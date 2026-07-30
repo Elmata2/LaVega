@@ -20,6 +20,9 @@ export function consolidate(accounts: Account[], txs: Tx[]) {
     if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
   }
   const balances = Object.values(byEntity).map((b) => b.balance);
-  const totalBalance = balances.some((x) => x === null) ? null : balances.reduce((s: number, x) => s + (x as number), 0);
+  const totalBalance =
+    balances.length === 0 || balances.some((x) => x === null)
+      ? null
+      : balances.reduce((s: number, x) => s + (x as number), 0);
   return { byEntity, totalBalance };
 }

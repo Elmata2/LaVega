@@ -50,6 +50,8 @@ export default function App() {
       ]);
       setAccounts(freshAccounts);
       setTxs(freshTxs);
+    } catch (err) {
+      setProblems([`Importeren mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
       setBusy(false);
     }

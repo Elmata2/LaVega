@@ -6,3 +6,4 @@ state.json
 .env
 .env.*
 .DS_Store
+.superpowers/

@@ -54,7 +54,7 @@ tx      = { id, accountKey, date /* ISO YYYY-MM-DD */, amount /* negative = outf
 - `ingest()` is the **single** entry path for all data, file or API.
 
 ## Stack
-- pnpm workspaces + TypeScript project references
+- pnpm workspaces + workspace deps (`@lavega/*`), resolved via `moduleResolution: bundler`; no TypeScript project references
 - **UI:** Vite + React (`apps/web`)
 - **Server:** Hono (`apps/server`) — portable across Node/edge/cheap hosting
 - **Storage:** IndexedDB adapter now → Postgres adapter later

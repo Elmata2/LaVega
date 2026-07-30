@@ -79,3 +79,8 @@ test("consolidate: one known + one null balance in same entity means unknown win
   const c = consolidate(accounts, []);
   expect(c.byEntity["BV1"].balance).toBeNull();
 });
+
+test("consolidate: no entities/balances (pristine app, no accounts) -> totalBalance is null, not 0", () => {
+  const c = consolidate([], []);
+  expect(c.totalBalance).toBeNull();
+});

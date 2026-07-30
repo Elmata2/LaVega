@@ -5,7 +5,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "pnpm --filter @lavega/web dev"
+    "dev": "pnpm --filter @lavega/web dev",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/adapters && tsc --noEmit -p apps/web"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",
