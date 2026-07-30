@@ -36,3 +36,46 @@ test("consolidate sums in/out per entity", () => {
   const c = consolidate(accounts, txs);
   expect(c.byEntity["BV1"]).toMatchObject({ in: 40, out: -10, balance: 100 });
 });
+
+test("consolidate: account with null balance makes entity balance null (unknown), and totalBalance null", () => {
+  const txs = assignTxIds([mk({ amount: -10 }), mk({ amount: 40 })]);
+  const accounts = [
+    {
+      key: "A",
+      iban: "A",
+      name: "",
+      bank: "",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
+  ];
+  const c = consolidate(accounts, txs);
+  expect(c.byEntity["BV1"].balance).toBeNull();
+  expect(c.totalBalance).toBeNull();
+});
+
+test("consolidate: one known + one null balance in same entity means unknown wins", () => {
+  const accounts = [
+    {
+      key: "A",
+      iban: "A",
+      name: "",
+      bank: "",
+      entity: "BV1",
+      currency: "EUR",
+      balance: 50,
+    },
+    {
+      key: "B",
+      iban: "B",
+      name: "",
+      bank: "",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
+  ];
+  const c = consolidate(accounts, []);
+  expect(c.byEntity["BV1"].balance).toBeNull();
+});
