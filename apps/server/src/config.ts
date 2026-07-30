@@ -44,7 +44,7 @@ function readJSON<T>(filePath: string, fallback: T): T {
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
   const applicationId = raw?.applicationId ?? null;
-  const configured = Boolean(applicationId) && !applicationId!.includes(PLACEHOLDER);
+  const configured = typeof applicationId === "string" && !applicationId.includes(PLACEHOLDER);
   return {
     configured,
     applicationId: configured ? (applicationId as string) : null,
