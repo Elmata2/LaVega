@@ -37,10 +37,29 @@ function parseDate(v: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-/* --- ING amount column is comma-decimal, e.g. "12,34" --- */
+/* --- ING amount column is Dutch-formatted: "12,34", "2500,00", or with a
+ * thousands separator "1.234,56" / "2.500,00". Ported from Kasoverzicht.html
+ * parseAmount's comma/dot disambiguation (lines ~361-385): when both ',' and
+ * '.' are present, the one that appears later is the decimal separator and
+ * the other is stripped as a thousands separator; when only ',' is present
+ * it's the decimal separator; when only '.' is present in a \d{1,3}(\.\d{3})+
+ * shape it's a thousands separator and gets stripped, otherwise it's already
+ * a decimal point. --- */
 function parseAmount(v: string): number | null {
-  const s = String(v ?? "").trim().replace(/^"|"$/g, "").replace(",", ".");
+  if (v == null) return null;
+  let s = String(v).trim().replace(/^"|"$/g, "");
   if (!s) return null;
+  const lastC = s.lastIndexOf(",");
+  const lastD = s.lastIndexOf(".");
+  if (lastC > -1 && lastD > -1) {
+    if (lastC > lastD) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+  } else if (lastC > -1) {
+    s = s.replace(",", ".");
+  } else if (lastD > -1) {
+    const dec = s.length - lastD - 1;
+    if (dec === 3 && /^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  }
   const n = parseFloat(s);
   return isNaN(n) ? null : n;
 }
