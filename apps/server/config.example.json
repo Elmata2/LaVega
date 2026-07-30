@@ -1,0 +1,6 @@
+{
+  "applicationId": "VUL-IN-app-id-uit-control-panel",
+  "privateKeyFile": "./VUL-IN-app-id.pem",
+  "redirectUrl": "http://localhost:8787/api/eb/callback",
+  "psuType": "business"
+}

@@ -6,7 +6,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "pnpm --filter @lavega/web dev",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/adapters && tsc --noEmit -p apps/web"
+    "dev:server": "pnpm --filter @lavega/server dev",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/adapters && tsc --noEmit -p apps/web && tsc --noEmit -p apps/server"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",
