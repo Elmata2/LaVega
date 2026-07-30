@@ -7,7 +7,11 @@ import type { BankAccessAdapter, BankResult } from "./BankAccessAdapter.js";
  * parsing to @lavega/core's parseIngCsv. Later adapters (EnableBanking, finAPI)
  * implement the same BankAccessAdapter interface over live bank APIs. */
 
-const UNKNOWN_FORMAT: BankResult = { accounts: [], txs: [], source: "", problems: ["onbekend CSV-formaat"] };
+// Fresh object per call — never share a module-level literal, since callers may
+// mutate the returned arrays (e.g. result.problems.push(...)).
+function unknownFormat(): BankResult {
+  return { accounts: [], txs: [], source: "", problems: ["onbekend CSV-formaat"] };
+}
 
 function nonBlankLines(text: string): string[] {
   return text.split(/\r?\n/).filter((l) => l.trim() !== "");
@@ -40,7 +44,7 @@ export function createFileImport(): BankAccessAdapter {
     async load({ filename, text, entity }): Promise<BankResult> {
       const lines = nonBlankLines(text);
       const headerLine = lines[0] ?? "";
-      if (!isIngHeader(headerLine)) return UNKNOWN_FORMAT;
+      if (!isIngHeader(headerLine)) return unknownFormat();
 
       const key = deriveIngAccountKey(lines, filename);
       const account: Account = {
