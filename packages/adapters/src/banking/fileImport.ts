@@ -23,7 +23,7 @@ function isIngHeader(headerLine: string): boolean {
  * the "Rekening" column index. */
 function deriveIngAccountKey(rows: string[][], filename: string): string {
   const header = rows[0] ?? [];
-  const rekeningIdx = header.findIndex((h) => norm(h).includes("rekening"));
+  const rekeningIdx = header.findIndex((h) => norm(h) === "rekening");
   if (rekeningIdx > -1 && rows.length > 1) {
     const value = rows[1][rekeningIdx];
     if (value) return value;
