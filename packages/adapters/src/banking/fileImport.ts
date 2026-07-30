@@ -1,4 +1,4 @@
-import { norm, parseIngCsv, type Account } from "@lavega/core";
+import { norm, parseIngCsv, splitRows, type Account } from "@lavega/core";
 import type { BankAccessAdapter, BankResult } from "./BankAccessAdapter.js";
 
 /* FileImport: the local-file banking adapter. Reads CSV text (already read from
@@ -13,27 +13,19 @@ function unknownFormat(): BankResult {
   return { accounts: [], txs: [], source: "", problems: ["onbekend CSV-formaat"] };
 }
 
-function nonBlankLines(text: string): string[] {
-  return text.split(/\r?\n/).filter((l) => l.trim() !== "");
-}
-
-/* Minimal, non-quote-aware field split used only to locate the "Rekening"
- * column's value for the account key — NOT a general CSV parser (that's
- * parseIngCsv's job). Good enough for ING's simple quoted-field header/rows. */
-function splitFields(line: string): string[] {
-  return line.split(";").map((c) => c.replace(/^"|"$/g, "").trim());
-}
-
 function isIngHeader(headerLine: string): boolean {
   const h = norm(headerLine);
   return h.includes("af bij") && h.includes("bedrag (eur)");
 }
 
-function deriveIngAccountKey(lines: string[], filename: string): string {
-  const header = splitFields(lines[0] ?? "");
-  const rekeningIdx = header.findIndex((h) => norm(h) === "rekening");
-  if (rekeningIdx > -1 && lines.length > 1) {
-    const value = splitFields(lines[1])[rekeningIdx];
+/* Uses core's quote-aware splitRows (not a naive ';'-split) so a quoted embedded
+ * ';' in an earlier free-text column (e.g. "Naam / Omschrijving") can't desync
+ * the "Rekening" column index. */
+function deriveIngAccountKey(rows: string[][], filename: string): string {
+  const header = rows[0] ?? [];
+  const rekeningIdx = header.findIndex((h) => norm(h).includes("rekening"));
+  if (rekeningIdx > -1 && rows.length > 1) {
+    const value = rows[1][rekeningIdx];
     if (value) return value;
   }
   return filename;
@@ -42,11 +34,11 @@ function deriveIngAccountKey(lines: string[], filename: string): string {
 export function createFileImport(): BankAccessAdapter {
   return {
     async load({ filename, text, entity }): Promise<BankResult> {
-      const lines = nonBlankLines(text);
-      const headerLine = lines[0] ?? "";
+      const rows = splitRows(text);
+      const headerLine = (rows[0] ?? []).join(";");
       if (!isIngHeader(headerLine)) return unknownFormat();
 
-      const key = deriveIngAccountKey(lines, filename);
+      const key = deriveIngAccountKey(rows, filename);
       const account: Account = {
         key, iban: key, name: key, bank: "ING", entity, currency: "EUR", balance: null,
       };

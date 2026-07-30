@@ -6,7 +6,7 @@ import { norm } from "../hash.js";
  * later tasks. Pure string logic, no I/O. */
 
 /* --- quote-aware row splitter, ';'-delimited (ING always uses ';') --- */
-function splitRows(text: string): string[][] {
+export function splitRows(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cur = "";
