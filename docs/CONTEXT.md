@@ -48,6 +48,8 @@ tx      = { id, accountKey, date /* ISO YYYY-MM-DD */, amount /* negative = outf
 ```
 `tx.id = hash(accountKey|date|amount|counterparty|description + '#' + n)` where `n` counts occurrences within one import. This dedupes overlapping exports while keeping genuinely identical same-day transactions. **Preserving this hash means the existing Kasoverzicht back-up JSON imports cleanly.**
 
+> **Known limitation — import one format per account.** Dedup keys on `accountKey` + `counterparty`/`description`, which differ between a bank's CSV and its MT940 export (e.g. ABN keys the CSV by BBAN `0123456789` but MT940 by IBAN `NL91ABNA0417164300`, and the two formats extract counterparty/description differently). So importing the *same account* via **both** CSV and MT940 double-counts its transactions and splits it into two accounts. Import each account in a single format. True cross-format dedup would need IBAN/BBAN key canonicalisation + shared counterparty/description extraction — a later normalisation pass, out of scope for the current importer.
+
 ### Adapter contracts (the seams that make it deployment-agnostic)
 - `StorageAdapter` — CRUD for accounts / txs / rules / maps. Impl now: IndexedDB. Later: Postgres. Core never imports a concrete storage.
 - `BankAccessAdapter` — returns `{ accounts, txs, source, problems }` (exactly what `ingest()` expects). Per-account failures go in `problems` so one broken link doesn't block the rest. Impls: `FileImport` (MT940/CAMT/CSV, always offline), `EnableBanking`, `finAPI`.

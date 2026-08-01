@@ -56,3 +56,12 @@ test("parseBankFile: an unrecognized file yields a problem, no throw", () => {
   expect(r.accounts).toHaveLength(0);
   expect(r.problems.length).toBeGreaterThan(0);
 });
+
+test("parseBankFile: a malformed MT940 (routed by :20:/:61: but no :25: account) yields a problem, not a silent empty success", () => {
+  const bad = [":20:X", ":61:2601020102D75,50NTRF", ":86:geen rekening"].join("\n");
+  const r = parseBankFile("bad.sta", bad);
+  expect(r.source).toBe("MT940"); // format was recognized...
+  expect(r.txs).toHaveLength(0); // ...but nothing parsed (no :25:)
+  expect(r.accounts).toHaveLength(0);
+  expect(r.problems.length).toBeGreaterThan(0); // so a problem is surfaced, not silent
+});

@@ -31,6 +31,20 @@ export function fallbackFromName(name: string): string {
   return base.slice(0, 40) || "onbekend";
 }
 
+/* Attach a problem when a format was routed but yielded nothing (a malformed
+ * MT940 with no :25:, an all-trades Trading 212 export, an unrecognized/empty
+ * CSV). A recognized format/profile with zero rows says so explicitly; only a
+ * truly unidentified file gets the generic "onbekend of leeg" message — so the
+ * `source` and the `problems` text never contradict each other. Never throws. */
+function finalize(accounts: Account[], txs: Array<Omit<Tx, "id">>, source: string): ParsedBankFile {
+  if (accounts.length > 0 || txs.length > 0) return { accounts, txs, source, problems: [] };
+  const recognized = source !== "" && source !== "generic" && source !== "leeg";
+  const problem = recognized
+    ? `formaat herkend (${source}) maar geen transacties gevonden`
+    : "onbekend of leeg bestand — geen transacties herkend";
+  return { accounts, txs, source, problems: [problem] };
+}
+
 export function parseBankFile(filename: string, text: string): ParsedBankFile {
   // CAMT.053 XML — deferred (Plan 2 Task 4). Detect and report clearly; don't throw.
   if (/^\s*<\?xml|<Document/i.test(text.slice(0, 400))) {
@@ -39,14 +53,9 @@ export function parseBankFile(filename: string, text: string): ParsedBankFile {
   // MT940 / .STA — content-detected SWIFT tag block.
   if (/:20:/.test(text.slice(0, 4000)) && /:61:/.test(text)) {
     const { accounts, txs } = parseMt940(text);
-    return { accounts, txs, source: "MT940", problems: [] };
+    return finalize(accounts, txs, "MT940");
   }
   // Otherwise CSV — parseBankCsv handles profile detection, ABN-TAB, and the generic fallback.
   const { accounts, txs, profile } = parseBankCsv(text, fallbackFromName(filename));
-  // Nothing recognized (unknown header that maps no columns, or an empty file):
-  // surface a problem rather than a silent empty success. No throw.
-  if (accounts.length === 0 && txs.length === 0) {
-    return { accounts, txs, source: profile, problems: ["onbekend of leeg bestand — geen transacties herkend"] };
-  }
-  return { accounts, txs, source: profile, problems: [] };
+  return finalize(accounts, txs, profile);
 }
