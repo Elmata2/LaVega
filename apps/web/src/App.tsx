@@ -51,6 +51,13 @@ export default function App() {
     [accounts],
   );
 
+  // Self-heal the Transacties entity filter: if the selected entity no longer
+  // exists (e.g. its last account was reassigned away in Rekeningen), reset to
+  // "Alle" so the dropdown doesn't render blank while silently filtering to nothing.
+  useEffect(() => {
+    if (fEntity && !entityOptions.includes(fEntity)) setFEntity("");
+  }, [entityOptions, fEntity]);
+
   const rows = useMemo(
     () =>
       filterTxs(enrichTxs(txs, accounts), {
