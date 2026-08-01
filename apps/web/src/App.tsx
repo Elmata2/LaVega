@@ -150,9 +150,12 @@ export default function App() {
           />
         </label>
         {" "}
+        {/* No `accept` filter: format is detected from the file's *contents*
+            (parseBankFile sniffs MT940 vs CSV), so restricting extensions only
+            risks the OS dialog greying out a valid file (e.g. an uppercase
+            .STA). An unrecognized file is reported via `problems`, not a crash. */}
         <input
           type="file"
-          accept=".csv,.sta,.txt,.940,.mt940,.swi"
           disabled={busy}
           onChange={(e) => {
             const file = e.target.files?.[0];

@@ -57,6 +57,41 @@ test("parseBankFile: an unrecognized file yields a problem, no throw", () => {
   expect(r.problems.length).toBeGreaterThan(0);
 });
 
+/* --- Real-world ABN AMRO .STA shape (anonymized): 3 non-tag header lines before
+ * :20:, a :25: that is an OLD-STYLE account number (NOT an IBAN), trailing-comma
+ * amounts ("30,", "0,99"), and a multi-line :86: continuation. This is the exact
+ * structure of a real ABN export — locked here so it can't silently regress. --- */
+const ABN_STA = [
+  "ABNANL2A",
+  "940",
+  "ABNANL2A",
+  ":20:ABN AMRO BANK NV",
+  ":25:155430750",
+  ":28:17301/1",
+  ":60F:C260621EUR0,",
+  ":61:2606220622C30,N654NONREF",
+  ":86:/TRTP/SEPA OVERBOEKING/IBAN/NL88INGB0793113504/BIC/INGBNL2A/NAME/HR A STEUNENBERG/EREF/NOTPROVIDED",
+  ":61:2606220622D0,99N200NONREF",
+  ":86:BEA, APPLE PAY                   SPAR UNIVERSITY SHOP",
+  "NR:VK3QQ1, 22.06.26/12:40        ROTTERDAM",
+  "KAARTNUMMER: **7142",
+  ":62F:C260622EUR29,01",
+].join("\r\n");
+
+test("parseBankFile: real ABN AMRO .STA (header lines, non-IBAN :25:, trailing-comma amounts, multi-line :86:) parses txs + balance", () => {
+  const r = parseBankFile("MT940260801160834.STA", ABN_STA);
+  expect(r.source).toBe("MT940");
+  expect(r.problems).toHaveLength(0);
+  expect(r.txs).toHaveLength(2);
+  expect(r.accounts).toHaveLength(1);
+  expect(r.accounts[0]).toMatchObject({ key: "155430750", balance: 29.01 });
+  // trailing-comma amount "30," -> 30 (credit); tags picked from the :86:
+  expect(r.txs[0]).toMatchObject({ date: "2026-06-22", amount: 30, counterparty: "HR A STEUNENBERG", description: "NOTPROVIDED" });
+  // "0,99" debit -> -0.99; no tags -> counterparty falls back to the first field of the BEA free text
+  expect(r.txs[1].amount).toBe(-0.99);
+  expect(r.txs[1].counterparty).toContain("BEA");
+});
+
 test("parseBankFile: a malformed MT940 (routed by :20:/:61: but no :25: account) yields a problem, not a silent empty success", () => {
   const bad = [":20:X", ":61:2601020102D75,50NTRF", ":86:geen rekening"].join("\n");
   const r = parseBankFile("bad.sta", bad);
