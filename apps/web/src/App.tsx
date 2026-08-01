@@ -88,11 +88,17 @@ export default function App() {
     }
   }
 
-  async function handleReassign(key: string, newEntity: string) {
-    const next = reassignEntity(accounts, key, newEntity);
-    setAccounts(next);
-    const changed = next.find((a) => a.key === key);
-    if (changed) await storage.putAccounts([changed]);
+  // Reassign an account's entity: update in memory on every keystroke (so the
+  // Overzicht/Transacties regroup live), but persist only once on blur. A fresh
+  // putAccounts per keystroke opens its own IndexedDB connection, and IndexedDB
+  // orders writes by transaction-creation time — so a burst of keystrokes could
+  // let an earlier write land after the final value and silently revert it.
+  // Committing on blur means exactly one write per edit, in order.
+  function handleEntityChange(key: string, newEntity: string) {
+    setAccounts(reassignEntity(accounts, key, newEntity));
+  }
+  async function handleEntityCommit(account: Account) {
+    await storage.putAccounts([account]);
   }
 
   return (
@@ -275,7 +281,8 @@ export default function App() {
                     <td>
                       <input
                         value={account.entity}
-                        onChange={(e) => void handleReassign(account.key, e.target.value)}
+                        onChange={(e) => handleEntityChange(account.key, e.target.value)}
+                        onBlur={() => void handleEntityCommit(account)}
                         disabled={busy}
                       />
                     </td>
