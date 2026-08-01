@@ -23,6 +23,21 @@ test("ING: parseBankCsv detects the ING profile and matches parseIngCsv's txs (a
   expect(wrapperTxs[1]).toMatchObject({ date: "2026-01-03", amount: 2500, counterparty: "Salaris" });
 });
 
+test("ING: long free-text fields are preserved in full (no 80/300 truncation) — the old parseIngCsv never truncated", () => {
+  const longCp = "Stichting " + "Langlopende Naam ".repeat(6).trim(); // > 80 chars
+  const longMemo = "SEPA batchincasso ".repeat(30).trim(); // > 300 chars
+  expect(longCp.length).toBeGreaterThan(80);
+  expect(longMemo.length).toBeGreaterThan(300);
+  const csv = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
+"20260104";"${longCp}";"NL01INGB0001";"";"IC";"Af";"9,99";"Incasso";"${longMemo}"`;
+  const result = parseBankCsv(csv, "NL01INGB0001");
+  expect(result.txs).toHaveLength(1);
+  expect(result.txs[0].counterparty).toBe(longCp);
+  expect(result.txs[0].description).toBe(longMemo);
+  // the thin wrapper agrees, byte-for-byte
+  expect(parseIngCsv(csv, "NL01INGB0001")[0].description).toBe(longMemo);
+});
+
 test("ING: parseIngCsv always tags txs with the caller-supplied accountKey, even if the CSV's Rekening column differs", () => {
   const OTHER_ACCOUNT = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
 "20260102";"Albert Heijn";"NL99DIFFERENT";"";"BA";"Af";"12,34";"Betaalautomaat";"Boodschappen"`;
@@ -91,6 +106,15 @@ test("Revolut: profile detected, dates truncate the time portion, amount sign pa
   expect(result.txs[1]).toMatchObject({ date: "2026-01-13", amount: 250, counterparty: "Bank Transfer" });
   // "Product" column value is "Current", not an IBAN -> falls back to the caller's fallback key.
   expect(result.txs[0].accountKey).toBe("Current");
+});
+
+test("Revolut: a nonzero Fee is subtracted from the amount (absolute value)", () => {
+  const csv = `Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+CARD_PAYMENT,Current,2026-01-15 10:00:00,2026-01-15 10:00:05,ATM Withdrawal,-100.00,2.50,EUR,COMPLETED,900.00`;
+  const result = parseBankCsv(csv, "REVOLUT-FALLBACK");
+  expect(result.txs).toHaveLength(1);
+  // amount -100.00, fee 2.50 -> -100 - |2.50| = -102.50
+  expect(result.txs[0].amount).toBe(-102.5);
 });
 
 /* --- American Express: comma-delimited, DD/MM/YYYY dates, flip:true inverts

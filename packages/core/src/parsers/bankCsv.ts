@@ -289,8 +289,8 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
       date,
       amount,
       currency: cur,
-      counterparty: (ci.cp > -1 ? String(r[ci.cp] ?? "").trim() : "").slice(0, 80),
-      description: (ci.desc > -1 ? String(r[ci.desc] ?? "").trim() : "").slice(0, 300),
+      counterparty: ci.cp > -1 ? String(r[ci.cp] ?? "").trim() : "",
+      description: ci.desc > -1 ? String(r[ci.desc] ?? "").trim() : "",
       category: "",
       manual: false,
     });
