@@ -74,7 +74,7 @@ export default function App() {
         {" "}
         <input
           type="file"
-          accept=".csv"
+          accept=".csv,.sta,.txt,.940,.mt940,.swi"
           disabled={busy}
           onChange={(e) => {
             const file = e.target.files?.[0];
