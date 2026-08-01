@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Tx } from "@lavega/core";
-import { ingest, consolidate, enrichTxs, filterTxs } from "@lavega/core";
+import {
+  ingest,
+  consolidate,
+  enrichTxs,
+  filterTxs,
+  accountSummaries,
+  reassignEntity,
+} from "@lavega/core";
 import { createFileImport, createIndexedDbStorage } from "@lavega/adapters";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -79,6 +86,13 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleReassign(key: string, newEntity: string) {
+    const next = reassignEntity(accounts, key, newEntity);
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
   }
 
   return (
@@ -240,7 +254,38 @@ export default function App() {
       {view === "accounts" && (
         <section aria-label="Rekeningen">
           <h2>Rekeningen</h2>
-          <p>Binnenkort.</p>
+          {accounts.length === 0 ? (
+            <p>Nog geen rekeningen — importeer eerst een bestand.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Bank</th>
+                  <th>Rekening</th>
+                  <th>Entiteit</th>
+                  <th>Saldo</th>
+                  <th>Transacties</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountSummaries(accounts, txs).map(({ account, txCount }) => (
+                  <tr key={account.key}>
+                    <td>{account.bank}</td>
+                    <td>{account.name}</td>
+                    <td>
+                      <input
+                        value={account.entity}
+                        onChange={(e) => void handleReassign(account.key, e.target.value)}
+                        disabled={busy}
+                      />
+                    </td>
+                    <td>{account.balance === null ? "onbekend" : formatEuro(account.balance)}</td>
+                    <td>{txCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
       )}
     </main>
