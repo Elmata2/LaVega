@@ -1,5 +1,5 @@
 import type { Account, Tx } from "../model.js";
-import { parseDate, parseAmount, findIban, bankFromIban } from "./primitives.js";
+import { parseDate, parseAmount, findIban, bankFromIban, bankFromBic } from "./primitives.js";
 
 /* Ported from Kasoverzicht.html's parseMT940 (398-442): splits the statement
  * into per-account blocks on ":20:", merges MT940 continuation lines, reads
@@ -12,6 +12,12 @@ import { parseDate, parseAmount, findIban, bankFromIban } from "./primitives.js"
 export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit<Tx, "id">> } {
   const accounts: Record<string, Account> = {};
   const txs: Array<Omit<Tx, "id">> = [];
+  // The statement header (before the first :20:) carries the account's own BIC
+  // (e.g. ABN's ".STA" starts with "ABNANL2A"). We read the bank from it only
+  // for accounts whose :25: is an old-style account number, not an IBAN. Scoped
+  // to the header so a counterparty BIC inside a :86: line can't mislabel it.
+  const i20 = text.indexOf(":20:");
+  const headerBic = (i20 > 0 ? text.slice(0, i20) : "").match(/\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/)?.[0] ?? null;
   const blocks = text.split(/(?=:20:)/).filter((b) => /:61:/.test(b) || /:25:/.test(b));
   for (const b of blocks) {
     const lines = b.split(/\r?\n/);
@@ -35,7 +41,8 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
     }
     if (!acc) continue;
     accounts[acc] = accounts[acc] || {
-      key: acc, iban: findIban(acc) ?? "", name: acc, bank: bankFromIban(acc) ?? "", entity: "", currency: cur, balance: close,
+      key: acc, iban: findIban(acc) ?? "", name: acc,
+      bank: bankFromIban(acc) ?? bankFromBic(headerBic) ?? "", entity: "", currency: cur, balance: close,
     };
     if (close != null) accounts[acc].balance = close;
     for (let i = 0; i < flat.length; i++) {

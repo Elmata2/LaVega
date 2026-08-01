@@ -102,3 +102,11 @@ export function bankFromIban(iban: unknown): string | null {
   const c = String(iban ?? "").toUpperCase().slice(4, 8);
   return BANK_BY_IBAN_PREFIX[c] || null;
 }
+
+/* A BIC's first 4 chars are the same bank code as IBAN positions 5-8, so we can
+ * reuse the same map. Used for MT940 accounts whose :25: is an old-style account
+ * number (no IBAN) — the bank is then derived from the statement header's BIC. */
+export function bankFromBic(bic: unknown): string | null {
+  const c = String(bic ?? "").toUpperCase().slice(0, 4);
+  return BANK_BY_IBAN_PREFIX[c] || null;
+}

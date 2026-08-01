@@ -84,7 +84,8 @@ test("parseBankFile: real ABN AMRO .STA (header lines, non-IBAN :25:, trailing-c
   expect(r.problems).toHaveLength(0);
   expect(r.txs).toHaveLength(2);
   expect(r.accounts).toHaveLength(1);
-  expect(r.accounts[0]).toMatchObject({ key: "155430750", balance: 29.01 });
+  // :25: is a non-IBAN account number; bank is derived from the header BIC "ABNANL2A".
+  expect(r.accounts[0]).toMatchObject({ key: "155430750", bank: "ABN AMRO", balance: 29.01 });
   // trailing-comma amount "30," -> 30 (credit); tags picked from the :86:
   expect(r.txs[0]).toMatchObject({ date: "2026-06-22", amount: 30, counterparty: "HR A STEUNENBERG", description: "NOTPROVIDED" });
   // "0,99" debit -> -0.99; no tags -> counterparty falls back to the first field of the BEA free text
