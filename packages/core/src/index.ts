@@ -5,3 +5,4 @@ export * from "./ingest.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";
 export * from "./parsers/mt940.js";
+export * from "./parsers/parseBankFile.js";
