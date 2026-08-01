@@ -87,3 +87,18 @@ export function headerIndex(header: string[]): Record<string, number> {
   header.forEach((h, i) => { idx[norm(h).replace(/^"|"$/g, "")] = i; });
   return idx;
 }
+
+/* --- IBAN uit tekst --- */
+export function findIban(s: unknown): string | null {
+  const m = String(s ?? "").toUpperCase().replace(/\s/g, "").match(/[A-Z]{2}\d{2}[A-Z0-9]{8,26}/);
+  return m ? m[0] : null;
+}
+
+const BANK_BY_IBAN_PREFIX: Record<string, string> = {
+  INGB: "ING", ABNA: "ABN AMRO", RABO: "Rabobank", KNAB: "Knab", BUNQ: "bunq",
+  TRIO: "Triodos", SNSB: "SNS", ASNB: "ASN", RBRB: "RegioBank", NNBA: "NN", REVO: "Revolut",
+};
+export function bankFromIban(iban: unknown): string | null {
+  const c = String(iban ?? "").toUpperCase().slice(4, 8);
+  return BANK_BY_IBAN_PREFIX[c] || null;
+}

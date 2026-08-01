@@ -1,6 +1,6 @@
 import type { Account, Tx } from "../model.js";
 import { norm } from "../hash.js";
-import { splitRows, parseDate, parseAmount, headerIndex } from "./primitives.js";
+import { splitRows, parseDate, parseAmount, headerIndex, findIban, bankFromIban } from "./primitives.js";
 
 /* Ported from Kasoverzicht.html's PARSERS block: the `profiles` table (486-500),
  * `headerIndex`/`pick` column mapping (502-516), `parseABN` (523-547) and
@@ -152,21 +152,6 @@ function pick(idx: Record<string, number>, names: string[]): number {
     }
   }
   return -1;
-}
-
-/* --- IBAN uit tekst --- */
-function findIban(s: unknown): string | null {
-  const m = String(s ?? "").toUpperCase().replace(/\s/g, "").match(/[A-Z]{2}\d{2}[A-Z0-9]{8,26}/);
-  return m ? m[0] : null;
-}
-
-const BANK_BY_IBAN_PREFIX: Record<string, string> = {
-  INGB: "ING", ABNA: "ABN AMRO", RABO: "Rabobank", KNAB: "Knab", BUNQ: "bunq",
-  TRIO: "Triodos", SNSB: "SNS", ASNB: "ASN", RBRB: "RegioBank", NNBA: "NN", REVO: "Revolut",
-};
-function bankFromIban(iban: unknown): string | null {
-  const c = String(iban ?? "").toUpperCase().slice(4, 8);
-  return BANK_BY_IBAN_PREFIX[c] || null;
 }
 
 /* --- pick a delimiter by counting occurrences in the first few lines; ties
