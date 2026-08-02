@@ -9,6 +9,7 @@ import Transacties from "./views/Transacties";
 import Rekeningen from "./views/Rekeningen";
 import Regels from "./views/Regels";
 import Import from "./views/Import";
+import Forecast from "./views/Forecast";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe.
@@ -198,10 +199,7 @@ export default function App() {
           )}
 
           {view === "forecast" && (
-            <section className="card" aria-label="Forecast">
-              <h2>Forecast</h2>
-              <p>Binnenkort.</p>
-            </section>
+            <Forecast txs={txs} accounts={accounts} entityScope={entityScope} asOf={asOf} />
           )}
         </main>
       </div>

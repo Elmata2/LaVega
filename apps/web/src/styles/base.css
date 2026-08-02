@@ -221,6 +221,9 @@ table tbody tr:hover {
 .text-warn {
   color: var(--warn);
 }
+.text-muted {
+  color: var(--muted);
+}
 
 /* Card grid (Overzicht + other multi-card views) */
 .card-grid {
@@ -512,6 +515,108 @@ table tbody tr:hover {
   padding: var(--sp-6);
   overflow-y: auto;
   min-width: 0;
+}
+
+/* Forecast view */
+.forecast-banner {
+  display: flex;
+  border-left: 4px solid var(--line);
+}
+.forecast-banner-none {
+  border-left-color: var(--pos);
+}
+.forecast-banner-shortfall {
+  border-left-color: var(--neg);
+}
+.forecast-banner-unknown {
+  border-left-color: var(--muted);
+}
+.forecast-banner-title {
+  margin: 0;
+  font-weight: 600;
+}
+.forecast-banner-sub,
+.forecast-banner-note {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.forecast-grid {
+  grid-template-columns: 2fr 1fr;
+}
+
+.forecast-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.forecast-chart-empty {
+  color: var(--muted);
+  margin: 0;
+}
+.forecast-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.forecast-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.forecast-chart-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.drivers-heading {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 500;
+  margin: var(--sp-4) 0 var(--sp-3);
+}
+.drivers-heading:first-child {
+  margin-top: 0;
+}
+.drivers-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.driver-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.driver-label {
+  min-width: 0;
+}
+.driver-amount {
+  flex: none;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.drivers-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.forecast-footnote {
+  display: flex;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 @media (max-width: 900px) {
