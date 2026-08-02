@@ -68,7 +68,10 @@ export default function App() {
   // reassigned away in Rekeningen), reset to "Alle" so neither control keeps
   // filtering to nothing while showing a stale selection.
   useEffect(() => {
-    if (fEntity && !entityOptions.includes(fEntity)) setFEntity("");
+    // Reset the per-view entity filter when it's gone OR when a top-bar scope
+    // pill is active (the scope already constrains the entity and the dropdown
+    // is hidden, so a stale fEntity would silently filter Transacties to 0 rows).
+    if (fEntity && (entityScope !== "" || !entityOptions.includes(fEntity))) setFEntity("");
     if (entityScope && !entityOptions.includes(entityScope)) setEntityScope("");
   }, [entityOptions, fEntity, entityScope]);
 

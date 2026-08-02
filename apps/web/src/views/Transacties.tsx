@@ -73,7 +73,6 @@ export default function Transacties({
           </select>
         </label>
       )}
-      {" "}
       <label>
         Rekening{" "}
         <select value={fAccount} onChange={(e) => onFAccountChange(e.target.value)}>
