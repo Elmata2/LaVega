@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import type { Tx } from "./model.js";
-import { detectRecurringStreams } from "./forecast.js";
+import type { Account, Tx } from "./model.js";
+import { detectRecurringStreams, forecastCashflow } from "./forecast.js";
 
 function tx(id: string, date: string, amount: number, cp: string): Tx {
   return { id, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false };
@@ -61,4 +61,50 @@ test("rejects irregular cadence (no snap band) and wildly variable amounts", () 
   expect(detectRecurringStreams(irregular)).toHaveLength(0);
   const variable: Tx[] = [tx("1", "2026-04-01", -10, "Y"), tx("2", "2026-05-01", -500, "Y"), tx("3", "2026-06-01", -10, "Y")];
   expect(detectRecurringStreams(variable)).toHaveLength(0);
+});
+
+test("roll-forward: monthly salary + rent projects the balance, no shortfall, ends above opening", () => {
+  const txs: Tx[] = [
+    tx("1", "2026-04-25", 3000, "Werkgever"), tx("2", "2026-05-25", 3000, "Werkgever"), tx("3", "2026-06-25", 3000, "Werkgever"),
+    tx("4", "2026-04-01", -1000, "Verhuurder"), tx("5", "2026-05-01", -1000, "Verhuurder"), tx("6", "2026-06-01", -1000, "Verhuurder"),
+  ];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: 5000 }];
+  const { byEntity, consolidated } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 });
+  const f = byEntity["BV1"];
+  expect(f.openingCents).toBe(500000);
+  expect(f.points).toHaveLength(13);
+  expect(f.streams).toHaveLength(2);
+  expect(f.shortfall).toBeNull();
+  expect(f.points[12].projectedClosingCents!).toBeGreaterThan(f.openingCents!);
+  expect(consolidated.openingCents).toBe(500000);
+});
+
+test("shortfall: a large recurring outflow against a small opening flags a breach date", () => {
+  const txs: Tx[] = [tx("1", "2026-04-05", -2000, "Lening"), tx("2", "2026-05-05", -2000, "Lening"), tx("3", "2026-06-05", -2000, "Lening")];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 1000 }];
+  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 });
+  const f = byEntity["BV1"];
+  expect(f.shortfall).not.toBeNull();
+  expect(f.shortfall!.balanceCents).toBeLessThan(0);
+  expect(f.shortfall!.date >= "2026-07-01").toBe(true);
+});
+
+test("null opening (CSV-only) -> flow projected internally but closing/band null, no shortfall, drivers present", () => {
+  const txs: Tx[] = [tx("1", "2026-04-25", 3000, "W"), tx("2", "2026-05-25", 3000, "W"), tx("3", "2026-06-25", 3000, "W")];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null }];
+  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const f = byEntity["BV1"];
+  expect(f.openingCents).toBeNull();
+  expect(f.points[0].projectedClosingCents).toBeNull();
+  expect(f.shortfall).toBeNull();
+  expect(f.streams.length).toBeGreaterThan(0);
+  expect(f.drivers.length).toBeGreaterThan(0);
+});
+
+test("deterministic: identical JSON on repeated runs", () => {
+  const txs: Tx[] = [tx("1", "2026-04-25", 3000, "W"), tx("2", "2026-05-25", 3000, "W"), tx("3", "2026-06-25", 3000, "W")];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 }];
+  const a = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const b = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  expect(JSON.stringify(a)).toBe(JSON.stringify(b));
 });

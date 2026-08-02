@@ -1,4 +1,4 @@
-import type { Tx } from "./model.js";
+import type { Account, Tx } from "./model.js";
 import { norm } from "./hash.js";
 
 /* Recurring-stream detection — the first stage of the deterministic cashflow
@@ -37,6 +37,29 @@ function daysBetween(a: string, b: string): number {
   const ua = Date.UTC(ay, am - 1, ad);
   const ub = Date.UTC(by, bm - 1, bd);
   return Math.round((ub - ua) / 86_400_000);
+}
+
+/** Add `n` days to an ISO `YYYY-MM-DD` date, returning a new ISO date. Parses
+ *  the y/m/d parts and lets `Date.UTC` do the calendar carry (month/year
+ *  rollover), then reads the result back via the UTC getters — deterministic
+ *  and, unlike `daysBetween`'s `new Date(str)` hazard, this only ever
+ *  constructs a `Date` from a numeric timestamp, which is TZ-safe. */
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  const yy = t.getUTCFullYear();
+  const mm = String(t.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(t.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Bucket an ISO date into a Monday-anchored week index, relative to a fixed
+ *  reference Monday (2000-01-03). Used only to group incidental (non-recurring)
+ *  cashflow into weeks so the forecast band can estimate week-to-week spread;
+ *  not a full ISO-8601 week-numbering (which has year-boundary edge cases we
+ *  don't need here) — just a stable, deterministic 7-day bucketing. */
+function weekBucket(iso: string): number {
+  return Math.floor(daysBetween("2000-01-03", iso) / 7);
 }
 
 /** Median of a numeric array (sorts a copy; never mutates the input). */
@@ -137,4 +160,190 @@ export function detectRecurringStreams(txs: Tx[], opts: DetectOptions = {}): Rec
   }
 
   return streams;
+}
+
+/* forecastCashflow — the orchestrator. Rolls detected streams forward
+ * day-by-day from `asOf` into a 13-week (default) balance projection per
+ * entity + consolidated, adds an incidental (non-recurring) baseline, widens
+ * a simple week-scaled band, and flags the first weekly close below a
+ * buffer. Pure + deterministic: `asOf` is caller-supplied (no Date.now()),
+ * no Math.random(), integer cents throughout. */
+
+export type ForecastPoint = {
+  date: string; // ISO, weekly closing date (asOf + 7,14,...)
+  projectedClosingCents: number | null; // null when opening is unknown (flow-only)
+  lowerCents: number | null;
+  upperCents: number | null;
+};
+export type Shortfall = { date: string; balanceCents: number };
+export type Driver = { label: string; sign: 1 | -1; perWeekCents: number };
+export type EntityForecast = {
+  scope: string; // entity name, or "geconsolideerd"
+  asOf: string;
+  horizonDays: number;
+  openingCents: number | null;
+  points: ForecastPoint[]; // weekly closings, length = floor(horizonDays/7)
+  shortfall: Shortfall | null;
+  streams: RecurringStream[];
+  drivers: Driver[]; // top streams by |perWeekCents| desc (cap 8)
+};
+export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number };
+
+/** Per-week "recurring flow" contribution of a stream, used both for the
+ *  driver ranking and (via its average) as the band's fallback spread when
+ *  there isn't enough incidental history to estimate one directly. */
+function perWeekCents(s: RecurringStream): number {
+  return Math.round(s.sign * s.amountCents * 7 / s.cadenceDays);
+}
+
+/** Build one scope's forecast (an entity, or the "geconsolideerd" total)
+ *  from its transactions and accounts. See module doc comment above for the
+ *  overall algorithm; this implements FinnTell spec §6.3/§6.5/§6.6. */
+function buildForecast(
+  scopeTxs: Tx[],
+  scopeAccounts: Account[],
+  scope: string,
+  asOf: string,
+  horizonDays: number,
+  bufferCents: number,
+): EntityForecast {
+  const openingCents = scopeAccounts.some((a) => a.balance === null)
+    ? null
+    : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
+
+  const streams = detectRecurringStreams(scopeTxs);
+  const streamKeys = new Set(streams.map((s) => s.key));
+  const nonRecurring = scopeTxs.filter(
+    (t) => !streamKeys.has(norm(t.counterparty) + "|" + (t.amount >= 0 ? "in" : "out")),
+  );
+
+  // Incidental (non-recurring) daily baseline, estimated from the scope's
+  // own transaction history.
+  let incidentalPerDayCents = 0;
+  if (scopeTxs.length > 0) {
+    const dates = scopeTxs.map((t) => t.date);
+    const minDate = dates.reduce((a, b) => (a < b ? a : b));
+    const maxDate = dates.reduce((a, b) => (a > b ? a : b));
+    const historyDays = Math.max(1, daysBetween(minDate, maxDate));
+    const nonRecurringSumCents = nonRecurring.reduce((s, t) => s + Math.round(t.amount * 100), 0);
+    incidentalPerDayCents = Math.round(nonRecurringSumCents / historyDays);
+  }
+
+  // Day-by-day roll-forward: apply the incidental baseline and any streams
+  // due "today", capturing a weekly closing point every 7th day.
+  const points: ForecastPoint[] = [];
+  let bal = openingCents ?? 0;
+  for (let d = 1; d <= horizonDays; d++) {
+    const day = addDays(asOf, d);
+    bal += incidentalPerDayCents;
+    for (const s of streams) {
+      const gap = daysBetween(s.lastDate, day);
+      if (gap > 0 && gap % s.cadenceDays === 0) bal += s.sign * s.amountCents;
+    }
+    if (d % 7 === 0) {
+      points.push({
+        date: day,
+        projectedClosingCents: openingCents === null ? null : bal,
+        lowerCents: null,
+        upperCents: null,
+      });
+    }
+  }
+
+  // Band + shortfall are only meaningful when we know the opening balance
+  // (otherwise the roll-forward above is a flow-only internal computation,
+  // not a projected position).
+  let shortfall: Shortfall | null = null;
+  if (openingCents !== null) {
+    const weeklyNetsByWeek = new Map<number, number>();
+    for (const t of nonRecurring) {
+      const wk = weekBucket(t.date);
+      weeklyNetsByWeek.set(wk, (weeklyNetsByWeek.get(wk) ?? 0) + Math.round(t.amount * 100));
+    }
+    const weeklyNets = [...weeklyNetsByWeek.values()];
+    const streamPerWeek = streams.map(perWeekCents);
+    const avgWeeklyRecurringFlow = streamPerWeek.length > 0 ? mean(streamPerWeek) : 0;
+    const weeklyIncidentalStd =
+      weeklyNets.length >= 2 ? std(weeklyNets) : Math.max(0, 0.15 * Math.abs(avgWeeklyRecurringFlow));
+
+    for (let i = 0; i < points.length; i++) {
+      const weekIndex = i + 1;
+      const spread = Math.round(weeklyIncidentalStd * Math.sqrt(weekIndex));
+      const closing = points[i].projectedClosingCents as number;
+      points[i].lowerCents = closing - spread;
+      points[i].upperCents = closing + spread;
+      if (shortfall === null && closing < bufferCents) {
+        shortfall = { date: points[i].date, balanceCents: closing };
+      }
+    }
+  }
+
+  const drivers: Driver[] = streams
+    .map((s) => ({ label: s.counterparty, sign: s.sign, perWeekCents: perWeekCents(s) }))
+    .sort((a, b) => Math.abs(b.perWeekCents) - Math.abs(a.perWeekCents))
+    .slice(0, 8);
+
+  return { scope, asOf, horizonDays, openingCents, points, shortfall, streams, drivers };
+}
+
+/** Deterministic 13-week (default) cashflow forecast: one `EntityForecast`
+ *  per entity found in `accounts`/`txs`, plus a "geconsolideerd" total over
+ *  everything. `opts.asOf` must be supplied by the caller (no Date.now()). */
+export function forecastCashflow(
+  txs: Tx[],
+  accounts: Account[],
+  opts: ForecastOptions,
+): { byEntity: Record<string, EntityForecast>; consolidated: EntityForecast } {
+  const asOf = opts.asOf;
+  const horizonDays = opts.horizonDays ?? 91;
+  const bufferCents = opts.bufferCents ?? 0;
+
+  const entityOf = new Map(accounts.map((a) => [a.key, a.entity]));
+
+  // Partition accounts and txs by entity, preserving each input array's own
+  // order (Map insertion order) for deterministic output.
+  const scopeAccountsByEntity = new Map<string, Account[]>();
+  for (const a of accounts) {
+    const arr = scopeAccountsByEntity.get(a.entity);
+    if (arr) arr.push(a);
+    else scopeAccountsByEntity.set(a.entity, [a]);
+  }
+  const scopeTxsByEntity = new Map<string, Tx[]>();
+  for (const t of txs) {
+    const e = entityOf.get(t.accountKey) ?? "onbekend";
+    const arr = scopeTxsByEntity.get(e);
+    if (arr) arr.push(t);
+    else scopeTxsByEntity.set(e, [t]);
+  }
+
+  const seenEntities = new Set<string>();
+  const entities: string[] = [];
+  for (const e of scopeAccountsByEntity.keys()) {
+    if (!seenEntities.has(e)) {
+      seenEntities.add(e);
+      entities.push(e);
+    }
+  }
+  for (const e of scopeTxsByEntity.keys()) {
+    if (!seenEntities.has(e)) {
+      seenEntities.add(e);
+      entities.push(e);
+    }
+  }
+
+  const byEntity: Record<string, EntityForecast> = {};
+  for (const e of entities) {
+    byEntity[e] = buildForecast(
+      scopeTxsByEntity.get(e) ?? [],
+      scopeAccountsByEntity.get(e) ?? [],
+      e,
+      asOf,
+      horizonDays,
+      bufferCents,
+    );
+  }
+
+  const consolidated = buildForecast(txs, accounts, "geconsolideerd", asOf, horizonDays, bufferCents);
+
+  return { byEntity, consolidated };
 }
