@@ -101,6 +101,21 @@ test("null opening (CSV-only) -> flow projected internally but closing/band null
   expect(f.drivers.length).toBeGreaterThan(0);
 });
 
+test("orphan txs (accountKey with no account) -> 'onbekend' scope has null opening, no spurious shortfall", () => {
+  // The tx's accountKey "GHOST" matches no account, so it lands in the "onbekend"
+  // entity scope, which has ZERO accounts -> opening must be unknown, not €0.
+  const txs: Tx[] = [
+    { id: "1", accountKey: "GHOST", date: "2026-04-05", amount: -2000, currency: "EUR", counterparty: "Lening", description: "", category: "", manual: false },
+    { id: "2", accountKey: "GHOST", date: "2026-05-05", amount: -2000, currency: "EUR", counterparty: "Lening", description: "", category: "", manual: false },
+    { id: "3", accountKey: "GHOST", date: "2026-06-05", amount: -2000, currency: "EUR", counterparty: "Lening", description: "", category: "", manual: false },
+  ];
+  const accounts: Account[] = []; // no accounts at all
+  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const f = byEntity["onbekend"];
+  expect(f.openingCents).toBeNull();
+  expect(f.shortfall).toBeNull(); // would have been a spurious breach if opening defaulted to 0
+});
+
 test("deterministic: identical JSON on repeated runs", () => {
   const txs: Tx[] = [tx("1", "2026-04-25", 3000, "W"), tx("2", "2026-05-25", 3000, "W"), tx("3", "2026-06-25", 3000, "W")];
   const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 }];

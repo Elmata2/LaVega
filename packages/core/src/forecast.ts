@@ -207,7 +207,9 @@ function buildForecast(
   horizonDays: number,
   bufferCents: number,
 ): EntityForecast {
-  const openingCents = scopeAccounts.some((a) => a.balance === null)
+  // No accounts (e.g. the "onbekend" scope of orphan txs) => opening is UNKNOWN,
+  // not a confident €0 — otherwise it could surface a spurious shortfall.
+  const openingCents = scopeAccounts.length === 0 || scopeAccounts.some((a) => a.balance === null)
     ? null
     : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
 
