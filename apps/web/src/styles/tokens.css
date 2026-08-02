@@ -1,0 +1,43 @@
+/* LaVega design-system tokens — dark dashboard palette.
+ * Values match the FinnTell app-shell mockup (see docs/superpowers/plans/
+ * 2026-08-02-dark-dashboard-ui.md). Fonts are self-hosted via @fontsource/*
+ * (imported in main.tsx) with a system fallback stack here so the app still
+ * looks reasonable if that import is ever unavailable. */
+:root {
+  /* Color */
+  --bg: #0a0b10;
+  --surface: #12141c;
+  --surface-2: #181b25;
+  --ink: #f5f6fa;
+  --muted: #8a8fa3;
+  --line: rgba(255, 255, 255, 0.08);
+  --accent: #2f5bff;
+  --accent-soft: rgba(47, 91, 255, 0.12);
+  --pos: #2fd6a6;
+  --neg: #e5484d;
+  --warn: #e8a33d;
+
+  /* Radius */
+  --r: 14px;
+  --r-sm: 10px;
+  --pill: 999px;
+
+  /* Spacing (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Type */
+  --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Elevation */
+  --shadow-sm: 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+
+  /* Layout */
+  --sidebar-w: 240px;
+}
