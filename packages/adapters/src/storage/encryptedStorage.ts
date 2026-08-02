@@ -70,6 +70,19 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     blob = fresh;
   }
 
+  // Serialize every write: each put's read-mutate-encrypt-write runs atomically
+  // relative to the others. Without this, two overlapping puts could each
+  // snapshot `data`, and if the earlier one's encrypt/IndexedDB write resolves
+  // LAST it would silently revert the on-disk blob to a stale snapshot — real
+  // data-loss risk for a vault. WebCrypto runs off-thread in browsers, so
+  // resolution order under concurrency isn't guaranteed; this queue makes it so.
+  let writeChain: Promise<unknown> = Promise.resolve();
+  function enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+    const run = writeChain.then(op, op); // run regardless of the prior write's outcome
+    writeChain = run.catch(() => {}); // keep the chain alive after a rejection
+    return run;
+  }
+
   return {
     async status(): Promise<VaultStatus> {
       const onDisk = await readBlobFromDisk();
@@ -125,24 +138,28 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       if (data == null) throw new Error(LOCKED_ERROR);
       return [...data.accounts];
     },
-    async putAccounts(a: Account[]): Promise<void> {
-      if (key == null || data == null) throw new Error(LOCKED_ERROR);
-      const byKey = new Map(data.accounts.map((acc) => [acc.key, acc]));
-      for (const acc of a) byKey.set(acc.key, acc);
-      data = { ...data, accounts: [...byKey.values()] };
-      await persist();
+    putAccounts(a: Account[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        const byKey = new Map(data.accounts.map((acc) => [acc.key, acc]));
+        for (const acc of a) byKey.set(acc.key, acc);
+        data = { ...data, accounts: [...byKey.values()] };
+        await persist();
+      });
     },
 
     async getTxs(): Promise<Tx[]> {
       if (data == null) throw new Error(LOCKED_ERROR);
       return [...data.txs];
     },
-    async putTxs(t: Tx[]): Promise<void> {
-      if (key == null || data == null) throw new Error(LOCKED_ERROR);
-      const byId = new Map(data.txs.map((tx) => [tx.id, tx]));
-      for (const tx of t) byId.set(tx.id, tx);
-      data = { ...data, txs: [...byId.values()] };
-      await persist();
+    putTxs(t: Tx[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        const byId = new Map(data.txs.map((tx) => [tx.id, tx]));
+        for (const tx of t) byId.set(tx.id, tx);
+        data = { ...data, txs: [...byId.values()] };
+        await persist();
+      });
     },
 
     async getRules(): Promise<Rule[]> {
@@ -150,10 +167,12 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return [...data.rules];
     },
     // Replace-all: mirrors createIndexedDbStorage's putRules semantics.
-    async putRules(rules: Rule[]): Promise<void> {
-      if (key == null || data == null) throw new Error(LOCKED_ERROR);
-      data = { ...data, rules: [...rules] };
-      await persist();
+    putRules(rules: Rule[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, rules: [...rules] };
+        await persist();
+      });
     },
   };
 }

@@ -2,7 +2,7 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, test } from "vitest";
-import type { Account } from "@lavega/core";
+import type { Account, Tx } from "@lavega/core";
 import { createEncryptedStorage } from "./encryptedStorage.js";
 
 const acc = (key: string, balance: number | null = null): Account =>
@@ -52,8 +52,38 @@ test("putRules replaces, putAccounts/putTxs upsert (parity with plaintext adapte
   const v = createEncryptedStorage();
   await v.setup("pw");
   await v.putAccounts([acc("A1", 1), acc("A2", 2)]);
-  await v.putAccounts([acc("A1", 9)]); // upsert A1
-  const accs = await v.getAccounts();
-  expect(accs.find((a) => a.key === "A1")!.balance).toBe(9);
-  expect(accs).toHaveLength(2);
+  await v.putAccounts([acc("A1", 9)]); // upsert A1 by key
+  expect((await v.getAccounts()).find((a) => a.key === "A1")!.balance).toBe(9);
+  expect(await v.getAccounts()).toHaveLength(2);
+
+  // putTxs upserts by id
+  const t = (id: string, amount: number): Tx => ({ id, accountKey: "A1", date: "2026-06-01", amount, currency: "EUR", counterparty: "", description: "", category: "", manual: false });
+  await v.putTxs([t("x", 10), t("y", 20)]);
+  await v.putTxs([t("x", 99)]); // upsert x
+  expect((await v.getTxs()).find((tx) => tx.id === "x")!.amount).toBe(99);
+  expect(await v.getTxs()).toHaveLength(2);
+
+  // putRules replaces the whole set
+  await v.putRules([{ id: "r1", match: "a", category: "X" }, { id: "r2", match: "b", category: "Y" }]);
+  await v.putRules([{ id: "r2", match: "b", category: "Z" }]);
+  const rules = await v.getRules();
+  expect(rules).toHaveLength(1);
+  expect(rules[0]).toMatchObject({ id: "r2", category: "Z" });
+});
+
+test("concurrent puts are serialized — neither write reverts the other", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage();
+  await v.setup("pw");
+  const t = (id: string): Tx => ({ id, accountKey: "A1", date: "2026-06-01", amount: 1, currency: "EUR", counterparty: "", description: "", category: "", manual: false });
+  // Fire two writes without awaiting between them; the write-queue must serialize
+  // so a stale snapshot's encrypt can't land last and drop the other's data.
+  await Promise.all([v.putAccounts([acc("A1", 5)]), v.putTxs([t("x")])]);
+  expect(await v.getAccounts()).toHaveLength(1);
+  expect(await v.getTxs()).toHaveLength(1);
+  // And it survives a lock/unlock reload (persisted, not just in memory)
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect(await v.getAccounts()).toHaveLength(1);
+  expect(await v.getTxs()).toHaveLength(1);
 });
