@@ -19,6 +19,12 @@ export type RecurringStream = {
 
 export type DetectOptions = { minOccurrences?: number; maxIntervalCv?: number; amountTolerance?: number };
 
+/** Minimum days of transaction history before the incidental (non-recurring)
+ *  daily baseline is extrapolated into the forecast. Below this, one lumpy
+ *  one-off would dominate a short window — so we project recurring streams only.
+ *  Tunable on real multi-BV data. */
+const MIN_HISTORY_DAYS = 60;
+
 /** Cadence "snap" bands: a group's median day-gap must fall in exactly one of
  *  these to be considered recurring (weekly/biweekly/monthly/quarterly/yearly). */
 const CADENCE_BANDS: ReadonlyArray<{ cadenceDays: number; min: number; max: number }> = [
@@ -219,16 +225,22 @@ function buildForecast(
     (t) => !streamKeys.has(norm(t.counterparty) + "|" + (t.amount >= 0 ? "in" : "out")),
   );
 
-  // Incidental (non-recurring) daily baseline, estimated from the scope's
-  // own transaction history.
+  // Incidental (non-recurring) daily baseline, estimated from the scope's own
+  // transaction history. Requires >= MIN_HISTORY_DAYS of history: with a short
+  // window a single lumpy one-off (a big transfer / equipment buy, <3 occ so
+  // not "recurring") extrapolates into a huge daily drift that would dominate —
+  // and could fabricate or erase a shortfall. Below the threshold we project
+  // recurring streams only (honest "not enough history for a spend baseline").
   let incidentalPerDayCents = 0;
   if (scopeTxs.length > 0) {
     const dates = scopeTxs.map((t) => t.date);
     const minDate = dates.reduce((a, b) => (a < b ? a : b));
     const maxDate = dates.reduce((a, b) => (a > b ? a : b));
     const historyDays = Math.max(1, daysBetween(minDate, maxDate));
-    const nonRecurringSumCents = nonRecurring.reduce((s, t) => s + Math.round(t.amount * 100), 0);
-    incidentalPerDayCents = Math.round(nonRecurringSumCents / historyDays);
+    if (historyDays >= MIN_HISTORY_DAYS) {
+      const nonRecurringSumCents = nonRecurring.reduce((s, t) => s + Math.round(t.amount * 100), 0);
+      incidentalPerDayCents = Math.round(nonRecurringSumCents / historyDays);
+    }
   }
 
   // Day-by-day roll-forward: apply the incidental baseline and any streams

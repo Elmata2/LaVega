@@ -101,6 +101,36 @@ test("null opening (CSV-only) -> flow projected internally but closing/band null
   expect(f.drivers.length).toBeGreaterThan(0);
 });
 
+test("thin history: a big non-recurring one-off does NOT dominate (incidental baseline needs >= 60 days)", () => {
+  // ~20 days of history + a -10000 one-off. Un-guarded, -10000/20 ≈ -500/day over
+  // 91 days ≈ -45k would fabricate a shortfall. Guarded -> incidental 0, flat.
+  const txs: Tx[] = [
+    tx("1", "2026-06-10", -10000, "Equipment"),
+    tx("2", "2026-06-20", -50, "Coffee"),
+    tx("3", "2026-06-30", -50, "Coffee"),
+  ];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 }];
+  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 });
+  const f = byEntity["BV1"];
+  expect(f.streams).toHaveLength(0);            // nothing recurs (Coffee 2x, Equipment 1x)
+  expect(f.points[12].projectedClosingCents).toBe(500000); // opening, flat — no incidental drift
+  expect(f.shortfall).toBeNull();
+});
+
+test("sufficient history: the incidental (non-recurring) baseline drifts the projection", () => {
+  // 90-day window, two distinct one-offs (neither recurs) -> a real daily drift.
+  const txs: Tx[] = [
+    tx("1", "2026-04-01", -910, "Diversen"),
+    tx("2", "2026-06-30", -910, "Anders"),
+  ];
+  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 }];
+  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 });
+  const f = byEntity["BV1"];
+  expect(f.streams).toHaveLength(0);
+  // history 90d, nonRecurring sum -182000c, per day round(-182000/90) = -2022 -> well below opening
+  expect(f.points[12].projectedClosingCents!).toBeLessThan(500000);
+});
+
 test("orphan txs (accountKey with no account) -> 'onbekend' scope has null opening, no spurious shortfall", () => {
   // The tx's accountKey "GHOST" matches no account, so it lands in the "onbekend"
   // entity scope, which has ZERO accounts -> opening must be unknown, not €0.
