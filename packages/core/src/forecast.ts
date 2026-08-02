@@ -11,7 +11,7 @@ export type RecurringStream = {
   counterparty: string;    // raw counterparty of the first occurrence in the group
   sign: 1 | -1;             // 1 = inflow, -1 = outflow
   cadenceDays: number;      // snapped: 7 | 14 | 30 | 91 | 365
-  amountCents: number;      // representative magnitude = median(|amount| in cents), POSITIVE
+  amountCents: number;      // representative magnitude = round(median(|amount| in cents)), POSITIVE integer
   occurrences: number;
   lastDate: string;         // ISO date of the most recent occurrence
   intervalCv: number;       // std/mean of day-gaps (0 when < 2 gaps)
@@ -50,10 +50,14 @@ function mean(nums: number[]): number {
   return nums.reduce((s, n) => s + n, 0) / nums.length;
 }
 
-/** Population standard deviation. */
+/** Sample standard deviation (Bessel's correction: n-1 denominator). The
+ *  standard convention for a CV estimated from a sample, and stricter at the
+ *  minimum n=3-occurrence case (2 gaps) — the right bias for asserting a stream
+ *  is "recurring". Returns 0 for fewer than 2 values. */
 function std(nums: number[]): number {
+  if (nums.length < 2) return 0;
   const m = mean(nums);
-  const variance = nums.reduce((s, n) => s + (n - m) ** 2, 0) / nums.length;
+  const variance = nums.reduce((s, n) => s + (n - m) ** 2, 0) / (nums.length - 1);
   return Math.sqrt(variance);
 }
 
@@ -109,7 +113,9 @@ export function detectRecurringStreams(txs: Tx[], opts: DetectOptions = {}): Rec
     if (intervalCv > maxIntervalCv) continue;
 
     const amountsCents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const amountCents = median(amountsCents);
+    // Round the median: for an even occurrence count it averages two middles and
+    // could yield a half-cent, which would break the "integer cents" contract.
+    const amountCents = Math.round(median(amountsCents));
     const tolerance = Math.max(amountTolerance * amountCents, 100);
     const hasOutlier = amountsCents.some((c) => Math.abs(c - amountCents) > tolerance);
     if (hasOutlier) continue;

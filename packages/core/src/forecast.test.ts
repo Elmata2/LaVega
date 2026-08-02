@@ -6,6 +6,29 @@ function tx(id: string, date: string, amount: number, cp: string): Tx {
   return { id, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false };
 }
 
+test("amountCents stays an integer for an even occurrence count (median of two middles is rounded)", () => {
+  const txs: Tx[] = [
+    tx("1", "2026-03-25", -100.0, "Saas"), tx("2", "2026-04-25", -100.0, "Saas"),
+    tx("3", "2026-05-25", -100.01, "Saas"), tx("4", "2026-06-25", -100.02, "Saas"),
+  ];
+  const streams = detectRecurringStreams(txs);
+  expect(streams).toHaveLength(1);
+  // cents [10000,10000,10001,10002] -> median (10000+10001)/2 = 10000.5 -> round 10001
+  expect(streams[0].amountCents).toBe(10001);
+  expect(Number.isInteger(streams[0].amountCents)).toBe(true);
+});
+
+test("interval CV uses SAMPLE stddev: a jittery ~monthly stream (gaps 22 & 40) is rejected as too irregular", () => {
+  // median gap 31 snaps to the 30-day band; amounts stable -> only the CV gate can reject.
+  // sample CV = 12.73/31 ≈ 0.41 > 0.35 -> rejected (population CV would be 0.29 -> accepted).
+  const txs: Tx[] = [
+    tx("1", "2026-06-01", -100, "Jitter"),
+    tx("2", "2026-06-23", -100, "Jitter"), // +22 days
+    tx("3", "2026-08-02", -100, "Jitter"), // +40 days
+  ];
+  expect(detectRecurringStreams(txs)).toHaveLength(0);
+});
+
 test("detects a monthly salary inflow (3 occurrences, ~30d cadence, stable amount)", () => {
   const txs: Tx[] = [
     tx("1", "2026-04-25", 2500, "Werkgever BV"),
