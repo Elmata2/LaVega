@@ -1,12 +1,13 @@
 import { useMemo } from "react";
-import type { Account, Tx } from "@lavega/core";
-import { consolidate, enrichTxs, monthlyTotals, forecastCashflow } from "@lavega/core";
+import type { Account, Rule, Tx } from "@lavega/core";
+import { consolidate, enrichTxs, monthlyTotals, categoryTotals, forecastCashflow } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 
 type OverzichtProps = {
   accounts: Account[];
   txs: Tx[];
+  rules: Rule[];
   asOf: string;
   onNavigate: (view: View) => void;
 };
@@ -121,8 +122,16 @@ function CashflowMiniChart({
 
 const FORECAST_BUFFER_CENTS = 0;
 
-export default function Overzicht({ accounts, txs, asOf, onNavigate }: OverzichtProps) {
+export default function Overzicht({ accounts, txs, rules, asOf, onNavigate }: OverzichtProps) {
   const { totalBalance } = useMemo(() => consolidate(accounts, txs), [accounts, txs]);
+
+  // Per-category in/out from the user's rules — biggest categories first.
+  const catRows = useMemo(() => {
+    const totals = categoryTotals(txs, rules);
+    return Object.entries(totals).sort(
+      (a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)),
+    );
+  }, [txs, rules]);
 
   const entities = useMemo(
     () => Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0))),
@@ -300,6 +309,39 @@ export default function Overzicht({ accounts, txs, asOf, onNavigate }: Overzicht
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card" aria-label="Per categorie">
+          <div className="card-header">
+            <h2>Per categorie</h2>
+            <button type="button" className="card-link" onClick={() => onNavigate("rules")}>
+              regels →
+            </button>
+          </div>
+          {catRows.length === 0 ? (
+            <p>Nog geen transacties.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Categorie</th>
+                    <th>In</th>
+                    <th>Uit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catRows.map(([cat, b]) => (
+                    <tr key={cat}>
+                      <td>{cat}</td>
+                      <td><span className="text-pos">{formatEuro(b.in)}</span></td>
+                      <td><span className="text-neg">{formatEuro(b.out)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

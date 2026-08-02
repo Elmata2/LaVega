@@ -157,7 +157,7 @@ export default function App() {
           />
 
           {view === "overview" && (
-            <Overzicht accounts={scopedAccounts} txs={scopedTxs} asOf={asOf} onNavigate={setView} />
+            <Overzicht accounts={scopedAccounts} txs={scopedTxs} rules={rules} asOf={asOf} onNavigate={setView} />
           )}
 
           {view === "transactions" && (
