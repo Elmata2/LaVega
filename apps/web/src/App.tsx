@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, MonthlyTotal, Tx } from "@lavega/core";
+import type { Account, MonthlyTotal, Rule, Tx } from "@lavega/core";
 import {
   ingest,
   consolidate,
@@ -8,6 +8,8 @@ import {
   monthlyTotals,
   accountSummaries,
   reassignEntity,
+  categorize,
+  categoryTotals,
 } from "@lavega/core";
 import { createFileImport, createIndexedDbStorage } from "@lavega/adapters";
 
@@ -44,7 +46,7 @@ function MonthlyChart({ data }: { data: MonthlyTotal[] }) {
   );
 }
 
-type View = "overview" | "transactions" | "accounts";
+type View = "overview" | "transactions" | "accounts" | "rules";
 
 export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -52,6 +54,7 @@ export default function App() {
   const [entity, setEntity] = useState("BV1");
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
 
   const [view, setView] = useState<View>("overview");
   const [fEntity, setFEntity] = useState("");
@@ -59,18 +62,29 @@ export default function App() {
   const [fSearch, setFSearch] = useState("");
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
+  const [ruleMatch, setRuleMatch] = useState("");
+  const [ruleCategory, setRuleCategory] = useState("");
 
   // Load persisted data on mount so a reload shows prior imports.
   useEffect(() => {
     (async () => {
-      const [loadedAccounts, loadedTxs] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
+        storage.getRules(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
+      setRules(loadedRules);
     })();
   }, []);
+
+  // Rules are UI-owned as a whole list (replace-all persistence), so every
+  // add/remove goes through this single helper to keep state and storage in sync.
+  async function saveRules(next: Rule[]) {
+    setRules(next);
+    await storage.putRules(next);
+  }
 
   const { byEntity, totalBalance } = useMemo(() => consolidate(accounts, txs), [accounts, txs]);
 
@@ -101,6 +115,7 @@ export default function App() {
   );
 
   const chart = useMemo(() => monthlyTotals(txs), [txs]);
+  const catTotals = useMemo(() => categoryTotals(txs, rules), [txs, rules]);
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
   async function handleImport(file: File) {
@@ -168,6 +183,14 @@ export default function App() {
           disabled={view === "accounts"}
         >
           Rekeningen
+        </button>{" "}
+        <button
+          type="button"
+          onClick={() => setView("rules")}
+          aria-current={view === "rules" ? "page" : undefined}
+          disabled={view === "rules"}
+        >
+          Regels
         </button>
       </nav>
 
@@ -222,6 +245,26 @@ export default function App() {
                   <td>{formatEuro(b.in)}</td>
                   <td>{formatEuro(b.out)}</td>
                   <td>{b.balance === null ? "onbekend" : formatEuro(b.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3>Per categorie</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Categorie</th>
+                <th>In</th>
+                <th>Uit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(catTotals).map(([category, b]) => (
+                <tr key={category}>
+                  <td>{category}</td>
+                  <td>{formatEuro(b.in)}</td>
+                  <td>{formatEuro(b.out)}</td>
                 </tr>
               ))}
             </tbody>
@@ -289,6 +332,7 @@ export default function App() {
                   <th>Rekening</th>
                   <th>Bedrag</th>
                   <th>Entiteit</th>
+                  <th>Categorie</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,6 +346,7 @@ export default function App() {
                       {formatEuro(t.amount)}
                     </td>
                     <td>{t.entity}</td>
+                    <td>{categorize(t, rules)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -341,6 +386,67 @@ export default function App() {
                     </td>
                     <td>{account.balance === null ? "onbekend" : formatEuro(account.balance)}</td>
                     <td>{txCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {view === "rules" && (
+        <section aria-label="Regels">
+          <h2>Regels</h2>
+          <label>
+            Match{" "}
+            <input value={ruleMatch} onChange={(e) => setRuleMatch(e.target.value)} disabled={busy} />
+          </label>
+          {" "}
+          <label>
+            Categorie{" "}
+            <input value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} disabled={busy} />
+          </label>
+          {" "}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const match = ruleMatch.trim();
+              const category = ruleCategory.trim();
+              if (!match || !category) return;
+              void saveRules([...rules, { id: crypto.randomUUID(), match, category }]);
+              setRuleMatch("");
+              setRuleCategory("");
+            }}
+          >
+            Toevoegen
+          </button>
+
+          {rules.length === 0 ? (
+            <p>Nog geen regels.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Match</th>
+                  <th>Categorie</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule) => (
+                  <tr key={rule.id}>
+                    <td>{rule.match}</td>
+                    <td>{rule.category}</td>
+                    <td>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void saveRules(rules.filter((r) => r.id !== rule.id))}
+                      >
+                        Verwijderen
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
