@@ -191,6 +191,9 @@ function parseABN(rows: string[][]): { accounts: Record<string, Account>; txs: A
       key: acc, iban: findIban(acc) ?? "", name: acc, bank: "ABN AMRO", entity: "", currency: cur, balance: close,
     };
     accounts[acc].balance = close;
+    // The running balance is "as of" this row's date; each row overwrites like
+    // `balance` above, so the last (max-date) row wins.
+    accounts[acc].balanceDate = date;
     let cp = "";
     const nm = info.match(/(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+([^\n]+?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i);
     if (nm) cp = nm[1].trim().slice(0, 60);

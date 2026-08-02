@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances } from "@lavega/core";
 import { createFileImport, createIndexedDbStorage } from "@lavega/adapters";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
@@ -93,6 +93,16 @@ export default function App() {
     return txs.filter((t) => scopedKeys.has(t.accountKey));
   }, [txs, entityScope, scopedAccounts]);
 
+  // A stored balance is only "as of" its balanceDate (no date => already
+  // current); roll every account forward to `asOf` with its later txs so
+  // Overzicht/Forecast always display/sum the current position. Rekeningen
+  // still gets the RAW scopedAccounts below — it edits stored values, not
+  // this derived view.
+  const currentScopedAccounts = useMemo(
+    () => withCurrentBalances(scopedAccounts, scopedTxs, asOf),
+    [scopedAccounts, scopedTxs, asOf],
+  );
+
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
   async function handleImport(file: File) {
     setBusy(true);
@@ -133,12 +143,15 @@ export default function App() {
 
   // Manually set an account's current saldo (CSV imports carry none). Accepts a
   // Dutch comma or dot decimal; blank clears it back to "onbekend" (null). Parse,
-  // update state, persist that one account — feeds the Totaalpositie.
+  // update state, persist that one account — feeds the Totaalpositie. A typed
+  // value is "current as of today", so it also anchors balanceDate to asOf;
+  // blank clears both back to unknown/unanchored.
   async function handleSaldoCommit(key: string, value: string) {
     const trimmed = value.trim().replace(",", ".");
     const balance = trimmed === "" ? null : Number(trimmed);
     if (balance !== null && !Number.isFinite(balance)) return; // ignore garbage input
-    const next = accounts.map((a) => (a.key === key ? { ...a, balance } : a));
+    const balanceDate = balance === null ? undefined : asOf;
+    const next = accounts.map((a) => (a.key === key ? { ...a, balance, balanceDate } : a));
     setAccounts(next);
     const changed = next.find((a) => a.key === key);
     if (changed) await storage.putAccounts([changed]);
@@ -170,7 +183,7 @@ export default function App() {
           />
 
           {view === "overview" && (
-            <Overzicht accounts={scopedAccounts} txs={scopedTxs} rules={rules} asOf={asOf} onNavigate={setView} />
+            <Overzicht accounts={currentScopedAccounts} txs={scopedTxs} rules={rules} asOf={asOf} onNavigate={setView} />
           )}
 
           {view === "transactions" && (
@@ -217,7 +230,7 @@ export default function App() {
           )}
 
           {view === "forecast" && (
-            <Forecast txs={txs} accounts={accounts} entityScope={entityScope} asOf={asOf} />
+            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} />
           )}
         </main>
       </div>

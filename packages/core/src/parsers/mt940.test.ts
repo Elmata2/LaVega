@@ -38,3 +38,8 @@ test("MT940: a debit :61: line yields a negative amount", () => {
   expect(txs[0].amount).toBeLessThan(0);
   expect(txs[1].amount).toBeGreaterThan(0);
 });
+
+test("MT940: the parsed account's balanceDate is the last (max) :61: tx date in the block", () => {
+  const { accounts } = parseMt940(MT940);
+  expect(accounts[0].balanceDate).toBe("2026-01-03");
+});

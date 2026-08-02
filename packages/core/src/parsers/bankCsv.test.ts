@@ -176,4 +176,6 @@ test("ABN AMRO: TAB/no-header detected, dates ISO, signed amounts, closing balan
   expect(result.accounts[0].bank).toBe("ABN AMRO");
   // Closing balance = the last row's balance-after column (real number, not null).
   expect(result.accounts[0].balance).toBe(1750);
+  // balanceDate anchors that closing balance to the last (max-date) row.
+  expect(result.accounts[0].balanceDate).toBe("2026-01-16");
 });

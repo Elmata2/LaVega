@@ -45,6 +45,10 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
       bank: bankFromIban(acc) ?? bankFromBic(headerBic) ?? "", entity: "", currency: cur, balance: close,
     };
     if (close != null) accounts[acc].balance = close;
+    // balanceDate anchors this block's closing balance to the statement's last
+    // movement (max :61: tx date). Tracked across the block's tx loop below and
+    // applied once it finishes; a block with a balance but no txs leaves it unset.
+    let maxTxDate: string | null = null;
     for (let i = 0; i < flat.length; i++) {
       const m = flat[i].match(/^:61:(\d{6})(\d{4})?(C|D|RC|RD)([A-Z])?([\d.,]+)/);
       if (!m) continue;
@@ -52,6 +56,7 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
       const sign = /D/.test(m[3]) ? -1 : 1;
       const val = parseAmount(m[5]);
       if (date == null || val == null) continue;
+      if (maxTxDate == null || date > maxTxDate) maxTxDate = date;
       let info = "";
       if (flat[i + 1] && flat[i + 1].startsWith(":86:")) info = flat[i + 1].slice(4);
       const ref = (flat[i].split(/\n/)[0] || "").slice(-40);
@@ -72,6 +77,7 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
         counterparty: cp, description: desc || ref, category: "", manual: false,
       });
     }
+    if (maxTxDate != null) accounts[acc].balanceDate = maxTxDate;
   }
   return { accounts: Object.values(accounts), txs };
 }
