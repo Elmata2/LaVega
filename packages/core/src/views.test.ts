@@ -85,6 +85,12 @@ test("categorize: first matching rule wins (case-insensitive over counterparty+d
   expect(categorize(manual, rules)).toBe("Handmatig");
 });
 
+test("categorize: a whitespace-only rule match does NOT match everything (guards on normalized match)", () => {
+  const bad: Rule[] = [{ id: "r0", match: "   ", category: "Alles" }];
+  expect(categorize(txsForMonths[0], bad)).toBe("onbekend");
+  expect(categorize(txsForMonths[1], bad)).toBe("onbekend");
+});
+
 test("categoryTotals: sums in/out per derived category", () => {
   const t = categoryTotals(txsForMonths, rules);
   expect(t["Inkomen"]).toEqual({ in: 100, out: 0 });

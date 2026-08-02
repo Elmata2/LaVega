@@ -75,7 +75,10 @@ export function categorize(tx: Tx, rules: Rule[]): string {
   if (tx.category) return tx.category;
   const hay = norm(tx.counterparty + " " + tx.description);
   for (const r of rules) {
-    if (r.match && hay.includes(norm(r.match))) return r.category;
+    // Guard on the NORMALIZED match: a whitespace-only match norms to "" and
+    // would otherwise substring-match every tx, mislabeling the whole dataset.
+    const m = norm(r.match);
+    if (m && hay.includes(m)) return r.category;
   }
   return "onbekend";
 }
