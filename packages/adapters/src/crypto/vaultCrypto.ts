@@ -29,6 +29,11 @@ export function newSalt(): Uint8Array {
 }
 
 export async function deriveKey(passphrase: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
+  // Floor the work factor: an attacker who tampered a stored blob's `iterations`
+  // down to a tiny number could otherwise force a cheap-to-bruteforce derivation.
+  if (iterations < PBKDF2_ITERATIONS) {
+    throw new Error(`PBKDF2 iterations te laag (${iterations} < ${PBKDF2_ITERATIONS})`);
+  }
   const material = await globalThis.crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
   return globalThis.crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: salt as BufferSource, iterations, hash: "SHA-256" },

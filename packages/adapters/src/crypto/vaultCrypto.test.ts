@@ -36,6 +36,10 @@ test("ciphertext does not contain the plaintext", async () => {
   expect(hay.includes("ALBERT")).toBe(false);
 });
 
+test("deriveKey rejects an iteration count below the floor (tamper hardening)", async () => {
+  await expect(deriveKey("pw", newSalt(), 1000)).rejects.toBeTruthy();
+});
+
 test("blob metadata is well-formed", async () => {
   const salt = newSalt();
   const key = await deriveKey("pw", salt, PBKDF2_ITERATIONS);
