@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import {
-  ingest,
-  enrichTxs,
-  filterTxs,
-  accountSummaries,
-  reassignEntity,
-  categorize,
-} from "@lavega/core";
+import { ingest, reassignEntity } from "@lavega/core";
 import { createFileImport, createIndexedDbStorage } from "@lavega/adapters";
-import { formatEuro } from "./format";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Overzicht from "./views/Overzicht";
+import Transacties from "./views/Transacties";
+import Rekeningen from "./views/Rekeningen";
+import Regels from "./views/Regels";
+import Import from "./views/Import";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe.
@@ -89,20 +85,6 @@ export default function App() {
     return txs.filter((t) => scopedKeys.has(t.accountKey));
   }, [txs, entityScope, scopedAccounts]);
 
-  const rows = useMemo(
-    () =>
-      filterTxs(enrichTxs(scopedTxs, accounts), {
-        entity: fEntity || undefined,
-        accountKey: fAccount || undefined,
-        search: fSearch || undefined,
-        from: fFrom || undefined,
-        to: fTo || undefined,
-      })
-        .slice()
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [scopedTxs, accounts, fEntity, fAccount, fSearch, fFrom, fTo],
-  );
-
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
   async function handleImport(file: File) {
     setBusy(true);
@@ -158,224 +140,58 @@ export default function App() {
         />
 
         <main className="content">
-          <section id="import" className="card" aria-label="Importeren">
-            <h2>Importeren</h2>
-            <label>
-              Entiteit{" "}
-              <input
-                value={entity}
-                onChange={(e) => setEntity(e.target.value)}
-                disabled={busy}
-              />
-            </label>
-            {" "}
-            {/* No `accept` filter: format is detected from the file's *contents*
-                (parseBankFile sniffs MT940 vs CSV), so restricting extensions only
-                risks the OS dialog greying out a valid file (e.g. an uppercase
-                .STA). An unrecognized file is reported via `problems`, not a crash. */}
-            <input
-              type="file"
-              disabled={busy}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void handleImport(file);
-              }}
-            />
-            {problems.length > 0 && <p role="alert">{problems.join(", ")}</p>}
-          </section>
+          <Import
+            entity={entity}
+            onEntityChange={setEntity}
+            busy={busy}
+            problems={problems}
+            onImport={handleImport}
+          />
 
           {view === "overview" && (
             <Overzicht accounts={scopedAccounts} txs={scopedTxs} asOf={asOf} onNavigate={setView} />
           )}
 
           {view === "transactions" && (
-            <section className="card" aria-label="Transacties">
-              <h2>Transacties</h2>
-              <label>
-                Entiteit{" "}
-                <select value={fEntity} onChange={(e) => setFEntity(e.target.value)}>
-                  <option value="">Alle entiteiten</option>
-                  {entityOptions.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {" "}
-              <label>
-                Rekening{" "}
-                <select value={fAccount} onChange={(e) => setFAccount(e.target.value)}>
-                  <option value="">Alle rekeningen</option>
-                  {accounts.map((a) => (
-                    <option key={a.key} value={a.key}>
-                      {a.bank} · {a.key}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {" "}
-              <label>
-                Zoeken{" "}
-                <input
-                  value={fSearch}
-                  onChange={(e) => setFSearch(e.target.value)}
-                  placeholder="Tegenpartij of omschrijving"
-                />
-              </label>
-              {" "}
-              <label>
-                Van{" "}
-                <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
-              </label>
-              {" "}
-              <label>
-                Tot{" "}
-                <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />
-              </label>
-
-              <p>{rows.length} transacties</p>
-
-              {rows.length === 0 ? (
-                <p>Geen transacties.</p>
-              ) : (
-                <div className="table-wrap">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Datum</th>
-                        <th>Tegenpartij</th>
-                        <th>Omschrijving</th>
-                        <th>Rekening</th>
-                        <th>Bedrag</th>
-                        <th>Entiteit</th>
-                        <th>Categorie</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((t) => (
-                        <tr key={t.id}>
-                          <td>{t.date}</td>
-                          <td>{t.counterparty}</td>
-                          <td>{t.description}</td>
-                          <td>{t.bank} · {t.accountKey}</td>
-                          <td style={{ color: t.amount >= 0 ? "green" : "crimson" }}>
-                            {formatEuro(t.amount)}
-                          </td>
-                          <td>{t.entity}</td>
-                          <td>{categorize(t, rules)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
+            <Transacties
+              accounts={accounts}
+              scopedTxs={scopedTxs}
+              rules={rules}
+              entityOptions={entityOptions}
+              entityScope={entityScope}
+              fEntity={fEntity}
+              onFEntityChange={setFEntity}
+              fAccount={fAccount}
+              onFAccountChange={setFAccount}
+              fSearch={fSearch}
+              onFSearchChange={setFSearch}
+              fFrom={fFrom}
+              onFFromChange={setFFrom}
+              fTo={fTo}
+              onFToChange={setFTo}
+            />
           )}
 
           {view === "accounts" && (
-            <section className="card" aria-label="Rekeningen">
-              <h2>Rekeningen</h2>
-              {scopedAccounts.length === 0 ? (
-                <p>Nog geen rekeningen — importeer eerst een bestand.</p>
-              ) : (
-                <div className="table-wrap">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Bank</th>
-                        <th>Rekening</th>
-                        <th>Entiteit</th>
-                        <th>Saldo</th>
-                        <th>Transacties</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {accountSummaries(scopedAccounts, scopedTxs).map(({ account, txCount }) => (
-                        <tr key={account.key}>
-                          <td>{account.bank}</td>
-                          <td>{account.name}</td>
-                          <td>
-                            <input
-                              value={account.entity}
-                              onChange={(e) => handleEntityChange(account.key, e.target.value)}
-                              onBlur={() => void handleEntityCommit(account)}
-                              disabled={busy}
-                            />
-                          </td>
-                          <td>{account.balance === null ? "onbekend" : formatEuro(account.balance)}</td>
-                          <td>{txCount}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
+            <Rekeningen
+              accounts={scopedAccounts}
+              txs={scopedTxs}
+              busy={busy}
+              onEntityChange={handleEntityChange}
+              onEntityCommit={handleEntityCommit}
+            />
           )}
 
           {view === "rules" && (
-            <section className="card" aria-label="Regels">
-              <h2>Regels</h2>
-              <label>
-                Match{" "}
-                <input value={ruleMatch} onChange={(e) => setRuleMatch(e.target.value)} disabled={busy} />
-              </label>
-              {" "}
-              <label>
-                Categorie{" "}
-                <input value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} disabled={busy} />
-              </label>
-              {" "}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  const match = ruleMatch.trim();
-                  const category = ruleCategory.trim();
-                  if (!match || !category) return;
-                  void saveRules([...rules, { id: crypto.randomUUID(), match, category }]);
-                  setRuleMatch("");
-                  setRuleCategory("");
-                }}
-              >
-                Toevoegen
-              </button>
-
-              {rules.length === 0 ? (
-                <p>Nog geen regels.</p>
-              ) : (
-                <div className="table-wrap">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Match</th>
-                        <th>Categorie</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rules.map((rule) => (
-                        <tr key={rule.id}>
-                          <td>{rule.match}</td>
-                          <td>{rule.category}</td>
-                          <td>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void saveRules(rules.filter((r) => r.id !== rule.id))}
-                            >
-                              Verwijderen
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
+            <Regels
+              rules={rules}
+              busy={busy}
+              ruleMatch={ruleMatch}
+              onRuleMatchChange={setRuleMatch}
+              ruleCategory={ruleCategory}
+              onRuleCategoryChange={setRuleCategory}
+              onSaveRules={saveRules}
+            />
           )}
 
           {view === "forecast" && (
