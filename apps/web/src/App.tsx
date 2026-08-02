@@ -74,7 +74,11 @@ export default function App() {
     // is hidden, so a stale fEntity would silently filter Transacties to 0 rows).
     if (fEntity && (entityScope !== "" || !entityOptions.includes(fEntity))) setFEntity("");
     if (entityScope && !entityOptions.includes(entityScope)) setEntityScope("");
-  }, [entityOptions, fEntity, entityScope]);
+    // Drop a stale account filter that's no longer selectable — the account was
+    // removed, or a scope pill now excludes it — else it silently filters to 0.
+    const acc = accounts.find((a) => a.key === fAccount);
+    if (fAccount && (!acc || (entityScope !== "" && acc.entity !== entityScope))) setFAccount("");
+  }, [accounts, entityOptions, fEntity, fAccount, entityScope]);
 
   // entityScope ("" = Alle bedrijven) pre-filters the accounts/txs every view
   // derives from; each view's own filters (fEntity, fAccount, search, ...)
@@ -158,7 +162,7 @@ export default function App() {
 
           {view === "transactions" && (
             <Transacties
-              accounts={accounts}
+              accounts={scopedAccounts}
               scopedTxs={scopedTxs}
               rules={rules}
               entityOptions={entityOptions}
