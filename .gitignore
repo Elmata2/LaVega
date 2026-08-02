@@ -7,3 +7,4 @@ state.json
 .env.*
 .DS_Store
 .superpowers/
+.gstack/
