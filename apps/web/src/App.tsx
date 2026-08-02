@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx } from "@lavega/core";
+import type { Account, MonthlyTotal, Tx } from "@lavega/core";
 import {
   ingest,
   consolidate,
   enrichTxs,
   filterTxs,
+  monthlyTotals,
   accountSummaries,
   reassignEntity,
 } from "@lavega/core";
@@ -16,6 +17,31 @@ const storage = createIndexedDbStorage();
 
 function formatEuro(n: number): string {
   return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(n);
+}
+
+function MonthlyChart({ data }: { data: MonthlyTotal[] }) {
+  if (data.length === 0) return <p>Nog geen data voor een grafiek.</p>;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.in, -d.out)));
+  const barW = 24, gap = 12, midY = 60, h = 120;
+  const w = data.length * (barW + gap) + gap;
+  const scale = (v: number) => (v / max) * (h / 2 - 10);
+  return (
+    <svg width={w} height={h + 20} role="img" aria-label="Maandelijkse in- en uitstroom">
+      <line x1={0} y1={midY} x2={w} y2={midY} stroke="#ccc" />
+      {data.map((d, i) => {
+        const x = gap + i * (barW + gap);
+        const inH = scale(d.in);
+        const outH = scale(-d.out);
+        return (
+          <g key={d.month}>
+            <rect x={x} y={midY - inH} width={barW} height={inH} fill="green" />
+            <rect x={x} y={midY} width={barW} height={outH} fill="crimson" />
+            <text x={x + barW / 2} y={h + 14} fontSize={9} textAnchor="middle">{d.month.slice(2)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 type View = "overview" | "transactions" | "accounts";
@@ -31,6 +57,8 @@ export default function App() {
   const [fEntity, setFEntity] = useState("");
   const [fAccount, setFAccount] = useState("");
   const [fSearch, setFSearch] = useState("");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
 
   // Load persisted data on mount so a reload shows prior imports.
   useEffect(() => {
@@ -64,11 +92,15 @@ export default function App() {
         entity: fEntity || undefined,
         accountKey: fAccount || undefined,
         search: fSearch || undefined,
+        from: fFrom || undefined,
+        to: fTo || undefined,
       })
         .slice()
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [txs, accounts, fEntity, fAccount, fSearch],
+    [txs, accounts, fEntity, fAccount, fSearch, fFrom, fTo],
   );
+
+  const chart = useMemo(() => monthlyTotals(txs), [txs]);
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
   async function handleImport(file: File) {
@@ -169,6 +201,7 @@ export default function App() {
       {view === "overview" && (
         <section aria-label="Overzicht">
           <h2>Overzicht</h2>
+          <MonthlyChart data={chart} />
           <p>
             Totaalsaldo:{" "}
             <strong>{totalBalance === null ? "onbekend" : formatEuro(totalBalance)}</strong>
@@ -230,6 +263,16 @@ export default function App() {
               onChange={(e) => setFSearch(e.target.value)}
               placeholder="Tegenpartij of omschrijving"
             />
+          </label>
+          {" "}
+          <label>
+            Van{" "}
+            <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
+          </label>
+          {" "}
+          <label>
+            Tot{" "}
+            <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />
           </label>
 
           <p>{rows.length} transacties</p>
