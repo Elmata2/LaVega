@@ -1,9 +1,9 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { Account, Tx } from "@lavega/core";
+import type { Account, Tx, Rule } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 
 const DB_NAME = "lavega";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openLaVegaDb(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
@@ -13,6 +13,9 @@ function openLaVegaDb(): Promise<IDBPDatabase> {
       }
       if (!db.objectStoreNames.contains("txs")) {
         db.createObjectStore("txs", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("rules")) {
+        db.createObjectStore("rules", { keyPath: "id" });
       }
     },
   });
@@ -38,6 +41,18 @@ export function createIndexedDbStorage(): StorageAdapter {
       const db = await openLaVegaDb();
       const tx = db.transaction("txs", "readwrite");
       await Promise.all(t.map((entry) => tx.store.put(entry)));
+      await tx.done;
+    },
+    async getRules(): Promise<Rule[]> {
+      const db = await openLaVegaDb();
+      return db.getAll("rules");
+    },
+    // Replace-all: the UI owns the full rules list, so a save clears and rewrites.
+    async putRules(rules: Rule[]): Promise<void> {
+      const db = await openLaVegaDb();
+      const tx = db.transaction("rules", "readwrite");
+      await tx.store.clear();
+      await Promise.all(rules.map((r) => tx.store.put(r)));
       await tx.done;
     },
   };
