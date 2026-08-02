@@ -3,6 +3,7 @@ export * from "./model.js";
 export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
+export * from "./forecast.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";
 export * from "./parsers/mt940.js";
