@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals } from "./views.js";
+import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
   { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING lopend", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
@@ -48,4 +49,45 @@ test("reassignEntity changes only the target account, immutably", () => {
   expect(next.find((a) => a.key === "NL91ABNA0417164300")!.entity).toBe("BV2");
   expect(accounts.find((a) => a.key === "NL01INGB0001")!.entity).toBe("BV1");
   expect(next).not.toBe(accounts);
+});
+
+const txsForMonths: Tx[] = [
+  { id: "a", accountKey: "A1", date: "2026-06-05", amount: 100, currency: "EUR", counterparty: "Klant", description: "Factuur", category: "", manual: false },
+  { id: "b", accountKey: "A1", date: "2026-06-20", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
+  { id: "c", accountKey: "A1", date: "2026-07-02", amount: -12.5, currency: "EUR", counterparty: "Coffee", description: "Koffie", category: "", manual: false },
+];
+
+test("filterTxs: from/to bound the date range (inclusive), combinable with other filters", () => {
+  const e = enrichTxs(txsForMonths, accounts);
+  expect(filterTxs(e, { from: "2026-07-01" }).map((t) => t.id)).toEqual(["c"]);
+  expect(filterTxs(e, { to: "2026-06-30" }).map((t) => t.id)).toEqual(["a", "b"]);
+  expect(filterTxs(e, { from: "2026-06-10", to: "2026-06-30" }).map((t) => t.id)).toEqual(["b"]);
+  expect(filterTxs(e, { from: "2026-06-01", to: "2026-07-31", search: "koffie" }).map((t) => t.id)).toEqual(["c"]);
+});
+
+test("monthlyTotals: groups by YYYY-MM, sums in/out, sorted ascending by month", () => {
+  expect(monthlyTotals(txsForMonths)).toEqual([
+    { month: "2026-06", in: 100, out: -30 },
+    { month: "2026-07", in: 0, out: -12.5 },
+  ]);
+});
+
+const rules: Rule[] = [
+  { id: "r1", match: "albert heijn", category: "Boodschappen" },
+  { id: "r2", match: "klant", category: "Inkomen" },
+];
+
+test("categorize: first matching rule wins (case-insensitive over counterparty+description); else 'onbekend'; manual tx.category wins", () => {
+  expect(categorize(txsForMonths[0], rules)).toBe("Inkomen");
+  expect(categorize(txsForMonths[1], rules)).toBe("Boodschappen");
+  expect(categorize(txsForMonths[2], rules)).toBe("onbekend");
+  const manual: Tx = { ...txsForMonths[2], category: "Handmatig" };
+  expect(categorize(manual, rules)).toBe("Handmatig");
+});
+
+test("categoryTotals: sums in/out per derived category", () => {
+  const t = categoryTotals(txsForMonths, rules);
+  expect(t["Inkomen"]).toEqual({ in: 100, out: 0 });
+  expect(t["Boodschappen"]).toEqual({ in: 0, out: -30 });
+  expect(t["onbekend"]).toEqual({ in: 0, out: -12.5 });
 });

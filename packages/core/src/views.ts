@@ -1,4 +1,4 @@
-import type { Account, Tx } from "./model.js";
+import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
@@ -18,15 +18,18 @@ export function enrichTxs(txs: Tx[], accounts: Account[]): EnrichedTx[] {
   });
 }
 
-export type TxFilter = { entity?: string; accountKey?: string; search?: string };
+export type TxFilter = { entity?: string; accountKey?: string; search?: string; from?: string; to?: string };
 
 /** Apply the (combinable) Transacties filters. Search is case/space-insensitive
- *  over counterparty + description (via norm). Input order is preserved. */
+ *  over counterparty + description (via norm). from/to bound the date range
+ *  inclusively (ISO dates compare lexicographically). Input order is preserved. */
 export function filterTxs(txs: EnrichedTx[], f: TxFilter): EnrichedTx[] {
   const q = f.search ? norm(f.search) : "";
   return txs.filter((t) => {
     if (f.entity && t.entity !== f.entity) return false;
     if (f.accountKey && t.accountKey !== f.accountKey) return false;
+    if (f.from && t.date < f.from) return false;
+    if (f.to && t.date > f.to) return false;
     if (q && !(norm(t.counterparty).includes(q) || norm(t.description).includes(q))) return false;
     return true;
   });
@@ -46,4 +49,44 @@ export function accountSummaries(accounts: Account[], txs: Tx[]): AccountSummary
  *  (immutable — never mutates the input). The caller persists + re-consolidates. */
 export function reassignEntity(accounts: Account[], key: string, entity: string): Account[] {
   return accounts.map((a) => (a.key === key ? { ...a, entity } : a));
+}
+
+export type MonthlyTotal = { month: string; in: number; out: number };
+
+/** Per-calendar-month inflow/outflow totals, sorted ascending by month
+ *  (YYYY-MM). Drives the Overzicht bar chart. */
+export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
+  const byMonth = new Map<string, { in: number; out: number }>();
+  for (const t of txs) {
+    const m = t.date.slice(0, 7);
+    const b = byMonth.get(m) ?? { in: 0, out: 0 };
+    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    byMonth.set(m, b);
+  }
+  return [...byMonth.entries()]
+    .map(([month, b]) => ({ month, in: b.in, out: b.out }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/** Category for a tx: a non-empty tx.category (manual override) wins; else the
+ *  first rule whose match text is a substring of counterparty+description
+ *  (case/space-insensitive); else "onbekend". */
+export function categorize(tx: Tx, rules: Rule[]): string {
+  if (tx.category) return tx.category;
+  const hay = norm(tx.counterparty + " " + tx.description);
+  for (const r of rules) {
+    if (r.match && hay.includes(norm(r.match))) return r.category;
+  }
+  return "onbekend";
+}
+
+/** In/out totals grouped by derived category (via categorize). */
+export function categoryTotals(txs: Tx[], rules: Rule[]): Record<string, { in: number; out: number }> {
+  const out: Record<string, { in: number; out: number }> = {};
+  for (const t of txs) {
+    const c = categorize(t, rules);
+    const b = (out[c] ??= { in: 0, out: 0 });
+    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+  }
+  return out;
 }
