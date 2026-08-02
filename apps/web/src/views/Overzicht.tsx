@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { consolidate, enrichTxs, monthlyTotals, categoryTotals, forecastCashflow } from "@lavega/core";
+import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 
@@ -123,8 +123,6 @@ function CashflowMiniChart({
 const FORECAST_BUFFER_CENTS = 0;
 
 export default function Overzicht({ accounts, txs, rules, asOf, onNavigate }: OverzichtProps) {
-  const { totalBalance } = useMemo(() => consolidate(accounts, txs), [accounts, txs]);
-
   // Per-category in/out from the user's rules — biggest categories first.
   const catRows = useMemo(() => {
     const totals = categoryTotals(txs, rules);
@@ -138,6 +136,10 @@ export default function Overzicht({ accounts, txs, rules, asOf, onNavigate }: Ov
     [accounts],
   );
   const unknownCount = useMemo(() => accounts.filter((a) => a.balance === null).length, [accounts]);
+  // Sum of the KNOWN balances — so Totaalpositie always shows a number, even
+  // when some accounts (CSV imports) have no saldo yet. When unknownCount is 0
+  // this equals consolidate()'s totalBalance (a complete, exact position).
+  const knownSum = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
 
   const recent = useMemo(
     () =>
@@ -182,9 +184,16 @@ export default function Overzicht({ accounts, txs, rules, asOf, onNavigate }: Ov
     <>
       <div className="kpi-row">
         <div className="kpi highlight">
-          <div className="kpi-label">Totaalpositie</div>
-          <div className={`kpi-value ${totalBalance === null ? "" : totalBalance >= 0 ? "text-pos" : "text-neg"}`}>
-            {totalBalance === null ? "onbekend" : formatEuro(totalBalance)}
+          <div className="kpi-label">Totaalpositie{unknownCount > 0 ? " (deels)" : ""}</div>
+          <div className={`kpi-value ${accounts.length === 0 ? "" : knownSum >= 0 ? "text-pos" : "text-neg"}`}>
+            {accounts.length === 0 ? "—" : formatEuro(knownSum)}
+          </div>
+          <div className="eyebrow">
+            {accounts.length === 0
+              ? "importeer of vul saldo's in"
+              : unknownCount > 0
+                ? `${unknownCount} rekening${unknownCount > 1 ? "en" : ""} nog zonder saldo — vul in bij Rekeningen`
+                : "compleet"}
           </div>
         </div>
         <div className="kpi">

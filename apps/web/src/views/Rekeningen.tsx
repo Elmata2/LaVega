@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import type { Account, Tx } from "@lavega/core";
 import { accountSummaries } from "@lavega/core";
-import { formatEuro } from "../format";
 
 type RekeningenProps = {
   accounts: Account[];
@@ -8,9 +8,42 @@ type RekeningenProps = {
   busy: boolean;
   onEntityChange: (key: string, newEntity: string) => void;
   onEntityCommit: (account: Account) => void;
+  onSaldoCommit: (key: string, value: string) => void;
 };
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit }: RekeningenProps) {
+/** Editable current-saldo cell. CSV imports carry no balance, so the owner types
+ *  it in from their bankapp; MT940/.STA fills it automatically but can be
+ *  overridden. Holds a free-form draft string while typing (so "-", "1," etc.
+ *  don't fight a controlled number input) and commits on blur — the parse +
+ *  persist happens in App. Blank commits back to "onbekend" (null). */
+function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolean; onCommit: (key: string, value: string) => void }) {
+  const [draft, setDraft] = useState(account.balance === null ? "" : String(account.balance));
+  // Resync when the balance changes elsewhere (re-import, reset) and we're not editing it.
+  useEffect(() => {
+    setDraft(account.balance === null ? "" : String(account.balance));
+  }, [account.balance]);
+  const cls = account.balance === null ? "" : account.balance >= 0 ? " text-pos" : " text-neg";
+  return (
+    <>
+      <span
+        className={`dot${account.balance === null ? "" : account.balance >= 0 ? " dot-pos" : " dot-neg"}`}
+        aria-hidden="true"
+      />{" "}
+      <input
+        className={`saldo-input${cls}`}
+        inputMode="decimal"
+        placeholder="onbekend"
+        aria-label={`Saldo ${account.name}`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onCommit(account.key, draft)}
+        disabled={busy}
+      />
+    </>
+  );
+}
+
+export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit }: RekeningenProps) {
   return (
     <section className="card" aria-label="Rekeningen">
       <h2>Rekeningen</h2>
@@ -42,13 +75,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                     />
                   </td>
                   <td>
-                    <span
-                      className={`dot${account.balance === null ? "" : account.balance >= 0 ? " dot-pos" : " dot-neg"}`}
-                      aria-hidden="true"
-                    />{" "}
-                    <span className={account.balance === null ? "" : account.balance >= 0 ? "text-pos" : "text-neg"}>
-                      {account.balance === null ? "onbekend" : formatEuro(account.balance)}
-                    </span>
+                    <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
                   </td>
                   <td>{txCount}</td>
                 </tr>

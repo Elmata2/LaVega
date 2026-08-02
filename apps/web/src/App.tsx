@@ -131,6 +131,19 @@ export default function App() {
     await storage.putAccounts([account]);
   }
 
+  // Manually set an account's current saldo (CSV imports carry none). Accepts a
+  // Dutch comma or dot decimal; blank clears it back to "onbekend" (null). Parse,
+  // update state, persist that one account — feeds the Totaalpositie.
+  async function handleSaldoCommit(key: string, value: string) {
+    const trimmed = value.trim().replace(",", ".");
+    const balance = trimmed === "" ? null : Number(trimmed);
+    if (balance !== null && !Number.isFinite(balance)) return; // ignore garbage input
+    const next = accounts.map((a) => (a.key === key ? { ...a, balance } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
   function scrollToImport() {
     document.getElementById("import")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -187,6 +200,7 @@ export default function App() {
               busy={busy}
               onEntityChange={handleEntityChange}
               onEntityCommit={handleEntityCommit}
+              onSaldoCommit={handleSaldoCommit}
             />
           )}
 
