@@ -180,6 +180,12 @@ table tbody tr:hover {
 }
 
 /* KPI tile */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
 .kpi {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -200,6 +206,129 @@ table tbody tr:hover {
   font-size: 1.9rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+.kpi .eyebrow {
+  margin-top: var(--sp-2);
+}
+
+/* Semantic text color (money only) */
+.text-pos {
+  color: var(--pos);
+}
+.text-neg {
+  color: var(--neg);
+}
+.text-warn {
+  color: var(--warn);
+}
+
+/* Card grid (Overzicht + other multi-card views) */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+.card-grid .span-2 {
+  grid-column: 1 / -1;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.card-header h2 {
+  margin: 0;
+}
+.card-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.card-link:hover {
+  filter: brightness(1.2);
+  text-decoration: underline;
+}
+
+/* Positie over je bedrijven */
+.position-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.position-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.position-row-info {
+  flex: 1;
+  min-width: 0;
+}
+.position-row-name {
+  font-weight: 600;
+}
+.position-row-balance {
+  flex: none;
+  min-width: 100px;
+  text-align: right;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.proportion-bar {
+  display: flex;
+  height: 6px;
+  border-radius: var(--pill);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.proportion-bar span {
+  height: 100%;
+}
+
+/* Cashflow mini-chart */
+.cashflow-caption {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: var(--sp-3) 0 0;
+}
+
+/* Recente transacties */
+.tx-list {
+  display: flex;
+  flex-direction: column;
+}
+.tx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.tx-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.tx-row-info {
+  min-width: 0;
+}
+.tx-desc {
+  font-weight: 600;
+}
+.tx-amount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* Pill */
@@ -387,6 +516,12 @@ table tbody tr:hover {
 
 @media (max-width: 900px) {
   .shell {
+    grid-template-columns: 1fr;
+  }
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .card-grid {
     grid-template-columns: 1fr;
   }
   .sidebar {
