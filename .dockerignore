@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.superpowers
+.gstack
+*.pem
+config.json
+state.json
+.env
+.env.*
+.DS_Store
