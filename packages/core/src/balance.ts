@@ -8,6 +8,15 @@ export function isCardAccount(a: Account): boolean {
   return a.bank === "American Express";
 }
 
+export const ACCOUNT_TYPES = ["Betaalrekening", "Spaarrekening", "Creditcard", "Beleggingsrekening", "Overig"] as const;
+
+/** The account's soort: the user-set `type` if present, else a smart default
+ *  (a card => Creditcard, otherwise Betaalrekening). */
+export function accountType(a: Account): string {
+  if (a.type && a.type.length > 0) return a.type;
+  return isCardAccount(a) ? "Creditcard" : "Betaalrekening";
+}
+
 /** Current balance rolled forward to `asOf`: stored balance + the txs that fall
  *  strictly AFTER balanceDate and on/before asOf. A null balance stays null
  *  (unknown). No balanceDate => the balance is already current (returned as-is). */

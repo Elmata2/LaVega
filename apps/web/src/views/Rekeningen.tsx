@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Account, Tx } from "@lavega/core";
-import { accountSummaries, isCardAccount } from "@lavega/core";
+import { accountSummaries, isCardAccount, accountType, ACCOUNT_TYPES } from "@lavega/core";
 
 type RekeningenProps = {
   accounts: Account[];
@@ -9,6 +9,7 @@ type RekeningenProps = {
   onEntityChange: (key: string, newEntity: string) => void;
   onEntityCommit: (account: Account) => void;
   onSaldoCommit: (key: string, value: string) => void;
+  onTypeCommit: (key: string, type: string) => void;
 };
 
 /** Editable current-saldo cell. CSV imports carry no balance, so the owner types
@@ -48,7 +49,7 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
   );
 }
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit }: RekeningenProps) {
+export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit }: RekeningenProps) {
   return (
     <section className="card" aria-label="Rekeningen">
       <h2>Rekeningen</h2>
@@ -60,31 +61,60 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
             <thead>
               <tr>
                 <th>Bank</th>
-                <th>Rekening</th>
+                <th>Type</th>
                 <th>Entiteit</th>
-                <th>Saldo</th>
-                <th>Transacties</th>
+                <th className="num">Saldo</th>
+                <th className="num">Transacties</th>
               </tr>
             </thead>
             <tbody>
-              {accountSummaries(accounts, txs).map(({ account, txCount }) => (
-                <tr key={account.key}>
-                  <td>{account.bank}</td>
-                  <td>{account.name}</td>
-                  <td>
-                    <input
-                      value={account.entity}
-                      onChange={(e) => onEntityChange(account.key, e.target.value)}
-                      onBlur={() => void onEntityCommit(account)}
-                      disabled={busy}
-                    />
-                  </td>
-                  <td>
-                    <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
-                  </td>
-                  <td>{txCount}</td>
-                </tr>
-              ))}
+              {accountSummaries(accounts, txs).map(({ account, txCount }) => {
+                const type = accountType(account);
+                return (
+                  <tr key={account.key}>
+                    <td>
+                      {account.bank ? (
+                        <>
+                          <div style={{ fontWeight: 600 }}>{account.bank}</div>
+                          <div className="cell-sub">{account.name}</div>
+                        </>
+                      ) : (
+                        <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
+                      )}
+                    </td>
+                    <td>
+                      <select
+                        aria-label={`Type ${account.name}`}
+                        value={type}
+                        onChange={(e) => onTypeCommit(account.key, e.target.value)}
+                        disabled={busy}
+                      >
+                        {!ACCOUNT_TYPES.includes(type as (typeof ACCOUNT_TYPES)[number]) && (
+                          <option value={type}>{type}</option>
+                        )}
+                        {ACCOUNT_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        value={account.entity}
+                        placeholder="—"
+                        onChange={(e) => onEntityChange(account.key, e.target.value)}
+                        onBlur={() => void onEntityCommit(account)}
+                        disabled={busy}
+                      />
+                    </td>
+                    <td className="num">
+                      <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
+                    </td>
+                    <td className="num">{txCount}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

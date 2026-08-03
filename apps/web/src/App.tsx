@@ -204,6 +204,15 @@ export default function App() {
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // Set an account's soort (type) — a select commits immediately (no draft/blur
+  // needed, unlike free-text saldo/entiteit), same persist pattern as the others.
+  async function handleTypeCommit(key: string, type: string) {
+    const next = accounts.map((a) => (a.key === key ? { ...a, type } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
   function scrollToImport() {
     document.getElementById("import")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -277,6 +286,7 @@ export default function App() {
               onEntityChange={handleEntityChange}
               onEntityCommit={handleEntityCommit}
               onSaldoCommit={handleSaldoCommit}
+              onTypeCommit={handleTypeCommit}
             />
           )}
 

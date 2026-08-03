@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { currentBalance, withCurrentBalances, isCardAccount } from "./balance.js";
+import { currentBalance, withCurrentBalances, isCardAccount, accountType } from "./balance.js";
 
 const acc = (key: string, balance: number | null, balanceDate?: string): Account =>
   ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance, balanceDate });
@@ -31,4 +31,14 @@ test("isCardAccount: Amex is a card (owed-balance stored negative), banks are no
   expect(isCardAccount(acc("A", 100))).toBe(false); // bank ""
   expect(isCardAccount({ ...acc("A", 100), bank: "American Express" })).toBe(true);
   expect(isCardAccount({ ...acc("A", 100), bank: "ING" })).toBe(false);
+});
+
+test("accountType: no type + Amex bank => smart default Creditcard", () => {
+  expect(accountType({ ...acc("A", 100), bank: "American Express" })).toBe("Creditcard");
+});
+test("accountType: no type + other bank => smart default Betaalrekening", () => {
+  expect(accountType({ ...acc("A", 100), bank: "ING" })).toBe("Betaalrekening");
+});
+test("accountType: explicit type wins over the smart default", () => {
+  expect(accountType({ ...acc("A", 100), bank: "ING", type: "Spaarrekening" })).toBe("Spaarrekening");
 });
