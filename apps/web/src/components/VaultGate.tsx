@@ -13,11 +13,12 @@ type VaultGateProps = {
   gate: GateState;
   storage: VaultStorage;
   onReady: () => void;
+  onBackup: () => void; // enter the app AND jump to the Back-up tab (post-migration nudge)
 };
 
 // Gates the app behind the encrypted vault: renders the matching screen for
 // every non-"ready" GateState. App only mounts this while gate !== "ready".
-export default function VaultGate({ gate, storage, onReady }: VaultGateProps) {
+export default function VaultGate({ gate, storage, onReady, onBackup }: VaultGateProps) {
   if (gate === "loading") {
     return (
       <div className="vault-gate">
@@ -27,7 +28,7 @@ export default function VaultGate({ gate, storage, onReady }: VaultGateProps) {
   }
   if (gate === "unlock") return <UnlockScreen storage={storage} onReady={onReady} />;
   if (gate === "setup") return <SetupScreen storage={storage} onReady={onReady} />;
-  if (gate === "migrate") return <MigrateScreen storage={storage} onReady={onReady} />;
+  if (gate === "migrate") return <MigrateScreen storage={storage} onReady={onReady} onBackup={onBackup} />;
   return null; // "ready" — App renders the app itself in this state
 }
 
@@ -244,7 +245,7 @@ function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScre
   );
 }
 
-function MigrateScreen({ storage, onReady }: ScreenProps) {
+function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup: () => void }) {
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -277,11 +278,14 @@ function MigrateScreen({ storage, onReady }: ScreenProps) {
           <h2>Migratie geslaagd</h2>
           <p>Je bestaande data is versleuteld opgeslagen in de kluis.</p>
           <p className="text-warn">
-            Maak nu een back-up van je wachtwoord. Zonder back-up is je data bij een vergeten wachtwoord
-            onherstelbaar verloren (een back-upfunctie volgt in een latere versie).
+            Maak nu meteen een back-up. Bij een vergeten wachtwoord is je data zonder back-up
+            onherstelbaar verloren.
           </p>
-          <button type="button" className="btn btn-primary" onClick={onReady}>
-            Doorgaan naar de app
+          <button type="button" className="btn btn-primary" onClick={onBackup}>
+            Maak nu een back-up
+          </button>{" "}
+          <button type="button" className="btn" onClick={onReady}>
+            Later, naar de app
           </button>
         </div>
       </div>

@@ -207,7 +207,17 @@ export default function App() {
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
-    return <VaultGate gate={gate} storage={storage} onReady={() => setGate("ready")} />;
+    return (
+      <VaultGate
+        gate={gate}
+        storage={storage}
+        onReady={() => setGate("ready")}
+        onBackup={() => {
+          setGate("ready");
+          setView("backup");
+        }}
+      />
+    );
   }
 
   return (
