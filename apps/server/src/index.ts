@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
+import { privacyHtml, termsHtml } from "./legal.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -38,6 +39,11 @@ app.get("/api/eb/status", (c) => {
     applicationId: maskApplicationId(config.applicationId),
   });
 });
+
+/* Legal pages (standalone HTML) — required for the Enable Banking app
+ * registration and linked from the app footer. Before the static catch-all. */
+app.get("/privacy", (c) => c.html(privacyHtml));
+app.get("/terms", (c) => c.html(termsHtml));
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web
