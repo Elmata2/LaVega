@@ -2,11 +2,14 @@
   "name": "lavega",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "pnpm --filter @lavega/web dev",
     "dev:server": "pnpm --filter @lavega/server dev",
+    "build": "pnpm --filter @lavega/web build",
+    "start": "pnpm --filter @lavega/server start",
     "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/adapters && tsc --noEmit -p apps/web && tsc --noEmit -p apps/server"
   },
   "devDependencies": {
