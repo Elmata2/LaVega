@@ -240,23 +240,30 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
 
         <details className="rates-benchmark">
           <summary className="eyebrow">
-            Vergelijkingsrentes · {RATES_SOURCE_LABEL[rates.source]} · peildatum {rates.asOf}
+            Vergelijkingsrentes ({rates.rates.length} banken) · {RATES_SOURCE_LABEL[rates.source]} · peildatum {rates.asOf}
           </summary>
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
                   <th>Bank</th>
-                  <th>Product</th>
-                  <th className="num">Rente</th>
+                  <th className="num">Rente nu</th>
+                  <th className="num">Standaard</th>
+                  <th>Actie</th>
                 </tr>
               </thead>
               <tbody>
                 {rates.rates.map((r) => (
                   <tr key={`${r.bank}-${r.product}`}>
-                    <td>{r.bank}</td>
-                    <td className="cell-sub">{r.product}</td>
-                    <td className="num">{pct(r.ratePct)}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{r.bank}</div>
+                      <div className="cell-sub">{r.product}</div>
+                    </td>
+                    <td className="num text-pos">{pct(r.ratePct)}</td>
+                    <td className="num cell-sub">
+                      {r.standardRatePct !== undefined && r.standardRatePct !== r.ratePct ? pct(r.standardRatePct) : "—"}
+                    </td>
+                    <td>{r.promoNote ? <span className="badge">🎁 {r.promoNote}</span> : <span className="cell-sub">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -265,7 +272,8 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
         </details>
 
         <p className="eyebrow">
-          Rentebron: {RATES_SOURCE_LABEL[rates.source]} (peildatum {rates.asOf}).{" "}
+          "Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "standaard" is het tarief ná de
+          actie. Bron: {RATES_SOURCE_LABEL[rates.source]} via geld.nl (peildatum {rates.asOf}).{" "}
           <button type="button" className="card-link" onClick={() => void refreshRates()} disabled={refreshing}>
             {refreshing ? "verversen…" : "ververs rentes"}
           </button>

@@ -8,7 +8,14 @@ import { accountType } from "./balance.js";
  * public/generic data: a bundled offline table here, which the app layer may
  * override with a fetched, cached list (see adapters). */
 
-export type RateBenchmark = { bank: string; product: string; ratePct: number; freeWithdrawal: boolean };
+export type RateBenchmark = {
+  bank: string;
+  product: string;
+  ratePct: number; // headline rate shown to the saver — the action rate when there is a promo
+  freeWithdrawal: boolean;
+  standardRatePct?: number; // the standard ("nominale") rate after the promo ends
+  promoNote?: string; // e.g. "Actierente 6 mnd, daarna 2,10%"
+};
 
 /** Peildatum of the bundled table below. Shown in the UI so a stale figure is
  *  never presented as live. The app can replace this table via a fetch. */
@@ -21,25 +28,18 @@ export const RATES_AS_OF = "2026-08-03";
  * new customers. Robinhood is excluded on purpose: its cash sweep (~3.35%) is
  * USD/US-only and not NL-DGS-protected. */
 export const NL_SAVINGS_RATES: readonly RateBenchmark[] = [
-  { bank: "Bigbank", product: "Spaarrekening", ratePct: 3.1, freeWithdrawal: true },
-  { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
-  { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
-  { bank: "Garanti BBVA International", product: "Spaarrekening", ratePct: 3.0, freeWithdrawal: true },
-  { bank: "DHB Bank", product: "Combispaarrekening", ratePct: 3.0, freeWithdrawal: true },
-  { bank: "Anadolubank", product: "Spaarrekening", ratePct: 3.0, freeWithdrawal: true },
-  { bank: "Trade Republic", product: "Cash", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "Bigbank", product: "Flexibel Sparen", ratePct: 3.1, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
+  { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 1.5, promoNote: "Actierente t/m 01-01-2027, daarna 1,50%", freeWithdrawal: true },
+  { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
+  { bank: "Garanti BBVA International", product: "Spaarrekening", ratePct: 3.0, standardRatePct: 1.55, promoNote: "Actierente 6 mnd, daarna 1,55%", freeWithdrawal: true },
+  { bank: "DHB Bank", product: "Combispaarrekening", ratePct: 3.0, standardRatePct: 1.85, promoNote: "Actierente 6 mnd, daarna 1,85%", freeWithdrawal: true },
+  { bank: "Anadolubank", product: "Spaarrekening", ratePct: 3.0, standardRatePct: 1.9, promoNote: "Actierente 6 mnd, daarna 1,90%", freeWithdrawal: true },
+  { bank: "Trade Republic", product: "Cash", ratePct: 3.0, standardRatePct: 2.25, promoNote: "Introrente, daarna 2,25%", freeWithdrawal: true },
   { bank: "Scalable Capital", product: "Cash", ratePct: 2.5, freeWithdrawal: true },
   { bank: "Klarna", product: "Spaarrekening", ratePct: 1.95, freeWithdrawal: true },
-  { bank: "Ayvens Bank", product: "Spaarrekening", ratePct: 1.85, freeWithdrawal: true },
-  { bank: "Argenta", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
   { bank: "Openbank", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
-  { bank: "Yapi Kredi Bank", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
-  { bank: "Lloyds Bank", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
-  { bank: "Centraal Beheer", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
-  { bank: "MeDirect", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
   { bank: "NIBC", product: "Spaarrekening", ratePct: 1.44, freeWithdrawal: true },
   { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.4, freeWithdrawal: true },
-  { bank: "Brand New Day", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
   { bank: "ASN Bank", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
   { bank: "Nationale-Nederlanden", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
   { bank: "Knab", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },

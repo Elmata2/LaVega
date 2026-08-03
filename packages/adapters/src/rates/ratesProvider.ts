@@ -23,7 +23,10 @@ export function parseRatesPayload(data: unknown): RatesPayload {
     ) {
       throw new Error(`rates: ongeldige regel ${i}`);
     }
-    return { bank: r.bank, product: r.product, ratePct: r.ratePct, freeWithdrawal: r.freeWithdrawal };
+    const standardRatePct =
+      typeof r.standardRatePct === "number" && Number.isFinite(r.standardRatePct) ? r.standardRatePct : undefined;
+    const promoNote = typeof r.promoNote === "string" && r.promoNote.length > 0 ? r.promoNote : undefined;
+    return { bank: r.bank, product: r.product, ratePct: r.ratePct, freeWithdrawal: r.freeWithdrawal, standardRatePct, promoNote };
   });
   if (rates.length === 0) throw new Error("rates: lege lijst");
   return { asOf: d.asOf, rates };
