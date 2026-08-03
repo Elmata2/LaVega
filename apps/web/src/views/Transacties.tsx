@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Account, Rule, Tx } from "@lavega/core";
+import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { enrichTxs, filterTxs, categorize } from "@lavega/core";
 import { formatEuro } from "../format";
 
@@ -7,6 +7,7 @@ type TransactiesProps = {
   accounts: Account[];
   scopedTxs: Tx[];
   rules: Rule[];
+  own: OwnAccounts;
   entityOptions: string[];
   entityScope: string;
   fEntity: string;
@@ -25,6 +26,7 @@ export default function Transacties({
   accounts,
   scopedTxs,
   rules,
+  own,
   entityOptions,
   entityScope,
   fEntity,
@@ -135,7 +137,7 @@ export default function Transacties({
                     </span>
                   </td>
                   <td>{t.entity}</td>
-                  <td>{categorize(t, rules)}</td>
+                  <td>{categorize(t, rules, own)}</td>
                 </tr>
               ))}
             </tbody>

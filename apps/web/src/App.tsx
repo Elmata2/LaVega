@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts } from "@lavega/core";
 import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -106,6 +106,11 @@ export default function App() {
     () => Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0))),
     [accounts],
   );
+
+  // Own-account identifiers for "Eigen overboeking" detection. Built from the
+  // FULL accounts list (not the entity-scoped subset) so a transfer between
+  // accounts of different BVs is still recognized as an internal transfer.
+  const own = useMemo(() => ownAccounts(accounts), [accounts]);
 
   // Self-heal the Transacties entity filter and the top-bar entity scope: if
   // the selected entity no longer exists (e.g. its last account was
@@ -259,7 +264,7 @@ export default function App() {
           />
 
           {view === "overview" && (
-            <Overzicht accounts={currentScopedAccounts} txs={scopedTxs} rules={rules} asOf={asOf} onNavigate={setView} />
+            <Overzicht accounts={currentScopedAccounts} txs={scopedTxs} rules={rules} own={own} asOf={asOf} onNavigate={setView} />
           )}
 
           {view === "transactions" && (
@@ -267,6 +272,7 @@ export default function App() {
               accounts={scopedAccounts}
               scopedTxs={scopedTxs}
               rules={rules}
+              own={own}
               entityOptions={entityOptions}
               entityScope={entityScope}
               fEntity={fEntity}

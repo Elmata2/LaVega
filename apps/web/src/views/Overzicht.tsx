@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Account, Rule, Tx } from "@lavega/core";
+import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
@@ -8,6 +8,7 @@ type OverzichtProps = {
   accounts: Account[];
   txs: Tx[];
   rules: Rule[];
+  own: OwnAccounts;
   asOf: string;
   onNavigate: (view: View) => void;
 };
@@ -122,14 +123,15 @@ function CashflowMiniChart({
 
 const FORECAST_BUFFER_CENTS = 0;
 
-export default function Overzicht({ accounts, txs, rules, asOf, onNavigate }: OverzichtProps) {
-  // Per-category in/out from the user's rules — biggest categories first.
+export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate }: OverzichtProps) {
+  // Per-category in/out (rules + built-in defaults + own-transfer detection) —
+  // biggest categories first.
   const catRows = useMemo(() => {
-    const totals = categoryTotals(txs, rules);
+    const totals = categoryTotals(txs, rules, own);
     return Object.entries(totals).sort(
       (a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)),
     );
-  }, [txs, rules]);
+  }, [txs, rules, own]);
 
   const entities = useMemo(
     () => Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0))),

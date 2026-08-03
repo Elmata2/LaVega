@@ -69,15 +69,52 @@ export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
+/** Identifiers of the user's own accounts, used to flag transfers between them
+ *  as "Eigen overboeking". `all` is the set of normalized, space-stripped IBANs
+ *  and account numbers; `byKey` maps each account.key to its own identifiers so
+ *  categorize can skip a transaction's OWN account (e.g. a bank-fee row that
+ *  cites its own IBAN in the description). */
+export type OwnAccounts = { all: string[]; byKey: Map<string, string[]> };
+
+/** Build OwnAccounts from the full accounts list. Only values that contain a
+ *  digit and are >= 8 chars qualify as identifiers — this deliberately excludes
+ *  generic keys like "Betaalrekening"/"Current" that would substring-match
+ *  unrelated descriptions and cause false "Eigen overboeking" hits. Pass the
+ *  FULL list (not an entity-scoped subset) so a BV1->BV2 move still counts. */
+export function ownAccounts(accounts: Account[]): OwnAccounts {
+  const byKey = new Map<string, string[]>();
+  const all = new Set<string>();
+  for (const a of accounts) {
+    const ids = [a.iban, a.key]
+      .map((v) => norm(v).replace(/\s+/g, ""))
+      .filter((s) => s.length >= 8 && /\d/.test(s));
+    byKey.set(a.key, ids);
+    for (const id of ids) all.add(id);
+  }
+  return { all: [...all], byKey };
+}
+
 /** Category for a tx, in precedence order: a non-empty tx.category (manual
- *  override) wins; else the first user rule whose match text is a substring of
- *  counterparty+description (case/space-insensitive); else the first built-in
- *  Dutch default (NL_CATEGORY_RULES) that matches; else "onbekend". So the
- *  defaults categorize out of the box, but a user's own rule or manual label
- *  always takes precedence. */
-export function categorize(tx: Tx, rules: Rule[]): string {
+ *  override) wins; else — when `own` is supplied — an "Eigen overboeking" if the
+ *  counterparty/description names another of the user's own accounts; else the
+ *  first user rule whose match text is a substring of counterparty+description
+ *  (case/space-insensitive); else the first built-in Dutch default
+ *  (NL_CATEGORY_RULES) that matches; else "onbekend". So internal transfers are
+ *  separated out and the defaults categorize the rest out of the box, while a
+ *  user's own rule or manual label always takes precedence over the defaults. */
+export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   if (tx.category) return tx.category;
   const hay = norm(tx.counterparty + " " + tx.description);
+  if (own && own.all.length) {
+    // Compare against a space-stripped haystack so an IBAN printed with spaces
+    // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
+    const hayCompact = hay.replace(/\s+/g, "");
+    const skip = own.byKey.get(tx.accountKey);
+    for (const id of own.all) {
+      if (skip && skip.includes(id)) continue; // don't match the tx's own account
+      if (hayCompact.includes(id)) return "Eigen overboeking";
+    }
+  }
   for (const r of rules) {
     // Guard on the NORMALIZED match: a whitespace-only match norms to "" and
     // would otherwise substring-match every tx, mislabeling the whole dataset.
@@ -90,11 +127,12 @@ export function categorize(tx: Tx, rules: Rule[]): string {
   return "onbekend";
 }
 
-/** In/out totals grouped by derived category (via categorize). */
-export function categoryTotals(txs: Tx[], rules: Rule[]): Record<string, { in: number; out: number }> {
+/** In/out totals grouped by derived category (via categorize). Pass `own` to
+ *  split out "Eigen overboeking" (transfers between the user's own accounts). */
+export function categoryTotals(txs: Tx[], rules: Rule[], own?: OwnAccounts): Record<string, { in: number; out: number }> {
   const out: Record<string, { in: number; out: number }> = {};
   for (const t of txs) {
-    const c = categorize(t, rules);
+    const c = categorize(t, rules, own);
     const b = (out[c] ??= { in: 0, out: 0 });
     if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
   }
