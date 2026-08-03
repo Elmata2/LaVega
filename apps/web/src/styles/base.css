@@ -624,6 +624,39 @@ table tbody tr:hover {
   font-size: 0.85rem;
 }
 
+/* Vault gate (setup / unlock / migrate screens) */
+.vault-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6);
+  background: var(--bg);
+}
+.vault-gate-card {
+  width: 100%;
+  max-width: 420px;
+}
+.vault-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+.vault-field label {
+  color: var(--muted);
+}
+.vault-field input {
+  width: 100%;
+}
+.vault-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-4);
+  color: var(--ink);
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;

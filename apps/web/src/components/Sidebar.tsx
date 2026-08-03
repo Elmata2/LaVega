@@ -68,9 +68,10 @@ type SidebarProps = {
   view: View;
   onNavigate: (view: View) => void;
   onImportClick: () => void;
+  onLock: () => void;
 };
 
-export default function Sidebar({ view, onNavigate, onImportClick }: SidebarProps) {
+export default function Sidebar({ view, onNavigate, onImportClick, onLock }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -102,6 +103,15 @@ export default function Sidebar({ view, onNavigate, onImportClick }: SidebarProp
       </nav>
 
       <div className="sidebar-footer">
+        <button type="button" className="nav-item" onClick={onLock}>
+          <span className="nav-icon" aria-hidden="true">
+            <Icon>
+              <rect x="4" y="11" width="16" height="9" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </Icon>
+          </span>
+          <span>Vergrendel</span>
+        </button>
         <div className="identity-card">Lokaal · privé</div>
       </div>
     </aside>

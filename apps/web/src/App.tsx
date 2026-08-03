@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
 import { ingest, reassignEntity, withCurrentBalances } from "@lavega/core";
-import { createFileImport, createIndexedDbStorage } from "@lavega/adapters";
+import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
+import { gateState } from "./vault-gate.js";
+import type { GateState } from "./vault-gate.js";
+import { hasLegacyData } from "./migrate.js";
+import VaultGate from "./components/VaultGate";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Overzicht from "./views/Overzicht";
@@ -12,12 +16,15 @@ import Import from "./views/Import";
 import Forecast from "./views/Forecast";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
-// (keyPath "key" / "id"), so re-importing the same account/tx is safe.
-const storage = createIndexedDbStorage();
+// (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
+// at rest only in the encrypted vault — the app never touches the legacy
+// plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
+const storage = createEncryptedStorage();
 
 export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast";
 
 export default function App() {
+  const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [entity, setEntity] = useState("BV1");
@@ -38,8 +45,20 @@ export default function App() {
   const [ruleMatch, setRuleMatch] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
 
-  // Load persisted data on mount so a reload shows prior imports.
+  // Decide which gate screen to show: unlock an existing vault, migrate
+  // existing plaintext data into a fresh vault, or set up a brand-new one.
   useEffect(() => {
+    (async () => {
+      const [status, legacy] = await Promise.all([storage.status(), hasLegacyData()]);
+      setGate(gateState(status, legacy));
+    })();
+  }, []);
+
+  // Load persisted data once the vault is unlocked, so a reload (or a fresh
+  // unlock after Vergrendel) shows prior imports. Gated on `gate` — never runs
+  // against a locked/empty vault, which would just throw.
+  useEffect(() => {
+    if (gate !== "ready") return;
     (async () => {
       const [loadedAccounts, loadedTxs, loadedRules] = await Promise.all([
         storage.getAccounts(),
@@ -50,7 +69,17 @@ export default function App() {
       setTxs(loadedTxs);
       setRules(loadedRules);
     })();
-  }, []);
+  }, [gate]);
+
+  // Sidebar "Vergrendel": drop the derived key + in-memory data (nothing
+  // sensitive stays rendered) and show the unlock screen again.
+  function handleLock() {
+    storage.lock();
+    setAccounts([]);
+    setTxs([]);
+    setRules([]);
+    setGate("unlock");
+  }
 
   // Rules are UI-owned as a whole list (replace-all persistence), so every
   // add/remove goes through this single helper to keep state and storage in sync.
@@ -161,9 +190,15 @@ export default function App() {
     document.getElementById("import")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // Until the vault is unlocked/set up/migrated, render only the gate — never
+  // the app shell (whose data-reads would throw against a locked/empty vault).
+  if (gate !== "ready") {
+    return <VaultGate gate={gate} storage={storage} onReady={() => setGate("ready")} />;
+  }
+
   return (
     <div className="shell">
-      <Sidebar view={view} onNavigate={setView} onImportClick={scrollToImport} />
+      <Sidebar view={view} onNavigate={setView} onImportClick={scrollToImport} onLock={handleLock} />
 
       <div className="shell-body">
         <TopBar

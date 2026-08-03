@@ -25,27 +25,36 @@ export function createIndexedDbStorage(): StorageAdapter {
   return {
     async getAccounts(): Promise<Account[]> {
       const db = await openLaVegaDb();
-      return db.getAll("accounts");
+      const result = await db.getAll("accounts");
+      db.close(); // don't leak a connection — a lingering one blocks a later
+      // indexedDB.deleteDatabase("lavega") (the vault migration's cleanup step)
+      return result;
     },
     async putAccounts(a: Account[]): Promise<void> {
       const db = await openLaVegaDb();
       const tx = db.transaction("accounts", "readwrite");
       await Promise.all(a.map((account) => tx.store.put(account)));
       await tx.done;
+      db.close();
     },
     async getTxs(): Promise<Tx[]> {
       const db = await openLaVegaDb();
-      return db.getAll("txs");
+      const result = await db.getAll("txs");
+      db.close();
+      return result;
     },
     async putTxs(t: Tx[]): Promise<void> {
       const db = await openLaVegaDb();
       const tx = db.transaction("txs", "readwrite");
       await Promise.all(t.map((entry) => tx.store.put(entry)));
       await tx.done;
+      db.close();
     },
     async getRules(): Promise<Rule[]> {
       const db = await openLaVegaDb();
-      return db.getAll("rules");
+      const result = await db.getAll("rules");
+      db.close();
+      return result;
     },
     // Replace-all: the UI owns the full rules list, so a save clears and rewrites.
     async putRules(rules: Rule[]): Promise<void> {
@@ -54,6 +63,7 @@ export function createIndexedDbStorage(): StorageAdapter {
       await tx.store.clear();
       await Promise.all(rules.map((r) => tx.store.put(r)));
       await tx.done;
+      db.close();
     },
   };
 }
