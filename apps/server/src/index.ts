@@ -49,8 +49,10 @@ app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
 
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  serve({ fetch: app.fetch, port: PORT }, (info) => {
+  // Bind 0.0.0.0 so a container host (Railway) can reach it for the health check
+  // and public traffic — not just loopback.
+  serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
     // eslint-disable-next-line no-console
-    console.log(`LaVega server listening on http://localhost:${info.port}`);
+    console.log(`LaVega server listening on 0.0.0.0:${info.port}`);
   });
 }
