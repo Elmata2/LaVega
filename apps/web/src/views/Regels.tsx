@@ -22,6 +22,11 @@ export default function Regels({
   return (
     <section className="card" aria-label="Regels">
       <h2>Regels</h2>
+      <p className="cell-sub">
+        LaVega categoriseert transacties automatisch met een ingebouwde Nederlandse
+        lijst (Albert Heijn → Boodschappen, NS → Transport, Netflix → Entertainment,
+        enz.). Je eigen regels hieronder gaan vóór die automatische categorieën.
+      </p>
       <label>
         Match{" "}
         <input value={ruleMatch} onChange={(e) => onRuleMatchChange(e.target.value)} disabled={busy} />

@@ -87,8 +87,11 @@ test("categorize: first matching rule wins (case-insensitive over counterparty+d
 
 test("categorize: a whitespace-only rule match does NOT match everything (guards on normalized match)", () => {
   const bad: Rule[] = [{ id: "r0", match: "   ", category: "Alles" }];
-  expect(categorize(txsForMonths[0], bad)).toBe("onbekend");
-  expect(categorize(txsForMonths[1], bad)).toBe("onbekend");
+  // Use a tx that matches no user rule AND no built-in NL default, so this
+  // isolates the whitespace guard (txsForMonths[1] is "Albert Heijn", which now
+  // hits a built-in default — that's covered in categories.test.ts).
+  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Jan Jansen", description: "particuliere betaling", category: "", manual: false };
+  expect(categorize(unmatched, bad)).toBe("onbekend");
 });
 
 test("categoryTotals: sums in/out per derived category", () => {

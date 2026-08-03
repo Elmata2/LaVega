@@ -4,6 +4,7 @@ export * from "./balance.js";
 export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
+export * from "./categories.js";
 export * from "./forecast.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";

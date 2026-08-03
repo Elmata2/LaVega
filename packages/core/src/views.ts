@@ -1,5 +1,6 @@
 import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
+import { NL_CATEGORY_RULES_NORMALIZED } from "./categories.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
  * take the already-loaded accounts/txs and return view-ready data, so the
@@ -68,9 +69,12 @@ export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
-/** Category for a tx: a non-empty tx.category (manual override) wins; else the
- *  first rule whose match text is a substring of counterparty+description
- *  (case/space-insensitive); else "onbekend". */
+/** Category for a tx, in precedence order: a non-empty tx.category (manual
+ *  override) wins; else the first user rule whose match text is a substring of
+ *  counterparty+description (case/space-insensitive); else the first built-in
+ *  Dutch default (NL_CATEGORY_RULES) that matches; else "onbekend". So the
+ *  defaults categorize out of the box, but a user's own rule or manual label
+ *  always takes precedence. */
 export function categorize(tx: Tx, rules: Rule[]): string {
   if (tx.category) return tx.category;
   const hay = norm(tx.counterparty + " " + tx.description);
@@ -79,6 +83,9 @@ export function categorize(tx: Tx, rules: Rule[]): string {
     // would otherwise substring-match every tx, mislabeling the whole dataset.
     const m = norm(r.match);
     if (m && hay.includes(m)) return r.category;
+  }
+  for (const r of NL_CATEGORY_RULES_NORMALIZED) {
+    if (hay.includes(r.m)) return r.category;
   }
   return "onbekend";
 }
