@@ -43,6 +43,7 @@ export default function App() {
   const [fSearch, setFSearch] = useState("");
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
+  const [fCategory, setFCategory] = useState("");
   const [ruleMatch, setRuleMatch] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
 
@@ -264,7 +265,26 @@ export default function App() {
           />
 
           {view === "overview" && (
-            <Overzicht accounts={currentScopedAccounts} txs={scopedTxs} rules={rules} own={own} asOf={asOf} onNavigate={setView} />
+            <Overzicht
+              accounts={currentScopedAccounts}
+              txs={scopedTxs}
+              rules={rules}
+              own={own}
+              asOf={asOf}
+              onNavigate={setView}
+              onSelectCategory={(c) => {
+                // Match exactly what the Per-categorie totals showed: only the
+                // category filter (plus any active top-bar entity scope); clear
+                // the per-view filters so the list isn't silently over-narrowed.
+                setFCategory(c);
+                setFEntity("");
+                setFAccount("");
+                setFSearch("");
+                setFFrom("");
+                setFTo("");
+                setView("transactions");
+              }}
+            />
           )}
 
           {view === "transactions" && (
@@ -285,6 +305,8 @@ export default function App() {
               onFFromChange={setFFrom}
               fTo={fTo}
               onFToChange={setFTo}
+              fCategory={fCategory}
+              onFCategoryChange={setFCategory}
             />
           )}
 

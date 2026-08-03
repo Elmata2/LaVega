@@ -20,6 +20,8 @@ type TransactiesProps = {
   onFFromChange: (from: string) => void;
   fTo: string;
   onFToChange: (to: string) => void;
+  fCategory: string;
+  onFCategoryChange: (category: string) => void;
 };
 
 export default function Transacties({
@@ -39,8 +41,13 @@ export default function Transacties({
   onFFromChange,
   fTo,
   onFToChange,
+  fCategory,
+  onFCategoryChange,
 }: TransactiesProps) {
-  const rows = useMemo(
+  // Rows after the non-category filters — the category dropdown's options are
+  // derived from these, so it always offers the categories actually present
+  // under the current entity/account/search/date selection.
+  const filtered = useMemo(
     () =>
       filterTxs(enrichTxs(scopedTxs, accounts), {
         entity: fEntity || undefined,
@@ -48,10 +55,22 @@ export default function Transacties({
         search: fSearch || undefined,
         from: fFrom || undefined,
         to: fTo || undefined,
-      })
+      }),
+    [scopedTxs, accounts, fEntity, fAccount, fSearch, fFrom, fTo],
+  );
+
+  const categoryOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of filtered) s.add(categorize(t, rules, own));
+    return [...s].sort((a, b) => a.localeCompare(b));
+  }, [filtered, rules, own]);
+
+  const rows = useMemo(
+    () =>
+      (fCategory ? filtered.filter((t) => categorize(t, rules, own) === fCategory) : filtered)
         .slice()
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [scopedTxs, accounts, fEntity, fAccount, fSearch, fFrom, fTo],
+    [filtered, fCategory, rules, own],
   );
 
   return (
@@ -82,6 +101,24 @@ export default function Transacties({
           {accounts.map((a) => (
             <option key={a.key} value={a.key}>
               {a.bank} · {a.key}
+            </option>
+          ))}
+        </select>
+      </label>
+      {" "}
+      <label>
+        Categorie{" "}
+        <select value={fCategory} onChange={(e) => onFCategoryChange(e.target.value)}>
+          <option value="">Alle categorieën</option>
+          {/* Keep a selected category visible even if the other filters leave it
+              with zero rows (so the dropdown reflects state, e.g. after a click
+              from Overzicht + a scope change). */}
+          {fCategory && !categoryOptions.includes(fCategory) && (
+            <option value={fCategory}>{fCategory}</option>
+          )}
+          {categoryOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>

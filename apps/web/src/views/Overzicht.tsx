@@ -11,6 +11,7 @@ type OverzichtProps = {
   own: OwnAccounts;
   asOf: string;
   onNavigate: (view: View) => void;
+  onSelectCategory: (category: string) => void;
 };
 
 // Identity color per entity row — reused for the row's dot, its sparkline,
@@ -123,7 +124,7 @@ function CashflowMiniChart({
 
 const FORECAST_BUFFER_CENTS = 0;
 
-export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate }: OverzichtProps) {
+export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate, onSelectCategory }: OverzichtProps) {
   // Per-category in/out (rules + built-in defaults + own-transfer detection) —
   // biggest categories first.
   const catRows = useMemo(() => {
@@ -346,7 +347,16 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate 
                 <tbody>
                   {catRows.map(([cat, b]) => (
                     <tr key={cat}>
-                      <td>{cat}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="card-link"
+                          onClick={() => onSelectCategory(cat)}
+                          title={`Bekijk transacties in ${cat}`}
+                        >
+                          {cat}
+                        </button>
+                      </td>
                       <td><span className="text-pos">{formatEuro(b.in)}</span></td>
                       <td><span className="text-neg">{formatEuro(b.out)}</span></td>
                     </tr>
