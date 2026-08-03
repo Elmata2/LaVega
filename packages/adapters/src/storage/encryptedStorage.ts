@@ -19,6 +19,11 @@ export interface VaultStorage extends StorageAdapter {
   unlock(passphrase: string): Promise<boolean>; // false on wrong passphrase (never throws for that)
   lock(): void;
   export(): CipherBlob | null; // the current on-memory-encrypted blob (Task 5 downloads it); null if locked/empty
+  // Adopt an imported CipherBlob (e.g. from a downloaded .lavega back-up) as
+  // THE vault: derive the key from ITS OWN salt/iterations, verify it decrypts,
+  // and only then write it to disk + swap in-memory state. False on wrong
+  // passphrase / malformed / sub-floor iterations — current state untouched.
+  restore(blob: CipherBlob, passphrase: string): Promise<boolean>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
@@ -134,6 +139,25 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
     export(): CipherBlob | null {
       return blob;
+    },
+
+    async restore(imported: CipherBlob, passphrase: string): Promise<boolean> {
+      try {
+        const importedSalt = fromB64(imported.salt);
+        const candidateKey = await deriveKey(passphrase, importedSalt, imported.iterations); // throws below the PBKDF2 floor
+        const decrypted = await decryptJSON<VaultData>(candidateKey, imported); // throws on wrong passphrase / tampered ciphertext
+        // Only past this point is the imported blob verified — safe to adopt.
+        await writeBlobToDisk(imported);
+        key = candidateKey;
+        salt = importedSalt;
+        data = decrypted;
+        blob = imported;
+        return true;
+      } catch {
+        // Wrong passphrase, malformed blob, or sub-floor iterations: leave
+        // any existing vault (in-memory state + on-disk blob) untouched.
+        return false;
+      }
     },
 
     async getAccounts(): Promise<Account[]> {

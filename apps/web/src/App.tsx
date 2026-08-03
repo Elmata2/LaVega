@@ -14,6 +14,7 @@ import Rekeningen from "./views/Rekeningen";
 import Regels from "./views/Regels";
 import Import from "./views/Import";
 import Forecast from "./views/Forecast";
+import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
@@ -21,7 +22,7 @@ import Forecast from "./views/Forecast";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -86,6 +87,19 @@ export default function App() {
   async function saveRules(next: Rule[]) {
     setRules(next);
     await storage.putRules(next);
+  }
+
+  // After storage.restore() swaps in a different vault's data (Task 5), reload
+  // everything from it — restore() itself only touches storage, never React state.
+  async function handleRestored() {
+    const [freshAccounts, freshTxs, freshRules] = await Promise.all([
+      storage.getAccounts(),
+      storage.getTxs(),
+      storage.getRules(),
+    ]);
+    setAccounts(freshAccounts);
+    setTxs(freshTxs);
+    setRules(freshRules);
   }
 
   const entityOptions = useMemo(
@@ -267,6 +281,8 @@ export default function App() {
           {view === "forecast" && (
             <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} />
           )}
+
+          {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
         </main>
       </div>
     </div>

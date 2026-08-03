@@ -3,6 +3,9 @@ import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
 import { migrateToVault } from "../migrate.js";
+import { parseBackup } from "../backup.js";
+
+const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
 
 const DATA_LOSS_WARNING = 'Wachtwoord kwijt = data kwijt — geen herstel. Er is geen "wachtwoord vergeten"-optie.';
 
@@ -80,6 +83,7 @@ function UnlockScreen({ storage, onReady }: ScreenProps) {
 }
 
 function SetupScreen({ storage, onReady }: ScreenProps) {
+  const [mode, setMode] = useState<"create" | "restore">("create");
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -102,6 +106,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (mode === "restore") {
+    return <RestoreOnSetupScreen storage={storage} onReady={onReady} onCancel={() => setMode("create")} />;
   }
 
   return (
@@ -148,6 +156,89 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
           Kluis aanmaken
         </button>
+        <p>
+          Heb je al een back-up?{" "}
+          <button type="button" className="btn" onClick={() => setMode("restore")} disabled={busy}>
+            Herstel uit back-up
+          </button>
+        </p>
+      </form>
+    </div>
+  );
+}
+
+type RestoreOnSetupScreenProps = ScreenProps & { onCancel: () => void };
+
+// Fresh-machine recovery: no vault exists yet, so instead of creating a new
+// (empty) one, adopt a downloaded .lavega back-up as THE vault.
+function RestoreOnSetupScreen({ storage, onReady, onCancel }: RestoreOnSetupScreenProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [pass, setPass] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const canSubmit = file != null && pass.length > 0 && !busy;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!canSubmit || !file) return;
+    setBusy(true);
+    setError("");
+    try {
+      const text = await file.text();
+      const blob = parseBackup(text); // throws on malformed/misshaped file
+      const ok = await storage.restore(blob, pass);
+      if (!ok) {
+        setError(RESTORE_ERROR);
+        return;
+      }
+      onReady();
+    } catch {
+      setError(RESTORE_ERROR);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="vault-gate">
+      <form className="card vault-gate-card" onSubmit={submit}>
+        <h2>Herstel uit back-up</h2>
+        <p>Kies je back-upbestand (.lavega) en vul het bijbehorende wachtwoord in.</p>
+        <div className="vault-field">
+          <label htmlFor="setup-restore-file">Back-upbestand</label>
+          <input
+            id="setup-restore-file"
+            type="file"
+            accept=".lavega"
+            disabled={busy}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
+        <div className="vault-field">
+          <label htmlFor="setup-restore-pass">Wachtwoord</label>
+          <input
+            id="setup-restore-pass"
+            type="password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            disabled={busy}
+            autoFocus
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-warn">
+            {error}
+          </p>
+        )}
+        <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+          Herstellen
+        </button>
+        <p>
+          <button type="button" className="btn" onClick={onCancel} disabled={busy}>
+            Terug
+          </button>
+        </p>
       </form>
     </div>
   );

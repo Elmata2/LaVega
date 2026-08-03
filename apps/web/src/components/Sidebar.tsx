@@ -46,6 +46,13 @@ const icons: Record<View, ReactNode> = {
       <path d="M14 4h6v6" />
     </Icon>
   ),
+  backup: (
+    <Icon>
+      <path d="M12 3v11" />
+      <path d="M8 10l4 4 4-4" />
+      <path d="M4 19h16" />
+    </Icon>
+  ),
 };
 
 const importIcon = (
@@ -62,6 +69,7 @@ const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "accounts", label: "Rekeningen" },
   { key: "rules", label: "Regels" },
   { key: "forecast", label: "Forecast" },
+  { key: "backup", label: "Back-up" },
 ];
 
 type SidebarProps = {

@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
+import type { CipherBlob } from "../crypto/vaultCrypto.js";
 import { createEncryptedStorage } from "./encryptedStorage.js";
 
 const acc = (key: string, balance: number | null = null): Account =>
@@ -69,6 +70,106 @@ test("putRules replaces, putAccounts/putTxs upsert (parity with plaintext adapte
   const rules = await v.getRules();
   expect(rules).toHaveLength(1);
   expect(rules[0]).toMatchObject({ id: "r2", category: "Z" });
+});
+
+test("export -> restore round-trips onto a fresh vault instance (fresh-machine recovery)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v1 = createEncryptedStorage();
+  await v1.setup("hunter2");
+  await v1.putAccounts([acc("A1", 1.98)]);
+  const backupBlob = v1.export();
+  expect(backupBlob).not.toBeNull();
+
+  // Simulate a fresh machine: a brand new disk, a brand new vault instance.
+  globalThis.indexedDB = new IDBFactory();
+  const v2 = createEncryptedStorage();
+  expect(await v2.status()).toBe("empty");
+
+  const ok = await v2.restore(backupBlob!, "hunter2");
+  expect(ok).toBe(true);
+  expect(await v2.status()).toBe("unlocked");
+  const accounts = await v2.getAccounts();
+  expect(accounts).toHaveLength(1);
+  expect(accounts[0]).toMatchObject({ key: "A1", balance: 1.98 });
+
+  // And it's genuinely persisted, not just in memory.
+  v2.lock();
+  expect(await v2.unlock("hunter2")).toBe(true);
+  expect(await v2.getAccounts()).toHaveLength(1);
+});
+
+test("restore replaces an existing (different) vault's data on success", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v1 = createEncryptedStorage();
+  await v1.setup("backup-pw");
+  await v1.putAccounts([acc("FROM-BACKUP", 5)]);
+  const backupBlob = v1.export()!;
+
+  const v2 = createEncryptedStorage("second-db");
+  await v2.setup("current-pw");
+  await v2.putAccounts([acc("CURRENT", 1)]);
+
+  const ok = await v2.restore(backupBlob, "backup-pw");
+  expect(ok).toBe(true);
+  const accounts = await v2.getAccounts();
+  expect(accounts).toHaveLength(1);
+  expect(accounts[0]).toMatchObject({ key: "FROM-BACKUP", balance: 5 });
+});
+
+test("restore(wrong passphrase) => false; existing vault's data + on-disk blob stay intact", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage();
+  await v.setup("current-pw");
+  await v.putAccounts([acc("EXIST1", 42)]);
+  const beforeBlob = v.export();
+
+  const ok = await v.restore(beforeBlob!, "WRONG-PASSPHRASE");
+  expect(ok).toBe(false);
+  expect(await v.status()).toBe("unlocked"); // untouched — still the original, still unlocked
+  const accounts = await v.getAccounts();
+  expect(accounts).toHaveLength(1);
+  expect(accounts[0]).toMatchObject({ key: "EXIST1", balance: 42 });
+  expect(v.export()).toEqual(beforeBlob); // on-disk blob unchanged too
+});
+
+test("restore(malformed blob) => false; existing vault stays intact", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage();
+  await v.setup("pw");
+  await v.putAccounts([acc("EXIST1", 7)]);
+  const beforeBlob = v.export();
+
+  const malformed: CipherBlob = {
+    v: 1,
+    kdf: "PBKDF2-SHA256",
+    iterations: 210_000,
+    salt: "!!!not-valid-base64!!!",
+    iv: "!!!",
+    ct: "!!!",
+  };
+  const ok = await v.restore(malformed, "pw");
+  expect(ok).toBe(false);
+  expect(await v.status()).toBe("unlocked");
+  const accounts = await v.getAccounts();
+  expect(accounts).toHaveLength(1);
+  expect(accounts[0]).toMatchObject({ key: "EXIST1", balance: 7 });
+  expect(v.export()).toEqual(beforeBlob);
+});
+
+test("restore(sub-floor iterations) => false; existing vault stays intact", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage();
+  await v.setup("pw");
+  await v.putAccounts([acc("EXIST1", 3)]);
+  const beforeBlob = v.export()!;
+
+  // A tampered blob claiming a tiny work factor must be rejected (deriveKey
+  // throws below the PBKDF2 floor), not silently adopted.
+  const tampered: CipherBlob = { ...beforeBlob, iterations: 1 };
+  const ok = await v.restore(tampered, "pw");
+  expect(ok).toBe(false);
+  expect(await v.status()).toBe("unlocked");
+  expect(v.export()).toEqual(beforeBlob);
 });
 
 test("concurrent puts are serialized — neither write reverts the other", async () => {
