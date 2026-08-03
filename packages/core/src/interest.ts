@@ -12,20 +12,22 @@ export type RateBenchmark = { bank: string; product: string; ratePct: number; fr
 
 /** Peildatum of the bundled table below. Shown in the UI so a stale figure is
  *  never presented as live. The app can replace this table via a fetch. */
-export const RATES_AS_OF = "2026-08-01";
+export const RATES_AS_OF = "2026-08-03";
 
-/* Bundled fallback of NL free-withdrawal ("vrij opneembaar") savings rates.
- * INDICATIVE — a static snapshot, not live; the UI labels it with RATES_AS_OF
- * and a "controleer zelf" note, and a fetched list overrides it when available. */
+/* Bundled OFFLINE fallback of NL/EU free-withdrawal ("vrij opneembaar") savings
+ * rates. INDICATIVE snapshot (verified against comparison sites, Aug 2026); the
+ * live fetch from /api/rates overrides it when the rates-service is reachable.
+ * Robinhood is intentionally excluded here: its cash sweep (~3.35%) is USD /
+ * US-only and not NL-DGS-protected, so it's a poor "vrij opneembaar NL" bench. */
 export const NL_SAVINGS_RATES: readonly RateBenchmark[] = [
-  { bank: "Raisin (Renault Bank)", product: "Spaarrekening", ratePct: 2.25, freeWithdrawal: true },
-  { bank: "Trade Republic", product: "Cash", ratePct: 2.0, freeWithdrawal: true },
-  { bank: "Openbank", product: "Spaarrekening", ratePct: 1.75, freeWithdrawal: true },
-  { bank: "Lloyds Bank", product: "Spaarrekening", ratePct: 1.7, freeWithdrawal: true },
-  { bank: "bunq", product: "Spaarrekening", ratePct: 1.56, freeWithdrawal: true },
-  { bank: "ABN AMRO", product: "Spaarrekening", ratePct: 1.1, freeWithdrawal: true },
-  { bank: "ING", product: "Oranje Spaarrekening", ratePct: 1.0, freeWithdrawal: true },
-  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.0, freeWithdrawal: true },
+  { bank: "Revolut", product: "Flexibel sparen", ratePct: 3.1, freeWithdrawal: true },
+  { bank: "Raisin (Raisin Bank)", product: "Spaarrekening", ratePct: 3.05, freeWithdrawal: true },
+  { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
+  { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
+  { bank: "Trade Republic", product: "Cash", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "ABN AMRO", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
+  { bank: "ING", product: "Oranje Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
+  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
 ];
 
 /** The best benchmark (highest ratePct); by default only free-withdrawal

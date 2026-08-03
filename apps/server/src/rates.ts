@@ -10,15 +10,18 @@
 export type RateBenchmark = { bank: string; product: string; ratePct: number; freeWithdrawal: boolean };
 export type RatesPayload = { asOf: string; rates: RateBenchmark[] };
 
+// Verified against NL comparison sites, Aug 2026 (grootbanken ~1,25%; top
+// vrij-opneembaar ~3%). Update here to refresh the live feed without a client
+// rebuild. Robinhood excluded: USD/US-only cash sweep (~3.35%), not NL-DGS.
 const RATES: RateBenchmark[] = [
-  { bank: "Raisin (Renault Bank)", product: "Spaarrekening", ratePct: 2.25, freeWithdrawal: true },
-  { bank: "Trade Republic", product: "Cash", ratePct: 2.0, freeWithdrawal: true },
-  { bank: "Openbank", product: "Spaarrekening", ratePct: 1.75, freeWithdrawal: true },
-  { bank: "Lloyds Bank", product: "Spaarrekening", ratePct: 1.7, freeWithdrawal: true },
-  { bank: "bunq", product: "Spaarrekening", ratePct: 1.56, freeWithdrawal: true },
-  { bank: "ABN AMRO", product: "Spaarrekening", ratePct: 1.1, freeWithdrawal: true },
-  { bank: "ING", product: "Oranje Spaarrekening", ratePct: 1.0, freeWithdrawal: true },
-  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.0, freeWithdrawal: true },
+  { bank: "Revolut", product: "Flexibel sparen", ratePct: 3.1, freeWithdrawal: true },
+  { bank: "Raisin (Raisin Bank)", product: "Spaarrekening", ratePct: 3.05, freeWithdrawal: true },
+  { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
+  { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
+  { bank: "Trade Republic", product: "Cash", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "ABN AMRO", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
+  { bank: "ING", product: "Oranje Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
+  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
 ];
 
 /** Current benchmark payload. Async so a live fetcher can drop in here later

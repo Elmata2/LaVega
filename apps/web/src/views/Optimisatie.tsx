@@ -90,6 +90,10 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
   }
 
   const interest = useMemo(() => analyzeInterest(accounts, txs, rates.rates, asOf), [accounts, txs, rates, asOf]);
+  // Why a suggestion might be empty: accounts missing a saldo (CSV imports) or a
+  // known rente — surfaced in the guidance so the €0 isn't a dead end.
+  const noSaldo = interest.accountRates.filter((a) => a.account.balance === null).length;
+  const unknownRate = interest.accountRates.filter((a) => a.ratePct === null).length;
 
   return (
     <>
@@ -197,7 +201,13 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
             ))}
           </>
         ) : (
-          <p>Geen duidelijke rente-winst gevonden (of saldi/rentes nog onbekend — vul ze hieronder in).</p>
+          <p>
+            Nog geen rente-winst berekend. Dat komt omdat ik per rekening een <strong>saldo</strong> én een{" "}
+            <strong>rente %</strong> nodig heb.
+            {noSaldo > 0 && ` ${noSaldo} rekening${noSaldo > 1 ? "en" : ""} zonder saldo — vul in bij Rekeningen.`}
+            {unknownRate > 0 &&
+              ` ${unknownRate} rekening${unknownRate > 1 ? "en" : ""} zonder rente — zet de Rente % hieronder (betaalrekeningen reken ik als 0%).`}
+          </p>
         )}
 
         <div className="table-wrap">

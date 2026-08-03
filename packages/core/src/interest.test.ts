@@ -8,7 +8,7 @@ const rente = (date: string, amount: number): Tx =>
   ({ id: date, accountKey: "A1", date, amount, currency: "EUR", counterparty: "Rente", description: "Rente spaarrekening", category: "", manual: false });
 
 test("bestRate picks the highest free-withdrawal benchmark", () => {
-  expect(bestRate(NL_SAVINGS_RATES)!.ratePct).toBe(2.25);
+  expect(bestRate(NL_SAVINGS_RATES)!.ratePct).toBe(3.1);
 });
 
 test("detectInterestRate: implied % from trailing-year rente credits vs balance", () => {
@@ -28,8 +28,8 @@ test("resolveAccountRate: manual > detected > assumed(0 for betaal) > unknown", 
 test("analyzeInterest: idle cash on 0% betaalrekening quantifies yearly gain vs best", () => {
   const accounts = [acc({ key: "B", type: "Betaalrekening", balance: 20000 })];
   const r = analyzeInterest(accounts, [], NL_SAVINGS_RATES, "2026-08-01");
-  expect(r.best!.ratePct).toBe(2.25);
+  expect(r.best!.ratePct).toBe(3.1);
   expect(r.suggestions).toHaveLength(1);
-  expect(r.suggestions[0].extraPerYearCents).toBe(45000); // 20000 * 2.25% = €450
-  expect(r.totalExtraPerYearCents).toBe(45000);
+  expect(r.suggestions[0].extraPerYearCents).toBe(62000); // 20000 * 3.1% = €620
+  expect(r.totalExtraPerYearCents).toBe(62000);
 });
