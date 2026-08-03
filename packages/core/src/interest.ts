@@ -85,7 +85,24 @@ export function detectInterestRate(account: Account, txs: Tx[], asOf: string): n
   return Math.round((interestCents / balanceCents) * 100 * 100) / 100; // % with 2 decimals
 }
 
-export type RateSource = "manual" | "detected" | "assumed" | "unknown";
+export type RateSource = "manual" | "detected" | "benchmark" | "assumed" | "unknown";
+
+/** Estimate a bank's current rate for an EXISTING customer by matching the
+ *  account's bank to a benchmark entry and taking its STANDARD (post-promo)
+ *  rate — not the new-customer action rate. Exact name match first, then a
+ *  containment match for longer names. Returns null when no bank matches. */
+function matchBankRate(bank: string, rates: readonly RateBenchmark[]): number | null {
+  const b = norm(bank);
+  if (b.length < 2) return null;
+  for (const r of rates) if (norm(r.bank) === b) return r.standardRatePct ?? r.ratePct;
+  if (b.length >= 4) {
+    for (const r of rates) {
+      const rb = norm(r.bank);
+      if (rb.includes(b) || b.includes(rb)) return r.standardRatePct ?? r.ratePct;
+    }
+  }
+  return null;
+}
 export type AccountRate = { account: Account; ratePct: number | null; source: RateSource; balanceCents: number };
 export type InterestSuggestion = { account: Account; ratePct: number; balanceCents: number; extraPerYearCents: number };
 export type InterestAnalysis = {
@@ -95,15 +112,25 @@ export type InterestAnalysis = {
   totalExtraPerYearCents: number;
 };
 
-/** Resolve an account's rate: user-set wins, else detected from txs, else a
- *  betaal/creditcard account is assumed 0% (they typically pay nothing), else
- *  unknown. */
-export function resolveAccountRate(account: Account, txs: Tx[], asOf: string): { ratePct: number | null; source: RateSource } {
+/** Resolve an account's CURRENT rate, in order: user-set wins; else detected
+ *  from "rente" txs; else a betaal/creditcard account is assumed 0% (they
+ *  typically pay nothing); else — for a savings account at a known bank —
+ *  estimated from that bank's standard tariff in `rates`; else unknown. This is
+ *  what a comparison is made against, so an existing ING saldo is compared to
+ *  ING's own rate, not to 0%. */
+export function resolveAccountRate(
+  account: Account,
+  txs: Tx[],
+  asOf: string,
+  rates: readonly RateBenchmark[] = [],
+): { ratePct: number | null; source: RateSource } {
   if (typeof account.interestRate === "number") return { ratePct: account.interestRate, source: "manual" };
   const detected = detectInterestRate(account, txs, asOf);
   if (detected !== null) return { ratePct: detected, source: "detected" };
   const t = accountType(account);
   if (t === "Betaalrekening" || t === "Creditcard") return { ratePct: 0, source: "assumed" };
+  const bench = matchBankRate(account.bank, rates);
+  if (bench !== null) return { ratePct: bench, source: "benchmark" };
   return { ratePct: null, source: "unknown" };
 }
 
@@ -119,7 +146,7 @@ export function analyzeInterest(
 ): InterestAnalysis {
   const best = bestRate(rates);
   const accountRates: AccountRate[] = accounts.map((a) => {
-    const { ratePct, source } = resolveAccountRate(a, txs, asOf);
+    const { ratePct, source } = resolveAccountRate(a, txs, asOf, rates);
     return { account: a, ratePct, source, balanceCents: a.balance === null ? 0 : Math.round(a.balance * 100) };
   });
 

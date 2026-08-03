@@ -37,6 +37,7 @@ const pct = (p: number) => `${p.toLocaleString("nl-NL", { maximumFractionDigits:
 const SOURCE_LABEL: Record<AccountRate["source"], string> = {
   manual: "handmatig",
   detected: "geschat uit rente",
+  benchmark: "geschat via banktarief",
   assumed: "aangenomen 0%",
   unknown: "onbekend",
 };

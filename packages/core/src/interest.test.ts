@@ -33,3 +33,17 @@ test("analyzeInterest: idle cash on 0% betaalrekening quantifies yearly gain vs 
   expect(r.suggestions[0].extraPerYearCents).toBe(62000); // 20000 * 3.1% = €620
   expect(r.totalExtraPerYearCents).toBe(62000);
 });
+
+test("resolveAccountRate: savings at a known bank estimates the current rate from that bank's standard tariff", () => {
+  const ing = acc({ type: "Spaarrekening", bank: "ING", balance: 5000 });
+  expect(resolveAccountRate(ing, [], "2026-08-01", NL_SAVINGS_RATES)).toEqual({ ratePct: 1.25, source: "benchmark" });
+  // unknown bank -> still unknown
+  expect(resolveAccountRate(acc({ type: "Spaarrekening", bank: "Onbekende Bank" }), [], "2026-08-01", NL_SAVINGS_RATES).source).toBe("unknown");
+});
+
+test("analyzeInterest: an existing savings saldo is compared to its OWN bank rate, not to 0%", () => {
+  const accounts = [acc({ key: "S", type: "Spaarrekening", bank: "ING", balance: 10000 })];
+  const r = analyzeInterest(accounts, [], NL_SAVINGS_RATES, "2026-08-01");
+  expect(r.suggestions[0].ratePct).toBe(1.25); // ING standard, not 0
+  expect(r.suggestions[0].extraPerYearCents).toBe(18500); // 10000 * (3.10-1.25)% = €185
+});
