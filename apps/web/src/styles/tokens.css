@@ -1,21 +1,21 @@
-/* LaVega design-system tokens — dark dashboard palette.
- * Values match the FinnTell app-shell mockup (see docs/superpowers/plans/
- * 2026-08-02-dark-dashboard-ui.md). Fonts are self-hosted via @fontsource/*
- * (imported in main.tsx) with a system fallback stack here so the app still
- * looks reasonable if that import is ever unavailable. */
+/* LaVega design-system tokens — clean light palette, inspired by the Hercules
+ * UI (warm cream surface, white raised cards, hairline borders, calm classical
+ * accents; EB Garamond headings + Inter body). Everything references these
+ * variables, so the whole app retheme lives here. Fonts are self-hosted via
+ * @fontsource/* (imported in main.tsx) with a system fallback stack. */
 :root {
-  /* Color */
-  --bg: #0a0b10;
-  --surface: #12141c;
-  --surface-2: #181b25;
-  --ink: #f5f6fa;
-  --muted: #8a8fa3;
-  --line: rgba(255, 255, 255, 0.08);
-  --accent: #2f5bff;
-  --accent-soft: rgba(47, 91, 255, 0.12);
-  --pos: #2fd6a6;
-  --neg: #e5484d;
-  --warn: #e8a33d;
+  /* Color — light, warm, editorial */
+  --bg: #f6f4ef; /* cream page */
+  --surface: #ffffff; /* raised cards */
+  --surface-2: #f1eee7; /* nested rows / inputs */
+  --ink: #1a1a17; /* near-black text */
+  --muted: #6b6961; /* warm grey */
+  --line: #e6e2d9; /* hairline border */
+  --accent: #1f4e6b; /* aegean deep blue */
+  --accent-soft: rgba(31, 78, 107, 0.1);
+  --pos: #4e7a3a; /* money in — natural green */
+  --neg: #b0442e; /* money out / debt — terracotta */
+  --warn: #b0781e; /* attention — amber */
 
   /* Radius */
   --r: 14px;
@@ -30,13 +30,13 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type */
-  --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  /* Type — EB Garamond for the classical headings, Inter for everything else */
+  --font-display: "EB Garamond", Georgia, "Times New Roman", serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Elevation */
-  --shadow-sm: 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  /* Elevation — soft lift for white cards on the cream surface */
+  --shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.05), 0 12px 28px -18px rgba(26, 26, 23, 0.18);
 
   /* Layout */
   --sidebar-w: 240px;

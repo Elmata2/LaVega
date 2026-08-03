@@ -168,7 +168,7 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
             €{euroNumber(v)}
           </text>
         ))}
-        <path d={bandPath} fill="rgba(47, 214, 166, 0.16)" stroke="none" />
+        <path d={bandPath} fill="rgba(78, 122, 58, 0.13)" stroke="none" />
         <line
           x1={PAD_L}
           y1={bufferY}
@@ -213,7 +213,7 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
           Verwacht (mediaan)
         </span>
         <span className="forecast-chart-legend-item">
-          <span className="forecast-chart-legend-swatch" style={{ background: "rgba(47, 214, 166, 0.4)" }} aria-hidden="true" />
+          <span className="forecast-chart-legend-swatch" style={{ background: "rgba(78, 122, 58, 0.35)" }} aria-hidden="true" />
           Bandbreedte
         </span>
         <span className="forecast-chart-legend-item">

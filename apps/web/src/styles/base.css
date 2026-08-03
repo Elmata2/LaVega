@@ -194,6 +194,7 @@ table tbody tr:hover {
   border-radius: var(--r);
   padding: var(--sp-5);
   margin-bottom: var(--sp-5);
+  box-shadow: var(--shadow-sm);
 }
 
 /* KPI tile */
@@ -208,10 +209,11 @@ table tbody tr:hover {
   border: 1px solid var(--line);
   border-radius: var(--r);
   padding: var(--sp-4) var(--sp-5);
+  box-shadow: var(--shadow-sm);
 }
 .kpi.highlight {
   background: var(--accent-soft);
-  border-color: rgba(47, 91, 255, 0.3);
+  border-color: rgba(31, 78, 107, 0.28);
 }
 .kpi-label {
   color: var(--muted);
@@ -219,10 +221,11 @@ table tbody tr:hover {
   margin-bottom: var(--sp-2);
 }
 .kpi-value {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: 1.9rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 .kpi .eyebrow {
   margin-top: var(--sp-2);
@@ -300,7 +303,7 @@ table tbody tr:hover {
   flex: none;
   min-width: 100px;
   text-align: right;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -621,7 +624,7 @@ table tbody tr:hover {
 }
 .driver-amount {
   flex: none;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

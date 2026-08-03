@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@fontsource/eb-garamond": "^5.3.0",
     "@lavega/adapters": "workspace:*",
     "@lavega/core": "workspace:*",
     "react": "^18.3.1",

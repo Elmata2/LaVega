@@ -101,7 +101,7 @@ function CashflowMiniChart({
 
   return (
     <svg width={w} height={h} role="img" aria-label="Verwachte kaspositie komende 13 weken">
-      <path d={bandPath} fill="rgba(138,143,163,0.16)" stroke="none" />
+      <path d={bandPath} fill="rgba(78, 122, 58, 0.13)" stroke="none" />
       <line
         x1={padX}
         y1={y(bufferCents)}
@@ -265,7 +265,7 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
         ) : (
           <div className="alert-list">
             {alerts.map((a) => (
-              <div key={a.id} className="alert-row" style={{ padding: "8px 0", borderTop: "1px solid var(--line, rgba(255,255,255,0.06))" }}>
+              <div key={a.id} className="alert-row" style={{ padding: "8px 0", borderTop: "1px solid var(--line)" }}>
                 <div style={{ fontWeight: 600 }}>
                   {SEV_ICON[a.severity]} {a.title}
                 </div>
