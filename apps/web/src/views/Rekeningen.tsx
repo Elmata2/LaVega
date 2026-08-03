@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Account, Tx } from "@lavega/core";
-import { accountSummaries } from "@lavega/core";
+import { accountSummaries, isCardAccount } from "@lavega/core";
 
 type RekeningenProps = {
   accounts: Account[];
@@ -17,11 +17,15 @@ type RekeningenProps = {
  *  don't fight a controlled number input) and commits on blur — the parse +
  *  persist happens in App. Blank commits back to "onbekend" (null). */
 function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolean; onCommit: (key: string, value: string) => void }) {
-  const [draft, setDraft] = useState(account.balance === null ? "" : String(account.balance));
+  // A credit card stores a NEGATIVE balance (debt) but the user types/reads the
+  // amount OWED as a positive — show the absolute value in the field for cards.
+  const card = isCardAccount(account);
+  const shown = (b: number) => (card ? Math.abs(b) : b);
+  const [draft, setDraft] = useState(account.balance === null ? "" : String(shown(account.balance)));
   // Resync when the balance changes elsewhere (re-import, reset) and we're not editing it.
   useEffect(() => {
-    setDraft(account.balance === null ? "" : String(account.balance));
-  }, [account.balance]);
+    setDraft(account.balance === null ? "" : String(card ? Math.abs(account.balance) : account.balance));
+  }, [account.balance, card]);
   const cls = account.balance === null ? "" : account.balance >= 0 ? " text-pos" : " text-neg";
   return (
     <>
@@ -33,12 +37,13 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
         className={`saldo-input${cls}`}
         inputMode="decimal"
         placeholder="onbekend"
-        aria-label={`Saldo ${account.name}`}
+        aria-label={card ? `Openstaand bedrag ${account.name}` : `Saldo ${account.name}`}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => onCommit(account.key, draft)}
         disabled={busy}
       />
+      {card && <span className="eyebrow"> schuld</span>}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { currentBalance, withCurrentBalances } from "./balance.js";
+import { currentBalance, withCurrentBalances, isCardAccount } from "./balance.js";
 
 const acc = (key: string, balance: number | null, balanceDate?: string): Account =>
   ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance, balanceDate });
@@ -25,4 +25,10 @@ test("withCurrentBalances maps every account", () => {
   const out = withCurrentBalances([acc("A", 100, "2026-06-30"), acc("B", null)], [tx("A", "2026-07-05", -20)], "2026-08-01");
   expect(out[0].balance).toBe(80);
   expect(out[1].balance).toBeNull();
+});
+
+test("isCardAccount: Amex is a card (owed-balance stored negative), banks are not", () => {
+  expect(isCardAccount(acc("A", 100))).toBe(false); // bank ""
+  expect(isCardAccount({ ...acc("A", 100), bank: "American Express" })).toBe(true);
+  expect(isCardAccount({ ...acc("A", 100), bank: "ING" })).toBe(false);
 });

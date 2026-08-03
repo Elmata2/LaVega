@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount } from "@lavega/core";
 import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -191,8 +191,12 @@ export default function App() {
   // blank clears both back to unknown/unanchored.
   async function handleSaldoCommit(key: string, value: string) {
     const trimmed = value.trim().replace(",", ".");
-    const balance = trimmed === "" ? null : Number(trimmed);
-    if (balance !== null && !Number.isFinite(balance)) return; // ignore garbage input
+    const raw = trimmed === "" ? null : Number(trimmed);
+    if (raw !== null && !Number.isFinite(raw)) return; // ignore garbage input
+    const account = accounts.find((a) => a.key === key);
+    // For a credit card the typed value is the amount OWED, so store it as a
+    // negative (debt) in the net position — the user types a plain positive.
+    const balance = raw === null ? null : account && isCardAccount(account) ? -Math.abs(raw) : raw;
     const balanceDate = balance === null ? undefined : asOf;
     const next = accounts.map((a) => (a.key === key ? { ...a, balance, balanceDate } : a));
     setAccounts(next);

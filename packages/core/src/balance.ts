@@ -1,5 +1,13 @@
 import type { Account, Tx } from "./model.js";
 
+/** A credit-card account: a manually-entered saldo is the amount OWED, so it
+ *  counts as NEGATIVE (debt) in the net position while the UI shows the owed
+ *  amount as a positive. Detected by bank name for now (Amex is always a card);
+ *  extend as more card sources are added. */
+export function isCardAccount(a: Account): boolean {
+  return a.bank === "American Express";
+}
+
 /** Current balance rolled forward to `asOf`: stored balance + the txs that fall
  *  strictly AFTER balanceDate and on/before asOf. A null balance stays null
  *  (unknown). No balanceDate => the balance is already current (returned as-is). */
