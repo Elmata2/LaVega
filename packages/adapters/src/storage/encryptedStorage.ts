@@ -143,15 +143,22 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
     async restore(imported: CipherBlob, passphrase: string): Promise<boolean> {
       try {
+        // Verify OUTSIDE the write queue — this only reads the imported blob and
+        // derives/decrypts, touching no vault state or disk.
         const importedSalt = fromB64(imported.salt);
         const candidateKey = await deriveKey(passphrase, importedSalt, imported.iterations); // throws below the PBKDF2 floor
         const decrypted = await decryptJSON<VaultData>(candidateKey, imported); // throws on wrong passphrase / tampered ciphertext
-        // Only past this point is the imported blob verified — safe to adopt.
-        await writeBlobToDisk(imported);
-        key = candidateKey;
-        salt = importedSalt;
-        data = decrypted;
-        blob = imported;
+        // Verified — adopt atomically w.r.t. concurrent puts: the disk write +
+        // state swap go through the SAME serialization queue as every mutator,
+        // so a put's persist() that's still resolving (restore's PBKDF2 pass
+        // takes real time) can't land after the swap and revert disk.
+        await enqueueWrite(async () => {
+          await writeBlobToDisk(imported);
+          key = candidateKey;
+          salt = importedSalt;
+          data = decrypted;
+          blob = imported;
+        });
         return true;
       } catch {
         // Wrong passphrase, malformed blob, or sub-floor iterations: leave

@@ -33,3 +33,8 @@ test("parseBackup throws on well-formed JSON that isn't shaped like a CipherBlob
   expect(() => parseBackup("null")).toThrow();
   expect(() => parseBackup("42")).toThrow();
 });
+
+test("parseBackup rejects an absurd iteration count (DoS guard) and a sub-1 count", () => {
+  expect(() => parseBackup(JSON.stringify({ ...validBlob, iterations: 999_999_999 }))).toThrow();
+  expect(() => parseBackup(JSON.stringify({ ...validBlob, iterations: 0 }))).toThrow();
+});

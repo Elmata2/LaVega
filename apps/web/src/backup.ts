@@ -23,7 +23,13 @@ export function parseBackup(text: string): CipherBlob {
     typeof o.salt !== "string" ||
     typeof o.iv !== "string" ||
     typeof o.ct !== "string" ||
-    typeof o.iterations !== "number"
+    typeof o.iterations !== "number" ||
+    // Cap the KDF work factor: a crafted file with an absurd iteration count
+    // would otherwise make crypto.subtle.deriveKey run for minutes and hang the
+    // tab (self-inflicted DoS). The vault's real floor (210k) is enforced in
+    // deriveKey; this bounds the top end before we ever derive.
+    o.iterations < 1 ||
+    o.iterations > 10_000_000
   ) {
     throw new Error("ongeldig back-upbestand");
   }

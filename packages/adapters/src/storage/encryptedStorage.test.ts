@@ -188,3 +188,28 @@ test("concurrent puts are serialized — neither write reverts the other", async
   expect(await v.getAccounts()).toHaveLength(1);
   expect(await v.getTxs()).toHaveLength(1);
 });
+
+test("concurrent put + restore: restore's adopt is serialized after in-flight puts (memory == disk)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  // A back-up from a separate source vault.
+  const src = createEncryptedStorage("src-db");
+  await src.setup("imported-pw");
+  await src.putAccounts([acc("IMPORTED", 100)]);
+  const backup = src.export()!;
+
+  const v = createEncryptedStorage();
+  await v.setup("current-pw");
+  await v.putAccounts([acc("CURRENT", 1)]);
+
+  // Fire a put and a restore concurrently. The put enqueues synchronously; the
+  // restore only enqueues its adopt after its (slow) verify, so the adopt runs
+  // last and the vault becomes the imported one — consistently on disk, not
+  // clobbered by the in-flight put.
+  await Promise.all([v.putAccounts([acc("CURRENT2", 2)]), v.restore(backup, "imported-pw")]);
+
+  v.lock();
+  expect(await v.unlock("imported-pw")).toBe(true); // disk holds the imported blob
+  const accs = await v.getAccounts();
+  expect(accs).toHaveLength(1);
+  expect(accs[0]).toMatchObject({ key: "IMPORTED", balance: 100 });
+});
