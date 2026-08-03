@@ -32,6 +32,7 @@ type Profile = {
   map: ColumnMap;
   flip?: boolean;
   cashOnly?: boolean;
+  dateFormat?: "DMY" | "MDY";
 };
 
 /* --- CSV profiles per bank, keyed off a header signature. Order matters:
@@ -101,15 +102,20 @@ const PROFILES: Profile[] = [
     bank: "American Express",
     test: (h) =>
       (h.includes("date") || h.includes("datum")) &&
-      h.includes("amount") &&
-      (h.includes("card member") || h.includes("appears on your statement as") || h.includes("extended details")),
+      (h.includes("amount") || h.includes("bedrag")) &&
+      (h.includes("card member") ||
+        h.includes("appears on your statement as") ||
+        h.includes("extended details") ||
+        h.includes("vermeld op") || // NL: "Vermeld op uw rekeningoverzicht als"
+        h.includes("aanvullende informatie")), // NL: "Extended Details"
     map: {
-      date: ["date"],
-      cp: ["description"],
-      desc: ["appears on your statement as"],
-      amount: ["amount"],
+      date: ["date", "datum"],
+      cp: ["description", "omschrijving"],
+      desc: ["appears on your statement as", "vermeld op uw rekeningoverzicht als"],
+      amount: ["amount", "bedrag"],
     },
     flip: true,
+    dateFormat: "MDY", // Amex dates are US MM/DD/YYYY in both English and Dutch exports
   },
   {
     bank: "Trading 212",
@@ -251,7 +257,7 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length < 2) continue;
-    const date = parseDate(r[ci.date]);
+    const date = parseDate(r[ci.date], prof?.dateFormat ?? "DMY");
     let amount = parseAmount(r[ci.amount]);
     if (date == null || amount == null) continue;
     if (ci.dc > -1) {

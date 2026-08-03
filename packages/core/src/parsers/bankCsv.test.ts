@@ -117,23 +117,47 @@ CARD_PAYMENT,Current,2026-01-15 10:00:00,2026-01-15 10:00:05,ATM Withdrawal,-100
   expect(result.txs[0].amount).toBe(-102.5);
 });
 
-/* --- American Express: comma-delimited, DD/MM/YYYY dates, flip:true inverts
- * every amount (Amex represents charges as positive, credits/payments as
- * negative — the opposite of our "negative = outflow" convention). No acc
- * column -> falls back to the caller-supplied key. --- */
+/* --- American Express: comma-delimited, US MM/DD/YYYY dates (Amex always
+ * uses US date order, even in its English UI), flip:true inverts every
+ * amount (Amex represents charges as positive, credits/payments as negative
+ * — the opposite of our "negative = outflow" convention). No acc column ->
+ * falls back to the caller-supplied key. --- */
 const AMEX = `Date,Description,Card Member,Account #,Amount,Appears on Your Statement As,Extended Details
 12/01/2026,RESTAURANT DE KROON AMSTERDAM,A STEUNENBERG,-12345,45.00,RESTAURANT DE KROON,Dining
-13/01/2026,PAYMENT RECEIVED - THANK YOU,A STEUNENBERG,-12345,-500.00,PAYMENT RECEIVED,Payment`;
+01/13/2026,PAYMENT RECEIVED - THANK YOU,A STEUNENBERG,-12345,-500.00,PAYMENT RECEIVED,Payment`;
 
 test("American Express: profile detected, flip inverts sign both ways (positive charge -> negative outflow; negative payment -> positive inflow)", () => {
   const result = parseBankCsv(AMEX, "AMEX-12345");
   expect(result.profile).toBe("American Express");
   expect(result.txs).toHaveLength(2);
 
+  // 12/01/2026 is MM/DD/YYYY -> December 1st (was wrongly read as Jan 12 under
+  // the old DMY-only parseDate; fixed by the per-profile "MDY" dateFormat).
   expect(result.txs[0]).toMatchObject({
-    date: "2026-01-12", amount: -45, counterparty: "RESTAURANT DE KROON AMSTERDAM", description: "RESTAURANT DE KROON", accountKey: "AMEX-12345",
+    date: "2026-12-01", amount: -45, counterparty: "RESTAURANT DE KROON AMSTERDAM", description: "RESTAURANT DE KROON", accountKey: "AMEX-12345",
   });
   expect(result.txs[1]).toMatchObject({ date: "2026-01-13", amount: 500, counterparty: "PAYMENT RECEIVED - THANK YOU" });
+});
+
+/* --- American Express (Dutch export): same MM/DD/YYYY US date order, Dutch
+ * column names ("Datum", "Bedrag", "Vermeld op uw rekeningoverzicht als"),
+ * comma-decimal amounts, and a quoted multi-line address field containing an
+ * embedded comma (must not desync columns). Before this fix, the header
+ * fell through to the generic profile whose fuzzy `acc` matcher latched onto
+ * "Vermeld op uw REKENINGoverzicht als" (substring "rekening") and turned
+ * every distinct merchant into its own account. --- */
+const AMEX_NL = `Datum,Omschrijving,Bedrag,Aanvullende informatie,Vermeld op uw rekeningoverzicht als,Adres,Plaats,Postcode,Land,Referentie
+07/31/2026,UBER TRIP,"22,28",,UBER TRIP,"BURGERWEESHUISPAD 301, AMSTERDAM",,1076 HR,NETHERLANDS,'AT262140'
+07/29/2026,AIRBNB LONDEN,"585,57",,AIRBNB LONDEN,"20-22 BEDFORD ROW",,,GB,'AT990001'`;
+
+test("American Express (NL export): one account, US MM/DD dates, flipped signs", () => {
+  const r = parseBankCsv(AMEX_NL, "AMEX-NL");
+  expect(r.profile).toBe("American Express");
+  expect(r.accounts).toHaveLength(1); // <-- the bug: was 12
+  expect(r.accounts[0].key).toBe("AMEX-NL"); // fallback key, single account
+  expect(r.txs).toHaveLength(2);
+  expect(r.txs[0]).toMatchObject({ date: "2026-07-31", amount: -22.28, counterparty: "UBER TRIP" }); // MDY + flip
+  expect(r.txs[1]).toMatchObject({ date: "2026-07-29", amount: -585.57, counterparty: "AIRBNB LONDEN" });
 });
 
 /* --- Trading 212: comma-delimited, cashOnly:true keeps only cash-movement

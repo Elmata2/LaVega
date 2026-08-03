@@ -37,17 +37,25 @@ export function splitRows(text: string, delim = ";"): string[][] {
  * Handles ISO (YYYY-MM-DD), ING/compact (YYYYMMDD), DD-MM-YYYY / DD/MM/YYYY /
  * DD.MM.YYYY (also 2-digit year), MT940's YYMMDD, and falls back to Date
  * parsing for anything else. Always returns ISO YYYY-MM-DD or null. --- */
-export function parseDate(v: unknown): string | null {
+export function parseDate(v: unknown, order: "DMY" | "MDY" = "DMY"): string | null {
   let s = String(v ?? "").trim();
   if (!s) return null;
   s = s.replace(/^"|"$/g, "");
   let m: RegExpMatchArray | null;
   if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
   if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return `${m[1]}-${m[2]}-${m[3]}`;
-  if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)))
-    return `${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
-  if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})(\D|$)/)))
-    return `20${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/))) {
+    const a = Number(m[1]), b = Number(m[2]);
+    const day = order === "MDY" ? b : a;
+    const month = order === "MDY" ? a : b;
+    return `${m[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})(\D|$)/))) {
+    const a = Number(m[1]), b = Number(m[2]);
+    const day = order === "MDY" ? b : a;
+    const month = order === "MDY" ? a : b;
+    return `20${m[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   if ((m = s.match(/^(\d{2})(\d{2})(\d{2})$/))) return `20${m[1]}-${m[2]}-${m[3]}`; // MT940 YYMMDD
   const d = new Date(s);
   if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
