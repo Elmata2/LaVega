@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
-import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow } from "@lavega/core";
+import { useEffect, useMemo, useState } from "react";
+import type { Account, OwnAccounts, Rule, Tx, Alert } from "@lavega/core";
+import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 
@@ -10,9 +10,13 @@ type OverzichtProps = {
   rules: Rule[];
   own: OwnAccounts;
   asOf: string;
+  bufferCents: number;
+  onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
 };
+
+const SEV_ICON: Record<Alert["severity"], string> = { critical: "🔴", warning: "🟠", info: "🟡" };
 
 // Identity color per entity row — reused for the row's dot, its sparkline,
 // and its segment in the proportion bar so the three stay visually linked.
@@ -122,9 +126,8 @@ function CashflowMiniChart({
   );
 }
 
-const FORECAST_BUFFER_CENTS = 0;
 
-export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate, onSelectCategory }: OverzichtProps) {
+export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, onBufferChange, onNavigate, onSelectCategory }: OverzichtProps) {
   // Per-category in/out (rules + built-in defaults + own-transfer detection) —
   // biggest categories first.
   const catRows = useMemo(() => {
@@ -154,9 +157,33 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate,
   );
 
   const forecast = useMemo(
-    () => forecastCashflow(txs, accounts, { asOf, bufferCents: FORECAST_BUFFER_CENTS }).consolidated,
-    [txs, accounts, asOf],
+    () => forecastCashflow(txs, accounts, { asOf, bufferCents }).consolidated,
+    [txs, accounts, asOf, bufferCents],
   );
+
+  // The "Aandacht" alert-center: shortfall (vs buffer) + overdue recurring
+  // payments + accounts missing a saldo, ranked by severity.
+  const alerts = useMemo(
+    () => computeAlerts({ accounts, forecast, asOf, bufferCents }),
+    [accounts, forecast, asOf, bufferCents],
+  );
+  const worst = alerts.find((a) => a.severity === "critical")
+    ? "critical"
+    : alerts.find((a) => a.severity === "warning")
+      ? "warning"
+      : alerts.length > 0
+        ? "info"
+        : "none";
+
+  // Buffer editor (draft while typing, commit on blur). Resyncs if the stored
+  // buffer changes elsewhere.
+  const [bufferDraft, setBufferDraft] = useState(bufferCents ? String(bufferCents / 100) : "");
+  useEffect(() => setBufferDraft(bufferCents ? String(bufferCents / 100) : ""), [bufferCents]);
+  function commitBuffer() {
+    const t = bufferDraft.trim().replace(/[€\s]/g, "").replace(",", ".");
+    const n = t === "" ? 0 : Number(t);
+    if (Number.isFinite(n) && n >= 0) onBufferChange(Math.round(n * 100));
+  }
 
   const positionRows = useMemo(
     () =>
@@ -210,10 +237,44 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate,
         </div>
         <div className="kpi">
           <div className="kpi-label">Aandacht</div>
-          <div className={`kpi-value ${unknownCount > 0 ? "text-warn" : ""}`}>{unknownCount}</div>
-          <div className="eyebrow">ter info</div>
+          <div className={`kpi-value ${worst === "critical" ? "text-neg" : worst === "warning" ? "text-warn" : ""}`}>
+            {alerts.length}
+          </div>
+          <div className="eyebrow">{alerts.length === 0 ? "alles in orde" : "signalen"}</div>
         </div>
       </div>
+
+      <section className="card" aria-label="Aandacht">
+        <div className="card-header">
+          <h2>Aandacht</h2>
+          <label className="eyebrow">
+            Waarschuw onder buffer € {" "}
+            <input
+              className="saldo-input"
+              inputMode="decimal"
+              placeholder="0"
+              aria-label="Waarschuwingsbuffer in euro"
+              value={bufferDraft}
+              onChange={(e) => setBufferDraft(e.target.value)}
+              onBlur={commitBuffer}
+            />
+          </label>
+        </div>
+        {alerts.length === 0 ? (
+          <p className="text-pos">Geen aandachtspunten — je verwachte saldo blijft boven je buffer en er zijn geen gemiste betalingen. 🎉</p>
+        ) : (
+          <div className="alert-list">
+            {alerts.map((a) => (
+              <div key={a.id} className="alert-row" style={{ padding: "8px 0", borderTop: "1px solid var(--line, rgba(255,255,255,0.06))" }}>
+                <div style={{ fontWeight: 600 }}>
+                  {SEV_ICON[a.severity]} {a.title}
+                </div>
+                <div className="cell-sub">{a.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="card-grid">
         <section className="card span-2" aria-label="Positie over je bedrijven">
@@ -278,7 +339,7 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, onNavigate,
             <>
               <CashflowMiniChart
                 points={forecast.points}
-                bufferCents={FORECAST_BUFFER_CENTS}
+                bufferCents={bufferCents}
                 shortfallDate={forecast.shortfall?.date ?? null}
               />
               <p className="cashflow-caption">

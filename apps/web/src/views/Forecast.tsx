@@ -8,12 +8,12 @@ type ForecastProps = {
   accounts: Account[];
   entityScope: string;
   asOf: string;
+  bufferCents: number;
 };
 
-// Matches Overzicht's own forecastCashflow call (91 days = 13 weekly points,
-// buffer 0 until a configurable buffer lands in Instellingen).
+// 91 days = 13 weekly points. The buffer is user-set (Overzicht → Aandacht) and
+// passed in, so the shortfall line reflects it here too.
 const HORIZON_DAYS = 91;
-const BUFFER_CENTS = 0;
 
 const wholeEuroFormatter = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
 /** Whole-euro number (no currency symbol, no cents) for chart ticks and
@@ -59,11 +59,13 @@ function ForecastBanner({
   state,
   thin,
   lowest,
+  bufferCents,
 }: {
   f: EntityForecast;
   state: BannerState;
   thin: boolean;
   lowest: LowestPoint | null;
+  bufferCents: number;
 }) {
   const stateClass =
     state === "shortfall" ? "forecast-banner-shortfall" : state === "unknown" ? "forecast-banner-unknown" : "forecast-banner-none";
@@ -76,7 +78,7 @@ function ForecastBanner({
           {state === "shortfall" && f.shortfall && (
             <>
               Tekort verwacht rond {f.shortfall.date} — laagste saldo ~{formatEuro(f.shortfall.balanceCents / 100)} (buffer €
-              {euroNumber(BUFFER_CENTS)}).
+              {euroNumber(bufferCents)}).
             </>
           )}
           {state === "unknown" && (
@@ -87,7 +89,7 @@ function ForecastBanner({
         {state === "none" && lowest && (
           <p className="forecast-banner-sub">
             Krapste punt: week {lowest.weekNumber} — verwacht €{euroNumber(lowest.closingCents)} (ondergrens €
-            {euroNumber(lowest.lowerCents)}), boven je buffer van €{euroNumber(BUFFER_CENTS)}.
+            {euroNumber(lowest.lowerCents)}), boven je buffer van €{euroNumber(bufferCents)}.
           </p>
         )}
         {thin && (
@@ -111,7 +113,7 @@ const PAD_BOTTOM = 30;
  *  line, plotted over 14 columns ("nu" = asOf/opening, then the 13 weekly
  *  points). All scaling below is guarded against NaN/empty input (range and
  *  point-count fallbacks), matching Overzicht's CashflowMiniChart. */
-function ForecastChart({ f, lowest }: { f: EntityForecast; lowest: LowestPoint | null }) {
+function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: LowestPoint | null; bufferCents: number }) {
   if (f.openingCents === null) {
     return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
   }
@@ -125,7 +127,7 @@ function ForecastChart({ f, lowest }: { f: EntityForecast; lowest: LowestPoint |
   const upper = [opening, ...f.points.map((p) => p.upperCents ?? opening)];
   const n = median.length;
 
-  const allValues = [...median, ...lower, ...upper, BUFFER_CENTS].filter((v) => Number.isFinite(v));
+  const allValues = [...median, ...lower, ...upper, bufferCents].filter((v) => Number.isFinite(v));
   const minV = allValues.length > 0 ? Math.min(...allValues) : 0;
   const maxV = allValues.length > 0 ? Math.max(...allValues) : 1;
   const range = maxV - minV || 1;
@@ -139,7 +141,7 @@ function ForecastChart({ f, lowest }: { f: EntityForecast; lowest: LowestPoint |
   const bandTop = upper.map((v, i) => `${x(i)},${y(v)}`);
   const bandBottom = lower.map((v, i) => `${x(i)},${y(v)}`).reverse();
   const bandPath = `M ${[...bandTop, ...bandBottom].join(" L ")} Z`;
-  const bufferY = y(BUFFER_CENTS);
+  const bufferY = y(bufferCents);
 
   const yTicks = [maxV, (maxV + minV) / 2, minV];
   const xTicks = [
@@ -216,15 +218,15 @@ function ForecastChart({ f, lowest }: { f: EntityForecast; lowest: LowestPoint |
         </span>
         <span className="forecast-chart-legend-item">
           <span className="forecast-chart-legend-swatch" style={{ background: "var(--warn)" }} aria-hidden="true" />
-          Buffer €{euroNumber(BUFFER_CENTS)}
+          Buffer €{euroNumber(bufferCents)}
         </span>
       </div>
     </>
   );
 }
 
-export default function Forecast({ txs, accounts, entityScope, asOf }: ForecastProps) {
-  const fc = forecastCashflow(txs, accounts, { asOf, horizonDays: HORIZON_DAYS, bufferCents: BUFFER_CENTS });
+export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents }: ForecastProps) {
+  const fc = forecastCashflow(txs, accounts, { asOf, horizonDays: HORIZON_DAYS, bufferCents });
   // Honor entityScope, but fall back to the consolidated view if the scope
   // isn't (or is no longer) present in byEntity — App.tsx self-heals a stale
   // entityScope already, but this component stays correct on its own too.
@@ -239,7 +241,7 @@ export default function Forecast({ txs, accounts, entityScope, asOf }: ForecastP
 
   return (
     <>
-      <ForecastBanner f={f} state={state} thin={thin} lowest={lowest} />
+      <ForecastBanner f={f} state={state} thin={thin} lowest={lowest} bufferCents={bufferCents} />
 
       <div className="card-grid forecast-grid">
         <section className="card" aria-label="13-weeks cashflow-forecast">
@@ -247,7 +249,7 @@ export default function Forecast({ txs, accounts, entityScope, asOf }: ForecastP
             <h2>13-weeks cashflow-forecast</h2>
             <span className="eyebrow">{scopeLabel}</span>
           </div>
-          <ForecastChart f={f} lowest={lowest} />
+          <ForecastChart f={f} lowest={lowest} bufferCents={bufferCents} />
         </section>
 
         <section className="card" aria-label="Drivers per week">

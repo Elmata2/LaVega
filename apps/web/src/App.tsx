@@ -5,6 +5,7 @@ import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
+import { getBufferCents, setBufferCents } from "./settings.js";
 import VaultGate from "./components/VaultGate";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
@@ -14,7 +15,7 @@ import Rekeningen from "./views/Rekeningen";
 import Regels from "./views/Regels";
 import Import from "./views/Import";
 import Forecast from "./views/Forecast";
-import Optimisatie from "./views/Optimisatie";
+import Optimalisatie from "./views/Optimalisatie";
 import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -23,7 +24,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimisatie" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -47,6 +48,14 @@ export default function App() {
   const [fCategory, setFCategory] = useState("");
   const [ruleMatch, setRuleMatch] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
+  // Alert buffer (cents): warn when the forecast dips below this, so shortfalls
+  // surface early instead of only at €0. Persisted as a local preference.
+  const [bufferCents, setBufferCentsState] = useState<number>(() => getBufferCents());
+  function handleBufferChange(cents: number) {
+    const c = Math.max(0, Math.round(cents));
+    setBufferCentsState(c);
+    setBufferCents(c);
+  }
 
   // Decide which gate screen to show: unlock an existing vault, migrate
   // existing plaintext data into a fresh vault, or set up a brand-new one.
@@ -285,6 +294,8 @@ export default function App() {
               rules={rules}
               own={own}
               asOf={asOf}
+              bufferCents={bufferCents}
+              onBufferChange={handleBufferChange}
               onNavigate={setView}
               onSelectCategory={(c) => {
                 // Match exactly what the Per-categorie totals showed: only the
@@ -349,11 +360,11 @@ export default function App() {
           )}
 
           {view === "forecast" && (
-            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} />
+            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} />
           )}
 
-          {view === "optimisatie" && (
-            <Optimisatie
+          {view === "optimalisatie" && (
+            <Optimalisatie
               txs={scopedTxs}
               accounts={currentScopedAccounts}
               asOf={asOf}

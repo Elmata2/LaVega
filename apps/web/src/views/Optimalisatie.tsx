@@ -23,7 +23,7 @@ const RATES_SOURCE_LABEL: Record<RatesResult["source"], string> = {
   bundled: "offline momentopname",
 };
 
-type OptimisatieProps = {
+type OptimalisatieProps = {
   txs: Tx[];
   accounts: Account[];
   asOf: string;
@@ -63,7 +63,7 @@ function RateCell({ ar, busy, onCommit }: { ar: AccountRate; busy: boolean; onCo
   );
 }
 
-export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }: OptimisatieProps) {
+export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit }: OptimalisatieProps) {
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
