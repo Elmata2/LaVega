@@ -4,7 +4,8 @@ import path from "node:path";
 
 const DIRNAME = path.dirname(fileURLToPath(import.meta.url));
 
-/** apps/server/config.json — git-ignored, holds the Enable Banking credential. */
+/** apps/server/config.json — git-ignored, holds the Enable Banking credential
+ *  for LOCAL dev. In production (Railway) the credential comes from env vars. */
 export const DEFAULT_CONFIG_PATH = path.join(DIRNAME, "..", "config.json");
 
 export const DEFAULT_PORT = 8787;
@@ -16,6 +17,9 @@ const DEFAULT_PSU_TYPE = "business";
 export interface EbConfig {
   configured: boolean;
   applicationId: string | null;
+  /** Inline PEM private key (from EB_PRIVATE_KEY env), if provided. */
+  privateKey: string | null;
+  /** Path to a PEM file (config.json / EB_PRIVATE_KEY_FILE), if provided. */
   privateKeyFile: string | null;
   redirectUrl: string;
   psuType: string;
@@ -23,6 +27,7 @@ export interface EbConfig {
 
 interface RawEbConfig {
   applicationId?: string;
+  privateKey?: string;
   privateKeyFile?: string;
   redirectUrl?: string;
   psuType?: string;
@@ -38,19 +43,27 @@ function readJSON<T>(filePath: string, fallback: T): T {
 }
 
 /**
- * Load the Enable Banking config. Never throws: a missing file or a
- * `VUL-IN` placeholder applicationId simply reports `configured: false`.
+ * Load the Enable Banking config. Env vars (production/Railway) win over
+ * config.json (local dev). Never throws: a missing applicationId or a `VUL-IN`
+ * placeholder simply reports `configured: false`.
+ *
+ * Env: EB_APPLICATION_ID, EB_PRIVATE_KEY (inline PEM — literal `\n` is
+ * un-escaped), EB_PRIVATE_KEY_FILE, EB_REDIRECT_URL, EB_PSU_TYPE.
  */
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
-  const applicationId = raw?.applicationId ?? null;
-  const configured = typeof applicationId === "string" && !applicationId.includes(PLACEHOLDER);
+  const applicationId = process.env.EB_APPLICATION_ID ?? raw?.applicationId ?? null;
+  const configured =
+    typeof applicationId === "string" && applicationId.length > 0 && !applicationId.includes(PLACEHOLDER);
+  const envKey = process.env.EB_PRIVATE_KEY;
+  const privateKey = envKey ? envKey.replace(/\\n/g, "\n") : (raw?.privateKey ?? null);
   return {
     configured,
     applicationId: configured ? (applicationId as string) : null,
-    privateKeyFile: raw?.privateKeyFile ?? null,
-    redirectUrl: raw?.redirectUrl ?? DEFAULT_REDIRECT_URL,
-    psuType: raw?.psuType ?? DEFAULT_PSU_TYPE,
+    privateKey,
+    privateKeyFile: process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null,
+    redirectUrl: process.env.EB_REDIRECT_URL ?? raw?.redirectUrl ?? DEFAULT_REDIRECT_URL,
+    psuType: process.env.EB_PSU_TYPE ?? raw?.psuType ?? DEFAULT_PSU_TYPE,
   };
 }
 

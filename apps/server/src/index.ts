@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
 import { privacyHtml, termsHtml } from "./legal.js";
+import { registerEbRoutes } from "./eb-routes.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -39,6 +40,9 @@ app.get("/api/eb/status", (c) => {
     applicationId: maskApplicationId(config.applicationId),
   });
 });
+
+/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts. */
+registerEbRoutes(app);
 
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */

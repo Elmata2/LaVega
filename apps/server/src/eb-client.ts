@@ -27,6 +27,8 @@ const SERVER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 export interface EbClientConfig {
   applicationId: string | null;
+  /** Inline PEM private key (Railway secret). Takes precedence over privateKeyFile. */
+  privateKey?: string | null;
   privateKeyFile: string | null;
 }
 
@@ -49,14 +51,20 @@ export function ebJWT(config: EbClientConfig): string {
   if (!applicationId) {
     throw new Error("Enable Banking: applicationId is missing from config");
   }
-  if (!privateKeyFile) {
-    throw new Error("Enable Banking: privateKeyFile is missing from config");
+  // Prefer an inline PEM (Railway secret); fall back to a key file (local dev).
+  let privateKey: string;
+  if (config.privateKey && config.privateKey.includes("BEGIN")) {
+    privateKey = config.privateKey;
+  } else {
+    if (!privateKeyFile) {
+      throw new Error("Enable Banking: no private key (set EB_PRIVATE_KEY or privateKeyFile)");
+    }
+    const keyPath = resolvePrivateKeyPath(privateKeyFile);
+    if (!existsSync(keyPath)) {
+      throw new Error(`Enable Banking: private key not found at ${keyPath}`);
+    }
+    privateKey = readFileSync(keyPath, "utf8");
   }
-  const keyPath = resolvePrivateKeyPath(privateKeyFile);
-  if (!existsSync(keyPath)) {
-    throw new Error(`Enable Banking: private key not found at ${keyPath}`);
-  }
-  const privateKey = readFileSync(keyPath, "utf8");
 
   const iat = Math.floor(Date.now() / 1000);
   const header = { typ: "JWT", alg: "RS256", kid: applicationId };

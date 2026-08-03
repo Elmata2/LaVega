@@ -27,6 +27,7 @@ test("GET /api/eb/status reports configured:false and applicationId:null when no
   loadConfigMock.mockReturnValue({
     configured: false,
     applicationId: null,
+    privateKey: null,
     privateKeyFile: null,
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
@@ -40,6 +41,7 @@ test("GET /api/eb/status masks the applicationId when configured", async () => {
   loadConfigMock.mockReturnValue({
     configured: true,
     applicationId: "abcd1234efgh5678",
+    privateKey: null,
     privateKeyFile: "./key.pem",
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",

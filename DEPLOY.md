@@ -29,13 +29,24 @@ Enable Banking OAuth exchange), it never stores your accounts/transactions.
   commit the `.pem` — add it as a Railway variable/secret or a mounted volume.
   `config.json`, `*.pem`, `.env*` are git-ignored.
 
-## Enable Banking (after the domain exists)
-The public HTTPS domain is what EB needs for the redirect. Once deployed:
-1. Register the app in the Enable Banking dashboard.
-2. Set the redirect URL to `https://<name>.up.railway.app/api/eb/callback`.
-3. Put `EB_APPLICATION_ID` + the `.pem` into Railway.
-4. Then we finish the flow (bank picker → authorise → callback → fetch
-   accounts+txs → into your vault). Sandbox first.
+## Enable Banking (flow is built — needs credentials)
+The `/api/eb/*` flow (aspsps → auth → callback → accounts) and the frontend
+"Koppel bank" button are implemented. To switch it on, register the EB app and
+set these Railway **Variables**:
+
+- `EB_APPLICATION_ID` — your Enable Banking application id
+- `EB_PRIVATE_KEY` — the PEM private key, inline (paste the whole key; literal
+  `\n` is accepted). Alternatively `EB_PRIVATE_KEY_FILE` pointing at a mounted file.
+- `EB_REDIRECT_URL` — `https://lavegaweb-production.up.railway.app/api/eb/callback`
+- `EB_PSU_TYPE` — `business` (or `personal`)
+
+In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
+- Redirect URL: `https://lavegaweb-production.up.railway.app/api/eb/callback`
+- Privacy: `https://lavegaweb-production.up.railway.app/privacy`
+- Terms: `https://lavegaweb-production.up.railway.app/terms`
+
+Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
+the app still works with file imports. Never commit the `.pem` — use the env var.
 
 ## Local production test
 ```

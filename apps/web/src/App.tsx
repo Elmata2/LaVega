@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts } from "@lavega/core";
-import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds } from "@lavega/core";
+import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
+import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
@@ -81,6 +82,59 @@ export default function App() {
       setTxs(loadedTxs);
       setRules(loadedRules);
     })();
+  }, [gate]);
+
+  // After returning from an Enable Banking authorisation, the browser lands on
+  // the SPA with ?eb=<session> (or ?eb_error=). Once the vault is unlocked, pull
+  // the accounts+transactions, map them (same shape as a file import) and store
+  // them. Reads fresh from storage to avoid stale state right after unlock.
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const params = new URLSearchParams(window.location.search);
+    const ebError = params.get("eb_error");
+    const ebSession = params.get("eb");
+    if (!ebError && !ebSession) return;
+    window.history.replaceState({}, "", window.location.pathname); // don't re-run on refresh
+    setView("overview");
+    if (ebError) {
+      setProblems([`Bankkoppeling mislukt: ${ebError}`]);
+      return;
+    }
+    (async () => {
+      setBusy(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`);
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          setProblems([`Bankkoppeling mislukt: ${data.error ?? res.status}`]);
+          return;
+        }
+        const aspsp: string = data.aspsp ?? "";
+        const newAccounts: Account[] = [];
+        const rawTxs: Array<Omit<Tx, "id">> = [];
+        for (const item of data.items ?? []) {
+          const acc = mapEbAccount({ ...item.account, aspsp }, pickEbBalance(item.balances));
+          acc.entity = entity;
+          newAccounts.push(acc);
+          const key = ebAccountKey(item.account);
+          for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
+        }
+        const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+        const mergedAccounts = mergeImportedAccounts(curAccounts, newAccounts);
+        const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
+        await storage.putAccounts(mergedAccounts);
+        await storage.putTxs(mergedTxs);
+        const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+        setAccounts(fa);
+        setTxs(ft);
+        setProblems([`Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`]);
+      } catch (e) {
+        setProblems([`Bankkoppeling mislukt: ${e instanceof Error ? e.message : String(e)}`]);
+      } finally {
+        setBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate]);
 
   // Sidebar "Vergrendel": drop the derived key + in-memory data (nothing

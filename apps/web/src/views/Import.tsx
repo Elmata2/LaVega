@@ -1,3 +1,5 @@
+import BankLink from "../components/BankLink";
+
 type ImportProps = {
   entity: string;
   onEntityChange: (entity: string) => void;
@@ -38,6 +40,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
           {problems.join(", ")}
         </p>
       )}
+      <BankLink busy={busy} />
     </section>
   );
 }
