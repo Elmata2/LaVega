@@ -48,3 +48,13 @@ test("GET /api/eb/status masks the applicationId when configured", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ configured: true, applicationId: "abcd1234…" });
 });
+
+test("GET /api/rates returns a valid rates payload with open CORS", async () => {
+  const res = await app.request("/api/rates");
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  const body = await res.json();
+  expect(typeof body.asOf).toBe("string");
+  expect(Array.isArray(body.rates)).toBe(true);
+  expect(body.rates[0]).toMatchObject({ bank: expect.any(String), ratePct: expect.any(Number), freeWithdrawal: expect.any(Boolean) });
+});

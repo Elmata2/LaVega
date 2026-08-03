@@ -8,7 +8,20 @@ import {
   NL_SAVINGS_RATES,
   RATES_AS_OF,
 } from "@lavega/core";
+import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { formatEuro } from "../format";
+
+// Where to fetch the public rate benchmark. Set VITE_RATES_URL to your rates
+// service; in dev it defaults to the local Hono server (run `pnpm dev:server`).
+// Unset in prod => no fetch, offline snapshot. Only public data is requested.
+const RATES_URL: string | undefined =
+  import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
+
+const RATES_SOURCE_LABEL: Record<RatesResult["source"], string> = {
+  live: "🟢 live opgehaald",
+  cache: "uit cache",
+  bundled: "offline momentopname",
+};
 
 type OptimisatieProps = {
   txs: Tx[];
@@ -54,7 +67,29 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
   const totalMonthlyCents = useMemo(() => subs.reduce((s, x) => s + x.monthlyCents, 0), [subs]);
-  const interest = useMemo(() => analyzeInterest(accounts, txs, NL_SAVINGS_RATES, asOf), [accounts, txs, asOf]);
+
+  // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
+  // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
+  const provider = useMemo(() => createRatesProvider({ url: RATES_URL }), []);
+  const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
+  const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    provider.getRates().then((r) => alive && setRates(r));
+    return () => {
+      alive = false;
+    };
+  }, [provider]);
+  async function refreshRates() {
+    setRefreshing(true);
+    try {
+      setRates(await provider.getRates());
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const interest = useMemo(() => analyzeInterest(accounts, txs, rates.rates, asOf), [accounts, txs, rates, asOf]);
 
   return (
     <>
@@ -194,7 +229,9 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
         </div>
 
         <details className="rates-benchmark">
-          <summary className="eyebrow">Vergelijkingsrentes (indicatief · peildatum {RATES_AS_OF})</summary>
+          <summary className="eyebrow">
+            Vergelijkingsrentes · {RATES_SOURCE_LABEL[rates.source]} · peildatum {rates.asOf}
+          </summary>
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -205,7 +242,7 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
                 </tr>
               </thead>
               <tbody>
-                {NL_SAVINGS_RATES.map((r) => (
+                {rates.rates.map((r) => (
                   <tr key={`${r.bank}-${r.product}`}>
                     <td>{r.bank}</td>
                     <td className="cell-sub">{r.product}</td>
@@ -218,8 +255,12 @@ export default function Optimisatie({ txs, accounts, asOf, busy, onRateCommit }:
         </details>
 
         <p className="eyebrow">
-          Rentes zijn een offline momentopname (peildatum {RATES_AS_OF}) — controleer actuele tarieven zelf. Live
-          ophalen volgt zodra de rentebron is aangesloten. Je eigen saldi/rentes blijven lokaal.
+          Rentebron: {RATES_SOURCE_LABEL[rates.source]} (peildatum {rates.asOf}).{" "}
+          <button type="button" className="card-link" onClick={() => void refreshRates()} disabled={refreshing}>
+            {refreshing ? "verversen…" : "ververs rentes"}
+          </button>
+          . Alleen publieke rentes worden opgehaald — je eigen saldi/rentes blijven lokaal.{" "}
+          {rates.source !== "live" && "Voor live tarieven: start de rente-service (pnpm dev:server)."}
         </p>
       </section>
     </>

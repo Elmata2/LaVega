@@ -5,3 +5,4 @@ export * from "./crypto/vaultCrypto.js";
 export * from "./banking/BankAccessAdapter.js";
 export * from "./banking/fileImport.js";
 export * from "./banking/enableBankingMap.js";
+export * from "./rates/ratesProvider.js";
