@@ -14,6 +14,7 @@ import Rekeningen from "./views/Rekeningen";
 import Regels from "./views/Regels";
 import Import from "./views/Import";
 import Forecast from "./views/Forecast";
+import Optimisatie from "./views/Optimisatie";
 import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -22,7 +23,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimisatie" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -223,6 +224,19 @@ export default function App() {
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // Manually set/override an account's annual interest rate (%) for the
+  // Optimisatie tab. Accepts a Dutch comma or dot (and a stray "%"); blank
+  // clears the override back to auto (detected/assumed). Same persist pattern.
+  async function handleRateCommit(key: string, value: string) {
+    const trimmed = value.trim().replace(",", ".").replace("%", "");
+    const rate = trimmed === "" ? undefined : Number(trimmed);
+    if (rate !== undefined && !Number.isFinite(rate)) return; // ignore garbage
+    const next = accounts.map((a) => (a.key === key ? { ...a, interestRate: rate } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
   function scrollToImport() {
     document.getElementById("import")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -336,6 +350,16 @@ export default function App() {
 
           {view === "forecast" && (
             <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} />
+          )}
+
+          {view === "optimisatie" && (
+            <Optimisatie
+              txs={scopedTxs}
+              accounts={currentScopedAccounts}
+              asOf={asOf}
+              busy={busy}
+              onRateCommit={handleRateCommit}
+            />
           )}
 
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}

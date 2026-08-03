@@ -5,6 +5,8 @@ export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
 export * from "./categories.js";
+export * from "./subscriptions.js";
+export * from "./interest.js";
 export * from "./forecast.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";

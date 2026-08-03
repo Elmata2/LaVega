@@ -6,6 +6,7 @@ const VIEW_TITLES: Record<View, string> = {
   accounts: "Rekeningen",
   rules: "Regels",
   forecast: "Forecast",
+  optimisatie: "Optimisatie",
   backup: "Back-up",
 };
 
