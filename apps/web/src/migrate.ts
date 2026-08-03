@@ -6,8 +6,8 @@ const LEGACY_DB = "lavega";
 /** True if the legacy plaintext DB holds any data worth migrating. */
 export async function hasLegacyData(): Promise<boolean> {
   const legacy = createIndexedDbStorage();
-  const [a, t] = await Promise.all([legacy.getAccounts(), legacy.getTxs()]);
-  return a.length > 0 || t.length > 0;
+  const [a, t, r] = await Promise.all([legacy.getAccounts(), legacy.getTxs(), legacy.getRules()]);
+  return a.length > 0 || t.length > 0 || r.length > 0; // incl. rules, so a rules-only DB still migrates
 }
 
 /** Migrate the legacy plaintext DB into the vault under `passphrase`, THEN delete

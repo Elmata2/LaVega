@@ -53,12 +53,14 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
   async function readBlobFromDisk(): Promise<CipherBlob | null> {
     const db = await openVaultDb();
     const record = (await db.get(STORE_NAME, RECORD_KEY)) as CipherBlob | undefined;
+    db.close(); // don't leak a connection per read (opened on every status/get/persist)
     return record ?? null;
   }
 
   async function writeBlobToDisk(b: CipherBlob): Promise<void> {
     const db = await openVaultDb();
     await db.put(STORE_NAME, b, RECORD_KEY);
+    db.close();
   }
 
   // Re-encrypts the full in-memory data set with a fresh IV and overwrites
