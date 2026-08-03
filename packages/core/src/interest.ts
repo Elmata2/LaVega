@@ -14,20 +14,39 @@ export type RateBenchmark = { bank: string; product: string; ratePct: number; fr
  *  never presented as live. The app can replace this table via a fetch. */
 export const RATES_AS_OF = "2026-08-03";
 
-/* Bundled OFFLINE fallback of NL/EU free-withdrawal ("vrij opneembaar") savings
- * rates. INDICATIVE snapshot (verified against comparison sites, Aug 2026); the
- * live fetch from /api/rates overrides it when the rates-service is reachable.
- * Robinhood is intentionally excluded here: its cash sweep (~3.35%) is USD /
- * US-only and not NL-DGS-protected, so it's a poor "vrij opneembaar NL" bench. */
+/* Bundled OFFLINE fallback: standard variable ("vrij opneembaar") savings rates
+ * for the Dutch consumer market. INDICATIVE snapshot (verified against geld.nl,
+ * Aug 2026); the live fetch from /api/rates overrides it when reachable. These
+ * are STANDARD variable rates — several banks run higher promo/actierentes for
+ * new customers. Robinhood is excluded on purpose: its cash sweep (~3.35%) is
+ * USD/US-only and not NL-DGS-protected. */
 export const NL_SAVINGS_RATES: readonly RateBenchmark[] = [
-  { bank: "Revolut", product: "Flexibel sparen", ratePct: 3.1, freeWithdrawal: true },
-  { bank: "Raisin (Raisin Bank)", product: "Spaarrekening", ratePct: 3.05, freeWithdrawal: true },
+  { bank: "Bigbank", product: "Spaarrekening", ratePct: 3.1, freeWithdrawal: true },
   { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
   { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, freeWithdrawal: true },
+  { bank: "Garanti BBVA International", product: "Spaarrekening", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "DHB Bank", product: "Combispaarrekening", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "Anadolubank", product: "Spaarrekening", ratePct: 3.0, freeWithdrawal: true },
   { bank: "Trade Republic", product: "Cash", ratePct: 3.0, freeWithdrawal: true },
+  { bank: "Scalable Capital", product: "Cash", ratePct: 2.5, freeWithdrawal: true },
+  { bank: "Klarna", product: "Spaarrekening", ratePct: 1.95, freeWithdrawal: true },
+  { bank: "Ayvens Bank", product: "Spaarrekening", ratePct: 1.85, freeWithdrawal: true },
+  { bank: "Argenta", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
+  { bank: "Openbank", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
+  { bank: "Yapi Kredi Bank", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
+  { bank: "Lloyds Bank", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
+  { bank: "Centraal Beheer", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
+  { bank: "MeDirect", product: "Spaarrekening", ratePct: 1.5, freeWithdrawal: true },
+  { bank: "NIBC", product: "Spaarrekening", ratePct: 1.44, freeWithdrawal: true },
+  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.4, freeWithdrawal: true },
+  { bank: "Brand New Day", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
+  { bank: "ASN Bank", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
+  { bank: "Nationale-Nederlanden", product: "Spaarrekening", ratePct: 1.3, freeWithdrawal: true },
+  { bank: "Knab", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
   { bank: "ABN AMRO", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
   { bank: "ING", product: "Oranje Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
-  { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.25, freeWithdrawal: true },
+  { bank: "Triodos Bank", product: "Spaarrekening", ratePct: 1.15, freeWithdrawal: true },
+  { bank: "Revolut", product: "Flexibel sparen", ratePct: 1.0, freeWithdrawal: true },
 ];
 
 /** The best benchmark (highest ratePct); by default only free-withdrawal

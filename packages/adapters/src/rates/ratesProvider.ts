@@ -36,8 +36,10 @@ export interface RatesCache {
 
 /** Default cache in localStorage — public, non-sensitive data, so it lives
  *  outside the encrypted vault (and works without the vault being unlocked).
- *  No-ops safely where localStorage is absent (SSR/tests). */
-export function localStorageRatesCache(key = "lavega.rates"): RatesCache {
+ *  No-ops safely where localStorage is absent (SSR/tests). The `.v2` suffix
+ *  versions the key: bumping it abandons any older cached payload (so a stale
+ *  snapshot from a previous rates schema is never shown again). */
+export function localStorageRatesCache(key = "lavega.rates.v2"): RatesCache {
   return {
     get() {
       try {
@@ -63,18 +65,23 @@ export type RatesProviderOptions = {
   fetchFn?: typeof fetch;
   cache?: RatesCache;
   timeoutMs?: number;
+  /** Max age a cached result is trusted as an offline fallback (default 12h).
+   *  Beyond it, the (current) bundled snapshot is preferred over stale cache. */
+  cacheTtlMs?: number;
   now?: () => number;
 };
 
 export type RatesProvider = { getRates(): Promise<RatesResult> };
 
-/** Create a rates provider. Resolution order on getRates(): live fetch → last
- *  cached live result (offline) → bundled offline snapshot. Never throws. */
+/** Create a rates provider. Resolution order on getRates(): live fetch → a
+ *  still-fresh cached live result (offline) → bundled offline snapshot. Never
+ *  throws. Live always wins, so a reload picks up refreshed server rates. */
 export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvider {
   const { url } = opts;
   const fetchFn = opts.fetchFn ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined);
   const cache = opts.cache ?? localStorageRatesCache();
   const timeoutMs = opts.timeoutMs ?? 6000;
+  const cacheTtlMs = opts.cacheTtlMs ?? 12 * 60 * 60 * 1000;
   const now = opts.now ?? (() => Date.now());
   const bundled: RatesResult = { rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" };
 
@@ -100,8 +107,10 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
         return { rates: live.rates, asOf: live.asOf, source: "live" };
       }
       const cached = cache.get();
-      if (cached) return { rates: cached.rates, asOf: cached.asOf, source: "cache" };
-      return bundled;
+      if (cached && now() - cached.ts < cacheTtlMs) {
+        return { rates: cached.rates, asOf: cached.asOf, source: "cache" };
+      }
+      return bundled; // no cache, or cache too stale → current bundled snapshot
     },
   };
 }

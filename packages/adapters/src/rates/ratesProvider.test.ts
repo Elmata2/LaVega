@@ -25,13 +25,20 @@ test("live fetch success -> source live + cached", async () => {
   expect(cache.get()).toMatchObject({ asOf: "2026-08-03", ts: 123 });
 });
 
-test("fetch fails but cache present -> source cache", async () => {
+test("fetch fails but fresh cache present -> source cache", async () => {
   const cache = memCache();
-  cache.set({ ...payload, ts: 1 });
-  const p = createRatesProvider({ url: "http://x/api/rates", fetchFn: failFetch, cache });
+  cache.set({ ...payload, ts: 1000 });
+  const p = createRatesProvider({ url: "http://x/api/rates", fetchFn: failFetch, cache, now: () => 2000 });
   const r = await p.getRates();
   expect(r.source).toBe("cache");
   expect(r.rates[0].bank).toBe("Test Bank");
+});
+
+test("fetch fails and cache is STALE (beyond TTL) -> bundled, not stale cache", async () => {
+  const cache = memCache();
+  cache.set({ ...payload, ts: 0 });
+  const p = createRatesProvider({ url: "http://x/api/rates", fetchFn: failFetch, cache, cacheTtlMs: 1000, now: () => 999999 });
+  expect((await p.getRates()).source).toBe("bundled");
 });
 
 test("fetch fails and no cache -> bundled offline fallback", async () => {
