@@ -10,11 +10,17 @@ export function isCardAccount(a: Account): boolean {
 
 export const ACCOUNT_TYPES = ["Betaalrekening", "Spaarrekening", "Creditcard", "Beleggingsrekening", "Overig"] as const;
 
-/** The account's soort: the user-set `type` if present, else a smart default
- *  (a card => Creditcard, otherwise Betaalrekening). */
+/** The account's soort: the user-set `type` if present, else a smart default —
+ *  a card => Creditcard; a name that reads as savings (ING "Oranje
+ *  Spaarrekening", a Revolut "Spaarrekening"/"Savings" product, etc.) =>
+ *  Spaarrekening; otherwise Betaalrekening. The name heuristic is only a
+ *  default: mergeImportedAccounts preserves a user's explicit type on
+ *  re-import, so an override always wins. */
 export function accountType(a: Account): string {
   if (a.type && a.type.length > 0) return a.type;
-  return isCardAccount(a) ? "Creditcard" : "Betaalrekening";
+  if (isCardAccount(a)) return "Creditcard";
+  if (/spaar|savings/i.test(a.name)) return "Spaarrekening";
+  return "Betaalrekening";
 }
 
 /** Current balance rolled forward to `asOf`: stored balance + the txs that fall

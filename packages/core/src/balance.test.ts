@@ -42,3 +42,9 @@ test("accountType: no type + other bank => smart default Betaalrekening", () => 
 test("accountType: explicit type wins over the smart default", () => {
   expect(accountType({ ...acc("A", 100), bank: "ING", type: "Spaarrekening" })).toBe("Spaarrekening");
 });
+
+test("accountType: no type + savings name => Spaarrekening (ING Oranje, Revolut Savings)", () => {
+  expect(accountType({ ...acc("A", 100), name: "Oranje Spaarrekening", bank: "ING" })).toBe("Spaarrekening");
+  expect(accountType({ ...acc("A", 100), name: "Savings", bank: "Revolut" })).toBe("Spaarrekening");
+  expect(accountType({ ...acc("A", 100), name: "Betaalrekening", bank: "Revolut" })).toBe("Betaalrekening");
+});

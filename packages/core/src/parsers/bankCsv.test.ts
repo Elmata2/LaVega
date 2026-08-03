@@ -203,3 +203,48 @@ test("ABN AMRO: TAB/no-header detected, dates ISO, signed amounts, closing balan
   // balanceDate anchors that closing balance to the last (max-date) row.
   expect(result.accounts[0].balanceDate).toBe("2026-01-16");
 });
+
+/* --- Revolut: the Dutch-localized export (Datum voltooid/Bedrag/Kosten/Saldo)
+ * must detect the Revolut profile, key by Product, subtract Kosten, and capture
+ * the latest Saldo as the account balance. --- */
+const REVOLUT_NL = `Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo
+Overschrijving,Betaalrekening,2026-01-03 07:33:17,2026-01-03 07:33:17,Van ELISA,19.45,0.00,EUR,VOLTOOID,29.95
+Kaartbetaling,Betaalrekening,2026-01-05 10:00:00,2026-01-05 10:00:01,Albert Heijn,-5.00,0.50,EUR,VOLTOOID,24.45`;
+
+test("Revolut NL export: detected, bank Revolut, keyed by Product, fee subtracted, latest Saldo becomes balance", () => {
+  const r = parseBankCsv(REVOLUT_NL, "REVOLUT");
+  expect(r.profile).toBe("Revolut");
+  expect(r.txs).toHaveLength(2);
+  expect(r.txs[0]).toMatchObject({ date: "2026-01-03", amount: 19.45, counterparty: "Van ELISA", accountKey: "Betaalrekening" });
+  expect(r.txs[1]).toMatchObject({ date: "2026-01-05", amount: -5.5 }); // -5.00 minus 0.50 fee
+  expect(r.accounts).toHaveLength(1);
+  expect(r.accounts[0]).toMatchObject({ key: "Betaalrekening", bank: "Revolut", balance: 24.45, balanceDate: "2026-01-05" });
+});
+
+const REVOLUT_EN = `Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+CARD_PAYMENT,Current,2026-02-01 09:00:00,2026-02-01 09:00:00,Store,-10.00,0.00,EUR,COMPLETED,90.00`;
+
+test("Revolut EN export still works (dual-language) and captures Balance", () => {
+  const r = parseBankCsv(REVOLUT_EN, "REVOLUT");
+  expect(r.profile).toBe("Revolut");
+  expect(r.txs).toHaveLength(1);
+  expect(r.txs[0]).toMatchObject({ date: "2026-02-01", amount: -10, accountKey: "Current" });
+  expect(r.accounts[0]).toMatchObject({ key: "Current", bank: "Revolut", balance: 90, balanceDate: "2026-02-01" });
+});
+
+/* --- ING "Alle spaarrekeningen": balance-only snapshot, no transactions. One
+ * account per Rekening, balance from the latest-date Boeksaldo, bank ING. --- */
+const SAVINGS = `"Datum";"Rekening";"Rekening naam";"Valuta";"Boeksaldo"
+"2026-07-31";"A28641213";"Oranje Spaarrekening";"EUR";"1.234,56"
+"2026-07-30";"A28641213";"Oranje Spaarrekening";"EUR";"1.000,00"
+"2026-07-31";"D12883091";"Oranje Spaarrekening";"EUR";"0,20"`;
+
+test("Savings balance export: no txs, one account per Rekening, latest Boeksaldo as balance, bank ING", () => {
+  const r = parseBankCsv(SAVINGS, "SPAAR");
+  expect(r.profile).toBe("Spaarrekeningen");
+  expect(r.txs).toHaveLength(0);
+  expect(r.accounts).toHaveLength(2);
+  const a = r.accounts.find((x) => x.key === "A28641213")!;
+  expect(a).toMatchObject({ name: "Oranje Spaarrekening", bank: "ING", balance: 1234.56, balanceDate: "2026-07-31", currency: "EUR" });
+  expect(r.accounts.find((x) => x.key === "D12883091")!.balance).toBe(0.2);
+});

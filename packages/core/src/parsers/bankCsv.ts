@@ -24,6 +24,7 @@ type ColumnMap = {
   dc?: string[];
   dcNeg?: string[];
   fee?: string[];
+  bal?: string[]; // running-balance column (e.g. Revolut "Saldo"): the latest row sets the account balance
 };
 
 type Profile = {
@@ -86,16 +87,22 @@ const PROFILES: Profile[] = [
     },
   },
   {
+    // Dual-language: Revolut exports headers in the account's locale. The Dutch
+    // export is "Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,
+    // Kosten,Valuta,Status,Saldo"; the English one uses Completed Date/Amount/
+    // Currency/Fee/Balance. "product" (Betaalrekening/Spaarrekening/Current/
+    // Savings) is the per-row account; "saldo"/"balance" is the running balance.
     bank: "Revolut",
-    test: (h) => h.includes("completed date") && h.includes("amount"),
+    test: (h) => (h.includes("completed date") || h.includes("datum voltooid")) && (h.includes("amount") || h.includes("bedrag")),
     map: {
-      date: ["completed date"],
-      cp: ["description"],
-      desc: ["type"],
-      amount: ["amount"],
-      cur: ["currency"],
-      fee: ["fee"],
+      date: ["completed date", "datum voltooid"],
+      cp: ["description", "beschrijving"],
+      desc: ["type"], // "Type"/"type" is identical after norm in both locales
+      amount: ["amount", "bedrag"],
+      cur: ["currency", "valuta"],
+      fee: ["fee", "kosten"],
       acc: ["product"],
+      bal: ["balance", "saldo"],
     },
   },
   {
@@ -213,6 +220,56 @@ function parseABN(rows: string[][]): { accounts: Record<string, Account>; txs: A
   return { accounts, txs };
 }
 
+/* --- balance-only savings export (ING "Alle spaarrekeningen"):
+ * "Datum";"Rekening";"Rekening naam";"Valuta";"Boeksaldo" — per-date balance
+ * snapshots with NO transactions and no amount column. The generic engine finds
+ * no amount and skips every row ("adds nothing"), so this shape gets its own
+ * path: one account per Rekening, its balance set from the latest-date row's
+ * Boeksaldo. Detected by the distinctive "rekening naam" + "boeksaldo" pair. --- */
+function looksLikeSavingsBalance(hNorm: string): boolean {
+  return hNorm.includes("boeksaldo") && (hNorm.includes("rekening naam") || hNorm.includes("rekeningnaam"));
+}
+
+function parseSavingsBalances(header: string[], rows: string[][]): { accounts: Account[]; txs: Array<Omit<Tx, "id">> } {
+  const idx = headerIndex(header);
+  const ci = {
+    date: pick(idx, ["datum", "boekdatum", "date"]),
+    acc: pick(idx, ["rekening", "rekeningnummer", "iban"]),
+    name: pick(idx, ["rekening naam", "rekeningnaam", "naam"]),
+    cur: pick(idx, ["valuta", "munt", "currency"]),
+    bal: pick(idx, ["boeksaldo", "saldo", "balance"]),
+  };
+  // Latest-date balance per account (last row wins on a date tie — exports run
+  // newest-first or oldest-first; `>=` in file order takes whichever is last).
+  const latest = new Map<string, { date: string; balance: number; name: string; cur: string }>();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.length < 2) continue;
+    const date = parseDate(r[ci.date]);
+    const bal = ci.bal > -1 ? parseAmount(r[ci.bal]) : null;
+    const accRaw = ci.acc > -1 ? String(r[ci.acc] ?? "").trim() : "";
+    if (date == null || bal == null || !accRaw) continue;
+    const acc = findIban(accRaw) || accRaw;
+    const prev = latest.get(acc);
+    if (!prev || date >= prev.date) {
+      latest.set(acc, {
+        date,
+        balance: bal,
+        name: (ci.name > -1 ? String(r[ci.name] ?? "").trim() : "") || acc,
+        cur: (ci.cur > -1 ? String(r[ci.cur] ?? "").trim() : "") || "EUR",
+      });
+    }
+  }
+  const accounts: Account[] = [];
+  for (const [acc, v] of latest) {
+    // ING's "Oranje Spaarrekening" carries no IBAN (old-style account number),
+    // so derive the bank from the product name; fall back to the IBAN prefix.
+    const bank = /oranje/i.test(v.name) ? "ING" : bankFromIban(acc) ?? "";
+    accounts.push({ key: acc, iban: findIban(acc) ?? "", name: v.name, bank, entity: "", currency: v.cur, balance: v.balance, balanceDate: v.date });
+  }
+  return { accounts, txs: [] };
+}
+
 export type ParsedBankCsv = { accounts: Account[]; txs: Array<Omit<Tx, "id">>; profile: string };
 
 /**
@@ -235,6 +292,14 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
   const txs: Array<Omit<Tx, "id">> = [];
   const header = rows[0].map((h) => String(h).replace(/^"|"$/g, "").trim());
   const hNorm = header.map(norm).join("|");
+
+  // Balance-only savings snapshot (no transactions) — handled before profile
+  // detection since it has no amount column the generic engine could use.
+  if (looksLikeSavingsBalance(hNorm)) {
+    const parsed = parseSavingsBalances(header, rows);
+    return { accounts: parsed.accounts, txs: parsed.txs, profile: "Spaarrekeningen" };
+  }
+
   const prof = PROFILES.find((p) => p.test(hNorm));
   const idx = headerIndex(header);
   const m: ColumnMap = prof ? prof.map : GENERIC_MAP;
@@ -248,7 +313,14 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     cur: pick(idx, m.cur ?? []),
     dc: pick(idx, m.dc ?? []),
     fee: pick(idx, m.fee ?? []),
+    bal: pick(idx, m.bal ?? []),
   };
+
+  // Running-balance capture (Revolut "Saldo"): remember the latest row's balance
+  // per account so we can set account.balance to the current position. Rows are
+  // scanned in file order; `>=` keeps the last row on a date tie (exports are
+  // chronological, so the final same-date row is the most recent).
+  const latestBal = new Map<string, { date: string; balance: number }>();
 
   const dcNeg = (m.dcNeg ?? ["af", "d", "debet", "debit"]).map(norm);
   const flip = prof?.flip ?? false;
@@ -278,6 +350,13 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     const cur = (ci.cur > -1 ? String(r[ci.cur] ?? "").trim() : "") || "EUR";
     const bank = prof?.bank ?? bankFromIban(acc) ?? "";
     accounts[acc] = accounts[acc] || { key: acc, iban: findIban(acc) ?? "", name: acc, bank, entity: "", currency: cur, balance: null };
+    if (ci.bal > -1) {
+      const b = parseAmount(r[ci.bal]);
+      if (b != null) {
+        const prevB = latestBal.get(acc);
+        if (!prevB || date >= prevB.date) latestBal.set(acc, { date, balance: b });
+      }
+    }
     txs.push({
       accountKey: acc,
       date,
@@ -288,6 +367,15 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
       category: "",
       manual: false,
     });
+  }
+
+  // Apply captured running balances (anchored to the latest row's date) so the
+  // account shows its current position without the user typing a saldo.
+  for (const [acc, lb] of latestBal) {
+    if (accounts[acc]) {
+      accounts[acc].balance = lb.balance;
+      accounts[acc].balanceDate = lb.date;
+    }
   }
 
   return { accounts: Object.values(accounts), txs, profile: prof ? prof.bank : "generic" };
