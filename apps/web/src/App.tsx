@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts } from "@lavega/core";
 import { createFileImport, createEncryptedStorage } from "@lavega/adapters";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -155,7 +155,11 @@ export default function App() {
       setProblems(result.problems);
 
       const mergedTxs = ingest(txs, result.txs);
-      await storage.putAccounts(result.accounts);
+      // Re-importing a statement for an account you already have must not wipe
+      // the Type/Entiteit/manual saldo you set in Rekeningen — merge those
+      // forward. A fresh statement balance (MT940/.STA) still wins.
+      const mergedAccounts = mergeImportedAccounts(accounts, result.accounts);
+      await storage.putAccounts(mergedAccounts);
       await storage.putTxs(mergedTxs);
 
       const [freshAccounts, freshTxs] = await Promise.all([

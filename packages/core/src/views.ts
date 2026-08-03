@@ -93,3 +93,24 @@ export function categoryTotals(txs: Tx[], rules: Rule[]): Record<string, { in: n
   }
   return out;
 }
+
+/** Merge freshly-imported accounts with the existing ones, preserving the user's
+ *  manual edits on accounts they already have: their entity, their type (soort),
+ *  and — for imports carrying no balance (CSV) — their manually-set saldo. A
+ *  fresh statement balance (MT940/ABN, non-null) still wins. New accounts pass
+ *  through unchanged. Returns only the imported accounts (the caller upserts
+ *  them; untouched existing accounts stay put). */
+export function mergeImportedAccounts(existing: Account[], imported: Account[]): Account[] {
+  const byKey = new Map(existing.map((a) => [a.key, a]));
+  return imported.map((imp) => {
+    const prev = byKey.get(imp.key);
+    if (!prev) return imp;
+    return {
+      ...imp,
+      entity: prev.entity,
+      type: prev.type,
+      balance: imp.balance !== null ? imp.balance : prev.balance,
+      balanceDate: imp.balance !== null ? imp.balanceDate : prev.balanceDate,
+    };
+  });
+}

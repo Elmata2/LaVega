@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, mergeImportedAccounts } from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
@@ -96,4 +96,27 @@ test("categoryTotals: sums in/out per derived category", () => {
   expect(t["Inkomen"]).toEqual({ in: 100, out: 0 });
   expect(t["Boodschappen"]).toEqual({ in: 0, out: -30 });
   expect(t["onbekend"]).toEqual({ in: 0, out: -12.5 });
+});
+
+test("mergeImportedAccounts preserves user entity/type + manual balance on re-import; new accounts pass through", () => {
+  const existing: Account[] = [
+    { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV2", type: "Spaarrekening", currency: "EUR", balance: 500, balanceDate: "2026-08-01" },
+  ];
+  const imported: Account[] = [
+    { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null }, // CSV re-import
+    { key: "A2", iban: "A2", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 100, balanceDate: "2026-07-31" },
+  ];
+  const merged = mergeImportedAccounts(existing, imported);
+  const a1 = merged.find((a) => a.key === "A1")!;
+  expect(a1.entity).toBe("BV2");           // user entity kept
+  expect(a1.type).toBe("Spaarrekening");   // user type kept
+  expect(a1.balance).toBe(500);            // CSV null -> manual saldo kept
+  expect(a1.balanceDate).toBe("2026-08-01");
+  expect(merged.find((a) => a.key === "A2")).toMatchObject({ entity: "BV1", balance: 100 }); // new passes through
+});
+
+test("mergeImportedAccounts: a fresh non-null statement balance updates the existing account (entity still kept)", () => {
+  const existing: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 10, balanceDate: "2026-06-01" }];
+  const imported: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV9", currency: "EUR", balance: 999, balanceDate: "2026-07-31" }];
+  expect(mergeImportedAccounts(existing, imported)[0]).toMatchObject({ entity: "BV1", balance: 999, balanceDate: "2026-07-31" });
 });
