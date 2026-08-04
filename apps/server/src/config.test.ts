@@ -60,10 +60,13 @@ test("maskApplicationId shows only the first 8 characters", () => {
 
 test("loadLlmConfig: configured only when ANTHROPIC_API_KEY is set", () => {
   const prev = process.env.ANTHROPIC_API_KEY;
-  delete process.env.ANTHROPIC_API_KEY;
-  expect(loadLlmConfig()).toEqual({ configured: false, apiKey: null });
-  process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-  expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "sk-ant-test" });
-  if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
-  else process.env.ANTHROPIC_API_KEY = prev;
+  try {
+    delete process.env.ANTHROPIC_API_KEY;
+    expect(loadLlmConfig()).toEqual({ configured: false, apiKey: null });
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "sk-ant-test" });
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev;
+  }
 });
