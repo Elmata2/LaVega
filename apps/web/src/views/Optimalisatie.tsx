@@ -219,22 +219,32 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
                 <th className="num">Saldo</th>
                 <th className="num">Rente %</th>
                 <th>Bron</th>
+                <th className="num">
+                  Mogelijk/jr{interest.best ? ` vs ${pct(interest.best.ratePct)}` : ""}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {interest.accountRates.map((ar) => (
-                <tr key={ar.account.key}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{ar.account.bank || ar.account.name}</div>
-                    <div className="cell-sub">{ar.account.name}</div>
-                  </td>
-                  <td className="num">{ar.account.balance === null ? "—" : euro(ar.balanceCents)}</td>
-                  <td className="num">
-                    <RateCell ar={ar} busy={busy} onCommit={onRateCommit} />
-                  </td>
-                  <td className="cell-sub">{SOURCE_LABEL[ar.source]}</td>
-                </tr>
-              ))}
+              {interest.accountRates.map((ar) => {
+                const gain =
+                  interest.best && ar.ratePct !== null && ar.balanceCents > 0 && interest.best.ratePct - ar.ratePct > 0.1
+                    ? Math.round((ar.balanceCents * (interest.best.ratePct - ar.ratePct)) / 100)
+                    : 0;
+                return (
+                  <tr key={ar.account.key}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{ar.account.bank || ar.account.name}</div>
+                      <div className="cell-sub">{ar.account.name}</div>
+                    </td>
+                    <td className="num">{ar.account.balance === null ? "—" : euro(ar.balanceCents)}</td>
+                    <td className="num">
+                      <RateCell ar={ar} busy={busy} onCommit={onRateCommit} />
+                    </td>
+                    <td className="cell-sub">{SOURCE_LABEL[ar.source]}</td>
+                    <td className="num">{gain > 0 ? <span className="text-warn">+{euro(gain)}</span> : "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

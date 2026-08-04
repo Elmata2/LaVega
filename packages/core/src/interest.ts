@@ -64,10 +64,18 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 
+/** A detected rate above this (%) is treated as implausible for a savings
+ *  account and discarded — it means the current balance is a poor proxy for the
+ *  balance that actually earned the interest (e.g. a small/shrunk saldo with a
+ *  normal "rente" credit gives hundreds of percent). Callers then fall back to
+ *  the bank-benchmark estimate. */
+const MAX_PLAUSIBLE_RATE = 15;
+
 /** Estimate an account's annual interest rate (%) from its "rente"
  *  bijschrijvingen in the trailing 365 days, annualized against the current
- *  balance. Rough (uses current balance as the base) and only a suggestion —
- *  returns null when there's no positive balance or no interest found. */
+ *  balance. Rough (current balance as the base) and only a suggestion — returns
+ *  null when there's no positive balance, no interest found, or the result is
+ *  implausible (<=0 or > MAX_PLAUSIBLE_RATE). */
 export function detectInterestRate(account: Account, txs: Tx[], asOf: string): number | null {
   if (account.balance === null || account.balance <= 0) return null;
   let interestCents = 0;
@@ -82,7 +90,9 @@ export function detectInterestRate(account: Account, txs: Tx[], asOf: string): n
   }
   if (!found) return null;
   const balanceCents = Math.round(account.balance * 100);
-  return Math.round((interestCents / balanceCents) * 100 * 100) / 100; // % with 2 decimals
+  const rate = Math.round((interestCents / balanceCents) * 100 * 100) / 100; // % with 2 decimals
+  if (rate <= 0 || rate > MAX_PLAUSIBLE_RATE) return null; // implausible -> use the benchmark instead
+  return rate;
 }
 
 export type RateSource = "manual" | "detected" | "benchmark" | "assumed" | "unknown";

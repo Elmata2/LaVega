@@ -47,3 +47,9 @@ test("analyzeInterest: an existing savings saldo is compared to its OWN bank rat
   expect(r.suggestions[0].ratePct).toBe(1.25); // ING standard, not 0
   expect(r.suggestions[0].extraPerYearCents).toBe(18500); // 10000 * (3.10-1.25)% = €185
 });
+
+test("detectInterestRate: implausible rate (tiny balance vs normal interest) is discarded -> benchmark", () => {
+  const tiny = acc({ balance: 2, bank: "ING", type: "Spaarrekening" });
+  expect(detectInterestRate(tiny, [rente("2026-06-01", 16.5)], "2026-08-01")).toBeNull(); // ~825% -> null
+  expect(resolveAccountRate(tiny, [rente("2026-06-01", 16.5)], "2026-08-01", NL_SAVINGS_RATES)).toEqual({ ratePct: 1.25, source: "benchmark" });
+});
