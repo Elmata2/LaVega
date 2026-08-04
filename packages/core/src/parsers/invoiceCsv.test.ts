@@ -37,7 +37,7 @@ test("parseInvoiceCsv: parses NL headers into 2 invoices with correct amount/dat
   });
 });
 
-test("parseInvoiceCsv: rows missing amount or a date are skipped", () => {
+test("parseInvoiceCsv: rows missing amount or issue date are skipped", () => {
   const csv = `Relatie;Bedrag;Factuurdatum;Vervaldatum
 Geen Bedrag BV;;01-08-2026;01-09-2026
 Geen Datum BV;100,00;;01-09-2026
@@ -45,6 +45,23 @@ Goede Rij BV;100,00;01-08-2026;01-09-2026`;
   const rows = parseInvoiceCsv(csv);
   expect(rows).toHaveLength(1);
   expect(rows[0].counterparty).toBe("Goede Rij BV");
+});
+
+test("parseInvoiceCsv: a row with an issueDate but no dueDate column is parsed, dueDate defaults to issueDate", () => {
+  const csv = `Relatie;Bedrag;Factuurdatum
+Geen Vervaldatum BV;100,00;01-08-2026`;
+  const rows = parseInvoiceCsv(csv);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].issueDate).toBe("2026-08-01");
+  expect(rows[0].dueDate).toBe(rows[0].issueDate);
+});
+
+test("parseInvoiceCsv: with no invoice-number column, invoiceNumber is undefined (not grabbed from Factuurdatum)", () => {
+  const csv = `Relatie;Bedrag;Factuurdatum;Vervaldatum;Richting
+Coolblue B.V.;1210,00;01-08-2026;01-09-2026;Inkoop`;
+  const rows = parseInvoiceCsv(csv);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].invoiceNumber).toBeUndefined();
 });
 
 test("parseInvoiceCsv: defaults direction to \"out\" when no richting/type/soort column is present", () => {

@@ -40,7 +40,7 @@ const CP_NAMES = ["relatie", "leverancier", "klant", "counterparty", "naam", "de
 const AMOUNT_NAMES = ["bedrag", "amount", "totaal", "total", "bedrag incl"];
 const ISSUE_DATE_NAMES = ["factuurdatum", "datum", "issue date"];
 const DUE_DATE_NAMES = ["vervaldatum", "due date", "verval"];
-const NUMBER_NAMES = ["factuurnummer", "nummer", "invoice", "factuur"];
+const NUMBER_NAMES = ["factuurnummer", "nummer", "invoice"];
 const VAT_NAMES = ["btw", "vat", "btw-bedrag"];
 const DIRECTION_NAMES = ["richting", "type", "soort"];
 
@@ -60,7 +60,8 @@ function detectDirection(raw: string | undefined): Invoice["direction"] {
  * Parses a generic invoice CSV export (NL or EN headers) into
  * Omit<Invoice,"id">[]. `entity` is left blank — the caller (Facturen.tsx)
  * stamps it with the currently-selected entity before running the rows
- * through makeInvoice. Rows missing an amount or either date are skipped.
+ * through makeInvoice. Rows missing an amount or an issue date are skipped;
+ * a missing due date defaults to the issue date (mirrors invoiceUbl.ts).
  */
 export function parseInvoiceCsv(text: string): Array<Omit<Invoice, "id">> {
   const delim = sniffDelim(text);
@@ -87,8 +88,10 @@ export function parseInvoiceCsv(text: string): Array<Omit<Invoice, "id">> {
 
     const amount = ci.amount > -1 ? parseAmount(r[ci.amount]) : null;
     const issueDate = ci.issue > -1 ? parseDate(r[ci.issue]) : null;
-    const dueDate = ci.due > -1 ? parseDate(r[ci.due]) : null;
-    if (amount == null || issueDate == null || dueDate == null) continue;
+    if (amount == null || issueDate == null) continue;
+    // No dueDate column (or unparseable) -> default to issueDate, matching
+    // the UBL parser's fallback.
+    const dueDate = (ci.due > -1 ? parseDate(r[ci.due]) : null) ?? issueDate;
 
     const vat = ci.vat > -1 ? parseAmount(r[ci.vat]) : null;
 

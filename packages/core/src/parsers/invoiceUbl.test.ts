@@ -6,7 +6,12 @@ import { parseInvoiceFile } from "./parseInvoiceFile.js";
  * invoice (Coolblue as supplier) with a supplier PartyName/Name, a customer
  * PartyLegalEntity/RegistrationName, a TaxTotal with the total TaxAmount
  * ahead of any TaxSubtotal, and a LegalMonetaryTotal carrying both
- * TaxInclusiveAmount and PayableAmount. */
+ * TaxInclusiveAmount and PayableAmount.
+ *
+ * The total TaxAmount (210.00) and the nested TaxSubtotal's TaxAmount
+ * (99.99) deliberately differ, so a parser that mistakenly grabs the
+ * nested TaxSubtotal's value instead of the TaxTotal's own TaxAmount
+ * is caught. */
 const UBL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
          xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
@@ -34,7 +39,7 @@ const UBL_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <cbc:TaxAmount currencyID="EUR">210.00</cbc:TaxAmount>
     <cac:TaxSubtotal>
       <cbc:TaxableAmount currencyID="EUR">1000.00</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="EUR">210.00</cbc:TaxAmount>
+      <cbc:TaxAmount currencyID="EUR">99.99</cbc:TaxAmount>
     </cac:TaxSubtotal>
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>

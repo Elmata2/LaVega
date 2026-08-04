@@ -64,10 +64,15 @@ export default function Facturen({
       status: "expected",
       sourceType: "manual",
     });
+    if (invoices.some((i) => i.id === inv.id)) {
+      setImportNote("Deze factuur staat er al.");
+      return;
+    }
     onSaveInvoices([...invoices, inv]);
     setCounterparty("");
     setInvoiceNumber("");
     setAmount("");
+    setImportNote(null);
   }
 
   function setStatus(id: string, status: Invoice["status"]) {
