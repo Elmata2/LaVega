@@ -37,6 +37,27 @@ test("AI-draft invoice: llm sourceType + confidence, identity unchanged", () => 
   expect(same.id).toBe(inv.id);
 });
 
+// The extracted BTW rides along with the AI draft (the manual form has no VAT
+// input) — it must be stored on the confirmed invoice, and like confidence it
+// must not change the invoice identity.
+test("AI-draft invoice: extracted vatAmount is carried and identity-neutral", () => {
+  const draft = {
+    entity: "BV1",
+    direction: "out" as const,
+    counterparty: "Leverancier BV",
+    issueDate: "2026-07-01",
+    dueDate: "2026-07-31",
+    amount: 121,
+    currency: "EUR",
+    status: "expected" as const,
+    sourceType: "llm" as const,
+  };
+  const withVat = makeInvoice({ ...draft, vatAmount: 21 });
+  expect(withVat.vatAmount).toBe(21);
+  const withoutVat = makeInvoice(draft);
+  expect(withoutVat.id).toBe(withVat.id); // vatAmount is not in the id-hash
+});
+
 test("AI extraction opt-in defaults to false", () => {
   expect(getAiExtractionEnabled()).toBe(false);
 });

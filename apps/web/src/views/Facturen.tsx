@@ -76,6 +76,10 @@ export default function Facturen({
   const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiExtractionEnabled());
   const [pendingSource, setPendingSource] = useState<Invoice["sourceType"]>("manual");
   const [pendingConfidence, setPendingConfidence] = useState<number | null>(null);
+  // Extracted BTW rides along with the AI draft: the manual form has no VAT
+  // input, but the Invoice keeps vatAmount for the (later) tax agent, so we
+  // carry it through the confirm rather than silently dropping it.
+  const [pendingVat, setPendingVat] = useState<number | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
@@ -106,9 +110,21 @@ export default function Facturen({
       status: "expected",
       sourceType: pendingSource,
       confidence: pendingSource === "llm" ? (pendingConfidence ?? undefined) : undefined,
+      vatAmount: pendingSource === "llm" ? (pendingVat ?? undefined) : undefined,
     });
+    // Whether the draft is added or turns out to be a duplicate, it has now been
+    // dealt with — clear the AI-draft tags so the NEXT manual entry can't inherit
+    // "llm"/confidence/vat. (A validation failure above keeps the draft alive so
+    // the owner can fix it, which is why that path intentionally doesn't reset.)
+    const clearDraftTags = () => {
+      setPendingSource("manual");
+      setPendingConfidence(null);
+      setPendingVat(null);
+      setAiNote(null);
+    };
     if (invoices.some((i) => i.id === inv.id)) {
       setImportNote("Deze factuur staat er al.");
+      clearDraftTags();
       return;
     }
     onSaveInvoices([...invoices, inv]);
@@ -116,11 +132,7 @@ export default function Facturen({
     setInvoiceNumber("");
     setAmount("");
     setImportNote(null);
-    // Next entry is a fresh manual one unless another PDF is extracted, so the
-    // manual invoice after an AI draft isn't mislabeled as "llm".
-    setPendingSource("manual");
-    setPendingConfidence(null);
-    setAiNote(null);
+    clearDraftTags();
   }
 
   function setStatus(id: string, status: Invoice["status"]) {
@@ -201,11 +213,15 @@ export default function Facturen({
       setCurrency(fields.currency || "EUR");
       setPendingSource("llm");
       setPendingConfidence(confidence);
+      const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
+      setPendingVat(vat);
       setAiNote(
-        `AI-concept — controleer en bevestig (betrouwbaarheid ${Math.round(confidence * 100)}%).`,
+        `AI-concept — controleer en bevestig (betrouwbaarheid ${Math.round(confidence * 100)}%${
+          vat !== null ? `, incl. btw ${formatEuro(vat)}` : ""
+        }).`,
       );
     } catch {
-      setAiNote("AI-extractie mislukt — kon de server niet bereiken.");
+      setAiNote("AI-extractie mislukt. Probeer het opnieuw.");
     } finally {
       setAiBusy(false);
     }
