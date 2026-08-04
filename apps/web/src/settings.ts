@@ -26,3 +26,24 @@ export function setBufferCents(cents: number): void {
     /* quota/serialization errors are non-fatal for a preference */
   }
 }
+
+const AI_KEY = "lavega.aiExtraction";
+
+/** Opt-in toggle for AI PDF invoice extraction. Defaults false: no document is
+ *  ever sent to the server (and onward to Anthropic) unless the owner turns this
+ *  on AND picks a specific PDF. A preference, so it lives in localStorage. */
+export function getAiExtractionEnabled(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(AI_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setAiExtractionEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(AI_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
