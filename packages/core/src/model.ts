@@ -38,7 +38,10 @@ export type Invoice = {
   currency: string;
   status: "expected" | "paid" | "cancelled";
   matchedTxId?: string;
-  sourceType: "manual" | "csv" | "ubl";
+  sourceType: "manual" | "csv" | "ubl" | "llm";
+  /** For `sourceType: "llm"` drafts: the extractor's self-reported confidence
+   *  (0..1). Does not affect invoice identity (see makeInvoice's id-hash). */
+  confidence?: number;
 };
 
 /** Per-entity (per-BV) VAT/BTW config for the set-aside estimate. */

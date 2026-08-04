@@ -2,6 +2,38 @@ import { useMemo, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
 import { makeInvoice, parseInvoiceFile, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
 import { formatEuro } from "../format";
+import { API_BASE } from "../api";
+import { getAiExtractionEnabled, setAiExtractionEnabled } from "../settings";
+
+/** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
+ *  The browser only ever talks to our server — never api.anthropic.com. */
+type ExtractResponse = {
+  fields: {
+    counterparty: string;
+    amount: number;
+    currency?: string;
+    issueDate: string;
+    dueDate?: string;
+    direction: "in" | "out";
+    vatAmount?: number;
+  };
+  confidence: number;
+};
+
+/** Read a File to base64 WITHOUT the `data:...;base64,` prefix (the server
+ *  expects raw base64). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("kon bestand niet lezen"));
+    reader.onload = () => {
+      const result = String(reader.result);
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 type FacturenProps = {
   entities: string[];
@@ -37,6 +69,16 @@ export default function Facturen({
   const [currency, setCurrency] = useState("EUR");
   const [importNote, setImportNote] = useState<string | null>(null);
 
+  // AI PDF extraction (opt-in, confirm-first). `aiEnabled` mirrors the
+  // localStorage preference; `pendingSource`/`pendingConfidence` tag the NEXT
+  // "Toevoegen" as an AI draft so a hallucinated field can't silently move the
+  // forecast — the owner still clicks confirm.
+  const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiExtractionEnabled());
+  const [pendingSource, setPendingSource] = useState<Invoice["sourceType"]>("manual");
+  const [pendingConfidence, setPendingConfidence] = useState<number | null>(null);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
   // Live projection: what the forecast will actually see from open invoices.
   const flows = useMemo(() => scheduledInvoiceFlows(invoices), [invoices]);
   const netCents = useMemo(
@@ -62,7 +104,8 @@ export default function Facturen({
       amount: amt,
       currency: currency.trim() || "EUR",
       status: "expected",
-      sourceType: "manual",
+      sourceType: pendingSource,
+      confidence: pendingSource === "llm" ? (pendingConfidence ?? undefined) : undefined,
     });
     if (invoices.some((i) => i.id === inv.id)) {
       setImportNote("Deze factuur staat er al.");
@@ -73,6 +116,11 @@ export default function Facturen({
     setInvoiceNumber("");
     setAmount("");
     setImportNote(null);
+    // Next entry is a fresh manual one unless another PDF is extracted, so the
+    // manual invoice after an AI draft isn't mislabeled as "llm".
+    setPendingSource("manual");
+    setPendingConfidence(null);
+    setAiNote(null);
   }
 
   function setStatus(id: string, status: Invoice["status"]) {
@@ -109,6 +157,60 @@ export default function Facturen({
     });
   }
 
+  function toggleAi(next: boolean) {
+    setAiEnabled(next);
+    setAiExtractionEnabled(next);
+    if (!next) setAiNote(null);
+  }
+
+  // Opt-in, per-document: only fires when the owner has enabled the toggle AND
+  // picked a specific PDF. Reads the file to base64 and POSTs it to OUR server
+  // proxy (never to Anthropic directly). On success it PRE-FILLS the existing
+  // form as a draft — nothing is saved until the owner clicks "Toevoegen".
+  async function handleExtractPdf(file: File) {
+    setAiBusy(true);
+    setAiNote("Bezig met lezen…");
+    try {
+      const pdfBase64 = await fileToBase64(file);
+      const res = await fetch(`${API_BASE}/api/agent/extract-invoice`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pdfBase64,
+          filename: file.name,
+          mediaType: file.type || "application/pdf",
+        }),
+      });
+      if (!res.ok) {
+        let msg = `AI-extractie mislukt (${res.status}).`;
+        try {
+          const body = (await res.json()) as { error?: string };
+          if (body?.error) msg = body.error;
+        } catch {
+          /* non-JSON error body; keep the status-based message */
+        }
+        setAiNote(msg);
+        return;
+      }
+      const { fields, confidence } = (await res.json()) as ExtractResponse;
+      setDirection(fields.direction);
+      setCounterparty(fields.counterparty);
+      setIssueDate(fields.issueDate);
+      setDueDate(fields.dueDate || fields.issueDate);
+      setAmount(String(fields.amount));
+      setCurrency(fields.currency || "EUR");
+      setPendingSource("llm");
+      setPendingConfidence(confidence);
+      setAiNote(
+        `AI-concept — controleer en bevestig (betrouwbaarheid ${Math.round(confidence * 100)}%).`,
+      );
+    } catch {
+      setAiNote("AI-extractie mislukt — kon de server niet bereiken.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <section className="card" aria-label="Facturen">
       <div className="card-header">
@@ -120,6 +222,41 @@ export default function Facturen({
         verwachte factuur verschijnt op de vervaldatum in het Overzicht en de Forecast
         en wordt automatisch op "betaald" gezet zodra een passende banktransactie binnenkomt.
       </p>
+
+      <div className="ai-extract" style={{ marginBottom: "var(--sp-3)" }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={aiEnabled}
+            disabled={busy}
+            aria-label="AI-facturen lezen"
+            onChange={(e) => toggleAi(e.target.checked)}
+          />{" "}
+          AI-facturen lezen (PDF → Claude)
+        </label>
+        <p className="cell-sub">
+          De gekozen PDF wordt via onze server naar Claude gestuurd om te lezen — opt-in, alleen
+          dat ene document, en je bevestigt zelf voor het meetelt.
+        </p>
+        {aiEnabled && (
+          <label>
+            PDF-factuur lezen{" "}
+            <input
+              type="file"
+              className="btn"
+              accept="application/pdf"
+              disabled={busy || aiBusy}
+              aria-label="PDF-factuur lezen met AI"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void handleExtractPdf(file);
+              }}
+            />
+          </label>
+        )}
+        {aiNote && <p className="cell-sub">{aiNote}</p>}
+      </div>
 
       <div className="facturen-form">
         <label>
@@ -160,7 +297,10 @@ export default function Facturen({
             onChange={(e) => setDueDate(e.target.value)} />
         </label>{" "}
         <label>
-          Bedrag{" "}
+          Bedrag
+          {pendingSource === "llm" && (
+            <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>AI-concept</span>
+          )}{" "}
           <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
             disabled={busy} aria-label="Bedrag"
             onChange={(e) => setAmount(e.target.value)} />
