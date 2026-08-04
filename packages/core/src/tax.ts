@@ -15,41 +15,66 @@ function lastDayOfMonth(y: number, m: number): string {
 const Q_LABEL = ["Q1", "Q2", "Q3", "Q4"];
 const NL_MONTHS = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
 
-/** The current period's end + its aangifte/betaling deadline (last day of the
- *  month AFTER the period end), relative to asOf. */
-export function nextBtwDeadline(frequency: VatSettings["frequency"], asOf: string): { periodLabel: string; periodEnd: string; deadline: string } {
-  const [y, m] = asOf.split("-").map(Number); // m: 1..12
-  if (frequency === "yearly") {
-    return { periodLabel: `${y}`, periodEnd: `${y}-12-31`, deadline: `${y + 1}-03-31` };
-  }
-  if (frequency === "monthly") {
-    const periodEnd = lastDayOfMonth(y, m); // last day of this month
-    const nextM = m === 12 ? 1 : m + 1;
-    const nextY = m === 12 ? y + 1 : y;
-    return { periodLabel: `${NL_MONTHS[m - 1]} ${y}`, periodEnd, deadline: lastDayOfMonth(nextY, nextM) };
-  }
-  // quarterly
-  const q = Math.floor((m - 1) / 3); // 0..3
-  const periodEndMonth = (q + 1) * 3; // 3,6,9,12
-  const periodEnd = lastDayOfMonth(y, periodEndMonth);
-  const deadlineMonth = periodEndMonth === 12 ? 1 : periodEndMonth + 1;
-  const deadlineYear = periodEndMonth === 12 ? y + 1 : y;
-  return { periodLabel: `${Q_LABEL[q]} ${y}`, periodEnd, deadline: lastDayOfMonth(deadlineYear, deadlineMonth) };
+type BtwPeriod = { periodLabel: string; periodStart: string; periodEnd: string; deadline: string };
+
+/** Descriptor for a single BTW period, given its frequency + coordinates. The
+ *  deadline is the last day of the month AFTER the period end. */
+function quarterPeriod(y: number, q: number): BtwPeriod {
+  const startMonth = q * 3 + 1; // 1,4,7,10
+  const endMonth = (q + 1) * 3; // 3,6,9,12
+  const deadlineMonth = endMonth === 12 ? 1 : endMonth + 1;
+  const deadlineYear = endMonth === 12 ? y + 1 : y;
+  return {
+    periodLabel: `${Q_LABEL[q]} ${y}`,
+    periodStart: `${y}-${String(startMonth).padStart(2, "0")}-01`,
+    periodEnd: lastDayOfMonth(y, endMonth),
+    deadline: lastDayOfMonth(deadlineYear, deadlineMonth),
+  };
 }
 
-const CADENCE_DAYS: Record<VatSettings["frequency"], number> = { monthly: 31, quarterly: 92, yearly: 366 };
+function monthPeriod(y: number, m: number): BtwPeriod {
+  const deadlineMonth = m === 12 ? 1 : m + 1;
+  const deadlineYear = m === 12 ? y + 1 : y;
+  return {
+    periodLabel: `${NL_MONTHS[m - 1]} ${y}`,
+    periodStart: `${y}-${String(m).padStart(2, "0")}-01`,
+    periodEnd: lastDayOfMonth(y, m),
+    deadline: lastDayOfMonth(deadlineYear, deadlineMonth),
+  };
+}
 
-function daysBetween(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+function yearPeriod(y: number): BtwPeriod {
+  return { periodLabel: `${y}`, periodStart: `${y}-01-01`, periodEnd: `${y}-12-31`, deadline: `${y + 1}-03-31` };
+}
+
+/** The nearest BTW deadline that has NOT yet passed (the earliest deadline
+ *  ≥ asOf), relative to asOf. On 15 Apr the owner still has to file the just-
+ *  ended Q1 (due 30 Apr), so we return the PREVIOUS period whenever its deadline
+ *  hasn't passed yet, otherwise the current (in-progress) period. */
+export function nextBtwDeadline(frequency: VatSettings["frequency"], asOf: string): BtwPeriod {
+  const [y, m] = asOf.split("-").map(Number); // m: 1..12
+  let current: BtwPeriod;
+  let previous: BtwPeriod;
+  if (frequency === "yearly") {
+    current = yearPeriod(y);
+    previous = yearPeriod(y - 1);
+  } else if (frequency === "monthly") {
+    current = monthPeriod(y, m);
+    previous = m === 1 ? monthPeriod(y - 1, 12) : monthPeriod(y, m - 1);
+  } else {
+    const q = Math.floor((m - 1) / 3); // 0..3
+    current = quarterPeriod(y, q);
+    previous = q === 0 ? quarterPeriod(y - 1, 3) : quarterPeriod(y, q - 1);
+  }
+  // ISO dates compare lexicographically. If last period's deadline is still
+  // open, that's the nearest unfiled one; otherwise it's the current period's.
+  return previous.deadline >= asOf ? previous : current;
 }
 
 /** Estimate the VAT to set aside for the current BTW period, as a confirmed
  *  outflow ScheduledFlow due on the deadline. See header for the estimate. */
 export function computeVatSetAside(txs: Tx[], settings: VatSettings, asOf: string): ScheduledFlow | null {
-  const { periodLabel, periodEnd, deadline } = nextBtwDeadline(settings.frequency, asOf);
-  const cadence = CADENCE_DAYS[settings.frequency];
+  const { periodLabel, periodStart, periodEnd, deadline } = nextBtwDeadline(settings.frequency, asOf);
 
   let amountCents: number;
   if (typeof settings.manualCents === "number") {
@@ -60,8 +85,7 @@ export function computeVatSetAside(txs: Tx[], settings: VatSettings, asOf: strin
     let incomeCents = 0;
     let expenseCents = 0;
     for (const t of txs) {
-      const age = daysBetween(t.date, periodEnd); // 0..cadence => inside the period
-      if (age < 0 || age >= cadence) continue;
+      if (t.date < periodStart || t.date > periodEnd) continue; // exact period window
       const c = Math.round(t.amount * 100);
       if (c >= 0) incomeCents += c; else expenseCents += -c;
     }

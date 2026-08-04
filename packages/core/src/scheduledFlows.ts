@@ -13,6 +13,17 @@ export function scheduledFlowsForScope(flows: ScheduledFlow[], entity = ""): Sch
   return entity ? flows.filter((f) => f.entity === entity) : flows;
 }
 
+/** Recompute-merge for VAT ScheduledFlows: drop every `source:"vat"` flow that
+ *  belongs to one of the given `entities`, then append the freshly computed
+ *  `fresh` flows. Non-vat flows and other entities' vat flows are preserved.
+ *  Because ids are content-hashed (see makeScheduledFlow), recomputing an
+ *  unchanged period yields the same flow rather than a duplicate. */
+export function rebuildVatFlows(existing: ScheduledFlow[], entities: string[], fresh: ScheduledFlow[]): ScheduledFlow[] {
+  const shown = new Set(entities);
+  const kept = existing.filter((f) => !(f.source === "vat" && shown.has(f.entity)));
+  return [...kept, ...fresh];
+}
+
 /** Money already earmarked for VAT that hasn't left the account yet — netted
  *  from "beschikbaar saldo". Only outflow `vat` flows that are not paid/cancelled. */
 export function reservedCents(flows: ScheduledFlow[], _asOf: string): number {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx, Alert, ScheduledFlow } from "@lavega/core";
-import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow, computeAlerts } from "@lavega/core";
+import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow, computeAlerts, reservedCents, availableBalanceCents } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 
@@ -147,6 +147,10 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
   // when some accounts (CSV imports) have no saldo yet. When unknownCount is 0
   // this equals consolidate()'s totalBalance (a complete, exact position).
   const knownSum = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
+  // Money earmarked for unpaid BTW reservations. When > 0 we show a
+  // "Beschikbaar" sub-line: the gross Totaalpositie minus what's set aside —
+  // making the Belasting netting claim true. Zero reservations => no extra line.
+  const reserved = useMemo(() => reservedCents(scheduledFlows, asOf), [scheduledFlows, asOf]);
 
   const recent = useMemo(
     () =>
@@ -226,6 +230,11 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
                 ? `${unknownCount} rekening${unknownCount > 1 ? "en" : ""} nog zonder saldo — vul in bij Rekeningen`
                 : "compleet"}
           </div>
+          {accounts.length > 0 && reserved > 0 && (
+            <div className="eyebrow">
+              Beschikbaar na BTW-reservering: {formatEuro(availableBalanceCents(knownSum, scheduledFlows, asOf) / 100)}
+            </div>
+          )}
         </div>
         <div className="kpi">
           <div className="kpi-label">Rekeningen</div>

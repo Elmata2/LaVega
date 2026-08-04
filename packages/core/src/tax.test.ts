@@ -2,14 +2,29 @@ import { expect, test } from "vitest";
 import { nextBtwDeadline, BTW_RULES_AS_OF, computeVatSetAside } from "./tax.js";
 import type { Tx, VatSettings } from "./model.js";
 
-test("nextBtwDeadline quarterly: from mid-Q2 -> Q2 ends 06-30, deadline 07-31", () => {
-  expect(nextBtwDeadline("quarterly", "2026-05-10")).toEqual({ periodLabel: "Q2 2026", periodEnd: "2026-06-30", deadline: "2026-07-31" });
+test("nextBtwDeadline quarterly: mid-Q2, Q1 filing already closed -> Q2 (deadline 07-31)", () => {
+  expect(nextBtwDeadline("quarterly", "2026-05-10")).toEqual({ periodLabel: "Q2 2026", periodStart: "2026-04-01", periodEnd: "2026-06-30", deadline: "2026-07-31" });
 });
 test("nextBtwDeadline quarterly: Q4 deadline rolls into next year (31 Jan)", () => {
-  expect(nextBtwDeadline("quarterly", "2026-11-15")).toEqual({ periodLabel: "Q4 2026", periodEnd: "2026-12-31", deadline: "2027-01-31" });
+  expect(nextBtwDeadline("quarterly", "2026-11-15")).toEqual({ periodLabel: "Q4 2026", periodStart: "2026-10-01", periodEnd: "2026-12-31", deadline: "2027-01-31" });
 });
-test("nextBtwDeadline monthly: Aug -> deadline 30 Sep", () => {
-  expect(nextBtwDeadline("monthly", "2026-08-04")).toEqual({ periodLabel: "aug 2026", periodEnd: "2026-08-31", deadline: "2026-09-30" });
+test("nextBtwDeadline quarterly: 15 Apr -> the unfiled Q1 (due 30 Apr), not in-progress Q2", () => {
+  expect(nextBtwDeadline("quarterly", "2026-04-15")).toEqual({ periodLabel: "Q1 2026", periodStart: "2026-01-01", periodEnd: "2026-03-31", deadline: "2026-04-30" });
+});
+test("nextBtwDeadline quarterly: mid-Jan -> Q4 of last year (due 31 Jan)", () => {
+  expect(nextBtwDeadline("quarterly", "2026-01-15")).toEqual({ periodLabel: "Q4 2025", periodStart: "2025-10-01", periodEnd: "2025-12-31", deadline: "2026-01-31" });
+});
+test("nextBtwDeadline monthly: 4 Aug -> July return still due 31 Aug", () => {
+  expect(nextBtwDeadline("monthly", "2026-08-04")).toEqual({ periodLabel: "jul 2026", periodStart: "2026-07-01", periodEnd: "2026-07-31", deadline: "2026-08-31" });
+});
+test("nextBtwDeadline monthly: 5 Sep -> Aug return due 30 Sep", () => {
+  expect(nextBtwDeadline("monthly", "2026-09-05")).toEqual({ periodLabel: "aug 2026", periodStart: "2026-08-01", periodEnd: "2026-08-31", deadline: "2026-09-30" });
+});
+test("nextBtwDeadline yearly: 10 Feb -> prior-year return due 31 Mar", () => {
+  expect(nextBtwDeadline("yearly", "2026-02-10")).toEqual({ periodLabel: "2025", periodStart: "2025-01-01", periodEnd: "2025-12-31", deadline: "2026-03-31" });
+});
+test("nextBtwDeadline yearly: 10 May -> current year (prior return already filed)", () => {
+  expect(nextBtwDeadline("yearly", "2026-05-10")).toEqual({ periodLabel: "2026", periodStart: "2026-01-01", periodEnd: "2026-12-31", deadline: "2027-03-31" });
 });
 test("has a verified-as-of date", () => { expect(BTW_RULES_AS_OF).toMatch(/^\d{4}-\d{2}-\d{2}$/); });
 

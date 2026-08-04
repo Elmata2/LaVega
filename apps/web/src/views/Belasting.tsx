@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Account, ScheduledFlow, Tx, VatSettings } from "@lavega/core";
-import { computeVatSetAside, nextBtwDeadline } from "@lavega/core";
+import { computeVatSetAside, nextBtwDeadline, rebuildVatFlows } from "@lavega/core";
 import { formatEuro } from "../format";
 
 type BelastingProps = {
@@ -81,13 +81,12 @@ export default function Belasting({
     const nextSettings = [...preservedSettings, ...entities.map((e) => resolve(e))];
     onSaveVatSettings(nextSettings);
 
-    const keptFlows = scheduledFlows.filter((f) => !(f.source === "vat" && shown.has(f.entity)));
     const freshFlows: ScheduledFlow[] = [];
     for (const e of entities) {
       const f = computeVatSetAside(entityTxs(e), resolve(e), asOf);
       if (f) freshFlows.push(f);
     }
-    onSaveScheduledFlows([...keptFlows, ...freshFlows]);
+    onSaveScheduledFlows(rebuildVatFlows(scheduledFlows, entities, freshFlows));
   }
 
   return (
