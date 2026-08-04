@@ -213,3 +213,15 @@ test("concurrent put + restore: restore's adopt is serialized after in-flight pu
   expect(accs).toHaveLength(1);
   expect(accs[0]).toMatchObject({ key: "IMPORTED", balance: 100 });
 });
+
+test("scheduledFlows + vatSettings round-trip; legacy vault defaults to empty", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-sf");
+  await s.setup("pw");
+  expect(await s.getScheduledFlows()).toEqual([]); // default
+  const flow = { id: "f1", entity: "BV1", label: "BTW", sign: -1 as const, amountCents: 1000, dueDate: "2026-05-01", source: "vat" as const, status: "confirmed" as const };
+  await s.putScheduledFlows([flow]);
+  await s.putVatSettings([{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false }]);
+  expect(await s.getScheduledFlows()).toEqual([flow]);
+  expect(await s.getVatSettings()).toHaveLength(1);
+});
