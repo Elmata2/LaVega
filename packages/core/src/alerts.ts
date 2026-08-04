@@ -1,4 +1,4 @@
-import type { Account } from "./model.js";
+import type { Account, ScheduledFlow } from "./model.js";
 import type { EntityForecast } from "./forecast.js";
 
 /* The "Aandacht" alert-center. Pure + deterministic: derives a ranked list of
@@ -29,6 +29,7 @@ export type ComputeAlertsInput = {
   forecast: EntityForecast; // consolidated, built with the user's bufferCents
   asOf: string;
   bufferCents: number;
+  scheduledFlows?: ScheduledFlow[];
 };
 
 /** Ranked alerts (critical → warning → info):
@@ -38,7 +39,7 @@ export type ComputeAlertsInput = {
  *  Missed-payment detection uses each stream's lastDate: a real arrival would
  *  have extended it. Only flagged when overdue past a grace window and by no
  *  more than two cadence cycles (older ⇒ assume the stream simply ended). */
-export function computeAlerts({ accounts, forecast, asOf, bufferCents }: ComputeAlertsInput): Alert[] {
+export function computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows }: ComputeAlertsInput): Alert[] {
   const alerts: Alert[] = [];
 
   if (forecast.shortfall) {
@@ -64,6 +65,19 @@ export function computeAlerts({ accounts, forecast, asOf, bufferCents }: Compute
         detail: `${kind[0].toUpperCase() + kind.slice(1)} ${prep} ${s.counterparty} (~${eur(s.amountCents)}) werd rond ${expectedNext} verwacht, maar is nog niet binnen.`,
       });
     }
+  }
+
+  for (const f of scheduledFlows ?? []) {
+    if (f.source !== "vat" || f.status === "paid" || f.status === "cancelled") continue;
+    const days = daysBetween(asOf, f.dueDate); // dueDate - asOf
+    if (days < 0 || days > 30) continue;
+    const severity: AlertSeverity = days <= 3 ? "critical" : days <= 14 ? "warning" : "info";
+    alerts.push({
+      id: `vat:${f.id}`,
+      severity,
+      title: `${f.label} — betaal vóór ${f.dueDate}`,
+      detail: `Zet ${eur(f.amountCents)} klaar; de BTW-aangifte + betaling moet uiterlijk ${f.dueDate} (over ${days} dagen).`,
+    });
   }
 
   const noBalance = accounts.filter((a) => a.balance === null).length;

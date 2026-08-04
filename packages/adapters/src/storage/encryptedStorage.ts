@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { Account, Tx, Rule } from "@lavega/core";
+import type { Account, Tx, Rule, ScheduledFlow, VatSettings } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { newSalt, deriveKey, encryptJSON, decryptJSON, PBKDF2_ITERATIONS } from "../crypto/vaultCrypto.js";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
@@ -11,7 +11,7 @@ const RECORD_KEY = "blob";
 
 export type VaultStatus = "empty" | "locked" | "unlocked";
 
-type VaultData = { accounts: Account[]; txs: Tx[]; rules: Rule[] };
+type VaultData = { accounts: Account[]; txs: Tx[]; rules: Rule[]; scheduledFlows?: ScheduledFlow[]; vatSettings?: VatSettings[] };
 
 export interface VaultStorage extends StorageAdapter {
   status(): Promise<VaultStatus>;
@@ -24,6 +24,10 @@ export interface VaultStorage extends StorageAdapter {
   // and only then write it to disk + swap in-memory state. False on wrong
   // passphrase / malformed / sub-floor iterations — current state untouched.
   restore(blob: CipherBlob, passphrase: string): Promise<boolean>;
+  getScheduledFlows(): Promise<ScheduledFlow[]>;
+  putScheduledFlows(f: ScheduledFlow[]): Promise<void>;
+  getVatSettings(): Promise<VatSettings[]>;
+  putVatSettings(s: VatSettings[]): Promise<void>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
@@ -204,6 +208,31 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, rules: [...rules] };
+        await persist();
+      });
+    },
+
+    // scheduledFlows/vatSettings are optional VaultData fields — a legacy vault
+    // decrypts without them, so getters default to []. Replace-all, like putRules.
+    async getScheduledFlows(): Promise<ScheduledFlow[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.scheduledFlows ?? [])];
+    },
+    putScheduledFlows(f: ScheduledFlow[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, scheduledFlows: [...f] };
+        await persist();
+      });
+    },
+    async getVatSettings(): Promise<VatSettings[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.vatSettings ?? [])];
+    },
+    putVatSettings(s: VatSettings[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, vatSettings: [...s] };
         await persist();
       });
     },

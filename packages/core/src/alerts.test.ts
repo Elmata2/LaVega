@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { Account } from "./model.js";
 import type { EntityForecast, RecurringStream } from "./forecast.js";
 import { computeAlerts } from "./alerts.js";
+import { makeScheduledFlow } from "./scheduledFlows.js";
 
 const acc = (key: string, balance: number | null): Account =>
   ({ key, iban: key, name: key, bank: "ING", entity: "BV1", currency: "EUR", balance });
@@ -48,4 +49,17 @@ test("alerts are ranked critical -> warning -> info", () => {
 
 test("nothing wrong -> no alerts", () => {
   expect(computeAlerts({ accounts: [acc("A", 100)], asOf: ASOF, bufferCents: 0, forecast: fc({}) })).toEqual([]);
+});
+
+test("computeAlerts: BTW deadline within 14 days -> warning with the amount", () => {
+  const vat = makeScheduledFlow({ entity: "BV1", label: "BTW Q2 2026", sign: -1, amountCents: 168000, dueDate: "2026-08-10", source: "vat", status: "confirmed" });
+  const alerts = computeAlerts({ accounts: [acc("A", 1000)], asOf: "2026-08-01", bufferCents: 0, forecast: fc({}), scheduledFlows: [vat] });
+  const w = alerts.filter((a) => a.id.startsWith("vat:"));
+  expect(w).toHaveLength(1);
+  expect(w[0].severity).toBe("warning");
+  expect(w[0].detail).toContain("1.680,00");
+});
+test("computeAlerts: BTW deadline > 30 days out -> no alert", () => {
+  const vat = makeScheduledFlow({ entity: "BV1", label: "BTW", sign: -1, amountCents: 100, dueDate: "2026-12-31", source: "vat", status: "confirmed" });
+  expect(computeAlerts({ accounts: [acc("A", 1000)], asOf: "2026-08-01", bufferCents: 0, forecast: fc({}), scheduledFlows: [vat] }).filter((a) => a.id.startsWith("vat:"))).toHaveLength(0);
 });

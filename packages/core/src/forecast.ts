@@ -1,5 +1,6 @@
-import type { Account, Tx } from "./model.js";
+import type { Account, ScheduledFlow, Tx } from "./model.js";
 import { norm } from "./hash.js";
+import { scheduledFlowsForScope } from "./scheduledFlows.js";
 
 /* Recurring-stream detection — the first stage of the deterministic cashflow
  * forecast. Pure + deterministic: no Date.now()/Math.random(), integer cents
@@ -193,7 +194,7 @@ export type EntityForecast = {
   streams: RecurringStream[];
   drivers: Driver[]; // top streams by |perWeekCents| desc (cap 8)
 };
-export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number };
+export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number; scheduledFlows?: ScheduledFlow[] };
 
 /** Per-week "recurring flow" contribution of a stream, used both for the
  *  driver ranking and (via its average) as the band's fallback spread when
@@ -212,6 +213,7 @@ function buildForecast(
   asOf: string,
   horizonDays: number,
   bufferCents: number,
+  scheduledFlows: ScheduledFlow[] = [],
 ): EntityForecast {
   // No accounts (e.g. the "onbekend" scope of orphan txs) => opening is UNKNOWN,
   // not a confident €0 — otherwise it could surface a spurious shortfall.
@@ -253,6 +255,10 @@ function buildForecast(
     for (const s of streams) {
       const gap = daysBetween(s.lastDate, day);
       if (gap > 0 && gap % s.cadenceDays === 0) bal += s.sign * s.amountCents;
+    }
+    for (const f of scheduledFlows) {
+      if (f.status === "cancelled" || f.status === "paid") continue;
+      if (f.dueDate === day) bal += f.sign * f.amountCents;
     }
     if (d % 7 === 0) {
       points.push({
@@ -311,6 +317,7 @@ export function forecastCashflow(
   const asOf = opts.asOf;
   const horizonDays = opts.horizonDays ?? 91;
   const bufferCents = opts.bufferCents ?? 0;
+  const allFlows = opts.scheduledFlows ?? [];
 
   const entityOf = new Map(accounts.map((a) => [a.key, a.entity]));
 
@@ -354,10 +361,11 @@ export function forecastCashflow(
       asOf,
       horizonDays,
       bufferCents,
+      scheduledFlowsForScope(allFlows, e),
     );
   }
 
-  const consolidated = buildForecast(txs, accounts, "geconsolideerd", asOf, horizonDays, bufferCents);
+  const consolidated = buildForecast(txs, accounts, "geconsolideerd", asOf, horizonDays, bufferCents, allFlows);
 
   return { byEntity, consolidated };
 }

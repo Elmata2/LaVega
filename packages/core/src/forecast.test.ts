@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
 import { detectRecurringStreams, forecastCashflow } from "./forecast.js";
+import { makeScheduledFlow } from "./scheduledFlows.js";
 
 function tx(id: string, date: string, amount: number, cp: string): Tx {
   return { id, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false };
@@ -152,4 +153,22 @@ test("deterministic: identical JSON on repeated runs", () => {
   const a = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
   const b = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+});
+
+test("forecast: a scheduled outflow on its due date lowers the projected closing", () => {
+  const accounts = [{ key: "A", iban: "A", name: "A", bank: "ING", entity: "BV1", currency: "EUR", balance: 1000 }];
+  const flow = makeScheduledFlow({ entity: "BV1", label: "BTW", sign: -1, amountCents: 30000, dueDate: "2026-08-15", source: "vat", status: "confirmed" });
+  const withFlow = forecastCashflow([], accounts, { asOf: "2026-08-01", scheduledFlows: [flow] }).consolidated;
+  const without = forecastCashflow([], accounts, { asOf: "2026-08-01" }).consolidated;
+  // €300 lower from the due date onward (week 3 point = day 21, after 08-15)
+  const wk3With = withFlow.points.find((p) => p.date >= "2026-08-15")!;
+  const wk3Without = without.points.find((p) => p.date >= "2026-08-15")!;
+  expect((wk3Without.projectedClosingCents ?? 0) - (wk3With.projectedClosingCents ?? 0)).toBe(30000);
+});
+
+test("forecast: no scheduledFlows => identical to before (additive)", () => {
+  const accounts = [{ key: "A", iban: "A", name: "A", bank: "ING", entity: "BV1", currency: "EUR", balance: 500 }];
+  const a = forecastCashflow([], accounts, { asOf: "2026-08-01" }).consolidated;
+  const b = forecastCashflow([], accounts, { asOf: "2026-08-01", scheduledFlows: [] }).consolidated;
+  expect(a.points).toEqual(b.points);
 });
