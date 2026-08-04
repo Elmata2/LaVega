@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope } from "@lavega/core";
+import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
@@ -18,6 +18,7 @@ import Import from "./views/Import";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Belasting from "./views/Belasting";
+import Facturen from "./views/Facturen";
 import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -26,7 +27,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "belasting" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "belasting" | "facturen" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -38,6 +39,7 @@ export default function App() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [view, setView] = useState<View>("overview");
   const [entityScope, setEntityScope] = useState("");
@@ -76,18 +78,20 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
         storage.getScheduledFlows(),
         storage.getVatSettings(),
+        storage.getInvoices(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
       setRules(loadedRules);
       setScheduledFlows(loadedFlows);
       setVatSettings(loadedVat);
+      setInvoices(loadedInvoices);
     })();
   }, [gate]);
 
@@ -134,6 +138,10 @@ export default function App() {
         const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
         setAccounts(fa);
         setTxs(ft);
+        // Reconcile invoices against the freshly linked bank txs (same as file import).
+        const curInvoices = await storage.getInvoices();
+        const reconciled = reconcileInvoices(curInvoices, ft);
+        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
         setProblems([`Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`]);
       } catch (e) {
         setProblems([`Bankkoppeling mislukt: ${e instanceof Error ? e.message : String(e)}`]);
@@ -153,6 +161,7 @@ export default function App() {
     setRules([]);
     setScheduledFlows([]);
     setVatSettings([]);
+    setInvoices([]);
     setGate("unlock");
   }
 
@@ -173,22 +182,30 @@ export default function App() {
     setVatSettings(next);
     await storage.putVatSettings(next);
   }
+  // Invoices are UI-owned as a whole list (replace-all persistence), same pattern
+  // as saveRules/saveScheduledFlows.
+  async function saveInvoices(next: Invoice[]) {
+    setInvoices(next);
+    await storage.putInvoices(next);
+  }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat] = await Promise.all([
+    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
       storage.getScheduledFlows(),
       storage.getVatSettings(),
+      storage.getInvoices(),
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
     setRules(freshRules);
     setScheduledFlows(freshFlows);
     setVatSettings(freshVat);
+    setInvoices(freshInvoices);
   }
 
   const entityOptions = useMemo(
@@ -240,11 +257,19 @@ export default function App() {
     [scopedAccounts, scopedTxs, asOf],
   );
 
-  // Scheduled flows (VAT set-asides) constrained to the active top-bar scope so
-  // Overzicht/Forecast only see the reservations for the entity in view ("" = all).
+  // The forecast/alerts input = the persisted scheduled flows (VAT set-asides,
+  // manual plans) PLUS the flows projected from `expected` invoices. Merging here
+  // means invoices show up in Overzicht/Forecast with no extra forecast wiring;
+  // paid/cancelled invoices project no flow, so a settled invoice drops out.
+  const allScheduledFlows = useMemo(
+    () => [...scheduledFlows, ...scheduledInvoiceFlows(invoices)],
+    [scheduledFlows, invoices],
+  );
+  // Scheduled flows constrained to the active top-bar scope so Overzicht/Forecast
+  // only see the reservations/invoices for the entity in view ("" = all).
   const scopedScheduledFlows = useMemo(
-    () => scheduledFlowsForScope(scheduledFlows, entityScope),
-    [scheduledFlows, entityScope],
+    () => scheduledFlowsForScope(allScheduledFlows, entityScope),
+    [allScheduledFlows, entityScope],
   );
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
@@ -269,6 +294,13 @@ export default function App() {
       ]);
       setAccounts(freshAccounts);
       setTxs(freshTxs);
+
+      // Reconcile stored invoices against the freshly imported txs: an `expected`
+      // invoice whose settling bank transaction now appears flips to `paid` (and
+      // thus drops out of the forecast, no double-count). Persist only on change.
+      const curInvoices = await storage.getInvoices();
+      const reconciled = reconcileInvoices(curInvoices, freshTxs);
+      if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
     } catch (err) {
       setProblems([`Importeren mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
@@ -470,6 +502,18 @@ export default function App() {
               busy={busy}
               onSaveVatSettings={saveVatSettings}
               onSaveScheduledFlows={saveScheduledFlows}
+            />
+          )}
+
+          {view === "facturen" && (
+            <Facturen
+              entities={entityOptions}
+              invoices={invoices}
+              txs={txs}
+              asOf={asOf}
+              busy={busy}
+              defaultEntity={entity}
+              onSaveInvoices={saveInvoices}
             />
           )}
 
