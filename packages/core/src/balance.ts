@@ -1,4 +1,5 @@
-import type { Account, Tx } from "./model.js";
+import type { Account, ScheduledFlow, Tx } from "./model.js";
+import { reservedCents } from "./scheduledFlows.js";
 
 /** A credit-card account: a manually-entered saldo is the amount OWED, so it
  *  counts as NEGATIVE (debt) in the net position while the UI shows the owed
@@ -43,4 +44,11 @@ export function currentBalance(account: Account, txs: Tx[], asOf: string): numbe
  *  so consolidate/forecast/display all see the rolled-forward position. */
 export function withCurrentBalances(accounts: Account[], txs: Tx[], asOf: string): Account[] {
   return accounts.map((a) => ({ ...a, balance: currentBalance(a, txs, asOf) }));
+}
+
+/** Spendable cash = total balance (euros) minus money earmarked for VAT
+ *  (reservations), in integer cents. The forecast still places the actual VAT
+ *  outflow on its due date; this is the "beschikbaar NU" view. */
+export function availableBalanceCents(totalBalanceEuros: number, flows: ScheduledFlow[], asOf: string): number {
+  return Math.round(totalBalanceEuros * 100) - reservedCents(flows, asOf);
 }

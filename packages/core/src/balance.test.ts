@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { currentBalance, withCurrentBalances, isCardAccount, accountType } from "./balance.js";
+import { currentBalance, withCurrentBalances, isCardAccount, accountType, availableBalanceCents } from "./balance.js";
+import { makeScheduledFlow } from "./scheduledFlows.js";
 
 const acc = (key: string, balance: number | null, balanceDate?: string): Account =>
   ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance, balanceDate });
@@ -47,4 +48,10 @@ test("accountType: no type + savings name => Spaarrekening (ING Oranje, Revolut 
   expect(accountType({ ...acc("A", 100), name: "Oranje Spaarrekening", bank: "ING" })).toBe("Spaarrekening");
   expect(accountType({ ...acc("A", 100), name: "Savings", bank: "Revolut" })).toBe("Spaarrekening");
   expect(accountType({ ...acc("A", 100), name: "Betaalrekening", bank: "Revolut" })).toBe("Betaalrekening");
+});
+
+test("availableBalanceCents subtracts unpaid VAT reservations from the total", () => {
+  const flows = [makeScheduledFlow({ entity: "BV1", label: "BTW", sign: -1, amountCents: 45000, dueDate: "2026-05-01", source: "vat", status: "confirmed" })];
+  expect(availableBalanceCents(1000, flows, "2026-04-01")).toBe(100000 - 45000); // €1000 - €450 = €550
+  expect(availableBalanceCents(1000, [], "2026-04-01")).toBe(100000);
 });
