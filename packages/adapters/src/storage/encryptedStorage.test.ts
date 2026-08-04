@@ -225,3 +225,13 @@ test("scheduledFlows + vatSettings round-trip; legacy vault defaults to empty", 
   expect(await s.getScheduledFlows()).toEqual([flow]);
   expect(await s.getVatSettings()).toHaveLength(1);
 });
+
+test("invoices round-trip; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-inv");
+  await s.setup("pw");
+  expect(await s.getInvoices()).toEqual([]);
+  const invoice = { id: "i1", entity: "BV1", direction: "out" as const, counterparty: "X", issueDate: "2026-08-01", dueDate: "2026-09-01", amount: 100, currency: "EUR", status: "expected" as const, sourceType: "manual" as const };
+  await s.putInvoices([invoice]);
+  expect(await s.getInvoices()).toEqual([invoice]);
+});
