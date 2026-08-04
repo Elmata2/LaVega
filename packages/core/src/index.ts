@@ -15,5 +15,7 @@ export * from "./alerts.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";
 export * from "./parsers/invoiceCsv.js";
+export * from "./parsers/invoiceUbl.js";
+export * from "./parsers/parseInvoiceFile.js";
 export * from "./parsers/mt940.js";
 export * from "./parsers/parseBankFile.js";

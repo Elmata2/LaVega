@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
-import { makeInvoice, parseInvoiceCsv, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
+import { makeInvoice, parseInvoiceFile, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
 import { formatEuro } from "../format";
 
 type FacturenProps = {
@@ -74,9 +74,9 @@ export default function Facturen({
     onSaveInvoices(invoices.map((i) => (i.id === id ? { ...i, status } : i)));
   }
 
-  function handleImportCsv(file: File) {
+  function handleImportFile(file: File) {
     void file.text().then((text) => {
-      const rows = parseInvoiceCsv(text);
+      const rows = parseInvoiceFile(file.name, text);
       if (rows.length === 0) {
         setImportNote("Geen facturen herkend in dit bestand.");
         return;
@@ -173,21 +173,22 @@ export default function Facturen({
       <p className="cell-sub" style={{ marginTop: "var(--sp-3)" }}>
         Of importeer facturen in bulk uit een CSV-export (elk boekhoudpakket heeft
         een net iets andere kolomindeling — headers als "Relatie/Bedrag/Factuurdatum/
-        Vervaldatum/Richting" worden automatisch herkend, NL of EN).
+        Vervaldatum/Richting" worden automatisch herkend, NL of EN) of een UBL/
+        EN-16931 XML-factuur.
       </p>
       <label>
-        CSV importeren{" "}
+        CSV of UBL/XML importeren{" "}
         {/* No `accept` filter, same rationale as Import.tsx: format is sniffed
             from content, not extension. */}
         <input
           type="file"
           className="btn"
           disabled={busy}
-          aria-label="Facturen CSV importeren"
+          aria-label="Facturen CSV of UBL/XML importeren"
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (file) handleImportCsv(file);
+            if (file) handleImportFile(file);
           }}
         />
       </label>
