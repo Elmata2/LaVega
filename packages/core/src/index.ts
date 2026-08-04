@@ -5,6 +5,7 @@ export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
 export * from "./scheduledFlows.js";
+export * from "./invoices.js";
 export * from "./tax.js";
 export * from "./categories.js";
 export * from "./subscriptions.js";
