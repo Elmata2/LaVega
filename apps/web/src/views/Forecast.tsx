@@ -1,4 +1,4 @@
-import type { Account, EntityForecast, Tx } from "@lavega/core";
+import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
 import { forecastCashflow } from "@lavega/core";
 import { formatEuro } from "../format";
 import { bannerState, isThinData, splitDrivers, type BannerState } from "../forecast-view";
@@ -9,6 +9,7 @@ type ForecastProps = {
   entityScope: string;
   asOf: string;
   bufferCents: number;
+  scheduledFlows: ScheduledFlow[];
 };
 
 // 91 days = 13 weekly points. The buffer is user-set (Overzicht → Aandacht) and
@@ -225,8 +226,8 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
   );
 }
 
-export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents }: ForecastProps) {
-  const fc = forecastCashflow(txs, accounts, { asOf, horizonDays: HORIZON_DAYS, bufferCents });
+export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents, scheduledFlows }: ForecastProps) {
+  const fc = forecastCashflow(txs, accounts, { asOf, horizonDays: HORIZON_DAYS, bufferCents, scheduledFlows });
   // Honor entityScope, but fall back to the consolidated view if the scope
   // isn't (or is no longer) present in byEntity — App.tsx self-heals a stale
   // entityScope already, but this component stays correct on its own too.

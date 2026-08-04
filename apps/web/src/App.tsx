@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Rule, Tx } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds } from "@lavega/core";
+import type { Account, Rule, Tx, ScheduledFlow, VatSettings } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
@@ -17,6 +17,7 @@ import Regels from "./views/Regels";
 import Import from "./views/Import";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
+import Belasting from "./views/Belasting";
 import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -25,7 +26,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "belasting" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -35,6 +36,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
 
   const [view, setView] = useState<View>("overview");
   const [entityScope, setEntityScope] = useState("");
@@ -73,14 +76,18 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
+        storage.getScheduledFlows(),
+        storage.getVatSettings(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
       setRules(loadedRules);
+      setScheduledFlows(loadedFlows);
+      setVatSettings(loadedVat);
     })();
   }, [gate]);
 
@@ -144,6 +151,8 @@ export default function App() {
     setAccounts([]);
     setTxs([]);
     setRules([]);
+    setScheduledFlows([]);
+    setVatSettings([]);
     setGate("unlock");
   }
 
@@ -154,17 +163,32 @@ export default function App() {
     await storage.putRules(next);
   }
 
+  // Scheduled flows (incl. VAT set-asides) and per-BV VAT settings are UI-owned
+  // as whole lists (replace-all persistence), same pattern as saveRules.
+  async function saveScheduledFlows(next: ScheduledFlow[]) {
+    setScheduledFlows(next);
+    await storage.putScheduledFlows(next);
+  }
+  async function saveVatSettings(next: VatSettings[]) {
+    setVatSettings(next);
+    await storage.putVatSettings(next);
+  }
+
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules] = await Promise.all([
+    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
+      storage.getScheduledFlows(),
+      storage.getVatSettings(),
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
     setRules(freshRules);
+    setScheduledFlows(freshFlows);
+    setVatSettings(freshVat);
   }
 
   const entityOptions = useMemo(
@@ -214,6 +238,13 @@ export default function App() {
   const currentScopedAccounts = useMemo(
     () => withCurrentBalances(scopedAccounts, scopedTxs, asOf),
     [scopedAccounts, scopedTxs, asOf],
+  );
+
+  // Scheduled flows (VAT set-asides) constrained to the active top-bar scope so
+  // Overzicht/Forecast only see the reservations for the entity in view ("" = all).
+  const scopedScheduledFlows = useMemo(
+    () => scheduledFlowsForScope(scheduledFlows, entityScope),
+    [scheduledFlows, entityScope],
   );
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
@@ -349,6 +380,7 @@ export default function App() {
               own={own}
               asOf={asOf}
               bufferCents={bufferCents}
+              scheduledFlows={scopedScheduledFlows}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
               onSelectCategory={(c) => {
@@ -414,7 +446,7 @@ export default function App() {
           )}
 
           {view === "forecast" && (
-            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} />
+            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} scheduledFlows={scopedScheduledFlows} />
           )}
 
           {view === "optimalisatie" && (
@@ -424,6 +456,20 @@ export default function App() {
               asOf={asOf}
               busy={busy}
               onRateCommit={handleRateCommit}
+            />
+          )}
+
+          {view === "belasting" && (
+            <Belasting
+              entities={entityScope ? [entityScope] : entityOptions}
+              txs={scopedTxs}
+              accounts={scopedAccounts}
+              asOf={asOf}
+              vatSettings={vatSettings}
+              scheduledFlows={scheduledFlows}
+              busy={busy}
+              onSaveVatSettings={saveVatSettings}
+              onSaveScheduledFlows={saveScheduledFlows}
             />
           )}
 

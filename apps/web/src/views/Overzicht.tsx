@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, OwnAccounts, Rule, Tx, Alert } from "@lavega/core";
+import type { Account, OwnAccounts, Rule, Tx, Alert, ScheduledFlow } from "@lavega/core";
 import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
@@ -11,6 +11,7 @@ type OverzichtProps = {
   own: OwnAccounts;
   asOf: string;
   bufferCents: number;
+  scheduledFlows: ScheduledFlow[];
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
@@ -127,7 +128,7 @@ function CashflowMiniChart({
 }
 
 
-export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, onBufferChange, onNavigate, onSelectCategory }: OverzichtProps) {
+export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, scheduledFlows, onBufferChange, onNavigate, onSelectCategory }: OverzichtProps) {
   // Per-category in/out (rules + built-in defaults + own-transfer detection) —
   // biggest categories first.
   const catRows = useMemo(() => {
@@ -157,15 +158,15 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
   );
 
   const forecast = useMemo(
-    () => forecastCashflow(txs, accounts, { asOf, bufferCents }).consolidated,
-    [txs, accounts, asOf, bufferCents],
+    () => forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows }).consolidated,
+    [txs, accounts, asOf, bufferCents, scheduledFlows],
   );
 
   // The "Aandacht" alert-center: shortfall (vs buffer) + overdue recurring
   // payments + accounts missing a saldo, ranked by severity.
   const alerts = useMemo(
-    () => computeAlerts({ accounts, forecast, asOf, bufferCents }),
-    [accounts, forecast, asOf, bufferCents],
+    () => computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows }),
+    [accounts, forecast, asOf, bufferCents, scheduledFlows],
   );
   const worst = alerts.find((a) => a.severity === "critical")
     ? "critical"
