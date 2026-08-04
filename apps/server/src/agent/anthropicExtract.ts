@@ -27,7 +27,7 @@ export type ExtractedInvoice = {
 export async function extractInvoiceFields(
   input: InvoiceExtractInput,
   apiKey: string,
-): Promise<{ fields: ExtractedInvoice; confidence: number }> {
+): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
   const client = new Anthropic({ apiKey });
 
   const content: Anthropic.ContentBlockParam[] = [];
@@ -36,7 +36,9 @@ export async function extractInvoiceFields(
       type: "document",
       source: {
         type: "base64",
-        media_type: (input.mediaType as "application/pdf") || "application/pdf",
+        // We only ever send PDFs as a document block, so the media type is fixed
+        // here rather than trusting the caller-supplied string.
+        media_type: "application/pdf",
         data: input.pdfBase64,
       },
     });
@@ -66,5 +68,11 @@ export async function extractInvoiceFields(
     direction: f.direction === "in" ? "in" : "out",
     vatAmount: typeof f.vatAmount === "number" ? f.vatAmount : undefined,
   };
-  return { fields, confidence: 0.8 };
+  // The model's OWN self-reported certainty (0..1), or null when it gave none —
+  // we never fabricate a number, so the UI only shows a percentage it actually
+  // reported.
+  const rawConf = f.confidence;
+  const confidence =
+    typeof rawConf === "number" && rawConf >= 0 && rawConf <= 1 ? rawConf : null;
+  return { fields, confidence };
 }

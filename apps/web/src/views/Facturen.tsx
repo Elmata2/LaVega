@@ -17,7 +17,9 @@ type ExtractResponse = {
     direction: "in" | "out";
     vatAmount?: number;
   };
-  confidence: number;
+  /** The model's OWN self-reported certainty (0..1), or null when it gave none.
+   *  Never a fabricated placeholder. */
+  confidence: number | null;
 };
 
 /** Read a File to base64 WITHOUT the `data:...;base64,` prefix (the server
@@ -116,12 +118,6 @@ export default function Facturen({
     // dealt with — clear the AI-draft tags so the NEXT manual entry can't inherit
     // "llm"/confidence/vat. (A validation failure above keeps the draft alive so
     // the owner can fix it, which is why that path intentionally doesn't reset.)
-    const clearDraftTags = () => {
-      setPendingSource("manual");
-      setPendingConfidence(null);
-      setPendingVat(null);
-      setAiNote(null);
-    };
     if (invoices.some((i) => i.id === inv.id)) {
       setImportNote("Deze factuur staat er al.");
       clearDraftTags();
@@ -137,6 +133,28 @@ export default function Facturen({
 
   function setStatus(id: string, status: Invoice["status"]) {
     onSaveInvoices(invoices.map((i) => (i.id === id ? { ...i, status } : i)));
+  }
+
+  // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
+  // entry isn't mislabeled as "llm" or given a stale confidence/BTW.
+  function clearDraftTags() {
+    setPendingSource("manual");
+    setPendingConfidence(null);
+    setPendingVat(null);
+    setAiNote(null);
+  }
+
+  // Explicitly throw away a pre-filled AI draft: clears the tags AND the fields
+  // the extraction populated, so nothing from it lingers if the owner decides
+  // not to use it.
+  function discardDraft() {
+    clearDraftTags();
+    setCounterparty("");
+    setInvoiceNumber("");
+    setIssueDate("");
+    setDueDate("");
+    setAmount("");
+    setCurrency("EUR");
   }
 
   function handleImportFile(file: File) {
@@ -215,11 +233,11 @@ export default function Facturen({
       setPendingConfidence(confidence);
       const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
       setPendingVat(vat);
-      setAiNote(
-        `AI-concept — controleer en bevestig (betrouwbaarheid ${Math.round(confidence * 100)}%${
-          vat !== null ? `, incl. btw ${formatEuro(vat)}` : ""
-        }).`,
-      );
+      // Only show a percentage the model actually reported; otherwise just ask
+      // the owner to check every field (no fabricated confidence number).
+      const conf = typeof confidence === "number" ? ` (AI-inschatting zekerheid ${Math.round(confidence * 100)}%)` : "";
+      const btw = vat !== null ? `, incl. btw ${formatEuro(vat)}` : "";
+      setAiNote(`AI-concept — controleer elk veld en bevestig${conf}${btw}.`);
     } catch {
       setAiNote("AI-extractie mislukt. Probeer het opnieuw.");
     } finally {
@@ -329,6 +347,14 @@ export default function Facturen({
         <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
           Toevoegen
         </button>
+        {pendingSource === "llm" && (
+          <>
+            {" "}
+            <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
+              Verwijder AI-concept
+            </button>
+          </>
+        )}
       </div>
 
       <p className="cell-sub" style={{ marginTop: "var(--sp-3)" }}>

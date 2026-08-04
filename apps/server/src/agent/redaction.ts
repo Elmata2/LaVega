@@ -45,6 +45,7 @@ export const INVOICE_TOOL = {
       dueDate: { type: "string", description: "Vervaldatum, ISO YYYY-MM-DD (indien afwezig: gelijk aan factuurdatum)" },
       direction: { type: "string", enum: ["in", "out"], description: "'in' = jij ontvangt geld (verkoopfactuur); 'out' = jij betaalt (inkoopfactuur)" },
       vatAmount: { type: "number", description: "Btw-bedrag indien vermeld" },
+      confidence: { type: "number", description: "Je eigen zekerheid over deze extractie, 0 (onzeker) tot 1 (zeker)." },
     },
     required: ["counterparty", "amount", "currency", "issueDate", "dueDate", "direction"],
   },
@@ -53,4 +54,5 @@ export const INVOICE_TOOL = {
 export const EXTRACT_PROMPT =
   "Je krijgt één factuur (PDF of tekst). Haal de velden eruit en roep record_invoice aan. " +
   "Gok niet: laat vatAmount weg als het niet vermeld staat; als de vervaldatum ontbreekt, gebruik de factuurdatum. " +
-  "Bepaal 'direction' vanuit wie de factuur uitschrijft.";
+  "Bepaal 'direction' vanuit wie de factuur uitschrijft. " +
+  "Geef in 'confidence' je eigen zekerheid (0..1) op basis van hoe leesbaar en volledig de factuur is.";

@@ -29,12 +29,14 @@ test("builds a forced-tool request with the document block and parses tool_use",
           dueDate: "2026-07-31",
           direction: "in",
           vatAmount: 21,
+          confidence: 0.9,
         },
       },
     ],
   });
 
-  const res = await extractInvoiceFields({ pdfBase64: "AAAA", mediaType: "application/pdf" }, "sk-ant-test");
+  // A caller-supplied mediaType must NOT be trusted for the document block.
+  const res = await extractInvoiceFields({ pdfBase64: "AAAA", mediaType: "image/png" }, "sk-ant-test");
 
   expect(res).toEqual({
     fields: {
@@ -46,7 +48,7 @@ test("builds a forced-tool request with the document block and parses tool_use",
       direction: "in",
       vatAmount: 21,
     },
-    confidence: 0.8,
+    confidence: 0.9, // the model's own self-reported value, passed through
   });
 
   // Request was built as specified.
@@ -56,7 +58,7 @@ test("builds a forced-tool request with the document block and parses tool_use",
   const blocks = arg.messages[0].content;
   expect(blocks[0]).toMatchObject({
     type: "document",
-    source: { type: "base64", media_type: "application/pdf", data: "AAAA" },
+    source: { type: "base64", media_type: "application/pdf", data: "AAAA" }, // fixed, not "image/png"
   });
   // The fixed prompt is always the last block.
   expect(blocks[blocks.length - 1].type).toBe("text");
@@ -73,12 +75,13 @@ test("coerces missing/mistyped fields: direction defaults to out, dueDate falls 
     ],
   });
 
-  const { fields } = await extractInvoiceFields({ text: "factuurtekst" }, "k");
+  const { fields, confidence } = await extractInvoiceFields({ text: "factuurtekst" }, "k");
   expect(fields.direction).toBe("out"); // anything other than "in"
   expect(fields.dueDate).toBe("2026-01-02"); // fell back to issueDate
   expect(fields.currency).toBe("EUR"); // default
   expect(fields.amount).toBe(50); // Number("50")
   expect(fields.vatAmount).toBeUndefined(); // absent -> undefined
+  expect(confidence).toBeNull(); // model reported none -> null, never fabricated
 
   // A text-only input builds no document block.
   const blocks = createMock.mock.calls[0][0].messages[0].content;
