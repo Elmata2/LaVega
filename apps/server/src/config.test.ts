@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadConfig, maskApplicationId } from "./config.js";
+import { loadConfig, loadLlmConfig, maskApplicationId } from "./config.js";
 
 test("with no config.json present, config reports configured:false and applicationId:null", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
@@ -56,4 +56,14 @@ test("a real config is reported as configured, with defaults filled in when abse
 test("maskApplicationId shows only the first 8 characters", () => {
   expect(maskApplicationId("abcd1234efgh5678")).toBe("abcd1234…");
   expect(maskApplicationId(null)).toBeNull();
+});
+
+test("loadLlmConfig: configured only when ANTHROPIC_API_KEY is set", () => {
+  const prev = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  expect(loadLlmConfig()).toEqual({ configured: false, apiKey: null });
+  process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+  expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "sk-ant-test" });
+  if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+  else process.env.ANTHROPIC_API_KEY = prev;
 });

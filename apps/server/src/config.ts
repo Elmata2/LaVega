@@ -72,3 +72,13 @@ export function maskApplicationId(applicationId: string | null): string | null {
   if (!applicationId) return null;
   return applicationId.slice(0, 8) + "…";
 }
+
+/**
+ * Load the Anthropic LLM config (server-only; the API key never reaches the
+ * client). `configured` is true only when ANTHROPIC_API_KEY is a non-empty
+ * string.
+ */
+export function loadLlmConfig(): { configured: boolean; apiKey: string | null } {
+  const apiKey = process.env.ANTHROPIC_API_KEY ?? null;
+  return { configured: typeof apiKey === "string" && apiKey.length > 0, apiKey };
+}
