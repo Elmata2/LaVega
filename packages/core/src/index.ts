@@ -4,6 +4,7 @@ export * from "./balance.js";
 export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
+export * from "./scheduledFlows.js";
 export * from "./categories.js";
 export * from "./subscriptions.js";
 export * from "./interest.js";
