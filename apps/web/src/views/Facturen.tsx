@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
-import { makeInvoice, scheduledInvoiceFlows } from "@lavega/core";
+import { makeInvoice, parseInvoiceCsv, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
 import { formatEuro } from "../format";
 
 type FacturenProps = {
@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<Invoice["status"], string> = {
 export default function Facturen({
   entities,
   invoices,
+  txs,
   busy,
   defaultEntity,
   onSaveInvoices,
@@ -34,6 +35,7 @@ export default function Facturen({
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("EUR");
+  const [importNote, setImportNote] = useState<string | null>(null);
 
   // Live projection: what the forecast will actually see from open invoices.
   const flows = useMemo(() => scheduledInvoiceFlows(invoices), [invoices]);
@@ -70,6 +72,36 @@ export default function Facturen({
 
   function setStatus(id: string, status: Invoice["status"]) {
     onSaveInvoices(invoices.map((i) => (i.id === id ? { ...i, status } : i)));
+  }
+
+  function handleImportCsv(file: File) {
+    void file.text().then((text) => {
+      const rows = parseInvoiceCsv(text);
+      if (rows.length === 0) {
+        setImportNote("Geen facturen herkend in dit bestand.");
+        return;
+      }
+      const parsed = rows.map((row) => makeInvoice({ ...row, entity: entity || defaultEntity }));
+      // Dedup by content-hashed id so re-importing the same file (or an
+      // overlapping export) doesn't duplicate rows already on file.
+      const seen = new Set(invoices.map((i) => i.id));
+      const added: Invoice[] = [];
+      for (const inv of parsed) {
+        if (!seen.has(inv.id)) {
+          seen.add(inv.id);
+          added.push(inv);
+        }
+      }
+      const merged = reconcileInvoices([...invoices, ...added], txs);
+      onSaveInvoices(merged);
+      setImportNote(
+        added.length > 0
+          ? `${added.length} van ${parsed.length} facturen geïmporteerd${
+              added.length !== parsed.length ? " (rest was al aanwezig)" : ""
+            }.`
+          : "Geen nieuwe facturen (allemaal al aanwezig).",
+      );
+    });
   }
 
   return (
@@ -137,6 +169,29 @@ export default function Facturen({
           Toevoegen
         </button>
       </div>
+
+      <p className="cell-sub" style={{ marginTop: "var(--sp-3)" }}>
+        Of importeer facturen in bulk uit een CSV-export (elk boekhoudpakket heeft
+        een net iets andere kolomindeling — headers als "Relatie/Bedrag/Factuurdatum/
+        Vervaldatum/Richting" worden automatisch herkend, NL of EN).
+      </p>
+      <label>
+        CSV importeren{" "}
+        {/* No `accept` filter, same rationale as Import.tsx: format is sniffed
+            from content, not extension. */}
+        <input
+          type="file"
+          className="btn"
+          disabled={busy}
+          aria-label="Facturen CSV importeren"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) handleImportCsv(file);
+          }}
+        />
+      </label>
+      {importNote && <p className="cell-sub">{importNote}</p>}
 
       <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>
         {flows.length} openstaande {flows.length === 1 ? "factuur" : "facturen"} in de forecast · netto verwacht{" "}
