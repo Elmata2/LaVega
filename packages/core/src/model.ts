@@ -21,6 +21,26 @@ export type ScheduledFlow = {
   status: "expected" | "confirmed" | "paid" | "cancelled";
 };
 
+/** An incoming (AR: money owed TO you) or outgoing (AP: you owe) invoice. amount
+ *  is DECIMAL euros (gross), Tx-convention. An `expected` invoice projects into a
+ *  ScheduledFlow; `paid`/`cancelled` do not (so a paid invoice doesn't
+ *  double-count with the bank transaction that settled it). */
+export type Invoice = {
+  id: string;
+  entity: string;
+  direction: "in" | "out";
+  counterparty: string;
+  invoiceNumber?: string;
+  issueDate: string; // ISO
+  dueDate: string;   // ISO
+  amount: number;    // decimal euros (gross)
+  vatAmount?: number;
+  currency: string;
+  status: "expected" | "paid" | "cancelled";
+  matchedTxId?: string;
+  sourceType: "manual" | "csv" | "ubl";
+};
+
 /** Per-entity (per-BV) VAT/BTW config for the set-aside estimate. */
 export type VatSettings = {
   entity: string;
