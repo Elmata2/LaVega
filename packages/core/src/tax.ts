@@ -37,4 +37,46 @@ export function nextBtwDeadline(frequency: VatSettings["frequency"], asOf: strin
   return { periodLabel: `${Q_LABEL[q]} ${y}`, periodEnd, deadline: lastDayOfMonth(deadlineYear, deadlineMonth) };
 }
 
-export {}; // (computeVatSetAside added in Task 5)
+const CADENCE_DAYS: Record<VatSettings["frequency"], number> = { monthly: 31, quarterly: 92, yearly: 366 };
+
+function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+}
+
+/** Estimate the VAT to set aside for the current BTW period, as a confirmed
+ *  outflow ScheduledFlow due on the deadline. See header for the estimate. */
+export function computeVatSetAside(txs: Tx[], settings: VatSettings, asOf: string): ScheduledFlow | null {
+  const { periodLabel, periodEnd, deadline } = nextBtwDeadline(settings.frequency, asOf);
+  const cadence = CADENCE_DAYS[settings.frequency];
+
+  let amountCents: number;
+  if (typeof settings.manualCents === "number") {
+    amountCents = Math.max(0, Math.round(settings.manualCents));
+  } else if (settings.mixedRates) {
+    return null; // can't safely auto-estimate mixed rates
+  } else {
+    let incomeCents = 0;
+    let expenseCents = 0;
+    for (const t of txs) {
+      const age = daysBetween(t.date, periodEnd); // 0..cadence => inside the period
+      if (age < 0 || age >= cadence) continue;
+      const c = Math.round(t.amount * 100);
+      if (c >= 0) incomeCents += c; else expenseCents += -c;
+    }
+    const marginCents = incomeCents - expenseCents;
+    const r = settings.defaultRatePct;
+    amountCents = marginCents > 0 ? Math.round((marginCents * r) / (100 + r)) : 0;
+  }
+  if (amountCents <= 0) return null;
+  return makeScheduledFlow({
+    entity: settings.entity,
+    label: `BTW ${periodLabel}`,
+    sign: -1,
+    amountCents,
+    dueDate: deadline,
+    source: "vat",
+    status: "confirmed",
+  });
+}
