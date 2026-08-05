@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice } from "@lavega/core";
+import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance } from "@lavega/core";
 import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
@@ -20,6 +20,7 @@ import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Facturen from "./views/Facturen";
+import Punten from "./views/Punten";
 import Backup from "./views/Backup";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -28,7 +29,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -41,6 +42,7 @@ export default function App() {
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [rewards, setRewards] = useState<RewardsBalance[]>([]);
 
   const [view, setView] = useState<View>("overview");
   const [entityScope, setEntityScope] = useState("");
@@ -79,13 +81,14 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
         storage.getScheduledFlows(),
         storage.getVatSettings(),
         storage.getInvoices(),
+        storage.getRewards(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -93,6 +96,7 @@ export default function App() {
       setScheduledFlows(loadedFlows);
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
+      setRewards(loadedRewards);
     })();
   }, [gate]);
 
@@ -163,6 +167,7 @@ export default function App() {
     setScheduledFlows([]);
     setVatSettings([]);
     setInvoices([]);
+    setRewards([]);
     setGate("unlock");
   }
 
@@ -189,17 +194,25 @@ export default function App() {
     setInvoices(next);
     await storage.putInvoices(next);
   }
+  // Rewards balances are UI-owned as a whole list (replace-all persistence),
+  // same pattern as saveInvoices. No reconcile — rewards are independent of
+  // bank data (manual balances, no auto-sync).
+  async function saveRewards(next: RewardsBalance[]) {
+    setRewards(next);
+    await storage.putRewards(next);
+  }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices] = await Promise.all([
+    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices, freshRewards] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
       storage.getScheduledFlows(),
       storage.getVatSettings(),
       storage.getInvoices(),
+      storage.getRewards(),
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
@@ -207,6 +220,7 @@ export default function App() {
     setScheduledFlows(freshFlows);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
+    setRewards(freshRewards);
   }
 
   const entityOptions = useMemo(
@@ -519,6 +533,8 @@ export default function App() {
               onSaveInvoices={saveInvoices}
             />
           )}
+
+          {view === "punten" && <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />}
 
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
         </main>
