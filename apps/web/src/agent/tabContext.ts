@@ -6,7 +6,7 @@
  * the browser for a tab's system prompt. */
 
 import type { Account, FxRate, Invoice, RewardsBalance, Rule, ScheduledFlow, Tx, VatSettings } from "@lavega/core";
-import { computeVatSetAside, detectSubscriptions, forecastCashflow, nextBtwDeadline, resolveAccountRate } from "@lavega/core";
+import { categoryTotals, computeAlerts, computeVatSetAside, detectSubscriptions, forecastCashflow, nextBtwDeadline, ownAccounts, resolveAccountRate } from "@lavega/core";
 
 /** Minimal per-account fields any tab's context builder might read. */
 export type TabAccount = {
@@ -90,12 +90,39 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
 
   switch (tab) {
     case "overview": {
+      // The landing tab is TAB-CONTEXT source-of-truth for "hoeveel
+      // aandachtspunten / is er een tekort" — so compute the same aggregates
+      // Overzicht renders from the raw state we already receive, rather than
+      // defaulting to empty (which made the agent answer "0 / geen tekort").
+      const bufferCents = state.bufferCents ?? 0;
+      const scheduledFlows = state.scheduledFlows ?? [];
+      // Consolidated 13-week forecast — the SAME core call Overzicht + the
+      // forecast case use; drives both the shortfall flag and the alert count.
+      const forecast = forecastCashflow(txs as Tx[], accounts as Account[], {
+        asOf,
+        bufferCents,
+        scheduledFlows,
+      }).consolidated;
+      const alertCount = computeAlerts({
+        accounts: accounts as Account[],
+        forecast,
+        asOf,
+        bufferCents,
+        scheduledFlows,
+      }).length;
+      // Top category totals (name + in/out), ranked by absolute volume like
+      // Overzicht's "Per categorie" table, capped to keep the slice small.
+      const own = ownAccounts(accounts as Account[]);
+      const categories = Object.entries(categoryTotals(txs as Tx[], (state.rules ?? []) as Rule[], own))
+        .sort((a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)))
+        .slice(0, 10)
+        .map(([name, b]) => ({ name, in: b.in, out: b.out }));
       const context: Record<string, unknown> = {
         entities: entityBalances(accounts),
-        categories: state.categories ?? [],
-        alertCount: state.alertCount ?? 0,
-        shortfall: state.shortfall ?? false,
-        bufferCents: state.bufferCents ?? 0,
+        categories,
+        alertCount,
+        shortfall: forecast.shortfall !== null,
+        bufferCents,
       };
       return { tab, context };
     }

@@ -22,3 +22,29 @@ test("sanitizeMessages drops junk roles + caps count", () => {
   const many = sanitizeMessages(Array.from({ length: 30 }, () => ({ role: "user", content: "q" })));
   expect(many.length).toBe(20);
 });
+test("sanitizeMessages drops empty/whitespace-only content messages", () => {
+  const msgs = sanitizeMessages([
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "   " },
+    { role: "user", content: "again" },
+  ]);
+  expect(msgs).toEqual([{ role: "user", content: "hi" }, { role: "user", content: "again" }]);
+});
+test("sanitizeMessages trims a leading assistant so history starts with user", () => {
+  const msgs = sanitizeMessages([
+    { role: "assistant", content: "eerder antwoord" },
+    { role: "user", content: "nieuwe vraag" },
+    { role: "assistant", content: "antwoord" },
+  ]);
+  expect(msgs).toEqual([{ role: "user", content: "nieuwe vraag" }, { role: "assistant", content: "antwoord" }]);
+});
+test("sanitizeMessages trims the leading assistant left by the tail slice", () => {
+  // 22 alternating msgs: slice(-20) starts at index 2, an assistant turn.
+  const raw = Array.from({ length: 22 }, (_, i) => ({
+    role: i % 2 === 0 ? "assistant" : "user",
+    content: `m${i}`,
+  }));
+  const msgs = sanitizeMessages(raw);
+  expect(msgs.length).toBeLessThanOrEqual(20);
+  expect(msgs[0].role).toBe("user");
+});

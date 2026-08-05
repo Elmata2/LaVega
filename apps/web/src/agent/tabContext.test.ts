@@ -1,14 +1,35 @@
 import { expect, test } from "vitest";
 import { buildTabContext } from "./tabContext.js";
 
-test("overview context carries only aggregates, not raw txs", () => {
+test("overview context computes real aggregates from raw state, never raw txs", () => {
+  // Low opening balance + a monthly recurring outflow that drains below the
+  // buffer within 13 weeks → forecast shortfall → a critical alert. Fixed asOf
+  // keeps the forecast deterministic.
   const { tab, context } = buildTabContext("overview", {
-    accounts: [{ entity: "BV1", balance: 100 } as any], txs: [{} as any], alertCount: 3, bufferCents: 5000,
-    shortfall: false, categories: [{ name: "Boodschappen", out: 200 }],
+    accounts: [{ key: "k1", entity: "BV1", balance: 50, bank: "ING", currency: "EUR" }],
+    txs: [
+      { id: "t1", accountKey: "k1", date: "2026-05-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+      { id: "t2", accountKey: "k1", date: "2026-06-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+      { id: "t3", accountKey: "k1", date: "2026-07-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+    ],
+    rules: [],
+    scheduledFlows: [],
+    bufferCents: 0,
+    asOf: "2026-08-05",
   } as any);
   expect(tab).toBe("overview");
+  // No raw transactions leak into the context.
   expect((context as any).txs).toBeUndefined();
-  expect((context as any).alertCount).toBe(3);
+  expect(JSON.stringify(context)).not.toContain('"accountKey"');
+  // Derived, non-default aggregates.
+  expect((context as any).alertCount).toBeGreaterThan(0);
+  expect((context as any).shortfall).toBe(true);
+  expect(Array.isArray((context as any).categories)).toBe(true);
+  expect((context as any).categories.length).toBeGreaterThan(0);
+  expect((context as any).categories.length).toBeLessThanOrEqual(10);
+  expect(typeof (context as any).categories[0].name).toBe("string");
+  expect(typeof (context as any).categories[0].out).toBe("number");
+  expect((context as any).bufferCents).toBe(0);
 });
 
 test("unknown tab yields empty context", () => {

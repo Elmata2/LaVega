@@ -40,9 +40,19 @@ export function sanitizeMessages(raw: unknown): ChatMessage[] {
       const role = (m as Record<string, unknown>).role;
       const content = (m as Record<string, unknown>).content;
       if ((role === "user" || role === "assistant") && typeof content === "string") {
+        // Drop empty/whitespace-only messages: a turn that yields no text
+        // leaves an empty-content assistant message in history, which
+        // Anthropic rejects.
+        if (content.trim() === "") continue;
         out.push({ role, content: content.slice(0, MAX_MSG_CHARS) });
       }
     }
   }
-  return out.slice(-MAX_MSGS);
+  const capped = out.slice(-MAX_MSGS);
+  // Anthropic requires the first message to be `user`; the tail slice (or a
+  // history that opened mid-turn) can leave a leading `assistant`. Drop any
+  // leading assistant turns so the result starts with `user` (or is empty).
+  let start = 0;
+  while (start < capped.length && capped[start].role === "assistant") start++;
+  return capped.slice(start);
 }
