@@ -49,7 +49,10 @@ export async function extractInvoiceFields(
   content.push({ type: "text", text: EXTRACT_PROMPT });
 
   const res = await client.messages.create({
-    model: "claude-opus-4-8",
+    // Haiku 4.5: invoice field-extraction with a forced tool is a light task —
+    // ~5x cheaper than Opus, same native PDF support. Bump a specific doc to a
+    // stronger model only if extraction quality proves insufficient.
+    model: "claude-haiku-4-5",
     max_tokens: 1024,
     tools: [INVOICE_TOOL as unknown as Anthropic.Tool],
     tool_choice: { type: "tool", name: "record_invoice" },

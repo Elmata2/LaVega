@@ -53,7 +53,7 @@ test("builds a forced-tool request with the document block and parses tool_use",
 
   // Request was built as specified.
   const arg = createMock.mock.calls[0][0];
-  expect(arg.model).toBe("claude-opus-4-8");
+  expect(arg.model).toBe("claude-haiku-4-5");
   expect(arg.tool_choice).toEqual({ type: "tool", name: "record_invoice" });
   const blocks = arg.messages[0].content;
   expect(blocks[0]).toMatchObject({
