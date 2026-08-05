@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
+import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
@@ -28,6 +29,17 @@ app.get("/api/rates", async (c) => {
   c.header("Access-Control-Allow-Origin", "*");
   c.header("Cache-Control", "public, max-age=3600");
   return c.json(await getRates());
+});
+
+/**
+ * ECB mid-market FX rates (base EUR), proxied from Frankfurter. Public data
+ * only — no user data is sent. CORS is open ("*") for the same reason as
+ * /api/rates above. The client derives from->to cross rates locally.
+ */
+app.get("/api/fx/rate", async (c) => {
+  c.header("Access-Control-Allow-Origin", "*");
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json(await getFxRate());
 });
 
 /**

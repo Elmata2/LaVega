@@ -53,6 +53,12 @@ const icons: Record<View, ReactNode> = {
       <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
     </Icon>
   ),
+  valuta: (
+    <Icon>
+      <path d="M4 7h13M17 7l-3-3M17 7l-3 3" />
+      <path d="M20 17H7M7 17l3 3M7 17l3-3" />
+    </Icon>
+  ),
   belasting: (
     <Icon>
       <rect x="4" y="3" width="16" height="18" rx="2" />
@@ -90,6 +96,7 @@ const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "rules", label: "Regels" },
   { key: "forecast", label: "Forecast" },
   { key: "optimalisatie", label: "Optimalisatie" },
+  { key: "valuta", label: "Valuta" },
   { key: "belasting", label: "Belasting" },
   { key: "facturen", label: "Facturen" },
   { key: "backup", label: "Back-up" },
