@@ -296,16 +296,6 @@ export default function App() {
     [scopedAccounts, scopedTxs, asOf],
   );
 
-  // Minimal per-tab context for the chat widget. Only what App already has in
-  // scope (current per-entity balances via accounts, + the alert buffer) — no
-  // extra forecast/alerts computed just for chat. buildTabContext turns this
-  // into the tab's allowlisted slice; overview aggregates it isn't given
-  // (categories/alertCount/shortfall) fall back to safe defaults inside it.
-  const chatCtx = useMemo(
-    () => buildTabContext(view, { accounts: currentScopedAccounts, bufferCents }),
-    [view, currentScopedAccounts, bufferCents],
-  );
-
   // The forecast/alerts input = the persisted scheduled flows (VAT set-asides,
   // manual plans) PLUS the flows projected from `expected` invoices. Merging here
   // means invoices show up in Overzicht/Forecast with no extra forecast wiring;
@@ -319,6 +309,28 @@ export default function App() {
   const scopedScheduledFlows = useMemo(
     () => scheduledFlowsForScope(allScheduledFlows, entityScope),
     [allScheduledFlows, entityScope],
+  );
+
+  // Minimal per-tab context for the chat widget. Passes everything already in
+  // App scope that a tab's slice needs (scoped accounts/txs/flows, config,
+  // buffer, asOf) — buildTabContext derives the aggregate/summary each tab is
+  // allowed to send and drops raw txs. No extra network fetches: the live ECB
+  // rate (valuta) and public savings benchmark (optimalisatie) aren't in scope
+  // here, so those are omitted and the agent web-searches them.
+  const chatCtx = useMemo(
+    () =>
+      buildTabContext(view, {
+        accounts: currentScopedAccounts,
+        txs: scopedTxs,
+        rules,
+        invoices,
+        rewards,
+        vatSettings,
+        scheduledFlows: scopedScheduledFlows,
+        bufferCents,
+        asOf,
+      }),
+    [view, currentScopedAccounts, scopedTxs, rules, invoices, rewards, vatSettings, scopedScheduledFlows, bufferCents, asOf],
   );
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
