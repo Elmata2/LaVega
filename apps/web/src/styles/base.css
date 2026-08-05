@@ -18,11 +18,14 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* Soft gutter the floating app frame sits on; the app itself scrolls
+   * internally so the page (gutter) never scrolls. */
+  background: var(--gutter);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.5;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -222,10 +225,11 @@ table tbody tr:hover {
 }
 .kpi-value {
   font-family: var(--font-body);
-  font-size: 1.9rem;
-  font-weight: 600;
+  font-size: 2.3rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .kpi .eyebrow {
   margin-top: var(--sp-2);
@@ -424,25 +428,27 @@ table tbody tr:hover {
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
-  padding: 10px var(--sp-4);
+  padding: 10px var(--sp-3);
   border-radius: var(--r-sm);
   border: none;
-  border-left: 2px solid transparent;
   background: transparent;
   color: var(--muted);
   font-size: 0.9rem;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .nav-item:hover:not(:disabled) {
   color: var(--ink);
   background: var(--surface-2);
-  border-left-color: transparent;
 }
-.nav-item.active {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
-  color: var(--ink);
+/* Active = solid dark rounded pill (the reference dashboard's signature). */
+.nav-item.active,
+.nav-item.active:hover {
+  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+  color: var(--on-ink);
+  box-shadow: 0 8px 18px -10px rgba(26, 26, 23, 0.5);
 }
 .nav-item:disabled {
   opacity: 1;
@@ -455,23 +461,29 @@ table tbody tr:hover {
   flex: none;
 }
 
-/* App shell layout */
+/* App shell layout — one floating, rounded frame on the gutter. It owns the
+ * viewport height; scrolling happens inside .content, so the frame + sidebar
+ * stay put like the reference dashboard. */
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  min-height: 100vh;
+  height: calc(100vh - 2 * var(--frame-gap));
+  max-width: 1680px;
+  margin: var(--frame-gap) auto;
   background: var(--bg);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
 }
 
 .sidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--bg);
   border-right: 1px solid var(--line);
   padding: var(--sp-5) var(--sp-3);
+  overflow-y: auto;
 }
 
 .brand {
@@ -505,7 +517,8 @@ table tbody tr:hover {
 .shell-body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -514,16 +527,15 @@ table tbody tr:hover {
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-6);
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  background: transparent;
   flex-wrap: wrap;
+  flex: none;
 }
 .topbar-title {
-  margin: 2px 0 0;
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
 }
 .topbar-right {
   display: flex;
@@ -532,8 +544,10 @@ table tbody tr:hover {
 }
 
 .content {
-  padding: var(--sp-6);
+  padding: var(--sp-3) var(--sp-6) var(--sp-6);
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -673,8 +687,19 @@ table tbody tr:hover {
 }
 
 @media (max-width: 900px) {
+  /* On phones the frame goes full-bleed and the page scrolls normally. */
+  body {
+    overflow: auto;
+  }
   .shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
   }
   .kpi-row {
     grid-template-columns: repeat(2, 1fr);
@@ -683,12 +708,13 @@ table tbody tr:hover {
     grid-template-columns: 1fr;
   }
   .sidebar {
-    position: relative;
     height: auto;
     flex-direction: row;
     align-items: center;
     overflow-x: auto;
     padding: var(--sp-3);
+    border-right: none;
+    border-bottom: 1px solid var(--line);
   }
   .brand {
     padding: 0 var(--sp-4) 0 0;
@@ -697,21 +723,20 @@ table tbody tr:hover {
     flex-direction: row;
   }
   .nav-item {
-    border-left: none;
-    border-bottom: 2px solid transparent;
     white-space: nowrap;
-  }
-  .nav-item.active {
-    border-bottom-color: var(--accent);
   }
   .sidebar-footer {
     display: none;
   }
   .content {
     padding: var(--sp-4);
+    overflow: visible;
   }
   .topbar {
-    padding: var(--sp-3) var(--sp-4);
+    padding: var(--sp-4);
+  }
+  .topbar-title {
+    font-size: 1.5rem;
   }
 }
 

@@ -1,14 +1,18 @@
-/* LaVega design-system tokens — clean light palette, inspired by the Hercules
- * UI (warm cream surface, white raised cards, hairline borders, calm classical
- * accents; EB Garamond headings + Inter body). Everything references these
- * variables, so the whole app retheme lives here. Fonts are self-hosted via
- * @fontsource/* (imported in main.tsx) with a system fallback stack. */
+/* LaVega design-system tokens. Warm editorial palette (EB Garamond headings +
+ * Inter body — self-hosted via @fontsource in main.tsx). The app now sits as a
+ * single floating, rounded "frame" on a soft gutter, with generously rounded
+ * white cards, soft diffuse shadows and a solid dark active nav pill — the look
+ * borrowed from the reference dashboard, our fonts + warm accents kept.
+ * Everything references these variables, so the whole theme lives here. */
 :root {
   /* Color — light, warm, editorial */
-  --bg: #f6f4ef; /* cream page */
+  --gutter: #d8d3c9; /* soft warm-grey frame the app floats on */
+  --bg: #f7f5f0; /* app surface inside the frame */
   --surface: #ffffff; /* raised cards */
   --surface-2: #f1eee7; /* nested rows / inputs */
-  --ink: #1a1a17; /* near-black text */
+  --ink: #1a1a17; /* near-black text + active nav pill */
+  --ink-soft: #33322d; /* pill gradient bottom */
+  --on-ink: #f7f5f0; /* text/icons on the dark pill */
   --muted: #6b6961; /* warm grey */
   --line: #e6e2d9; /* hairline border */
   --accent: #1f4e6b; /* aegean deep blue */
@@ -16,10 +20,15 @@
   --pos: #4e7a3a; /* money in — natural green */
   --neg: #b0442e; /* money out / debt — terracotta */
   --warn: #b0781e; /* attention — amber */
+  /* Data-viz accents (charts, category dots) */
+  --chart-blue: #3b6ea5;
+  --chart-purple: #7b6cc4;
+  --chart-teal: #2f8f83;
 
-  /* Radius */
-  --r: 14px;
-  --r-sm: 10px;
+  /* Radius — larger, softer than before */
+  --r-lg: 26px; /* the floating app frame */
+  --r: 18px; /* cards */
+  --r-sm: 12px; /* inputs, chips, small controls */
   --pill: 999px;
 
   /* Spacing (4px base) */
@@ -30,14 +39,16 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type — EB Garamond for the classical headings, Inter for everything else */
+  /* Type — EB Garamond for classical headings, Inter for everything else */
   --font-display: "EB Garamond", Georgia, "Times New Roman", serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Elevation — soft lift for white cards on the cream surface */
-  --shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.05), 0 12px 28px -18px rgba(26, 26, 23, 0.18);
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.04), 0 18px 40px -28px rgba(26, 26, 23, 0.16);
+  --shadow-float: 0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
 
   /* Layout */
-  --sidebar-w: 240px;
+  --sidebar-w: 216px;
+  --frame-gap: 14px; /* gutter around the floating app */
 }
