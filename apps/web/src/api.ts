@@ -17,7 +17,7 @@ export type ChatStreamHandlers = {
  *  matching handler. A record with no `event:` line is a plain text chunk —
  *  one `onChunk` call per `data:` line. `event: error` / `event: done`
  *  records are the terminal signals the server (agent-routes.ts) sends. */
-function dispatchSseRecord(record: string, handlers: ChatStreamHandlers): void {
+export function dispatchSseRecord(record: string, handlers: ChatStreamHandlers): void {
   if (!record.trim()) return;
   let event: string | null = null;
   const dataLines: string[] = [];
@@ -34,7 +34,11 @@ function dispatchSseRecord(record: string, handlers: ChatStreamHandlers): void {
     handlers.onDone?.();
     return;
   }
-  for (const d of dataLines) handlers.onChunk(d);
+  // One record = one writeSSE({data}) call. Claude's `writeSSE` splits a chunk
+  // that contains newlines into multiple `data:` lines, so rejoin them into the
+  // single original chunk (preserving internal newlines) rather than emitting
+  // one onChunk per line.
+  if (dataLines.length > 0) handlers.onChunk(dataLines.join("\n"));
 }
 
 /** Stream one chat turn from our server's `POST /api/agent/chat` (which
