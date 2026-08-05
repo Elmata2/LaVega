@@ -715,6 +715,161 @@ table tbody tr:hover {
   }
 }
 
+/* Floating LaVega chat widget (bottom-right, over every tab). The fixed
+ * container itself is click-through (pointer-events: none) so it never blocks
+ * the page; only the launcher + panel capture clicks. */
+.chat-widget {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  pointer-events: none;
+}
+.chat-widget > * {
+  pointer-events: auto;
+}
+
+.chat-launcher {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-radius: var(--pill);
+  padding: 10px 18px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.chat-launcher:hover {
+  filter: brightness(1.08);
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 2rem));
+  height: min(480px, calc(100vh - 6rem));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+.chat-header-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.chat-close {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.chat-close:hover {
+  color: var(--ink);
+  border-color: transparent;
+}
+
+.chat-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.chat-notice {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.chat-notice p {
+  margin: 0 0 var(--sp-4);
+}
+
+.chat-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: auto 0;
+  text-align: center;
+}
+
+.chat-msg {
+  max-width: 85%;
+  padding: var(--sp-3);
+  border-radius: var(--r-sm);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-msg-user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border: 1px solid rgba(31, 78, 107, 0.28);
+  color: var(--ink);
+}
+.chat-msg-assistant {
+  align-self: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.chat-typing {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  max-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.chat-send {
+  flex: none;
+  padding: 8px 14px;
+}
+
 /* Facturen manual-entry form: wrap fields into rows with consistent spacing. */
 .facturen-form {
   display: flex;

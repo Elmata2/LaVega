@@ -47,3 +47,25 @@ export function setAiExtractionEnabled(on: boolean): void {
     /* quota/serialization errors are non-fatal for a preference */
   }
 }
+
+const CHAT_KEY = "lavega.chatEnabled";
+
+/** Opt-in toggle for the LaVega chat assistant. Defaults false: no tab
+ *  context or message is ever sent to the server (and onward to Claude)
+ *  until the owner explicitly turns this on. A preference, so it lives in
+ *  localStorage. */
+export function getChatEnabled(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(CHAT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setChatEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(CHAT_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}

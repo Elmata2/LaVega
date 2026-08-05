@@ -7,7 +7,9 @@ import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
 import { getBufferCents, setBufferCents } from "./settings.js";
+import { buildTabContext } from "./agent/tabContext.js";
 import VaultGate from "./components/VaultGate";
+import ChatWidget from "./components/ChatWidget";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Overzicht from "./views/Overzicht";
@@ -43,6 +45,9 @@ export default function App() {
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
+  // Whether the server has an ANTHROPIC_API_KEY (drives the chat widget's
+  // "not configured" state). Fetched once; defaults false on any error.
+  const [llmConfigured, setLlmConfigured] = useState(false);
 
   const [view, setView] = useState<View>("overview");
   const [entityScope, setEntityScope] = useState("");
@@ -65,6 +70,25 @@ export default function App() {
     setBufferCentsState(c);
     setBufferCents(c);
   }
+
+  // Ask the server once whether the AI assistant is configured (key present).
+  // Independent of the vault gate — it sends no account data, just a status GET.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/agent/status`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { configured?: boolean };
+        if (!cancelled) setLlmConfigured(!!data.configured);
+      } catch {
+        /* default false — widget shows the "not configured" state */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Decide which gate screen to show: unlock an existing vault, migrate
   // existing plaintext data into a fresh vault, or set up a brand-new one.
@@ -285,6 +309,28 @@ export default function App() {
   const scopedScheduledFlows = useMemo(
     () => scheduledFlowsForScope(allScheduledFlows, entityScope),
     [allScheduledFlows, entityScope],
+  );
+
+  // Minimal per-tab context for the chat widget. Passes everything already in
+  // App scope that a tab's slice needs (scoped accounts/txs/flows, config,
+  // buffer, asOf) — buildTabContext derives the aggregate/summary each tab is
+  // allowed to send and drops raw txs. No extra network fetches: the live ECB
+  // rate (valuta) and public savings benchmark (optimalisatie) aren't in scope
+  // here, so those are omitted and the agent web-searches them.
+  const chatCtx = useMemo(
+    () =>
+      buildTabContext(view, {
+        accounts: currentScopedAccounts,
+        txs: scopedTxs,
+        rules,
+        invoices,
+        rewards,
+        vatSettings,
+        scheduledFlows: scopedScheduledFlows,
+        bufferCents,
+        asOf,
+      }),
+    [view, currentScopedAccounts, scopedTxs, rules, invoices, rewards, vatSettings, scopedScheduledFlows, bufferCents, asOf],
   );
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
@@ -547,6 +593,8 @@ export default function App() {
 
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
         </main>
+
+        <ChatWidget view={view} context={chatCtx} configured={llmConfigured} />
       </div>
     </div>
   );

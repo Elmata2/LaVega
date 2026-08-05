@@ -1,10 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { RewardsBalance } from "@lavega/core";
-import {
-  makeRewardsBalance, estimateValueCents, totalValueCents, isStale, amexTransferOptions,
-  REWARD_PROGRAMS, REWARDS_AS_OF,
-} from "@lavega/core";
-import { formatEuro } from "../format";
+import { makeRewardsBalance, isStale, REWARD_PROGRAMS } from "@lavega/core";
 
 /** Replace the balance with the same id, or append it. */
 export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): RewardsBalance[] {
@@ -21,12 +17,6 @@ export default function Punten({
   const [program, setProgram] = useState(REWARD_PROGRAMS[0].name);
   const [points, setPoints] = useState("");
   const [updatedAt, setUpdatedAt] = useState(asOf);
-
-  const total = useMemo(() => totalValueCents(balances), [balances]);
-  const amex = useMemo(
-    () => balances.find((b) => b.program.toLowerCase().includes("membership rewards")),
-    [balances],
-  );
 
   function add() {
     const pts = Number(points.replace(/\./g, "").replace(",", "."));
@@ -45,9 +35,12 @@ export default function Punten({
         <span className="eyebrow">loyalty &amp; rewards</span>
       </div>
       <p className="cell-sub">
-        Houd je punten- en cashback-saldi bij. Waardes zijn <strong>schattingen</strong> (indicatieve
-        cent-per-punt, peildatum {REWARDS_AS_OF}) en je vult de saldi zelf bij — er is geen koppeling
-        die punten automatisch ophaalt.
+        Houd je punten- en cashback-saldi bij. Je vult de saldi zelf bij — er is geen koppeling die
+        punten automatisch ophaalt.
+      </p>
+      <p className="cell-sub">
+        Wat je punten waard zijn en de beste inwissel/transfer: vraag de LaVega-assistent rechtsonder
+        — die zoekt actuele waardes live op.
       </p>
 
       <div className="facturen-form">
@@ -72,49 +65,26 @@ export default function Punten({
       {balances.length === 0 ? (
         <p>Nog geen punten-saldi.</p>
       ) : (
-        <>
-          <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>
-            Totale geschatte waarde <span className="text-pos">{formatEuro(total / 100)}</span>
-          </p>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr><th>Programma</th><th>Punten</th><th>Geschatte waarde</th><th>Bijgewerkt</th><th></th></tr>
-              </thead>
-              <tbody>
-                {balances.map((b) => {
-                  const val = estimateValueCents(b);
-                  const stale = isStale(b, asOf);
-                  return (
-                    <tr key={b.id}>
-                      <td>{b.program}</td>
-                      <td>{b.points.toLocaleString("nl-NL")}</td>
-                      <td>{val === null ? <span className="cell-sub">onbekend</span> : formatEuro(val / 100)}</td>
-                      <td>{b.updatedAt}{stale ? <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>verouderd</span> : null}</td>
-                      <td><button type="button" className="btn" disabled={busy} onClick={() => remove(b.id)}>verwijder</button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {amex && amex.points > 0 && (
-        <>
-          <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>Amex MR overzetten (indicatief)</p>
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>Partner</th><th>Miles/punten</th></tr></thead>
-              <tbody>
-                {amexTransferOptions(amex.points).map((o) => (
-                  <tr key={o.partner}><td>{o.partner}{o.note ? <span className="cell-sub"> · {o.note}</span> : null}</td><td>{o.miles.toLocaleString("nl-NL")}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr><th>Programma</th><th>Punten</th><th>Bijgewerkt</th><th></th></tr>
+            </thead>
+            <tbody>
+              {balances.map((b) => {
+                const stale = isStale(b, asOf);
+                return (
+                  <tr key={b.id}>
+                    <td>{b.program}</td>
+                    <td>{b.points.toLocaleString("nl-NL")}</td>
+                    <td>{b.updatedAt}{stale ? <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>verouderd</span> : null}</td>
+                    <td><button type="button" className="btn" disabled={busy} onClick={() => remove(b.id)}>verwijder</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
