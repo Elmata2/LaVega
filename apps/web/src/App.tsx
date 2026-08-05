@@ -378,10 +378,6 @@ export default function App() {
     if (changed) await storage.putAccounts([changed]);
   }
 
-  function scrollToImport() {
-    document.getElementById("import")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
@@ -400,7 +396,7 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Sidebar view={view} onNavigate={setView} onImportClick={scrollToImport} onLock={handleLock} />
+      <Sidebar view={view} onNavigate={setView} onLock={handleLock} />
 
       <div className="shell-body">
         <TopBar
@@ -411,13 +407,15 @@ export default function App() {
         />
 
         <main className="content">
-          <Import
-            entity={entity}
-            onEntityChange={setEntity}
-            busy={busy}
-            problems={problems}
-            onImport={handleImport}
-          />
+          {view === "overview" && (
+            <Import
+              entity={entity}
+              onEntityChange={setEntity}
+              busy={busy}
+              problems={problems}
+              onImport={handleImport}
+            />
+          )}
 
           {view === "overview" && (
             <Overzicht
@@ -477,6 +475,17 @@ export default function App() {
               onEntityCommit={handleEntityCommit}
               onSaldoCommit={handleSaldoCommit}
               onTypeCommit={handleTypeCommit}
+              onSelectAccount={(key) => {
+                // Show just this account's transactions — clear the other
+                // filters so the list isn't silently narrowed by a stale one.
+                setFAccount(key);
+                setFEntity("");
+                setFSearch("");
+                setFCategory("");
+                setFFrom("");
+                setFTo("");
+                setView("transactions");
+              }}
             />
           )}
 

@@ -88,17 +88,8 @@ const icons: Record<View, ReactNode> = {
   ),
 };
 
-const importIcon = (
-  <Icon>
-    <path d="M12 3v12" />
-    <path d="M7 10l5 5 5-5" />
-    <path d="M4 20h16" />
-  </Icon>
-);
-
 const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "overview", label: "Overzicht" },
-  { key: "transactions", label: "Transacties" },
   { key: "accounts", label: "Rekeningen" },
   { key: "rules", label: "Regels" },
   { key: "forecast", label: "Forecast" },
@@ -113,11 +104,10 @@ const NAV_ITEMS: { key: View; label: string }[] = [
 type SidebarProps = {
   view: View;
   onNavigate: (view: View) => void;
-  onImportClick: () => void;
   onLock: () => void;
 };
 
-export default function Sidebar({ view, onNavigate, onImportClick, onLock }: SidebarProps) {
+export default function Sidebar({ view, onNavigate, onLock }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -140,12 +130,6 @@ export default function Sidebar({ view, onNavigate, onImportClick, onLock }: Sid
             <span>{item.label}</span>
           </button>
         ))}
-        <button type="button" className="nav-item" onClick={onImportClick}>
-          <span className="nav-icon" aria-hidden="true">
-            {importIcon}
-          </span>
-          <span>Importeren</span>
-        </button>
       </nav>
 
       <div className="sidebar-footer">

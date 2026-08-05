@@ -10,6 +10,9 @@ type RekeningenProps = {
   onEntityCommit: (account: Account) => void;
   onSaldoCommit: (key: string, value: string) => void;
   onTypeCommit: (key: string, type: string) => void;
+  /** Open this account's transactions (transactions has no own nav item — it's
+   *  reached from here and from the Overzicht category totals). */
+  onSelectAccount: (accountKey: string) => void;
 };
 
 /** Editable current-saldo cell. CSV imports carry no balance, so the owner types
@@ -49,7 +52,7 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
   );
 }
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit }: RekeningenProps) {
+export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit, onSelectAccount }: RekeningenProps) {
   return (
     <section className="card" aria-label="Rekeningen">
       <h2>Rekeningen</h2>
@@ -111,7 +114,17 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                     <td className="num">
                       <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
                     </td>
-                    <td className="num">{txCount}</td>
+                    <td className="num">
+                      <button
+                        type="button"
+                        className="card-link"
+                        onClick={() => onSelectAccount(account.key)}
+                        title={`Bekijk transacties van ${account.name}`}
+                        disabled={txCount === 0}
+                      >
+                        {txCount}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
