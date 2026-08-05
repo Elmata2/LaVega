@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, mergeImportedAccounts } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, ownAccounts, mergeImportedAccounts } from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
@@ -122,4 +122,57 @@ test("mergeImportedAccounts: a fresh non-null statement balance updates the exis
   const existing: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 10, balanceDate: "2026-06-01" }];
   const imported: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV9", currency: "EUR", balance: 999, balanceDate: "2026-07-31" }];
   expect(mergeImportedAccounts(existing, imported)[0]).toMatchObject({ entity: "BV1", balance: 999, balanceDate: "2026-07-31" });
+});
+
+test("categoryComparison: latest month vs prior — share % + change %, transfers excluded", () => {
+  // Build `own` via the real helper so the transfer ids are normalized exactly
+  // as categorize expects (the ING account is "own"; the tx below references it).
+  const own = ownAccounts([
+    { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+  ]);
+  const t = (id: string, date: string, amount: number, cp: string): Tx => ({
+    id, accountKey: "NL91ABNA0417164300", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false,
+  });
+  const rows: Tx[] = [
+    // previous month (2026-07): boodschappen 100, transport 50
+    t("p1", "2026-07-05", -60, "Albert Heijn"),
+    t("p2", "2026-07-20", -40, "Jumbo"),
+    t("p3", "2026-07-10", -50, "NS"),
+    // current month (2026-08): boodschappen 120 (+20%), transport 50 (0%), horeca 30 (nieuw)
+    t("c1", "2026-08-03", -70, "Albert Heijn"),
+    t("c2", "2026-08-18", -50, "Jumbo"),
+    t("c3", "2026-08-12", -50, "NS"),
+    t("c4", "2026-08-14", -30, "Restaurant"),
+    // an own-account transfer in the current month — must be EXCLUDED from spend
+    { id: "x1", accountKey: "NL91ABNA0417164300", date: "2026-08-15", amount: -500, currency: "EUR", counterparty: "NL01INGB0001 eigen", description: "spaar", category: "", manual: false },
+    // income — ignored
+    t("i1", "2026-08-01", 3000, "Salaris"),
+  ];
+  // Explicit rules so categories don't depend on the built-in NL merchant list.
+  const cmpRules: Rule[] = [
+    { id: "b1", match: "albert heijn", category: "Boodschappen" },
+    { id: "b2", match: "jumbo", category: "Boodschappen" },
+    { id: "tr", match: "ns", category: "Transport" },
+    { id: "ho", match: "restaurant", category: "Horeca" },
+  ];
+  const cmp = categoryComparison(rows, cmpRules, own);
+  expect(cmp.month).toBe("2026-08");
+  expect(cmp.prevMonth).toBe("2026-07");
+  const by = Object.fromEntries(cmp.rows.map((r) => [r.category, r]));
+  // Boodschappen: current 120 of total 200 => 60% share; vs prev 100 => +20%
+  expect(by["Boodschappen"].out).toBeCloseTo(120, 5);
+  expect(by["Boodschappen"].sharePct).toBeCloseTo(60, 5);
+  expect(by["Boodschappen"].changePct).toBeCloseTo(20, 5);
+  // Transport: 50 vs 50 => 0%
+  expect(by["Transport"].changePct).toBeCloseTo(0, 5);
+  // Horeca (Restaurant): new this month => changePct null
+  expect(by["Horeca"].changePct).toBeNull();
+  // Own transfer excluded, income ignored
+  expect(by["Eigen overboeking"]).toBeUndefined();
+  // Sorted biggest-first
+  expect(cmp.rows[0].category).toBe("Boodschappen");
+});
+
+test("categoryComparison: empty input yields empty result", () => {
+  expect(categoryComparison([], [])).toEqual({ month: "", prevMonth: "", rows: [] });
 });

@@ -139,6 +139,60 @@ export function categoryTotals(txs: Tx[], rules: Rule[], own?: OwnAccounts): Rec
   return out;
 }
 
+export type CategoryComparisonRow = {
+  category: string;
+  out: number; // current-month spend, positive euros
+  sharePct: number; // % of the current month's total spend
+  prevOut: number; // previous-month spend, positive euros
+  changePct: number | null; // vs previous month; null when there was no prior spend
+};
+export type CategoryComparison = { month: string; prevMonth: string; rows: CategoryComparisonRow[] };
+
+const TRANSFER_CATEGORY = "Eigen overboeking";
+const monthOf = (date: string): string => date.slice(0, 7); // "YYYY-MM"
+
+/** Internal category comparison for the LATEST month present in the data vs the
+ *  month before it: each expense category's share of that month's spend and its
+ *  change vs the prior month. Own transfers ("Eigen overboeking") are excluded
+ *  (not spending). Deterministic — the "current" month is derived from the
+ *  newest tx date, so it also works on historical/imported statements. Only
+ *  categories with spend in the current month are returned, biggest first. */
+export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts): CategoryComparison {
+  const dates = txs.map((t) => t.date).filter(Boolean);
+  if (dates.length === 0) return { month: "", prevMonth: "", rows: [] };
+  const month = monthOf(dates.reduce((a, b) => (a > b ? a : b)));
+  const [y, m] = month.split("-").map(Number);
+  const pd = new Date(Date.UTC(y, m - 2, 1)); // m is 1-based; m-2 = prev month (0-based)
+  const prevMonth = `${pd.getUTCFullYear()}-${String(pd.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  const cur: Record<string, number> = {};
+  const prev: Record<string, number> = {};
+  for (const t of txs) {
+    if (t.amount >= 0) continue; // spend only
+    const c = categorize(t, rules, own);
+    if (c === TRANSFER_CATEGORY) continue;
+    const mo = monthOf(t.date);
+    const spend = -t.amount; // positive euros
+    if (mo === month) cur[c] = (cur[c] ?? 0) + spend;
+    else if (mo === prevMonth) prev[c] = (prev[c] ?? 0) + spend;
+  }
+  const totalCur = Object.values(cur).reduce((s, v) => s + v, 0);
+  const rows: CategoryComparisonRow[] = Object.keys(cur)
+    .map((category) => {
+      const out = cur[category];
+      const prevOut = prev[category] ?? 0;
+      return {
+        category,
+        out,
+        sharePct: totalCur > 0 ? (out / totalCur) * 100 : 0,
+        prevOut,
+        changePct: prevOut > 0 ? ((out - prevOut) / prevOut) * 100 : null,
+      };
+    })
+    .sort((a, b) => b.out - a.out);
+  return { month, prevMonth, rows };
+}
+
 /** Merge freshly-imported accounts with the existing ones, preserving the user's
  *  manual edits on accounts they already have: their entity, their type (soort),
  *  and — for imports carrying no balance (CSV) — their manually-set saldo. A

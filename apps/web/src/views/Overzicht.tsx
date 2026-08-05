@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx, Alert, ScheduledFlow } from "@lavega/core";
-import { enrichTxs, monthlyTotals, categoryTotals, forecastCashflow, computeAlerts, reservedCents, availableBalanceCents } from "@lavega/core";
+import { enrichTxs, monthlyTotals, categoryComparison, forecastCashflow, computeAlerts, reservedCents, availableBalanceCents } from "@lavega/core";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 
@@ -128,15 +128,32 @@ function CashflowMiniChart({
 }
 
 
+const MONTHS_NL = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+/** "2026-08" -> "aug 2026" (empty string for a missing month). */
+function monthLabelNL(ym: string): string {
+  if (!ym) return "";
+  const [y, m] = ym.split("-").map(Number);
+  return MONTHS_NL[m - 1] ? `${MONTHS_NL[m - 1]} ${y}` : ym;
+}
+
+/** Change vs last month. For an expense, up = spending more (terracotta),
+ *  down = spending less (green); a brand-new category shows "nieuw". */
+function CategoryDelta({ changePct }: { changePct: number | null }) {
+  if (changePct === null) return <span className="cat-delta flat">nieuw</span>;
+  const rounded = Math.round(changePct);
+  if (rounded === 0) return <span className="cat-delta flat">0%</span>;
+  const up = rounded > 0;
+  return (
+    <span className={`cat-delta ${up ? "up" : "down"}`}>
+      {up ? "▲" : "▼"} {Math.abs(rounded)}%
+    </span>
+  );
+}
+
 export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, scheduledFlows, onBufferChange, onNavigate, onSelectCategory }: OverzichtProps) {
-  // Per-category in/out (rules + built-in defaults + own-transfer detection) —
-  // biggest categories first.
-  const catRows = useMemo(() => {
-    const totals = categoryTotals(txs, rules, own);
-    return Object.entries(totals).sort(
-      (a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)),
-    );
-  }, [txs, rules, own]);
+  // Per-category spend for the latest month vs the month before: share of
+  // spend (the % bars) + change vs last month. Own transfers excluded.
+  const catComp = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
 
   const entities = useMemo(
     () => Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0))),
@@ -403,38 +420,38 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
               regels →
             </button>
           </div>
-          {catRows.length === 0 ? (
-            <p>Nog geen transacties.</p>
+          {catComp.rows.length === 0 ? (
+            <p>Nog geen uitgaven deze maand.</p>
           ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Categorie</th>
-                    <th>In</th>
-                    <th>Uit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {catRows.map(([cat, b]) => (
-                    <tr key={cat}>
-                      <td>
-                        <button
-                          type="button"
-                          className="card-link"
-                          onClick={() => onSelectCategory(cat)}
-                          title={`Bekijk transacties in ${cat}`}
-                        >
-                          {cat}
-                        </button>
-                      </td>
-                      <td><span className="text-pos">{formatEuro(b.in)}</span></td>
-                      <td><span className="text-neg">{formatEuro(b.out)}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <p className="eyebrow" style={{ marginBottom: "var(--sp-4)" }}>
+                {monthLabelNL(catComp.month)} · aandeel van je uitgaven &amp; Δ t.o.v. {monthLabelNL(catComp.prevMonth)}
+              </p>
+              <div className="cat-list">
+                {catComp.rows.map((r) => (
+                  <div className="cat-row" key={r.category}>
+                    <div className="cat-row-top">
+                      <button
+                        type="button"
+                        className="card-link"
+                        onClick={() => onSelectCategory(r.category)}
+                        title={`Bekijk transacties in ${r.category}`}
+                      >
+                        {r.category}
+                      </button>
+                      <span className="cat-fig">
+                        <span className="cat-share">{r.sharePct.toFixed(0)}%</span>
+                        <span className="cat-amt">{formatEuro(r.out)}</span>
+                        <CategoryDelta changePct={r.changePct} />
+                      </span>
+                    </div>
+                    <div className="cat-bar">
+                      <div className="cat-bar-fill" style={{ width: `${Math.min(100, r.sharePct)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </section>
       </div>

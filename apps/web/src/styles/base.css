@@ -403,6 +403,61 @@ table tbody tr:hover {
   letter-spacing: 0.02em;
 }
 
+/* Per-categorie comparison (share bars + Δ vs last month) */
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cat-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.cat-fig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cat-share {
+  font-weight: 600;
+}
+.cat-amt {
+  color: var(--muted);
+}
+.cat-bar {
+  height: 7px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.cat-bar-fill {
+  height: 100%;
+  border-radius: var(--pill);
+  background: var(--accent);
+}
+.cat-delta {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.cat-delta.up {
+  color: var(--neg);
+}
+.cat-delta.down {
+  color: var(--pos);
+}
+.cat-delta.flat {
+  color: var(--muted);
+}
+
 /* Status dots */
 .dot {
   display: inline-block;
