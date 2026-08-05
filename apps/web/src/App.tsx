@@ -17,6 +17,7 @@ import Regels from "./views/Regels";
 import Import from "./views/Import";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
+import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Facturen from "./views/Facturen";
 import Backup from "./views/Backup";
@@ -27,7 +28,7 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "belasting" | "facturen" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -490,6 +491,8 @@ export default function App() {
               onRateCommit={handleRateCommit}
             />
           )}
+
+          {view === "valuta" && <Valuta accounts={accounts} />}
 
           {view === "belasting" && (
             <Belasting
