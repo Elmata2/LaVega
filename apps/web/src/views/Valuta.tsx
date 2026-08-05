@@ -1,23 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account } from "@lavega/core";
-import { FX_ROUTES, FX_ROUTES_AS_OF, FX_RATE_FALLBACK, crossRate, parseFxRatePayload, rankRoutes } from "@lavega/core";
-import type { FxRate, FxRoute } from "@lavega/core";
+import { FX_RATE_FALLBACK, crossRate, parseFxRatePayload } from "@lavega/core";
+import type { FxRate } from "@lavega/core";
 import { API_BASE } from "../api";
-
-/** Which route providers the user likely already holds, by matching each
- *  account's bank name against the provider label (token contains). Lets the
- *  UI flag "in bezit" so the owner can prefer a route they can use today. */
-export function ownedProviders(accounts: Account[], routes: readonly FxRoute[]): Set<string> {
-  const banks = accounts.map((a) => (a.bank || "").toLowerCase()).filter(Boolean);
-  const owned = new Set<string>();
-  for (const r of routes) {
-    const label = r.provider.toLowerCase();
-    if (banks.some((b) => b.length > 2 && (label.includes(b) || b.includes(label.split(" ")[0])))) {
-      owned.add(r.provider);
-    }
-  }
-  return owned;
-}
 
 export default function Valuta({ accounts }: { accounts: Account[] }) {
   const [rate, setRate] = useState<FxRate>(FX_RATE_FALLBACK);
@@ -45,19 +30,11 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
     () => [rate.base, ...Object.keys(rate.rates)].filter((v, i, a) => a.indexOf(v) === i).sort(),
     [rate],
   );
-  const owned = useMemo(() => ownedProviders(accounts, FX_ROUTES), [accounts]);
   const foreignHoldings = useMemo(
     () => [...new Set(accounts.map((a) => a.currency).filter((c) => c && c !== "EUR"))],
     [accounts],
   );
   const amt = Number(amount.replace(",", ".")) || 0;
-  const results = useMemo(() => {
-    try {
-      return rankRoutes(amt, from, to, rate);
-    } catch {
-      return [];
-    }
-  }, [amt, from, to, rate]);
   const mid = useMemo(() => {
     try {
       return crossRate(from, to, rate);
@@ -65,6 +42,7 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
       return null;
     }
   }, [from, to, rate]);
+  const received = mid !== null ? amt * mid : null;
 
   const fmt = (n: number, ccy: string) =>
     new Intl.NumberFormat("nl-NL", { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(n);
@@ -73,12 +51,11 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
     <section className="card" aria-label="Valuta">
       <div className="card-header">
         <h2>Valuta</h2>
-        <span className="eyebrow">beste wisselroute</span>
+        <span className="eyebrow">live wisselkoers</span>
       </div>
       <p className="cell-sub">
-        Vergelijk wat je overhoudt bij het omwisselen van valuta. Middenkoers via de ECB
-        (Frankfurter); de kosten per aanbieder zijn <strong>indicatief</strong> (peildatum {FX_ROUTES_AS_OF}).
-        Er wordt niets over je rekeningen verstuurd.
+        Reken om tegen de live middenkoers van de ECB (via Frankfurter). Er wordt niets
+        over je rekeningen verstuurd.
       </p>
 
       {foreignHoldings.length > 0 && (
@@ -106,34 +83,17 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
         Middenkoers: 1 {from} = {mid ? mid.toFixed(4) : "—"} {to}
       </p>
 
-      {results.length === 0 ? (
-        <p>Kies geldige valuta.</p>
-      ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr><th>Aanbieder</th><th>Effectieve koers</th><th>Je ontvangt</th><th>Kosten vs midden</th><th></th></tr>
-            </thead>
-            <tbody>
-              {results.map((r, i) => (
-                <tr key={r.provider}>
-                  <td>
-                    {r.provider}
-                    {owned.has(r.provider) ? <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>in bezit</span> : null}
-                    {r.note ? <span className="cell-sub"> · {r.note}</span> : null}
-                  </td>
-                  <td>{r.effectiveRate.toFixed(4)}</td>
-                  <td className={i === 0 ? "text-pos" : ""}>{fmt(r.netReceived, to)}</td>
-                  <td>{r.totalCostPct.toFixed(2)}%</td>
-                  <td>{i === 0 ? <span className="badge">beste</span> : null}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <p style={{ marginTop: "var(--sp-2)" }}>
+        Je ontvangt ≈ {received !== null ? fmt(received, to) : "—"}
+      </p>
+
       <p className="cell-sub" style={{ marginTop: "var(--sp-2)" }}>
         Koersbron: {source === "live" ? `live (ECB, ${rate.date})` : "offline snapshot"}.
+      </p>
+
+      <p className="cell-sub" style={{ marginTop: "var(--sp-2)" }}>
+        Voor de goedkoopste route en actuele kosten per aanbieder: vraag de LaVega-assistent
+        rechtsonder — die zoekt de actuele tarieven live op.
       </p>
     </section>
   );
