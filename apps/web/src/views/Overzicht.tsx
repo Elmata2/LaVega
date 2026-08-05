@@ -15,6 +15,9 @@ type OverzichtProps = {
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
+  /** Push a pre-filled question into the LaVega assistant (used by the
+   *  per-category "vs. gemiddelde" benchmark button). */
+  onAsk: (text: string) => void;
 };
 
 const SEV_ICON: Record<Alert["severity"], string> = { critical: "🔴", warning: "🟠", info: "🟡" };
@@ -150,7 +153,7 @@ function CategoryDelta({ changePct }: { changePct: number | null }) {
   );
 }
 
-export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, scheduledFlows, onBufferChange, onNavigate, onSelectCategory }: OverzichtProps) {
+export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents, scheduledFlows, onBufferChange, onNavigate, onSelectCategory, onAsk }: OverzichtProps) {
   // Per-category spend for the latest month vs the month before: share of
   // spend (the % bars) + change vs last month. Own transfers excluded.
   const catComp = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
@@ -443,6 +446,20 @@ export default function Overzicht({ accounts, txs, rules, own, asOf, bufferCents
                         <span className="cat-share">{r.sharePct.toFixed(0)}%</span>
                         <span className="cat-amt">{formatEuro(r.out)}</span>
                         <CategoryDelta changePct={r.changePct} />
+                        <button
+                          type="button"
+                          className="cat-compare"
+                          title={`Vergelijk "${r.category}" met het Nederlandse gemiddelde (via de assistent)`}
+                          onClick={() =>
+                            onAsk(
+                              `Geef ik meer of minder uit aan "${r.category}" dan een gemiddeld Nederlands huishouden? ` +
+                                `Mijn uitgave in ${monthLabelNL(catComp.month)}: ${formatEuro(r.out)}. ` +
+                                `Zoek een actueel gemiddelde op (bijv. Nibud of CBS), vergelijk het met mijn bedrag en noem het verschil in %.`,
+                            )
+                          }
+                        >
+                          vs. gem.
+                        </button>
                       </span>
                     </div>
                     <div className="cat-bar">

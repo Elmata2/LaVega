@@ -48,6 +48,14 @@ export default function App() {
   // Whether the server has an ANTHROPIC_API_KEY (drives the chat widget's
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
+  // A question pushed into the chat widget from elsewhere (e.g. the per-category
+  // "vs. gemiddelde" button). The nonce re-triggers even for the same text.
+  const [askText, setAskText] = useState<string | null>(null);
+  const [askNonce, setAskNonce] = useState(0);
+  function askAssistant(text: string) {
+    setAskText(text);
+    setAskNonce((n) => n + 1);
+  }
 
   const [view, setView] = useState<View>("overview");
   const [entityScope, setEntityScope] = useState("");
@@ -474,6 +482,7 @@ export default function App() {
               scheduledFlows={scopedScheduledFlows}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
+              onAsk={askAssistant}
               onSelectCategory={(c) => {
                 // Match exactly what the Per-categorie totals showed: only the
                 // category filter (plus any active top-bar entity scope); clear
@@ -594,7 +603,7 @@ export default function App() {
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
         </main>
 
-        <ChatWidget view={view} context={chatCtx} configured={llmConfigured} />
+        <ChatWidget view={view} context={chatCtx} configured={llmConfigured} prompt={askText} promptNonce={askNonce} />
       </div>
     </div>
   );

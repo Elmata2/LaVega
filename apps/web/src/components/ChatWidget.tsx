@@ -9,6 +9,11 @@ type ChatWidgetProps = {
   view: string;
   context: { tab: string; context: Record<string, unknown> };
   configured: boolean;
+  /** An externally-triggered question (e.g. the "vs. gemiddelde" button). When
+   *  `promptNonce` changes, the widget opens and pre-fills the input with
+   *  `prompt` — the owner still reviews + presses Verstuur (so consent holds). */
+  prompt?: string | null;
+  promptNonce?: number;
 };
 
 /** Floating LaVega assistant. Opt-in and local-first: nothing leaves the
@@ -16,7 +21,7 @@ type ChatWidgetProps = {
  *  forwards only the active tab's pre-computed context (via buildTabContext) plus
  *  the conversation to our own server (POST /api/agent/chat) — never Anthropic
  *  directly. Default OFF; the consent gate below explains what is sent. */
-export default function ChatWidget({ view, context, configured }: ChatWidgetProps) {
+export default function ChatWidget({ view, context, configured, prompt, promptNonce }: ChatWidgetProps) {
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState<boolean>(() => getChatEnabled());
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -29,6 +34,18 @@ export default function ChatWidget({ view, context, configured }: ChatWidgetProp
   // Abort any in-flight stream when the widget unmounts (e.g. Vergrendel), so a
   // late chunk can't call setState on a gone component.
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // An external "ask this" trigger (e.g. the per-category "vs. gemiddelde"
+  // button) opens the panel and pre-fills the input. We do NOT auto-send: the
+  // owner reviews and presses Verstuur, which keeps the opt-in/consent intact.
+  useEffect(() => {
+    if (promptNonce && prompt) {
+      setOpen(true);
+      setInput(prompt);
+    }
+    // Keyed on the nonce so clicking the same category twice re-triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptNonce]);
 
   // Keep the newest message in view as it streams in.
   useEffect(() => {
