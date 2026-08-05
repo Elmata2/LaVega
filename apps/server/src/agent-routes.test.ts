@@ -118,3 +118,83 @@ test("an oversize pdfBase64 payload is rejected with 400 before the extractor", 
     expect(called).toBe(false);
   });
 });
+
+test("POST /api/agent/chat returns 503 when no API key is configured", async () => {
+  await withApiKey(undefined, async () => {
+    const app = new Hono();
+    let called = false;
+    registerAgentRoutes(app, {
+      chat: async function* () {
+        called = true;
+        yield "hoi";
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+    );
+    expect(res.status).toBe(503);
+    expect(called).toBe(false); // never reaches the chat generator
+  });
+});
+
+test("with a key set and an injected chat generator, the stream contains the yielded chunk", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, {
+      chat: async function* () {
+        yield "hoi";
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("data: hoi");
+  });
+});
+
+test("only the sanitized context reaches the chat agent — disallowed keys are stripped", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let captured: Record<string, unknown> | undefined;
+    registerAgentRoutes(app, {
+      chat: async function* (args) {
+        captured = args as unknown as Record<string, unknown>;
+        yield "hoi";
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({
+        tab: "facturen",
+        messages: [{ role: "user", content: "hoi" }],
+        context: { invoices: [{ id: 1 }], txs: [1, 2, 3] },
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(captured).toBeDefined();
+    const context = captured?.context as Record<string, unknown>;
+    expect(context.txs).toBeUndefined();
+    expect(context.invoices).toEqual([{ id: 1 }]);
+  });
+});
+
+test("POST /api/agent/chat returns 400 when messages is empty", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let called = false;
+    registerAgentRoutes(app, {
+      chat: async function* () {
+        called = true;
+        yield "hoi";
+      },
+    });
+    const res = await app.request("/api/agent/chat", jsonPost({ tab: "overview", messages: [] }));
+    expect(res.status).toBe(400);
+    expect(called).toBe(false);
+  });
+});
