@@ -235,3 +235,13 @@ test("invoices round-trip; legacy vault defaults to []", async () => {
   await s.putInvoices([invoice]);
   expect(await s.getInvoices()).toEqual([invoice]);
 });
+
+test("rewards round-trip; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-rewards");
+  await s.setup("pw");
+  expect(await s.getRewards()).toEqual([]);
+  const reward = { id: "amex", program: "American Express Membership Rewards", points: 10000, updatedAt: "2026-06-01" };
+  await s.putRewards([reward]);
+  expect(await s.getRewards()).toEqual([reward]);
+});
