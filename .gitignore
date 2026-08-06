@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.turbo/
 config.json
 state.json
 *.pem

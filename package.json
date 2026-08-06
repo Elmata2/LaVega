@@ -7,16 +7,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "dev": "pnpm --filter @lavega/web dev",
-    "dev:server": "pnpm --filter @lavega/server dev",
+    "test": "turbo run test",
+    "test:watch": "turbo watch test",
+    "dev": "turbo run dev",
     "build": "pnpm --filter @lavega/web build",
     "start": "pnpm --filter @lavega/server start",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/adapters && tsc --noEmit -p apps/web && tsc --noEmit -p apps/server"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",
+    "turbo": "2.10.8",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }
