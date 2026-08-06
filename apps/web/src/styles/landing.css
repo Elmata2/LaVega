@@ -1,0 +1,512 @@
+/* LaVega public landing page. Self-contained + scoped under .lp so it never
+ * clashes with the app's base.css. Warm cream + espresso + tan, big EB Garamond
+ * serif (shared fonts), tasteful float/reveal/marquee animations. */
+
+/* Let the (tall) landing scroll even though the app frame pins body overflow. */
+body.lp-scroll {
+  overflow: auto;
+}
+body.lp-scroll #root {
+  height: auto;
+  min-height: 100%;
+}
+
+.lp {
+  --lp-cream: #f4f1ec;
+  --lp-ink: #2b2117;
+  --lp-ink2: #6a5f4e;
+  --lp-tan: #cf9f5e;
+  --lp-tan-deep: #b07f33;
+  --lp-pos: #5c7d4f;
+  --lp-card: #fbfaf7;
+  --lp-line: #e7e0d4;
+  --lp-espresso: #241b12;
+
+  min-height: 100vh;
+  background: var(--lp-cream);
+  color: var(--lp-ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+.lp * {
+  box-sizing: border-box;
+}
+
+/* ---- Nav ---- */
+.lp-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 22px 28px;
+}
+.lp-brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  color: var(--lp-ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.lp-nav-links {
+  display: flex;
+  gap: 28px;
+}
+.lp-nav-links a {
+  color: var(--lp-ink2);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.lp-nav-links a:hover {
+  color: var(--lp-ink);
+}
+
+/* ---- Buttons ---- */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 11px 22px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.lp-btn:hover {
+  transform: translateY(-1px);
+}
+.lp-btn-lg {
+  padding: 15px 28px;
+  font-size: 1.02rem;
+}
+.lp-btn-dark {
+  background: var(--lp-ink);
+  color: var(--lp-cream);
+  box-shadow: 0 12px 26px -14px rgba(43, 33, 23, 0.6);
+}
+.lp-btn-light {
+  background: var(--lp-card);
+  color: var(--lp-ink);
+  border-color: var(--lp-line);
+}
+.lp-btn-tan {
+  background: var(--lp-tan);
+  color: var(--lp-espresso);
+  box-shadow: 0 14px 30px -14px rgba(176, 127, 51, 0.7);
+}
+
+/* ---- Hero ---- */
+.lp-hero {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 48px 28px 40px;
+  text-align: center;
+}
+.lp-h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0 0 22px;
+  color: var(--lp-ink);
+}
+.lp-sub {
+  max-width: 640px;
+  margin: 0 auto 28px;
+  color: var(--lp-ink2);
+  font-size: 1.1rem;
+}
+.lp-cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 56px;
+}
+
+/* ---- Hero stage (device + floating chips) ---- */
+.lp-stage {
+  position: relative;
+  max-width: 720px;
+  min-height: 400px;
+  margin: 0 auto;
+}
+.lp-device {
+  position: relative;
+  z-index: 2;
+  width: min(340px, 82vw);
+  margin: 0 auto;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 24px;
+  padding: 24px;
+  text-align: left;
+  box-shadow: 0 40px 80px -40px rgba(43, 33, 23, 0.45), 0 8px 20px -12px rgba(43, 33, 23, 0.2);
+}
+.lp-device-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lp-ink2);
+}
+.lp-device-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.lp-device-delta {
+  color: var(--lp-pos);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.lp-spark {
+  margin: 8px 0 14px;
+}
+.lp-device-rows > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--lp-line);
+  font-size: 0.9rem;
+  color: var(--lp-ink2);
+}
+.lp-device-rows > div span:last-child {
+  color: var(--lp-ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.lp-chip {
+  position: absolute;
+  z-index: 3;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: 0 24px 50px -28px rgba(43, 33, 23, 0.4);
+  font-size: 0.9rem;
+}
+.lp-chip-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--lp-ink2);
+}
+.lp-chip-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lp-chip .lp-pos {
+  color: var(--lp-pos);
+  font-size: 1rem;
+}
+.lp-chip-a {
+  top: 30px;
+  left: 0;
+}
+.lp-chip-b {
+  top: 90px;
+  right: 0;
+}
+.lp-chip-c {
+  bottom: 24px;
+  left: 8%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.lp-lock {
+  font-size: 1rem;
+}
+
+/* ---- Sections ---- */
+.lp-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 72px 28px;
+}
+.lp-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lp-tan-deep);
+  text-align: center;
+  margin: 0 0 10px;
+}
+.lp-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.9rem, 3.4vw, 2.8rem);
+  letter-spacing: -0.02em;
+  text-align: center;
+  margin: 0 0 36px;
+  color: var(--lp-ink);
+}
+.lp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+.lp-card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 20px;
+  padding: 26px 22px;
+  box-shadow: 0 22px 48px -34px rgba(43, 33, 23, 0.28);
+}
+.lp-card-icon {
+  font-size: 1.7rem;
+  margin-bottom: 12px;
+}
+.lp-card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.25rem;
+  margin: 0 0 6px;
+  color: var(--lp-ink);
+}
+.lp-card-text {
+  margin: 0;
+  color: var(--lp-ink2);
+  font-size: 0.95rem;
+}
+
+/* ---- Marquee ---- */
+.lp-marquee {
+  overflow: hidden;
+  padding: 8px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  gap: 14px;
+  width: max-content;
+  animation: lp-marq 34s linear infinite;
+}
+.lp-pill {
+  flex: none;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  color: var(--lp-ink);
+  white-space: nowrap;
+}
+@keyframes lp-marq {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ---- Privacy band (dark for contrast) ---- */
+.lp-privacy {
+  padding: 0 28px;
+}
+.lp-privacy-inner {
+  max-width: 1100px;
+  margin: 24px auto;
+  background: var(--lp-espresso);
+  color: var(--lp-cream);
+  border-radius: 28px;
+  padding: 56px 48px;
+  text-align: center;
+}
+.lp-privacy-inner .lp-h2 {
+  color: var(--lp-cream);
+}
+.lp-privacy-inner .lp-sub {
+  color: rgba(244, 241, 236, 0.8);
+}
+.lp-ticks {
+  list-style: none;
+  padding: 0;
+  margin: 24px auto 0;
+  max-width: 560px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+.lp-ticks li {
+  padding-left: 30px;
+  position: relative;
+  color: rgba(244, 241, 236, 0.92);
+}
+.lp-ticks li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--lp-tan);
+  font-weight: 700;
+}
+
+/* ---- Steps ---- */
+.lp-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.lp-step {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 20px;
+  padding: 28px 24px;
+}
+.lp-step-n {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--lp-ink);
+  color: var(--lp-cream);
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+/* ---- CTA band ---- */
+.lp-cta-band {
+  max-width: 1100px;
+  margin: 0 auto 24px;
+  padding: 64px 28px;
+  text-align: center;
+}
+
+/* ---- Footer ---- */
+.lp-footer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 28px 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--lp-line);
+  color: var(--lp-ink2);
+  font-size: 0.9rem;
+}
+.lp-brand-sm {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--lp-ink);
+}
+.lp-foot-note {
+  flex: 1;
+}
+.lp-foot-links {
+  display: flex;
+  gap: 18px;
+}
+.lp-foot-links a {
+  color: var(--lp-ink2);
+  text-decoration: none;
+}
+.lp-foot-links a:hover {
+  color: var(--lp-ink);
+}
+
+/* ---- Animations ---- */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.lp-reveal.lp-in {
+  opacity: 1;
+  transform: none;
+}
+.lp-hero > .lp-reveal:nth-child(2) {
+  transition-delay: 0.08s;
+}
+.lp-hero > .lp-reveal:nth-child(3) {
+  transition-delay: 0.16s;
+}
+.lp-hero > .lp-reveal:nth-child(4) {
+  transition-delay: 0.24s;
+}
+@keyframes lp-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.lp-float {
+  animation: lp-bob 4s ease-in-out infinite;
+}
+.lp-float-slow {
+  animation-duration: 5.5s;
+}
+.lp-float-slower {
+  animation-duration: 7s;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 860px) {
+  .lp-nav-links {
+    display: none;
+  }
+  .lp-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-steps {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .lp-grid {
+    grid-template-columns: 1fr;
+  }
+  .lp-chip-a,
+  .lp-chip-b {
+    display: none;
+  }
+  .lp-privacy-inner {
+    padding: 40px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .lp-float {
+    animation: none;
+  }
+  .lp-marquee-track {
+    animation: none;
+  }
+  .lp-btn:hover {
+    transform: none;
+  }
+}
