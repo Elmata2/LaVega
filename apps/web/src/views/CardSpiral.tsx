@@ -31,7 +31,7 @@ export default function CardSpiral() {
         ctx = gsap.context(() => {
           const apply = (p: number) => {
             cards.forEach((card, i) => {
-              const t = N === 1 ? 0.5 : i / (N - 1); // 0..1
+              const t = i / (N - 1); // 0..1 (N is fixed > 1)
               const c = t - 0.5; // -0.5..0.5
               const spread = 70 + p * 220;
               const curl = 0.18 + p * 1.5; // total arc (radians) grows on scroll
