@@ -57,7 +57,6 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           LaVega
         </button>
         <nav className="lp-nav-links">
-          <a href="#voor-wie">Voor wie</a>
           <a href="#agents">Agents</a>
           <a href="#privacy">Privacy</a>
           <a href="#how">Hoe het werkt</a>
@@ -121,25 +120,6 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <div className="lp-chip lp-chip-c lp-float lp-float-slower">
             <span className="lp-lock">🔒</span> Lokaal &amp; versleuteld
           </div>
-        </div>
-      </section>
-
-      {/* Voor wie */}
-      <section className="lp-section" id="voor-wie">
-        <p className="lp-eyebrow lp-reveal">Voor wie</p>
-        <h2 className="lp-h2 lp-reveal">Van je eerste bijbaan tot je eigen zaak</h2>
-        <div className="lp-grid lp-grid-3 lp-reveal">
-          {[
-            { icon: "🎓", t: "Studenten", d: "Zie waar je geld heen gaat en houd moeiteloos grip op je budget." },
-            { icon: "💼", t: "Werkenden", d: "Eén overzicht van al je rekeningen, sparen en vaste lasten." },
-            { icon: "🚀", t: "Ondernemers", d: "Cashflow-forecast, btw-reservering en facturen — automatisch." },
-          ].map((a) => (
-            <div className="lp-card" key={a.t}>
-              <div className="lp-card-icon">{a.icon}</div>
-              <h3 className="lp-card-title">{a.t}</h3>
-              <p className="lp-card-text">{a.d}</p>
-            </div>
-          ))}
         </div>
       </section>
 
