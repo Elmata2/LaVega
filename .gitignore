@@ -9,3 +9,5 @@ state.json
 .DS_Store
 .superpowers/
 .gstack/
+
+.claude/
