@@ -32,10 +32,13 @@ lavega/
 │   │   └── investing/ # cofounder's domain module
 │   └── adapters/
 │       ├── storage/   # StorageAdapter → Local (IndexedDB) now · Postgres later
-│       └── banking/   # BankAccess → FileImport · EnableBanking · finAPI
+│       ├── banking/   # BankAccess → FileImport · EnableBanking · finAPI
+│       └── brokers/   # BrokerAccess → DeGiro · IBKR · Trading 212
 ├── apps/
-│   ├── web/           # Vite + React dashboard
-│   └── server/        # Hono API: local sync now → hosted backend later (same code)
+│   ├── web/           # Vite + React dashboard (personal)
+│   ├── server/        # Hono API: local sync now → hosted backend later (same code)
+│   ├── investing-web/    # investing dashboard
+│   └── investing-server/ # investing API
 ├── docs/CONTEXT.md    # this file
 └── LICENSE (AGPL-3.0), README
 ```
@@ -66,7 +69,10 @@ tx      = { id, accountKey, date /* ISO YYYY-MM-DD */, amount /* negative = outf
 ## Bank access
 - **Enable Banking** first, against the **sandbox** we have access to. JWT RS256 (`node:crypto`), routes for aspsps/auth/callback/sync/forget, pagination via `continuation_key`, prefer `CLBD` balance. Re-implement cleanly in TS from the Kasoverzicht `server.mjs` logic (clean-room, permitted).
 - **finAPI** second (client-credentials → user token; webform response varies by version).
-- **File import** always available offline: MT940/.STA, CAMT.053, CSV with per-bank profiles (ING, Rabobank, ABN tab-no-header, Knab, Revolut, Amex, Trading 212). Amex expenses may be positive → "invert amounts" option. Trading 212 = cashflows only (deposits/withdrawals/dividends), not securities trades.
+- **File import** always available offline: MT940/.STA, CAMT.053, CSV with per-bank profiles (ING, Rabobank, ABN tab-no-header, Knab, Revolut, Amex, Trading 212). Amex expenses may be positive → "invert amounts" option. Trading 212's **CSV export** = cashflows only (deposits/withdrawals/dividends), not securities trades — its **API** does expose trades, see `docs/investing/CONNECTORS.md`.
+
+## Broker access (investing)
+Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. Read it before touching `packages/adapters/src/brokers/`.
 
 ## Conventions
 - Dutch in the UI, English in code identifiers.

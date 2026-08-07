@@ -1,0 +1,140 @@
+# LaVega — Broker Connectors
+
+_The spec for the investing proposition's broker integrations. Read `docs/CONTEXT.md` first — this file assumes it._
+
+Charted via the [Investing connector strategy](https://github.com/Elmata2/LaVega/issues/1) wayfinder map. Every decision below links to the ticket that made it.
+
+## Scope
+
+Three brokers in v1 — **DeGiro**, **Interactive Brokers**, **Trading 212** — no priority order among them ([#3](https://github.com/Elmata2/LaVega/issues/3)). Each gets one adapter behind a shared `BrokerAccessAdapter` seam, mirroring how `BankAccessAdapter` sits behind bank access on the personal side.
+
+Adapters pull **positions and trade history**. They do not enrich instruments (industry, sector, fundamentals) — that's a separate future layer, see [Future work](#future-work).
+
+Read-only throughout. No order placement, no PIS — the whole-app hard constraint from `docs/CONTEXT.md` holds here, and each adapter's client surface is deliberately locked to read endpoints even where the upstream API exposes more ([#10](https://github.com/Elmata2/LaVega/issues/10)).
+
+## Where the code lives
+
+```
+apps/
+├── investing-web/                      # investing dashboard (Vite + React)
+└── investing-server/                   # investing API (Hono)
+packages/
+├── core/investing/                     # investing domain module
+└── adapters/src/brokers/
+    ├── BrokerAccessAdapter.ts          # the contract
+    ├── degiro/
+    ├── ibkr/
+    └── trading212/
+```
+
+`apps/web` and `apps/server` (the personal side) are **not renamed** — the `investing-` prefix keeps the two trees unambiguous for search and avoids merge conflicts with Alexander's work ([#2](https://github.com/Elmata2/LaVega/issues/2)).
+
+Adapters nest under `packages/adapters/src/`, matching the existing `banking/`, `rates/`, `crypto/`, `storage/` convention ([#11](https://github.com/Elmata2/LaVega/issues/11)).
+
+## The `BrokerAccessAdapter` contract
+
+Narrow, and shaped exactly like `BankAccessAdapter` ([#4](https://github.com/Elmata2/LaVega/issues/4)):
+
+```ts
+export type BrokerResult = {
+  positions: Position[];
+  trades: Omit<Trade, "id">[];
+  source: string;
+  problems: string[];
+};
+
+export interface BrokerAccessAdapter {
+  sync(input: { entity: string }): Promise<BrokerResult>;
+}
+```
+
+`sync()` rather than `load()` because every broker path here is API-driven, not file-driven — there is no `{filename, text}` to pass.
+
+Per-broker failures go in `problems` so one broken connection doesn't block the rest, exactly as `BankAccessAdapter` does it. An adapter that can't reach its broker returns a `BrokerResult` with empty arrays and a populated `problems`; it does not throw.
+
+`Position` and `Trade` land in `packages/core/investing/`. `Trade` carries an `id` computed the same way `tx.id` is — a hash over the identifying fields plus an occurrence counter — because scheduled syncs re-fetch overlapping windows and would otherwise double-count. Follow `packages/core/src/hash.ts`; do not invent a second hashing scheme.
+
+## Credentials & secrets
+
+Local-first by default, inherited unchanged from the personal side ([#5](https://github.com/Elmata2/LaVega/issues/5)): the user brings their own broker credentials, nothing routes through LaVega-run infrastructure, and no secret ever enters the repo. No broker in v1 needs an exception to this.
+
+**Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
+
+| Broker | Persisted? | Why |
+|---|---|---|
+| DeGiro | **Never** | Username/password/OTP. Anything that can read the store could trigger an unattended login — the exact path to account lockout ([#7](https://github.com/Elmata2/LaVega/issues/7)). Re-entered every sync. |
+| Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)). |
+| Trading 212 | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)). |
+
+## Risk-disclosure gates
+
+Two of the three adapters ship behind a **one-time consent checkbox** shown before the first sync, persisted locally so it doesn't re-nag. The UI gate is the one that matters; the same text is mirrored here for self-hosting users reading the docs.
+
+- **DeGiro** — "Uses DeGiro's private, undocumented API. This is not an official integration, and your account could be locked or suspended."
+- **Trading 212** — "This key may be able to place trades if its scope isn't read-only. Verify the scope in the Trading 212 app before granting."
+- **Interactive Brokers** — no gate. Official API, no lockout risk. Setup instructions only.
+
+---
+
+## DeGiro
+
+**Status: unofficial. Highest-risk connector in v1.**
+
+DeGiro has **no official API** — its own helpdesk states third-party scripts and API wrappers violate its terms ([#7](https://github.com/Elmata2/LaVega/issues/7)). Everything below drives DeGiro's internal web-app endpoints, reverse-engineered from the browser client.
+
+**Approach:** clean-room TypeScript port, **not** an npm dependency ([#10](https://github.com/Elmata2/LaVega/issues/10)). Reference implementation: `icastillejogomez/degiro-api` (TS, MIT, active). Port only the read endpoints LaVega needs, shaped like the existing `eb-client.ts` — thin typed client, credentials passed in explicitly, no hidden state. Do not port order-placement endpoints.
+
+**Auth:** username + password, plus TOTP or in-app mobile approval. Returns a `session_id` passed as a query param on every call. No OAuth, no refresh token. Trading session times out at ~30 minutes.
+
+**Sync model: manual / user-triggered only. Never scheduled polling.** This is the load-bearing constraint of this adapter. A documented account lockout exists from re-logins at roughly 30-minute cadence, and DeGiro publishes no safe cadence, so even a conservative background schedule carries unquantifiable ban risk.
+
+**Data:** both positions (`positionReport`) and historical transactions (`transactions` / order history) — pulled together in v1, not staged. Same session plumbing either way, and `trades` has to be populated for the contract to be usable at all.
+
+## Interactive Brokers
+
+**Status: official API, no local gateway.**
+
+The obvious retail paths — Client Portal Web API and the TWS API — both require a persistently-running local process plus manual daily or weekly browser re-auth, with no supported automation ([#8](https://github.com/Elmata2/LaVega/issues/8)). **This adapter sidesteps both** ([#11](https://github.com/Elmata2/LaVega/issues/11)).
+
+**Approach:** IBKR's official **Flex Web Service** — token + numeric Query ID, no browser session login, no always-on local process, no re-auth ritual. The trade-off is near-real-time data for a report that refreshes daily server-side, which is fine given the sync cadence below.
+
+**Query shape:** one combined Flex Query with both **Open Positions** and **Trades** sections under a single Query ID — one token, one fetch, mapping directly onto `{positions, trades, source, problems}`.
+
+**Sync model: scheduled, automatic, daily (end of day).** No lockout to protect against, and the report's own refresh cadence is a daily ceiling regardless, so manual-only would add friction for no benefit.
+
+**Fetch flow:** Flex is two-step — `SendRequest` returns a reference code, then `GetStatement` must be polled with that code until the report is ready. The adapter polls synchronously with backoff inside `sync()`, timing out at ~30–60s; a timeout surfaces via `problems[]`. Blocking is acceptable because this runs on a schedule, not behind a user-facing click.
+
+**Dependency:** `fast-xml-parser` (new). The Flex report is flat but attribute-based (`<OpenPosition symbol="..." position="..." />`) — not worth hand-rolling.
+
+**Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions and Trades sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID.
+
+## Trading 212
+
+**Status: official API, in beta.**
+
+Trading 212 does have an official public API (`https://docs.trading212.com/api`), self-service key generation from inside the app, no waitlist ([#9](https://github.com/Elmata2/LaVega/issues/9)). Scoped to Invest and Stocks ISA accounts; multi-currency accounts unsupported, values come back in the primary account currency.
+
+**This corrects a line in `docs/CONTEXT.md`:** "Trading 212 = cashflows only, not securities trades" is true of Trading 212's **CSV export**, but *not* of its API, which exposes real order history via `GET /api/v0/equity/history/orders` (cursor-paginated via `nextPagePath`, similar in shape to the Enable Banking `continuation_key` pattern already in this codebase).
+
+**Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key.
+
+**Sync model: scheduled, automatic, daily.** Deliberately coarse — per-endpoint numeric rate limits are still unconfirmed, so staying daily avoids tripping an unknown ceiling. Revisit the interval once limits are confirmed.
+
+**Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
+
+**Open items carried into implementation.** None of these change the shape decided above; all three are confirm-on-build:
+- exact positions/holdings endpoint name and fields (referenced in the docs but not confirmed from source)
+- per-endpoint numeric rate limits
+- whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable)
+
+---
+
+## Future work
+
+Deliberately **not** specified here. Named so the next effort knows where the edges are:
+
+- **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals, fed by a market-data provider. Feeds the intended intelligent-agent portfolio-analysis layer. Explicitly split out of the broker adapter ([#4](https://github.com/Elmata2/LaVega/issues/4)); a broker is not a market-data source.
+- **Additional brokers** — Revolut Invest, Bux, eToro and others are wanted, deferred until the big-three adapters prove the interface ([#3](https://github.com/Elmata2/LaVega/issues/3)).
+- **Sync scheduling mechanism** — DeGiro is manual, IBKR and Trading 212 are both daily-scheduled. Whether one shared scheduler drives them or each adapter self-schedules is still open.
+- **`apps/investing-web` UI/UX** — this spec is connectors only.
+- **Hosted/cloud tier** — a standing directional constraint (any hosted tier is additive, never required), not a decision this spec makes.
