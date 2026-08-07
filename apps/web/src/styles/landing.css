@@ -2,10 +2,8 @@
  * clashes with the app's base.css. Warm cream + espresso + tan, big EB Garamond
  * serif (shared fonts), tasteful float/reveal/marquee animations. */
 
-/* Let the (tall) landing scroll even though the app frame pins body overflow. */
-body.lp-scroll {
-  overflow: auto;
-}
+/* The landing lets the whole window scroll (Landing.tsx sets html/body sizing
+ * imperatively so GSAP ScrollTrigger tracks the default scroller). */
 body.lp-scroll #root {
   height: auto;
   min-height: 100%;
@@ -268,6 +266,9 @@ body.lp-scroll #root {
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
 }
+.lp-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
 .lp-card {
   background: var(--lp-card);
   border: 1px solid var(--lp-line);
@@ -429,6 +430,94 @@ body.lp-scroll #root {
 }
 .lp-foot-links a:hover {
   color: var(--lp-ink);
+}
+
+/* ---- Signature scroll section (GSAP card spiral) ---- */
+.lp-spiral {
+  position: relative;
+}
+.lp-spiral-stage {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--lp-cream);
+  display: grid;
+  place-items: center;
+}
+.lp-spiral-word {
+  position: absolute;
+  z-index: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(4rem, 17vw, 15rem);
+  letter-spacing: -0.03em;
+  color: var(--lp-ink);
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+.lp-spiral-tag {
+  position: absolute;
+  z-index: 3;
+  top: 22%;
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  color: var(--lp-ink2);
+}
+.lp-spiral-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  perspective: 1400px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.lp-card3d {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(120px, 13vw, 176px);
+  height: clamp(168px, 18vw, 244px);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  align-items: flex-end;
+  box-shadow: 0 34px 60px -24px rgba(26, 20, 12, 0.5);
+  will-change: transform;
+  backface-visibility: hidden;
+  /* Resting fan — used pre-JS and on reduced-motion; GSAP writes inline
+     transforms that override this once the animation is live. */
+  transform: translate(-50%, -50%) translateX(calc((var(--i) - 6.5) * 40px))
+    translateY(calc((var(--i) - 6.5) * 7px)) rotate(calc((var(--i) - 6.5) * 6deg));
+}
+.lp-card3d-a {
+  background: linear-gradient(160deg, #33281b, #17110b);
+  color: #e8dcc8;
+}
+.lp-card3d-b {
+  background: linear-gradient(160deg, #e2bd7d, #c6963c);
+  color: #3a2c14;
+}
+.lp-card3d-c {
+  background: linear-gradient(160deg, #f3ede1, #ddd2bd);
+  color: #3a2c14;
+}
+.lp-card3d-chip {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 30px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.38);
+}
+.lp-card3d-num {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  opacity: 0.92;
 }
 
 /* ---- Animations ---- */

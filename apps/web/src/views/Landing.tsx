@@ -1,20 +1,33 @@
 import { useEffect, useRef } from "react";
+import CardSpiral from "./CardSpiral";
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
- *  serif — the StrategiQ-inspired look, LaVega's fonts + local-first story.
- *  Purely presentational; "Aan de slag / Inloggen" enters the app (#app). */
+ *  serif (StrategiQ-inspired), broad audience (students → werkenden →
+ *  ondernemers). "Aan de slag / Inloggen" enters the app (#app). */
 export default function Landing({ onEnter }: { onEnter: () => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Let the (tall) landing scroll even though the app frame sets body overflow
-  // hidden; restore on unmount so the dashboard frame behaves again.
+  // Let the whole window scroll (the app frame otherwise pins body overflow).
+  // Restored on unmount so the dashboard frame behaves again. Window-scrolling
+  // also lets GSAP ScrollTrigger track with its default scroller.
   useEffect(() => {
-    document.body.classList.add("lp-scroll");
-    return () => document.body.classList.remove("lp-scroll");
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = { htmlH: html.style.height, bodyH: body.style.height, bodyO: body.style.overflow };
+    html.style.height = "auto";
+    body.style.height = "auto";
+    body.style.overflow = "visible";
+    body.classList.add("lp-scroll");
+    return () => {
+      html.style.height = prev.htmlH;
+      body.style.height = prev.bodyH;
+      body.style.overflow = prev.bodyO;
+      body.classList.remove("lp-scroll");
+    };
   }, []);
 
-  // Scroll-reveal: fade/rise elements in as they enter the viewport. Honours
-  // prefers-reduced-motion via CSS (the .lp-reveal base stays visible there).
+  // Scroll-reveal (fade/rise) via IntersectionObserver; CSS keeps content
+  // visible under prefers-reduced-motion.
   useEffect(() => {
     const els = rootRef.current?.querySelectorAll<HTMLElement>(".lp-reveal");
     if (!els || !("IntersectionObserver" in window)) {
@@ -44,6 +57,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           LaVega
         </button>
         <nav className="lp-nav-links">
+          <a href="#voor-wie">Voor wie</a>
           <a href="#agents">Agents</a>
           <a href="#privacy">Privacy</a>
           <a href="#how">Hoe het werkt</a>
@@ -56,12 +70,12 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Hero */}
       <section className="lp-hero">
         <h1 className="lp-h1 lp-reveal">
-          Overzicht en grip,<br />over al je BV&apos;s heen.
+          Grip op je geld,<br />van student tot ondernemer.
         </h1>
         <p className="lp-sub lp-reveal">
-          LaVega bundelt al je rekeningen tot één helder beeld, voorspelt je kaspositie 13 weken
-          vooruit en zet slimme agents in voor facturen, belasting, koersen en punten.
-          Lokaal-first — jouw data blijft op je eigen apparaat.
+          Of je nu studeert, in loondienst werkt of onderneemt — LaVega brengt al je rekeningen samen
+          in één helder beeld, voorspelt je kaspositie en denkt met je mee. Lokaal-first: jouw data
+          blijft op je eigen apparaat.
         </p>
         <div className="lp-cta-row lp-reveal">
           <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={onEnter}>
@@ -76,7 +90,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         <div className="lp-stage lp-reveal" aria-hidden="true">
           <div className="lp-device">
             <div className="lp-device-eyebrow">Totaalpositie</div>
-            <div className="lp-device-value">€128.480</div>
+            <div className="lp-device-value">€12.480</div>
             <div className="lp-device-delta">▲ 4,6% deze maand</div>
             <div className="lp-spark">
               <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
@@ -97,11 +111,11 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             </div>
           </div>
           <div className="lp-chip lp-chip-a lp-float">
-            <div className="lp-chip-label">BTW gereserveerd</div>
-            <div className="lp-chip-value">€4.200</div>
+            <div className="lp-chip-label">Deze maand gespaard</div>
+            <div className="lp-chip-value lp-pos">+€420</div>
           </div>
           <div className="lp-chip lp-chip-b lp-float lp-float-slow">
-            <div className="lp-chip-label">13-weken forecast</div>
+            <div className="lp-chip-label">Forecast · 13 weken</div>
             <div className="lp-chip-value lp-pos">geen tekort</div>
           </div>
           <div className="lp-chip lp-chip-c lp-float lp-float-slower">
@@ -110,14 +124,36 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
       </section>
 
+      {/* Voor wie */}
+      <section className="lp-section" id="voor-wie">
+        <p className="lp-eyebrow lp-reveal">Voor wie</p>
+        <h2 className="lp-h2 lp-reveal">Van je eerste bijbaan tot je eigen zaak</h2>
+        <div className="lp-grid lp-grid-3 lp-reveal">
+          {[
+            { icon: "🎓", t: "Studenten", d: "Zie waar je geld heen gaat en houd moeiteloos grip op je budget." },
+            { icon: "💼", t: "Werkenden", d: "Eén overzicht van al je rekeningen, sparen en vaste lasten." },
+            { icon: "🚀", t: "Ondernemers", d: "Cashflow-forecast, btw-reservering en facturen — automatisch." },
+          ].map((a) => (
+            <div className="lp-card" key={a.t}>
+              <div className="lp-card-icon">{a.icon}</div>
+              <h3 className="lp-card-title">{a.t}</h3>
+              <p className="lp-card-text">{a.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Signature scroll section (GSAP card spiral + tagline) */}
+      <CardSpiral />
+
       {/* Agents */}
       <section className="lp-section" id="agents">
         <p className="lp-eyebrow lp-reveal">De agents</p>
-        <h2 className="lp-h2 lp-reveal">Vier agents die met je meedenken</h2>
+        <h2 className="lp-h2 lp-reveal">Slimme agents die het werk doen</h2>
         <div className="lp-grid lp-reveal">
           {[
             { icon: "🧾", t: "Facturen", d: "Leest PDF-facturen automatisch uit en zet ze in je cashflow." },
-            { icon: "🏛️", t: "Belasting", d: "Reserveert je btw en bewaakt elke aangifte-deadline." },
+            { icon: "🏛️", t: "Belasting", d: "Reserveert btw en bewaakt elke aangifte-deadline." },
             { icon: "💱", t: "Koersen", d: "Vindt de goedkoopste route om valuta te wisselen — realtime." },
             { icon: "⭐", t: "Punten", d: "Houdt je loyalty-punten bij en wat ze écht waard zijn." },
           ].map((a) => (
@@ -130,15 +166,6 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
       </section>
 
-      {/* Card marquee (decorative) */}
-      <div className="lp-marquee" aria-hidden="true">
-        <div className="lp-marquee-track">
-          {["Kasoverzicht", "13-weken forecast", "BTW-reservering", "Facturen-agent", "Valuta-routes", "Punten", "Alle banken", "Versleutelde kluis", "Kasoverzicht", "13-weken forecast", "BTW-reservering", "Facturen-agent", "Valuta-routes", "Punten", "Alle banken", "Versleutelde kluis"].map((t, i) => (
-            <span className="lp-pill" key={i}>{t}</span>
-          ))}
-        </div>
-      </div>
-
       {/* Privacy */}
       <section className="lp-section lp-privacy" id="privacy">
         <div className="lp-privacy-inner lp-reveal">
@@ -149,7 +176,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           </p>
           <ul className="lp-ticks">
             <li>Lokaal-first: geen server bewaart je transacties</li>
-            <li>Alleen-lezen bankkoppeling (AIS, geen betalingen)</li>
+            <li>Alleen-lezen bankkoppeling (geen betalingen)</li>
             <li>Versleutelde kluis met je eigen wachtwoord</li>
           </ul>
         </div>
@@ -158,11 +185,11 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* How it works */}
       <section className="lp-section" id="how">
         <p className="lp-eyebrow lp-reveal">Hoe het werkt</p>
-        <h2 className="lp-h2 lp-reveal">Van bankexport tot forecast in minuten</h2>
+        <h2 className="lp-h2 lp-reveal">In een paar minuten opgezet</h2>
         <div className="lp-steps lp-reveal">
           {[
             { n: "1", t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
-            { n: "2", t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie 13 weken vooruit." },
+            { n: "2", t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
             { n: "3", t: "Vraag de assistent", d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee." },
           ].map((s) => (
             <div className="lp-step" key={s.n}>

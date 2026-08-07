@@ -13,6 +13,7 @@
     "@fontsource/eb-garamond": "^5.3.0",
     "@lavega/adapters": "workspace:*",
     "@lavega/core": "workspace:*",
+    "gsap": "^3.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
