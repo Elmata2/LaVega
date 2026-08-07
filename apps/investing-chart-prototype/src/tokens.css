@@ -1,0 +1,17 @@
+:root {
+  color-scheme: dark;
+  --prototype-bg: #0e1110;
+  --prototype-surface: #151917;
+  --prototype-surface-raised: #1b201d;
+  --prototype-line: #303832;
+  --prototype-grid: #252c28;
+  --prototype-ink: #f2f0e9;
+  --prototype-muted: #9da69f;
+  --prototype-portfolio: #8fc7a8;
+  --prototype-benchmark: #d6a85f;
+  --prototype-focus: #f3dfb4;
+  --prototype-positive: #75b88f;
+  --prototype-radius: 16px;
+  --prototype-font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --prototype-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
