@@ -126,6 +126,63 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Signature scroll section (GSAP card spiral + tagline) */}
       <CardSpiral />
 
+      {/* Kern-tegels — waarom LaVega (SS1-inspired, our fonts + warm palet) */}
+      <section className="lp-section lp-strengths" id="waarom">
+        <div className="lp-strengths-head lp-reveal">
+          <h2 className="lp-h2 lp-strengths-title">Al je geldzaken, samen op één plek</h2>
+          <div className="lp-strengths-aside">
+            <p className="lp-sub lp-strengths-sub">
+              We doen er alles aan om je een naadloze ervaring te geven — snel, veilig en compleet.
+              Eén helder beeld van al je rekeningen, waar je ook bankiert.
+            </p>
+            <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
+              Ontdek meer <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+        <div className="lp-tiles lp-reveal">
+          <article className="lp-tile">
+            <h3 className="lp-tile-title">Snel &amp; soepel</h3>
+            <div className="lp-ill lp-ill-fast" aria-hidden="true">
+              <span className="c c1" />
+              <span className="c c2" />
+              <span className="c c3" />
+              <span className="c c4" />
+            </div>
+          </article>
+          <article className="lp-tile">
+            <h3 className="lp-tile-title">Al je rekeningen gekoppeld</h3>
+            <div className="lp-ill lp-ill-toggles" aria-hidden="true">
+              <span className="tg" />
+              <span className="tg on" />
+              <span className="tg" />
+            </div>
+          </article>
+          <article className="lp-tile">
+            <h3 className="lp-tile-title">Sterke versleuteling</h3>
+            <div className="lp-ill lp-ill-rings" aria-hidden="true">
+              <span className="ring r1" />
+              <span className="ring r2" />
+              <span className="orbit"><span className="odot" /></span>
+              <span className="core" />
+            </div>
+          </article>
+          <article className="lp-tile">
+            <h3 className="lp-tile-title">Eén compleet overzicht</h3>
+            <div className="lp-ill lp-ill-tree" aria-hidden="true">
+              <svg viewBox="0 0 160 120" width="100%" height="120">
+                <circle cx="80" cy="28" r="15" className="tree-node" />
+                <circle cx="80" cy="28" r="5" className="tree-core" />
+                <path d="M80,43 V66 M32,96 V80 H128 V96 M80,80 V96" className="tree-branch" />
+                <circle cx="32" cy="100" r="4" className="tree-leaf" />
+                <circle cx="80" cy="100" r="4" className="tree-leaf" />
+                <circle cx="128" cy="100" r="4" className="tree-leaf" />
+              </svg>
+            </div>
+          </article>
+        </div>
+      </section>
+
       {/* Agents */}
       <section className="lp-section" id="agents">
         <p className="lp-eyebrow lp-reveal">De agents</p>
