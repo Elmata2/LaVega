@@ -432,6 +432,157 @@ body.lp-scroll #root {
   color: var(--lp-ink);
 }
 
+/* ---- Kern-tegels (waarom LaVega) ---- */
+.lp-strengths-head {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 40px;
+  align-items: start;
+  margin-bottom: 40px;
+}
+.lp-strengths-title {
+  text-align: left;
+  margin: 0;
+}
+.lp-strengths-sub {
+  text-align: left;
+  margin: 0 0 20px;
+}
+.lp-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+.lp-tile {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  border-radius: 20px;
+  padding: 24px 20px 16px;
+  text-align: center;
+  box-shadow: 0 22px 48px -34px rgba(43, 33, 23, 0.28);
+}
+.lp-tile-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin: 0 0 6px;
+  color: var(--lp-ink);
+}
+.lp-ill {
+  position: relative;
+  height: 150px;
+  display: grid;
+  place-items: center;
+}
+/* fast — overlapping circles (individual translate/scale props avoid clashes) */
+.lp-ill-fast .c {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1.5px solid var(--lp-line);
+}
+.lp-ill-fast .c1 { translate: -48px 16px; }
+.lp-ill-fast .c2 { translate: -24px 6px; }
+.lp-ill-fast .c3 { translate: 0 -4px; }
+.lp-ill-fast .c4 {
+  translate: 30px -14px;
+  background: var(--lp-tan);
+  border-color: var(--lp-tan-deep);
+  box-shadow: 0 8px 20px -8px rgba(176, 127, 51, 0.6);
+  animation: lp-breathe 3.2s ease-in-out infinite;
+}
+@keyframes lp-breathe {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.09; }
+}
+/* toggles — connect all accounts */
+.lp-ill-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lp-ill-toggles .tg {
+  width: 116px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1.5px dashed var(--lp-line);
+  position: relative;
+}
+.lp-ill-toggles .tg::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--lp-ink2);
+}
+.lp-ill-toggles .tg.on {
+  border: 1.5px solid var(--lp-tan-deep);
+  background: rgba(207, 159, 94, 0.18);
+}
+.lp-ill-toggles .tg.on::after {
+  background: var(--lp-tan-deep);
+  animation: lp-toggle 2.8s ease-in-out infinite;
+}
+@keyframes lp-toggle {
+  0%, 28% { left: calc(100% - 23px); }
+  58%, 70% { left: 3px; }
+  100% { left: calc(100% - 23px); }
+}
+/* rings — encryption */
+.lp-ill-rings .ring,
+.lp-ill-rings .core,
+.lp-ill-rings .orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+}
+.lp-ill-rings .ring {
+  border-radius: 50%;
+  border: 1.5px solid var(--lp-line);
+}
+.lp-ill-rings .r1 { width: 120px; height: 120px; }
+.lp-ill-rings .r2 { width: 80px; height: 80px; }
+.lp-ill-rings .core {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--lp-tan);
+}
+.lp-ill-rings .orbit {
+  width: 120px;
+  height: 120px;
+  animation: lp-spin 7s linear infinite;
+}
+.lp-ill-rings .odot {
+  position: absolute;
+  top: -6px;
+  left: calc(50% - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lp-ink);
+}
+@keyframes lp-spin {
+  to { rotate: 360deg; }
+}
+/* tree — overview */
+.lp-ill-tree svg { overflow: visible; }
+.lp-ill-tree .tree-node { fill: rgba(207, 159, 94, 0.18); stroke: var(--lp-tan-deep); stroke-width: 1.5; }
+.lp-ill-tree .tree-core { fill: var(--lp-ink); }
+.lp-ill-tree .tree-branch { fill: none; stroke: var(--lp-ink2); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.lp-ill-tree .tree-leaf { fill: var(--lp-tan-deep); animation: lp-pulse 2.4s ease-in-out infinite; }
+.lp-ill-tree .tree-leaf:nth-of-type(2) { animation-delay: 0.4s; }
+.lp-ill-tree .tree-leaf:nth-of-type(3) { animation-delay: 0.8s; }
+@keyframes lp-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
 /* ---- Signature scroll section (GSAP card spiral) ---- */
 .lp-spiral {
   position: relative;
@@ -566,12 +717,22 @@ body.lp-scroll #root {
   .lp-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  .lp-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-strengths-head {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
   .lp-steps {
     grid-template-columns: 1fr;
   }
 }
 @media (max-width: 560px) {
   .lp-grid {
+    grid-template-columns: 1fr;
+  }
+  .lp-tiles {
     grid-template-columns: 1fr;
   }
   .lp-chip-a,
@@ -593,6 +754,12 @@ body.lp-scroll #root {
     animation: none;
   }
   .lp-marquee-track {
+    animation: none;
+  }
+  .lp-ill-fast .c4,
+  .lp-ill-toggles .tg.on::after,
+  .lp-ill-rings .orbit,
+  .lp-ill-tree .tree-leaf {
     animation: none;
   }
   .lp-btn:hover {
