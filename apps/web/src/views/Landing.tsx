@@ -6,6 +6,15 @@ import CardSpiral from "./CardSpiral";
  *  ondernemers). "Aan de slag / Inloggen" enters the app (#app). */
 export default function Landing({ onEnter }: { onEnter: () => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const agentsRef = useRef<HTMLDivElement | null>(null);
+
+  function scrollAgents(dir: 1 | -1) {
+    const track = agentsRef.current;
+    if (!track) return;
+    const card = track.querySelector<HTMLElement>(".lp-feature-card");
+    const step = card ? card.offsetWidth + 20 : track.clientWidth * 0.8;
+    track.scrollBy({ left: dir * step, behavior: "smooth" });
+  }
 
   // Let the whole window scroll (the app frame otherwise pins body overflow).
   // Restored on unmount so the dashboard frame behaves again. Window-scrolling
@@ -183,22 +192,30 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
       </section>
 
-      {/* Agents */}
+      {/* Agents — feature carousel (SS2-style, our fonts + warm palet) */}
       <section className="lp-section" id="agents">
-        <p className="lp-eyebrow lp-reveal">De agents</p>
-        <h2 className="lp-h2 lp-reveal">Slimme agents die het werk doen</h2>
-        <div className="lp-grid lp-reveal">
+        <div className="lp-carousel-head lp-reveal">
+          <div>
+            <p className="lp-eyebrow lp-eyebrow-left">De agents</p>
+            <h2 className="lp-h2 lp-strengths-title">Slimme agents die het werk doen</h2>
+          </div>
+          <div className="lp-carousel-nav">
+            <button type="button" aria-label="Vorige" onClick={() => scrollAgents(-1)}>←</button>
+            <button type="button" aria-label="Volgende" className="accent" onClick={() => scrollAgents(1)}>→</button>
+          </div>
+        </div>
+        <div className="lp-carousel lp-reveal" ref={agentsRef}>
           {[
-            { icon: "🧾", t: "Facturen", d: "Leest PDF-facturen automatisch uit en zet ze in je cashflow." },
-            { icon: "🏛️", t: "Belasting", d: "Reserveert btw en bewaakt elke aangifte-deadline." },
-            { icon: "💱", t: "Koersen", d: "Vindt de goedkoopste route om valuta te wisselen — realtime." },
-            { icon: "⭐", t: "Punten", d: "Houdt je loyalty-punten bij en wat ze écht waard zijn." },
+            { icon: "🧾", t: "Facturen-agent", d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt." },
+            { icon: "🏛️", t: "Belasting-agent", d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan." },
+            { icon: "💱", t: "Koersen-agent", d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank)." },
+            { icon: "⭐", t: "Punten-agent", d: "Houdt je loyalty- en spaarpunten bij en zoekt live op wat ze écht waard zijn en hoe je ze het best inwisselt." },
           ].map((a) => (
-            <div className="lp-card" key={a.t}>
-              <div className="lp-card-icon">{a.icon}</div>
-              <h3 className="lp-card-title">{a.t}</h3>
-              <p className="lp-card-text">{a.d}</p>
-            </div>
+            <article className="lp-feature-card" key={a.t}>
+              <div className="lp-feature-medallion" aria-hidden="true">{a.icon}</div>
+              <h3 className="lp-feature-title">{a.t}</h3>
+              <p className="lp-feature-text">{a.d}</p>
+            </article>
           ))}
         </div>
       </section>
@@ -238,22 +255,70 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
       </section>
 
-      {/* CTA band */}
-      <section className="lp-cta-band lp-reveal">
-        <h2 className="lp-h2">Klaar om grip te krijgen op je geld?</h2>
-        <button type="button" className="lp-btn lp-btn-tan lp-btn-lg" onClick={onEnter}>
-          Aan de slag <span aria-hidden="true">→</span>
-        </button>
+      {/* FAQ */}
+      <section className="lp-section" id="faq">
+        <p className="lp-eyebrow lp-reveal">FAQ</p>
+        <h2 className="lp-h2 lp-reveal">Veelgestelde vragen</h2>
+        <div className="lp-faq lp-reveal">
+          {[
+            {
+              q: "Is mijn data veilig?",
+              a: "Ja. Alles staat versleuteld op je eigen apparaat — er is geen cloud die je transacties bewaart. Bankkoppelingen zijn altijd alleen-lezen.",
+            },
+            {
+              q: "Moet ik mijn bank koppelen?",
+              a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
+            },
+            {
+              q: "Voor wie is LaVega?",
+              a: "Van studenten die grip willen op hun budget tot werkenden en ondernemers die hun rekeningen, cashflow en btw willen beheren.",
+            },
+            {
+              q: "Werkt het met meerdere rekeningen en BV's?",
+              a: "Ja — LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
+            },
+            {
+              q: "Gebruikt de AI-assistent mijn gegevens?",
+              a: "Alleen als jij dat aanzet, per onderdeel, en je bevestigt zelf wat er gedeeld wordt. Standaard staat het uit.",
+            },
+          ].map((f) => (
+            <details className="lp-faq-item" key={f.q}>
+              <summary>
+                <span>{f.q}</span>
+                <span className="lp-faq-mark" aria-hidden="true" />
+              </summary>
+              <p>{f.a}</p>
+            </details>
+          ))}
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="lp-footer">
-        <span className="lp-brand-sm">LaVega</span>
-        <span className="lp-foot-note">lokaal-first personal finance</span>
-        <span className="lp-foot-links">
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Voorwaarden</a>
-        </span>
+      <footer className="lp-footer2">
+        <div className="lp-footer2-cta lp-reveal">
+          <h2 className="lp-h2">Klaar om grip te krijgen op je geld?</h2>
+          <button type="button" className="lp-btn lp-btn-tan lp-btn-lg" onClick={onEnter}>
+            Aan de slag <span aria-hidden="true">→</span>
+          </button>
+        </div>
+        <div className="lp-footer2-grid">
+          <div className="lp-footer2-about">
+            <div className="lp-footer2-brand">LaVega</div>
+            <p className="lp-footer2-note">Lokaal-first personal finance — van student tot ondernemer.</p>
+          </div>
+          <div className="lp-footer2-col">
+            <span className="lp-footer2-h">Product</span>
+            <a href="#agents">Agents</a>
+            <a href="#how">Hoe het werkt</a>
+            <a href="#faq">FAQ</a>
+          </div>
+          <div className="lp-footer2-col">
+            <span className="lp-footer2-h">Juridisch</span>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Voorwaarden</a>
+          </div>
+        </div>
+        <div className="lp-footer2-bottom">© 2026 LaVega · lokaal-first</div>
       </footer>
     </div>
   );
