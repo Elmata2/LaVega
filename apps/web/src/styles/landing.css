@@ -728,6 +728,56 @@ body.lp-scroll #root {
   color: var(--lp-ink2);
 }
 
+/* ---- Waitlist ---- */
+.lp-waitlist-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  text-align: center;
+}
+.lp-waitlist-inner .lp-eyebrow {
+  text-align: center;
+}
+.lp-waitlist-form {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+.lp-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 14px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-line);
+  background: var(--lp-card);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--lp-ink);
+}
+.lp-input:focus {
+  outline: none;
+  border-color: var(--lp-tan-deep);
+  box-shadow: 0 0 0 3px rgba(207, 159, 94, 0.2);
+}
+.lp-input:disabled {
+  opacity: 0.6;
+}
+.lp-waitlist-form .lp-btn {
+  flex: 0 0 auto;
+}
+.lp-waitlist-done {
+  margin-top: 24px;
+  font-size: 1.1rem;
+  color: var(--lp-pos);
+  font-weight: 600;
+}
+.lp-waitlist-note {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--lp-ink2);
+}
+
 /* ---- Footer (dark) ---- */
 .lp-footer2 {
   background: var(--lp-espresso);
@@ -955,6 +1005,10 @@ body.lp-scroll #root {
   }
   .lp-privacy-inner {
     padding: 40px 24px;
+  }
+  .lp-waitlist-form .lp-btn {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }
 

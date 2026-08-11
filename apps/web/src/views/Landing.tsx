@@ -1,5 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import CardSpiral from "./CardSpiral";
+
+/** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
+ *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
+ *  shows a "binnenkort" state instead of silently dropping sign-ups. */
+const WAITLIST_ENDPOINT = "";
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
@@ -14,6 +20,33 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
     const card = track.querySelector<HTMLElement>(".lp-feature-card");
     const step = card ? card.offsetWidth + 20 : track.clientWidth * 0.8;
     track.scrollBy({ left: dir * step, behavior: "smooth" });
+  }
+
+  // Waitlist form → Google Sheet (via the Apps Script web app). Fire-and-forget
+  // no-cors POST (Apps Script can't do CORS preflight), so we optimistically
+  // confirm on a resolved fetch and only show an error on a network failure.
+  const wlReady = WAITLIST_ENDPOINT.length > 0;
+  const [wlName, setWlName] = useState("");
+  const [wlEmail, setWlEmail] = useState("");
+  const [wlStatus, setWlStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+
+  async function submitWaitlist(e: FormEvent) {
+    e.preventDefault();
+    const email = wlEmail.trim();
+    if (!wlReady || !email || wlStatus === "sending") return;
+    setWlStatus("sending");
+    try {
+      await fetch(WAITLIST_ENDPOINT, {
+        method: "POST",
+        mode: "no-cors",
+        body: new URLSearchParams({ name: wlName.trim(), email, source: "lavega.dev" }),
+      });
+      setWlStatus("done");
+      setWlName("");
+      setWlEmail("");
+    } catch {
+      setWlStatus("error");
+    }
   }
 
   // Let the whole window scroll (the app frame otherwise pins body overflow).
@@ -69,6 +102,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <a href="#agents">Agents</a>
           <a href="#privacy">Privacy</a>
           <a href="#how">Hoe het werkt</a>
+          <a href="#wachtlijst">Wachtlijst</a>
         </nav>
         <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
           Inloggen
@@ -290,6 +324,48 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               <p>{f.a}</p>
             </details>
           ))}
+        </div>
+      </section>
+
+      {/* Waitlist */}
+      <section className="lp-section lp-waitlist" id="wachtlijst">
+        <div className="lp-waitlist-inner lp-reveal">
+          <p className="lp-eyebrow">Wachtlijst</p>
+          <h2 className="lp-h2">Wees er als eerste bij</h2>
+          <p className="lp-sub">
+            LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan de
+            beurt bent — plus af en toe een update over nieuwe agents.
+          </p>
+          {wlStatus === "done" ? (
+            <p className="lp-waitlist-done">Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.</p>
+          ) : (
+            <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
+              <input
+                type="text"
+                className="lp-input"
+                placeholder="Naam (optioneel)"
+                aria-label="Naam"
+                value={wlName}
+                onChange={(e) => setWlName(e.target.value)}
+                disabled={!wlReady || wlStatus === "sending"}
+              />
+              <input
+                type="email"
+                className="lp-input"
+                placeholder="jouw@email.nl"
+                aria-label="E-mailadres"
+                required
+                value={wlEmail}
+                onChange={(e) => setWlEmail(e.target.value)}
+                disabled={!wlReady || wlStatus === "sending"}
+              />
+              <button type="submit" className="lp-btn lp-btn-dark lp-btn-lg" disabled={!wlReady || wlStatus === "sending"}>
+                {wlReady ? (wlStatus === "sending" ? "Bezig…" : "Zet me op de lijst") : "Binnenkort"}
+              </button>
+            </form>
+          )}
+          {!wlReady && <p className="lp-waitlist-note">De wachtlijst opent zeer binnenkort.</p>}
+          {wlStatus === "error" && <p className="lp-waitlist-note">Er ging iets mis — probeer het zo nog eens.</p>}
         </div>
       </section>
 
