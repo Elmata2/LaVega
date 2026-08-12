@@ -5,7 +5,7 @@ import CardSpiral from "./CardSpiral";
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
  *  shows a "binnenkort" state instead of silently dropping sign-ups. */
-const WAITLIST_ENDPOINT = "";
+const WAITLIST_ENDPOINT = "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
@@ -112,12 +112,12 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Hero */}
       <section className="lp-hero">
         <h1 className="lp-h1 lp-reveal">
-          Grip op je geld,<br />van student tot ondernemer.
+          Je financiële cockpit<br />voor al je BV&apos;s én privé.
         </h1>
         <p className="lp-sub lp-reveal">
-          Of je nu studeert, in loondienst werkt of onderneemt — LaVega brengt al je rekeningen samen
-          in één helder beeld, voorspelt je kaspositie en denkt met je mee. Lokaal-first: jouw data
-          blijft op je eigen apparaat.
+          LaVega bundelt al je zakelijke en privé-rekeningen in één privé overzicht, voorspelt je
+          kaspositie 13 weken vooruit, en zet agents in die je btw reserveren, facturen uitlezen en de
+          goedkoopste koers vinden. Lokaal-first — je cijfers blijven op je eigen apparaat, zonder CFO.
         </p>
         <div className="lp-cta-row lp-reveal">
           <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={onEnter}>
