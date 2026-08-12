@@ -7,6 +7,35 @@ export const API_BASE: string =
 
 export type ChatMessage = { role: string; content: string };
 
+/** One transaction for the AI-categorize proxy. Only these three fields ever
+ *  leave the browser — never amounts, balances, account keys, or dates. The
+ *  server's `sanitizeCategorizeInput` re-enforces this allowlist. */
+export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
+
+/** Bulk-categorize onbekend transactions via our server's `POST
+ *  /api/agent/categorize` (which proxies Claude — the browser never talks to
+ *  Anthropic directly). Returns one `{id, category}` per transaction the model
+ *  could classify; ids it couldn't place are simply absent. Throws with the
+ *  server's `{error}` message on a non-OK response (503/429/400/502). */
+export async function categorizeTxs(items: CategorizeItem[]): Promise<{ id: string; category: string }[]> {
+  const res = await fetch(`${API_BASE}/api/agent/categorize`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    let msg = `Verzoek mislukt (${res.status}).`;
+    try {
+      const parsed = (await res.json()) as { error?: string };
+      if (parsed?.error) msg = parsed.error;
+    } catch {
+      /* non-JSON error body; keep the status-based message */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as { id: string; category: string }[];
+}
+
 export type ChatStreamHandlers = {
   onChunk: (text: string) => void;
   onError?: (msg: string) => void;

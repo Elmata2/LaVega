@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations } from "@lavega/core";
+import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
@@ -232,6 +233,24 @@ export default function App() {
   async function saveRewards(next: RewardsBalance[]) {
     setRewards(next);
     await storage.putRewards(next);
+  }
+
+  // Transactions are UI-owned as a whole list too (replace-all persistence),
+  // same pattern as saveRules. Used by the AI-categorize flow to persist the
+  // `manual` category it stamps on decided txs.
+  async function saveTxs(next: Tx[]) {
+    setTxs(next);
+    await storage.putTxs(next);
+  }
+
+  // Apply confirmed AI-category decisions against the FULL tx + rules lists
+  // (not just the scoped view Transacties shows), then persist. Adding one
+  // deduped rule per (counterparty, category) means future imports of the same
+  // merchant auto-categorize without another AI call.
+  async function handleApplyCategories(decisions: CategoryDecision[]) {
+    const next = applyCategorizations(txs, rules, decisions);
+    await saveTxs(next.txs);
+    if (next.rules.length !== rules.length) await saveRules(next.rules);
   }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
@@ -518,6 +537,8 @@ export default function App() {
               onFToChange={setFTo}
               fCategory={fCategory}
               onFCategoryChange={setFCategory}
+              configured={llmConfigured}
+              onApplyCategories={handleApplyCategories}
             />
           )}
 

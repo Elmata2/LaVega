@@ -69,3 +69,25 @@ export function setChatEnabled(on: boolean): void {
     /* quota/serialization errors are non-fatal for a preference */
   }
 }
+
+const CATEGORIZE_KEY = "lavega.aiCategorize";
+
+/** Opt-in toggle for AI transaction-categorization. Defaults false: the
+ *  merchant text of your onbekend transactions is only sent to the server
+ *  (and onward to Claude) after the owner turns this on. A preference, so it
+ *  lives in localStorage. */
+export function getAiCategorizeEnabled(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(CATEGORIZE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setAiCategorizeEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(CATEGORIZE_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
