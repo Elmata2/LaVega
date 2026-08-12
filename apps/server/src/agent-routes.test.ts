@@ -198,3 +198,67 @@ test("POST /api/agent/chat returns 400 when messages is empty", async () => {
     expect(called).toBe(false);
   });
 });
+
+test("POST /api/agent/categorize returns 503 when no API key is configured", async () => {
+  await withApiKey(undefined, async () => {
+    const app = new Hono();
+    let called = false;
+    registerAgentRoutes(app, {
+      categorize: async () => {
+        called = true;
+        return [];
+      },
+    });
+    const res = await app.request("/api/agent/categorize", jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }));
+    expect(res.status).toBe(503);
+    expect(called).toBe(false);
+  });
+});
+
+test("with a key set and an injected categorizer, returns 200 with the results", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    registerAgentRoutes(app, { categorize: async () => [{ id: "t1", category: "Boodschappen" }] });
+    const res = await app.request("/api/agent/categorize", jsonPost({ items: [{ id: "t1", text: "Albert Heijn", sign: "out" }] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([{ id: "t1", category: "Boodschappen" }]);
+  });
+});
+
+test("only the sanitized items reach the categorizer — amount/accountKey are stripped", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let captured: { items: Record<string, unknown>[] } | undefined;
+    registerAgentRoutes(app, {
+      categorize: async (input) => {
+        captured = input as { items: Record<string, unknown>[] };
+        return [];
+      },
+    });
+    const res = await app.request(
+      "/api/agent/categorize",
+      jsonPost({ items: [{ id: "t1", text: "Albert Heijn", sign: "out", amount: -20, accountKey: "A1" }] }),
+    );
+    expect(res.status).toBe(200);
+    expect(captured?.items).toEqual([{ id: "t1", text: "Albert Heijn", sign: "out" }]);
+    expect(captured?.items[0]).not.toHaveProperty("amount");
+    expect(captured?.items[0]).not.toHaveProperty("accountKey");
+  });
+});
+
+test("an oversize categorize batch is rejected with 400 before the categorizer", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let called = false;
+    registerAgentRoutes(app, {
+      categorize: async () => {
+        called = true;
+        return [];
+      },
+    });
+    const items = Array.from({ length: 201 }, (_, i) => ({ id: String(i), text: "x", sign: "out" }));
+    const res = await app.request("/api/agent/categorize", jsonPost({ items }));
+    expect(res.status).toBe(400);
+    expect(called).toBe(false);
+  });
+});
