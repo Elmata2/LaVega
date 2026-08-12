@@ -9,7 +9,9 @@ const WAITLIST_ENDPOINT = "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAi
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
- *  ondernemers). "Aan de slag / Inloggen" enters the app (#app). */
+ *  ondernemers). The app isn't public yet — it's a waitlist front door: the
+ *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
+ *  the vault (#app) via `onEnter`, for owner/Railway testing. */
 export default function Landing({ onEnter }: { onEnter: () => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const agentsRef = useRef<HTMLDivElement | null>(null);
@@ -120,9 +122,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.
         </p>
         <div className="lp-cta-row lp-reveal">
-          <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={onEnter}>
-            Aan de slag <span aria-hidden="true">→</span>
-          </button>
+          <a className="lp-btn lp-btn-dark lp-btn-lg" href="#wachtlijst">
+            Kom op de wachtlijst <span aria-hidden="true">→</span>
+          </a>
           <a className="lp-btn lp-btn-light lp-btn-lg" href="#how">
             Bekijk hoe het werkt
           </a>
@@ -178,9 +180,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               We doen er alles aan om je een naadloze ervaring te geven — snel, veilig en compleet.
               Eén helder beeld van al je rekeningen, waar je ook bankiert.
             </p>
-            <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
+            <a className="lp-btn lp-btn-dark" href="#agents">
               Ontdek meer <span aria-hidden="true">→</span>
-            </button>
+            </a>
           </div>
         </div>
         <div className="lp-tiles lp-reveal">
@@ -409,9 +411,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       <footer className="lp-footer2">
         <div className="lp-footer2-cta lp-reveal">
           <h2 className="lp-h2">Klaar om grip te krijgen op je geld?</h2>
-          <button type="button" className="lp-btn lp-btn-tan lp-btn-lg" onClick={onEnter}>
-            Aan de slag <span aria-hidden="true">→</span>
-          </button>
+          <a className="lp-btn lp-btn-tan lp-btn-lg" href="#wachtlijst">
+            Kom op de wachtlijst <span aria-hidden="true">→</span>
+          </a>
         </div>
         <div className="lp-footer2-grid">
           <div className="lp-footer2-about">
