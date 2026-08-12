@@ -23,6 +23,17 @@ test("buildCategorizeItems maps to {id,text,sign} only — no amount/account/dat
   expect(Object.keys(items[0]).sort()).toEqual(["id", "sign", "text"]);
 });
 
+test("buildCategorizeItems scrubs IBANs, dates and amounts hiding in the free-text", () => {
+  const items = buildCategorizeItems([
+    tx({ description: "SEPA NL12ABNA0123456789 factuurdatum 2026-08-01 bedrag 45,00" }),
+  ]);
+  const text = items[0].text;
+  expect(text).not.toMatch(/NL12ABNA/i);
+  expect(text).not.toMatch(/2026-08-01/);
+  expect(text).not.toMatch(/45,00/);
+  expect(text).toContain("Albert Heijn"); // merchant name is preserved
+});
+
 test("buildCategorizeItems derives sign from amount and trims text to 200 chars", () => {
   const long = "X".repeat(300);
   const items = buildCategorizeItems([

@@ -70,7 +70,9 @@ export async function categorizeTransactions(
     list;
   const res = await client.messages.create({
     model: "claude-haiku-4-5",
-    max_tokens: 4096,
+    // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
+    // land well under this, so the forced-tool JSON won't truncate mid-array.
+    max_tokens: 8192,
     tools: [CATEGORIZE_TOOL as unknown as Anthropic.Tool],
     tool_choice: { type: "tool", name: "categorize_transactions" },
     messages: [{ role: "user", content: prompt }],

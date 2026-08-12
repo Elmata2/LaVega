@@ -235,9 +235,11 @@ export default function App() {
     await storage.putRewards(next);
   }
 
-  // Transactions are UI-owned as a whole list too (replace-all persistence),
-  // same pattern as saveRules. Used by the AI-categorize flow to persist the
-  // `manual` category it stamps on decided txs.
+  // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
+  // (not replace-all like putRules), which is correct here because the AI-
+  // categorize flow passes the COMPLETE list back from `applyCategorizations`,
+  // so upserting every id is equivalent to a replace. Used to persist the
+  // `manual` category stamped on decided txs.
   async function saveTxs(next: Tx[]) {
     setTxs(next);
     await storage.putTxs(next);

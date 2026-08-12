@@ -19,7 +19,9 @@ type Deps = {
   categorize?: typeof categorizeTransactions;
 };
 
-// 20 requests/min, shared across all agent routes (single-user personal app).
+// 20 requests/min per route key (each route passes its own key — "extract" /
+// "chat" / "categorize" — so each gets an independent bucket). Single-user
+// personal app, so these limits are a safety valve, not a shared budget.
 const limit = createRateLimiter(20, 60_000);
 
 export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {

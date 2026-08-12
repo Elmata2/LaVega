@@ -175,9 +175,10 @@ export default function Transacties({
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <p className="cell-sub">
             Alleen de <strong>tegenpartij + omschrijving</strong> en de richting (in/uit) van je
-            onbekende transacties gaan via onze server naar Claude — nooit bedragen, saldi,
-            rekeningnummers of datums. Je bekijkt en bevestigt elk voorstel voordat er iets
-            verandert.
+            onbekende transacties gaan via onze server naar Claude — nooit je bedragen, saldi,
+            rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen
+            en datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk
+            voorstel voordat er iets verandert.
           </p>
           <button type="button" className="btn btn-primary" onClick={enableAndRun}>
             Aanzetten en categoriseren
@@ -239,6 +240,11 @@ export default function Transacties({
               </tbody>
             </table>
           </div>
+          {aiNote && (
+            <p className="cell-sub" role="alert">
+              {aiNote}
+            </p>
+          )}
           <button type="button" className="btn btn-primary" onClick={() => void applyReview()}>
             Toepassen
           </button>{" "}
