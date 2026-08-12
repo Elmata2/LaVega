@@ -10,9 +10,16 @@ Sheet: https://docs.google.com/spreadsheets/d/1jsz4U_P0jvDyWWGhbrK5jdrSvQojL_44G
 
 1. Open the Sheet (link above).
 2. **Extensions → Apps Script.**
-3. Replace the default code with:
+3. Select ALL existing code and delete it, then paste **only** the code below.
+   ⚠️ Do NOT paste the triple-backticks or a `js` line — the first line must be
+   `function doGet(e) {`. (A stray `js` on line 1 causes the runtime error
+   `ReferenceError: js is not defined`.)
 
-```js
+```
+function doGet(e) {
+  return ContentService.createTextOutput("LaVega waitlist ok");
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(5000);
@@ -36,6 +43,9 @@ function doPost(e) {
    - Who has access: **Anyone**
 5. **Deploy**, then **Authorize access** (grant your own account).
 6. Copy the **Web app URL** (ends in `/exec`).
+   (If you edit the code later, re-publish via Deploy → **Manage deployments** →
+   edit → Version **New version**; the `/exec` URL stays the same.)
+7. Verify: open the `/exec` URL in a browser — it should show `LaVega waitlist ok`.
 7. Send Claude that URL → it sets `WAITLIST_ENDPOINT` in `Landing.tsx` and redeploys.
    Until then the form shows a "Binnenkort" state (no sign-ups are silently dropped).
 
