@@ -645,10 +645,14 @@ body.lp-scroll #root {
   border-radius: 20px;
   display: grid;
   place-items: center;
-  font-size: 1.9rem;
+  color: var(--lp-tan-deep);
   background: rgba(207, 159, 94, 0.16);
   border: 1px solid var(--lp-line);
   margin-bottom: 18px;
+}
+.lp-feature-medallion svg {
+  width: 30px;
+  height: 30px;
 }
 .lp-feature-title {
   font-family: var(--font-display);

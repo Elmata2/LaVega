@@ -115,10 +115,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           Al je rekeningen,<br />één helder getal.
         </h1>
         <p className="lp-sub lp-reveal">
-          Student, ondernemer én stichting-oprichter tegelijk? LaVega bundelt al je rekeningen — bij
-          elke bank — in één overzicht. Weet op elk moment precies hoeveel je hebt en waar je geld heen
-          gaat, reserveer je belasting, en haal het meeste uit je Amex- en ING-punten. Lokaal-first:
-          je cijfers blijven op je eigen apparaat.
+          LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment
+          precies hoeveel je hebt en waar je geld heen gaat, reserveer je belasting, en haal het
+          meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.
         </p>
         <div className="lp-cta-row lp-reveal">
           <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={onEnter}>
@@ -241,10 +240,46 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
         <div className="lp-carousel lp-reveal" ref={agentsRef}>
           {[
-            { icon: "🧾", t: "Facturen-agent", d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt." },
-            { icon: "🏛️", t: "Belasting-agent", d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan." },
-            { icon: "💱", t: "Koersen-agent", d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank)." },
-            { icon: "⭐", t: "Punten-agent", d: "Houdt je Amex- en ING-punten bij en zoekt live op wat ze écht waard zijn — en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen." },
+            {
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 3h8l4 4v14H6z" />
+                  <path d="M14 3v4h4" />
+                  <path d="M9 13h6M9 17h6" />
+                </svg>
+              ),
+              t: "Facturen-agent",
+              d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt.",
+            },
+            {
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              ),
+              t: "Belasting-agent",
+              d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan.",
+            },
+            {
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 8h13M17 8l-3-3M17 8l-3 3" />
+                  <path d="M20 16H7M7 16l3 3M7 16l3-3" />
+                </svg>
+              ),
+              t: "Koersen-agent",
+              d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank).",
+            },
+            {
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6 6.9 19.2l1-5.7-4.1-4 5.7-.8z" />
+                </svg>
+              ),
+              t: "Punten-agent",
+              d: "Houdt je punten bij en zoekt live op wat ze écht waard zijn en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen.",
+            },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
               <div className="lp-feature-medallion" aria-hidden="true">{a.icon}</div>
