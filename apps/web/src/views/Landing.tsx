@@ -112,12 +112,13 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Hero */}
       <section className="lp-hero">
         <h1 className="lp-h1 lp-reveal">
-          Je financiële cockpit<br />voor al je BV&apos;s én privé.
+          Al je rekeningen,<br />één helder getal.
         </h1>
         <p className="lp-sub lp-reveal">
-          LaVega bundelt al je zakelijke en privé-rekeningen in één privé overzicht, voorspelt je
-          kaspositie 13 weken vooruit, en zet agents in die je btw reserveren, facturen uitlezen en de
-          goedkoopste koers vinden. Lokaal-first — je cijfers blijven op je eigen apparaat, zonder CFO.
+          Student, ondernemer én stichting-oprichter tegelijk? LaVega bundelt al je rekeningen — bij
+          elke bank — in één overzicht. Weet op elk moment precies hoeveel je hebt en waar je geld heen
+          gaat, reserveer je belasting, en haal het meeste uit je Amex- en ING-punten. Lokaal-first:
+          je cijfers blijven op je eigen apparaat.
         </p>
         <div className="lp-cta-row lp-reveal">
           <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={onEnter}>
@@ -243,7 +244,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             { icon: "🧾", t: "Facturen-agent", d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt." },
             { icon: "🏛️", t: "Belasting-agent", d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan." },
             { icon: "💱", t: "Koersen-agent", d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank)." },
-            { icon: "⭐", t: "Punten-agent", d: "Houdt je loyalty- en spaarpunten bij en zoekt live op wat ze écht waard zijn en hoe je ze het best inwisselt." },
+            { icon: "⭐", t: "Punten-agent", d: "Houdt je Amex- en ING-punten bij en zoekt live op wat ze écht waard zijn — en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen." },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
               <div className="lp-feature-medallion" aria-hidden="true">{a.icon}</div>
