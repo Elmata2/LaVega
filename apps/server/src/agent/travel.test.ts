@@ -97,3 +97,36 @@ test("real brand names with digits still pass", () => {
   const out = sanitizeTravelInput({ ...valid, providers: ["Trading 212", "N26", "bunq", "American Express"] });
   expect(out.providers).toEqual(["Trading 212", "N26", "bunq", "American Express"]);
 });
+
+/* --- Attribution: a reported name that isn't byte-identical to what we asked
+ * used to be discarded, which turned a real answer into an empty result. --- */
+
+test("with ONE provider asked, an answer under any name is attributed to it", async () => {
+  const single = { ...valid, providers: ["American Express"] };
+  for (const name of ["Amex", "American Express Nederland", "AMERICAN EXPRESS", ""]) {
+    const client = stubClient([{ provider: name, fxFeePct: 2 }]);
+    const out = await lookupProviderTerms(sanitizeTravelInput(single), "k", { client });
+    expect(out).toHaveLength(1);
+    expect(out[0].provider).toBe("American Express"); // keyed by what WE asked
+    expect(out[0].fxFeePct).toBe(2);
+  }
+});
+
+test("with one asked, a model volunteering extra products still can't inject them", async () => {
+  const client = stubClient([{ provider: "Amex", fxFeePct: 2 }, { provider: "Wise", fxFeePct: 0.4 }]);
+  const out = await lookupProviderTerms(sanitizeTravelInput({ ...valid, providers: ["American Express"] }), "k", { client });
+  expect(out).toHaveLength(1);
+  expect(out[0]).toMatchObject({ provider: "American Express", fxFeePct: 2 });
+});
+
+test("with several asked, near-matches attach to the right one and strangers are refused", async () => {
+  const many = { ...valid, providers: ["ING", "American Express"] };
+  const client = stubClient([
+    { provider: "ING Bank", fxFeePct: 1.4 },
+    { provider: "Amex", fxFeePct: 2 }, // no containment either way -> refused
+    { provider: "Wise", fxFeePct: 0.4 },
+  ]);
+  const out = await lookupProviderTerms(sanitizeTravelInput(many), "k", { client });
+  expect(out.map((o) => o.provider)).toEqual(["ING"]);
+  expect(out[0].fxFeePct).toBe(1.4);
+});

@@ -113,10 +113,35 @@ export type ProviderTerms = {
   note?: string;
 };
 
-const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 6 } as const;
+const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 4 } as const;
+
+/** Hard ceiling per provider. Measured: a lookup for "American Express" was
+ *  still searching after seven minutes — plausible for a brand with a dozen
+ *  card variants, and far too long to make anyone wait. Better to give up and
+ *  let the owner type the number in than to hang. */
+const LOOKUP_TIMEOUT_MS = 120_000;
 
 function numeric(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+const lower = (s: string) => s.trim().toLowerCase();
+
+/** Decide which asked-for provider a reported row is about, returning the name
+ *  WE asked with (so facts key consistently). Callers look ONE provider up per
+ *  request, and then any row can only be about that one — so it is pinned.
+ *  Demanding an exact string match there silently threw away real answers: a
+ *  model asked about "American Express" may reply "Amex" or "American Express
+ *  Nederland". Only the first row is taken, so a model that volunteers extra
+ *  products still can't inject one. With several providers asked, fall back to
+ *  exact, then containment, then refuse. */
+function attribute(reported: string, asked: string[], alreadyTaken: number): string | null {
+  if (asked.length === 1) return alreadyTaken === 0 ? asked[0] : null;
+  const r = lower(reported);
+  if (!r) return null;
+  return asked.find((a) => lower(a) === r)
+    ?? asked.find((a) => r.includes(lower(a)) || lower(a).includes(r))
+    ?? null;
 }
 
 /** Look up current product terms via Sonnet 5 + web search (fees change, so a
@@ -165,20 +190,18 @@ export async function lookupProviderTerms(
           `.\nAanbieders: ${input.providers.join(", ")}.${known}`,
       },
     ],
-  });
+  }, { timeout: LOOKUP_TIMEOUT_MS, maxRetries: 0 });
 
   const block = message.content.find((b) => b.type === "tool_use" && b.name === TERMS_TOOL.name);
   if (!block || block.type !== "tool_use") return [];
   const rows = (block.input as { providers?: unknown }).providers;
   if (!Array.isArray(rows)) return [];
 
-  // Only report back on providers we actually asked about, matched case-insensitively.
-  const wanted = new Map(input.providers.map((p) => [p.toLowerCase(), p]));
   const out: ProviderTerms[] = [];
   for (const r of rows) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
-    const asked = wanted.get(String(o.provider ?? "").trim().toLowerCase());
+    const asked = attribute(String(o.provider ?? ""), input.providers, out.length);
     if (!asked) continue;
     out.push({
       provider: asked,
