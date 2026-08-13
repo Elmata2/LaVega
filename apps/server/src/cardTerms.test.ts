@@ -71,3 +71,29 @@ test("the same brand is cached separately per market", async () => {
   const gbp = getCardTerms({ ...input(["ING"]), currency: "GBP" }, "k", { lookup: lookup as never });
   expect(gbp.pending).toEqual(["ING"]);
 });
+
+test("an EXPIRED entry is still served while it refreshes — never a blank", async () => {
+  let value = 1;
+  const lookup = async () => [{ provider: "Revolut", fxFeePct: value }];
+  getCardTerms(input(["Revolut"]), "k", { lookup: lookup as never });
+  await settle();
+
+  // Age the entry past its TTL.
+  const eightDays = 8 * 24 * 60 * 60 * 1000;
+  const realNow = Date.now;
+  Date.now = () => realNow() + eightDays;
+  try {
+    value = 2; // the refresh will find a new figure
+    const stale = getCardTerms(input(["Revolut"]), "k", { lookup: lookup as never });
+    // The week-old tariff is handed over NOW rather than reverting to unknown.
+    expect(stale.terms).toEqual([{ provider: "Revolut", fxFeePct: 1 }]);
+    expect(stale.pending).toEqual([]);
+    await settle();
+    // ...and the background refresh has replaced it for the next caller.
+    expect(getCardTerms(input(["Revolut"]), "k", { lookup: lookup as never }).terms).toEqual([
+      { provider: "Revolut", fxFeePct: 2 },
+    ]);
+  } finally {
+    Date.now = realNow;
+  }
+});

@@ -553,7 +553,11 @@ export default function App() {
     setBusy(true);
     try {
       const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
-      const providers = plan.unknownProviders;
+      // Ask about EVERY provider, not just the ones with no figure yet — the
+      // server holds the freshness clock, and only asking about unknowns meant
+      // a fee, once learned, could never be refreshed again. Corrections are
+      // still safe: upsertFacts never lets an agent overwrite a user fact.
+      const providers = plan.spend.map((o) => o.provider).filter(Boolean);
       if (providers.length === 0) return;
       const today = new Date().toISOString().slice(0, 10);
       // Send what he corrected so the model is told not to contradict it.

@@ -116,9 +116,13 @@ export default function TravelBlock({
     <section className="card" aria-label="Op reis">
       <div className="card-header">
         <h2>Op reis</h2>
-        {plan && plan.unknownProviders.length > 0 && aiAvailable && (
+        {plan && plan.spend.length > 0 && aiAvailable && (
           <button type="button" className="card-link" onClick={() => onRefreshTerms(destination)} disabled={busy}>
-            {busy ? "Bezig…" : `Zoek voorwaarden (${plan.unknownProviders.length})`}
+            {busy
+              ? "Bezig…"
+              : plan.unknownProviders.length > 0
+                ? `Zoek voorwaarden (${plan.unknownProviders.length})`
+                : "Ververs voorwaarden"}
           </button>
         )}
       </div>
@@ -173,7 +177,10 @@ export default function TravelBlock({
                       <div className="cell-sub">
                         {option.why}
                         {option.netCostPct !== null && ` → netto ${option.netCostPct}%`}
+                        {option.feeSource === "user" && " · door jou ingesteld"}
+                        {option.feeSource === "agent" && option.feeUpdatedAt && ` · opgezocht ${option.feeUpdatedAt}`}
                       </div>
+                      {option.note && <div className="cell-sub travel-note">{option.note}</div>}
                     </div>
                     <FactCorrection
                       provider={option.provider}

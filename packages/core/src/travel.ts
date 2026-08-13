@@ -1,6 +1,6 @@
 import type { Account, Tx } from "./model.js";
-import type { LearnedFact } from "./facts.js";
-import { factNumber } from "./facts.js";
+import type { LearnedFact, FactSource } from "./facts.js";
+import { factNumber, factEntry } from "./facts.js";
 import { analyzeInterest, type RateBenchmark, type InterestSuggestion } from "./interest.js";
 import { accountType } from "./balance.js";
 
@@ -36,6 +36,11 @@ export type SpendOption = {
   netCostPct: number | null; // null when the fee is unknown — never assumed free
   known: boolean;
   why: string;
+  /** Where the fee figure came from and when, so the owner can judge it. */
+  feeSource: FactSource | null;
+  feeUpdatedAt: string | null;
+  /** The provider's own caveat (weekend surcharge, monthly free limit, …). */
+  note: string | null;
 };
 
 export type ConvertStep = {
@@ -107,6 +112,7 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
   const options = [...byProvider.entries()].map(([provider, group]): SpendOption => {
     const fxFeePct = factNumber(facts, TRAVEL_AGENT, provider, "fxFeePct");
     const cashbackPct = factNumber(facts, TRAVEL_AGENT, provider, "cashbackPct");
+    const entry = factEntry(facts, TRAVEL_AGENT, provider, "fxFeePct");
     const known = fxFeePct !== null;
     const netCostPct = known ? fxFeePct - (cashbackPct ?? 0) : null;
     return {
@@ -114,6 +120,9 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
       why: known
         ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}`
         : "voorwaarden nog onbekend",
+      feeSource: entry?.source ?? null,
+      feeUpdatedAt: entry?.updatedAt ?? null,
+      note: entry?.note ?? null,
     };
   });
   return options.sort((a, b) => {

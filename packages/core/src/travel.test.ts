@@ -138,3 +138,19 @@ test("the savings advice names an account even when it has no bank (display, not
   // ...and it is still never offered as a provider to look up.
   expect(plan.unknownProviders).toEqual([]);
 });
+
+test("a spend option carries where its fee came from, so the owner can judge it", () => {
+  const facts = upsertFacts([], [
+    fact("Trading 212", "fxFeePct", "0", "agent"),
+    makeFact({ agent: TRAVEL_AGENT, subject: "ING", key: "fxFeePct", value: "1.4", source: "user", updatedAt: "2026-08-13", note: "zelf nagekeken" }),
+  ]);
+  const ranked = rankSpendOptions(CARDS, facts);
+  const t212 = ranked.find((o) => o.provider === "Trading 212")!;
+  const ing = ranked.find((o) => o.provider === "ING")!;
+  expect(t212.feeSource).toBe("agent");
+  expect(t212.feeUpdatedAt).toBe("2026-08-13");
+  expect(ing.feeSource).toBe("user"); // shown as "door jou ingesteld"
+  expect(ing.note).toBe("zelf nagekeken");
+  // Unknown terms carry no provenance to display.
+  expect(ranked.find((o) => o.provider === "American Express")!.feeSource).toBeNull();
+});

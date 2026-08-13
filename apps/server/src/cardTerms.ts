@@ -74,11 +74,17 @@ export function getCardTerms(input: TravelInput, apiKey: string, deps: Deps = {}
   const pending: string[] = [];
   for (const provider of providers) {
     const hit = cache.get(keyOf(provider, base.homeCountry, base.currency));
-    if (fresh(hit)) terms.push(hit!.terms);
-    else {
-      startLookup(provider, base, apiKey, deps);
-      pending.push(provider);
+    if (fresh(hit)) {
+      terms.push(hit!.terms);
+      continue;
     }
+    // Stale-while-revalidate, the same fallback order rates.ts uses (fresh ->
+    // live -> last good). An expired entry is still a real tariff and beats
+    // showing "unknown": hand it over NOW and refresh it in the background. A
+    // week-old fee is almost certainly still right; a blank one is never right.
+    startLookup(provider, base, apiKey, deps);
+    if (hit) terms.push(hit.terms);
+    else pending.push(provider);
   }
   return { terms, pending };
 }

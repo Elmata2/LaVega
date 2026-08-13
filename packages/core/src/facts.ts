@@ -65,6 +65,14 @@ export function factNumber(facts: readonly LearnedFact[], agent: string, subject
   return Number.isFinite(n) ? n : null;
 }
 
+/** The stored fact itself, for showing where a number came from and how old it
+ *  is — "1,4% (door jou ingesteld)" reads very differently from a figure an
+ *  agent found months ago, and the owner deserves to tell them apart. */
+export function factEntry(facts: readonly LearnedFact[], agent: string, subject: string, key: string): LearnedFact | null {
+  const id = factId(agent, subject, key);
+  return facts.find((f) => f.id === id) ?? null;
+}
+
 /** Every fact about one subject, for showing "what LaVega thinks it knows". */
 export function factsFor(facts: readonly LearnedFact[], agent: string, subject: string): LearnedFact[] {
   const want = norm(subject);
