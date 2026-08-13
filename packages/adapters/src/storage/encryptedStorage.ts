@@ -203,6 +203,26 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       });
     },
 
+    // Removal primitives — parity with createIndexedDbStorage. Through
+    // enqueueWrite like every mutator: a delete resolving out of order must not
+    // let a stale snapshot's persist() revert the blob (and bring the row back).
+    // `accountKey` (not `key`) — a `key` param would shadow the vault CryptoKey.
+    deleteAccount(accountKey: string): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, accounts: data.accounts.filter((a) => a.key !== accountKey) };
+        await persist();
+      });
+    },
+    deleteTxs(ids: string[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        const drop = new Set(ids);
+        data = { ...data, txs: data.txs.filter((t) => !drop.has(t.id)) };
+        await persist();
+      });
+    },
+
     async getRules(): Promise<Rule[]> {
       if (data == null) throw new Error(LOCKED_ERROR);
       return [...data.rules];

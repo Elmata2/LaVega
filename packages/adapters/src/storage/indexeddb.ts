@@ -50,6 +50,23 @@ export function createIndexedDbStorage(): StorageAdapter {
       await tx.done;
       db.close();
     },
+    // Removal primitives. Account and txs are deleted separately so a merge can
+    // reassign the transactions before the duplicate account row goes.
+    async deleteAccount(key: string): Promise<void> {
+      const db = await openLaVegaDb();
+      const tx = db.transaction("accounts", "readwrite");
+      await tx.store.delete(key); // absent key = no-op in IndexedDB
+      await tx.done;
+      db.close();
+    },
+    async deleteTxs(ids: string[]): Promise<void> {
+      const db = await openLaVegaDb();
+      const tx = db.transaction("txs", "readwrite");
+      await Promise.all(ids.map((id) => tx.store.delete(id)));
+      await tx.done;
+      db.close();
+    },
+
     async getRules(): Promise<Rule[]> {
       const db = await openLaVegaDb();
       const result = await db.getAll("rules");

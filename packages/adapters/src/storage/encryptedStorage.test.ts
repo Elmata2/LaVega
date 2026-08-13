@@ -9,6 +9,10 @@ import { createEncryptedStorage } from "./encryptedStorage.js";
 const acc = (key: string, balance: number | null = null): Account =>
   ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance });
 
+const tx = (id: string, accountKey: string): Tx =>
+  ({ id, accountKey, date: "2026-06-01", amount: -5, currency: "EUR",
+     counterparty: "", description: "", category: "", manual: false });
+
 test("setup -> put -> lock -> unlock(correct) round-trips; wrong passphrase stays locked", async () => {
   globalThis.indexedDB = new IDBFactory();
   const v = createEncryptedStorage();
@@ -244,4 +248,62 @@ test("rewards round-trip; legacy vault defaults to []", async () => {
   const reward = { id: "amex", program: "American Express Membership Rewards", points: 10000, updatedAt: "2026-06-01" };
   await s.putRewards([reward]);
   expect(await s.getRewards()).toEqual([reward]);
+});
+
+test("deleteAccount / deleteTxs remove only their rows (parity with plaintext adapter)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-delete");
+  await v.setup("pw");
+  await v.putAccounts([acc("A", 1), acc("B", 2)]);
+  await v.putTxs([tx("a1", "A"), tx("a2", "A"), tx("b1", "B")]);
+
+  await v.deleteAccount("A");
+  expect((await v.getAccounts()).map((a) => a.key)).toEqual(["B"]);
+  expect(await v.getTxs()).toHaveLength(3); // txs untouched — the caller decides
+
+  await v.deleteTxs(["a1", "nope"]); // unknown id is a no-op
+  expect((await v.getTxs()).map((t) => t.id).sort()).toEqual(["a2", "b1"]);
+
+  await v.deleteAccount("GONE"); // absent account is a no-op
+  expect(await v.getAccounts()).toHaveLength(1);
+});
+
+test("deletes survive lock/unlock — they are persisted, not just in-memory", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-delete-persist");
+  await v.setup("pw");
+  await v.putAccounts([acc("A", 1), acc("B", 2)]);
+  await v.putTxs([tx("a1", "A"), tx("b1", "B")]);
+  await v.deleteAccount("A");
+  await v.deleteTxs(["a1"]);
+
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect((await v.getAccounts()).map((a) => a.key)).toEqual(["B"]);
+  expect((await v.getTxs()).map((t) => t.id)).toEqual(["b1"]);
+});
+
+test("a delete racing a put is serialized — neither reverts the other", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-delete-race");
+  await v.setup("pw");
+  await v.putAccounts([acc("A", 1)]);
+  await v.putTxs([tx("a1", "A"), tx("a2", "A")]);
+
+  // Fire concurrently: without the write queue one persist() could land last
+  // with a stale snapshot and resurrect the deleted tx.
+  await Promise.all([v.deleteTxs(["a1"]), v.putTxs([tx("a3", "A")])]);
+
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect((await v.getTxs()).map((t) => t.id).sort()).toEqual(["a2", "a3"]);
+});
+
+test("delete while locked throws", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-delete-locked");
+  await v.setup("pw");
+  v.lock();
+  await expect(v.deleteAccount("A")).rejects.toBeTruthy();
+  await expect(v.deleteTxs(["a1"])).rejects.toBeTruthy();
 });
