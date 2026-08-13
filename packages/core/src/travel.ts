@@ -23,12 +23,14 @@ export function countryCurrency(code: string): string | null {
   return COUNTRY_CURRENCY[String(code ?? "").trim().toUpperCase()] ?? null;
 }
 
-/** One card ranked for spending abroad. `netCostPct` is what the trip actually
- *  costs you per euro spent: the conversion surcharge minus what you get back.
- *  Lower is better; a negative value means the card pays you to use it. */
+/** One PRODUCT ranked for spending abroad — a provider, not an account: terms
+ *  belong to the card product, so two accounts at one bank are one row (and one
+ *  correction). `netCostPct` is what the trip actually costs you per euro spent:
+ *  the conversion surcharge minus what you get back. Lower is better; negative
+ *  means the card pays you to use it. */
 export type SpendOption = {
-  account: Account;
   provider: string;
+  accounts: Account[];
   fxFeePct: number | null;
   cashbackPct: number | null;
   netCostPct: number | null; // null when the fee is unknown — never assumed free
@@ -37,8 +39,8 @@ export type SpendOption = {
 };
 
 export type ConvertStep = {
-  from: Account | null;
-  to: Account | null;
+  fromProvider: string | null;
+  toProvider: string | null;
   method: string | null; // e.g. "iDEAL"
   note: string;
 };
@@ -52,19 +54,29 @@ export type TravelPlan = {
   spend: SpendOption[];
   /** Providers we have no terms for yet — what an agent refresh should look up. */
   unknownProviders: string[];
+  /** Payment accounts we can't attribute to a bank, so they can't be ranked or
+   *  looked up. Reported so the owner can fix them, never silently dropped. */
+  unidentifiedCount: number;
 };
 
-/** The provider name a card's terms are stored under. The bank is the product
- *  ("Trading 212"); the account name is his own label and would fragment facts. */
-function providerOf(a: Account): string {
-  return (a.bank || a.name || a.key || "").trim();
+/** The product a card's terms belong to: the BANK, and only the bank.
+ *
+ *  Never falls back to the account name or key. Those are the owner's own
+ *  labels, and for an account imported without a bank they are literally the
+ *  account NUMBER ("A 286-41213") — useless to rank, and an identifier that
+ *  would be handed to an agent as if it were a product name. An account we
+ *  can't attribute to a bank is reported as unidentified instead. */
+export function providerOf(a: Account): string {
+  return String(a.bank ?? "").trim();
 }
 
-/** Cards + payment accounts he could actually pay with abroad. */
+/** Products you could actually pay with abroad: cards and payment accounts at a
+ *  known bank. Savings and investment accounts are not payment instruments, and
+ *  an account with no bank can't be looked up (see `providerOf`). */
 function spendableAccounts(accounts: Account[]): Account[] {
   return accounts.filter((a) => {
     const t = accountType(a);
-    return t === "Creditcard" || t === "Betaalrekening";
+    return (t === "Creditcard" || t === "Betaalrekening") && providerOf(a) !== "";
   });
 }
 
@@ -72,14 +84,24 @@ function spendableAccounts(accounts: Account[]): Account[] {
  *  with unknown terms always sort last — an unknown fee is a risk, not a zero,
  *  and silently ranking it first is exactly how you get burned abroad. */
 export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFact[]): SpendOption[] {
-  const options = spendableAccounts(accounts).map((account): SpendOption => {
-    const provider = providerOf(account);
+  // Collapse to one entry per provider: the terms are the product's, so several
+  // accounts at one bank must not become several identical rows (correcting one
+  // of them would silently move the others anyway).
+  const byProvider = new Map<string, Account[]>();
+  for (const a of spendableAccounts(accounts)) {
+    const p = providerOf(a);
+    const list = byProvider.get(p);
+    if (list) list.push(a);
+    else byProvider.set(p, [a]);
+  }
+
+  const options = [...byProvider.entries()].map(([provider, group]): SpendOption => {
     const fxFeePct = factNumber(facts, TRAVEL_AGENT, provider, "fxFeePct");
     const cashbackPct = factNumber(facts, TRAVEL_AGENT, provider, "cashbackPct");
     const known = fxFeePct !== null;
     const netCostPct = known ? fxFeePct - (cashbackPct ?? 0) : null;
     return {
-      account, provider, fxFeePct, cashbackPct, netCostPct, known,
+      provider, accounts: group, fxFeePct, cashbackPct, netCostPct, known,
       why: known
         ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}`
         : "voorwaarden nog onbekend",
@@ -99,19 +121,20 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
  *  step for him to take. */
 function planConversion(accounts: Account[], best: SpendOption | null, facts: readonly LearnedFact[]): ConvertStep {
   if (!best || !best.known) {
-    return { from: null, to: null, method: null, note: "Nog geen kaart met bekende voorwaarden — ververs eerst de voorwaarden." };
+    return { fromProvider: null, toProvider: null, method: null, note: "Nog geen kaart met bekende voorwaarden — ververs eerst de voorwaarden." };
   }
-  // Fund the winning card from the payment account holding the most money.
+  // Fund the winning product from the payment account holding the most money —
+  // at a DIFFERENT provider, else the advice is "move it to where it already is".
   const funding = accounts
-    .filter((a) => accountType(a) === "Betaalrekening" && a.key !== best.account.key)
+    .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== best.provider)
     .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0] ?? null;
   const method = factNumber(facts, TRAVEL_AGENT, best.provider, "transferFreeViaIdeal") === 1 ? "iDEAL" : null;
   if (!funding) {
-    return { from: null, to: best.account, method, note: `Je betaalt het voordeligst vanaf ${best.provider}.` };
+    return { fromProvider: null, toProvider: best.provider, method, note: `Je betaalt het voordeligst vanaf ${best.provider}.` };
   }
   return {
-    from: funding,
-    to: best.account,
+    fromProvider: providerOf(funding),
+    toProvider: best.provider,
     method,
     note: method
       ? `Zet je reisbudget van ${providerOf(funding)} naar ${best.provider} via ${method} — dat is gratis — en betaal daar.`
@@ -144,10 +167,16 @@ export function planTravel(input: {
 
   const spend = rankSpendOptions(accounts, facts);
   const bestSpend = spend.find((s) => s.known) ?? null;
-  const convert =
+  const convert: ConvertStep =
     currency === "EUR"
-      ? { from: null, to: null, method: null, note: "Daar betaal je in euro's — omwisselen is niet nodig." }
+      ? { fromProvider: null, toProvider: null, method: null, note: "Daar betaal je in euro's — omwisselen is niet nodig." }
       : planConversion(accounts, bestSpend, facts);
+
+  // Payment accounts with no bank: countable, but never rankable or lookupable.
+  const unidentifiedCount = accounts.filter((a) => {
+    const t = accountType(a);
+    return (t === "Creditcard" || t === "Betaalrekening") && providerOf(a) === "";
+  }).length;
 
   return {
     destination,
@@ -156,5 +185,6 @@ export function planTravel(input: {
     convert,
     spend,
     unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],
+    unidentifiedCount,
   };
 }

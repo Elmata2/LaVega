@@ -30,6 +30,16 @@ function shortField(raw: unknown): string {
   return s.slice(0, MAX_FIELD);
 }
 
+/** Defence in depth for provider names. A provider is a BRAND ("Trading 212",
+ *  "N26"), never an account identifier — but an account imported without a bank
+ *  is named after its own number, so a caller bug could turn "A 286-41213" into
+ *  a "provider" and hand an identifier to the model. Anything carrying an IBAN
+ *  or a run of 4+ digits is refused here regardless of what the caller thinks.
+ *  Real brands don't have that shape; account numbers always do. */
+function looksLikeAccountNumber(s: string): boolean {
+  return /[A-Z]{2}\d{2}[A-Z0-9]{8,}/i.test(s) || /\d{4}/.test(s);
+}
+
 /** THE redaction boundary for the travel agent — the tightest in the app.
  *
  *  Only a home country, a destination, a currency, provider NAMES, and facts
@@ -50,7 +60,7 @@ export function sanitizeTravelInput(raw: unknown): TravelInput {
 
   const rawProviders = Array.isArray(o.providers) ? o.providers : [];
   if (rawProviders.length > MAX_PROVIDERS) throw new Error("te veel aanbieders");
-  const providers = [...new Set(rawProviders.map(shortField).filter(Boolean))];
+  const providers = [...new Set(rawProviders.map(shortField).filter((p) => p && !looksLikeAccountNumber(p)))];
   if (providers.length === 0) throw new Error("geen aanbieders");
 
   const rawFacts = Array.isArray(o.knownFacts) ? o.knownFacts : [];

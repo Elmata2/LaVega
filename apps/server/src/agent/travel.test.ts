@@ -83,3 +83,17 @@ test("a model reply with no tool call yields no terms rather than throwing", asy
   const client = { messages: { create: async () => ({ content: [{ type: "text", text: "sorry" }] }) } } as never;
   expect(await lookupProviderTerms(sanitizeTravelInput(valid), "k", { client })).toEqual([]);
 });
+
+test("a provider that looks like an account number is refused at the boundary", () => {
+  const out = sanitizeTravelInput({ ...valid, providers: ["ING", "A 286-41213", "NL12INGB0123456789", "D 128-83091"] });
+  expect(out.providers).toEqual(["ING"]); // identifiers dropped, brand kept
+  // Nothing digit-shaped survives into what we would send.
+  expect(out.providers.some((p) => /\d{4}/.test(p))).toBe(false);
+  // If ALL of them were identifiers there is nothing legitimate to ask about.
+  expect(() => sanitizeTravelInput({ ...valid, providers: ["A 286-41213"] })).toThrow();
+});
+
+test("real brand names with digits still pass", () => {
+  const out = sanitizeTravelInput({ ...valid, providers: ["Trading 212", "N26", "bunq", "American Express"] });
+  expect(out.providers).toEqual(["Trading 212", "N26", "bunq", "American Express"]);
+});

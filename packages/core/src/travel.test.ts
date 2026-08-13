@@ -56,8 +56,8 @@ test("planTravel combines the three answers for a non-euro destination", () => {
 
   expect(plan.currency).toBe("USD");
   expect(plan.spend[0].provider).toBe("Trading 212"); // pay with this
-  expect(plan.convert.to?.key).toBe("t212"); // move money here
-  expect(plan.convert.from?.key).toBe("ing"); // out of the fullest payment account
+  expect(plan.convert.toProvider).toBe("Trading 212"); // move money here
+  expect(plan.convert.fromProvider).toBe("ING"); // out of the fullest payment account
   expect(plan.convert.method).toBe("iDEAL");
   expect(plan.convert.note).toContain("gratis");
   expect(plan.unknownProviders).toEqual(["American Express"]);
@@ -84,4 +84,47 @@ test("planTravel surfaces the best place to keep savings", () => {
   const plan = planTravel({ accounts, txs: [], rates, facts: [], destination: "US", asOf: "2026-08-13" });
   expect(plan.store.suggestion?.account.key).toBe("spaar");
   expect(plan.store.note).toContain("BigBank");
+});
+
+/* --- Real-data regressions: accounts imported without a bank (his stale ING
+ * savings rows are named after their account NUMBER), and several accounts at
+ * one bank. --- */
+
+const REAL_WORLD = [
+  acc({ key: "A28641213", bank: "", name: "A 286-41213" }), // stale import: name IS the number
+  acc({ key: "D12883091", bank: "", name: "D 128-83091" }),
+  acc({ key: "abn", bank: "ABN AMRO", name: "ABN AMRO" }),
+  acc({ key: "amex", bank: "American Express", name: "activity", type: "Creditcard" }),
+  acc({ key: "ing1", bank: "ING", name: "NL12INGB0001" }),
+  acc({ key: "ing2", bank: "ING", name: "NL12INGB0002" }),
+];
+
+test("an account number is NEVER offered as a provider — no identifier can reach the agent", () => {
+  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  const providers = plan.spend.map((o) => o.provider);
+  expect(providers).not.toContain("A 286-41213");
+  expect(providers).not.toContain("D 128-83091");
+  // And nothing digit-shaped may end up in what we would send out.
+  expect(plan.unknownProviders.some((p) => /\d{4}/.test(p))).toBe(false);
+});
+
+test("one row per PROVIDER, not per account — two ING accounts are one product", () => {
+  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  expect(plan.spend.map((o) => o.provider).sort()).toEqual(["ABN AMRO", "American Express", "ING"]);
+  expect(plan.spend.find((o) => o.provider === "ING")!.accounts).toHaveLength(2);
+});
+
+test("accounts whose bank is unknown are counted, not silently dropped", () => {
+  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  expect(plan.unidentifiedCount).toBe(2); // the two stale savings rows
+});
+
+test("savings and investment accounts are not something you pay with abroad", () => {
+  const accounts = [
+    acc({ key: "s", bank: "BigBank", type: "Spaarrekening" }),
+    acc({ key: "b", bank: "Trading 212", type: "Beleggingsrekening" }),
+    acc({ key: "c", bank: "Revolut", type: "Betaalrekening" }),
+  ];
+  const plan = planTravel({ accounts, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  expect(plan.spend.map((o) => o.provider)).toEqual(["Revolut"]);
 });

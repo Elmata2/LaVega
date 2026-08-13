@@ -163,10 +163,13 @@ export default function TravelBlock({
             ) : (
               <ul className="travel-cards">
                 {plan.spend.map((option, i) => (
-                  <li key={option.account.key} className={i === 0 && option.known ? "travel-card-best" : ""}>
+                  <li key={option.provider} className={i === 0 && option.known ? "travel-card-best" : ""}>
                     <div>
                       <strong>{option.provider}</strong>
                       {i === 0 && option.known && <span className="eyebrow"> beste</span>}
+                      {option.accounts.length > 1 && (
+                        <span className="eyebrow"> · {option.accounts.length} rekeningen</span>
+                      )}
                       <div className="cell-sub">
                         {option.why}
                         {option.netCostPct !== null && ` → netto ${option.netCostPct}%`}
@@ -183,6 +186,12 @@ export default function TravelBlock({
                   </li>
                 ))}
               </ul>
+            )}
+            {plan.unidentifiedCount > 0 && (
+              <p className="cell-sub">
+                {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder bank — die kunnen we
+                niet opzoeken. Vul de bank in bij Rekeningen, of zet het type op Spaarrekening als het spaargeld is.
+              </p>
             )}
           </div>
         </div>
