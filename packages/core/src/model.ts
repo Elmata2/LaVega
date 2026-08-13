@@ -2,7 +2,11 @@ export type Account = { key: string; iban: string; name: string; bank: string;
   entity: string; currency: string; balance: number | null; balanceDate?: string; type?: string;
   /** Optional annual interest rate (%) for the Optimisatie tab. User-set;
    *  suggested from detected "rente" bijschrijvingen when absent. */
-  interestRate?: number };
+  interestRate?: number;
+  /** The owner typed this account's bank/name himself. Set by the rename action
+   *  in Rekeningen so a re-import can't undo it — while a name that only ever
+   *  came from an old parser stays replaceable by a better one. */
+  renamed?: boolean };
 export type Tx = { id: string; accountKey: string; date: string; amount: number;
   currency: string; counterparty: string; description: string; category: string; manual: boolean };
 export type Rule = { id: string; match: string; category: string };

@@ -210,6 +210,10 @@ export function mergeImportedAccounts(existing: Account[], imported: Account[]):
       type: prev.type,
       balance: imp.balance !== null ? imp.balance : prev.balance,
       balanceDate: imp.balance !== null ? imp.balanceDate : prev.balanceDate,
+      // A bank/name the owner typed himself survives a re-import; one that only
+      // ever came from a parser does not, so an improved parser can still fix a
+      // stale row (his old ING savings accounts came in as their own number).
+      ...(prev.renamed ? { bank: prev.bank, name: prev.name, renamed: true } : {}),
     };
   });
 }

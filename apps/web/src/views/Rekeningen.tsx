@@ -7,7 +7,10 @@ type RekeningenProps = {
   txs: Tx[];
   busy: boolean;
   onEntityChange: (key: string, newEntity: string) => void;
-  onEntityCommit: (account: Account) => void;
+  /** Persist one account after an inline edit (entity, bank, name). */
+  onAccountCommit: (account: Account) => void;
+  /** Patch an account in memory while typing; committed on blur. */
+  onAccountFieldChange: (key: string, patch: Partial<Account>) => void;
   onSaldoCommit: (key: string, value: string) => void;
   onTypeCommit: (key: string, type: string) => void;
   /** Open this account's transactions (transactions has no own nav item — it's
@@ -58,6 +61,61 @@ function accountLabel(a: Account): string {
   return [a.bank, a.name || a.key].filter(Boolean).join(" ");
 }
 
+/** Editable bank + name. Statements don't always carry a bank — the older ING
+ *  savings exports came in with the account NUMBER as the name and no bank at
+ *  all, which leaves them out of the rate comparison and the travel ranking
+ *  (both key on the bank). Same draft-then-commit-on-blur shape as Entiteit:
+ *  one write per edit, in order. */
+function NameCell({ account, busy, onFieldChange, onCommit }: {
+  account: Account;
+  busy: boolean;
+  onFieldChange: (key: string, patch: Partial<Account>) => void;
+  onCommit: (account: Account) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (!editing) {
+    return (
+      <>
+        {account.bank ? (
+          <>
+            <div style={{ fontWeight: 600 }}>{account.bank}</div>
+            <div className="cell-sub">{account.name}</div>
+          </>
+        ) : (
+          <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
+        )}
+        <button type="button" className="card-link" onClick={() => setEditing(true)} disabled={busy}>
+          {account.bank ? "Hernoem" : "Bank invullen"}
+        </button>
+      </>
+    );
+  }
+  return (
+    <div className="rename-cell">
+      <input
+        aria-label={`Bank van ${account.name || account.key}`}
+        placeholder="Bank, bijv. ING"
+        value={account.bank}
+        onChange={(e) => onFieldChange(account.key, { bank: e.target.value, renamed: true })}
+        onBlur={() => onCommit(account)}
+        disabled={busy}
+      />
+      <input
+        aria-label={`Naam van ${account.name || account.key}`}
+        placeholder="Naam, bijv. Oranje Spaarrekening"
+        value={account.name}
+        onChange={(e) => onFieldChange(account.key, { name: e.target.value, renamed: true })}
+        onBlur={() => onCommit(account)}
+        disabled={busy}
+      />
+      <button type="button" className="card-link" onClick={() => setEditing(false)} disabled={busy}>
+        Klaar
+      </button>
+    </div>
+  );
+}
+
 /** Editable current-saldo cell. CSV imports carry no balance, so the owner types
  *  it in from their bankapp; MT940/.STA fills it automatically but can be
  *  overridden. Holds a free-form draft string while typing (so "-", "1," etc.
@@ -95,7 +153,7 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
   );
 }
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit, onSelectAccount, onDeleteAccount, duplicateGroups, onMergeDuplicates }: RekeningenProps) {
+export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAccountCommit, onAccountFieldChange, onSaldoCommit, onTypeCommit, onSelectAccount, onDeleteAccount, duplicateGroups, onMergeDuplicates }: RekeningenProps) {
   // Only flag duplicates you can actually see here — a group whose accounts all
   // sit outside the active entity scope would be a banner about nothing.
   const visibleKeys = new Set(accounts.map((a) => a.key));
@@ -154,14 +212,12 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                 return (
                   <tr key={account.key}>
                     <td>
-                      {account.bank ? (
-                        <>
-                          <div style={{ fontWeight: 600 }}>{account.bank}</div>
-                          <div className="cell-sub">{account.name}</div>
-                        </>
-                      ) : (
-                        <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
-                      )}
+                      <NameCell
+                        account={account}
+                        busy={busy}
+                        onFieldChange={onAccountFieldChange}
+                        onCommit={onAccountCommit}
+                      />
                     </td>
                     <td>
                       <select
@@ -185,7 +241,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                         value={account.entity}
                         placeholder="—"
                         onChange={(e) => onEntityChange(account.key, e.target.value)}
-                        onBlur={() => void onEntityCommit(account)}
+                        onBlur={() => void onAccountCommit(account)}
                         disabled={busy}
                       />
                     </td>

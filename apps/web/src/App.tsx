@@ -59,7 +59,6 @@ export default function App() {
   // Same provider Optimalisatie uses (localStorage-cached), so no double fetch
   // cost; falls back to the bundled snapshot when the rates server is down.
   const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
-  const [aiAvailable, setAiAvailable] = useState(false);
   const homeCountry = getHomeCountry();
   // Whether the server has an ANTHROPIC_API_KEY (drives the chat widget's
   // "not configured" state). Fetched once; defaults false on any error.
@@ -150,18 +149,13 @@ export default function App() {
     })();
   }, [gate]);
 
-  // Public rate benchmark + whether the server has an API key. Both are public
-  // facts about the environment, not user data, so they load once at startup and
-  // failing is harmless (bundled rates / no AI actions offered).
+  // Public savings-rate benchmark for the travel block's "where to keep it"
+  // step. Public data, not user data; failing is harmless (bundled snapshot).
   useEffect(() => {
     let alive = true;
     createRatesProvider({ url: RATES_URL })
       .getRates()
       .then((r) => alive && setRates(r))
-      .catch(() => {});
-    fetch(`${API_BASE}/api/agent/status`)
-      .then((r) => r.json())
-      .then((s) => alive && setAiAvailable(Boolean((s as { configured?: boolean }).configured)))
       .catch(() => {});
     return () => {
       alive = false;
@@ -448,8 +442,18 @@ export default function App() {
   function handleEntityChange(key: string, newEntity: string) {
     setAccounts(reassignEntity(accounts, key, newEntity));
   }
-  async function handleEntityCommit(account: Account) {
+  // Persist one account after an inline edit (entity, bank, name). Same reason
+  // the entity edit commits on blur: one ordered write per edit, never one per
+  // keystroke (IndexedDB orders by transaction-creation time, so a burst could
+  // land out of order and revert the final value).
+  async function handleAccountCommit(account: Account) {
     await storage.putAccounts([account]);
+  }
+
+  // Patch an account in memory while typing. `renamed` rides along from the
+  // rename cell so a later re-import knows this bank/name was typed by hand.
+  function handleAccountFieldChange(key: string, patch: Partial<Account>) {
+    setAccounts(accounts.map((a) => (a.key === key ? { ...a, ...patch } : a)));
   }
 
   // Manually set an account's current saldo (CSV imports carry none). Accepts a
@@ -656,7 +660,7 @@ export default function App() {
               asOf={asOf}
               homeCountry={homeCountry}
               busy={busy}
-              aiAvailable={aiAvailable}
+              aiAvailable={llmConfigured}
               onRefreshTerms={handleRefreshTravelTerms}
               onCorrectFact={(fact) => void saveFacts([fact])}
             />
@@ -720,7 +724,8 @@ export default function App() {
               txs={scopedTxs}
               busy={busy}
               onEntityChange={handleEntityChange}
-              onEntityCommit={handleEntityCommit}
+              onAccountCommit={handleAccountCommit}
+              onAccountFieldChange={handleAccountFieldChange}
               onSaldoCommit={handleSaldoCommit}
               onTypeCommit={handleTypeCommit}
               onDeleteAccount={handleDeleteAccount}

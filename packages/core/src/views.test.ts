@@ -176,3 +176,21 @@ test("categoryComparison: latest month vs prior — share % + change %, transfer
 test("categoryComparison: empty input yields empty result", () => {
   expect(categoryComparison([], [])).toEqual({ month: "", prevMonth: "", rows: [] });
 });
+
+test("a re-import keeps a bank/name the owner typed, but may fix a stale parser one", () => {
+  const renamed = { key: "A28641213", iban: "", name: "Oranje Spaarrekening", bank: "ING", entity: "Prive",
+    currency: "EUR", balance: 100, type: "Spaarrekening", renamed: true };
+  const stale = { ...renamed, key: "D12883091", name: "D 128-83091", bank: "", renamed: undefined };
+  const imported = [
+    { key: "A28641213", iban: "", name: "D 286-41213", bank: "", entity: "", currency: "EUR", balance: null },
+    { key: "D12883091", iban: "", name: "Oranje Spaarrekening", bank: "ING", entity: "", currency: "EUR", balance: null },
+  ];
+  const merged = mergeImportedAccounts([renamed, stale], imported);
+
+  // His own rename survives the import that would have blanked the bank again.
+  expect(merged[0]).toMatchObject({ bank: "ING", name: "Oranje Spaarrekening", renamed: true });
+  // The row he never touched takes the better data the current parser produces.
+  expect(merged[1]).toMatchObject({ bank: "ING", name: "Oranje Spaarrekening" });
+  // Entity/type/balance preservation is unchanged.
+  expect(merged[0]).toMatchObject({ entity: "Prive", type: "Spaarrekening", balance: 100 });
+});

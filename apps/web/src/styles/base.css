@@ -1077,3 +1077,11 @@ table tbody tr:hover {
 .travel-card-best strong {
   color: var(--pos);
 }
+
+/* Rekeningen — inline rename (bank + naam) */
+.rename-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
