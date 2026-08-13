@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Account, Tx } from "@lavega/core";
+import type { Account, Tx, DuplicateGroup } from "@lavega/core";
 import { accountSummaries, isCardAccount, accountType, ACCOUNT_TYPES } from "@lavega/core";
 
 type RekeningenProps = {
@@ -13,7 +13,50 @@ type RekeningenProps = {
   /** Open this account's transactions (transactions has no own nav item — it's
    *  reached from here and from the Overzicht category totals). */
   onSelectAccount: (accountKey: string) => void;
+  /** Remove the account AND its transactions. Confirmed inline first. */
+  onDeleteAccount: (key: string) => void;
+  /** Accounts that look like the same real account imported twice. Computed on
+   *  the FULL list in App; only groups touching the current scope are shown. */
+  duplicateGroups: DuplicateGroup[];
+  onMergeDuplicates: (survivorKey: string, duplicateKey: string) => void;
 };
+
+/** A destructive action is never one click: the button swaps into a
+ *  "Weet je het zeker? Ja / Nee" prompt in place, and only "Ja" fires it. */
+function ConfirmAction({ label, question, busy, onConfirm }: { label: string; question: string; busy: boolean; onConfirm: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <button type="button" className="card-link card-link-danger" onClick={() => setAsking(true)} disabled={busy}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <span className="confirm-inline">
+      <span className="confirm-q">{question}</span>
+      <button
+        type="button"
+        className="card-link card-link-danger"
+        onClick={() => {
+          setAsking(false);
+          onConfirm();
+        }}
+        disabled={busy}
+      >
+        Ja
+      </button>
+      <button type="button" className="card-link" onClick={() => setAsking(false)} disabled={busy}>
+        Nee
+      </button>
+    </span>
+  );
+}
+
+/** Label an account the way the table does, so the banner names it recognisably. */
+function accountLabel(a: Account): string {
+  return [a.bank, a.name || a.key].filter(Boolean).join(" ");
+}
 
 /** Editable current-saldo cell. CSV imports carry no balance, so the owner types
  *  it in from their bankapp; MT940/.STA fills it automatically but can be
@@ -52,10 +95,44 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
   );
 }
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit, onSelectAccount }: RekeningenProps) {
+export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEntityCommit, onSaldoCommit, onTypeCommit, onSelectAccount, onDeleteAccount, duplicateGroups, onMergeDuplicates }: RekeningenProps) {
+  // Only flag duplicates you can actually see here — a group whose accounts all
+  // sit outside the active entity scope would be a banner about nothing.
+  const visibleKeys = new Set(accounts.map((a) => a.key));
+  const shownGroups = duplicateGroups.filter((g) => g.accounts.some((a) => visibleKeys.has(a.key)));
+
   return (
     <section className="card" aria-label="Rekeningen">
       <h2>Rekeningen</h2>
+
+      {shownGroups.map((group) => {
+        const others = group.accounts.filter((a) => a.key !== group.survivor.key);
+        return (
+          <div className="dup-banner" key={group.canonicalId}>
+            <div>
+              <p className="dup-banner-title">
+                Deze rekeningen lijken dezelfde rekening: {group.accounts.map(accountLabel).join(", ")}.
+              </p>
+              <p className="dup-banner-sub">
+                LaVega houdt <strong>{accountLabel(group.survivor)}</strong> aan en verplaatst de transacties
+                daarheen. Overlappende periodes worden samengevoegd, niet dubbel geteld.
+              </p>
+            </div>
+            <div className="dup-banner-actions">
+              {others.map((dup) => (
+                <ConfirmAction
+                  key={dup.key}
+                  label={others.length > 1 ? `Samenvoegen: ${accountLabel(dup)}` : "Samenvoegen"}
+                  question={`${accountLabel(dup)} samenvoegen met ${accountLabel(group.survivor)}?`}
+                  busy={busy}
+                  onConfirm={() => onMergeDuplicates(group.survivor.key, dup.key)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
       {accounts.length === 0 ? (
         <p>Nog geen rekeningen — importeer eerst een bestand.</p>
       ) : (
@@ -68,6 +145,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                 <th>Entiteit</th>
                 <th className="num">Saldo</th>
                 <th className="num">Transacties</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -124,6 +202,18 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onEnti
                       >
                         {txCount}
                       </button>
+                    </td>
+                    <td className="num">
+                      <ConfirmAction
+                        label="Verwijder"
+                        question={
+                          txCount === 0
+                            ? `${account.name || account.key} verwijderen?`
+                            : `${account.name || account.key} en ${txCount} ${txCount === 1 ? "transactie" : "transacties"} verwijderen?`
+                        }
+                        busy={busy}
+                        onConfirm={() => onDeleteAccount(account.key)}
+                      />
                     </td>
                   </tr>
                 );

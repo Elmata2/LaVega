@@ -620,6 +620,50 @@ table tbody tr:hover {
   min-width: 0;
 }
 
+/* Rekeningen — destructive actions + duplicate-account banner */
+.card-link-danger {
+  color: var(--neg);
+}
+.confirm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.confirm-q {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.dup-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.dup-banner-title {
+  margin: 0;
+  font-weight: 600;
+}
+.dup-banner-sub {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.dup-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
 /* Forecast view */
 .forecast-banner {
   display: flex;

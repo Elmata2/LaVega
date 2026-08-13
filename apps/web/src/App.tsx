@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
@@ -8,6 +8,7 @@ import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
 import { getBufferCents, setBufferCents } from "./settings.js";
+import { txIdsForAccount, txDiff } from "./accountActions.js";
 import { buildTabContext } from "./agent/tabContext.js";
 import VaultGate from "./components/VaultGate";
 import ChatWidget from "./components/ChatWidget";
@@ -286,6 +287,11 @@ export default function App() {
   // accounts of different BVs is still recognized as an internal transfer.
   const own = useMemo(() => ownAccounts(accounts), [accounts]);
 
+  // Accounts that look like the SAME real account imported twice. Computed on
+  // the full list (a duplicate pair can straddle two entities if one side was
+  // filed under the wrong BV); Rekeningen narrows the banner to the scope.
+  const duplicateGroups = useMemo(() => findDuplicateAccounts(accounts), [accounts]);
+
   // Self-heal the Transacties entity filter and the top-bar entity scope: if
   // the selected entity no longer exists (e.g. its last account was
   // reassigned away in Rekeningen), reset to "Alle" so neither control keeps
@@ -453,6 +459,46 @@ export default function App() {
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // Delete an account and every transaction imported with it. Irreversible (no
+  // soft-delete), so Rekeningen confirms inline first. Transactions go FIRST:
+  // if the second call fails, a leftover account row is visible and simply
+  // deletable again, while orphaned transactions belong to nothing and would
+  // still count toward the totals.
+  async function handleDeleteAccount(key: string) {
+    setBusy(true);
+    try {
+      const ids = txIdsForAccount(txs, key);
+      if (ids.length > 0) await storage.deleteTxs(ids);
+      await storage.deleteAccount(key);
+      setTxs(txs.filter((t) => t.accountKey !== key));
+      setAccounts(accounts.filter((a) => a.key !== key));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Merge a duplicate account into its survivor: one real account that got
+  // imported two ways (CSV keys by raw number, MT940/Enable Banking by IBAN).
+  // The core merge re-keys the duplicate's transactions and collapses the
+  // overlapping range by content, so a period present in both statements is
+  // never double-counted. Persist exactly the diff it produced.
+  async function handleMergeDuplicates(survivorKey: string, duplicateKey: string) {
+    setBusy(true);
+    try {
+      const merged = mergeAccounts(accounts, txs, survivorKey, duplicateKey);
+      const { removedIds, upserts } = txDiff(txs, merged.txs);
+      if (removedIds.length > 0) await storage.deleteTxs(removedIds);
+      if (upserts.length > 0) await storage.putTxs(upserts);
+      const survivor = merged.accounts.find((a) => a.key === survivorKey);
+      if (survivor) await storage.putAccounts([survivor]);
+      await storage.deleteAccount(duplicateKey);
+      setTxs(merged.txs);
+      setAccounts(merged.accounts);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
@@ -553,6 +599,9 @@ export default function App() {
               onEntityCommit={handleEntityCommit}
               onSaldoCommit={handleSaldoCommit}
               onTypeCommit={handleTypeCommit}
+              onDeleteAccount={handleDeleteAccount}
+              duplicateGroups={duplicateGroups}
+              onMergeDuplicates={handleMergeDuplicates}
               onSelectAccount={(key) => {
                 // Show just this account's transactions — clear the other
                 // filters so the list isn't silently narrowed by a stale one.
