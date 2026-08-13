@@ -70,6 +70,15 @@ export function providerOf(a: Account): string {
   return String(a.bank ?? "").trim();
 }
 
+/** How to NAME an account in text shown to the owner. Unlike `providerOf` this
+ *  may fall back to his own label (which can be the account number) — that is
+ *  fine on his own screen, where Rekeningen already shows it, and it is never
+ *  what gets sent to an agent. Keep the two apart: `providerOf` for anything
+ *  leaving the device or keying a fact, `accountLabel` for display only. */
+export function accountLabel(a: Account): string {
+  return String(a.bank || a.name || a.key || "deze rekening").trim();
+}
+
 /** Products you could actually pay with abroad: cards and payment accounts at a
  *  known bank. Savings and investment accounts are not payment instruments, and
  *  an account with no bank can't be looked up (see `providerOf`). */
@@ -161,7 +170,7 @@ export function planTravel(input: {
     suggestion: topSuggestion,
     best: interest.best,
     note: topSuggestion
-      ? `Je laat rente liggen op ${providerOf(topSuggestion.account)}${interest.best ? ` — ${interest.best.bank} geeft ${interest.best.ratePct}%` : ""}.`
+      ? `Je laat rente liggen op ${accountLabel(topSuggestion.account)}${interest.best ? ` — ${interest.best.bank} geeft ${interest.best.ratePct}%` : ""}.`
       : "Je spaargeld staat al op de beste plek die we kennen.",
   };
 

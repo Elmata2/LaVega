@@ -55,11 +55,24 @@ export async function travelFacts(input: {
   providers: string[];
   knownFacts: { subject: string; key: string; value: string }[];
 }): Promise<ProviderTerms[]> {
-  const res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  // The agent web-searches before answering, which takes real time (measured:
+  // ~2 min for two providers). Callers look one provider up at a time; this
+  // ceiling just stops a hung request from spinning forever.
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 180_000) : null;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+      signal: ctrl?.signal,
+    });
+  } catch (e) {
+    throw new Error(ctrl?.signal.aborted ? "Opzoeken duurde te lang." : e instanceof Error ? e.message : "Opzoeken mislukt.");
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     let msg = `Verzoek mislukt (${res.status}).`;
     try {

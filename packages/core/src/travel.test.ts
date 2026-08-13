@@ -128,3 +128,13 @@ test("savings and investment accounts are not something you pay with abroad", ()
   const plan = planTravel({ accounts, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
   expect(plan.spend.map((o) => o.provider)).toEqual(["Revolut"]);
 });
+
+test("the savings advice names an account even when it has no bank (display, not provider)", () => {
+  const accounts = [acc({ key: "A28641213", bank: "", name: "A 286-41213", type: "Spaarrekening", balance: 20000, interestRate: 1.0 })];
+  const rates = [{ bank: "BigBank", product: "Spaarrekening", ratePct: 3.1, freeWithdrawal: true }];
+  const plan = planTravel({ accounts, txs: [], rates, facts: [], destination: "US", asOf: "2026-08-13" });
+  expect(plan.store.note).toContain("A 286-41213"); // no dangling "op  —"
+  expect(plan.store.note).not.toMatch(/op\s+—/);
+  // ...and it is still never offered as a provider to look up.
+  expect(plan.unknownProviders).toEqual([]);
+});

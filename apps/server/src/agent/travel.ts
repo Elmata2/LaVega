@@ -113,7 +113,7 @@ export type ProviderTerms = {
   note?: string;
 };
 
-const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 8 } as const;
+const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 6 } as const;
 
 function numeric(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
@@ -149,7 +149,13 @@ export async function lookupProviderTerms(
     max_tokens: 2048,
     system: instructions,
     tools: [WEB_SEARCH as never, TERMS_TOOL as never],
-    tool_choice: { type: "tool", name: TERMS_TOOL.name },
+    // NOT a forced tool_choice. Forcing this tool makes the model report on its
+    // FIRST turn, before it can run a single web search — and since the prompt
+    // (rightly) forbids guessing, it then reports provider names with no fields
+    // at all. Measured: forced => zero searches and empty terms; auto => ~10
+    // searches and correctly hedged answers. The prompt still says to answer
+    // only through this tool, and a reply without it yields no terms.
+    tool_choice: { type: "auto" },
     messages: [
       {
         role: "user",

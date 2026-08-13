@@ -551,29 +551,56 @@ export default function App() {
       const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
       const providers = plan.unknownProviders;
       if (providers.length === 0) return;
-      const terms = await travelFacts({
-        homeCountry,
-        destination,
-        currency: countryCurrency(destination) ?? "",
-        providers,
-        // Send what he corrected so the model is told not to contradict it.
-        knownFacts: facts
-          .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
-          .map((f) => ({ subject: f.subject, key: f.key, value: f.value })),
-      });
       const today = new Date().toISOString().slice(0, 10);
-      const learned: LearnedFact[] = [];
-      for (const t of terms) {
-        const put = (key: string, value: number | undefined) => {
-          if (value === undefined) return; // unverified stays unknown, never 0
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
-        };
-        put("fxFeePct", t.fxFeePct);
-        put("cashbackPct", t.cashbackPct);
-        put("pointsPerEuro", t.pointsPerEuro);
-        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+      // Send what he corrected so the model is told not to contradict it.
+      const knownFacts = facts
+        .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
+        .map((f) => ({ subject: f.subject, key: f.key, value: f.value }));
+
+      // ONE PROVIDER PER REQUEST. The agent web-searches before it answers, so a
+      // batch of four would be one multi-minute request that loses everything on
+      // a timeout. Looking them up one at a time keeps each request short and
+      // persists what already succeeded, so progress appears as it arrives.
+      let learnedAny = false;
+      let carried = facts;
+      const failed: string[] = [];
+      for (const provider of providers) {
+        try {
+          const terms = await travelFacts({
+            homeCountry,
+            destination,
+            currency: countryCurrency(destination) ?? "",
+            providers: [provider],
+            knownFacts,
+          });
+          const learned: LearnedFact[] = [];
+          for (const t of terms) {
+            const put = (key: string, value: number | undefined) => {
+              if (value === undefined) return; // unverified stays unknown, never 0
+              learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
+            };
+            put("fxFeePct", t.fxFeePct);
+            put("cashbackPct", t.cashbackPct);
+            put("pointsPerEuro", t.pointsPerEuro);
+            put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+          }
+          if (learned.length > 0) {
+            carried = upsertFacts(carried, learned); // keep the merge rule intact
+            setFacts(carried);
+            await storage.putFacts(carried);
+            learnedAny = true;
+          } else {
+            failed.push(provider);
+          }
+        } catch {
+          failed.push(provider); // one provider failing must not sink the rest
+        }
       }
-      if (learned.length > 0) await saveFacts(learned);
+      if (failed.length > 0) {
+        setProblems([
+          `Geen voorwaarden gevonden voor ${failed.join(", ")}${learnedAny ? " — de rest is wel bijgewerkt" : ""}. Je kunt ze zelf invullen met "aanpassen".`,
+        ]);
+      }
     } catch (err) {
       setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
