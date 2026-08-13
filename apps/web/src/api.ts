@@ -55,24 +55,14 @@ export async function travelFacts(input: {
   providers: string[];
   knownFacts: { subject: string; key: string; value: string }[];
 }): Promise<ProviderTerms[]> {
-  // The agent web-searches before answering, which takes real time (measured:
-  // ~2 min for two providers). Callers look one provider up at a time; this
-  // ceiling just stops a hung request from spinning forever.
-  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = ctrl ? setTimeout(() => ctrl.abort(), 180_000) : null;
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-      signal: ctrl?.signal,
-    });
-  } catch (e) {
-    throw new Error(ctrl?.signal.aborted ? "Opzoeken duurde te lang." : e instanceof Error ? e.message : "Opzoeken mislukt.");
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  // The response is STREAMED (see the route): the agent searches for minutes,
+  // and Cloudflare kills any origin that hasn't started replying within 100s.
+  // The payload still arrives in one piece — as a single `result` event.
+  const res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
   if (!res.ok) {
     let msg = `Verzoek mislukt (${res.status}).`;
     try {
@@ -83,7 +73,39 @@ export async function travelFacts(input: {
     }
     throw new Error(msg);
   }
-  return ((await res.json()) as { providers?: ProviderTerms[] }).providers ?? [];
+  if (!res.body) throw new Error("Geen antwoord van de server.");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let providers: ProviderTerms[] = [];
+  let failure: string | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const records = buffer.split("\n\n");
+    buffer = records.pop() ?? "";
+    for (const record of records) {
+      const event = /^event:\s*(.+)$/m.exec(record)?.[1]?.trim();
+      const data = record
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trimStart())
+        .join("\n");
+      if (event === "error") failure = data || "Opzoeken mislukt.";
+      else if (event === "result") {
+        try {
+          providers = (JSON.parse(data) as { providers?: ProviderTerms[] }).providers ?? [];
+        } catch {
+          failure = "Onleesbaar antwoord van de server.";
+        }
+      }
+      // `progress` events exist only to keep the connection alive; ignore them.
+    }
+  }
+  if (failure) throw new Error(failure);
+  return providers;
 }
 
 export type ChatStreamHandlers = {
