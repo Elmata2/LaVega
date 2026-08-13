@@ -561,48 +561,34 @@ export default function App() {
         .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
         .map((f) => ({ subject: f.subject, key: f.key, value: f.value }));
 
-      // ONE PROVIDER PER REQUEST. The agent web-searches before it answers, so a
-      // batch of four would be one multi-minute request that loses everything on
-      // a timeout. Looking them up one at a time keeps each request short and
-      // persists what already succeeded, so progress appears as it arrives.
-      let learnedAny = false;
-      let carried = facts;
-      const failed: string[] = [];
-      for (const provider of providers) {
-        try {
-          const terms = await travelFacts({
-            homeCountry,
-            destination,
-            currency: countryCurrency(destination) ?? "",
-            providers: [provider],
-            knownFacts,
-          });
-          const learned: LearnedFact[] = [];
-          for (const t of terms) {
-            const put = (key: string, value: number | undefined) => {
-              if (value === undefined) return; // unverified stays unknown, never 0
-              learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
-            };
-            put("fxFeePct", t.fxFeePct);
-            put("cashbackPct", t.cashbackPct);
-            put("pointsPerEuro", t.pointsPerEuro);
-            put("transferFreeViaIdeal", t.transferFreeViaIdeal);
-          }
-          if (learned.length > 0) {
-            carried = upsertFacts(carried, learned); // keep the merge rule intact
-            setFacts(carried);
-            await storage.putFacts(carried);
-            learnedAny = true;
-          } else {
-            failed.push(provider);
-          }
-        } catch {
-          failed.push(provider); // one provider failing must not sink the rest
-        }
+      // One fast call: the server answers from its shared cache of PUBLIC card
+      // tariffs and starts background lookups for whatever it doesn't have yet.
+      // Nothing here waits on the model, so the button never hangs — a gap just
+      // means "press it again in a minute".
+      const { terms, pending } = await travelFacts({
+        homeCountry,
+        destination,
+        currency: countryCurrency(destination) ?? "",
+        providers,
+        knownFacts,
+      });
+
+      const learned: LearnedFact[] = [];
+      for (const t of terms) {
+        const put = (key: string, value: number | undefined) => {
+          if (value === undefined) return; // unverified stays unknown, never 0
+          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
+        };
+        put("fxFeePct", t.fxFeePct);
+        put("cashbackPct", t.cashbackPct);
+        put("pointsPerEuro", t.pointsPerEuro);
+        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
       }
-      if (failed.length > 0) {
+      if (learned.length > 0) await saveFacts(learned);
+
+      if (pending.length > 0) {
         setProblems([
-          `Geen voorwaarden gevonden voor ${failed.join(", ")}${learnedAny ? " — de rest is wel bijgewerkt" : ""}. Je kunt ze zelf invullen met "aanpassen".`,
+          `LaVega zoekt de voorwaarden van ${pending.join(", ")} nu op — dat duurt een minuut of twee. Klik daarna nog eens op "Zoek voorwaarden", of vul ze zelf in met "aanpassen".`,
         ]);
       }
     } catch (err) {

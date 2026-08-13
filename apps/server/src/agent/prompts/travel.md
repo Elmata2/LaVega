@@ -35,4 +35,8 @@ Rules that matter more than completeness:
 - Never include anything about the user in a search query. Search for products,
   not people.
 
+Use web search only. Do **not** use code execution — you need the provider's
+tariff page, not a calculation. (Measured: allowing it turned a 39-second
+lookup into one still running after several minutes.)
+
 Return your findings through the `report_provider_terms` tool only.

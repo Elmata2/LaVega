@@ -54,10 +54,10 @@ export async function travelFacts(input: {
   currency: string;
   providers: string[];
   knownFacts: { subject: string; key: string; value: string }[];
-}): Promise<ProviderTerms[]> {
-  // The response is STREAMED (see the route): the agent searches for minutes,
-  // and Cloudflare kills any origin that hasn't started replying within 100s.
-  // The payload still arrives in one piece — as a single `result` event.
+}): Promise<{ terms: ProviderTerms[]; pending: string[] }> {
+  // Returns immediately: `terms` is what the server already knows, `pending`
+  // is what it just started looking up. Card tariffs are public data cached
+  // server-side, so the answer is usually instant and a gap fills in by itself.
   const res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -73,39 +73,8 @@ export async function travelFacts(input: {
     }
     throw new Error(msg);
   }
-  if (!res.body) throw new Error("Geen antwoord van de server.");
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let providers: ProviderTerms[] = [];
-  let failure: string | null = null;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const records = buffer.split("\n\n");
-    buffer = records.pop() ?? "";
-    for (const record of records) {
-      const event = /^event:\s*(.+)$/m.exec(record)?.[1]?.trim();
-      const data = record
-        .split("\n")
-        .filter((l) => l.startsWith("data:"))
-        .map((l) => l.slice(5).trimStart())
-        .join("\n");
-      if (event === "error") failure = data || "Opzoeken mislukt.";
-      else if (event === "result") {
-        try {
-          providers = (JSON.parse(data) as { providers?: ProviderTerms[] }).providers ?? [];
-        } catch {
-          failure = "Onleesbaar antwoord van de server.";
-        }
-      }
-      // `progress` events exist only to keep the connection alive; ignore them.
-    }
-  }
-  if (failure) throw new Error(failure);
-  return providers;
+  const body = (await res.json()) as { terms?: ProviderTerms[]; pending?: string[] };
+  return { terms: body.terms ?? [], pending: body.pending ?? [] };
 }
 
 export type ChatStreamHandlers = {

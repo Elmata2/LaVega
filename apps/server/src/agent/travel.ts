@@ -115,11 +115,12 @@ export type ProviderTerms = {
 
 const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 4 } as const;
 
-/** Hard ceiling per provider. Measured: a lookup for "American Express" was
- *  still searching after seven minutes — plausible for a brand with a dozen
- *  card variants, and far too long to make anyone wait. Better to give up and
- *  let the owner type the number in than to hang. */
-const LOOKUP_TIMEOUT_MS = 120_000;
+/** Hard ceiling per provider. Measured: an "American Express" lookup was still
+ *  searching after seven minutes (a brand with a dozen card variants). This now
+ *  runs in the BACKGROUND (see cardTerms.ts), so nobody is waiting on it — the
+ *  ceiling only has to catch the pathological case, not keep a UI responsive.
+ *  120s proved too tight and cut off legitimate work, including Revolut's. */
+const LOOKUP_TIMEOUT_MS = 240_000;
 
 function numeric(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;

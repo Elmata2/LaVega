@@ -8,6 +8,7 @@ import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
 import { categorizeTransactions } from "./agent/categorize.js";
 import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
+import { getCardTerms } from "./cardTerms.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
@@ -125,26 +126,12 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
-    // STREAMED, like /chat — and for a hard infrastructure reason, not style.
-    // The agent web-searches before it answers (~2 min per provider), while
-    // Cloudflare cuts off any origin that hasn't started responding within 100s
-    // (measured: a plain JSON reply to this route returned `error code: 524`).
-    // Opening the stream immediately and emitting a heartbeat keeps bytes
-    // flowing, so the connection survives for as long as the lookup needs.
-    return streamSSE(c, async (stream) => {
-      const beat = setInterval(() => {
-        void stream.writeSSE({ event: "progress", data: "bezig" });
-      }, 15_000);
-      try {
-        await stream.writeSSE({ event: "progress", data: input.providers.join(", ") });
-        const providers = await travelFacts(input, apiKey);
-        await stream.writeSSE({ event: "result", data: JSON.stringify({ providers }) });
-      } catch (e) {
-        await stream.writeSSE({ event: "error", data: e instanceof Error ? e.message : "opzoeken mislukt" });
-      } finally {
-        clearInterval(beat);
-        await stream.writeSSE({ event: "done", data: "" });
-      }
-    });
+    // Returns instantly with whatever is cached and starts background lookups
+    // for the gaps — card tariffs are PUBLIC data, the same for every user, so
+    // they belong in a shared server cache (exactly like /api/rates) rather
+    // than being re-fetched per user at the moment someone wants an answer.
+    // Nothing here awaits the model, so the 100s Cloudflare ceiling that killed
+    // the synchronous version can't be reached.
+    return c.json(getCardTerms(input, apiKey, { lookup: travelFacts }));
   });
 }
