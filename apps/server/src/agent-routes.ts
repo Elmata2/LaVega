@@ -7,6 +7,7 @@ import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
 import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
 import { categorizeTransactions } from "./agent/categorize.js";
+import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
@@ -17,6 +18,7 @@ type Deps = {
   extract?: typeof extractInvoiceFields;
   chat?: typeof runChat;
   categorize?: typeof categorizeTransactions;
+  travelFacts?: typeof lookupProviderTerms;
 };
 
 // 20 requests/min per route key (each route passes its own key — "extract" /
@@ -28,6 +30,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const extract = deps.extract ?? extractInvoiceFields;
   const chat = deps.chat ?? runChat;
   const categorize = deps.categorize ?? categorizeTransactions;
+  const travelFacts = deps.travelFacts ?? lookupProviderTerms;
 
   // Whether AI extraction is available server-side (does the key exist?). The
   // key itself is never returned. Lives here, not in index.ts (Task 1 deferred).
@@ -104,6 +107,28 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       return c.json(await categorize(input, apiKey));
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "categorisatie mislukt" }, 502);
+    }
+  });
+
+  // Travel agent: looks up CURRENT product terms (foreign-transaction fee,
+  // cashback, iDEAL top-up) for the providers the user banks with. The tightest
+  // boundary in the app — `sanitizeTravelInput` lets only a country pair, a
+  // currency and provider NAMES through, because the ranking that needs his
+  // balances is done locally in core. Same ladder: 503 -> 429 -> 400 -> 502.
+  app.post("/api/agent/travel-facts", async (c) => {
+    const { configured, apiKey } = loadLlmConfig();
+    if (!configured || !apiKey) return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
+    if (!limit("travel")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    let input: import("./agent/travel.js").TravelInput;
+    try {
+      input = sanitizeTravelInput(await c.req.json());
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+    }
+    try {
+      return c.json({ providers: await travelFacts(input, apiKey) });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "opzoeken mislukt" }, 502);
     }
   });
 }

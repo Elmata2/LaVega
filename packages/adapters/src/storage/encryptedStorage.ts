@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { Account, Tx, Rule, ScheduledFlow, VatSettings, Invoice, RewardsBalance } from "@lavega/core";
+import type { Account, Tx, Rule, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import { newSalt, deriveKey, encryptJSON, decryptJSON, PBKDF2_ITERATIONS } from "../crypto/vaultCrypto.js";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
@@ -11,7 +11,7 @@ const RECORD_KEY = "blob";
 
 export type VaultStatus = "empty" | "locked" | "unlocked";
 
-type VaultData = { accounts: Account[]; txs: Tx[]; rules: Rule[]; scheduledFlows?: ScheduledFlow[]; vatSettings?: VatSettings[]; invoices?: Invoice[]; rewards?: RewardsBalance[] };
+type VaultData = { accounts: Account[]; txs: Tx[]; rules: Rule[]; scheduledFlows?: ScheduledFlow[]; vatSettings?: VatSettings[]; invoices?: Invoice[]; rewards?: RewardsBalance[]; facts?: LearnedFact[] };
 
 export interface VaultStorage extends StorageAdapter {
   status(): Promise<VaultStatus>;
@@ -32,6 +32,8 @@ export interface VaultStorage extends StorageAdapter {
   putInvoices(i: Invoice[]): Promise<void>;
   getRewards(): Promise<RewardsBalance[]>;
   putRewards(r: RewardsBalance[]): Promise<void>;
+  getFacts(): Promise<LearnedFact[]>;
+  putFacts(f: LearnedFact[]): Promise<void>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
@@ -283,6 +285,20 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, rewards: [...r] };
+        await persist();
+      });
+    },
+
+    // What the agents have learned (and what the owner corrected). Same additive
+    // optional field + replace-all shape as the rest; a legacy vault has none.
+    async getFacts(): Promise<LearnedFact[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.facts ?? [])];
+    },
+    putFacts(f: LearnedFact[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, facts: [...f] };
         await persist();
       });
     },

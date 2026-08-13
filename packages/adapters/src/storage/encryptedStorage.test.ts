@@ -307,3 +307,15 @@ test("delete while locked throws", async () => {
   await expect(v.deleteAccount("A")).rejects.toBeTruthy();
   await expect(v.deleteTxs(["a1"])).rejects.toBeTruthy();
 });
+
+test("learned facts round-trip and survive lock/unlock; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-facts");
+  await v.setup("pw");
+  expect(await v.getFacts()).toEqual([]); // legacy/new vault
+  const learned = { id: "f1", agent: "travel", subject: "Trading 212", key: "fxFeePct", value: "0", source: "agent" as const, updatedAt: "2026-08-13" };
+  await v.putFacts([learned]);
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect(await v.getFacts()).toEqual([learned]); // a correction must outlive the session
+});

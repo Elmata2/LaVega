@@ -91,3 +91,27 @@ export function setAiCategorizeEnabled(on: boolean): void {
     /* quota/serialization errors are non-fatal for a preference */
   }
 }
+
+const HOME_COUNTRY_KEY = "lavega.homeCountry";
+
+/** The owner's home country as a 2-letter code, default NL. A local-first app
+ *  has no signup to read this from, so it's a preference — and it's the one
+ *  thing the travel agent needs to know to look up the RIGHT market's card
+ *  terms (the same brand differs per country). */
+export function getHomeCountry(): string {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_COUNTRY_KEY);
+    return raw && /^[A-Z]{2}$/.test(raw) ? raw : "NL";
+  } catch {
+    return "NL";
+  }
+}
+
+export function setHomeCountry(code: string): void {
+  try {
+    const c = String(code ?? "").trim().toUpperCase();
+    if (typeof localStorage !== "undefined" && /^[A-Z]{2}$/.test(c)) localStorage.setItem(HOME_COUNTRY_KEY, c);
+  } catch {
+    /* non-fatal for a preference */
+  }
+}

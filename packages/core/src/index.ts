@@ -5,6 +5,8 @@ export * from "./hash.js";
 export * from "./ingest.js";
 export * from "./views.js";
 export * from "./accounts.js";
+export * from "./facts.js";
+export * from "./travel.js";
 export * from "./categorize.js";
 export * from "./scheduledFlows.js";
 export * from "./invoices.js";

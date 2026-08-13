@@ -36,6 +36,43 @@ export async function categorizeTxs(items: CategorizeItem[]): Promise<{ id: stri
   return (await res.json()) as { id: string; category: string }[];
 }
 
+export type ProviderTerms = {
+  provider: string;
+  fxFeePct?: number;
+  cashbackPct?: number;
+  pointsPerEuro?: number;
+  transferFreeViaIdeal?: number;
+  note?: string;
+};
+
+/** Ask the travel agent for the CURRENT terms of the providers you bank with.
+ *  Sends provider NAMES and a country pair — never balances or accounts; the
+ *  ranking that needs those is done locally. */
+export async function travelFacts(input: {
+  homeCountry: string;
+  destination: string;
+  currency: string;
+  providers: string[];
+  knownFacts: { subject: string; key: string; value: string }[];
+}): Promise<ProviderTerms[]> {
+  const res = await fetch(`${API_BASE}/api/agent/travel-facts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let msg = `Verzoek mislukt (${res.status}).`;
+    try {
+      const parsed = (await res.json()) as { error?: string };
+      if (parsed?.error) msg = parsed.error;
+    } catch {
+      /* non-JSON error body; keep the status-based message */
+    }
+    throw new Error(msg);
+  }
+  return ((await res.json()) as { providers?: ProviderTerms[] }).providers ?? [];
+}
+
 export type ChatStreamHandlers = {
   onChunk: (text: string) => void;
   onError?: (msg: string) => void;

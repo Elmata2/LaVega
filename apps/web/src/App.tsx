@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts } from "@lavega/core";
+import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, makeFact, planTravel, countryCurrency, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
-import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey } from "@lavega/adapters";
+import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents } from "./settings.js";
+import { getBufferCents, setBufferCents, getHomeCountry } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
+import { travelFacts } from "./api.js";
+import TravelBlock from "./components/TravelBlock";
 import { buildTabContext } from "./agent/tabContext.js";
 import VaultGate from "./components/VaultGate";
 import ChatWidget from "./components/ChatWidget";
@@ -33,6 +35,10 @@ import Backup from "./views/Backup";
 // plaintext `lavega` DB directly (that's migrate.ts's job, once, at setup).
 const storage = createEncryptedStorage();
 
+// Public savings-rate benchmark (same source Optimalisatie uses).
+const RATES_URL: string | undefined =
+  import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
+
 export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "backup";
 
 export default function App() {
@@ -47,6 +53,14 @@ export default function App() {
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
+  // What the agents have learned (and what he corrected). Lives in the vault.
+  const [facts, setFacts] = useState<LearnedFact[]>([]);
+  // Public savings benchmark for the travel block's "where to keep it" step.
+  // Same provider Optimalisatie uses (localStorage-cached), so no double fetch
+  // cost; falls back to the bundled snapshot when the rates server is down.
+  const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const homeCountry = getHomeCountry();
   // Whether the server has an ANTHROPIC_API_KEY (drives the chat widget's
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
@@ -115,7 +129,7 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards, loadedFacts] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
@@ -123,6 +137,7 @@ export default function App() {
         storage.getVatSettings(),
         storage.getInvoices(),
         storage.getRewards(),
+        storage.getFacts(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -131,8 +146,27 @@ export default function App() {
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
       setRewards(loadedRewards);
+      setFacts(loadedFacts);
     })();
   }, [gate]);
+
+  // Public rate benchmark + whether the server has an API key. Both are public
+  // facts about the environment, not user data, so they load once at startup and
+  // failing is harmless (bundled rates / no AI actions offered).
+  useEffect(() => {
+    let alive = true;
+    createRatesProvider({ url: RATES_URL })
+      .getRates()
+      .then((r) => alive && setRates(r))
+      .catch(() => {});
+    fetch(`${API_BASE}/api/agent/status`)
+      .then((r) => r.json())
+      .then((s) => alive && setAiAvailable(Boolean((s as { configured?: boolean }).configured)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // After returning from an Enable Banking authorisation, the browser lands on
   // the SPA with ?eb=<session> (or ?eb_error=). Once the vault is unlocked, pull
@@ -202,6 +236,7 @@ export default function App() {
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
+    setFacts([]);
     setGate("unlock");
   }
 
@@ -499,6 +534,53 @@ export default function App() {
     }
   }
 
+  // Persist learned facts through the ONE merge rule (upsertFacts): whatever he
+  // corrected himself is never overwritten by an agent refresh.
+  async function saveFacts(incoming: LearnedFact[]) {
+    const next = upsertFacts(facts, incoming);
+    setFacts(next);
+    await storage.putFacts(next);
+  }
+
+  // Ask the travel agent for the current terms of the providers whose terms we
+  // don't know yet. Only provider NAMES and a country pair leave the browser —
+  // the ranking that needs his balances already happened locally.
+  async function handleRefreshTravelTerms(destination: string) {
+    setBusy(true);
+    try {
+      const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
+      const providers = plan.unknownProviders;
+      if (providers.length === 0) return;
+      const terms = await travelFacts({
+        homeCountry,
+        destination,
+        currency: countryCurrency(destination) ?? "",
+        providers,
+        // Send what he corrected so the model is told not to contradict it.
+        knownFacts: facts
+          .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
+          .map((f) => ({ subject: f.subject, key: f.key, value: f.value })),
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      const learned: LearnedFact[] = [];
+      for (const t of terms) {
+        const put = (key: string, value: number | undefined) => {
+          if (value === undefined) return; // unverified stays unknown, never 0
+          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
+        };
+        put("fxFeePct", t.fxFeePct);
+        put("cashbackPct", t.cashbackPct);
+        put("pointsPerEuro", t.pointsPerEuro);
+        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+      }
+      if (learned.length > 0) await saveFacts(learned);
+    } catch (err) {
+      setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
@@ -535,6 +617,21 @@ export default function App() {
               busy={busy}
               problems={problems}
               onImport={handleImport}
+            />
+          )}
+
+          {view === "overview" && (
+            <TravelBlock
+              accounts={scopedAccounts}
+              txs={scopedTxs}
+              rates={rates.rates}
+              facts={facts}
+              asOf={asOf}
+              homeCountry={homeCountry}
+              busy={busy}
+              aiAvailable={aiAvailable}
+              onRefreshTerms={handleRefreshTravelTerms}
+              onCorrectFact={(fact) => void saveFacts([fact])}
             />
           )}
 
