@@ -108,3 +108,52 @@ test("mergeAccounts is a no-op when keys are equal or an account is missing", ()
   expect(mergeAccounts([a], [], "A", "A").accounts).toHaveLength(1);
   expect(mergeAccounts([a], [], "A", "ghost").accounts).toHaveLength(1);
 });
+
+/* --- Filename-keyed accounts (Amex/Revolut/Trading 212 exports carry no
+ * account column, so the key comes from the filename). Downloading the same
+ * statement twice gives "activity.csv" + "activity (1).csv" — one real card,
+ * two accounts, and neither key has the 4 digits canonicalAccountId needs. --- */
+
+test("canonicalAccountId ignores a browser download suffix, so a suffixed IBAN still matches", () => {
+  const plain = acc({ key: "NL12INGB0123456789", iban: "NL12INGB0123456789" });
+  const dupe = acc({ key: "NL12INGB0123456789 (1)", iban: "" });
+  expect(canonicalAccountId(dupe)).toBe(canonicalAccountId(plain));
+  // A digits-bearing name must not be polluted by the "(1)" either.
+  expect(canonicalAccountId(acc({ key: "Rabo-2026 (1)" }))).toBe(canonicalAccountId(acc({ key: "Rabo-2026" })));
+});
+
+test("findDuplicateAccounts groups digit-less keys that differ only by a download suffix", () => {
+  const first = acc({ key: "activity", name: "activity", bank: "American Express", type: "Creditcard", balance: -2000 });
+  const second = acc({ key: "activity (1)", name: "activity (1)", bank: "American Express", type: "Creditcard" });
+  const groups = findDuplicateAccounts([first, second]);
+  expect(groups).toHaveLength(1);
+  expect(groups[0].accounts.map((a) => a.key).sort()).toEqual(["activity", "activity (1)"]);
+  // The row carrying the typed saldo survives, so the manual balance isn't lost.
+  expect(groups[0].survivor.key).toBe("activity");
+});
+
+test("findDuplicateAccounts does not group different names, or the same name at different banks", () => {
+  const revolutPay = acc({ key: "Betaalrekening", bank: "Revolut" });
+  const revolutSave = acc({ key: "Spaarrekening", bank: "Revolut" });
+  expect(findDuplicateAccounts([revolutPay, revolutSave])).toEqual([]);
+
+  const amex = acc({ key: "activity", bank: "American Express" });
+  const other = acc({ key: "activity (1)", bank: "Revolut" });
+  expect(findDuplicateAccounts([amex, other])).toEqual([]);
+});
+
+test("a merged filename-keyed pair keeps every distinct tx and double-counts none", () => {
+  const survivor = acc({ key: "activity", bank: "American Express" });
+  const duplicate = acc({ key: "activity (1)", bank: "American Express" });
+  // The short export overlaps the long one on Uber; Airbnb is only in the long one.
+  const txs = assignTxIds([
+    { accountKey: "activity", date: "2026-07-31", amount: -22.28, currency: "EUR", counterparty: "UBER TRIP", description: "", category: "", manual: false },
+    { accountKey: "activity (1)", date: "2026-07-31", amount: -22.28, currency: "EUR", counterparty: "UBER TRIP", description: "", category: "", manual: false },
+    { accountKey: "activity (1)", date: "2026-07-29", amount: -585.57, currency: "EUR", counterparty: "AIRBNB LONDEN", description: "", category: "", manual: false },
+  ]);
+  const merged = mergeAccounts([survivor, duplicate], txs, "activity", "activity (1)");
+  expect(merged.accounts).toHaveLength(1);
+  expect(merged.txs).toHaveLength(2); // Uber collapsed, Airbnb carried over
+  expect(merged.txs.filter((t) => t.counterparty === "UBER TRIP")).toHaveLength(1);
+  expect(merged.txs.every((t) => t.accountKey === "activity")).toBe(true);
+});
