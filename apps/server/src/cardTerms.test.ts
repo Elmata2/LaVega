@@ -97,3 +97,23 @@ test("an EXPIRED entry is still served while it refreshes — never a blank", as
     Date.now = realNow;
   }
 });
+
+test("a note-only reply is NOT cached — a failed lookup must stay retryable", async () => {
+  // What the live agent returns when web search hits its limit: a note, no numbers.
+  const noteOnly = async () => [{ provider: "ING", note: "Kon actuele tarieven niet verifiëren." }];
+  getCardTerms(input(["ING"]), "k", { lookup: noteOnly as never });
+  await settle();
+
+  // Still unknown, so the next ask tries again instead of serving the failure
+  // back for a week.
+  const again = getCardTerms(input(["ING"]), "k", { lookup: noteOnly as never });
+  expect(again.terms).toEqual([]);
+  expect(again.pending).toEqual(["ING"]);
+});
+
+test("a reply carrying any usable number IS cached", async () => {
+  const withNumber = async () => [{ provider: "ING", cashbackPct: 0, note: "geen cashback" }];
+  getCardTerms(input(["ING"]), "k", { lookup: withNumber as never });
+  await settle();
+  expect(getCardTerms(input(["ING"]), "k", { lookup: withNumber as never }).pending).toEqual([]);
+});

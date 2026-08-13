@@ -28,6 +28,13 @@ function fresh(e: Entry | undefined): boolean {
   return e != null && Date.now() - e.at < TTL_MS;
 }
 
+/** Does this reply contain anything we can actually rank with? A note alone is
+ *  not an answer — the ranking needs a number. */
+function usable(t: ProviderTerms): boolean {
+  return t.fxFeePct !== undefined || t.cashbackPct !== undefined
+    || t.pointsPerEuro !== undefined || t.transferFreeViaIdeal !== undefined;
+}
+
 /** Start a lookup for one provider, unless one is already running for it. The
  *  promise is deliberately not awaited by the caller: the request returns now
  *  and the answer lands in the cache for the next one. A failure is swallowed
@@ -40,7 +47,12 @@ function startLookup(provider: string, base: Omit<TravelInput, "providers">, api
   void (async () => {
     try {
       const found = await (deps.lookup ?? lookupProviderTerms)({ ...base, providers: [provider] }, apiKey);
-      if (found.length > 0) {
+      // Only cache an answer that actually carries a NUMBER. A reply with just
+      // a note ("couldn't verify — the search tool hit its limit") is a failed
+      // lookup wearing an answer's clothes; caching it for a week would lock in
+      // that failure and stop us retrying. Better to leave it unknown and let
+      // the next ask try again.
+      if (found.length > 0 && usable(found[0])) {
         // Evict the oldest entry rather than growing without bound.
         if (cache.size >= MAX_TRACKED) {
           const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
