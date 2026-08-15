@@ -6,6 +6,16 @@ import { accountType } from "./balance.js";
 
 export const TRAVEL_AGENT = "travel";
 
+/** The reference spend the advice is priced against. A percentage is hard to
+ *  act on; "€14 op €1.000" is not. */
+export const TRAVEL_REFERENCE_SPEND = 1000;
+
+/** What a card costs in euros on the reference spend — negative when it pays
+ *  you (cashback above the surcharge). Null when the terms are unknown. */
+export function costOnReferenceSpend(netCostPct: number | null): number | null {
+  return netCostPct === null ? null : Math.round(netCostPct * TRAVEL_REFERENCE_SPEND) / 100;
+}
+
 /** Destination → the currency you will actually be charged in. Only the
  *  countries worth naming; an unknown country yields null and the plan says so
  *  rather than guessing a currency. Euro countries return EUR, which is what

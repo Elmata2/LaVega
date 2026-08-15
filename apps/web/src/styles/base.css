@@ -1068,6 +1068,7 @@ table tbody tr:hover {
   gap: var(--sp-3);
 }
 .travel-cards li {
+  display: block;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1084,4 +1085,65 @@ table tbody tr:hover {
   flex-direction: column;
   gap: var(--sp-2);
   align-items: flex-start;
+}
+
+/* Op reis — decisive answer first, reasoning on click */
+.travel-step-wide {
+  grid-column: 1 / -1;
+}
+.travel-winner {
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--pos);
+}
+.travel-winner-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.travel-winner-cost {
+  margin-top: 2px;
+  font-weight: 500;
+}
+.travel-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.travel-card-row:hover {
+  border-color: var(--accent);
+}
+.travel-card-name {
+  font-weight: 500;
+}
+.travel-card-cost {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.travel-caret {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.travel-card-detail {
+  padding: 0 0 var(--sp-3);
+}
+.travel-card-best .travel-card-name {
+  color: var(--pos);
+}
+.travel-note {
+  line-height: 1.5;
 }

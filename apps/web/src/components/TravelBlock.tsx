@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Account, Tx, LearnedFact, RateBenchmark, TravelPlan } from "@lavega/core";
-import { planTravel, countryCurrency, makeFact, TRAVEL_AGENT } from "@lavega/core";
+import { planTravel, countryCurrency, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND } from "@lavega/core";
 import { formatEuro } from "../format.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
@@ -107,10 +107,22 @@ export default function TravelBlock({
   accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onCorrectFact,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
+  // Which card's "waarom" is open. One at a time — the point is a clear answer
+  // with the reasoning a click away, not a wall of caveats.
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const plan: TravelPlan | null = destination
     ? planTravel({ accounts, txs, rates, facts, destination, asOf })
     : null;
+
+  const winner = plan?.spend.find((o) => o.known) ?? null;
+  const winnerCost = costOnReferenceSpend(winner?.netCostPct ?? null);
+  // What choosing the winner saves against the next-best KNOWN card.
+  const runnerUp = plan?.spend.filter((o) => o.known)[1] ?? null;
+  const runnerUpSaving =
+    winner && runnerUp && winner.netCostPct !== null && runnerUp.netCostPct !== null
+      ? Math.round((runnerUp.netCostPct - winner.netCostPct) * TRAVEL_REFERENCE_SPEND) / 100
+      : null;
 
   return (
     <section className="card" aria-label="Op reis">
@@ -160,39 +172,73 @@ export default function TravelBlock({
             <p className="cell-sub">LaVega verplaatst zelf niets — dit is een stap die jij zet.</p>
           </div>
 
-          <div className="travel-step">
+          <div className="travel-step travel-step-wide">
             <h3 className="travel-step-title">Betalen</h3>
             {plan.spend.length === 0 ? (
               <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
             ) : (
-              <ul className="travel-cards">
-                {plan.spend.map((option, i) => (
-                  <li key={option.provider} className={i === 0 && option.known ? "travel-card-best" : ""}>
-                    <div>
-                      <strong>{option.provider}</strong>
-                      {i === 0 && option.known && <span className="eyebrow"> beste</span>}
-                      {option.accounts.length > 1 && (
-                        <span className="eyebrow"> · {option.accounts.length} rekeningen</span>
-                      )}
-                      <div className="cell-sub">
-                        {option.why}
-                        {option.netCostPct !== null && ` → netto ${option.netCostPct}%`}
-                        {option.feeSource === "user" && " · door jou ingesteld"}
-                        {option.feeSource === "agent" && option.feeUpdatedAt && ` · opgezocht ${option.feeUpdatedAt}`}
-                      </div>
-                      {option.note && <div className="cell-sub travel-note">{option.note}</div>}
+              <>
+                {winner && (
+                  <div className="travel-winner">
+                    <div className="travel-winner-name">{winner.provider}</div>
+                    <div className="travel-winner-cost">
+                      {winnerCost !== null && winnerCost > 0 && `€ ${winnerCost.toFixed(2)} kosten per € 1.000 die je uitgeeft`}
+                      {winnerCost !== null && winnerCost <= 0 && `levert € ${Math.abs(winnerCost).toFixed(2)} op per € 1.000 die je uitgeeft`}
                     </div>
-                    <FactCorrection
-                      provider={option.provider}
-                      factKey="fxFeePct"
-                      label={`wisselkosten (${pct(option.fxFeePct)})`}
-                      value={option.fxFeePct}
-                      busy={busy}
-                      onCorrect={onCorrectFact}
-                    />
-                  </li>
-                ))}
-              </ul>
+                    {runnerUpSaving !== null && (
+                      <div className="cell-sub">
+                        € {runnerUpSaving.toFixed(2)} goedkoper dan {runnerUp!.provider}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <ul className="travel-cards">
+                  {plan.spend.map((option, i) => {
+                    const cost = costOnReferenceSpend(option.netCostPct);
+                    const open = expanded === option.provider;
+                    return (
+                      <li key={option.provider} className={option === winner ? "travel-card-best" : ""}>
+                        <button
+                          type="button"
+                          className="travel-card-row"
+                          aria-expanded={open}
+                          onClick={() => setExpanded(open ? null : option.provider)}
+                        >
+                          <span className="travel-card-name">
+                            {option.provider}
+                            {option.accounts.length > 1 && <span className="eyebrow"> · {option.accounts.length} rek.</span>}
+                            {(option.pointsPerEuro ?? 0) > 0 && <span className="eyebrow"> · {option.pointsPerEuro} punt/€</span>}
+                          </span>
+                          <span className="travel-card-cost">
+                            {cost === null ? "onbekend" : `€ ${cost.toFixed(2)}`}
+                            <span className="travel-caret" aria-hidden="true">{open ? "▾" : "▸"}</span>
+                          </span>
+                        </button>
+
+                        {open && (
+                          <div className="travel-card-detail">
+                            <p className="cell-sub">
+                              {option.why}
+                              {option.feeSource === "user" && " · door jou ingesteld"}
+                              {option.feeSource === "agent" && option.feeUpdatedAt && ` · opgezocht ${option.feeUpdatedAt}`}
+                            </p>
+                            {option.note && <p className="cell-sub travel-note">{option.note}</p>}
+                            <FactCorrection
+                              provider={option.provider}
+                              factKey="fxFeePct"
+                              label={`wisselkosten (${pct(option.fxFeePct)})`}
+                              value={option.fxFeePct}
+                              busy={busy}
+                              onCorrect={onCorrectFact}
+                            />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
             {plan.spendNote && <p className="cell-sub travel-note">{plan.spendNote}</p>}
             {plan.unidentifiedCount > 0 && (
