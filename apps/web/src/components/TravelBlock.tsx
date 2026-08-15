@@ -194,6 +194,7 @@ export default function TravelBlock({
                 ))}
               </ul>
             )}
+            {plan.spendNote && <p className="cell-sub travel-note">{plan.spendNote}</p>}
             {plan.unidentifiedCount > 0 && (
               <p className="cell-sub">
                 {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder bank — die kunnen we

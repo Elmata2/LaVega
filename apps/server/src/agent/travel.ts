@@ -210,7 +210,10 @@ export async function lookupProviderTerms(
       cashbackPct: numeric(o.cashbackPct),
       pointsPerEuro: numeric(o.pointsPerEuro),
       transferFreeViaIdeal: o.transferFreeViaIdeal === 1 ? 1 : o.transferFreeViaIdeal === 0 ? 0 : undefined,
-      note: typeof o.note === "string" ? o.note.slice(0, 400) : undefined,
+      // Roomy enough for the caveats that actually matter (weekend surcharge,
+      // free-withdrawal limit, "credit card differs from debit"). 400 chopped
+      // real sentences mid-word in the UI.
+      note: typeof o.note === "string" ? o.note.slice(0, 900) : undefined,
     });
   }
   return out;

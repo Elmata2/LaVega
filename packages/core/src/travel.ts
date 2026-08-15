@@ -33,6 +33,8 @@ export type SpendOption = {
   accounts: Account[];
   fxFeePct: number | null;
   cashbackPct: number | null;
+  /** Reward points per euro spent. Shown, never priced — see rankSpendOptions. */
+  pointsPerEuro: number | null;
   netCostPct: number | null; // null when the fee is unknown — never assumed free
   known: boolean;
   why: string;
@@ -57,6 +59,10 @@ export type TravelPlan = {
   store: { suggestion: InterestSuggestion | null; best: RateBenchmark | null; note: string };
   convert: ConvertStep;
   spend: SpendOption[];
+  /** The points-vs-cash trade-off, when the cheapest card earns none and a
+   *  dearer one does. Stated as a choice, not resolved — only the owner knows
+   *  what his points are worth to him. */
+  spendNote: string | null;
   /** Providers we have no terms for yet — what an agent refresh should look up. */
   unknownProviders: string[];
   /** Payment accounts we can't attribute to a bank, so they can't be ranked or
@@ -73,6 +79,19 @@ export type TravelPlan = {
  *  can't attribute to a bank is reported as unidentified instead. */
 export function providerOf(a: Account): string {
   return String(a.bank ?? "").trim();
+}
+
+/** The PRODUCT whose terms we rank — the bank plus the kind of card, because
+ *  those are different products with different tariffs. Measured on real data:
+ *  ING's betaalpas charges 1.4% while ABN AMRO's creditcard charges 2%, and the
+ *  agent's own note said ABN's betaalpas is nearer 1%. Ranking on the bank alone
+ *  put a debit card against a credit card and crowned the wrong one — which
+ *  would hand someone the wrong card abroad, the exact mistake this exists to
+ *  prevent. Also reads better: "ING betaalpas", not "ING". */
+export function productOf(a: Account): string {
+  const bank = providerOf(a);
+  if (!bank) return "";
+  return `${bank} ${accountType(a) === "Creditcard" ? "creditcard" : "betaalpas"}`;
 }
 
 /** How to NAME an account in text shown to the owner. Unlike `providerOf` this
@@ -103,7 +122,7 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
   // of them would silently move the others anyway).
   const byProvider = new Map<string, Account[]>();
   for (const a of spendableAccounts(accounts)) {
-    const p = providerOf(a);
+    const p = productOf(a);
     const list = byProvider.get(p);
     if (list) list.push(a);
     else byProvider.set(p, [a]);
@@ -112,13 +131,19 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
   const options = [...byProvider.entries()].map(([provider, group]): SpendOption => {
     const fxFeePct = factNumber(facts, TRAVEL_AGENT, provider, "fxFeePct");
     const cashbackPct = factNumber(facts, TRAVEL_AGENT, provider, "cashbackPct");
+    const pointsPerEuro = factNumber(facts, TRAVEL_AGENT, provider, "pointsPerEuro");
     const entry = factEntry(facts, TRAVEL_AGENT, provider, "fxFeePct");
     const known = fxFeePct !== null;
+    // Ranking is on HARD CASH only: fee minus cashback. Points are shown but
+    // never folded in, because that needs a value per point that nobody can
+    // state honestly (a Membership Rewards point is worth anything from ~0.5
+    // to ~2 cent depending on how it's redeemed). Inventing one would be the
+    // same fake precision the "indicatief" tables were dropped for.
     const netCostPct = known ? fxFeePct - (cashbackPct ?? 0) : null;
     return {
-      provider, accounts: group, fxFeePct, cashbackPct, netCostPct, known,
+      provider, accounts: group, fxFeePct, cashbackPct, pointsPerEuro, netCostPct, known,
       why: known
-        ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}`
+        ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}${pointsPerEuro ? ` + ${pointsPerEuro} punt${pointsPerEuro === 1 ? "" : "en"} per euro` : ""}`
         : "voorwaarden nog onbekend",
       feeSource: entry?.source ?? null,
       feeUpdatedAt: entry?.updatedAt ?? null,
@@ -142,9 +167,12 @@ function planConversion(accounts: Account[], best: SpendOption | null, facts: re
     return { fromProvider: null, toProvider: null, method: null, note: "Nog geen kaart met bekende voorwaarden — ververs eerst de voorwaarden." };
   }
   // Fund the winning product from the payment account holding the most money —
-  // at a DIFFERENT provider, else the advice is "move it to where it already is".
+  // at a DIFFERENT bank, else the advice is "move it to where it already is".
+  // Compared on BANK, not product: moving from your ING betaalpas to your ING
+  // creditcard is not a conversion route.
+  const winningBank = best.accounts[0] ? providerOf(best.accounts[0]) : "";
   const funding = accounts
-    .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== best.provider)
+    .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== winningBank)
     .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0] ?? null;
   const method = factNumber(facts, TRAVEL_AGENT, best.provider, "transferFreeViaIdeal") === 1 ? "iDEAL" : null;
   if (!funding) {
@@ -185,6 +213,14 @@ export function planTravel(input: {
 
   const spend = rankSpendOptions(accounts, facts);
   const bestSpend = spend.find((s) => s.known) ?? null;
+
+  // Cash is ranked; points are a judgement call. If the cheapest card earns
+  // none and a pricier one does, name the difference and let him decide.
+  const pointsCard = spend.find((s) => s.known && (s.pointsPerEuro ?? 0) > 0);
+  const spendNote =
+    bestSpend && pointsCard && pointsCard.provider !== bestSpend.provider && bestSpend.netCostPct !== null && pointsCard.netCostPct !== null
+      ? `${pointsCard.provider} kost ${(pointsCard.netCostPct - bestSpend.netCostPct).toFixed(2)}% meer, maar levert ${pointsCard.pointsPerEuro} punt${pointsCard.pointsPerEuro === 1 ? "" : "en"} per euro. Of dat loont hangt af van wat jij met die punten doet.`
+      : null;
   const convert: ConvertStep =
     currency === "EUR"
       ? { fromProvider: null, toProvider: null, method: null, note: "Daar betaal je in euro's — omwisselen is niet nodig." }
@@ -202,6 +238,7 @@ export function planTravel(input: {
     store,
     convert,
     spend,
+    spendNote,
     unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],
     unidentifiedCount,
   };

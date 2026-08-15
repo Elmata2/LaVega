@@ -6,7 +6,13 @@ provider names the user banks with. You are NOT given their balances, accounts,
 transactions or identity, and you must never ask for them — everything about
 their money is calculated locally, outside this call.
 
-For each provider, use web search to find, for a PERSONAL (consumer) card or
+Each provider names a SPECIFIC PRODUCT, not just a bank — "ING betaalpas" is
+the debit card, "ABN AMRO creditcard" is the credit card. Report the terms of
+exactly that product. They differ sharply (a Dutch bank's debit card is often
+around 1% while its credit card is 2%), and answering about the wrong one sends
+someone abroad with the wrong card in their pocket.
+
+For each product, use web search to find, for a PERSONAL (consumer) card or
 account issued in the user's home country:
 
 - `fxFeePct` — the surcharge on a transaction in a foreign currency, as a
