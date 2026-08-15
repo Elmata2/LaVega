@@ -1,0 +1,162 @@
+{
+  "name": "LaVega — kaartvoorwaarden",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Handmatig starten",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-620, 120]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Elke maandag 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-620, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// De aanbieders waarvan LaVega de voorwaarden moet kennen.\n// `provider` MOET exact overeenkomen met wat LaVega toont: bank + \"betaalpas\"\n// of \"creditcard\" (zie productOf() in packages/core/src/travel.ts).\n// `url` is de eigen tarievenpagina van de aanbieder — dat is precies de stap\n// die de zoek-agent onbetrouwbaar maakte. Controleer een URL als een aanbieder\n// leeg blijft; die veranderen af en toe.\nreturn [\n  { json: { provider: 'Revolut betaalpas',           url: 'https://www.revolut.com/nl-NL/legal/fees/' } },\n  { json: { provider: 'ING betaalpas',               url: 'https://www.ing.nl/particulier/betalen/betalen-en-geld-opnemen-in-het-buitenland' } },\n  { json: { provider: 'ING creditcard',              url: 'https://www.ing.nl/particulier/betalen/creditcard/kosten-creditcard' } },\n  { json: { provider: 'ABN AMRO betaalpas',          url: 'https://www.abnamro.nl/nl/prive/betalen/in-het-buitenland/index.html' } },\n  { json: { provider: 'ABN AMRO creditcard',         url: 'https://www.abnamro.nl/nl/prive/creditcards/tarieven.html' } },\n  { json: { provider: 'American Express creditcard', url: 'https://www.americanexpress.com/nl-nl/kaarten/alle-kaarten/' } },\n  { json: { provider: 'bunq betaalpas',              url: 'https://www.bunq.com/nl/pricing' } },\n  { json: { provider: 'Trading 212 creditcard',      url: 'https://www.trading212.com/nl/terms/card' } },\n];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Aanbieders + tariefpagina",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-380, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Haal tariefpagina op",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-140, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// HTML -> platte tekst. Het model hoeft geen opmaak te zien, en een kale\n// pagina scheelt tokens en tijd. Alles boven 18k tekens gaat eraf: tarieven\n// staan vrijwel altijd in het eerste deel, en een lange staart aan footer-\n// en cookieteksten helpt niet.\nconst out = [];\nfor (const item of $input.all()) {\n  const provider = item.json.provider;\n  const url = item.json.url;\n  const raw = typeof item.json.data === 'string' ? item.json.data : '';\n  if (!raw) { out.push({ json: { provider, url, text: '', ok: false } }); continue; }\n  const text = raw\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 18000);\n  out.push({ json: { provider, url, text, ok: text.length > 200 } });\n}\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "HTML naar tekst",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Pagina gelukt?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [320, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-5',\n  max_tokens: 1024,\n  system: 'Je leest de tarievenpagina van een betaalproduct en haalt er cijfers uit. Antwoord UITSLUITEND met JSON, zonder uitleg eromheen: {\"fxFeePct\": number|null, \"cashbackPct\": number|null, \"pointsPerEuro\": number|null, \"transferFreeViaIdeal\": 0|1|null, \"note\": string}. fxFeePct = de koersopslag in procenten bovenop de interbancaire koers bij een betaling in vreemde valuta met DIT product. Laat een veld null als de pagina het niet vermeldt — verzin nooit een getal, een verkeerd tarief stuurt iemand met de verkeerde kaart op reis. Zet uitzonderingen (weekendtoeslag, gratis-limiet per maand, kosten voor contant opnemen) in note, niet in de getallen.',\n  messages: [{ role: 'user', content: 'Product: ' + $json.provider + '\\nBron: ' + $json.url + '\\n\\n' + $json.text }]\n}) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Lees tarieven uit de pagina",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Het antwoord van het model naar de vorm die LaVega verwacht.\n//\n// De productnaam zit NIET in het antwoord van Claude, dus die halen we op uit\n// de filter-node ervoor: die stuurt 1-op-1 in dezelfde volgorde door, zodat\n// item i hier hoort bij aanbieder i daar. (Bewust de filter-node en niet\n// \"HTML naar tekst\", want de filter gooit mislukte pagina's eruit en dan\n// lopen de posities niet meer gelijk.)\nconst sources = $('Pagina gelukt?').all();\nconst items = $input.all();\nconst rows = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const name = sources[i]?.json?.provider;\n  if (!name) continue;\n  const text = items[i]?.json?.content?.[0]?.text ?? '';\n  const match = typeof text === 'string' ? text.match(/\\{[\\s\\S]*\\}/) : null;\n  if (!match) continue;\n  let parsed;\n  try { parsed = JSON.parse(match[0]); } catch (e) { continue; }\n\n  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : undefined);\n  const row = {\n    provider: name,\n    fxFeePct: num(parsed.fxFeePct),\n    cashbackPct: num(parsed.cashbackPct),\n    pointsPerEuro: num(parsed.pointsPerEuro),\n    transferFreeViaIdeal: parsed.transferFreeViaIdeal === 1 ? 1 : parsed.transferFreeViaIdeal === 0 ? 0 : undefined,\n    note: typeof parsed.note === 'string' ? parsed.note.slice(0, 900) : undefined,\n  };\n  // Zonder bruikbaar getal weigert LaVega de rij toch — \"onbekend\" is een\n  // eerlijker uitkomst dan een gok, en dan kun jij hem zelf invullen.\n  const usable = ['fxFeePct', 'cashbackPct', 'pointsPerEuro', 'transferFreeViaIdeal'].some((k) => row[k] !== undefined);\n  if (usable) rows.push(row);\n}\n\nreturn [{ json: { homeCountry: 'NL', currency: 'USD', terms: rows } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Naar LaVega-vorm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 200],
+      "executeOnce": false,
+      "alwaysOutputData": false,
+      "notes": "Zet hier `currency` op de valuta van je bestemming. USD = Verenigde Staten."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lavega.dev/api/card-terms/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-ingest-token", "value": "={{ $env.LAVEGA_INGEST_TOKEN }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Stuur naar LaVega",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 200]
+    }
+  ],
+  "connections": {
+    "Handmatig starten": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
+    "Elke maandag 06:00": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
+    "Aanbieders + tariefpagina": { "main": [[{ "node": "Haal tariefpagina op", "type": "main", "index": 0 }]] },
+    "Haal tariefpagina op": { "main": [[{ "node": "HTML naar tekst", "type": "main", "index": 0 }]] },
+    "HTML naar tekst": { "main": [[{ "node": "Pagina gelukt?", "type": "main", "index": 0 }]] },
+    "Pagina gelukt?": { "main": [[{ "node": "Lees tarieven uit de pagina", "type": "main", "index": 0 }]] },
+    "Lees tarieven uit de pagina": { "main": [[{ "node": "Naar LaVega-vorm", "type": "main", "index": 0 }]] },
+    "Naar LaVega-vorm": { "main": [[{ "node": "Stuur naar LaVega", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

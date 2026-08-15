@@ -1,5 +1,5 @@
 import { expect, test, beforeEach } from "vitest";
-import { getCardTerms, resetCardTerms } from "./cardTerms.js";
+import { getCardTerms, resetCardTerms, ingestCardTerms } from "./cardTerms.js";
 import type { TravelInput } from "./agent/travel.js";
 
 const input = (providers: string[]): TravelInput =>
@@ -116,4 +116,34 @@ test("a reply carrying any usable number IS cached", async () => {
   getCardTerms(input(["ING"]), "k", { lookup: withNumber as never });
   await settle();
   expect(getCardTerms(input(["ING"]), "k", { lookup: withNumber as never }).pending).toEqual([]);
+});
+
+/* --- Ingest from the n8n workflow (fetches the provider's own tariff page, so
+ * there is no "couldn't find it" step to fail). --- */
+
+test("ingested terms are served straight away, no lookup needed", async () => {
+  const never = async () => { throw new Error("should not be called"); };
+  const res = ingestCardTerms("NL", "USD", [{ provider: "Revolut betaalpas", fxFeePct: 0, note: "0% tot €1000/mnd" }]);
+  expect(res).toEqual({ accepted: 1, rejected: [] });
+
+  const out = getCardTerms(input(["Revolut betaalpas"]), "k", { lookup: never as never });
+  expect(out.pending).toEqual([]);
+  expect(out.terms[0]).toMatchObject({ provider: "Revolut betaalpas", fxFeePct: 0 });
+});
+
+test("a row with no usable number is rejected, exactly like a failed lookup", () => {
+  const res = ingestCardTerms("NL", "USD", [
+    { provider: "Revolut betaalpas", note: "kon niets vinden" },
+    { provider: "", fxFeePct: 1 },
+    { provider: "ING betaalpas", fxFeePct: 1.4 },
+  ]);
+  expect(res.accepted).toBe(1);
+  expect(res.rejected).toEqual(["Revolut betaalpas"]);
+});
+
+test("ingest is scoped per market, like every other cached entry", async () => {
+  const never = async () => { throw new Error("should not be called"); };
+  ingestCardTerms("NL", "USD", [{ provider: "Revolut betaalpas", fxFeePct: 0 }]);
+  const gbp = getCardTerms({ ...input(["Revolut betaalpas"]), currency: "GBP" }, "k", { lookup: never as never });
+  expect(gbp.terms).toEqual([]); // different market -> not served
 });

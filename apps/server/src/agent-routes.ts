@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { loadLlmConfig } from "./config.js";
+import { loadLlmConfig, loadIngestConfig } from "./config.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
 import { extractInvoiceFields } from "./agent/anthropicExtract.js";
 import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
@@ -8,7 +8,7 @@ import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
 import { categorizeTransactions } from "./agent/categorize.js";
 import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
-import { getCardTerms } from "./cardTerms.js";
+import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
@@ -133,5 +133,34 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     // Nothing here awaits the model, so the 100s Cloudflare ceiling that killed
     // the synchronous version can't be reached.
     return c.json(getCardTerms(input, apiKey, { lookup: travelFacts }));
+  });
+
+  // Ingest from the n8n workflow, which fetches each provider's OWN tariff page
+  // and extracts the numbers — no searching, so no flaky "couldn't find it".
+  // Shared-secret auth: without CARD_TERMS_INGEST_TOKEN the endpoint is closed,
+  // and a wrong token is refused, because this writes into the cache every user
+  // reads. Constant-time-ish compare: reject on length first, then value.
+  app.post("/api/card-terms/ingest", async (c) => {
+    const { configured, token } = loadIngestConfig();
+    if (!configured || !token) return c.json({ error: "Ingest is niet geconfigureerd." }, 503);
+    const given = c.req.header("x-ingest-token") ?? "";
+    if (given.length !== token.length || given !== token) return c.json({ error: "Ongeldige token." }, 401);
+
+    let body: { homeCountry?: unknown; currency?: unknown; terms?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "ongeldige invoer" }, 400);
+    }
+    const homeCountry = /^[A-Z]{2}$/.test(String(body.homeCountry ?? "").toUpperCase())
+      ? String(body.homeCountry).toUpperCase()
+      : "NL";
+    const currency = /^[A-Z]{3}$/.test(String(body.currency ?? "").toUpperCase())
+      ? String(body.currency).toUpperCase()
+      : "";
+    if (!Array.isArray(body.terms)) return c.json({ error: "geen terms" }, 400);
+    if (body.terms.length > 40) return c.json({ error: "te veel terms" }, 400);
+
+    return c.json(ingestCardTerms(homeCountry, currency, body.terms as never));
   });
 }

@@ -82,3 +82,11 @@ export function loadLlmConfig(): { configured: boolean; apiKey: string | null } 
   const apiKey = process.env.ANTHROPIC_API_KEY ?? null;
   return { configured: typeof apiKey === "string" && apiKey.length > 0, apiKey };
 }
+
+/** Shared secret for the n8n card-terms ingest. Unset means the endpoint is
+ *  closed (503) — same shape as loadLlmConfig, so an unconfigured deployment
+ *  refuses rather than accepting anonymous writes into the terms cache. */
+export function loadIngestConfig(): { configured: boolean; token: string | null } {
+  const token = process.env.CARD_TERMS_INGEST_TOKEN ?? null;
+  return { configured: typeof token === "string" && token.length >= 16, token };
+}

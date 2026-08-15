@@ -101,6 +101,37 @@ export function getCardTerms(input: TravelInput, apiKey: string, deps: Deps = {}
   return { terms, pending };
 }
 
+/** Write terms in from OUTSIDE the LLM path — the n8n workflow that fetches a
+ *  provider's own tariff page and extracts the numbers from it.
+ *
+ *  Why this exists: the agent's weak step was never reading a tariff, it was
+ *  FINDING one. Revolut kept coming back empty while ING, ABN and Amex
+ *  succeeded. Handing a known URL to a workflow removes the search entirely,
+ *  which is the same reason the geld.nl scraper beats asking a model for
+ *  savings rates. The agent stays as the fallback for providers nobody has
+ *  configured a source for.
+ *
+ *  Returns how many were accepted; rows with no usable number are rejected for
+ *  the same reason a failed lookup isn't cached. */
+export function ingestCardTerms(
+  homeCountry: string,
+  currency: string,
+  rows: ProviderTerms[],
+): { accepted: number; rejected: string[] } {
+  const rejected: string[] = [];
+  let accepted = 0;
+  for (const row of rows) {
+    const provider = String(row?.provider ?? "").trim();
+    if (!provider || !usable(row)) {
+      if (provider) rejected.push(provider);
+      continue;
+    }
+    cache.set(keyOf(provider, homeCountry, currency), { terms: { ...row, provider }, at: Date.now() });
+    accepted++;
+  }
+  return { accepted, rejected };
+}
+
 /** Test seam: drop everything (there is no cross-request state to preserve). */
 export function resetCardTerms(): void {
   cache.clear();
