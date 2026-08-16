@@ -8,8 +8,10 @@ import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
 import { categorizeTransactions } from "./agent/categorize.js";
 import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
+import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
+import { AGENTS, type LearnedFact } from "@lavega/core";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
  * client) and is the ONLY place that talks to Claude. `deps.extract`/`deps.chat`
@@ -46,13 +48,18 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     if (!configured || !apiKey) return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
     if (!limit("extract")) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
     let input: InvoiceExtractInput;
+    let facts: LearnedFact[];
     try {
-      input = sanitizeExtractInput(await c.req.json());
+      const raw = await c.req.json();
+      input = sanitizeExtractInput(raw);
+      // What the extractor has learned about how the owner corrects it (per
+      // invoice FIELD, never per counterparty) — sanitized like every input.
+      facts = sanitizeKnownFacts(raw?.facts, AGENTS.facturen);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
     try {
-      return c.json(await extract(input, apiKey));
+      return c.json(await extract(input, apiKey, facts));
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "extractie mislukt" }, 502);
     }
@@ -69,18 +76,22 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     let tab = "";
     let messages;
     let context;
+    let facts: LearnedFact[] = [];
     try {
       const raw = await c.req.json();
       tab = String(raw?.tab ?? "");
       messages = sanitizeMessages(raw?.messages);
       context = sanitizeChatContext(tab, raw?.context);
+      // How the owner wants the assistant to answer — the chat agent's own
+      // namespace, never anything about his money.
+      facts = sanitizeKnownFacts(raw?.facts, AGENTS.chat);
       if (messages.length === 0) return c.json({ error: "Geen bericht." }, 400);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
     return streamSSE(c, async (stream) => {
       try {
-        for await (const chunk of chat({ tab, messages, context, apiKey })) {
+        for await (const chunk of chat({ tab, messages, context, facts, apiKey })) {
           await stream.writeSSE({ data: chunk });
         }
         await stream.writeSSE({ event: "done", data: "" });
@@ -99,13 +110,18 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     if (!configured || !apiKey) return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
     if (!limit("categorize")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
+    let facts: LearnedFact[];
     try {
-      input = sanitizeCategorizeInput(await c.req.json());
+      const raw = await c.req.json();
+      input = sanitizeCategorizeInput(raw);
+      // How the owner keeps re-filing the categorizer's suggestions — category
+      // to category, so no merchant can ride along.
+      facts = sanitizeKnownFacts(raw?.facts, AGENTS.categorize);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
     }
     try {
-      return c.json(await categorize(input, apiKey));
+      return c.json(await categorize(input, apiKey, facts));
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "categorisatie mislukt" }, 502);
     }

@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
+import { entityScope } from "@lavega/core";
 import { createIndexedDbStorage } from "./indexeddb.js";
 
 const tx = (id: string, accountKey = "A"): Tx =>
@@ -47,4 +48,31 @@ test("deleting an absent account is a no-op", async () => {
   await s.putAccounts([acc("A")]);
   await s.deleteAccount("GONE");
   expect(await s.getAccounts()).toHaveLength(1);
+});
+
+test("entityProfiles round-trip; a database with none returns [] (every entity is privé)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createIndexedDbStorage();
+  expect(await s.getEntityProfiles()).toEqual([]);
+  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }, { entity: "Privé", scope: "personal" }]);
+  expect((await s.getEntityProfiles()).map((p) => p.entity).sort()).toEqual(["BV1", "Privé"]);
+});
+
+test("putEntityProfiles is replace-all: dropping a row returns that entity to the default", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createIndexedDbStorage();
+  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }, { entity: "BV2", scope: "business" }]);
+  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }]);
+  expect(await s.getEntityProfiles()).toEqual([{ entity: "BV1", scope: "business" }]);
+  expect(entityScope("BV2", await s.getEntityProfiles())).toBe("personal");
+});
+
+test("accounts and txs survive the store being added (the upgrade is additive, not a migration)", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createIndexedDbStorage();
+  await s.putAccounts([acc("A")]);
+  await s.putTxs([tx("a1", "A")]);
+  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }]);
+  expect(await s.getAccounts()).toHaveLength(1);
+  expect(await s.getTxs()).toHaveLength(1);
 });

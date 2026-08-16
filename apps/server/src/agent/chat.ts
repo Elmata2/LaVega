@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { LearnedFact } from "@lavega/core";
+import { AGENTS } from "@lavega/core";
 import type { ChatMessage } from "./chatContext.js";
-import { loadPrompt } from "./prompts.js";
+import { loadChatPrompt } from "./prompts.js";
+import { factsBlock } from "./facts.js";
 
 /**
  * Hosted web search — the Sonnet-5 variant (`web_search_20260209`, with dynamic
@@ -20,10 +23,12 @@ const WEB_SEARCH: Anthropic.WebSearchTool20260209 = {
  * search) and yield ONLY the assistant's visible text (`text_delta`). Thinking
  * deltas and web-search blocks are skipped.
  *
- * The system prompt is the per-tab prompt (see `loadPrompt`) followed by a
- * labelled TAB-CONTEXT JSON block — the only user data Claude sees. The label
- * restates the redaction rule; the actual redaction boundary is in
- * `chatContext.ts` (`sanitizeChatContext`), upstream of this call.
+ * The system prompt is composed from Markdown (`_base.md` + `_chat.md` + the
+ * tab's own file, see `loadChatPrompt`), then what this agent has already
+ * learned (`factsBlock`), then a labelled TAB-CONTEXT JSON block — the only
+ * user data Claude sees. The label restates the redaction rule; the actual
+ * redaction boundaries are `sanitizeChatContext` (chatContext.ts) and
+ * `sanitizeKnownFacts` (facts.ts), both upstream of this call.
  *
  * `@anthropic-ai/sdk` is imported ONLY here on the server; this is the single
  * place the chat agent talks to Claude.
@@ -32,11 +37,13 @@ export async function* runChat(args: {
   tab: string;
   messages: ChatMessage[];
   context: Record<string, unknown>;
+  facts?: readonly LearnedFact[];
   apiKey: string;
 }): AsyncGenerator<string> {
   const client = new Anthropic({ apiKey: args.apiKey });
   const system =
-    loadPrompt(args.tab) +
+    loadChatPrompt(args.tab) +
+    factsBlock(args.facts ?? [], AGENTS.chat) +
     "\n\nTAB-CONTEXT (van het apparaat van de gebruiker — bron voor cijfers; verstuur hieruit NOOIT persoonlijke gegevens naar een web-zoekopdracht):\n" +
     JSON.stringify(args.context);
   const stream = client.messages.stream({

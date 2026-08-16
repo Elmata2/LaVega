@@ -13,21 +13,31 @@ export function scheduledFlowsForScope(flows: ScheduledFlow[], entity = ""): Sch
   return entity ? flows.filter((f) => f.entity === entity) : flows;
 }
 
-/** Recompute-merge for VAT ScheduledFlows: drop every `source:"vat"` flow that
+/** The flow sources the tax engine owns and recomputes: a VAT set-aside and,
+ *  in a country that prepays profit tax, its prepayments/settlement. */
+const TAX_SOURCES = new Set<ScheduledFlow["source"]>(["vat", "prepayment"]);
+
+/** Recompute-merge for the tax ScheduledFlows: drop every tax-owned flow that
  *  belongs to one of the given `entities`, then append the freshly computed
- *  `fresh` flows. Non-vat flows and other entities' vat flows are preserved.
- *  Because ids are content-hashed (see makeScheduledFlow), recomputing an
- *  unchanged period yields the same flow rather than a duplicate. */
-export function rebuildVatFlows(existing: ScheduledFlow[], entities: string[], fresh: ScheduledFlow[]): ScheduledFlow[] {
+ *  `fresh` flows. Invoice/manual flows and other entities' tax flows are
+ *  preserved. Because ids are content-hashed (see makeScheduledFlow),
+ *  recomputing an unchanged period yields the same flow rather than a duplicate. */
+export function rebuildTaxFlows(existing: ScheduledFlow[], entities: string[], fresh: ScheduledFlow[]): ScheduledFlow[] {
   const shown = new Set(entities);
-  const kept = existing.filter((f) => !(f.source === "vat" && shown.has(f.entity)));
+  const kept = existing.filter((f) => !(TAX_SOURCES.has(f.source) && shown.has(f.entity)));
   return [...kept, ...fresh];
 }
 
-/** Money already earmarked for VAT that hasn't left the account yet — netted
- *  from "beschikbaar saldo". Only outflow `vat` flows that are not paid/cancelled. */
+/** The name this had when VAT was the only tax LaVega reserved for. */
+export const rebuildVatFlows = rebuildTaxFlows;
+
+/** Money already earmarked for tax that hasn't left the account yet — netted
+ *  from "beschikbaar saldo". Outflow `vat` and `prepayment` flows that are not
+ *  paid/cancelled: a German prepayment is exactly as much not-your-money as a
+ *  BTW set-aside, and showing it as available is the mistake this feature
+ *  exists to prevent. */
 export function reservedCents(flows: ScheduledFlow[], _asOf: string): number {
   return flows
-    .filter((f) => f.source === "vat" && f.sign === -1 && f.status !== "paid" && f.status !== "cancelled")
+    .filter((f) => TAX_SOURCES.has(f.source) && f.sign === -1 && f.status !== "paid" && f.status !== "cancelled")
     .reduce((s, f) => s + f.amountCents, 0);
 }

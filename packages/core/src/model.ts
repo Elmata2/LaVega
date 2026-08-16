@@ -1,3 +1,5 @@
+import type { CountryCode, VatFrequency } from "./taxpacks/index.js";
+
 export type Account = { key: string; iban: string; name: string; bank: string;
   entity: string; currency: string; balance: number | null; balanceDate?: string; type?: string;
   /** Optional annual interest rate (%) for the Optimisatie tab. User-set;
@@ -21,7 +23,11 @@ export type ScheduledFlow = {
   sign: 1 | -1;
   amountCents: number;
   dueDate: string; // ISO YYYY-MM-DD
-  source: "vat" | "invoice" | "manual";
+  /** Where the flow came from. `prepayment` is a profit-tax prepayment or
+   *  settlement demanded by the owner's country (see `taxpacks/`) — it is
+   *  reserved and forecast exactly like a VAT set-aside, because it is the same
+   *  problem: money in the account that was never the owner's. */
+  source: "vat" | "invoice" | "manual" | "prepayment";
   status: "expected" | "confirmed" | "paid" | "cancelled";
 };
 
@@ -49,11 +55,28 @@ export type Invoice = {
   confidence?: number;
 };
 
-/** Per-entity (per-BV) VAT/BTW config for the set-aside estimate. */
+/** Per-entity (per-BV) tax config. Named `VatSettings` because that is all it
+ *  held at first; it is now the entity's whole tax setup — which country's rules
+ *  apply and, where that country prepays profit tax, how to size the
+ *  prepayment. Every field after `manualCents` is optional, so a vault written
+ *  before the country packs still decrypts and behaves exactly as it did
+ *  (no country = NL). */
 export type VatSettings = {
   entity: string;
-  frequency: "monthly" | "quarterly" | "yearly";
+  frequency: VatFrequency;
   defaultRatePct: number; // e.g. 21
   mixedRates: boolean;    // true => don't auto-estimate; manual-only
   manualCents?: number;   // manual override of the amount to set aside this period
+  /** Which country's rule pack applies. Absent = "NL". */
+  country?: CountryCode;
+  /** Override of the pack's indicative profit-tax rate (%), e.g. a known
+   *  Gewerbesteuer-Hebesatz or a different legal form. */
+  profitTaxRatePct?: number;
+  /** The amount the tax office actually assessed for one prepayment period, in
+   *  cents. Set this and nothing is estimated — an assessment beats a guess. */
+  profitTaxManualCents?: number;
 };
+
+/** What `VatSettings` has grown into. Same type, honest name — use this one in
+ *  new code; the old name stays because the vault and the web lane use it. */
+export type TaxSettings = VatSettings;

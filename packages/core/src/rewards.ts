@@ -1,6 +1,12 @@
 import { norm } from "./hash.js";
 
-export type RewardsBalance = { id: string; program: string; points: number; updatedAt: string; note?: string };
+/** A hand-kept points/cashback balance. `intervalDays` and `snoozedUntil` are
+ *  additive and optional — they drive the stale detector in `tracking.ts` (how
+ *  often this programme should be re-confirmed, and "don't ask before X"). A
+ *  vault written before them decrypts unchanged and falls back to the default
+ *  interval. */
+export type RewardsBalance = { id: string; program: string; points: number; updatedAt: string; note?: string;
+  intervalDays?: number; snoozedUntil?: string };
 export type RewardProgram = { name: string; category: string; note?: string };
 
 /** One row per program: id is the normalized program name, so editing a

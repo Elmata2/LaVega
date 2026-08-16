@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORY_OPTIONS } from "@lavega/core";
+import { AGENTS, CATEGORY_OPTIONS, type LearnedFact } from "@lavega/core";
+import { loadAgentPrompt } from "./prompts.js";
+import { factsBlock } from "./facts.js";
 
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
@@ -55,27 +57,27 @@ const VALID = new Set(CATEGORY_OPTIONS);
 /** Bulk-categorize transactions via Haiku (forced tool). Returns [{id, category}]
  *  for the ids the model classified, filtered to the allowed taxonomy. The only
  *  place `@anthropic-ai/sdk` is imported for categorization; it only ever sees
- *  the sanitized {id, text, sign} items. */
+ *  the sanitized {id, text, sign} items.
+ *
+ *  Its behaviour lives in `prompts/categorize.md` (composed with `_base.md`),
+ *  not in this file — plus what it has learned about how the owner re-files its
+ *  suggestions, which is what stops him correcting the same category twice. */
 export async function categorizeTransactions(
   input: { items: CategorizeItem[] },
   apiKey: string,
+  facts: readonly LearnedFact[] = [],
 ): Promise<{ id: string; category: string }[]> {
   const client = new Anthropic({ apiKey });
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
-  const prompt =
-    "Je krijgt banktransacties (id, richting in/uit, omschrijving). Wijs elke transactie een categorie " +
-    "toe uit de toegestane lijst (zie het tool-schema). Gebruik 'Inkomen' voor inkomende bedragen, " +
-    "'Eigen overboeking' of 'Overboekingen' voor overboekingen tussen rekeningen, en laat een id weg " +
-    "als je het echt niet kunt bepalen. Transacties:\n" +
-    list;
   const res = await client.messages.create({
     model: "claude-haiku-4-5",
     // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
     // land well under this, so the forced-tool JSON won't truncate mid-array.
     max_tokens: 8192,
+    system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
     tools: [CATEGORIZE_TOOL as unknown as Anthropic.Tool],
     tool_choice: { type: "tool", name: "categorize_transactions" },
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content: `Transacties:\n${list}` }],
   });
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") return [];

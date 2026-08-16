@@ -1,10 +1,14 @@
 import type { Account, Tx } from "./model.js";
 import type { LearnedFact, FactSource } from "./facts.js";
 import { factNumber, factEntry } from "./facts.js";
+import { AGENTS } from "./agentFacts.js";
 import { analyzeInterest, type RateBenchmark, type InterestSuggestion } from "./interest.js";
 import { accountType } from "./balance.js";
 
-export const TRAVEL_AGENT = "travel";
+/** Travel's slot in the agent namespace (see `agentFacts.ts` for what it may
+ *  learn: fxFeePct / cashbackPct / pointsPerEuro / transferFreeViaIdeal, keyed
+ *  by product name). */
+export const TRAVEL_AGENT = AGENTS.travel;
 
 /** The reference spend the advice is priced against. A percentage is hard to
  *  act on; "€14 op €1.000" is not. */

@@ -1,9 +1,12 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { Account, Tx, Rule } from "@lavega/core";
+import type { Account, Tx, Rule, EntityProfile } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 
 const DB_NAME = "lavega";
-const DB_VERSION = 2;
+// 3 adds the `entityProfiles` store (privé/zakelijk per entity). Purely
+// additive: the upgrade only creates a store that isn't there, so an existing
+// database keeps every row it has and simply gains an empty store.
+const DB_VERSION = 3;
 
 function openLaVegaDb(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
@@ -16,6 +19,9 @@ function openLaVegaDb(): Promise<IDBPDatabase> {
       }
       if (!db.objectStoreNames.contains("rules")) {
         db.createObjectStore("rules", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("entityProfiles")) {
+        db.createObjectStore("entityProfiles", { keyPath: "entity" });
       }
     },
   });
@@ -79,6 +85,23 @@ export function createIndexedDbStorage(): StorageAdapter {
       const tx = db.transaction("rules", "readwrite");
       await tx.store.clear();
       await Promise.all(rules.map((r) => tx.store.put(r)));
+      await tx.done;
+      db.close();
+    },
+
+    // Entity classifications. Keyed on the entity name, replace-all like rules —
+    // the UI owns the whole list, and clearing a row means "back to privé".
+    async getEntityProfiles(): Promise<EntityProfile[]> {
+      const db = await openLaVegaDb();
+      const result = await db.getAll("entityProfiles");
+      db.close();
+      return result;
+    },
+    async putEntityProfiles(profiles: EntityProfile[]): Promise<void> {
+      const db = await openLaVegaDb();
+      const tx = db.transaction("entityProfiles", "readwrite");
+      await tx.store.clear();
+      await Promise.all(profiles.map((p) => tx.store.put(p)));
       await tx.done;
       db.close();
     },

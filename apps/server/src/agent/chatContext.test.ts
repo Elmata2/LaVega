@@ -13,6 +13,33 @@ test("valuta allows only rate + holdings (no personal amounts)", () => {
   const out = sanitizeChatContext("valuta", { rate: { base: "EUR" }, holdings: ["USD"], invoices: [1] });
   expect(out).toEqual({ rate: { base: "EUR" }, holdings: ["USD"] });
 });
+test("belasting may say WHICH country and HOW the sheet is mapped, never the sheet itself", () => {
+  const out = sanitizeChatContext("belasting", {
+    country: "DE",
+    rules: { vat: { label: "USt" }, caveats: ["Dauerfristverlängerung niet meegerekend"] },
+    prepayments: [{ label: "Nachzahlung 2026", dueDate: "2027-03-10", status: "expected" }],
+    sheet: { mapping: { revenue: "Omzet excl. btw" }, problems: [] },
+    // everything the tab does not own stays out, whatever the client sends
+    rows: [{ revenue: 1_000_000 }],
+    accounts: [{ iban: "NL91ABNA0417164300" }],
+    txs: [1, 2, 3],
+  });
+  expect(Object.keys(out).sort()).toEqual(["country", "prepayments", "rules", "sheet"]);
+});
+
+test("punten may carry which balances are stale and the question to ask, nothing else", () => {
+  const out = sanitizeChatContext("punten", {
+    balances: [{ program: "American Express Membership Rewards", points: 240_000, updatedAt: "2026-01-10" }],
+    tracking: [{ label: "American Express Membership Rewards", state: "overdue", daysOverdue: 113,
+                 question: "Hoeveel punten staan er nu bij American Express Membership Rewards? Stuur alleen het getal." }],
+    accounts: [{ iban: "NL91ABNA0417164300" }],
+    txs: [1, 2, 3],
+  });
+  expect(Object.keys(out).sort()).toEqual(["balances", "tracking"]);
+  // The question core builds is value-free, so the ask itself carries no number.
+  expect(JSON.stringify((out as Record<string, unknown>).tracking)).not.toContain("240");
+});
+
 test("oversize context throws", () => {
   expect(() => sanitizeChatContext("facturen", { invoices: "A".repeat(70_000) })).toThrow();
 });

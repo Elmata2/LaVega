@@ -10,7 +10,9 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
+import { AGENTS } from "@lavega/core";
 import { extractInvoiceFields } from "./anthropicExtract.js";
+import { sanitizeKnownFacts } from "./facts.js";
 
 beforeEach(() => createMock.mockReset());
 
@@ -60,8 +62,12 @@ test("builds a forced-tool request with the document block and parses tool_use",
     type: "document",
     source: { type: "base64", media_type: "application/pdf", data: "AAAA" }, // fixed, not "image/png"
   });
-  // The fixed prompt is always the last block.
-  expect(blocks[blocks.length - 1].type).toBe("text");
+  // The instructions are no longer a string literal appended to the message:
+  // they are the composed system prompt (_base.md + facturen-extract.md), and
+  // the user message carries only the document.
+  expect(blocks).toHaveLength(1);
+  expect(arg.system).toContain("Factuur-extractie-agent");
+  expect(arg.system).toContain("LaVega"); // _base.md composed in
 });
 
 test("coerces missing/mistyped fields: direction defaults to out, dueDate falls back to issueDate", async () => {
@@ -86,6 +92,23 @@ test("coerces missing/mistyped fields: direction defaults to out, dueDate falls 
   // A text-only input builds no document block.
   const blocks = createMock.mock.calls[0][0].messages[0].content;
   expect(blocks.some((b: { type: string }) => b.type === "document")).toBe(false);
+});
+
+test("the extractor is told the owner's field preferences, and never a counterparty", async () => {
+  createMock.mockResolvedValue({
+    content: [{ type: "tool_use", name: "record_invoice", input: { counterparty: "X", amount: 1, issueDate: "2026-01-01" } }],
+  });
+  const facts = sanitizeKnownFacts(
+    [
+      { subject: "dueDate", key: "voorkeur", value: "issueDate+30", source: "user" },
+      { subject: "ACME BV", key: "voorkeur", value: "14 dagen", source: "user" }, // a counterparty: refused
+    ],
+    AGENTS.facturen,
+  );
+  await extractInvoiceFields({ text: "factuur" }, "k", facts);
+  const system: string = createMock.mock.calls[0][0].system;
+  expect(system).toContain("- dueDate voorkeur = issueDate+30 (door de gebruiker)");
+  expect(system).not.toContain("ACME BV");
 });
 
 test("throws when the response has no tool_use block (surfaces as 502 upstream)", async () => {

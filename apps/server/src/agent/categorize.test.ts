@@ -1,5 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import { AGENTS } from "@lavega/core";
 import { sanitizeCategorizeInput } from "./categorize.js";
+import { sanitizeKnownFacts } from "./facts.js";
 
 // Mock the SDK so categorizeTransactions runs without a network call.
 const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
@@ -55,6 +57,24 @@ test("categorizeTransactions uses Haiku forced tool + drops invalid categories",
   const arg = createMock.mock.calls[0][0];
   expect(arg.model).toBe("claude-haiku-4-5");
   expect(arg.tool_choice).toEqual({ type: "tool", name: "categorize_transactions" });
+  // The instructions come from prompts/categorize.md + _base.md, not a literal.
+  expect(arg.system).toContain("Categorisatie-agent");
+  expect(arg.system).toContain("LaVega — basis voor elke agent");
+});
+
+test("categorizeTransactions is told how the owner re-files its suggestions", async () => {
+  createMock.mockResolvedValue({ content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }] });
+  const facts = sanitizeKnownFacts(
+    [
+      { subject: "Overboekingen", key: "corrigeerNaar", value: "Eigen overboeking", source: "user" },
+      { subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen", source: "user" }, // a merchant: refused
+    ],
+    AGENTS.categorize,
+  );
+  await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k", facts);
+  const system: string = createMock.mock.calls[0][0].system;
+  expect(system).toContain("- Overboekingen corrigeerNaar = Eigen overboeking (door de gebruiker)");
+  expect(system).not.toContain("Albert Heijn");
 });
 
 test("categorizeTransactions returns [] when there's no tool_use block", async () => {

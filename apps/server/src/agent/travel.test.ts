@@ -48,6 +48,42 @@ test("known facts survive, malformed ones are dropped", () => {
   expect(out.knownFacts).toEqual([{ subject: "Trading 212", key: "fxFeePct", value: "0.5" }]);
 });
 
+test("a known fact outside the namespace, or carrying money, is refused", () => {
+  const out = sanitizeTravelInput({
+    ...valid,
+    knownFacts: [
+      { subject: "Trading 212", key: "fxFeePct", value: "0.5" }, // kept
+      { subject: "Trading 212", key: "saldo", value: "12" }, // not a travel key
+      { subject: "Trading 212", key: "fxFeePct", value: "12450" }, // a balance, not a fee
+      { subject: "NL91ABNA0417164300", key: "fxFeePct", value: "0" }, // an IBAN
+      { subject: "Albert Heijn", key: "fxFeePct", value: "€ 12,50" }, // a counterparty + an amount
+    ],
+  });
+  expect(out.knownFacts).toEqual([{ subject: "Trading 212", key: "fxFeePct", value: "0.5" }]);
+  const serialized = JSON.stringify(out.knownFacts);
+  expect(serialized).not.toContain("12450");
+  expect(serialized).not.toContain("ABNA");
+  expect(serialized).not.toContain("Albert Heijn");
+});
+
+test("the travel prompt is composed from _base.md + travel.md, with the owner's facts marked", async () => {
+  let sent: Record<string, unknown> = {};
+  const client = {
+    messages: {
+      create: async (arg: Record<string, unknown>) => {
+        sent = arg;
+        return { content: [{ type: "tool_use", name: "report_provider_terms", input: { providers: [] } }] };
+      },
+    },
+  } as never;
+  const input = sanitizeTravelInput({ ...valid, knownFacts: [{ subject: "ING", key: "fxFeePct", value: "1.4" }] });
+  await lookupProviderTerms(input, "k", { client });
+  const system = String(sent.system);
+  expect(system).toContain("LaVega — basis voor elke agent");
+  expect(system).toContain("CURRENT terms"); // travel.md itself
+  expect(system).toContain("- ING fxFeePct = 1.4 (door de gebruiker)");
+});
+
 /* --- The model call, with a stubbed client (no network, no key). --- */
 
 function stubClient(providers: unknown) {

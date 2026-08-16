@@ -1,5 +1,6 @@
 import type { Account, ScheduledFlow } from "./model.js";
 import type { EntityForecast } from "./forecast.js";
+import type { TrackedStatus } from "./tracking.js";
 
 /* The "Aandacht" alert-center. Pure + deterministic: derives a ranked list of
  * things worth the owner's attention from the already-computed forecast +
@@ -30,6 +31,10 @@ export type ComputeAlertsInput = {
   asOf: string;
   bufferCents: number;
   scheduledFlows?: ScheduledFlow[];
+  /** Hand-kept numbers that have gone stale (from `dueTrackers`). The alert
+   *  center is LaVega's notification surface, so this is where item 7's
+   *  low-trust ask lands: one row per number, carrying its own question. */
+  tracking?: TrackedStatus[];
 };
 
 /** Ranked alerts (critical → warning → info):
@@ -39,7 +44,7 @@ export type ComputeAlertsInput = {
  *  Missed-payment detection uses each stream's lastDate: a real arrival would
  *  have extended it. Only flagged when overdue past a grace window and by no
  *  more than two cadence cycles (older ⇒ assume the stream simply ended). */
-export function computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows }: ComputeAlertsInput): Alert[] {
+export function computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows, tracking }: ComputeAlertsInput): Alert[] {
   const alerts: Alert[] = [];
 
   if (forecast.shortfall) {
@@ -68,15 +73,32 @@ export function computeAlerts({ accounts, forecast, asOf, bufferCents, scheduled
   }
 
   for (const f of scheduledFlows ?? []) {
-    if (f.source !== "vat" || f.status === "paid" || f.status === "cancelled") continue;
+    const isVat = f.source === "vat";
+    const isPrepayment = f.source === "prepayment";
+    if ((!isVat && !isPrepayment) || f.status === "paid" || f.status === "cancelled") continue;
     const days = daysBetween(asOf, f.dueDate); // dueDate - asOf
     if (days < 0 || days > 30) continue;
     const severity: AlertSeverity = days <= 3 ? "critical" : days <= 14 ? "warning" : "info";
     alerts.push({
-      id: `vat:${f.id}`,
+      id: `${isVat ? "vat" : "tax"}:${f.id}`,
       severity,
       title: `${f.label} — betaal vóór ${f.dueDate}`,
-      detail: `Zet ${eur(f.amountCents)} klaar; de BTW-aangifte + betaling moet uiterlijk ${f.dueDate} (over ${days} dagen).`,
+      detail: isVat
+        ? `Zet ${eur(f.amountCents)} klaar; de BTW-aangifte + betaling moet uiterlijk ${f.dueDate} (over ${days} dagen).`
+        : `Zet ${eur(f.amountCents)} klaar; deze vooruitbetaling winstbelasting moet uiterlijk ${f.dueDate} betaald zijn (over ${days} dagen).`,
+    });
+  }
+
+  // Hand-kept numbers that have gone stale. `warning` once genuinely overdue,
+  // `info` while merely due — this must never outrank a real cash problem. The
+  // detail IS the question, so answering is one number away.
+  for (const t of tracking ?? []) {
+    if (t.state !== "due" && t.state !== "overdue") continue;
+    alerts.push({
+      id: `tracking:${t.source}:${t.id}`,
+      severity: t.state === "overdue" ? "warning" : "info",
+      title: `${t.label} — saldo bijwerken`,
+      detail: `Laatst bijgewerkt op ${t.updatedAt} (${t.ageDays} dagen geleden). ${t.question}`,
     });
   }
 

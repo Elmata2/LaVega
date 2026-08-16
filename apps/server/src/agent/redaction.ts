@@ -51,8 +51,6 @@ export const INVOICE_TOOL = {
   },
 } as const;
 
-export const EXTRACT_PROMPT =
-  "Je krijgt één factuur (PDF of tekst). Haal de velden eruit en roep record_invoice aan. " +
-  "Gok niet: laat vatAmount weg als het niet vermeld staat; als de vervaldatum ontbreekt, gebruik de factuurdatum. " +
-  "Bepaal 'direction' vanuit wie de factuur uitschrijft. " +
-  "Geef in 'confidence' je eigen zekerheid (0..1) op basis van hoe leesbaar en volledig de factuur is.";
+/* The extractor's instructions used to live here as a string literal. They are
+ * now `prompts/facturen-extract.md`, composed with `_base.md` — edit the
+ * Markdown, not TypeScript. */

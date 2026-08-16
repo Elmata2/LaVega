@@ -15,9 +15,17 @@ const ALLOW: Record<string, readonly string[]> = {
   forecast: ["summary"],
   optimalisatie: ["subscriptions", "rates", "bestBenchmark"],
   valuta: ["rate", "holdings"],
-  belasting: ["vat", "deadlines", "settings"],
+  // `country` + `rules` carry the active tax pack (which country, its VAT label
+  // and rates, its caveats); `prepayments` the profit-tax reservations a country
+  // like DE demands; `sheet` only how the owner's spreadsheet is MAPPED (which
+  // column holds which figure) and its problems — never its cells.
+  belasting: ["vat", "deadlines", "settings", "country", "rules", "prepayments", "sheet"],
   facturen: ["invoices"],
-  punten: ["balances"],
+  // `tracking` = which hand-kept balances have gone stale and the question to
+  // ask for each (programme, state, days overdue, question text). The question
+  // is built value-free in core's `trackingQuestion`, so this key carries no
+  // points totals of its own — the numbers stay in `balances`.
+  punten: ["balances", "tracking"],
   backup: [],
 };
 

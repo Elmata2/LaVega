@@ -1,9 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-
-const PROMPT_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", "travel.md");
+import { AGENTS, isSafeFact, makeFact } from "@lavega/core";
+import { loadAgentPrompt } from "./prompts.js";
+import { factsBlock } from "./facts.js";
 
 export type KnownFact = { subject: string; key: string; value: string };
 export type TravelInput = {
@@ -40,6 +38,13 @@ function looksLikeAccountNumber(s: string): boolean {
   return /[A-Z]{2}\d{2}[A-Z0-9]{8,}/i.test(s) || /\d{4}/.test(s);
 }
 
+/** A wire fact as the vault would store it. Travel only ever receives facts the
+ *  OWNER corrected (the caller filters on that), so they are tagged `user` —
+ *  which is what marks them "niet tegenspreken" in the briefing block. */
+function asTravelFact(f: KnownFact) {
+  return makeFact({ agent: AGENTS.travel, ...f, source: "user" as const, updatedAt: "" });
+}
+
 /** THE redaction boundary for the travel agent — the tightest in the app.
  *
  *  Only a home country, a destination, a currency, provider NAMES, and facts
@@ -72,7 +77,12 @@ export function sanitizeTravelInput(raw: unknown): TravelInput {
     const subject = shortField(f.subject);
     const key = shortField(f.key);
     const value = shortField(f.value);
-    if (subject && key && value) knownFacts.push({ subject, key, value });
+    if (!subject || !key || !value) continue;
+    // Same namespace + no-personal-data guard the vault applies (core's
+    // `checkFact`), so a fact echoed back by the client cannot become a way to
+    // hand the model something the other three fields would never allow.
+    if (!isSafeFact(asTravelFact({ subject, key, value }))) continue;
+    knownFacts.push({ subject, key, value });
   }
 
   return { homeCountry, destination, currency, providers, knownFacts };
@@ -156,19 +166,11 @@ export async function lookupProviderTerms(
   deps: { client?: Anthropic } = {},
 ): Promise<ProviderTerms[]> {
   const client = deps.client ?? new Anthropic({ apiKey });
-  const instructions = (() => {
-    try {
-      return readFileSync(PROMPT_FILE, "utf8");
-    } catch {
-      return "";
-    }
-  })();
-
-  const known = input.knownFacts.length
-    ? `\n\nAl bekend (door de gebruiker gecorrigeerd — niet tegenspreken):\n${input.knownFacts
-        .map((f) => `- ${f.subject} ${f.key} = ${f.value}`)
-        .join("\n")}`
-    : "";
+  // `_base.md` + `travel.md`, and what the owner has already corrected — the
+  // same composition and the same "WAT LAVEGA AL WEET" block the other three
+  // agents get, so the learning contract is explained once for all of them.
+  const instructions =
+    loadAgentPrompt("travel") + factsBlock(input.knownFacts.map(asTravelFact), AGENTS.travel);
 
   const message = await client.messages.create({
     model: "claude-sonnet-5",
@@ -188,7 +190,7 @@ export async function lookupProviderTerms(
         content:
           `Thuisland: ${input.homeCountry}. Bestemming: ${input.destination}` +
           (input.currency ? ` (${input.currency})` : "") +
-          `.\nAanbieders: ${input.providers.join(", ")}.${known}`,
+          `.\nAanbieders: ${input.providers.join(", ")}.`,
       },
     ],
   }, { timeout: LOOKUP_TIMEOUT_MS, maxRetries: 0 });

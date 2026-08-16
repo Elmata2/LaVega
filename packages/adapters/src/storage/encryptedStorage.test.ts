@@ -319,3 +319,30 @@ test("learned facts round-trip and survive lock/unlock; legacy vault defaults to
   expect(await v.unlock("pw")).toBe(true);
   expect(await v.getFacts()).toEqual([learned]); // a correction must outlive the session
 });
+
+test("entityProfiles round-trip; legacy vault defaults to [] and stays decryptable", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-entities");
+  await s.setup("pw");
+  expect(await s.getEntityProfiles()).toEqual([]); // a vault written before item 4
+  const profiles = [{ entity: "BV1", scope: "business" as const }, { entity: "Privé", scope: "personal" as const }];
+  await s.putEntityProfiles(profiles);
+  expect(await s.getEntityProfiles()).toEqual(profiles);
+
+  // Survives a lock/unlock cycle — i.e. it really went through the encrypted blob.
+  s.lock();
+  expect(await s.unlock("pw")).toBe(true);
+  expect(await s.getEntityProfiles()).toEqual(profiles);
+  expect(await s.getAccounts()).toEqual([]); // nothing else disturbed
+});
+
+test("a stale-tracked rewards balance round-trips with its interval and snooze", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-tracking");
+  await s.setup("pw");
+  const reward = { id: "amex", program: "American Express Membership Rewards", points: 240000, updatedAt: "2026-01-10", intervalDays: 30, snoozedUntil: "2026-09-01" };
+  await s.putRewards([reward]);
+  s.lock();
+  expect(await s.unlock("pw")).toBe(true);
+  expect(await s.getRewards()).toEqual([reward]);
+});

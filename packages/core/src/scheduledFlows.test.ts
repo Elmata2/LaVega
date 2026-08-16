@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { makeScheduledFlow, scheduledFlowsForScope, reservedCents, rebuildVatFlows } from "./scheduledFlows.js";
+import { makeScheduledFlow, scheduledFlowsForScope, reservedCents, rebuildVatFlows, rebuildTaxFlows } from "./scheduledFlows.js";
 
 test("makeScheduledFlow builds a positive-cents dated flow with a stable id", () => {
   const f = makeScheduledFlow({ entity: "BV1", label: "BTW Q1", sign: -1, amountCents: 120000, dueDate: "2026-04-30", source: "vat", status: "confirmed" });
@@ -47,4 +47,24 @@ test("rebuildVatFlows dedups on recompute via content-hashed ids", () => {
   const result = rebuildVatFlows([existing], ["BV1"], [fresh]);
   expect(result).toHaveLength(1);
   expect(result[0].id).toBe(existing.id);
+});
+
+test("a profit-tax prepayment is earmarked money too — it never counts as available", () => {
+  const flows = [
+    makeScheduledFlow({ entity: "BV1", label: "USt Q2 2026", sign: -1, amountCents: 50000, dueDate: "2026-07-10", source: "vat", status: "confirmed" }),
+    makeScheduledFlow({ entity: "BV1", label: "Nachzahlung 2026", sign: -1, amountCents: 25_000_000, dueDate: "2027-03-10", source: "prepayment", status: "expected" }),
+    makeScheduledFlow({ entity: "BV1", label: "betaald", sign: -1, amountCents: 999, dueDate: "2026-03-10", source: "prepayment", status: "paid" }),
+  ];
+  expect(reservedCents(flows, "2026-06-20")).toBe(25_050_000);
+});
+
+test("rebuildTaxFlows replaces both tax sources for the shown entities in one pass", () => {
+  const oldVat = makeScheduledFlow({ entity: "BV1", label: "USt Q1", sign: -1, amountCents: 100, dueDate: "2026-04-10", source: "vat", status: "confirmed" });
+  const oldPrepay = makeScheduledFlow({ entity: "BV1", label: "Vorauszahlung 1/4 2026", sign: -1, amountCents: 200, dueDate: "2026-03-10", source: "prepayment", status: "expected" });
+  const invoice = makeScheduledFlow({ entity: "BV1", label: "factuur", sign: 1, amountCents: 300, dueDate: "2026-05-01", source: "invoice", status: "expected" });
+  const fresh = makeScheduledFlow({ entity: "BV1", label: "Vorauszahlung 2/4 2026", sign: -1, amountCents: 400, dueDate: "2026-06-10", source: "prepayment", status: "expected" });
+
+  const result = rebuildTaxFlows([oldVat, oldPrepay, invoice], ["BV1"], [fresh]);
+  expect(result).toEqual([invoice, fresh]);
+  expect(rebuildVatFlows).toBe(rebuildTaxFlows); // the old name is the same door
 });

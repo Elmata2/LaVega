@@ -262,3 +262,90 @@ test("an oversize categorize batch is rejected with 400 before the categorizer",
     expect(called).toBe(false);
   });
 });
+
+/* --- Learning: facts travel up with the request, and the fact boundary is
+ * applied at the route, before any agent sees them. --- */
+
+test("the categorize route forwards only namespace-legal facts to the agent", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let captured: readonly { subject: string; key: string; value: string; agent: string }[] = [];
+    registerAgentRoutes(app, {
+      categorize: async (_input, _key, facts) => {
+        captured = facts ?? [];
+        return [];
+      },
+    });
+    const res = await app.request(
+      "/api/agent/categorize",
+      jsonPost({
+        items: [{ id: "t1", text: "x", sign: "out" }],
+        facts: [
+          { subject: "Overboekingen", key: "corrigeerNaar", value: "Eigen overboeking", source: "user" },
+          { subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen", source: "user" }, // counterparty
+          { subject: "Overboekingen", key: "saldo", value: "12450", source: "user" }, // a balance
+          { agent: "travel", subject: "ING betaalpas", key: "fxFeePct", value: "1.4" }, // wrong namespace
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({ agent: "categorize", subject: "Overboekingen", value: "Eigen overboeking" });
+    const serialized = JSON.stringify(captured);
+    expect(serialized).not.toContain("Albert Heijn");
+    expect(serialized).not.toContain("12450");
+    expect(serialized).not.toContain("fxFeePct");
+  });
+});
+
+test("the extract-invoice route forwards only facturen facts, never a counterparty", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let captured: readonly { subject: string }[] = [];
+    registerAgentRoutes(app, {
+      extract: async (_input, _key, facts) => {
+        captured = facts ?? [];
+        return FAKE_RESULT;
+      },
+    });
+    const res = await app.request(
+      "/api/agent/extract-invoice",
+      jsonPost({
+        text: "factuur",
+        facts: [
+          { subject: "dueDate", key: "voorkeur", value: "issueDate+30", source: "user" },
+          { subject: "Acme BV", key: "voorkeur", value: "14 dagen", source: "user" },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(captured.map((f) => f.subject)).toEqual(["dueDate"]);
+  });
+});
+
+test("the chat route forwards its own facts and drops another agent's", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    let captured: readonly { subject: string; key: string }[] = [];
+    registerAgentRoutes(app, {
+      chat: async function* (args) {
+        captured = args.facts ?? [];
+        yield "ok";
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({
+        tab: "overview",
+        messages: [{ role: "user", content: "hoi" }],
+        facts: [
+          { subject: "antwoord", key: "lengte", value: "kort", source: "user" },
+          { subject: "ING betaalpas", key: "fxFeePct", value: "1.4", source: "user" },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text(); // drain the stream so the generator runs
+    expect(captured.map((f) => f.key)).toEqual(["lengte"]);
+  });
+});

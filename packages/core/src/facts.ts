@@ -1,4 +1,5 @@
 import { hash, norm } from "./hash.js";
+import { checkFact, validateFacts, type FactRejection } from "./agentFacts.js";
 
 /** Who put this fact in the store. The distinction is the whole point: an agent
  *  may refresh what it found, but it may never overrule what the owner said. */
@@ -31,21 +32,42 @@ export function makeFact(input: Omit<LearnedFact, "id">): LearnedFact {
   return { ...input, id: factId(input.agent, input.subject, input.key) };
 }
 
-/** Merge freshly learned facts into the store.
+/** THE one path a fact takes into the store — every agent goes through here.
  *
- *  THE LEARNING RULE: a fact the owner set himself is never overwritten by an
- *  agent. Correct a wrong fee once and it stays corrected — across refreshes,
- *  trips and sessions. A user fact always wins; agent facts only fill gaps and
- *  refresh other agent facts. This one rule is what makes the product tailored
- *  instead of generically re-guessing every time. */
+ *  Two rules, both enforced here so no caller can skip them:
+ *
+ *  1. THE LEARNING RULE: a fact the owner set himself is never overwritten by
+ *     an agent. Correct a wrong fee once and it stays corrected — across
+ *     refreshes, trips and sessions. A user fact always wins; agent facts only
+ *     fill gaps and refresh other agent facts. This one rule is what makes the
+ *     product tailored instead of generically re-guessing every time.
+ *  2. THE NAMESPACE RULE: an incoming fact must fit the agent/subject/key
+ *     namespace in `agentFacts.ts` and carry no IBAN, account number or amount.
+ *     Anything else is dropped rather than stored — the store is replayed into
+ *     model calls, so this is a redaction boundary, not a validation nicety.
+ *     Facts already in `existing` are passed through untouched, so an older
+ *     vault keeps decrypting.
+ *
+ *  Use `learnFacts` when you want to know WHAT was refused. */
 export function upsertFacts(existing: LearnedFact[], incoming: LearnedFact[]): LearnedFact[] {
   const byId = new Map(existing.map((f) => [f.id, f]));
   for (const f of incoming) {
+    if (checkFact(f) !== null) continue; // outside the namespace, or carries personal data
     const prev = byId.get(f.id);
     if (prev && prev.source === "user" && f.source === "agent") continue; // owner wins
     byId.set(f.id, f);
   }
   return [...byId.values()];
+}
+
+/** `upsertFacts` plus the refusals, for a caller that wants to report them
+ *  ("2 feiten geweigerd") instead of watching them disappear. */
+export function learnFacts(
+  existing: LearnedFact[],
+  incoming: LearnedFact[],
+): { facts: LearnedFact[]; rejected: FactRejection[] } {
+  const { valid, rejected } = validateFacts(incoming);
+  return { facts: upsertFacts(existing, valid), rejected };
 }
 
 /** The raw value for (agent, subject, key), or null when nothing is known. */
