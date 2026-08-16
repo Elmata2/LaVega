@@ -31,7 +31,7 @@ function fresh(e: Entry | undefined): boolean {
 /** Does this reply contain anything we can actually rank with? A note alone is
  *  not an answer — the ranking needs a number. */
 function usable(t: ProviderTerms): boolean {
-  return t.fxFeePct !== undefined || t.cashbackPct !== undefined
+  return t.fxFeePct !== undefined || t.convertFeePct !== undefined || t.cashbackPct !== undefined
     || t.pointsPerEuro !== undefined || t.transferFreeViaIdeal !== undefined;
 }
 

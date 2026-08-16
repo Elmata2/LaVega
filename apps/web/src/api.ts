@@ -39,6 +39,7 @@ export async function categorizeTxs(items: CategorizeItem[]): Promise<{ id: stri
 export type ProviderTerms = {
   provider: string;
   fxFeePct?: number;
+  convertFeePct?: number;
   cashbackPct?: number;
   pointsPerEuro?: number;
   transferFreeViaIdeal?: number;

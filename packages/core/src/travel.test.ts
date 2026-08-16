@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account } from "./model.js";
-import { countryCurrency, rankSpendOptions, planTravel, TRAVEL_AGENT } from "./travel.js";
+import { countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT } from "./travel.js";
 import { makeFact, upsertFacts } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
@@ -201,4 +201,94 @@ test("no points note when the cheapest card is also the one earning points", () 
     fact("American Express creditcard", "pointsPerEuro", "1"),
   ]);
   expect(planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-15" }).spendNote).toBeNull();
+});
+
+/* --- Journeys: the whole route priced, not just the card. Ranking cards alone
+ * priced only the last leg, so "move it first" always looked free. --- */
+
+const ROUTE_ACCOUNTS = [
+  acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+  acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
+];
+
+const ROUTE_FACTS = upsertFacts([], [
+  fact("ING betaalpas", "fxFeePct", "1.4"),
+  fact("Revolut betaalpas", "fxFeePct", "0.5"), // paying direct still carries a surcharge
+  fact("Revolut betaalpas", "convertFeePct", "0"), // converting inside the app is free
+  fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+]);
+
+test("rankJourneys prices the transfer and conversion legs, which can change the winner", () => {
+  const js = rankJourneys(ROUTE_ACCOUNTS, ROUTE_FACTS);
+  const best = js[0];
+
+  expect(best.via).toBe("Revolut betaalpas"); // moving first wins
+  expect(best.fundedFrom).toBe("ING"); // out of the fullest account at another bank
+  expect(best.method).toBe("iDEAL");
+  expect(best.totalCostPct).toBe(0);
+  expect(best.costOnReference).toBe(0);
+
+  // ...and it beats paying straight from that same card, which is the comparison
+  // the old card-only ranking could not make.
+  const revDirect = js.find((j) => j.provider === "Revolut betaalpas" && j.via === null);
+  expect(revDirect?.totalCostPct).toBe(0.5);
+  expect(revDirect?.costOnReference).toBe(5);
+
+  const ingDirect = js.find((j) => j.provider === "ING betaalpas" && j.via === null);
+  expect(ingDirect?.costOnReference).toBe(14);
+});
+
+test("a journey with any unknown leg is unknown as a whole and ranks last", () => {
+  // Revolut's conversion cost is deliberately absent.
+  const facts = upsertFacts([], [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "0"),
+    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+  ]);
+  const js = rankJourneys(ROUTE_ACCOUNTS, facts);
+  const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
+
+  expect(via?.known).toBe(false);
+  expect(via?.totalCostPct).toBeNull(); // never assumed free
+  expect(js.findIndex((j) => j === via)).toBeGreaterThan(js.findIndex((j) => j.known));
+});
+
+test("an unknown transfer cost is not treated as free either", () => {
+  const facts = upsertFacts([], [
+    fact("Revolut betaalpas", "fxFeePct", "0"),
+    fact("Revolut betaalpas", "convertFeePct", "0"),
+    // transferFreeViaIdeal deliberately absent
+  ]);
+  const js = rankJourneys(ROUTE_ACCOUNTS, facts);
+  const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
+
+  expect(via?.transferPct).toBeNull();
+  expect(via?.known).toBe(false);
+  expect(via?.method).toBeNull();
+});
+
+test("journeyHeadline states the winner and what it saves, in euros", () => {
+  const js = rankJourneys(ROUTE_ACCOUNTS, ROUTE_FACTS);
+  const line = journeyHeadline(js, "USD");
+
+  expect(line).toContain("van ING naar Revolut betaalpas");
+  expect(line).toContain("iDEAL");
+  expect(line).toContain("€5.00 goedkoper");
+});
+
+test("journeyHeadline says nothing to convert for a euro destination, and asks for a refresh when nothing is known", () => {
+  expect(journeyHeadline([], "EUR")).toContain("euro");
+  expect(journeyHeadline(rankJourneys(ROUTE_ACCOUNTS, []), "USD")).toContain("ververs");
+});
+
+test("planTravel carries the priced journeys and leads with one sentence", () => {
+  const plan = planTravel({ accounts: ROUTE_ACCOUNTS, txs: [], rates: [], facts: ROUTE_FACTS, destination: "US", asOf: "2026-08-16" });
+  expect(plan.journeys.length).toBeGreaterThan(0);
+  expect(plan.journeys[0].totalCostPct).toBe(0);
+  expect(plan.headline).toContain("Revolut");
+
+  // A euro destination has nothing to rank.
+  const es = planTravel({ accounts: ROUTE_ACCOUNTS, txs: [], rates: [], facts: ROUTE_FACTS, destination: "ES", asOf: "2026-08-16" });
+  expect(es.journeys).toEqual([]);
+  expect(es.headline).toContain("euro");
 });

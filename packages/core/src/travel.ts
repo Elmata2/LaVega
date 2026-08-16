@@ -6,8 +6,8 @@ import { analyzeInterest, type RateBenchmark, type InterestSuggestion } from "./
 import { accountType } from "./balance.js";
 
 /** Travel's slot in the agent namespace (see `agentFacts.ts` for what it may
- *  learn: fxFeePct / cashbackPct / pointsPerEuro / transferFreeViaIdeal, keyed
- *  by product name). */
+ *  learn: fxFeePct / convertFeePct / cashbackPct / pointsPerEuro /
+ *  transferFreeViaIdeal, keyed by product name). */
 export const TRAVEL_AGENT = AGENTS.travel;
 
 /** The reference spend the advice is priced against. A percentage is hard to
@@ -72,6 +72,12 @@ export type TravelPlan = {
   /** Where the money is best kept — reuses the interest analysis. */
   store: { suggestion: InterestSuggestion | null; best: RateBenchmark | null; note: string };
   convert: ConvertStep;
+  /** Every way of paying abroad, priced end to end and cheapest first. This is
+   *  the comparison; `convert` and `spend` are the legs it is built from. */
+  journeys: Journey[];
+  /** The one sentence to lead with, in euros. The backlog's actual requirement
+   *  was one recommendation instead of three sections to reconcile. */
+  headline: string;
   spend: SpendOption[];
   /** The points-vs-cash trade-off, when the cheapest card earns none and a
    *  dearer one does. Stated as a choice, not resolved — only the owner knows
@@ -202,6 +208,143 @@ function planConversion(accounts: Account[], best: SpendOption | null, facts: re
   };
 }
 
+/** One complete way to get €1.000 from where it sits now into a payment in the
+ *  destination currency. Ranking JOURNEYS instead of cards is the whole point:
+ *  ranking cards prices only the last leg, so "move it to Revolut first" always
+ *  looked free and paying directly always looked expensive. That is not a
+ *  comparison, it is two different questions answered side by side. */
+export type Journey = {
+  /** The product you finally pay with. */
+  provider: string;
+  /** Where the euros are converted; null means you pay directly and the card
+   *  does the conversion for you. */
+  via: string | null;
+  /** The bank the money leaves, when a move is involved. */
+  fundedFrom: string | null;
+  method: string | null; // "iDEAL" when the transfer leg is free
+  transferPct: number | null;
+  convertPct: number | null;
+  /** The card leg. Paying direct costs the card's FX surcharge minus cashback;
+   *  on a via-route you already hold the currency, so only cashback is left. */
+  spendPct: number | null;
+  totalCostPct: number | null;
+  costOnReference: number | null;
+  known: boolean;
+  why: string;
+};
+
+/** Rank every way of paying abroad, cheapest first, in hard cash only.
+ *
+ *  Rules carried over from `rankSpendOptions`, because they are why it can be
+ *  trusted: an unknown leg makes the WHOLE journey unknown and sorts it last —
+ *  never assume a missing fee is zero, that is how someone ends up abroad with
+ *  the wrong card. Points stay out of the total for the reason documented
+ *  there. And only providers he already holds appear; LaVega proposes no
+ *  account he does not have and moves nothing itself. */
+export function rankJourneys(
+  accounts: Account[],
+  facts: readonly LearnedFact[],
+  spendOptions?: SpendOption[],
+): Journey[] {
+  const spend = spendOptions ?? rankSpendOptions(accounts, facts);
+  const journeys: Journey[] = [];
+
+  for (const s of spend) {
+    // Paying straight from the card: one leg, the one already priced today.
+    journeys.push({
+      provider: s.provider,
+      via: null,
+      fundedFrom: null,
+      method: null,
+      transferPct: null,
+      convertPct: null,
+      spendPct: s.netCostPct,
+      totalCostPct: s.netCostPct,
+      costOnReference: costOnReferenceSpend(s.netCostPct),
+      known: s.known,
+      why: s.known ? `direct betalen: ${s.why}` : "voorwaarden nog onbekend",
+    });
+
+    // Moving first only exists as a choice when there is somewhere to move FROM
+    // — another bank holding money. Funding a product from its own bank is not
+    // a conversion route, it is the same money standing still.
+    const bank = s.accounts[0] ? providerOf(s.accounts[0]) : "";
+    const funding = accounts
+      .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== bank)
+      .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0];
+    if (!funding) continue;
+
+    const free = factNumber(facts, TRAVEL_AGENT, s.provider, "transferFreeViaIdeal") === 1;
+    const transferPct = free ? 0 : null; // unknown until an agent or the owner says so
+    const convertPct = factNumber(facts, TRAVEL_AGENT, s.provider, "convertFeePct");
+    // You already hold the currency by the time you pay, so the card's FX
+    // surcharge does not apply a second time — only its cashback still does.
+    const spendPct = -(s.cashbackPct ?? 0);
+    const known = transferPct !== null && convertPct !== null;
+    const totalCostPct = known ? transferPct + convertPct + spendPct : null;
+
+    journeys.push({
+      provider: s.provider,
+      via: s.provider,
+      fundedFrom: providerOf(funding),
+      method: free ? "iDEAL" : null,
+      transferPct,
+      convertPct,
+      spendPct,
+      totalCostPct,
+      costOnReference: costOnReferenceSpend(totalCostPct),
+      known,
+      why: known
+        ? `overzetten${free ? " via iDEAL (gratis)" : ""} en daar wisselen: ${convertPct}% wisselkosten${s.cashbackPct ? ` − ${s.cashbackPct}% cashback` : ""}`
+        : convertPct === null
+          ? "wisselkosten nog onbekend"
+          : "overboekkosten nog onbekend",
+    });
+  }
+
+  return journeys.sort((a, b) => {
+    if (a.totalCostPct === null && b.totalCostPct === null) return a.provider.localeCompare(b.provider);
+    if (a.totalCostPct === null) return 1;
+    if (b.totalCostPct === null) return -1;
+    return a.totalCostPct - b.totalCostPct || a.provider.localeCompare(b.provider);
+  });
+}
+
+/** The one sentence the block leads with. Built from the winning journey and the
+ *  runner-up, so the answer carries its own justification in euros: a percentage
+ *  is hard to act on, "€14 goedkoper op €1.000" is not. */
+export function journeyHeadline(journeys: readonly Journey[], currency: string | null): string {
+  if (currency === "EUR") return "Daar betaal je in euro's — omwisselen is niet nodig.";
+  const best = journeys.find((j) => j.known);
+  if (!best) return "Nog geen route met bekende voorwaarden — ververs eerst de voorwaarden.";
+
+  const runnerUp = journeys.find((j) => j.known && j !== best && j.totalCostPct !== best.totalCostPct);
+  const saving =
+    runnerUp && runnerUp.costOnReference !== null && best.costOnReference !== null
+      ? runnerUp.costOnReference - best.costOnReference
+      : null;
+
+  const head =
+    best.via === null
+      ? `Betaal direct met ${best.provider}.`
+      : `Zet je reisbudget van ${best.fundedFrom} naar ${best.via}${best.method ? ` via ${best.method} (gratis)` : ""} en betaal daar.`;
+  const cost =
+    best.costOnReference === null
+      ? ""
+      : best.costOnReference === 0
+        ? " Dat kost je niets op €1.000."
+        : ` Dat kost €${best.costOnReference.toFixed(2)} op €1.000.`;
+  const versus = versusNote(saving, runnerUp);
+  return `${head}${cost}${versus}`;
+}
+
+/** " …€14 goedkoper dan direct met ING." Only when there is a real difference
+ *  to name; a saving of zero is not worth a clause. */
+function versusNote(saving: number | null, runnerUp: Journey | undefined): string {
+  if (saving === null || !runnerUp || saving <= 0) return "";
+  return ` Dat is €${saving.toFixed(2)} goedkoper dan ${runnerUp.via === null ? `direct met ${runnerUp.provider}` : `via ${runnerUp.via}`}.`;
+}
+
 /** The single combined answer: where to keep it, where to convert it, what to
  *  pay with. Pure — every input is passed in, nothing is fetched or clocked. */
 export function planTravel(input: {
@@ -246,11 +389,15 @@ export function planTravel(input: {
     return (t === "Creditcard" || t === "Betaalrekening") && providerOf(a) === "";
   }).length;
 
+  const journeys = currency === "EUR" ? [] : rankJourneys(accounts, facts, spend);
+
   return {
     destination,
     currency,
     store,
     convert,
+    journeys,
+    headline: journeyHeadline(journeys, currency),
     spend,
     spendNote,
     unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],

@@ -19,6 +19,14 @@ account issued in the user's home country:
   percentage on top of the interbank/mid-market rate. A card that converts at
   the mid-market rate with no markup is `0`. Include a weekend/fair-usage
   surcharge in the note rather than in the number.
+- `convertFeePct` — what it costs to convert euros into the target currency
+  INSIDE this provider, before spending, as a percentage on top of the
+  mid-market rate. This is often NOT the same as `fxFeePct`: a provider can
+  convert in-app for 0.35% and still charge more when its card converts at the
+  till, or the other way round. It is the leg that decides whether moving money
+  across first is worth doing at all, so report it separately and never copy
+  `fxFeePct` into it. Omit it when the provider does not let you hold or convert
+  the currency yourself.
 - `cashbackPct` — cashback actually paid on ordinary card spending, as a
   percentage. Use `0` when the product has none.
 - `pointsPerEuro` — reward points earned per euro spent, when the product runs a

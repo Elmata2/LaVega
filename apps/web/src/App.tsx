@@ -605,6 +605,7 @@ export default function App() {
           learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
         };
         put("fxFeePct", t.fxFeePct);
+        put("convertFeePct", t.convertFeePct);
         put("cashbackPct", t.cashbackPct);
         put("pointsPerEuro", t.pointsPerEuro);
         put("transferFreeViaIdeal", t.transferFreeViaIdeal);

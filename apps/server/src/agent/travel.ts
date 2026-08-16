@@ -101,6 +101,7 @@ const TERMS_TOOL = {
           properties: {
             provider: { type: "string" },
             fxFeePct: { type: "number" },
+            convertFeePct: { type: "number" },
             cashbackPct: { type: "number" },
             pointsPerEuro: { type: "number" },
             transferFreeViaIdeal: { type: "number", enum: [0, 1] },
@@ -117,6 +118,7 @@ const TERMS_TOOL = {
 export type ProviderTerms = {
   provider: string;
   fxFeePct?: number;
+  convertFeePct?: number;
   cashbackPct?: number;
   pointsPerEuro?: number;
   transferFreeViaIdeal?: number;
@@ -209,6 +211,7 @@ export async function lookupProviderTerms(
     out.push({
       provider: asked,
       fxFeePct: numeric(o.fxFeePct),
+      convertFeePct: numeric(o.convertFeePct),
       cashbackPct: numeric(o.cashbackPct),
       pointsPerEuro: numeric(o.pointsPerEuro),
       transferFreeViaIdeal: o.transferFreeViaIdeal === 1 ? 1 : o.transferFreeViaIdeal === 0 ? 0 : undefined,

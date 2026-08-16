@@ -90,6 +90,7 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
     subjectWhat: "A public product name, e.g. 'ING betaalpas' or 'Trading 212 creditcard'.",
     keys: [
       { key: "fxFeePct", kind: "percentage", what: "Surcharge on a foreign-currency transaction, on top of the mid-market rate." },
+      { key: "convertFeePct", kind: "percentage", what: "Cost of converting euros into the destination currency INSIDE this provider, before spending — often different from fxFeePct, and the leg that decides whether moving money first is worth it." },
       { key: "cashbackPct", kind: "percentage", what: "Cashback actually paid on ordinary card spending." },
       { key: "pointsPerEuro", kind: "percentage", what: "Reward points earned per euro spent." },
       { key: "transferFreeViaIdeal", kind: "flag", what: "1 when the account can be topped up for free via iDEAL." },
