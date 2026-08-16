@@ -30,10 +30,34 @@ export type N8nInvoiceRow = {
   note?: string;
 };
 
+/** A mail the workflow could NOT turn into an invoice but refuses to drop
+ *  silently: a "your invoice is ready, log in" notice, a dunning letter, an
+ *  invoice whose amount the model could not read, or a mail with nothing
+ *  readable in it at all.
+ *
+ *  Note what is NOT in this type: an amount. Not optional, not nullable —
+ *  absent. A notice is therefore structurally incapable of becoming a booked
+ *  row, which is a stronger guarantee than any validation. It is a to-do:
+ *  "something is waiting, go and get it yourself".
+ *
+ *  `mailUrl` points at HIS OWN mailbox, never at the link inside the mail. That
+ *  link arrives from outside, is often single-use, and a fake invoice looks
+ *  exactly like a real one. */
+export type N8nNotice = {
+  messageId: string;
+  subject?: string;
+  from?: string;
+  receivedAt?: string;
+  kind: "notification" | "reminder" | "no-amount" | "unreadable";
+  reason: string;
+  /** Empty when the workflow had no messageId to build one from. Never guessed. */
+  mailUrl: string;
+};
+
 /** What a GET on the webhook ended in. Every failure is its own kind — none of
  *  them may be presented as a success. */
 export type FetchOutcome =
-  | { kind: "ok"; rows: N8nInvoiceRow[]; dropped: number }
+  | { kind: "ok"; rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number }
   | { kind: "not-configured" }
   | { kind: "unauthorized"; status: number }
   | { kind: "http-error"; status: number }
@@ -57,7 +81,48 @@ function cents(v: unknown): number | null {
  * an amount — are counted in `dropped` so the UI can say so out loud rather
  * than booking a zero.
  */
-export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; dropped: number } | null {
+const NOTICE_KINDS: N8nNotice["kind"][] = ["notification", "reminder", "no-amount", "unreadable"];
+
+/** What the owner reads above each notice. Kept here, next to the type, so a
+ *  new kind cannot reach the screen without a label. */
+export const NOTICE_LABELS: Record<N8nNotice["kind"], string> = {
+  notification: "Staat klaar bij de leverancier",
+  reminder: "Herinnering of aanmaning",
+  "no-amount": "Factuur zonder leesbaar bedrag",
+  unreadable: "Niets leesbaars in deze mail",
+};
+
+/**
+ * The `notices` half of the same body. An older workflow that doesn't send them
+ * yields an empty list — that is not an error, it is a workflow that hasn't been
+ * re-imported yet.
+ */
+function parseNotices(body: unknown): N8nNotice[] {
+  const list = (body as { notices?: unknown }).notices;
+  if (!Array.isArray(list)) return [];
+  const notices: N8nNotice[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const messageId = str(r.messageId);
+    const kind = NOTICE_KINDS.find((k) => k === r.kind);
+    // Without a messageId there is nothing to mark as handled, so it would
+    // reappear every hour forever; without a kind we don't know what to say.
+    if (!messageId || !kind) continue;
+    notices.push({
+      messageId,
+      subject: str(r.subject) ?? undefined,
+      from: str(r.from) ?? undefined,
+      receivedAt: str(r.receivedAt) ?? undefined,
+      kind,
+      reason: str(r.reason) ?? "n8n gaf geen reden mee.",
+      mailUrl: str(r.mailUrl)?.startsWith("https://mail.google.com/") ? str(r.mailUrl)! : "",
+    });
+  }
+  return notices;
+}
+
+export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number } | null {
   if (!body || typeof body !== "object") return null;
   const list = (body as { invoices?: unknown }).invoices;
   if (!Array.isArray(list)) return null;
@@ -94,7 +159,7 @@ export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; dropped: num
       note: str(r.note) ?? undefined,
     });
   }
-  return { rows, dropped };
+  return { rows, notices: parseNotices(body), dropped };
 }
 
 /**
@@ -126,7 +191,7 @@ export async function fetchQueue(
   }
   const parsed = parseQueue(body);
   if (!parsed) return { kind: "unreadable" };
-  return { kind: "ok", rows: parsed.rows, dropped: parsed.dropped };
+  return { kind: "ok", rows: parsed.rows, notices: parsed.notices, dropped: parsed.dropped };
 }
 
 /** An n8n row while the owner is still reviewing it. Strings, because these are

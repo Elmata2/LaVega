@@ -4,8 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { Invoice } from "@lavega/core";
 import Facturen from "./views/Facturen";
-import type { PendingInvoice } from "./n8n";
-import { setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
+import type { N8nNotice, PendingInvoice } from "./n8n";
+import { getHandledInvoiceMessageIds, setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
 
 /* The confirm-first review queue in Facturen. What matters here is not the
  * markup but the promises the feature makes: a fetched row is only ever a
@@ -60,6 +60,7 @@ function serving(bodies: unknown[]) {
  *  unmounting), so the test owns that state exactly like App does. */
 function Harness({ fetchImpl, invoices }: { fetchImpl: typeof fetch; invoices: Invoice[] }) {
   const [pending, setPending] = useState<PendingInvoice[]>([]);
+  const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
       entities={["BV1"]}
@@ -71,6 +72,8 @@ function Harness({ fetchImpl, invoices }: { fetchImpl: typeof fetch; invoices: I
       onSaveInvoices={(next) => saved.push(next)}
       pending={pending}
       onPendingChange={setPending}
+      notices={notices}
+      onNoticesChange={setNotices}
       onNavigate={() => {}}
       fetchImpl={fetchImpl}
     />
@@ -265,4 +268,46 @@ test("without a URL and token nothing is fetched, and it says so", async () => {
   const c = await fetchOnce(counting);
   expect(called).toBe(0);
   expect(c.textContent).toContain("Nog niet ingesteld");
+});
+
+/* ── Zelf ophalen: de mail die geen boekbare factuur was ─────────────────── */
+
+const NOTICE = {
+  messageId: "msg-kpn",
+  subject: "Uw factuur van augustus staat voor u klaar",
+  from: "KPN <noreply@kpn.com>",
+  receivedAt: "2026-08-14T02:31:02.000Z",
+  kind: "notification",
+  reason: "De factuur staat in MijnKPN; log in om hem te downloaden.",
+  mailUrl: "https://mail.google.com/mail/u/0/#all/msg-kpn",
+};
+
+test("a link-only mail shows up as a to-do with no amount and no way to book it", async () => {
+  const c = await fetchOnce(serving([{ invoices: [], notices: [NOTICE] }]));
+
+  expect(c.textContent).toContain("Zelf ophalen");
+  expect(c.textContent).toContain("Staat klaar bij de leverancier");
+  expect(c.textContent).toContain("log in om hem te downloaden");
+  // Geen invoerveld, geen Bevestigen: er valt niets te boeken.
+  const notice = c.querySelector('[data-noticeid="msg-kpn"]')!;
+  expect(notice.querySelectorAll("input")).toHaveLength(0);
+  expect(notice.textContent).not.toContain("Bevestigen");
+  // De link gaat naar zijn eigen mailbox, niet naar de leverancier.
+  expect((notice.querySelector("a") as HTMLAnchorElement).href).toBe(
+    "https://mail.google.com/mail/u/0/#all/msg-kpn",
+  );
+  // En er is niets geboekt.
+  expect(saved).toEqual([]);
+});
+
+test("Gedaan files the notice as handled so the hourly re-scan can't put it back", async () => {
+  const c = await fetchOnce(serving([{ invoices: [], notices: [NOTICE] }]));
+  click(byText("button", "Gedaan"));
+  expect(c.querySelector('[data-noticeid="msg-kpn"]')).toBeNull();
+  expect(getHandledInvoiceMessageIds()).toContain("msg-kpn");
+  expect(saved).toEqual([]);
+
+  // Tweede ophaal met dezelfde melding: hij komt niet terug.
+  const again = await fetchOnce(serving([{ invoices: [], notices: [NOTICE] }]));
+  expect(again.querySelector('[data-noticeid="msg-kpn"]')).toBeNull();
 });

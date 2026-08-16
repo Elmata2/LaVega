@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { Invoice } from "@lavega/core";
 import Facturen from "./views/Facturen";
-import type { PendingInvoice } from "./n8n";
+import type { N8nNotice, PendingInvoice } from "./n8n";
 
 /* The rebuilt Facturen surface (UI review, 2026-08-16).
  *
@@ -33,6 +33,7 @@ afterEach(() => {
 
 function Harness({ invoices, pending: seed }: { invoices: Invoice[]; pending: PendingInvoice[] }) {
   const [pending, setPending] = useState<PendingInvoice[]>(seed);
+  const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
       entities={["BV1"]}
@@ -44,6 +45,8 @@ function Harness({ invoices, pending: seed }: { invoices: Invoice[]; pending: Pe
       onSaveInvoices={(next) => saved.push(next)}
       pending={pending}
       onPendingChange={setPending}
+      notices={notices}
+      onNoticesChange={setNotices}
       onNavigate={() => {}}
       fetchImpl={(async () => ({ ok: true, status: 200, json: async () => ({ invoices: [] }) })) as unknown as typeof fetch}
     />

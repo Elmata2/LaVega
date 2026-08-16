@@ -1,1 +1,13 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // De n8n-Code-nodes staan als gewoon JavaScript in src/n8n/: die tekst wordt
+    // letterlijk in docs/n8n/lavega-invoices.json gekopieerd, dus er mag geen
+    // TypeScript-syntax in. checkJs zorgt dat de JSDoc-types daar wél gecontroleerd
+    // worden — anders is dat de enige ongecontroleerde code in het project, en dat
+    // is precies waar de factuur-workflow op stukliep.
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src"]
+}
