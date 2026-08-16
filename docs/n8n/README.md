@@ -14,10 +14,14 @@ Gemeten op 2026-08-16 klopt dat niet. Van de acht tariefpagina's laten er maar
 | ABN AMRO betaalpas | time-out | **200** |
 | ABN AMRO creditcard | time-out | **200** |
 | bunq | **200** | **200** |
+| Wise | **200** | **200** |
+| Knab | **200** | **200** |
+| American Express Gold | — | **200** (de oude URL gaf 404: verhuisd) |
 | Revolut | 403 | 403 — "Just a quick security check" (Cloudflare) |
 | Trading 212 | 403 | 403 — Cloudflare |
 | ING (beide) | verbinding verbroken | idem, ook via HTTP/1.1 (Akamai) |
-| American Express | 404 | 404 — de URL bestaat niet meer |
+| Rabobank | 403 | 403 |
+| N26, Trade Republic | 404 | 404 — die URL's bestaan niet |
 
 Twee conclusies:
 
@@ -36,12 +40,22 @@ creditcard 2% en Trading 212 0%.
 
 Zet een aanbieder er pas bij als een kale fetch zijn pagina teruggeeft.
 
-**American Express staat er bewust niet meer bij.** Zijn URL gaf 404: de pagina
-is verhuisd. Een URL die verhuist, verhuist nog een keer — en dan staat er weer
-stil een 0 in de uitkomst. Amex hoort daarom permanent bij de agent, die zelf
-zoekt en dus niet omvalt van een verhuizing. Dit is de regel, niet de
-uitzondering: een vaste URL is alleen beter dan zoeken zolang die URL blijft
-staan en de fetch wordt toegelaten.
+**American Express staat er weer bij, met een andere URL.** De oude gaf 404,
+omdat die pagina verhuisd was. Belangrijker was iets anders: "American Express
+creditcard" is geen product. Green, Gold en Platinum hebben verschillende
+voorwaarden, dus er viel niets te vinden — de agent kwam daarom keer op keer
+leeg terug, en dat lag niet aan het zoeken. De eigenaar heeft de **Gold Card**,
+dus dat is de pagina die er nu staat.
+
+Let op de naam in die regel. LaVega vraagt vandaag om `American Express
+creditcard`, omdat `productOf()` geen kaartvariant kent. De cijfers van de Gold
+Card worden dus onder die algemene naam bewaard. Dat klopt zolang er één Amex
+is. Komt er een tweede bij, dan moet LaVega eerst variantnamen leren, anders
+overschrijft de ene kaart stil de cijfers van de andere.
+
+Dit is de regel, niet de uitzondering: een vaste URL is alleen beter dan zoeken
+zolang die URL blijft staan, de fetch wordt toegelaten, én de productnaam
+precies één product aanwijst.
 
 ## Eenmalig instellen
 
