@@ -1,6 +1,7 @@
 import { expect, test, beforeEach } from "vitest";
 import { getCardTerms, resetCardTerms, ingestCardTerms } from "./cardTerms.js";
 import type { TravelInput } from "./agent/travel.js";
+import type { BankNlTable } from "@lavega/core";
 
 const input = (providers: string[]): TravelInput =>
   ({ homeCountry: "NL", destination: "US", currency: "USD", providers, knownFacts: [] });
@@ -146,4 +147,154 @@ test("ingest is scoped per market, like every other cached entry", async () => {
   ingestCardTerms("NL", "USD", [{ provider: "Revolut betaalpas", fxFeePct: 0 }]);
   const gbp = getCardTerms({ ...input(["Revolut betaalpas"]), currency: "GBP" }, "k", { lookup: never as never });
   expect(gbp.terms).toEqual([]); // different market -> not served
+});
+
+/* --- The bank.nl comparison table: ONE fetch covering seven Dutch banks and
+ * both card kinds, including the ones whose own tariff pages refuse us. --- */
+
+const TABLE: BankNlTable = {
+  checkedAt: "2026-01-15",
+  rows: [
+    { bank: "ING", card: "betaalpas", fxFeePct: 1.4, checkedAt: "2026-01-15", note: "1,4% koersopslag. Bron: bank.nl-vergelijking." },
+    { bank: "ING", card: "creditcard", fxFeePct: 2, checkedAt: "2026-01-15", note: "2,0% koersopslag. Bron: bank.nl-vergelijking." },
+    { bank: "Triodos Bank", card: "betaalpas", fxFeePct: 1, checkedAt: "2026-01-15", note: "1,0% koersopslag. Bron: bank.nl-vergelijking." },
+  ],
+};
+const comparison = () => Promise.resolve(TABLE);
+const noLookup = async () => [];
+
+test("a gap the comparison table covers is filled without any model call", async () => {
+  const res = getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison });
+  expect(res.pending).toEqual(["ING betaalpas"]); // nothing known yet, so: ask again
+  await settle();
+
+  const second = getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison });
+  expect(second.pending).toEqual([]);
+  expect(second.terms[0]).toMatchObject({ provider: "ING betaalpas", fxFeePct: 1.4 });
+  expect(second.terms[0].note).toContain("bank.nl");
+});
+
+test("debit and credit get their own figure, never each other's", async () => {
+  getCardTerms(input(["ING betaalpas", "ING creditcard"]), "k", { lookup: noLookup as never, comparison });
+  await settle();
+  const res = getCardTerms(input(["ING betaalpas", "ING creditcard"]), "k", { lookup: noLookup as never, comparison });
+  expect(res.terms.map((t) => [t.provider, t.fxFeePct])).toEqual([
+    ["ING betaalpas", 1.4],
+    ["ING creditcard", 2],
+  ]);
+});
+
+test("a card kind the table never priced stays unknown, not free", async () => {
+  // Triodos is listed for a betaalpas only. An unknown fee is a risk, not a 0%.
+  getCardTerms(input(["Triodos creditcard"]), "k", { lookup: noLookup as never, comparison });
+  await settle();
+  expect(getCardTerms(input(["Triodos creditcard"]), "k", { lookup: noLookup as never, comparison }).pending)
+    .toEqual(["Triodos creditcard"]);
+});
+
+test("a bank the table says nothing about stays unknown", async () => {
+  getCardTerms(input(["Revolut betaalpas"]), "k", { lookup: noLookup as never, comparison });
+  await settle();
+  expect(getCardTerms(input(["Revolut betaalpas"]), "k", { lookup: noLookup as never, comparison }).pending)
+    .toEqual(["Revolut betaalpas"]);
+});
+
+test("the comparison table is NOT consulted for a euro destination", async () => {
+  // There is no koersopslag to compare when you already pay in euros.
+  let calls = 0;
+  const counted = () => { calls++; return Promise.resolve(TABLE); };
+  getCardTerms({ ...input(["ING betaalpas"]), destination: "DE", currency: "EUR" }, "k", { lookup: noLookup as never, comparison: counted });
+  await settle();
+  expect(calls).toBe(0);
+});
+
+test("the comparison table is NOT used outside the Netherlands", async () => {
+  // A Dutch source about Dutch banks; a Belgian ING card is a different tariff.
+  let calls = 0;
+  const counted = () => { calls++; return Promise.resolve(TABLE); };
+  getCardTerms({ ...input(["ING betaalpas"]), homeCountry: "BE" }, "k", { lookup: noLookup as never, comparison: counted });
+  await settle();
+  expect(calls).toBe(0);
+});
+
+test("a failing comparison fetch leaves the provider unknown, nothing more", async () => {
+  const broken = () => Promise.reject(new Error("403"));
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison: broken });
+  await settle();
+  expect(getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison: broken }).pending)
+    .toEqual(["ING betaalpas"]);
+});
+
+/* --- Precedence. The provider's OWN tariff page beats the comparison table,
+ * and the owner beats both (his corrections never enter this cache at all —
+ * core's upsertFacts refuses to let an agent-sourced fact overwrite a user
+ * one, so everything served from here passes that rule first). --- */
+
+test("the comparison table never overwrites a fresher provider-specific figure", async () => {
+  // n8n read ING's own tariff page: 1,5%. bank.nl says 1,4%. The provider wins.
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5, note: "eigen tarievenblad" }]);
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison });
+  await settle();
+  const res = getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never, comparison });
+  expect(res.terms[0]).toMatchObject({ fxFeePct: 1.5, note: "eigen tarievenblad" });
+});
+
+test("a provider-specific figure DOES overwrite a comparison figure", async () => {
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4 }], "comparison");
+  const res = ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5 }]);
+  expect(res).toEqual({ accepted: 1, rejected: [] });
+  const out = getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never });
+  expect(out.terms[0]).toMatchObject({ fxFeePct: 1.5 });
+});
+
+test("the comparison table DOES overwrite what the model searched up", async () => {
+  // The model's weak step was finding a tariff page at all; a curated, dated
+  // table beats a web search that may not have found the right page.
+  const lookup = async () => [{ provider: "ING betaalpas", fxFeePct: 9.9 }];
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4 }], "comparison");
+  const out = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  expect(out.terms[0]).toMatchObject({ fxFeePct: 1.4 });
+});
+
+test("a comparison figure may refresh an EXPIRED provider figure", async () => {
+  // "Fresher" is the point: refusing forever would freeze a stale number in
+  // place with nothing able to correct it.
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5 }]);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 8 * 24 * 60 * 60 * 1000;
+  try {
+    ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4 }], "comparison");
+    const out = getCardTerms(input(["ING betaalpas"]), "k", { lookup: noLookup as never });
+    expect(out.terms[0]).toMatchObject({ fxFeePct: 1.4 });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("a refused write is reported as rejected, never counted as accepted", () => {
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5 }]);
+  const res = ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4 }], "comparison");
+  expect(res).toEqual({ accepted: 0, rejected: ["ING betaalpas"] });
+});
+
+test("a source that states only a fee keeps what another source knew", async () => {
+  // bank.nl publishes a koersopslag and nothing else. Letting it land must not
+  // wipe the cashback the model found, or the ranking silently gets worse.
+  const lookup = async () => [{ provider: "ING betaalpas", fxFeePct: 9.9, cashbackPct: 1, pointsPerEuro: 2 }];
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4, note: "bank.nl" }], "comparison");
+  const out = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  expect(out.terms[0]).toMatchObject({ fxFeePct: 1.4, cashbackPct: 1, pointsPerEuro: 2, note: "bank.nl" });
+});
+
+test("without a comparison layer wired in, nothing changes", async () => {
+  // The layer is injected, never imported here: a caller that does not pass it
+  // (every existing test, and any deployment that turns it off) gets exactly
+  // the old behaviour.
+  const lookup = async () => [{ provider: "ING betaalpas", fxFeePct: 1.4 }];
+  const res = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  expect(res.pending).toEqual(["ING betaalpas"]);
 });

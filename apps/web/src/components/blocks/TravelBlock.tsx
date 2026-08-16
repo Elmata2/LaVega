@@ -1,12 +1,17 @@
 import { useState } from "react";
-import type { Account, Tx, LearnedFact, RateBenchmark, TravelPlan } from "@lavega/core";
-import { planTravel, countryCurrency, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND } from "@lavega/core";
+import type { Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey } from "@lavega/core";
+import { planTravel, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
- * module among the rest on the homescreen grid. */
+ * module among the rest on the homescreen grid.
+ *
+ * It leads with ONE answer — `plan.headline`, priced in euros — because three
+ * sections (Bewaren / Wisselen / Betalen) were three answers the owner had to
+ * reconcile himself. The ranked JOURNEYS and those three sections are still all
+ * here; they just sit behind "waarom", as the reasoning under the answer. */
 
 export type TravelBlockProps = {
   accounts: Account[];
@@ -47,7 +52,9 @@ const COUNTRIES: { code: string; name: string }[] = [
 ];
 
 /** Inline correction of one learned number. Correcting is the whole point: it
- *  writes a `user` fact, which no later agent run may overwrite. */
+ *  writes a `user` fact, which no later agent run may overwrite. The same
+ *  component serves every learnable number — fxFeePct, convertFeePct — so a new
+ *  leg is correctable the day it is priced, not a release later. */
 function FactCorrection({ provider, factKey, label, value, busy, onCorrect }: {
   provider: string;
   factKey: string;
@@ -104,26 +111,69 @@ function pct(n: number | null): string {
   return n === null ? "onbekend" : `${n}%`;
 }
 
+/** A leg's price on the reference spend. `null` is UNKNOWN and must never read
+ *  as free — that rule is why the ranking can be trusted at all. A leg that does
+ *  not exist on this route (no transfer when you pay directly) is not a price,
+ *  so it renders as "n.v.t." rather than as a zero. */
+function legCost(costPct: number | null): string {
+  if (costPct === null) return "onbekend";
+  const euros = costOnReferenceSpend(costPct);
+  if (euros === null) return "onbekend";
+  // `-0` is a real outcome here (a leg with no cashback prices at minus nothing)
+  // and formats as "€ -0,00", which reads like a rounding error. It is zero.
+  if (euros === 0) return formatEuro(0);
+  if (euros < 0) return `${formatEuro(Math.abs(euros))} terug`;
+  return formatEuro(euros);
+}
+
+type Leg = { name: string; detail: string; cost: string };
+
+/** The three legs of a route, in the order the money travels: overzetten →
+ *  wisselen → betalen. Named after the sections they replace, so the detail the
+ *  owner already knows how to read is still there — now inside one route
+ *  instead of standing next to it as a rival answer. */
+function legsOf(j: Journey): Leg[] {
+  if (j.via === null) {
+    return [
+      { name: "Overzetten", detail: "niet nodig — je betaalt direct", cost: "n.v.t." },
+      { name: "Wisselen", detail: "de kaart wisselt bij betaling", cost: "n.v.t." },
+      { name: "Betalen", detail: j.provider, cost: legCost(j.spendPct) },
+    ];
+  }
+  return [
+    {
+      name: "Overzetten",
+      detail: `${j.fundedFrom ?? "je betaalrekening"} → ${j.via}${j.method ? ` via ${j.method}` : ""}`,
+      cost: legCost(j.transferPct),
+    },
+    { name: "Wisselen", detail: `bij ${j.via}`, cost: legCost(j.convertPct) },
+    { name: "Betalen", detail: j.provider, cost: legCost(j.spendPct) },
+  ];
+}
+
+function journeyTitle(j: Journey): string {
+  return j.via === null
+    ? `Direct betalen met ${j.provider}`
+    : `Via ${j.via}${j.fundedFrom ? ` (vanaf ${j.fundedFrom})` : ""}`;
+}
+
+function journeyKey(j: Journey): string {
+  return `${j.provider}|${j.via ?? "direct"}`;
+}
+
 export default function TravelBlock({
   accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onCorrectFact,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
-  // Which card's "waarom" is open. One at a time — the point is a clear answer
-  // with the reasoning a click away, not a wall of caveats.
-  const [expanded, setExpanded] = useState<string | null>(null);
+  // One disclosure for the whole block. The answer is the product; everything
+  // that argues for it is a click away, not a wall of caveats next to it.
+  const [showWhy, setShowWhy] = useState(false);
 
   const plan: TravelPlan | null = destination
     ? planTravel({ accounts, txs, rates, facts, destination, asOf })
     : null;
 
-  const winner = plan?.spend.find((o) => o.known) ?? null;
-  const winnerCost = costOnReferenceSpend(winner?.netCostPct ?? null);
-  // What choosing the winner saves against the next-best KNOWN card.
-  const runnerUp = plan?.spend.filter((o) => o.known)[1] ?? null;
-  const runnerUpSaving =
-    winner && runnerUp && winner.netCostPct !== null && runnerUp.netCostPct !== null
-      ? Math.round((runnerUp.netCostPct - winner.netCostPct) * TRAVEL_REFERENCE_SPEND) / 100
-      : null;
+  const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
 
   return (
     <Module
@@ -158,100 +208,148 @@ export default function TravelBlock({
       {!plan ? (
         <p className="block-empty">Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.</p>
       ) : (
-        <div className="travel-plan">
-          <div className="travel-step">
-            <h3 className="travel-step-title">Bewaren</h3>
-            <p className="travel-step-line">{plan.store.note}</p>
-            {plan.store.suggestion && (
-              <p className="cell-sub">
-                Scheelt {formatEuro(plan.store.suggestion.extraPerYearCents / 100)} per jaar.
-              </p>
-            )}
+        <>
+          {/* THE ANSWER. One sentence, in euros, on the reference spend. */}
+          <div className="travel-winner">
+            <div className="travel-winner-name">{plan.headline}</div>
+            <div className="cell-sub">
+              Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst zelf
+              niets — dit is een stap die jij zet.
+            </div>
           </div>
 
-          <div className="travel-step">
-            <h3 className="travel-step-title">Wisselen</h3>
-            <p className="travel-step-line">{plan.convert.note}</p>
-            <p className="cell-sub">LaVega verplaatst zelf niets — dit is een stap die jij zet.</p>
-          </div>
+          <button
+            type="button"
+            className="card-link"
+            aria-expanded={showWhy}
+            onClick={() => setShowWhy(!showWhy)}
+          >
+            {showWhy ? "Verberg waarom" : "Waarom?"}
+          </button>
 
-          <div className="travel-step travel-step-wide">
-            <h3 className="travel-step-title">Betalen</h3>
-            {plan.spend.length === 0 ? (
-              <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
-            ) : (
-              <>
-                {winner && (
-                  <div className="travel-winner">
-                    <div className="travel-winner-name">{winner.provider}</div>
-                    <div className="travel-winner-cost">
-                      {winnerCost !== null && winnerCost > 0 && `€ ${winnerCost.toFixed(2)} kosten per € 1.000 die je uitgeeft`}
-                      {winnerCost !== null && winnerCost <= 0 && `levert € ${Math.abs(winnerCost).toFixed(2)} op per € 1.000 die je uitgeeft`}
-                    </div>
-                    {runnerUpSaving !== null && (
-                      <div className="cell-sub">
-                        € {runnerUpSaving.toFixed(2)} goedkoper dan {runnerUp!.provider}
+          {showWhy && (
+            <div className="travel-why">
+              <h3 className="travel-step-title">Alle routes</h3>
+              {plan.journeys.length === 0 ? (
+                <p className="cell-sub">
+                  {plan.currency === "EUR"
+                    ? "Geen route nodig — daar reken je gewoon in euro's af."
+                    : "Nog geen kaarten of betaalrekeningen bekend."}
+                </p>
+              ) : (
+                <ul className="travel-journeys">
+                  {plan.journeys.map((j) => (
+                    <li
+                      key={journeyKey(j)}
+                      className={`travel-journey${j === bestJourney ? " travel-journey-best" : ""}${j.known ? "" : " travel-journey-unknown"}`}
+                    >
+                      <div className="travel-journey-head">
+                        <span className="travel-journey-name">{journeyTitle(j)}</span>
+                        <span className="travel-journey-cost">
+                          {j.known ? legCost(j.totalCostPct) : "onbekend"}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
 
-                <ul className="travel-cards">
-                  {plan.spend.map((option, i) => {
-                    const cost = costOnReferenceSpend(option.netCostPct);
-                    const open = expanded === option.provider;
-                    return (
-                      <li key={option.provider} className={option === winner ? "travel-card-best" : ""}>
-                        <button
-                          type="button"
-                          className="travel-card-row"
-                          aria-expanded={open}
-                          onClick={() => setExpanded(open ? null : option.provider)}
-                        >
-                          <span className="travel-card-name">
-                            {option.provider}
-                            {option.accounts.length > 1 && <span className="eyebrow"> · {option.accounts.length} rek.</span>}
-                            {(option.pointsPerEuro ?? 0) > 0 && <span className="eyebrow"> · {option.pointsPerEuro} punt/€</span>}
-                          </span>
-                          <span className="travel-card-cost">
-                            {cost === null ? "onbekend" : `€ ${cost.toFixed(2)}`}
-                            <span className="travel-caret" aria-hidden="true">{open ? "▾" : "▸"}</span>
-                          </span>
-                        </button>
+                      <ul className="travel-legs">
+                        {legsOf(j).map((leg) => (
+                          <li key={leg.name} className="travel-leg">
+                            <span className="travel-leg-name">
+                              {leg.name} · {leg.detail}
+                            </span>
+                            <span className="travel-leg-cost">{leg.cost}</span>
+                          </li>
+                        ))}
+                      </ul>
 
-                        {open && (
-                          <div className="travel-card-detail">
-                            <p className="cell-sub">
-                              {option.why}
-                              {option.feeSource === "user" && " · door jou ingesteld"}
-                              {option.feeSource === "agent" && option.feeUpdatedAt && ` · opgezocht ${option.feeUpdatedAt}`}
-                            </p>
-                            {option.note && <p className="cell-sub travel-note">{option.note}</p>}
-                            <FactCorrection
-                              provider={option.provider}
-                              factKey="fxFeePct"
-                              label={`wisselkosten (${pct(option.fxFeePct)})`}
-                              value={option.fxFeePct}
-                              busy={busy}
-                              onCorrect={onCorrectFact}
-                            />
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
+                      <p className="cell-sub travel-note">
+                        {j.known
+                          ? j.why
+                          : `Niet elke stap van deze route is bekend (${j.why}) — daarom staat er geen bedrag. Onbekend is niet gratis.`}
+                      </p>
+
+                      {j.via === null ? (
+                        <FactCorrection
+                          provider={j.provider}
+                          factKey="fxFeePct"
+                          label={`wisselkosten (${pct(plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null)})`}
+                          value={plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null}
+                          busy={busy}
+                          onCorrect={onCorrectFact}
+                        />
+                      ) : (
+                        <FactCorrection
+                          provider={j.provider}
+                          factKey="convertFeePct"
+                          label={`omwisselkosten (${pct(j.convertPct)})`}
+                          value={j.convertPct}
+                          busy={busy}
+                          onCorrect={onCorrectFact}
+                        />
+                      )}
+                    </li>
+                  ))}
                 </ul>
-              </>
-            )}
-            {plan.spendNote && <p className="cell-sub travel-note">{plan.spendNote}</p>}
-            {plan.unidentifiedCount > 0 && (
-              <p className="cell-sub">
-                {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder bank — die kunnen we
-                niet opzoeken. Vul de bank in bij Rekeningen, of zet het type op Spaarrekening als het spaargeld is.
-              </p>
-            )}
-          </div>
-        </div>
+              )}
+
+              {/* The three original sections, kept — as the detail under the
+                  answer rather than three answers standing beside it. */}
+              <div className="travel-plan">
+                <div className="travel-step">
+                  <h3 className="travel-step-title">Bewaren</h3>
+                  <p className="travel-step-line">{plan.store.note}</p>
+                  {plan.store.suggestion && (
+                    <p className="cell-sub">
+                      Scheelt {formatEuro(plan.store.suggestion.extraPerYearCents / 100)} per jaar.
+                    </p>
+                  )}
+                </div>
+
+                <div className="travel-step">
+                  <h3 className="travel-step-title">Wisselen</h3>
+                  <p className="travel-step-line">{plan.convert.note}</p>
+                </div>
+
+                <div className="travel-step">
+                  <h3 className="travel-step-title">Betalen</h3>
+                  {plan.spend.length === 0 ? (
+                    <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
+                  ) : (
+                    <ul className="travel-legs">
+                      {plan.spend.map((option) => {
+                        const cost = costOnReferenceSpend(option.netCostPct);
+                        return (
+                          <li key={option.provider} className="travel-leg">
+                            <span className="travel-leg-name">
+                              {option.provider}
+                              {(option.pointsPerEuro ?? 0) > 0 && (
+                                <span className="eyebrow"> · {option.pointsPerEuro} punt/€</span>
+                              )}
+                              {option.feeSource === "user" && <span className="eyebrow"> · door jou ingesteld</span>}
+                              {option.feeSource === "agent" && option.feeUpdatedAt && (
+                                <span className="eyebrow"> · opgezocht {option.feeUpdatedAt}</span>
+                              )}
+                            </span>
+                            <span className="travel-leg-cost">
+                              {cost === null ? "onbekend" : legCost(option.netCostPct)}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {plan.spendNote && <p className="cell-sub travel-note">{plan.spendNote}</p>}
+                </div>
+              </div>
+
+              {plan.unidentifiedCount > 0 && (
+                <p className="cell-sub">
+                  {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder bank — die kunnen we
+                  niet opzoeken. Vul de bank in bij Rekeningen, of zet het type op Spaarrekening als het spaargeld is.
+                </p>
+              )}
+            </div>
+          )}
+        </>
       )}
     </Module>
   );

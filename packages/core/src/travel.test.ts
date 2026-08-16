@@ -273,7 +273,7 @@ test("journeyHeadline states the winner and what it saves, in euros", () => {
 
   expect(line).toContain("van ING naar Revolut betaalpas");
   expect(line).toContain("iDEAL");
-  expect(line).toContain("€5.00 goedkoper");
+  expect(line).toContain("€ 5,00 goedkoper");
 });
 
 test("journeyHeadline says nothing to convert for a euro destination, and asks for a refresh when nothing is known", () => {

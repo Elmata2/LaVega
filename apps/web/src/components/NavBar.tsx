@@ -5,7 +5,7 @@ import type { View } from "../App";
  * dashboard's signature nav), and the lock control on the right. Replaces the
  * old left sidebar — the desktop reference puts navigation on top and gives the
  * full width to the module grid. The rail scrolls horizontally rather than
- * wrapping, so all eleven tabs stay reachable on a phone (where the old
+ * wrapping, so all twelve tabs stay reachable on a phone (where the old
  * sidebar hid the lock button entirely). */
 
 type IconProps = { children: ReactNode };
@@ -86,6 +86,13 @@ const icons: Record<View, ReactNode> = {
       <path d="M12 6.5v11" />
     </Icon>
   ),
+  koppelingen: (
+    <Icon>
+      <path d="M9 15l6-6" />
+      <path d="M10.5 6.5l1.8-1.8a3.5 3.5 0 1 1 5 5L15.5 11.5" />
+      <path d="M13.5 17.5l-1.8 1.8a3.5 3.5 0 1 1-5-5L8.5 12.5" />
+    </Icon>
+  ),
   backup: (
     <Icon>
       <path d="M12 3v11" />
@@ -105,6 +112,7 @@ const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "punten", label: "Punten" },
   { key: "belasting", label: "Belasting" },
   { key: "facturen", label: "Facturen" },
+  { key: "koppelingen", label: "Koppelingen" },
   { key: "backup", label: "Back-up" },
 ];
 

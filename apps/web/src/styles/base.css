@@ -1237,6 +1237,37 @@ table tbody tr:hover {
   gap: var(--sp-1);
 }
 
+/* Facturen — the n8n review queue. Each row is a bordered card because it is a
+   decision, not a table row: it stays until it is confirmed or rejected. */
+.n8n-block {
+  margin-bottom: var(--sp-4);
+}
+.n8n-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-2);
+}
+.n8n-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.n8n-row {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+.n8n-row .facturen-form {
+  margin-bottom: 0;
+}
+.n8n-row-source {
+  margin: 0 0 var(--sp-2);
+}
+
 /* Op reis — the travel block (first modular block) */
 .travel-controls {
   display: flex;
@@ -1274,26 +1305,6 @@ table tbody tr:hover {
   margin: 0;
   font-weight: 500;
 }
-.travel-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.travel-cards li {
-  display: block;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-.travel-card-best strong {
-  color: var(--pos);
-}
-
 /* Rekeningen — inline rename (bank + naam) */
 .rename-cell {
   display: flex;
@@ -1303,9 +1314,6 @@ table tbody tr:hover {
 }
 
 /* Op reis — decisive answer first, reasoning on click */
-.travel-step-wide {
-  grid-column: 1 / -1;
-}
 .travel-winner {
   padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-3);
@@ -1315,49 +1323,9 @@ table tbody tr:hover {
   border-left: 4px solid var(--pos);
 }
 .travel-winner-name {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 600;
-}
-.travel-winner-cost {
-  margin-top: 2px;
-  font-weight: 500;
-}
-.travel-card-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  width: 100%;
-  padding: var(--sp-2) 0;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--line);
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-}
-.travel-card-row:hover {
-  border-color: var(--accent);
-}
-.travel-card-name {
-  font-weight: 500;
-}
-.travel-card-cost {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.travel-caret {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.travel-card-detail {
-  padding: 0 0 var(--sp-3);
-}
-.travel-card-best .travel-card-name {
-  color: var(--pos);
+  line-height: 1.4;
 }
 .travel-note {
   line-height: 1.5;

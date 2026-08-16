@@ -10,8 +10,9 @@ import { categorizeTransactions } from "./agent/categorize.js";
 import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
+import { getBankNlTable } from "./bankNl.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
-import { AGENTS, type LearnedFact } from "@lavega/core";
+import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
  * client) and is the ONLY place that talks to Claude. `deps.extract`/`deps.chat`
@@ -22,6 +23,8 @@ type Deps = {
   chat?: typeof runChat;
   categorize?: typeof categorizeTransactions;
   travelFacts?: typeof lookupProviderTerms;
+  /** The bank.nl koersopslag comparison table. Injected so a test never fetches. */
+  cardComparison?: () => Promise<BankNlTable>;
 };
 
 // 20 requests/min per route key (each route passes its own key — "extract" /
@@ -34,6 +37,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const chat = deps.chat ?? runChat;
   const categorize = deps.categorize ?? categorizeTransactions;
   const travelFacts = deps.travelFacts ?? lookupProviderTerms;
+  const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
 
   // Whether AI extraction is available server-side (does the key exist?). The
   // key itself is never returned. Lives here, not in index.ts (Task 1 deferred).
@@ -148,7 +152,12 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     // than being re-fetched per user at the moment someone wants an answer.
     // Nothing here awaits the model, so the 100s Cloudflare ceiling that killed
     // the synchronous version can't be reached.
-    return c.json(getCardTerms(input, apiKey, { lookup: travelFacts }));
+    //
+    // `comparison` is the bank.nl koersopslag table: one 96 kB GET that answers
+    // for seven Dutch banks at once, including ING and Rabobank, whose own
+    // tariff pages refuse us. It ranks BELOW a provider's own tariff page and
+    // below the owner's correction — see the ladder in cardTerms.ts.
+    return c.json(getCardTerms(input, apiKey, { lookup: travelFacts, comparison: cardComparison }));
   });
 
   // Ingest from the n8n workflow, which fetches each provider's OWN tariff page

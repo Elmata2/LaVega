@@ -10,6 +10,7 @@ export * from "./tracking.js";
 export * from "./facts.js";
 export * from "./agentFacts.js";
 export * from "./travel.js";
+export * from "./bankNl.js";
 export * from "./categorize.js";
 export * from "./scheduledFlows.js";
 export * from "./invoices.js";

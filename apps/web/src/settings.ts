@@ -92,6 +92,81 @@ export function setAiCategorizeEnabled(on: boolean): void {
   }
 }
 
+/* --- The owner's own n8n invoice webhook (see docs/n8n/FACTUREN.md).
+ * URL and token are HIS, for HIS n8n: they live in this browser only — never in
+ * the vault-synced data (a back-up file would then carry a live token), never
+ * in the repo, and they are never sent to the LaVega server. The whole point of
+ * the n8n design is that the invoice path is mailbox -> his n8n -> his browser,
+ * with our server nowhere in it. --- */
+
+const N8N_URL_KEY = "lavega.n8nInvoiceUrl";
+const N8N_TOKEN_KEY = "lavega.n8nInvoiceToken";
+
+export function getN8nInvoiceUrl(): string {
+  try {
+    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_URL_KEY)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setN8nInvoiceUrl(url: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_URL_KEY, String(url ?? "").trim());
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+export function getN8nInvoiceToken(): string {
+  try {
+    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_TOKEN_KEY)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setN8nInvoiceToken(token: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_TOKEN_KEY, String(token ?? "").trim());
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+const N8N_HANDLED_KEY = "lavega.n8nHandledMessageIds";
+/** Keep the newest N decided messageIds. The n8n queue holds at most 200 and
+ *  covers 7 days of mail, so this window is far wider than anything that can
+ *  still be re-offered. */
+const HANDLED_MAX = 1000;
+
+/** Gmail messageIds already decided on (confirmed OR rejected). Needed because
+ *  the n8n queue only dedups against what is STILL in the queue: it empties on
+ *  read, so the hourly run over the same 7 days of mail re-queues an invoice we
+ *  already dealt with. Only opaque message ids are stored here — no amounts, no
+ *  counterparties; the invoice itself lives in the encrypted vault. */
+export function getHandledInvoiceMessageIds(): string[] {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_HANDLED_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addHandledInvoiceMessageIds(ids: string[]): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const merged = [...getHandledInvoiceMessageIds(), ...ids.filter((id) => typeof id === "string" && id.length > 0)];
+    const deduped = Array.from(new Set(merged));
+    localStorage.setItem(N8N_HANDLED_KEY, JSON.stringify(deduped.slice(-HANDLED_MAX)));
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
 const HOME_COUNTRY_KEY = "lavega.homeCountry";
 
 /** The owner's home country as a 2-letter code, default NL. A local-first app

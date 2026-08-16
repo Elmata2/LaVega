@@ -26,7 +26,9 @@ import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
+import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
+import type { PendingInvoice } from "./n8n.js";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
@@ -38,7 +40,7 @@ const storage = createEncryptedStorage();
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -52,6 +54,14 @@ export default function App() {
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
+  // Invoice rows fetched from his own n8n and not yet decided on. Held HERE,
+  // not in the Facturen view: that webhook empties its queue as it responds, so
+  // these rows are the only copy in existence and must not die when the view
+  // unmounts on a navigation. Deliberately not persisted — the vault is the
+  // only place invoice amounts are allowed to rest, and until he confirms a
+  // row it isn't an invoice yet. Vergrendel therefore clears them too, which
+  // the view says out loud.
+  const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   // What the agents have learned (and what he corrected). Lives in the vault.
   const [facts, setFacts] = useState<LearnedFact[]>([]);
   // Public savings benchmark for the travel block's "where to keep it" step.
@@ -230,6 +240,7 @@ export default function App() {
     setInvoices([]);
     setRewards([]);
     setFacts([]);
+    setPendingInvoices([]);
     setGate("unlock");
   }
 
@@ -805,10 +816,15 @@ export default function App() {
               busy={busy}
               defaultEntity={entity}
               onSaveInvoices={saveInvoices}
+              pending={pendingInvoices}
+              onPendingChange={setPendingInvoices}
+              onNavigate={setView}
             />
           )}
 
           {view === "punten" && <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />}
+
+          {view === "koppelingen" && <Koppelingen />}
 
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
         </main>

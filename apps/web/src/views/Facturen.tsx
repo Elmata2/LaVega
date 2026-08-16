@@ -1,9 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
 import { makeInvoice, parseInvoiceFile, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
+import type { View } from "../App";
 import { formatEuro } from "../format";
 import { API_BASE } from "../api";
-import { getAiExtractionEnabled, setAiExtractionEnabled } from "../settings";
+import {
+  addHandledInvoiceMessageIds,
+  getAiExtractionEnabled,
+  getHandledInvoiceMessageIds,
+  getN8nInvoiceToken,
+  getN8nInvoiceUrl,
+  setAiExtractionEnabled,
+} from "../settings";
+import { fetchQueue, pendingToInvoice, toPending, type PendingInvoice } from "../n8n";
 
 /** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
  *  The browser only ever talks to our server — never api.anthropic.com. */
@@ -45,6 +54,15 @@ type FacturenProps = {
   busy: boolean;
   defaultEntity: string;
   onSaveInvoices: (next: Invoice[]) => void;
+  /** Rows fetched from his n8n and not yet decided on. Held in App, NOT here:
+   *  the webhook empties its queue as it responds, so these rows are the only
+   *  copy there is — they must survive this view unmounting when he navigates
+   *  away and back. */
+  pending: PendingInvoice[];
+  onPendingChange: (next: PendingInvoice[]) => void;
+  onNavigate: (view: View) => void;
+  /** Injectable for tests; production uses the browser's own fetch. */
+  fetchImpl?: typeof fetch;
 };
 
 const STATUS_LABELS: Record<Invoice["status"], string> = {
@@ -60,6 +78,10 @@ export default function Facturen({
   busy,
   defaultEntity,
   onSaveInvoices,
+  pending,
+  onPendingChange,
+  onNavigate,
+  fetchImpl,
 }: FacturenProps) {
   const [entity, setEntity] = useState(defaultEntity);
   const [direction, setDirection] = useState<Invoice["direction"]>("out");
@@ -84,6 +106,118 @@ export default function Facturen({
   const [pendingVat, setPendingVat] = useState<number | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+
+  // --- Ophalen uit n8n. `n8nNote` is disposable UI text; the ROWS live in App
+  // (see the `pending` prop) because they are the only copy that exists.
+  const [n8nBusy, setN8nBusy] = useState(false);
+  const [n8nNote, setN8nNote] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+  // A reload would take the fetched rows with it, and n8n cannot serve them
+  // again. So while rows are still undecided, make the browser ask first.
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending.length]);
+
+  // Every outcome gets its own sentence, and none of the failures may read like
+  // a success. The two that can cost data (a broken connection, an unreadable
+  // body) say so plainly, because on those we cannot tell whether n8n already
+  // emptied its queue.
+  async function handleFetchN8n() {
+    setN8nBusy(true);
+    setN8nNote("Bezig met ophalen…");
+    try {
+      const outcome = await fetchQueue(getN8nInvoiceUrl(), getN8nInvoiceToken(), fetchImpl);
+      if (outcome.kind === "not-configured") {
+        setN8nNote("Nog niet ingesteld: vul eerst de webhook-URL en het token in onder Koppelingen. Er is niets opgehaald.");
+        return;
+      }
+      if (outcome.kind === "unauthorized") {
+        setN8nNote(`n8n weigerde het token (${outcome.status}). Er is niets opgehaald; de wachtrij in n8n staat er nog, want de workflow is niet eens gestart. Controleer het token onder Koppelingen.`);
+        return;
+      }
+      if (outcome.kind === "http-error") {
+        setN8nNote(`n8n antwoordde met status ${outcome.status}. Er is niets opgehaald. Staat de workflow aan?`);
+        return;
+      }
+      if (outcome.kind === "network") {
+        setN8nNote("Geen antwoord van n8n — netwerk, verkeerde URL, of allowedOrigins staat deze pagina niet toe. Hier is niets binnengekomen; heeft n8n het verzoek tóch verwerkt, dan is die wachtrij nu leeg. Kijk in dat geval in n8n.");
+        return;
+      }
+      if (outcome.kind === "unreadable") {
+        setN8nNote("Het antwoord van n8n was niet te lezen. Er is niets overgenomen — en omdat de wachtrij bij het ophalen geleegd wordt, kan die rij verloren zijn. Kijk in n8n.");
+        return;
+      }
+
+      const handled = new Set(getHandledInvoiceMessageIds());
+      const already = new Set(pending.map((p) => p.messageId));
+      const fresh = outcome.rows.filter((r) => !handled.has(r.messageId) && !already.has(r.messageId));
+      const duplicates = outcome.rows.length - fresh.length;
+      if (fresh.length > 0) {
+        onPendingChange([...pending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
+      }
+      const parts: string[] = [];
+      if (outcome.rows.length === 0) {
+        parts.push("De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.");
+      } else if (fresh.length === 0) {
+        parts.push("Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.");
+      } else {
+        parts.push(`${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd — bevestig of verwerp elke regel.`);
+      }
+      if (duplicates > 0) parts.push(`${duplicates} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`);
+      if (outcome.dropped > 0) parts.push(`${outcome.dropped} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`);
+      setN8nNote(parts.join(" "));
+    } finally {
+      setN8nBusy(false);
+    }
+  }
+
+  function patchRow(messageId: string, patch: Partial<PendingInvoice>) {
+    onPendingChange(pending.map((p) => (p.messageId === messageId ? { ...p, ...patch } : p)));
+  }
+
+  function dropRowError(messageId: string) {
+    setRowErrors((errs) => {
+      const next = { ...errs };
+      delete next[messageId];
+      return next;
+    });
+  }
+
+  // Confirm = the only path from an n8n row to a real Invoice. A row that
+  // doesn't validate stays on screen with its reason; nothing is booked.
+  function confirmRow(p: PendingInvoice) {
+    const result = pendingToInvoice(p);
+    if (!result.ok) {
+      setRowErrors((errs) => ({ ...errs, [p.messageId]: result.error }));
+      return;
+    }
+    const duplicate = invoices.some((i) => i.id === result.invoice.id);
+    if (!duplicate) onSaveInvoices([...invoices, result.invoice]);
+    addHandledInvoiceMessageIds([p.messageId]);
+    onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
+    dropRowError(p.messageId);
+    setN8nNote(
+      duplicate
+        ? `Deze factuur (${p.counterparty.trim()}) stond al in LaVega — regel afgevinkt, niets dubbel geboekt.`
+        : `Factuur van ${result.invoice.counterparty} toegevoegd als verwacht.`,
+    );
+  }
+
+  // Reject = decided, so it is remembered as handled and n8n's hourly re-scan
+  // of the same week of mail can't put it back in front of him.
+  function rejectRow(p: PendingInvoice) {
+    addHandledInvoiceMessageIds([p.messageId]);
+    onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
+    dropRowError(p.messageId);
+    setN8nNote("Regel verworpen. Er is niets geboekt, en hij wordt niet opnieuw aangeboden.");
+  }
 
   // Live projection: what the forecast will actually see from open invoices.
   const flows = useMemo(() => scheduledInvoiceFlows(invoices), [invoices]);
@@ -256,6 +390,122 @@ export default function Facturen({
         verwachte factuur verschijnt op de vervaldatum in het Overzicht en de Forecast
         en wordt automatisch op "betaald" gezet zodra een passende banktransactie binnenkomt.
       </p>
+
+      <div className="n8n-block">
+        <div className="n8n-head">
+          <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
+            Ophalen uit n8n
+          </button>{" "}
+          <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
+            Koppelingen instellen
+          </button>
+        </div>
+        <p className="cell-sub">
+          Haalt de facturen op die je eigen n8n uit je mailbox heeft gehaald. Er wordt
+          niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf.
+        </p>
+        {n8nNote && <p className="cell-sub">{n8nNote}</p>}
+
+        {pending.length > 0 && (
+          <>
+            <p className="cell-sub text-neg">
+              <strong>Let op — dit is de enige kopie.</strong> n8n leegt zijn wachtrij op het
+              moment dat hij antwoordt: nog eens ophalen levert deze {pending.length}{" "}
+              {pending.length === 1 ? "regel" : "regels"} niet terug. Ook herladen of
+              vergrendelen wist ze. Bevestig of verwerp ze nu.
+            </p>
+            <div className="n8n-rows">
+              {pending.map((p) => (
+                <div className="n8n-row" data-messageid={p.messageId} key={p.messageId}>
+                  <p className="n8n-row-source cell-sub">
+                    Uit de mail: {p.subject ?? "(geen onderwerp)"}
+                    {p.note ? ` · ${p.note}` : ""}
+                  </p>
+                  <div className="facturen-form">
+                    <label>
+                      Entiteit{" "}
+                      <select value={p.entity} aria-label="Entiteit (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
+                        {entityChoices.map((e) => (
+                          <option key={e} value={e}>{e}</option>
+                        ))}
+                      </select>
+                    </label>{" "}
+                    <label>
+                      Richting{" "}
+                      <select value={p.direction} aria-label="Richting (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { direction: e.target.value as Invoice["direction"] })}>
+                        <option value="out">Uitgaand (inkoop)</option>
+                        <option value="in">Inkomend (verkoop)</option>
+                      </select>
+                    </label>{" "}
+                    <label>
+                      Relatie{" "}
+                      <input value={p.counterparty} aria-label="Relatie (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { counterparty: e.target.value })} />
+                    </label>{" "}
+                    <label>
+                      Factuurnr.{" "}
+                      <input value={p.invoiceNumber} aria-label="Factuurnummer (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { invoiceNumber: e.target.value })} />
+                    </label>{" "}
+                    <label>
+                      Factuurdatum{" "}
+                      <input type="date" value={p.issueDate} aria-label="Factuurdatum (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { issueDate: e.target.value })} />
+                    </label>{" "}
+                    <label>
+                      Vervaldatum{" "}
+                      <input type="date" value={p.dueDate} aria-label="Vervaldatum (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { dueDate: e.target.value })} />
+                    </label>{" "}
+                    <label>
+                      Bedrag{" "}
+                      <input className="saldo-input" type="number" step={0.01} min={0} value={p.amount}
+                        aria-label="Bedrag (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { amount: e.target.value })} />
+                    </label>{" "}
+                    <label>
+                      Valuta{" "}
+                      <input className="saldo-input" value={p.currency} maxLength={3}
+                        placeholder="onbekend" aria-label="Valuta (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { currency: e.target.value.toUpperCase() })} />
+                    </label>{" "}
+                    <label>
+                      Btw{" "}
+                      <input className="saldo-input" type="number" step={0.01} min={0} value={p.vat}
+                        placeholder="onbekend" aria-label="Btw (n8n)"
+                        onChange={(e) => patchRow(p.messageId, { vat: e.target.value })} />
+                    </label>{" "}
+                    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => confirmRow(p)}>
+                      Bevestigen
+                    </button>{" "}
+                    <button type="button" className="btn" disabled={busy} onClick={() => rejectRow(p)}>
+                      Verwerpen
+                    </button>
+                  </div>
+                  {!p.dueDate && (
+                    <p className="cell-sub">
+                      Geen vervaldatum gevonden — vul hem zelf in. LaVega verzint er geen
+                      betaaltermijn bij.
+                    </p>
+                  )}
+                  {!p.currency && (
+                    <p className="cell-sub">
+                      Geen valuta gevonden — vul hem zelf in. LaVega boekt niets in euro&apos;s
+                      omdat de factuur toevallig geen valuta noemde.
+                    </p>
+                  )}
+                  {p.vat === "" && (
+                    <p className="cell-sub">Btw stond niet in de factuur; leeg blijft “onbekend”, niet €&nbsp;0,00.</p>
+                  )}
+                  {rowErrors[p.messageId] && <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="ai-extract" style={{ marginBottom: "var(--sp-3)" }}>
         <label>

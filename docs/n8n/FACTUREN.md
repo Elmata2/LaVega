@@ -66,8 +66,10 @@ toevoegen.
 2. **Activeer de workflow** (schakelaar rechtsboven). Een webhook werkt alleen
    in een actieve workflow — in de test-modus luistert hij maar één keer.
 3. Kopieer de **Production URL** van de webhook.
-4. Zet die URL en dat token straks in LaVega onder *Koppelingen*. LaVega bewaart
-   beide lokaal, net als je andere instellingen.
+4. Zet die URL en dat token in LaVega onder *Koppelingen* — dat scherm bestaat
+   nu. LaVega bewaart beide lokaal, net als je andere instellingen. Daarna haal
+   je de rij op met **Ophalen uit n8n** in *Facturen*, en bevestig je hem regel
+   voor regel.
 
 De node staat ingesteld op `allowedOrigins: https://lavega.dev,
 http://localhost:5173`. Draai je LaVega op een andere poort, pas dat dan aan,
@@ -108,9 +110,13 @@ Twee instellingen waar dit zonder mankeren op stukloopt:
 - Een regel zonder bedrag wordt geweigerd. Een verzonnen factuur in een
   boekhouding is erger dan een gemiste factuur.
 - Aanmaningen en orderbevestigingen zonder bedrag gelden niet als factuur.
-- Nog te bouwen in LaVega: het scherm *Koppelingen* voor URL en token, en de
-  bevestigingsrij in *Facturen*. Tot dan levert de webhook wel, maar heeft
-  LaVega nog geen knop om hem op te halen.
+- De rij die je nog niet hebt afgehandeld staat alleen in het geheugen van de
+  pagina. De webhook leegt zichzelf bij het ophalen, dus **na een herlaadbeurt of
+  Vergrendel is hij weg** en komt hij niet terug. Handel hem af in één zitting.
+- Leest het model geen valuta van de factuur, dan blijft die leeg en kun je de
+  regel pas bevestigen als je hem invult. Er wordt niet stilzwijgend EUR van
+  gemaakt: een dollarfactuur die als euro geboekt wordt is een verkeerd bedrag in
+  je boekhouding, en niets zou je daarvoor waarschuwen.
 
 ---
 

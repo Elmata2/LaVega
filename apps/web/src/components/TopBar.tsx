@@ -16,6 +16,7 @@ const VIEW_TITLES: Record<View, string> = {
   belasting: "Belasting",
   facturen: "Facturen",
   punten: "Punten",
+  koppelingen: "Koppelingen",
   backup: "Back-up",
 };
 

@@ -208,6 +208,13 @@ function planConversion(accounts: Account[], best: SpendOption | null, facts: re
   };
 }
 
+/** Euros the Dutch way — "€ 5,00", matching what the UI's own formatter prints
+ *  next to it. Done by hand rather than with Intl so core stays deterministic
+ *  across environments. */
+function euro(n: number): string {
+  return `€ ${n.toFixed(2).replace(".", ",")}`;
+}
+
 /** One complete way to get €1.000 from where it sits now into a payment in the
  *  destination currency. Ranking JOURNEYS instead of cards is the whole point:
  *  ranking cards prices only the last leg, so "move it to Revolut first" always
@@ -333,7 +340,7 @@ export function journeyHeadline(journeys: readonly Journey[], currency: string |
       ? ""
       : best.costOnReference === 0
         ? " Dat kost je niets op €1.000."
-        : ` Dat kost €${best.costOnReference.toFixed(2)} op €1.000.`;
+        : ` Dat kost ${euro(best.costOnReference)} op € 1.000.`;
   const versus = versusNote(saving, runnerUp);
   return `${head}${cost}${versus}`;
 }
@@ -342,7 +349,7 @@ export function journeyHeadline(journeys: readonly Journey[], currency: string |
  *  to name; a saving of zero is not worth a clause. */
 function versusNote(saving: number | null, runnerUp: Journey | undefined): string {
   if (saving === null || !runnerUp || saving <= 0) return "";
-  return ` Dat is €${saving.toFixed(2)} goedkoper dan ${runnerUp.via === null ? `direct met ${runnerUp.provider}` : `via ${runnerUp.via}`}.`;
+  return ` Dat is ${euro(saving)} goedkoper dan ${runnerUp.via === null ? `direct met ${runnerUp.provider}` : `via ${runnerUp.via}`}.`;
 }
 
 /** The single combined answer: where to keep it, where to convert it, what to
