@@ -69,32 +69,35 @@ function click(el: HTMLElement) {
   });
 }
 
-test("the picker toggles a module into the nav and back out again", () => {
+test("the picker toggles a module out of the nav and back in again", () => {
+  // Everything starts on, so decluttering means switching OFF what you do not
+  // want — an existing install must never open with its tabs missing.
   render();
-  expect(navLabels()).not.toContain("Valuta");
-
-  click(toggle("Valuta"));
   expect(navLabels()).toContain("Valuta");
-  expect(toggle("Valuta").getAttribute("aria-checked")).toBe("true");
 
   click(toggle("Valuta"));
   expect(navLabels()).not.toContain("Valuta");
   expect(toggle("Valuta").getAttribute("aria-checked")).toBe("false");
+
+  click(toggle("Valuta"));
+  expect(navLabels()).toContain("Valuta");
+  expect(toggle("Valuta").getAttribute("aria-checked")).toBe("true");
 });
 
 test("the selection survives a reload — it is a local preference, not React state", () => {
   render();
   click(toggle("Punten"));
-  expect(navLabels()).toContain("Punten");
+  expect(navLabels()).not.toContain("Punten");
 
-  // What a reload actually reads back.
-  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).toContain("punten");
+  // What a reload actually reads back: the choice is stored, and it is the
+  // ABSENCE of "punten" that has to survive.
+  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).not.toContain("punten");
 
   // Tear the whole tree down and mount a fresh one, as a reload would.
   act(() => root!.unmount());
   container!.remove();
   render();
-  expect(navLabels()).toContain("Punten");
+  expect(navLabels()).not.toContain("Punten");
 });
 
 test("Overzicht cannot be switched off — an app with no home is a broken app", () => {

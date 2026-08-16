@@ -40,11 +40,6 @@ export type ModuleDef = {
  *  in the nav and its toggle is disabled. */
 export const HOME_MODULE: ModuleId = "overview";
 
-/** What the nav holds before the owner has picked anything — his own words:
- *  "Stays in the nav: Overzicht, Forecast, and whatever the user switches on."
- *  Every other module starts off and is one toggle away in the profile. */
-export const DEFAULT_MODULES: ModuleId[] = ["overview", "forecast"];
-
 function Icon({ children }: { children: ReactNode }) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -264,6 +259,16 @@ export const MODULES: ModuleDef[] = [
     ),
   },
 ];
+
+/** What the nav holds before the owner has picked anything: everything.
+ *
+ *  Starting with only Overzicht + Forecast matched his sentence literally, but
+ *  it emptied the nav of an EXISTING install on the next load, which reads as
+ *  the app having lost its tabs rather than as an invitation to choose.
+ *  Decluttering by switching OFF what you do not want reaches the same end state
+ *  and never looks like a fault. Declared after MODULES because it is derived
+ *  from it — the registry stays the single list. */
+export const DEFAULT_MODULES: ModuleId[] = MODULES.map((m) => m.id);
 
 const KNOWN = new Set<string>(MODULES.map((m) => m.id));
 
