@@ -1,0 +1,284 @@
+/* Chart chrome — the shared look of every graph in the app (BACKLOG item 6:
+ * "graphs in the style of the Hercules weight-trend charts: clean, sleek,
+ * readable at a glance").
+ *
+ * Two components use these rules: components/TrendChart.tsx (a smooth line with
+ * a hover/tap readout) and components/CategoryBars.tsx (side-by-side bars with
+ * a period control). Both share the same gridlines, legend, axis ticks and
+ * readout so a trend and a comparison read as one system.
+ *
+ * The layout contract both components follow:
+ *   .lv-chart / .lv-bars           the whole graph (readout · plot · x-axis)
+ *     .lv-chart-plot               fixed CSS-pixel height, position: relative
+ *       .lv-chart-tick             value labels, in the left gutter
+ *       .lv-chart-area             the drawing box — left:x% / top:y% inside
+ *                                  here always means x/y% OF THE CHART
+ * Only .lv-chart-area contains geometry, so switching the axis gutter on never
+ * moves a single data point.
+ *
+ * Every colour is an existing token; nothing here introduces a palette. */
+
+.lv-chart,
+.lv-bars {
+  /* Width of the value-label gutter. 0 until a chart asks for an axis. */
+  --lv-axis-w: 0px;
+  display: block;
+  min-width: 0;
+}
+.lv-chart-withaxis {
+  --lv-axis-w: 3.6rem;
+}
+
+/* ---------- Readout (the number the chart is about) ---------- */
+
+.lv-chart-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sp-3);
+  min-height: 3rem;
+}
+.lv-chart-readout-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Plot ---------- */
+
+.lv-chart-plot,
+.lv-bars-plot {
+  position: relative;
+  width: 100%;
+}
+.lv-chart-area {
+  position: absolute;
+  inset: 0 0 0 var(--lv-axis-w);
+}
+
+.lv-chart-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Quiet dashed gridlines, the reference's register. */
+.lv-chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--line);
+  pointer-events: none;
+}
+
+/* Value labels in the left gutter, vertically centred on their gridline. */
+.lv-chart-tick {
+  position: absolute;
+  left: 0;
+  width: var(--lv-axis-w);
+  transform: translateY(-50%);
+  padding-right: var(--sp-2);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---------- Trend line: cursor, dot, marker, reference label ---------- */
+
+.lv-chart-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid var(--line);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.lv-chart-cursor[data-active="on"] {
+  opacity: 1;
+}
+
+.lv-chart-dot {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2.5px solid var(--accent);
+  pointer-events: none;
+}
+
+/* An always-on annotation, e.g. the week the forecast dips below the buffer. */
+.lv-chart-mark {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lv-chart-reflabel {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  border-radius: var(--pill);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--warn);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The pointer surface sits on top of everything and captures nothing else. */
+.lv-chart-hit {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+}
+
+/* ---------- X axis (HTML, so it never scales with the drawing) ---------- */
+
+.lv-chart-xaxis {
+  position: relative;
+  height: 1.1rem;
+  margin: 6px 0 0 var(--lv-axis-w);
+}
+.lv-chart-xlabel {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* The first and last labels hug the edges instead of hanging off the card. */
+.lv-chart-xlabel:first-child {
+  transform: none;
+}
+.lv-chart-xlabel:last-child {
+  transform: translateX(-100%);
+}
+
+/* ---------- Legend (shared) ---------- */
+
+.lv-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.lv-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lv-chart-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* ---------- Side-by-side bars ---------- */
+
+.lv-bars-groups {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.lv-bars-group {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.lv-bar {
+  flex: 1;
+  min-width: 0;
+  /* Wide enough to read with twelve months in the window, capped so a
+   * three-month window is not two lonely posts in a wide card. */
+  max-width: 26px;
+  border-radius: 4px 4px 2px 2px;
+  /* A zero-height bar would vanish; a hairline says "measured, and it's ~0". */
+  min-height: 2px;
+  transition: height 0.18s ease;
+}
+
+.lv-bars-xaxis {
+  display: flex;
+  margin: 6px 0 0 var(--lv-axis-w);
+  gap: 2px;
+}
+.lv-bars-xaxis span {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  /* Category names are long; the full name stays in the title attribute. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Phone ---------- */
+
+@media (max-width: 900px) {
+  /* One column means every chart gets the full width, so the readout can grow
+   * into the big-number register the mobile reference uses. */
+  .lv-chart-readout-value {
+    font-size: 1.9rem;
+  }
+  .lv-chart-withaxis {
+    --lv-axis-w: 3rem;
+  }
+  .lv-chart-tick,
+  .lv-chart-xlabel,
+  .lv-bars-xaxis span {
+    font-size: 0.62rem;
+  }
+  .lv-bar {
+    max-width: 18px;
+  }
+}
+
+/* Twelve months in a phone-width card leave about 17px per label and "sep"
+ * needs 18, so every month ellipsised to "s…". Print every other one and let it
+ * overflow into the blanked neighbour: the cells all stay, so a label is still
+ * centred under its own pair of bars. Hiding alone would not have worked —
+ * visibility:hidden keeps the cell's width, so the visible labels gained
+ * nothing. Only below 620px; a two-column tablet card fits all twelve. */
+@media (max-width: 620px) {
+  .lv-bars-many span {
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .lv-bars-many span:nth-child(even) {
+    visibility: hidden;
+  }
+}

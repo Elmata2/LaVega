@@ -144,7 +144,7 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
                 {euro(o.monthlyCents)}/mnd. Er eentje opzeggen?
               </p>
             ))}
-            <div className="table-wrap">
+            <div className="table-wrap table-cards">
               <table className="table">
                 <thead>
                   <tr>
@@ -159,16 +159,16 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
                 <tbody>
                   {subs.map((s) => (
                     <tr key={s.key}>
-                      <td style={{ fontWeight: 600 }}>{s.name}</td>
-                      <td>
+                      <td data-label="Dienst" style={{ fontWeight: 600 }}>{s.name}</td>
+                      <td data-label="Functie">
                         <span className="badge">{s.function}</span>
                       </td>
-                      <td className="num">{euro(s.monthlyCents)}</td>
-                      <td className="num">{euro(s.lastAmountCents)}</td>
-                      <td className={`num ${s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : ""}`}>
+                      <td className="num" data-label="Per maand">{euro(s.monthlyCents)}</td>
+                      <td className="num" data-label="Laatste bedrag">{euro(s.lastAmountCents)}</td>
+                      <td data-label="Verandering" className={`num ${s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : ""}`}>
                         {s.changePct === 0 ? "—" : `${s.changePct > 0 ? "+" : ""}${Math.round(s.changePct * 100)}%`}
                       </td>
-                      <td className="cell-sub">{s.lastDate}</td>
+                      <td className="cell-sub" data-label="Laatst">{s.lastDate}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -211,7 +211,7 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
           </p>
         )}
 
-        <div className="table-wrap">
+        <div className="table-wrap table-cards">
           <table className="table">
             <thead>
               <tr>
@@ -232,16 +232,16 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
                     : 0;
                 return (
                   <tr key={ar.account.key}>
-                    <td>
+                    <td data-label="Rekening">
                       <div style={{ fontWeight: 600 }}>{ar.account.bank || ar.account.name}</div>
                       <div className="cell-sub">{ar.account.name}</div>
                     </td>
-                    <td className="num">{ar.account.balance === null ? "—" : euro(ar.balanceCents)}</td>
-                    <td className="num">
+                    <td className="num" data-label="Saldo">{ar.account.balance === null ? "—" : euro(ar.balanceCents)}</td>
+                    <td className="num" data-label="Rente %">
                       <RateCell ar={ar} busy={busy} onCommit={onRateCommit} />
                     </td>
-                    <td className="cell-sub">{SOURCE_LABEL[ar.source]}</td>
-                    <td className="num">{gain > 0 ? <span className="text-warn">+{euro(gain)}</span> : "—"}</td>
+                    <td className="cell-sub" data-label="Bron">{SOURCE_LABEL[ar.source]}</td>
+                    <td className="num" data-label="Mogelijk/jr">{gain > 0 ? <span className="text-warn">+{euro(gain)}</span> : "—"}</td>
                   </tr>
                 );
               })}
@@ -253,7 +253,7 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
           <summary className="eyebrow">
             Vergelijkingsrentes ({rates.rates.length} banken) · {RATES_SOURCE_LABEL[rates.source]} · peildatum {rates.asOf}
           </summary>
-          <div className="table-wrap">
+          <div className="table-wrap table-cards">
             <table className="table">
               <thead>
                 <tr>
@@ -266,15 +266,15 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
               <tbody>
                 {rates.rates.map((r) => (
                   <tr key={`${r.bank}-${r.product}`}>
-                    <td>
+                    <td data-label="Bank">
                       <div style={{ fontWeight: 600 }}>{r.bank}</div>
                       <div className="cell-sub">{r.product}</div>
                     </td>
-                    <td className="num text-pos">{pct(r.ratePct)}</td>
-                    <td className="num cell-sub">
+                    <td className="num text-pos" data-label="Rente nu">{pct(r.ratePct)}</td>
+                    <td className="num cell-sub" data-label="Standaard">
                       {r.standardRatePct !== undefined && r.standardRatePct !== r.ratePct ? pct(r.standardRatePct) : "—"}
                     </td>
-                    <td>{r.promoNote ? <span className="badge">🎁 {r.promoNote}</span> : <span className="cell-sub">—</span>}</td>
+                    <td data-label="Actie">{r.promoNote ? <span className="badge">🎁 {r.promoNote}</span> : <span className="cell-sub">—</span>}</td>
                   </tr>
                 ))}
               </tbody>

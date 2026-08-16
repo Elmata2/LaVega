@@ -1,0 +1,245 @@
+/* Homescreen blocks — the styles the individual modules need on top of the
+ * module primitive (styles/modules.css).
+ *
+ * Only what a block actually renders lives here; anything already in base.css
+ * (.tx-list, .cat-list, .position-rows, .card-link, .eyebrow, .dot, .badge,
+ * .text-pos/-neg/-warn) is reused as-is. Every colour is a token — no new
+ * palette, per BACKLOG item 6 ("keep the current colours, change the layout").
+ *
+ * Each block is a separate file under components/blocks/, so its rules are
+ * grouped under a heading with the same name and a block can be dropped
+ * without leaving orphan CSS behind. */
+
+/* ---------- Shared ---------- */
+
+/* Opt out of the grid's min-height. For a full-width block whose content is a
+ * few lines (Aandacht with nothing to report), the reserved height is dead
+ * space rather than a shape the eye needs. */
+.module-hug {
+  min-height: 0;
+}
+
+/* Empty state inside a module body: never a blank card, always a sentence. */
+.block-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* A label/value line under a big figure (e.g. "Rekeningen  4"). */
+.block-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.block-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.block-stat-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.block-stat-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- AandachtBlock ---------- */
+
+.alert-rows {
+  display: flex;
+  flex-direction: column;
+}
+.alert-row {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.alert-row:first-child {
+  padding-top: 0;
+}
+.alert-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.alert-row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 600;
+}
+
+/* The buffer editor sits in the module's control slot, so it has to read as a
+ * control rather than a form field. */
+.buffer-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+/* Modules.css sizes the control slot for a pill; a whole labelled input is
+ * wider than a phone-width card and pushed the page sideways (measured: 31px
+ * of horizontal overflow at 390px). Let this module's header wrap instead. */
+.module-head-wrap .module-head {
+  flex-wrap: wrap;
+}
+.module-head-wrap .module-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.module-head-wrap .buffer-field {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  white-space: normal;
+}
+.module-head-wrap .buffer-field .saldo-input {
+  width: 5rem;
+}
+
+/* ---------- StatistiekBlock ---------- */
+
+.stat-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.stat-figure {
+  min-width: 0;
+}
+.stat-figure .module-figure-value {
+  font-size: 1.6rem;
+}
+/* The chart itself (bars, legend, month labels, value axis) is the shared
+ * CategoryBars component — styles/charts.css. Nothing block-specific left. */
+
+/* ---------- RecenteTransactiesBlock ---------- */
+
+/* The reference's per-row category chip. Neutral by design: the amount already
+ * carries the money colour, so a coloured chip would compete with it. */
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.tx-chip-button {
+  cursor: pointer;
+}
+.tx-chip-button:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.tx-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: none;
+}
+
+/* ---------- BetaalschemaBlock ---------- */
+
+.pay-list {
+  display: flex;
+  flex-direction: column;
+}
+.pay-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.pay-row:first-child {
+  padding-top: 0;
+}
+.pay-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+/* The reference's little date tile. Warn-tinted once the date has passed. */
+.pay-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 42px;
+  padding: 4px 0;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  line-height: 1.1;
+}
+.pay-date-overdue {
+  background: rgba(176, 120, 30, 0.12);
+  border-color: rgba(176, 120, 30, 0.35);
+}
+.pay-date-day {
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.pay-date-month {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.pay-info {
+  flex: 1;
+  min-width: 0;
+}
+.pay-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pay-amount {
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- TopUitgavenBlock ---------- */
+
+/* The figures line (share · amount · Δ · "vs. gem.") is nowrap in base.css, so
+ * on a very narrow phone it ran up to 64px past the card (measured at 320px).
+ * Let the row and the figures wrap; the category name keeps the first line. */
+@media (max-width: 520px) {
+  .cat-row-top {
+    flex-wrap: wrap;
+  }
+  .cat-fig {
+    flex-wrap: wrap;
+    white-space: normal;
+    row-gap: 2px;
+  }
+}
+
+/* ---------- PositieBlock ---------- */
+
+/* At one column per row the sparkline is the first thing worth dropping —
+ * the name and the balance are the information. */
+@media (max-width: 520px) {
+  .position-row .sparkline {
+    display: none;
+  }
+}

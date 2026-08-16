@@ -194,7 +194,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
       {accounts.length === 0 ? (
         <p>Nog geen rekeningen — importeer eerst een bestand.</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap table-cards">
           <table className="table">
             <thead>
               <tr>
@@ -211,7 +211,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                 const type = accountType(account);
                 return (
                   <tr key={account.key}>
-                    <td>
+                    <td data-label="Bank">
                       <NameCell
                         account={account}
                         busy={busy}
@@ -219,7 +219,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                         onCommit={onAccountCommit}
                       />
                     </td>
-                    <td>
+                    <td data-label="Type">
                       <select
                         aria-label={`Type ${account.name}`}
                         value={type}
@@ -236,7 +236,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                         ))}
                       </select>
                     </td>
-                    <td>
+                    <td data-label="Entiteit">
                       <input
                         value={account.entity}
                         placeholder="—"
@@ -245,10 +245,10 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                         disabled={busy}
                       />
                     </td>
-                    <td className="num">
+                    <td className="num" data-label="Saldo">
                       <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
                     </td>
-                    <td className="num">
+                    <td className="num" data-label="Transacties">
                       <button
                         type="button"
                         className="card-link"
@@ -259,7 +259,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                         {txCount}
                       </button>
                     </td>
-                    <td className="num">
+                    <td className="num" data-label="">
                       <ConfirmAction
                         label="Verwijder"
                         question={

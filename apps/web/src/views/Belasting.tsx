@@ -107,7 +107,7 @@ export default function Belasting({
         <p>Nog geen entiteiten — importeer eerst rekeningen.</p>
       ) : (
         <>
-          <div className="table-wrap">
+          <div className="table-wrap table-cards">
             <table className="table">
               <thead>
                 <tr>
@@ -127,8 +127,8 @@ export default function Belasting({
                   const preview = computeVatSetAside(entityTxs(entity), s, asOf);
                   return (
                     <tr key={entity}>
-                      <td>{entity}</td>
-                      <td>
+                      <td data-label="Entiteit">{entity}</td>
+                      <td data-label="Frequentie">
                         <select
                           value={s.frequency}
                           disabled={busy}
@@ -142,7 +142,7 @@ export default function Belasting({
                           ))}
                         </select>
                       </td>
-                      <td>
+                      <td data-label="BTW %">
                         <input
                           className="saldo-input"
                           type="number"
@@ -156,7 +156,7 @@ export default function Belasting({
                           }
                         />
                       </td>
-                      <td>
+                      <td data-label="Gemengd">
                         <input
                           type="checkbox"
                           checked={s.mixedRates}
@@ -165,7 +165,7 @@ export default function Belasting({
                           onChange={(e) => patch(entity, { mixedRates: e.target.checked })}
                         />
                       </td>
-                      <td>
+                      <td data-label="Handmatig €">
                         <input
                           className="saldo-input"
                           type="number"
@@ -182,12 +182,12 @@ export default function Belasting({
                           }
                         />
                       </td>
-                      <td>
+                      <td data-label="Volgende deadline">
                         <span className="cell-sub">{periodLabel}</span>
                         <br />
                         {deadline}
                       </td>
-                      <td className={preview ? "text-neg" : ""}>
+                      <td data-label="Geschat opzij" className={preview ? "text-neg" : ""}>
                         {preview ? formatEuro(preview.amountCents / 100) : "—"}
                       </td>
                     </tr>

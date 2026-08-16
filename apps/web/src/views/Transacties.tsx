@@ -198,7 +198,7 @@ export default function Transacties({
             "Sla over", en bevestig. Toegepaste categorieën worden ook als regel opgeslagen voor
             volgende imports.
           </p>
-          <div className="table-wrap">
+          <div className="table-wrap table-cards">
             <table className="table">
               <thead>
                 <tr>
@@ -211,14 +211,14 @@ export default function Transacties({
               <tbody>
                 {proposals.map((p, i) => (
                   <tr key={p.tx.id}>
-                    <td>{p.tx.counterparty}</td>
-                    <td>{p.tx.description}</td>
-                    <td>
+                    <td data-label="Tegenpartij">{p.tx.counterparty}</td>
+                    <td data-label="Omschrijving">{p.tx.description}</td>
+                    <td data-label="Bedrag">
                       <span className={p.tx.amount >= 0 ? "text-pos" : "text-neg"}>
                         {formatEuro(p.tx.amount)}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Categorie">
                       <select
                         value={p.category}
                         aria-label={`Categorie voor ${p.tx.counterparty}`}
@@ -258,74 +258,73 @@ export default function Transacties({
           yielded 0 rows with no explanation. The scope pill already constrains
           to that entity, so hide this filter while scoped; show it only for
           "Alle bedrijven" (entityScope === ""). */}
-      {entityScope === "" && (
+      {/* One wrapping row of fields rather than inline labels separated by
+          spaces: at phone width the old layout ran the six controls into each
+          other and pushed the page sideways. */}
+      <div className="filter-bar">
+        {entityScope === "" && (
+          <label>
+            Entiteit{" "}
+            <select value={fEntity} onChange={(e) => onFEntityChange(e.target.value)}>
+              <option value="">Alle entiteiten</option>
+              {entityOptions.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
-          Entiteit{" "}
-          <select value={fEntity} onChange={(e) => onFEntityChange(e.target.value)}>
-            <option value="">Alle entiteiten</option>
-            {entityOptions.map((e) => (
-              <option key={e} value={e}>
-                {e}
+          Rekening{" "}
+          <select value={fAccount} onChange={(e) => onFAccountChange(e.target.value)}>
+            <option value="">Alle rekeningen</option>
+            {accounts.map((a) => (
+              <option key={a.key} value={a.key}>
+                {a.bank} · {a.key}
               </option>
             ))}
           </select>
         </label>
-      )}
-      <label>
-        Rekening{" "}
-        <select value={fAccount} onChange={(e) => onFAccountChange(e.target.value)}>
-          <option value="">Alle rekeningen</option>
-          {accounts.map((a) => (
-            <option key={a.key} value={a.key}>
-              {a.bank} · {a.key}
-            </option>
-          ))}
-        </select>
-      </label>
-      {" "}
-      <label>
-        Categorie{" "}
-        <select value={fCategory} onChange={(e) => onFCategoryChange(e.target.value)}>
-          <option value="">Alle categorieën</option>
-          {/* Keep a selected category visible even if the other filters leave it
-              with zero rows (so the dropdown reflects state, e.g. after a click
-              from Overzicht + a scope change). */}
-          {fCategory && !categoryOptions.includes(fCategory) && (
-            <option value={fCategory}>{fCategory}</option>
-          )}
-          {categoryOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      {" "}
-      <label>
-        Zoeken{" "}
-        <input
-          value={fSearch}
-          onChange={(e) => onFSearchChange(e.target.value)}
-          placeholder="Tegenpartij of omschrijving"
-        />
-      </label>
-      {" "}
-      <label>
-        Van{" "}
-        <input type="date" value={fFrom} onChange={(e) => onFFromChange(e.target.value)} />
-      </label>
-      {" "}
-      <label>
-        Tot{" "}
-        <input type="date" value={fTo} onChange={(e) => onFToChange(e.target.value)} />
-      </label>
+        <label>
+          Categorie{" "}
+          <select value={fCategory} onChange={(e) => onFCategoryChange(e.target.value)}>
+            <option value="">Alle categorieën</option>
+            {/* Keep a selected category visible even if the other filters leave it
+                with zero rows (so the dropdown reflects state, e.g. after a click
+                from Overzicht + a scope change). */}
+            {fCategory && !categoryOptions.includes(fCategory) && (
+              <option value={fCategory}>{fCategory}</option>
+            )}
+            {categoryOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="filter-grow">
+          Zoeken{" "}
+          <input
+            value={fSearch}
+            onChange={(e) => onFSearchChange(e.target.value)}
+            placeholder="Tegenpartij of omschrijving"
+          />
+        </label>
+        <label>
+          Van <input type="date" value={fFrom} onChange={(e) => onFFromChange(e.target.value)} />
+        </label>
+        <label>
+          Tot <input type="date" value={fTo} onChange={(e) => onFToChange(e.target.value)} />
+        </label>
+      </div>
 
       <p>{rows.length} transacties</p>
 
       {rows.length === 0 ? (
         <p>Geen transacties.</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap table-cards">
           <table className="table">
             <thead>
               <tr>
@@ -341,17 +340,17 @@ export default function Transacties({
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td>{t.date}</td>
-                  <td>{t.counterparty}</td>
-                  <td>{t.description}</td>
-                  <td>{t.bank} · {t.accountKey}</td>
-                  <td>
+                  <td data-label="Datum">{t.date}</td>
+                  <td data-label="Tegenpartij">{t.counterparty}</td>
+                  <td data-label="Omschrijving">{t.description}</td>
+                  <td data-label="Rekening">{t.bank} · {t.accountKey}</td>
+                  <td data-label="Bedrag">
                     <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
                       {formatEuro(t.amount)}
                     </span>
                   </td>
-                  <td>{t.entity}</td>
-                  <td>{categorize(t, rules, own)}</td>
+                  <td data-label="Entiteit">{t.entity}</td>
+                  <td data-label="Categorie">{categorize(t, rules, own)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import type { View } from "../App";
 
+/* The app bar: brand, the tab set as a horizontal pill rail (the reference
+ * dashboard's signature nav), and the lock control on the right. Replaces the
+ * old left sidebar — the desktop reference puts navigation on top and gives the
+ * full width to the module grid. The rail scrolls horizontally rather than
+ * wrapping, so all eleven tabs stay reachable on a phone (where the old
+ * sidebar hid the lock button entirely). */
+
 type IconProps = { children: ReactNode };
 function Icon({ children }: IconProps) {
   return (
@@ -101,21 +108,21 @@ const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "backup", label: "Back-up" },
 ];
 
-type SidebarProps = {
+type NavBarProps = {
   view: View;
   onNavigate: (view: View) => void;
   onLock: () => void;
 };
 
-export default function Sidebar({ view, onNavigate, onLock }: SidebarProps) {
+export default function NavBar({ view, onNavigate, onLock }: NavBarProps) {
   return (
-    <aside className="sidebar">
+    <header className="appbar">
       <div className="brand">
         <span className="dot dot-pos" aria-hidden="true" />
         <span>LaVega</span>
       </div>
 
-      <nav className="nav" aria-label="Weergaven">
+      <nav className="navrail" aria-label="Weergaven">
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
@@ -132,8 +139,9 @@ export default function Sidebar({ view, onNavigate, onLock }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="sidebar-footer">
-        <button type="button" className="nav-item" onClick={onLock}>
+      <div className="appbar-right">
+        <span className="identity-card">Lokaal · privé</span>
+        <button type="button" className="appbar-lock" onClick={onLock}>
           <span className="nav-icon" aria-hidden="true">
             <Icon>
               <rect x="4" y="11" width="16" height="9" rx="2" />
@@ -142,8 +150,7 @@ export default function Sidebar({ view, onNavigate, onLock }: SidebarProps) {
           </span>
           <span>Vergrendel</span>
         </button>
-        <div className="identity-card">Lokaal · privé</div>
       </div>
-    </aside>
+    </header>
   );
 }

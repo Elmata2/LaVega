@@ -27,6 +27,7 @@
 
   /* Radius — larger, softer than before */
   --r-lg: 26px; /* the floating app frame */
+  --r-card: 22px; /* module cards on the homescreen grid */
   --r: 18px; /* cards */
   --r-sm: 12px; /* inputs, chips, small controls */
   --pill: 999px;
@@ -49,6 +50,13 @@
   --shadow-float: 0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
 
   /* Layout */
-  --sidebar-w: 216px;
   --frame-gap: 14px; /* gutter around the floating app */
+
+  /* Module grid — the homescreen layout language. A block declares a span
+   * (1/2/3 columns) and a height (short/tall); the grid places it. Adding a
+   * block is one <Module span=…> line, never a layout rewrite. */
+  --grid-gap: var(--sp-5);
+  --module-h-short: 200px;
+  --module-h-tall: 360px;
+  --module-pad: var(--sp-5);
 }

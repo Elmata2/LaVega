@@ -1,0 +1,222 @@
+/* Module system — the homescreen's building blocks (BACKLOG item 6).
+ *
+ * Layout language borrowed from Alexander's reference dashboards: white cards
+ * with a generous radius floating on the soft canvas, an uppercase
+ * letter-spaced title, a period control and a "…" menu on the right, and a big
+ * number with a coloured delta pill. The palette is LaVega's own — every value
+ * below is a token from tokens.css, no colour is introduced here.
+ *
+ * The grid is modular on purpose: a block declares `span` (1/2/3 columns) and
+ * `height` (short/tall) and the grid places it. See module-grid.ts; the rules
+ * below are pinned by module-grid.test.ts. */
+
+/* ---------- Grid ---------- */
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  align-items: start;
+  margin-bottom: var(--sp-5);
+}
+
+.module-span-1 {
+  grid-column: span 1;
+}
+.module-span-2 {
+  grid-column: span 2;
+}
+.module-span-3 {
+  grid-column: 1 / -1;
+}
+
+.module-short {
+  min-height: var(--module-h-short);
+}
+.module-tall {
+  min-height: var(--module-h-tall);
+}
+
+/* ---------- Module card ---------- */
+
+.module {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: var(--module-pad);
+  box-shadow: var(--shadow-sm);
+}
+
+.module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 32px;
+  margin-bottom: var(--sp-4);
+}
+
+/* Uppercase, letter-spaced, mono — the reference's card title register. */
+.module-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.module-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+/* Period control ("Week ▾") — a pill select on the nested surface. */
+.module-period {
+  appearance: none;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 0.8rem;
+  padding: 6px 26px 6px 14px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 10px) 52%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.module-period:hover {
+  border-color: var(--accent);
+}
+
+/* The "…" menu slot. */
+.module-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.module-menu:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.module-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.module-foot {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ---------- Big number + delta pill (reference: "$14,300.00 ↗2.03%") ---------- */
+
+.module-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.module-figure-value {
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.module-figure-label {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.delta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--pill);
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+/* Money semantics, not chart semantics: up = more money out is handled by the
+ * caller choosing the class, so a rising balance and a rising cost can differ. */
+.delta-pill.delta-up {
+  background: rgba(78, 122, 58, 0.12);
+  color: var(--pos);
+}
+.delta-pill.delta-down {
+  background: rgba(176, 68, 46, 0.12);
+  color: var(--neg);
+}
+.delta-pill.delta-flat {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/* ---------- Breakpoints: the grid collapses, spans clamp to full width ---------- */
+
+@media (max-width: 1200px) {
+  .module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .module-span-2,
+  .module-span-3 {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .module-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .module-span-1,
+  .module-span-2,
+  .module-span-3 {
+    grid-column: 1 / -1;
+  }
+  /* One column of stacked cards: a fixed tall height only adds dead space. */
+  .module-tall {
+    min-height: var(--module-h-short);
+  }
+  .module {
+    padding: var(--sp-4);
+  }
+  /* The card is full-width now, so the figure keeps its desktop size rather
+   * than shrinking — the mobile reference leads with big numbers. */
+  .module-figure-value {
+    font-size: 2.1rem;
+  }
+  /* A period pill and a "…" button next to a long uppercase title do not fit
+   * one phone-width line; let the header wrap instead of squeezing the title. */
+  .module-head {
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+}

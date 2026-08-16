@@ -1,5 +1,10 @@
 import type { View } from "../App";
 
+/* The greeting/title row, straight from the desktop reference: one large line
+ * naming where you are, a muted eyebrow above it, and the filter controls on
+ * the right. The eyebrow now reflects the active company scope instead of
+ * always claiming "Alle bedrijven". */
+
 const VIEW_TITLES: Record<View, string> = {
   overview: "Overzicht",
   transactions: "Transacties",
@@ -23,9 +28,9 @@ type TopBarProps = {
 
 export default function TopBar({ view, entityScope, onEntityScopeChange, entityOptions }: TopBarProps) {
   return (
-    <header className="topbar">
+    <div className="topbar">
       <div className="topbar-left">
-        <div className="eyebrow">LaVega · Alle bedrijven</div>
+        <div className="eyebrow">LaVega · {entityScope || "Alle bedrijven"}</div>
         <h1 className="topbar-title">{VIEW_TITLES[view]}</h1>
       </div>
 
@@ -50,6 +55,6 @@ export default function TopBar({ view, entityScope, onEntityScopeChange, entityO
           </button>
         ))}
       </div>
-    </header>
+    </div>
   );
 }

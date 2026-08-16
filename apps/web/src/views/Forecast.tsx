@@ -2,6 +2,7 @@ import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
 import { forecastCashflow } from "@lavega/core";
 import { formatEuro } from "../format";
 import { bannerState, isThinData, splitDrivers, type BannerState } from "../forecast-view";
+import TrendChart, { type TrendPoint } from "../components/TrendChart";
 
 type ForecastProps = {
   txs: Tx[];
@@ -103,17 +104,14 @@ function ForecastBanner({
   );
 }
 
-const CHART_W = 640;
-const CHART_H = 220;
-const PAD_L = 56;
-const PAD_R = 12;
-const PAD_TOP = 14;
-const PAD_BOTTOM = 30;
-
-/** 13-week cashflow chart: median line + filled P-band + a dashed buffer(0)
- *  line, plotted over 14 columns ("nu" = asOf/opening, then the 13 weekly
- *  points). All scaling below is guarded against NaN/empty input (range and
- *  point-count fallbacks), matching Overzicht's CashflowMiniChart. */
+/** 13-week cashflow chart: median line + filled P-band + a dashed buffer line,
+ *  over 14 points ("nu" = asOf/opening, then the 13 weekly points).
+ *
+ *  Since U3 this is the shared TrendChart — the same component the Overzicht
+ *  cashflow module draws, here with the value axis switched on. That removed
+ *  the third copy of the x/y scaling in this app, and with it the hardcoded
+ *  rgba(78,122,58,0.13) band colour, which was the one colour in the charts
+ *  that was not a token. */
 function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: LowestPoint | null; bufferCents: number }) {
   if (f.openingCents === null) {
     return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
@@ -123,104 +121,57 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
   }
 
   const opening = f.openingCents;
-  const median = [opening, ...f.points.map((p) => p.projectedClosingCents ?? opening)];
-  const lower = [opening, ...f.points.map((p) => p.lowerCents ?? opening)];
-  const upper = [opening, ...f.points.map((p) => p.upperCents ?? opening)];
-  const n = median.length;
-
-  const allValues = [...median, ...lower, ...upper, bufferCents].filter((v) => Number.isFinite(v));
-  const minV = allValues.length > 0 ? Math.min(...allValues) : 0;
-  const maxV = allValues.length > 0 ? Math.max(...allValues) : 1;
-  const range = maxV - minV || 1;
-
-  const innerW = CHART_W - PAD_L - PAD_R;
-  const innerH = CHART_H - PAD_TOP - PAD_BOTTOM;
-  const x = (i: number) => PAD_L + (n <= 1 ? 0 : (i / (n - 1)) * innerW);
-  const y = (v: number) => PAD_TOP + innerH - ((v - minV) / range) * innerH;
-
-  const medianPoints = median.map((v, i) => `${x(i)},${y(v)}`).join(" ");
-  const bandTop = upper.map((v, i) => `${x(i)},${y(v)}`);
-  const bandBottom = lower.map((v, i) => `${x(i)},${y(v)}`).reverse();
-  const bandPath = `M ${[...bandTop, ...bandBottom].join(" L ")} Z`;
-  const bufferY = y(bufferCents);
-
-  const yTicks = [maxV, (maxV + minV) / 2, minV];
-  const xTicks = [
-    { i: 0, label: "nu" },
-    { i: Math.min(4, n - 1), label: "w4" },
-    { i: Math.min(9, n - 1), label: "w9" },
-    { i: n - 1, label: "w13" },
+  const points: TrendPoint[] = [
+    { label: "nu", value: opening / 100 },
+    ...f.points.map((p, i) => ({ label: `w${i + 1}`, value: (p.projectedClosingCents ?? opening) / 100 })),
   ];
-
-  const lowestX = lowest ? x(lowest.columnIndex) : null;
-  const lowestY = lowest ? y(lowest.closingCents) : null;
+  const band = {
+    lower: [opening / 100, ...f.points.map((p) => (p.lowerCents ?? opening) / 100)],
+    upper: [opening / 100, ...f.points.map((p) => (p.upperCents ?? opening) / 100)],
+  };
   const lowestIsShortfall = lowest !== null && f.shortfall !== null && lowest.date === f.shortfall.date;
 
   return (
     <>
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        className="forecast-chart-svg"
-        role="img"
-        aria-label="Verwachte kaspositie komende 13 weken"
-      >
-        {yTicks.map((v, idx) => (
-          <text key={idx} x={PAD_L - 8} y={y(v) + 4} textAnchor="end" fontSize={10} fill="var(--muted)">
-            €{euroNumber(v)}
-          </text>
-        ))}
-        <path d={bandPath} fill="rgba(78, 122, 58, 0.13)" stroke="none" />
-        <line
-          x1={PAD_L}
-          y1={bufferY}
-          x2={CHART_W - PAD_R}
-          y2={bufferY}
-          stroke="var(--warn)"
-          strokeWidth={1.5}
-          strokeDasharray="5 4"
-        />
-        <polyline
-          points={medianPoints}
-          fill="none"
-          stroke="var(--pos)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {lowest && lowestX !== null && lowestY !== null && (
-          <>
-            <circle cx={lowestX} cy={lowestY} r={3.5} fill={lowestIsShortfall ? "var(--neg)" : "var(--pos)"} />
-            <text
-              x={lowestX}
-              y={Math.max(12, lowestY - 10)}
-              textAnchor="middle"
-              fontSize={10}
-              fill={lowestIsShortfall ? "var(--neg)" : "var(--ink)"}
-            >
-              €{euroNumber(lowest.closingCents)}
-            </text>
-          </>
-        )}
-        {xTicks.map((t) => (
-          <text key={t.label} x={x(t.i)} y={CHART_H - 8} textAnchor="middle" fontSize={10} fill="var(--muted)">
-            {t.label}
-          </text>
-        ))}
-      </svg>
+      <TrendChart
+        points={points}
+        band={band}
+        reference={{ value: bufferCents / 100, label: `buffer €${euroNumber(bufferCents)}` }}
+        color={f.shortfall ? "var(--neg)" : "var(--pos)"}
+        format={(v) => `€${wholeEuroFormatter.format(Math.round(v))}`}
+        ariaLabel="Verwachte kaspositie komende 13 weken"
+        readoutLabel="Verwacht saldo"
+        mark={lowest ? { index: lowest.columnIndex, color: lowestIsShortfall ? "var(--neg)" : "var(--pos)" } : null}
+        height={220}
+        showAxis
+      />
 
       <div className="forecast-chart-legend">
         <span className="forecast-chart-legend-item">
-          <span className="forecast-chart-legend-swatch" style={{ background: "var(--pos)" }} aria-hidden="true" />
+          <span
+            className="forecast-chart-legend-swatch"
+            style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
+            aria-hidden="true"
+          />
           Verwacht (mediaan)
         </span>
         <span className="forecast-chart-legend-item">
-          <span className="forecast-chart-legend-swatch" style={{ background: "rgba(78, 122, 58, 0.35)" }} aria-hidden="true" />
+          <span
+            className="forecast-chart-legend-swatch forecast-chart-legend-band"
+            style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
+            aria-hidden="true"
+          />
           Bandbreedte
         </span>
         <span className="forecast-chart-legend-item">
           <span className="forecast-chart-legend-swatch" style={{ background: "var(--warn)" }} aria-hidden="true" />
           Buffer €{euroNumber(bufferCents)}
         </span>
+        {lowest && (
+          <span className="forecast-chart-legend-item">
+            Krapste punt: week {lowest.weekNumber} · €{euroNumber(lowest.closingCents)}
+          </span>
+        )}
       </div>
     </>
   );

@@ -10,11 +10,10 @@ import { hasLegacyData } from "./migrate.js";
 import { getBufferCents, setBufferCents, getHomeCountry } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import { travelFacts } from "./api.js";
-import TravelBlock from "./components/TravelBlock";
 import { buildTabContext } from "./agent/tabContext.js";
 import VaultGate from "./components/VaultGate";
 import ChatWidget from "./components/ChatWidget";
-import Sidebar from "./components/Sidebar";
+import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
@@ -620,7 +619,7 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Sidebar view={view} onNavigate={setView} onLock={handleLock} />
+      <NavBar view={view} onNavigate={setView} onLock={handleLock} />
 
       <div className="shell-body">
         <TopBar
@@ -642,21 +641,6 @@ export default function App() {
           )}
 
           {view === "overview" && (
-            <TravelBlock
-              accounts={scopedAccounts}
-              txs={scopedTxs}
-              rates={rates.rates}
-              facts={facts}
-              asOf={asOf}
-              homeCountry={homeCountry}
-              busy={busy}
-              aiAvailable={llmConfigured}
-              onRefreshTerms={handleRefreshTravelTerms}
-              onCorrectFact={(fact) => void saveFacts([fact])}
-            />
-          )}
-
-          {view === "overview" && (
             <Overzicht
               accounts={currentScopedAccounts}
               txs={scopedTxs}
@@ -668,6 +652,18 @@ export default function App() {
               onBufferChange={handleBufferChange}
               onNavigate={setView}
               onAsk={askAssistant}
+              travel={{
+                accounts: scopedAccounts,
+                txs: scopedTxs,
+                rates: rates.rates,
+                facts,
+                asOf,
+                homeCountry,
+                busy,
+                aiAvailable: llmConfigured,
+                onRefreshTerms: handleRefreshTravelTerms,
+                onCorrectFact: (fact) => void saveFacts([fact]),
+              }}
               onSelectCategory={(c) => {
                 // Match exactly what the Per-categorie totals showed: only the
                 // category filter (plus any active top-bar entity scope); clear

@@ -1,13 +1,14 @@
 import { useState } from "react";
 import type { Account, Tx, LearnedFact, RateBenchmark, TravelPlan } from "@lavega/core";
 import { planTravel, countryCurrency, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND } from "@lavega/core";
-import { formatEuro } from "../format.js";
+import { formatEuro } from "../../format.js";
+import Module from "../Module.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
- * its own draft state. That makes it the first MODULAR block — droppable into a
- * customizable dashboard without dragging App state along with it. */
+ * its own draft state. That made it the first MODULAR block, and it is now one
+ * module among the rest on the homescreen grid. */
 
-type TravelBlockProps = {
+export type TravelBlockProps = {
   accounts: Account[];
   txs: Tx[];
   rates: readonly RateBenchmark[];
@@ -125,10 +126,12 @@ export default function TravelBlock({
       : null;
 
   return (
-    <section className="card" aria-label="Op reis">
-      <div className="card-header">
-        <h2>Op reis</h2>
-        {plan && plan.spend.length > 0 && aiAvailable && (
+    <Module
+      title="Op reis"
+      span={3}
+      height="tall"
+      menu={
+        plan && plan.spend.length > 0 && aiAvailable ? (
           <button type="button" className="card-link" onClick={() => onRefreshTerms(destination)} disabled={busy}>
             {busy
               ? "Bezig…"
@@ -136,9 +139,9 @@ export default function TravelBlock({
                 ? `Zoek voorwaarden (${plan.unknownProviders.length})`
                 : "Ververs voorwaarden"}
           </button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       <div className="travel-controls">
         <label>
           <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>
@@ -153,7 +156,7 @@ export default function TravelBlock({
       </div>
 
       {!plan ? (
-        <p className="cell-sub">Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.</p>
+        <p className="block-empty">Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.</p>
       ) : (
         <div className="travel-plan">
           <div className="travel-step">
@@ -250,6 +253,6 @@ export default function TravelBlock({
           </div>
         </div>
       )}
-    </section>
+    </Module>
   );
 }
