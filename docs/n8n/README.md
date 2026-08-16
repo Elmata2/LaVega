@@ -3,16 +3,45 @@
 `lavega-card-terms.json` haalt per betaalproduct de **eigen tarievenpagina** op,
 laat Claude daar de cijfers uit lezen, en stuurt die naar LaVega.
 
-## Waarom niet gewoon de agent
+## Wie doet wat: fetch én agent, niet fetch óf agent
 
-De reis-agent in LaVega zoekt zelf op internet. Dat werkte voor ING, ABN AMRO en
-American Express, maar Revolut kwam keer op keer leeg terug — en die pagina
-bestaat gewoon. De zwakke stap is niet het *lezen* van een tarief, het is het
-*vinden* ervan. Deze workflow slaat dat over: één vaste URL per product.
+De eerste opzet ging uit van "vinden is de zwakke stap, lezen lukt altijd".
+Gemeten op 2026-08-16 klopt dat niet. Van de acht tariefpagina's laten er maar
+**drie** een gewone HTTP-fetch toe:
 
-Dat is precies waarom de geld.nl-scraper voor spaarrentes betrouwbaarder is dan
-een model laten zoeken. De agent blijft bestaan als terugval voor aanbieders
-waarvoor hier geen bron staat.
+| Bron | Kale fetch | Met browser-User-Agent |
+|---|---|---|
+| ABN AMRO betaalpas | time-out | **200** |
+| ABN AMRO creditcard | time-out | **200** |
+| bunq | **200** | **200** |
+| Revolut | 403 | 403 — "Just a quick security check" (Cloudflare) |
+| Trading 212 | 403 | 403 — Cloudflare |
+| ING (beide) | verbinding verbroken | idem, ook via HTTP/1.1 (Akamai) |
+| American Express | 404 | 404 — de URL bestaat niet meer |
+
+Twee conclusies:
+
+1. **De User-Agent beslist over toegang.** ABN AMRO werkt alleen mét de header.
+   Die staat nu vast op de node *Haal tariefpagina op*. Dit is dezelfde uitkomst
+   als bij de crawl4ai-test van augustus: niet de browser maakt het verschil,
+   de UA-string wel. Een echte headless browser is hier dus geen oplossing.
+2. **De rest is een bot-check, geen opmaakprobleem.** Een reader-proxy
+   (`r.jina.ai`) werd zelf ook met 403 geweigerd. Meer scraping-techniek helpt
+   niet tegen een partij die je bewust buiten houdt.
+
+Daarom haalt deze workflow alleen de drie bronnen op die het echt toelaten. De
+**reis-agent** in LaVega doet de andere vijf met web search, en die kán het:
+gemeten leverde hij Revolut 0%, ING betaalpas 1,4%, ING creditcard 2%, ABN AMRO
+creditcard 2% en Trading 212 0%.
+
+Zet een aanbieder er pas bij als een kale fetch zijn pagina teruggeeft.
+
+**American Express staat er bewust niet meer bij.** Zijn URL gaf 404: de pagina
+is verhuisd. Een URL die verhuist, verhuist nog een keer — en dan staat er weer
+stil een 0 in de uitkomst. Amex hoort daarom permanent bij de agent, die zelf
+zoekt en dus niet omvalt van een verhuizing. Dit is de regel, niet de
+uitzondering: een vaste URL is alleen beter dan zoeken zolang die URL blijft
+staan en de fetch wordt toegelaten.
 
 ## Eenmalig instellen
 
@@ -26,14 +55,21 @@ waarvoor hier geen bron staat.
    cache schrijven.
 3. **In n8n** twee omgevingsvariabelen zetten:
    - `LAVEGA_INGEST_TOKEN` — hetzelfde token
-   - `ANTHROPIC_API_KEY` — je eigen sleutel
+   - `FT_ANTHROPIC_KEY` — je eigen sleutel. De node accepteert ook
+     `ANTHROPIC_API_KEY`; hij pakt `FT_ANTHROPIC_KEY` als die er staat.
+
+   n8n leest omgevingsvariabelen alleen bij het opstarten. Zet je er een bij op
+   Railway, **herstart dan de n8n-service** — anders blijft `$env` leeg en geeft
+   de laatste node `401 Ongeldige token`.
 
    Werkt `$env` in jouw n8n niet (sommige installaties blokkeren dat), maak dan
    in plaats daarvan twee **Header Auth**-credentials aan en koppel die aan de
    twee HTTP Request-nodes.
 4. **Importeren:** n8n → *Workflows* → *Import from File* → dit JSON-bestand.
-5. Klik **Handmatig starten** om te testen. De schedule staat op maandagochtend
-   06:00.
+5. Klik **Handmatig starten** om te testen. Daarna loopt hij **elke ochtend
+   06:00**. Dagelijks en niet wekelijks, omdat de cache in het geheugen van de
+   server zit: na een deploy is hij leeg, en met een weekschema zou hij dan tot
+   de volgende maandag leeg blijven.
 
 ## Wat je moet controleren
 

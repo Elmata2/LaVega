@@ -15,20 +15,20 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 6 * * 1"
+              "expression": "0 6 * * *"
             }
           ]
         }
       },
       "id": "a1000000-0000-4000-8000-000000000002",
-      "name": "Elke maandag 06:00",
+      "name": "Elke dag 06:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [-620, 300]
     },
     {
       "parameters": {
-        "jsCode": "// De aanbieders waarvan LaVega de voorwaarden moet kennen.\n// `provider` MOET exact overeenkomen met wat LaVega toont: bank + \"betaalpas\"\n// of \"creditcard\" (zie productOf() in packages/core/src/travel.ts).\n// `url` is de eigen tarievenpagina van de aanbieder — dat is precies de stap\n// die de zoek-agent onbetrouwbaar maakte. Controleer een URL als een aanbieder\n// leeg blijft; die veranderen af en toe.\nreturn [\n  { json: { provider: 'Revolut betaalpas',           url: 'https://www.revolut.com/nl-NL/legal/fees/' } },\n  { json: { provider: 'ING betaalpas',               url: 'https://www.ing.nl/particulier/betalen/betalen-en-geld-opnemen-in-het-buitenland' } },\n  { json: { provider: 'ING creditcard',              url: 'https://www.ing.nl/particulier/betalen/creditcard/kosten-creditcard' } },\n  { json: { provider: 'ABN AMRO betaalpas',          url: 'https://www.abnamro.nl/nl/prive/betalen/in-het-buitenland/index.html' } },\n  { json: { provider: 'ABN AMRO creditcard',         url: 'https://www.abnamro.nl/nl/prive/creditcards/tarieven.html' } },\n  { json: { provider: 'American Express creditcard', url: 'https://www.americanexpress.com/nl-nl/kaarten/alle-kaarten/' } },\n  { json: { provider: 'bunq betaalpas',              url: 'https://www.bunq.com/nl/pricing' } },\n  { json: { provider: 'Trading 212 creditcard',      url: 'https://www.trading212.com/nl/terms/card' } },\n];"
+        "jsCode": "// De aanbieders waarvan LaVega de voorwaarden ophaalt van hun EIGEN tariefpagina.\n//\n// ALLEEN bronnen die een gewone HTTP-fetch echt toelaten staan hier. Gemeten op\n// 2026-08-16, met en zonder browser-User-Agent:\n//   ABN AMRO betaal/creditcard  200  (LUKT ALLEEN met de User-Agent-header die\n//                                     op de node ernaast staat; zonder die\n//                                     header loopt de verbinding in een timeout)\n//   bunq                        200\n//   Revolut                     403  \"Just a quick security check\" (Cloudflare)\n//   Trading 212                 403  Cloudflare\n//   ING (beide)                 verbinding verbroken, ook via HTTP/1.1 (Akamai)\n//   American Express            404  de URL bestaat niet meer\n//\n// Die vier zijn niet met een header te repareren: het is een bot-check, geen\n// opmaakprobleem. Een reader-proxy (r.jina.ai) werd zelf ook geblokkeerd.\n// Ze worden daarom overgelaten aan de reis-agent in LaVega, die ze met web\n// search WEL vindt (gemeten: Revolut 0%, ING creditcard 2%, T212 0%).\n//\n// Dus: deze workflow doet wat een fetch betrouwbaar kan, de agent doet de rest.\n// Zet een aanbieder hier pas bij als een kale fetch zijn pagina teruggeeft.\n//\n// `provider` MOET exact overeenkomen met wat LaVega toont: bank + \"betaalpas\"\n// of \"creditcard\" (zie productOf() in packages/core/src/travel.ts).\nreturn [\n  { json: { provider: 'ABN AMRO betaalpas',  url: 'https://www.abnamro.nl/nl/prive/betalen/in-het-buitenland/index.html' } },\n  { json: { provider: 'ABN AMRO creditcard', url: 'https://www.abnamro.nl/nl/prive/creditcards/tarieven.html' } },\n  { json: { provider: 'bunq betaalpas',      url: 'https://www.bunq.com/nl/pricing' } },\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000003",
       "name": "Aanbieders + tariefpagina",
@@ -39,6 +39,14 @@
     {
       "parameters": {
         "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" },
+            { "name": "Accept-Language", "value": "nl-NL,nl;q=0.9,en;q=0.8" },
+            { "name": "Accept", "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+          ]
+        },
         "options": {
           "response": {
             "response": {
@@ -94,7 +102,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "x-api-key", "value": "={{ $env.FT_ANTHROPIC_KEY || $env.ANTHROPIC_API_KEY }}" },
             { "name": "anthropic-version", "value": "2023-06-01" },
             { "name": "content-type", "value": "application/json" }
           ]
@@ -149,7 +157,7 @@
   ],
   "connections": {
     "Handmatig starten": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
-    "Elke maandag 06:00": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
+    "Elke dag 06:00": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
     "Aanbieders + tariefpagina": { "main": [[{ "node": "Haal tariefpagina op", "type": "main", "index": 0 }]] },
     "Haal tariefpagina op": { "main": [[{ "node": "HTML naar tekst", "type": "main", "index": 0 }]] },
     "HTML naar tekst": { "main": [[{ "node": "Pagina gelukt?", "type": "main", "index": 0 }]] },
