@@ -28,7 +28,7 @@ import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
-import type { PendingInvoice } from "./n8n.js";
+import type { N8nNotice, PendingInvoice } from "./n8n.js";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
@@ -62,6 +62,11 @@ export default function App() {
   // row it isn't an invoice yet. Vergrendel therefore clears them too, which
   // the view says out loud.
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
+  // Meldingen uit n8n: mail die WEL over een factuur ging maar er geen is (staat
+  // klaar bij de leverancier, aanmaning, onleesbaar). Ze horen hier om dezelfde
+  // reden als de rijen hierboven: de webhook leegt zichzelf, dus dit is de enige
+  // kopie. Ze bevatten geen bedrag en kunnen dus nooit een boeking worden.
+  const [pendingNotices, setPendingNotices] = useState<N8nNotice[]>([]);
   // What the agents have learned (and what he corrected). Lives in the vault.
   const [facts, setFacts] = useState<LearnedFact[]>([]);
   // The owner's own privé/zakelijk classification, one row per entity. Lives in
@@ -284,6 +289,7 @@ export default function App() {
     setFacts([]);
     setEntityProfiles([]);
     setPendingInvoices([]);
+    setPendingNotices([]);
     setGate("unlock");
   }
 
@@ -877,6 +883,8 @@ export default function App() {
               onSaveInvoices={saveInvoices}
               pending={pendingInvoices}
               onPendingChange={setPendingInvoices}
+              notices={pendingNotices}
+              onNoticesChange={setPendingNotices}
               onNavigate={setView}
             />
           )}

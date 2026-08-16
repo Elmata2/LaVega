@@ -12,7 +12,8 @@
     "dev": "turbo run dev",
     "build": "pnpm --filter @lavega/web build",
     "start": "pnpm --filter @lavega/server start",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "sync:n8n": "node scripts/sync-n8n-code.mjs"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",

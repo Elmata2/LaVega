@@ -14,7 +14,7 @@ import {
   getN8nInvoiceUrl,
   setAiExtractionEnabled,
 } from "../settings";
-import { fetchQueue, pendingToInvoice, toPending, type PendingInvoice } from "../n8n";
+import { fetchQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nNotice, type PendingInvoice } from "../n8n";
 import "../styles/views.css";
 
 /* Facturen — reduced to EXACTLY three ways in (UI review, 2026-08-16):
@@ -78,6 +78,12 @@ type FacturenProps = {
    *  away and back. */
   pending: PendingInvoice[];
   onPendingChange: (next: PendingInvoice[]) => void;
+  /** Mail die over een factuur ging zonder er een te zijn: hij staat klaar bij
+   *  de leverancier, het is een aanmaning, of er viel niets uit te lezen. Geen
+   *  bedrag, dus geen boeking — alleen een lijstje "zelf ophalen". Ook dit is de
+   *  enige kopie, dus ook dit hoort in App te staan. */
+  notices: N8nNotice[];
+  onNoticesChange: (next: N8nNotice[]) => void;
   onNavigate: (view: View) => void;
   /** Injectable for tests; production uses the browser's own fetch. */
   fetchImpl?: typeof fetch;
@@ -102,6 +108,8 @@ export default function Facturen({
   onSaveInvoices,
   pending,
   onPendingChange,
+  notices,
+  onNoticesChange,
   onNavigate,
   fetchImpl,
 }: FacturenProps) {
@@ -140,14 +148,14 @@ export default function Facturen({
   // A reload would take the fetched rows with it, and n8n cannot serve them
   // again. So while rows are still undecided, make the browser ask first.
   useEffect(() => {
-    if (pending.length === 0) return;
+    if (pending.length === 0 && notices.length === 0) return;
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [pending.length]);
+  }, [pending.length, notices.length]);
 
   // Every outcome gets its own sentence, and none of the failures may read like
   // a success. The two that can cost data (a broken connection, an unreadable
@@ -186,6 +194,12 @@ export default function Facturen({
       if (fresh.length > 0) {
         onPendingChange([...pending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
       }
+      // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
+      const knownNotices = new Set(notices.map((n) => n.messageId));
+      const freshNotices = outcome.notices.filter(
+        (n) => !handled.has(n.messageId) && !knownNotices.has(n.messageId),
+      );
+      if (freshNotices.length > 0) onNoticesChange([...notices, ...freshNotices]);
       const parts: string[] = [];
       if (outcome.rows.length === 0) {
         parts.push("De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.");
@@ -196,6 +210,9 @@ export default function Facturen({
       }
       if (duplicates > 0) parts.push(`${duplicates} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`);
       if (outcome.dropped > 0) parts.push(`${outcome.dropped} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`);
+      if (freshNotices.length > 0) {
+        parts.push(`${freshNotices.length} ${freshNotices.length === 1 ? "mail wacht" : "mails wachten"} onder “Zelf ophalen”: daar zat geen factuur in die LaVega kon boeken.`);
+      }
       setN8nNote(parts.join(" "));
     } finally {
       setN8nBusy(false);
@@ -241,6 +258,14 @@ export default function Facturen({
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
     setN8nNote("Regel verworpen. Er is niets geboekt, en hij wordt niet opnieuw aangeboden.");
+  }
+
+  // Een melding "Gedaan" zetten boekt niets — het is een to-do die van de lijst
+  // gaat en, net als een verworpen regel, niet opnieuw wordt aangeboden.
+  function dismissNotice(notice: N8nNotice) {
+    addHandledInvoiceMessageIds([notice.messageId]);
+    onNoticesChange(notices.filter((n) => n.messageId !== notice.messageId));
+    setN8nNote("Melding afgevinkt. Er is niets geboekt.");
   }
 
   // Live projection: what the forecast will actually see from open invoices.
@@ -694,6 +719,45 @@ export default function Facturen({
                   <p className="cell-sub">Btw stond niet in de factuur; leeg blijft “onbekend”, niet €&nbsp;0,00.</p>
                 )}
                 {rowErrors[p.messageId] && <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Zelf ophalen: mail die geen boekbare factuur was ───────────── */}
+      {notices.length > 0 && (
+        <section className="card n8n-block" aria-label="Zelf ophalen">
+          <div className="card-header">
+            <h2>Zelf ophalen</h2>
+            <span className="eyebrow">uit n8n · {notices.length}</span>
+          </div>
+          <p className="cell-sub">
+            Deze mails gingen over een factuur, maar er zat er geen in die LaVega kan
+            boeken. Er staat met opzet <strong>geen bedrag</strong> bij: dit is een
+            lijstje om zelf af te werken, geen boeking in wording. Haal de factuur op
+            en sleep hem hierboven naar binnen.
+          </p>
+          <div className="n8n-rows">
+            {notices.map((n) => (
+              <div className="n8n-row" data-noticeid={n.messageId} key={n.messageId}>
+                <p className="n8n-row-source cell-sub">
+                  <strong>{NOTICE_LABELS[n.kind]}</strong> · {n.subject ?? "(geen onderwerp)"}
+                  {n.from ? ` · ${n.from}` : ""}
+                </p>
+                <p className="cell-sub">{n.reason}</p>
+                <div className="stack-form-actions">
+                  {n.mailUrl ? (
+                    <a className="btn" href={n.mailUrl} target="_blank" rel="noreferrer noopener">
+                      Open in Gmail
+                    </a>
+                  ) : (
+                    <span className="cell-sub">n8n gaf geen link mee; zoek de mail op het onderwerp.</span>
+                  )}
+                  <button type="button" className="btn" onClick={() => dismissNotice(n)}>
+                    Gedaan
+                  </button>
+                </div>
               </div>
             ))}
           </div>

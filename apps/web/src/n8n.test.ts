@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
-import { fetchQueue, parseQueue, pendingToInvoice, toPending, type N8nInvoiceRow } from "./n8n.js";
+import { fetchQueue, parseQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nInvoiceRow } from "./n8n.js";
 import {
   addHandledInvoiceMessageIds,
   getHandledInvoiceMessageIds,
@@ -77,7 +77,7 @@ test("a body that isn't the documented shape is a failure, not an empty queue", 
   expect(parseQueue("nope")).toBeNull();
   expect(parseQueue(null)).toBeNull();
   // An actually empty queue is a different thing and parses fine.
-  expect(parseQueue({ invoices: [] })).toEqual({ rows: [], dropped: 0 });
+  expect(parseQueue({ invoices: [] })).toEqual({ rows: [], notices: [], dropped: 0 });
 });
 
 test("fetchQueue sends the token in x-lavega-token and returns the rows", async () => {
@@ -99,7 +99,7 @@ test("every failure mode is its own outcome, and none of them is 'ok'", async ()
   expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { badJson: true }).impl)).toEqual({ kind: "unreadable" });
   expect(await fetchQueue("https://x", "t", fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
   // The empty queue IS ok — it just carries no rows.
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({ kind: "ok", rows: [], dropped: 0 });
+  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({ kind: "ok", rows: [], notices: [], dropped: 0 });
 });
 
 test("pendingToInvoice refuses what it cannot know, and marks what a model read", () => {
@@ -159,4 +159,60 @@ test("an unreadable currency stays empty and blocks the row — a USD invoice is
   const done = pendingToInvoice({ ...pending, currency: "usd" });
   expect(done.ok).toBe(true);
   if (done.ok) expect(done.invoice.currency).toBe("USD"); // normalised, not rejected
+});
+
+/* ── meldingen: wat n8n niet als factuur kon aanleveren ──────────────────── */
+
+const NOTICE = {
+  messageId: "kpn-77213",
+  subject: "Uw factuur van augustus staat voor u klaar",
+  from: "KPN <noreply@kpn.com>",
+  receivedAt: "2026-08-14T02:31:02.000Z",
+  kind: "notification",
+  reason: "De factuur staat in MijnKPN; log in om hem te downloaden.",
+  mailUrl: "https://mail.google.com/mail/u/0/#all/kpn-77213",
+};
+
+test("a notice survives the parse and carries no amount at all", () => {
+  const parsed = parseQueue({ invoices: [ROW], notices: [NOTICE] });
+  expect(parsed!.notices).toHaveLength(1);
+  const notice = parsed!.notices[0];
+  expect(notice.kind).toBe("notification");
+  expect(notice.mailUrl).toBe("https://mail.google.com/mail/u/0/#all/kpn-77213");
+  // The safety property: there is no field to book.
+  expect("amount" in notice).toBe(false);
+  expect("amountCents" in notice).toBe(false);
+});
+
+test("a workflow that sends no notices is not an error — the owner hasn't re-imported yet", () => {
+  expect(parseQueue({ invoices: [ROW] })!.notices).toEqual([]);
+  expect(parseQueue({ invoices: [], notices: "nope" })!.notices).toEqual([]);
+});
+
+test("a notice without a messageId or with an unknown kind is not shown at all", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [{ ...NOTICE, messageId: "" }, { ...NOTICE, kind: "iets-nieuws" }],
+  });
+  expect(parsed!.notices).toEqual([]);
+});
+
+test("a link that does not go to his own mailbox is dropped, not shown", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [{ ...NOTICE, mailUrl: "https://kpn-facturen.example.com/betaal-nu" }],
+  });
+  expect(parsed!.notices[0].mailUrl).toBe("");
+});
+
+test("every notice kind has a Dutch label", () => {
+  for (const kind of ["notification", "reminder", "no-amount", "unreadable"] as const) {
+    expect(NOTICE_LABELS[kind].length).toBeGreaterThan(0);
+  }
+});
+
+test("fetchQueue hands the notices through", async () => {
+  const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
+  const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  expect(out.kind === "ok" && out.notices).toHaveLength(1);
 });
