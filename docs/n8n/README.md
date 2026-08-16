@@ -40,6 +40,32 @@ creditcard 2% en Trading 212 0%.
 
 Zet een aanbieder er pas bij als een kale fetch zijn pagina teruggeeft.
 
+## Beter op termijn: één vergelijkingsbron in plaats van dertig bankpagina's
+
+Dertig losse tariefpagina's onderhouden is geen plan: de vier belangrijkste
+(ING, Rabobank, Revolut, Trading 212) blijven toch geblokkeerd, elke URL
+veroudert, en een verouderde URL mislukt stil als een 0.
+
+**Gemeten alternatief, 2026-08-16:**
+`https://www.bank.nl/kennisbank/betalen-in-buitenland/` — 200, 96 kB, en de
+koersopslagen staan gewoon in de ruwe HTML (0,5% / 1,0% / 1,2% / 1,4% / 1,5% /
+2,0%), voor ING, ABN AMRO, Rabobank, American Express, bunq, ICS, Knab, SNS, ASN
+en Triodos. De pagina zet er zelf "laatst gecontroleerd op" bij. Eén fetch,
+tien aanbieders, inclusief de twee die ons rechtstreeks buitenhouden.
+
+Dat is precies het patroon dat voor spaarrentes al werkt met geld.nl.
+
+Nog niet gebouwd. Wat het nodig heeft:
+- een parser per rij (bank → koersopslag), net als `rates.ts` voor geld.nl;
+- een naamafbeelding van "ING" op `productOf()`-namen ("ING betaalpas" /
+  "ING creditcard"), want de tabel noemt de bank en niet het product;
+- een besluit over voorrang: een eigen tariefpagina is preciezer dan een
+  vergelijkingstabel, dus de bron per aanbieder moet blijven winnen.
+
+Revolut, Wise en N26 staan er níet in. Consumentenbond noemt die wel, maar zijn
+pagina is 1 MB en de percentages in de HTML zijn CSS-breedtes, geen tarieven.
+Die drie blijven dus bij de agent.
+
 **American Express staat er weer bij, met een andere URL.** De oude gaf 404,
 omdat die pagina verhuisd was. Belangrijker was iets anders: "American Express
 creditcard" is geen product. Green, Gold en Platinum hebben verschillende

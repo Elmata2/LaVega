@@ -1,0 +1,362 @@
+{
+  "name": "LaVega — facturen uit de mail",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Handmatig starten",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -860,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Elk uur",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -860,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "simple": false,
+        "filters": {
+          "q": "newer_than:7d (factuur OR invoice OR rekening OR receipt)"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Gmail: recente mail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -620,
+        60
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "filters": {
+          "custom": "contains(subject,'factuur') or contains(subject,'invoice') or contains(subject,'rekening')"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "Outlook: recente mail",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 2
+      },
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "Samenvoegen",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -380,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gmail en Outlook leveren een ander bericht-object. Hier wordt het één vorm,\n// zodat alles erna niet hoeft te weten waar een mail vandaan kwam.\n//\n// Bijlagen: n8n zet ze in item.binary, met .data al base64. Alleen PDF's gaan\n// mee; een logo van 4 kB in de handtekening is geen factuur en kost wel tokens.\nconst MAX_PDFS = 3;\nconst MAX_PDF_BYTES = 4 * 1024 * 1024; // Claude weigert grotere documenten\nconst out = [];\n\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const bin = item.binary || {};\n\n  // Outlook heeft receivedDateTime + from.emailAddress; Gmail heeft threadId en\n  // (met simple:false) headers. Beide varianten worden hier afgevangen.\n  const isOutlook = !!j.receivedDateTime || !!j.bodyPreview;\n  const headers = j.headers || {};\n  const subject = j.subject || headers.subject || '';\n  const from = isOutlook\n    ? (j.from && j.from.emailAddress ? (j.from.emailAddress.address || '') : '')\n    : (headers.from || j.From || '');\n  const date = j.receivedDateTime || headers.date || j.internalDate || '';\n  const text = String(j.text || j.bodyPreview || j.snippet || (j.body && j.body.content) || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 6000);\n\n  const pdfs = [];\n  for (const key of Object.keys(bin)) {\n    const b = bin[key];\n    if (!b || !b.data) continue;\n    const type = String(b.mimeType || '').toLowerCase();\n    const name = String(b.fileName || key);\n    if (type !== 'application/pdf' && !/\\.pdf$/i.test(name)) continue;\n    // base64 is ~4/3 van de bytes; zo weten we de grootte zonder te decoderen.\n    if ((b.data.length * 3) / 4 > MAX_PDF_BYTES) continue;\n    pdfs.push({ name, data: b.data });\n    if (pdfs.length >= MAX_PDFS) break;\n  }\n\n  out.push({ json: {\n    source: isOutlook ? 'outlook' : 'gmail',\n    messageId: String(j.id || j.messageId || ''),\n    subject, from, date, text, pdfs,\n    // Zonder PDF én zonder bruikbare tekst valt er niets te lezen.\n    ok: pdfs.length > 0 || text.length > 40,\n  } });\n}\nreturn out;"
+      },
+      "id": "b1000000-0000-4000-8000-000000000006",
+      "name": "Normaliseer bericht",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "Iets te lezen?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        60,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Het verzoek aan Claude wordt HIER opgebouwd, niet in een expressie op de\n// HTTP-node: met base64-PDF's erin wordt die expressie onleesbaar en is een\n// fout er niet meer uit te halen.\n//\n// De PDF gaat als document-blok mee. Een factuur is een LAYOUT — bedragen staan\n// in kolommen, btw staat onderaan — en die layout overleeft het platslaan naar\n// tekst niet. Het model moet de pagina zien.\nconst SYSTEM = [\n  'Je leest e-mails en bijlagen en bepaalt of er een FACTUUR in zit.',\n  'Antwoord UITSLUITEND met JSON, zonder uitleg eromheen:',\n  '{\"isInvoice\": true|false, \"invoiceNumber\": string|null, \"issueDate\": \"YYYY-MM-DD\"|null,',\n  ' \"dueDate\": \"YYYY-MM-DD\"|null, \"amount\": number|null, \"vatAmount\": number|null,',\n  ' \"currency\": \"EUR\", \"counterparty\": string|null, \"direction\": \"expense\"|\"income\"|null,',\n  ' \"note\": string}',\n  'amount is het TOTAAL inclusief btw, als getal, punt als decimaalteken, zonder valutateken.',\n  'vatAmount is alleen het btw-bedrag.',\n  'direction: \"expense\" als iemand GELD VAN JOU wil, \"income\" als jij iemand factureert.',\n  'Laat een veld null als het er niet staat. Verzin nooit een bedrag of een nummer:',\n  'een verzonnen factuur in een boekhouding is erger dan een gemiste factuur.',\n  'Een betaalherinnering, aanmaning of orderbevestiging zonder bedrag is GEEN factuur:',\n  'zet dan isInvoice op false.',\n].join(' ');\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  const content = [];\n  for (const pdf of (j.pdfs || [])) {\n    content.push({\n      type: 'document',\n      source: { type: 'base64', media_type: 'application/pdf', data: pdf.data },\n    });\n  }\n  content.push({\n    type: 'text',\n    text: 'Onderwerp: ' + j.subject + '\\nAfzender: ' + j.from + '\\nDatum: ' + j.date +\n          '\\nBijlagen: ' + (j.pdfs || []).map((p) => p.name).join(', ') +\n          '\\n\\n' + j.text,\n  });\n\n  out.push({ json: {\n    source: j.source,\n    messageId: j.messageId,\n    subject: j.subject,\n    body: {\n      model: 'claude-sonnet-5',\n      max_tokens: 1024,\n      system: SYSTEM,\n      messages: [{ role: 'user', content }],\n    },\n  } });\n}\nreturn out;"
+      },
+      "id": "b1000000-0000-4000-8000-000000000008",
+      "name": "Bouw Claude-verzoek",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.FT_ANTHROPIC_KEY || $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000009",
+      "name": "Lees de factuur",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        150
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Het antwoord van Claude naar de vorm die LaVega verwacht.\n//\n// De HTTP-node stuurt 1-op-1 door, dus item i hoort bij verzoek i uit\n// \"Bouw Claude-verzoek\". Daar staan onderwerp en messageId, die Claude niet\n// terugstuurt.\nconst asked = $('Bouw Claude-verzoek').all();\nconst items = $input.all();\nconst invoices = [];\n\nconst money = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) : null);\nconst isoDate = (v) => (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v) ? v : null);\n\nfor (let i = 0; i < items.length; i++) {\n  const src = asked[i] ? asked[i].json : null;\n  if (!src) continue;\n  const text = items[i] && items[i].json && items[i].json.content && items[i].json.content[0]\n    ? items[i].json.content[0].text : '';\n  const match = typeof text === 'string' ? text.match(/\\{[\\s\\S]*\\}/) : null;\n  if (!match) continue;\n  let p;\n  try { p = JSON.parse(match[0]); } catch (e) { continue; }\n\n  // Zonder bedrag valt er niets in te boeken, en zonder bedrag kan LaVega ook\n  // niet controleren of het klopt. Die weigeren we hier al.\n  const amountCents = money(p.amount);\n  if (p.isInvoice !== true || amountCents === null) continue;\n\n  invoices.push({\n    source: src.source,\n    messageId: src.messageId,\n    subject: String(src.subject || '').slice(0, 200),\n    invoiceNumber: typeof p.invoiceNumber === 'string' ? p.invoiceNumber.slice(0, 60) : null,\n    issueDate: isoDate(p.issueDate),\n    dueDate: isoDate(p.dueDate),\n    amountCents,\n    vatCents: money(p.vatAmount),\n    currency: typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency) ? p.currency : 'EUR',\n    counterparty: typeof p.counterparty === 'string' ? p.counterparty.slice(0, 120) : null,\n    direction: p.direction === 'income' ? 'income' : 'expense',\n    note: typeof p.note === 'string' ? p.note.slice(0, 400) : undefined,\n  });\n}\n\n// Eén verzoek met alles erin: LaVega zet ze in een wachtrij die JIJ bevestigt.\n// Er wordt niets automatisch geboekt.\nreturn [{ json: { invoices } }];"
+      },
+      "id": "b1000000-0000-4000-8000-00000000000a",
+      "name": "Naar LaVega-vorm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lavega.dev/api/invoices/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-ingest-token",
+              "value": "={{ $env.LAVEGA_INVOICE_TOKEN }}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b1000000-0000-4000-8000-00000000000b",
+      "name": "Stuur naar LaVega",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "Handmatig starten": {
+      "main": [
+        [
+          {
+            "node": "Gmail: recente mail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Outlook: recente mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elk uur": {
+      "main": [
+        [
+          {
+            "node": "Gmail: recente mail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Outlook: recente mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: recente mail": {
+      "main": [
+        [
+          {
+            "node": "Samenvoegen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outlook: recente mail": {
+      "main": [
+        [
+          {
+            "node": "Samenvoegen",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Samenvoegen": {
+      "main": [
+        [
+          {
+            "node": "Normaliseer bericht",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliseer bericht": {
+      "main": [
+        [
+          {
+            "node": "Iets te lezen?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iets te lezen?": {
+      "main": [
+        [
+          {
+            "node": "Bouw Claude-verzoek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bouw Claude-verzoek": {
+      "main": [
+        [
+          {
+            "node": "Lees de factuur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lees de factuur": {
+      "main": [
+        [
+          {
+            "node": "Naar LaVega-vorm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Naar LaVega-vorm": {
+      "main": [
+        [
+          {
+            "node": "Stuur naar LaVega",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

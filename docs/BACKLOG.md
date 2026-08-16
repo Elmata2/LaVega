@@ -19,6 +19,18 @@ Status legend: `todo` · `questions-open` · `building` · `in-test` · `done`
 > `LAVEGA_INGEST_TOKEN` in the n8n environment (see `docs/n8n/README.md`). The Railway
 > side (`CARD_TERMS_INGEST_TOKEN` on `@lavega/web`) is set and verified 2026-08-16.
 > The cache is in server memory, so it is empty after every deploy until a run lands.
+>
+> **Handoff — two follow-ups, both specified, neither built:**
+> 1. *Price the conversion leg.* `store` and `spend` answer in numbers; `convert` picks a
+>    route but never costs it, so a via-route always looks free. Design:
+>    `docs/superpowers/specs/2026-08-16-travel-conversion-pricing-design.md`.
+> 2. *One comparison source instead of thirty bank pages.* Verified 2026-08-16:
+>    `bank.nl/kennisbank/betalen-in-buitenland/` returns 200, 96 kB, with real koersopslag
+>    figures in the raw HTML for ten Dutch banks — including ING and Rabobank, which block
+>    us directly. Same shape as the geld.nl savings scraper. Needs a row parser, a
+>    bank→product name mapping, and a precedence rule (a provider's own page beats the
+>    table). Not in it: Revolut, Wise, N26 — those stay with the agent. See
+>    `docs/n8n/README.md`.
 
 One combined answer built from three agents that today don't talk to each other:
 
