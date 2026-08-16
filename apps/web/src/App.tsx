@@ -904,7 +904,10 @@ export default function App() {
             />
           )}
 
-          {view === "valuta" && <Valuta accounts={accounts} />}
+          {/* Scoped like every other view: standing in Zakelijk and being offered a
+              conversion out of a personal account is a leak across the very line
+              the switch exists to draw. */}
+          {view === "valuta" && <Valuta accounts={scopedAccounts} />}
 
           {view === "belasting" && (
             <Belasting
@@ -913,6 +916,10 @@ export default function App() {
               accounts={scopedAccounts}
               asOf={asOf}
               vatSettings={vatSettings}
+              // Deliberately the UNSCOPED list: Belasting saves flows back through
+              // onSaveScheduledFlows, which persists replace-all, so handing it a
+              // scoped list would delete every flow outside the current half.
+              // Scoping this needs a merge-based save first — see the backlog.
               scheduledFlows={scheduledFlows}
               busy={busy}
               onSaveVatSettings={saveVatSettings}

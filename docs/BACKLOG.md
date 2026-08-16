@@ -294,3 +294,23 @@ His verdict on round 1: "major, major improvement". What follows is the de-dupli
 - **Remove the disclaimer block on the right.** Disclaimers and terms belong at launch, not in the
   working screen.
 - **Invoices**: he is testing first; other work continues meanwhile.
+
+## Carried over from round 2's adversarial pass — 2026-08-17
+
+- **`Belasting` receives the UNSCOPED scheduled-flow list, on purpose.** It saves them back
+  through `onSaveScheduledFlows`, which persists replace-all, so handing it a scoped list would
+  delete every flow outside the current half. Scoping it needs a merge-based save first. Recorded
+  because it looks like a leak and someone will otherwise "fix" it into data loss.
+- **`apps/web/src/category-trend.ts` is dead code** — no non-test callers, and it carries the same
+  uncovered-account defect that `categoryComparison` was just fixed for. Its seven green tests make
+  it look maintained. Retire both deliberately.
+- **Unreachable view branches** for `rules`, `koppelingen` and `backup` in App.tsx: nothing calls
+  `setView` with those any more since Profiel renders the components inline. Not lost tabs — dead
+  branches. Remove them, or wire a deep link if a direct route is wanted.
+- **Real card art** (his Amex Gold request): blocked twice over. Card faces are trademarked artwork,
+  so bundling them is a licensing question, and fetching one at runtime tells that server which
+  cards he holds. What is possible is product-specific generated art from our own tokens.
+- **Points from transactions** once the owner grants access once (Amex, ING) — his own framing:
+  ask once, then compute.
+- **Enable Banking multi-account** after the MVP, not before.
+- Disclaimers and terms belong at launch, not in the working screen.

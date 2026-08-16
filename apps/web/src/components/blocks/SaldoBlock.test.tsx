@@ -148,3 +148,39 @@ test("changePct is null rather than 0% when there is nothing to compare against"
   // A negative starting position still moves in the direction the money did.
   expect(changePct(-50, -100)).toBeCloseTo(50, 6);
 });
+
+test("coverage is the SHORTEST-covered account, so one fresh import cannot unlock a month's comparison", () => {
+  // One account with a long history, one imported yesterday. The union reaches
+  // back far enough; the newcomer does not. Rolling 30 days back would treat
+  // the new account's balance as if it had been constant all month.
+  const old = { key: "abn", iban: "", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 1_000 } as never;
+  const fresh = { key: "amex", iban: "", name: "Amex", bank: "American Express", entity: "BV1", currency: "EUR", balance: 500 } as never;
+  const history = [
+    { id: "a1", accountKey: "abn", date: "2026-07-01", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false },
+    { id: "a2", accountKey: "abn", date: "2026-08-10", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false },
+    { id: "b1", accountKey: "amex", date: "2026-08-15", amount: -10, currency: "EUR", counterparty: "Y", description: "", category: "", manual: false },
+  ] as never[];
+
+  const s = positionSeries([old, fresh], history, "2026-08-16");
+
+  expect(s.coverageDays).toBe(1); // Amex, not ABN's six weeks
+  expect(s.limitedBy).toEqual(["amex"]);
+  expect(s.weekAgo).toBeNull(); // never a number the data cannot support
+  expect(s.monthAgo).toBeNull();
+});
+
+test("an account with a saldo but no transactions blocks the comparison rather than being assumed flat", () => {
+  const typed = { key: "amex", iban: "", name: "Amex", bank: "American Express", entity: "BV1", currency: "EUR", balance: 500 } as never;
+  const banked = { key: "abn", iban: "", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 1_000 } as never;
+  const history = [
+    { id: "a1", accountKey: "abn", date: "2026-06-01", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false },
+    { id: "a2", accountKey: "abn", date: "2026-08-10", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false },
+  ] as never[];
+
+  // "No movements" and "not imported" are indistinguishable from here, so the
+  // typed balance is not treated as having been constant for a month.
+  const s = positionSeries([typed, banked], history, "2026-08-16");
+  expect(s.coverageDays).toBe(0);
+  expect(s.limitedBy).toEqual(["amex"]);
+  expect(s.monthAgo).toBeNull();
+});

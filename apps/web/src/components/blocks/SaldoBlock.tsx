@@ -46,8 +46,14 @@ export type PositionSeries = {
    *  history does not reach that far back. Never 0 as a stand-in. */
   weekAgo: number | null;
   monthAgo: number | null;
-  /** Days between the oldest transaction we hold and `asOf`. */
+  /** How far back EVERY contributing account has history — not the union.
+   *  Rolling the position back past the shortest-covered account treats a
+   *  newly imported balance as if it had been constant all along, which is how
+   *  a comparison invents a change nobody made. */
   coverageDays: number;
+  /** Accounts whose history is what limits `coverageDays`, so the card can say
+   *  which import would unlock the comparison instead of just refusing it. */
+  limitedBy: string[];
   /** Accounts left out because their saldo is unknown. */
   excluded: number;
 };
@@ -70,18 +76,35 @@ export function positionSeries(
 
   const relevant = txs.filter((t) => keys.has(t.accountKey) && t.date <= asOf);
   if (relevant.length === 0) {
-    return { ...base, points: [], weekAgo: null, monthAgo: null, coverageDays: 0 };
+    return { ...base, points: [], weekAgo: null, monthAgo: null, coverageDays: 0, limitedBy: known.map((a) => a.key) };
   }
 
+  // Coverage is the SHORTEST-covered account, never the union. If ABN reaches
+  // back a year and a card was imported yesterday, the position is only known
+  // as far back as yesterday: before that, that card's balance is assumed
+  // rather than derived. An account with a balance and no transactions at all
+  // limits coverage to nothing, because "no movements" and "not imported" are
+  // indistinguishable from here — and guessing between them is exactly the
+  // mistake the month comparison was just fixed for.
+  const startByKey = new Map<string, string>();
+  for (const t of relevant) {
+    const prev = startByKey.get(t.accountKey);
+    if (prev === undefined || t.date < prev) startByKey.set(t.accountKey, t.date);
+  }
+  const noHistory = known.filter((a) => !startByKey.has(a.key));
+  const latestStart = [...startByKey.values()].reduce((a, b) => (a > b ? a : b));
   const earliest = relevant.reduce((a, t) => (t.date < a ? t.date : a), relevant[0].date);
-  const coverageDays = Math.max(0, daysBetween(earliest, asOf));
+  const coverageDays = noHistory.length > 0 ? 0 : Math.max(0, daysBetween(latestStart, asOf));
+  const limitedBy = noHistory.length > 0
+    ? noHistory.map((a) => a.key)
+    : known.filter((a) => startByKey.get(a.key) === latestStart).map((a) => a.key);
 
   const net = new Map<string, number>();
   for (const t of relevant) net.set(t.date, (net.get(t.date) ?? 0) + Math.round(t.amount * 100));
 
   // Never earlier than the oldest transaction: before it the position is not
   // known, it is merely unrecorded.
-  const start = coverageDays >= windowDays ? shiftDate(asOf, -windowDays) : earliest;
+  const start = coverageDays >= windowDays ? shiftDate(asOf, -windowDays) : (coverageDays > 0 ? latestStart : earliest);
   const back: PositionPoint[] = [{ date: asOf, value: currentCents / 100 }];
   let cents = currentCents;
   for (let d = shiftDate(asOf, -1); d >= start; d = shiftDate(d, -1)) {
@@ -96,6 +119,7 @@ export function positionSeries(
     ...base,
     points,
     coverageDays,
+    limitedBy,
     weekAgo: coverageDays >= 7 ? at(shiftDate(asOf, -7)) : null,
     monthAgo: coverageDays >= 30 ? at(shiftDate(asOf, -30)) : null,
   };
@@ -155,6 +179,13 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
   // some — otherwise "beschikbaar" would just repeat the number above it.
   const reserved = reservedCents(scheduledFlows, asOf);
 
+  // Which account is holding the comparison back, by its own name — "wait for
+  // more data" is useless advice; "import Amex" is actionable.
+  const limitLabel = series.limitedBy
+    .map((key) => accounts.find((a) => a.key === key))
+    .filter((a): a is NonNullable<typeof a> => a != null)
+    .map((a) => a.bank || a.name || a.key)
+    .join(", ");
   const hasGraph = series.coverageDays >= MIN_HISTORY_DAYS && series.points.length >= 2;
   /** The pill beside the big number: the move against ONE WEEK AGO. Null when
    *  the history does not reach back a week — then nothing is shown. */
@@ -218,7 +249,9 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
       ) : (
         <p className="block-empty position-graph-empty">
           {series.coverageDays === 0
-            ? "Nog geen transacties op de rekeningen met een saldo — daaruit wordt de grafiek opgebouwd."
+            ? limitLabel
+              ? `${limitLabel} heeft nog geen transacties, dus de positie van vorige week of maand is niet af te leiden — alleen aangenomen. Importeer die rekening en de vergelijking verschijnt.`
+              : "Nog geen transacties op de rekeningen met een saldo — daaruit wordt de grafiek opgebouwd."
             : `Pas ${series.coverageDays} dag${series.coverageDays === 1 ? "" : "en"} transactiegeschiedenis — te weinig voor een lijn. Vanaf ${MIN_HISTORY_DAYS} dagen tekent LaVega hem.`}
         </p>
       )}
