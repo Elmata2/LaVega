@@ -221,3 +221,76 @@ Works: bank, rename, type, entity, transactions, delete, filter per company.
   that is actually relevant, driven by the country in the profile (NL income tax, etc.).
 - **Facturen**: the UI is bad. Reduce it to exactly three ways in — the automatic n8n
   feed, manual entry, and **drag and drop an invoice file**. Nothing else.
+
+---
+
+# UI review round 2 — dictated 2026-08-16
+
+His verdict on round 1: "major, major improvement". What follows is the de-duplicated signal.
+
+## Correctness first — two numbers and one behaviour that may be lying
+
+- **"Uitgaven t.o.v. vorige maand" showed a ~€24.000 rise he does not believe.** He guessed it
+  compares by UPLOAD date. Checked: `categoryComparison` (packages/core/src/views.ts:176) buckets on
+  `t.date`, so that guess is wrong — but he is right that the number is not trustworthy, for a
+  reason he could not have seen. There is **no per-account coverage guard**: every transaction is
+  bucketed by month regardless of which account it came from. Import ABN for Jan–Aug and Amex for
+  Aug only, and August carries a whole extra card that July never had — a large, entirely fictional
+  "increase". Compounding it, the "current" month is simply the latest date present, which may be a
+  half-imported month. **Fix: compare like for like** — restrict both months to accounts that have
+  data in both, and say so plainly when coverage differs, rather than printing a percentage that
+  cannot mean what it appears to mean.
+- **Persoonlijk ⇄ Zakelijk does not restore.** Switching to Zakelijk shows only the accounts;
+  switching back to Persoonlijk does not bring back what was there before. Investigate.
+- **The 3% figure beside Totaalpositie is unclear.** Say what it is measured against.
+
+## Overzicht
+
+- **Statistics — the time filter.** Wants `1 week · 1 maand · 3 maanden · 6 maanden · 12 maanden`,
+  or `1w · 1m · 3m · aangepast` where *aangepast* lets him pick any range.
+- **Remove the small note line under the statistics block** — it earns nothing.
+- **"6 kleinere categorieën niet getoond" — make the cut-off per TIMEFRAME, not global.** Small
+  amounts that add up meaningfully within a month are invisible against a year. The threshold must
+  be relative to the window being shown.
+- Trend lines, if they are genuinely useful. Only then.
+- **Recente transacties** — remove the note line underneath. On logos: if real logos are not
+  possible, drop the two-letter monogram circle and just show the name. He asked which is better.
+- **Payment schedule**: empty so far, but he likes it.
+- **Cashflow projection**: good.
+- **Cards** — he wants the REAL card art (his example: the Amex Gold card). Confirm the obstacles
+  and record them rather than quietly not doing it. Also remove the note under this block.
+- **Travel agent**: clicking a destination gives "nog geen route met bekende voorwaarden — ververs
+  eerst". He re-ran the ingest and got zero. Still broken; he wants to discuss before it is fixed.
+
+## Profiel
+
+- Likes it. Widgets and Persoonlijk/Zakelijk are right.
+- **Country/region: every country, not a short list.** And regions matter — tax in Texas is not tax
+  in New York — so a region level is needed under the country. Always entered by hand: privacy-first
+  means never inferring location.
+- **Import: default the entity to Persoonlijk.**
+- **Enable Banking — after the MVP**, then connecting several accounts. Not before we are happy.
+- **Koppelingen: simplify.** Explanations belong behind a small info (eye) icon, not as rows of
+  visible text. Click to learn, otherwise stay out of the way.
+- **Back-up** works well.
+- **Profile at the very top with first and last name**, so the screen feels like the user's own.
+
+## Optimalisatie
+
+- **His Simeo subscription is missing.** He suspects the detection window is one month. It must be
+  **at least 3 months, better 6** — quarterly subscriptions exist and a one-month window can never
+  see them.
+- Rent/savings framing: he likes it, but **he should not have to type the rent by hand — read it
+  from the data.**
+- Layout is good.
+
+## Punten
+
+- The real prize: **once the user grants access once, derive the points from the transactions**
+  (Amex, ING). Ask once, then compute. Backlog.
+
+## Elsewhere
+
+- **Remove the disclaimer block on the right.** Disclaimers and terms belong at launch, not in the
+  working screen.
+- **Invoices**: he is testing first; other work continues meanwhile.
