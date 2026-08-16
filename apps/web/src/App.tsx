@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents, getHomeCountry } from "./settings.js";
+import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getEnabledModules, setEnabledModules } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
+import { txsForAccounts, flowsForScope, entityOptionsFor } from "./scope.js";
 import { travelFacts } from "./api.js";
-import { buildTabContext } from "./agent/tabContext.js";
 import VaultGate from "./components/VaultGate";
-import ChatWidget from "./components/ChatWidget";
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
+import { enabledModules as resolveModules, navModules, type ModuleId } from "./components/moduleRegistry";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
 import Rekeningen from "./views/Rekeningen";
 import Regels from "./views/Regels";
-import Import from "./views/Import";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
@@ -28,6 +27,7 @@ import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
+import Profiel from "./views/Profiel";
 import type { PendingInvoice } from "./n8n.js";
 
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
@@ -40,7 +40,7 @@ const storage = createEncryptedStorage();
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup";
+export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup" | "profiel";
 
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
@@ -64,16 +64,31 @@ export default function App() {
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   // What the agents have learned (and what he corrected). Lives in the vault.
   const [facts, setFacts] = useState<LearnedFact[]>([]);
+  // The owner's own privé/zakelijk classification, one row per entity. Lives in
+  // the vault (storage.getEntityProfiles). An entity with no row is personal —
+  // core's hard default, never a guess: `suggestEntityScope` only prefills the
+  // picker in the profile, it never resolves on its own.
+  const [entityProfiles, setEntityProfiles] = useState<EntityProfile[]>([]);
   // Public savings benchmark for the travel block's "where to keep it" step.
   // Same provider Optimalisatie uses (localStorage-cached), so no double fetch
   // cost; falls back to the bundled snapshot when the rates server is down.
   const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
-  const homeCountry = getHomeCountry();
-  // Whether the server has an ANTHROPIC_API_KEY (drives the chat widget's
+  // The country that drives the tax rules and the market whose card terms the
+  // travel agent looks up. A local preference, edited in the profile — held in
+  // state so changing it re-renders everything that reads it.
+  const [homeCountry, setHomeCountryState] = useState<string>(() => getHomeCountry());
+  function handleHomeCountryChange(code: string) {
+    setHomeCountry(code);
+    setHomeCountryState(getHomeCountry()); // read back: setHomeCountry rejects a non-ISO code
+  }
+  // Whether the server has an ANTHROPIC_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
-  // A question pushed into the chat widget from elsewhere (e.g. the per-category
-  // "vs. gemiddelde" button). The nonce re-triggers even for the same text.
+  // A question raised elsewhere in the UI (e.g. the per-category "vs.
+  // gemiddelde" button). The floating chat widget that consumed it is
+  // deliberately not rendered for now (his UI review: "remove it, decide later
+  // what it becomes"), so the question is parked here until it comes back —
+  // the component file and this wiring stay so that is a one-line change.
   const [askText, setAskText] = useState<string | null>(null);
   const [askNonce, setAskNonce] = useState(0);
   function askAssistant(text: string) {
@@ -81,7 +96,32 @@ export default function App() {
     setAskNonce((n) => n + 1);
   }
 
+  // The owner's own module selection: which modules sit in the top nav. A local
+  // preference (settings.ts); the registry resolves an unset/stale stored list
+  // and guarantees Overzicht is in it.
+  const [modules, setModules] = useState<ModuleId[]>(() => resolveModules(getEnabledModules()));
+  function handleModulesChange(next: ModuleId[]) {
+    const resolved = resolveModules(next);
+    setModules(resolved);
+    setEnabledModules(resolved);
+  }
+  // Bumped by "Widget toevoegen" in the header so the profile scrolls to the
+  // picker instead of the top of a long settings page.
+  const [addWidget, setAddWidget] = useState(0);
+  function handleAddWidget() {
+    setView("profiel");
+    setAddWidget((n) => n + 1);
+  }
+
   const [view, setView] = useState<View>("overview");
+  // The shell's own filter: whose money is on screen. Starts on the classification
+  // core defaults to, so a vault that has never been classified opens showing
+  // everything it has rather than an empty page.
+  const [scope, setScope] = useState<EntityScope>(DEFAULT_ENTITY_SCOPE);
+  // The per-COMPANY scope inside that half ("" = every company in this scope).
+  // The chrome no longer sets it (per-company splitting is not a priority), but
+  // the plumbing is intact and every view still receives it — Transacties and
+  // Rekeningen still filter per company, and Belasting still works per BV.
   const [entityScope, setEntityScope] = useState("");
   // Built once at mount (empty deps — never re-reads the clock), so the
   // forecast stays deterministic for the lifetime of the session.
@@ -137,7 +177,7 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards, loadedFacts] = await Promise.all([
+      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards, loadedFacts, loadedProfiles] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
@@ -146,6 +186,7 @@ export default function App() {
         storage.getInvoices(),
         storage.getRewards(),
         storage.getFacts(),
+        storage.getEntityProfiles(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -155,6 +196,7 @@ export default function App() {
       setInvoices(loadedInvoices);
       setRewards(loadedRewards);
       setFacts(loadedFacts);
+      setEntityProfiles(loadedProfiles);
     })();
   }, [gate]);
 
@@ -240,6 +282,7 @@ export default function App() {
     setInvoices([]);
     setRewards([]);
     setFacts([]);
+    setEntityProfiles([]);
     setPendingInvoices([]);
     setGate("unlock");
   }
@@ -298,7 +341,7 @@ export default function App() {
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices, freshRewards] = await Promise.all([
+    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices, freshRewards, freshProfiles] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
@@ -306,6 +349,7 @@ export default function App() {
       storage.getVatSettings(),
       storage.getInvoices(),
       storage.getRewards(),
+      storage.getEntityProfiles(),
     ]);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
@@ -314,12 +358,33 @@ export default function App() {
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
     setRewards(freshRewards);
+    setEntityProfiles(freshProfiles);
   }
 
-  const entityOptions = useMemo(
-    () => Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0))),
-    [accounts],
+  // Classify one entity as privé or zakelijk. Replace-all persistence, same
+  // pattern as saveRules; the core mutator keeps it one row per entity.
+  async function handleClassifyEntity(entityName: string, next: EntityScope) {
+    const profiles = classifyEntity(entityProfiles, entityName, next);
+    setEntityProfiles(profiles);
+    await storage.putEntityProfiles(profiles);
+  }
+
+  // The accounts of the half in view. Built from the FULL list, so switching
+  // the top-bar switch is the only thing that decides which half you see.
+  const scopeAccounts = useMemo(
+    () => accountsInScope(accounts, scope, entityProfiles),
+    [accounts, scope, entityProfiles],
   );
+
+  // One row per entity with its resolved classification — what the profile's
+  // "Persoonlijk of zakelijk" list edits. Built from ALL accounts, never the
+  // scoped subset: an entity must stay editable after you move it to the half
+  // you are not currently looking at.
+  const entitySummaryRows = useMemo(() => entitySummaries(accounts, entityProfiles), [accounts, entityProfiles]);
+
+  // The companies inside the active half — what the per-company controls that
+  // survive (Transacties' filter, Belasting's per-BV modules) are built from.
+  const entityOptions = useMemo(() => entityOptionsFor(scopeAccounts), [scopeAccounts]);
 
   // Own-account identifiers for "Eigen overboeking" detection. Built from the
   // FULL accounts list (not the entity-scoped subset) so a transfer between
@@ -347,18 +412,17 @@ export default function App() {
     if (fAccount && (!acc || (entityScope !== "" && acc.entity !== entityScope))) setFAccount("");
   }, [accounts, entityOptions, fEntity, fAccount, entityScope]);
 
-  // entityScope ("" = Alle bedrijven) pre-filters the accounts/txs every view
-  // derives from; each view's own filters (fEntity, fAccount, search, ...)
-  // still apply on top of this scope.
+  // Two nested scopes pre-filter the accounts/txs every view derives from: the
+  // top-bar half (persoonlijk/zakelijk) and, inside it, entityScope ("" = every
+  // company in this half). Each view's own filters (fEntity, fAccount, search,
+  // ...) still apply on top of both.
   const scopedAccounts = useMemo(
-    () => (entityScope ? accounts.filter((a) => a.entity === entityScope) : accounts),
-    [accounts, entityScope],
+    () => (entityScope ? scopeAccounts.filter((a) => a.entity === entityScope) : scopeAccounts),
+    [scopeAccounts, entityScope],
   );
-  const scopedTxs = useMemo(() => {
-    if (!entityScope) return txs;
-    const scopedKeys = new Set(scopedAccounts.map((a) => a.key));
-    return txs.filter((t) => scopedKeys.has(t.accountKey));
-  }, [txs, entityScope, scopedAccounts]);
+  // A transaction follows its account's classification — it is never classified
+  // on its own, so the two can't disagree.
+  const scopedTxs = useMemo(() => txsForAccounts(scopedAccounts, txs), [txs, scopedAccounts]);
 
   // A stored balance is only "as of" its balanceDate (no date => already
   // current); roll every account forward to `asOf` with its later txs so
@@ -378,34 +442,19 @@ export default function App() {
     () => [...scheduledFlows, ...scheduledInvoiceFlows(invoices)],
     [scheduledFlows, invoices],
   );
-  // Scheduled flows constrained to the active top-bar scope so Overzicht/Forecast
-  // only see the reservations/invoices for the entity in view ("" = all).
+  // Scheduled flows constrained to BOTH scopes, so Overzicht/Forecast never
+  // show a company's VAT reservation while you are looking at your private
+  // money. A flow carries its own entity (it can exist before that entity has
+  // an account), so it is classified directly rather than through `accounts`.
   const scopedScheduledFlows = useMemo(
-    () => scheduledFlowsForScope(allScheduledFlows, entityScope),
-    [allScheduledFlows, entityScope],
+    () => scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
+    [allScheduledFlows, scope, entityProfiles, entityScope],
   );
 
-  // Minimal per-tab context for the chat widget. Passes everything already in
-  // App scope that a tab's slice needs (scoped accounts/txs/flows, config,
-  // buffer, asOf) — buildTabContext derives the aggregate/summary each tab is
-  // allowed to send and drops raw txs. No extra network fetches: the live ECB
-  // rate (valuta) and public savings benchmark (optimalisatie) aren't in scope
-  // here, so those are omitted and the agent web-searches them.
-  const chatCtx = useMemo(
-    () =>
-      buildTabContext(view, {
-        accounts: currentScopedAccounts,
-        txs: scopedTxs,
-        rules,
-        invoices,
-        rewards,
-        vatSettings,
-        scheduledFlows: scopedScheduledFlows,
-        bufferCents,
-        asOf,
-      }),
-    [view, currentScopedAccounts, scopedTxs, rules, invoices, rewards, vatSettings, scopedScheduledFlows, bufferCents, asOf],
-  );
+  // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
+  // more — the floating chat widget it fed is not rendered while its future is
+  // being decided. Nothing about the redaction boundary changed; the builder
+  // and the widget are both still in the tree, just unmounted.
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
   async function handleImport(file: File) {
@@ -653,25 +702,21 @@ export default function App() {
 
   return (
     <div className="shell">
-      <NavBar view={view} onNavigate={setView} onLock={handleLock} />
+      <NavBar view={view} modules={navModules(modules)} onNavigate={setView} onOpenProfile={() => setView("profiel")} />
 
       <div className="shell-body">
-        <TopBar
-          view={view}
-          entityScope={entityScope}
-          onEntityScopeChange={setEntityScope}
-          entityOptions={entityOptions}
-        />
+        <TopBar view={view} scope={scope} onScopeChange={setScope} onAddWidget={handleAddWidget} />
 
         <main className="content">
-          {view === "overview" && (
-            <Import
-              entity={entity}
-              onEntityChange={setEntity}
-              busy={busy}
-              problems={problems}
-              onImport={handleImport}
-            />
+          {/* Import moved into the profile, so import/bank-link messages would
+              otherwise only be visible on that page. They are the outcome of
+              something the user just did (a file import, a bank return), so
+              they follow him: the profile's own Import block shows them there,
+              this banner shows them anywhere else. */}
+          {problems.length > 0 && view !== "profiel" && (
+            <p role="alert" className="text-warn shell-problems">
+              {problems.join(", ")}
+            </p>
           )}
 
           {view === "overview" && (
@@ -827,9 +872,34 @@ export default function App() {
           {view === "koppelingen" && <Koppelingen />}
 
           {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
-        </main>
 
-        <ChatWidget view={view} context={chatCtx} configured={llmConfigured} prompt={askText} promptNonce={askNonce} />
+          {view === "profiel" && (
+            <Profiel
+              enabledModules={modules}
+              onModulesChange={handleModulesChange}
+              focusModules={addWidget}
+              entities={entitySummaryRows}
+              onClassifyEntity={handleClassifyEntity}
+              homeCountry={homeCountry}
+              onHomeCountryChange={handleHomeCountryChange}
+              onLock={handleLock}
+              entity={entity}
+              onEntityChange={setEntity}
+              busy={busy}
+              problems={problems}
+              onImport={handleImport}
+              rules={rules}
+              ruleMatch={ruleMatch}
+              onRuleMatchChange={setRuleMatch}
+              ruleCategory={ruleCategory}
+              onRuleCategoryChange={setRuleCategory}
+              onSaveRules={saveRules}
+              storage={storage}
+              asOf={asOf}
+              onRestored={handleRestored}
+            />
+          )}
+        </main>
       </div>
     </div>
   );

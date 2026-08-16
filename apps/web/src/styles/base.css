@@ -190,14 +190,31 @@ table tbody tr:hover {
   letter-spacing: 0.02em;
 }
 
+/* ---------- Header language (shared by every section, card and module) ------
+ *
+ * The reference announces a section with a title and a black rule under it, not
+ * by wrapping it in a round-edged tile. So the tiles lost most of their radius
+ * and all of their shadow — the hairline border is enough to hold a section
+ * together — and the rule under the title does the announcing. The same three
+ * declarations sit on .module-head in modules.css, so a block written against
+ * the design system inherits the treatment without touching the block.
+ *
+ * Applies to a card's own <h2> as well as to .card-header, because half the
+ * views title a card with a bare heading and the two must not read differently. */
+.card-header,
+.card > h2 {
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--ink);
+}
+
 /* Card */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-sm);
   padding: var(--sp-5);
   margin-bottom: var(--sp-5);
-  box-shadow: var(--shadow-sm);
 }
 
 /* KPI tile */
@@ -210,9 +227,8 @@ table tbody tr:hover {
 .kpi {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-sm);
   padding: var(--sp-4) var(--sp-5);
-  box-shadow: var(--shadow-sm);
 }
 .kpi.highlight {
   background: var(--accent-soft);
@@ -261,13 +277,15 @@ table tbody tr:hover {
 }
 .card-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
 }
+/* The rule belongs to the header row, not to the heading inside it. */
 .card-header h2 {
   margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 .card-link {
   background: none;
@@ -484,35 +502,37 @@ table tbody tr:hover {
   background: var(--warn);
 }
 
-/* App-bar nav item — a pill in the horizontal rail (the reference's nav). */
+/* App-bar nav item — a plain text tab with a rule under the active one, the
+ * desktop reference's treatment. It replaced the round-edged dark tile once the
+ * rail stopped showing the whole catalogue: with only the modules the owner
+ * switched on, the nav needs no decoration to stay readable. */
 .nav-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  /* Tight enough that all eleven tabs fit a 1440 screen without scrolling. */
-  padding: 8px 12px;
-  border-radius: var(--pill);
+  padding: 8px 2px;
   border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 500;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
 .nav-item:hover:not(:disabled) {
   color: var(--ink);
-  background: var(--surface);
 }
-/* Active = solid dark rounded pill (the reference dashboard's signature). */
+/* Active = the reference's rule under the label, in ink. */
 .nav-item.active,
 .nav-item.active:hover {
-  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
-  color: var(--on-ink);
-  box-shadow: 0 8px 18px -10px rgba(26, 26, 23, 0.5);
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  font-weight: 600;
 }
 .nav-item:disabled {
   opacity: 1;
@@ -563,16 +583,15 @@ table tbody tr:hover {
   color: var(--ink);
 }
 
-/* The tab set: one scrollable pill rail on the nested surface. */
+/* The tab set: the owner's chosen modules as a row of text tabs. It still
+ * scrolls rather than wraps, because a selection can still be long. */
 .navrail {
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-5);
   flex: 1;
   min-width: 0;
-  padding: var(--sp-1);
-  border-radius: var(--pill);
-  background: var(--surface-2);
+  padding: 0 var(--sp-2);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -586,16 +605,14 @@ table tbody tr:hover {
   gap: var(--sp-3);
   flex: none;
 }
-.identity-card {
-  color: var(--muted);
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-.appbar-lock {
+
+/* Profile entry — the reference's avatar position, top right. It holds the
+ * module picker and everything that is a setting rather than a workspace. */
+.appbar-profile {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 8px 14px;
+  padding: 5px 14px 5px 5px;
   border-radius: var(--pill);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -605,9 +622,28 @@ table tbody tr:hover {
   white-space: nowrap;
   cursor: pointer;
 }
-.appbar-lock:hover {
+.appbar-profile:hover {
   color: var(--ink);
   border-color: var(--accent);
+}
+.appbar-profile.active {
+  color: var(--on-ink);
+  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+  border-color: var(--ink);
+}
+.profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.appbar-profile.active .profile-avatar {
+  background: var(--on-ink);
 }
 
 .shell-body {
@@ -618,13 +654,18 @@ table tbody tr:hover {
   min-width: 0;
 }
 
-/* Greeting / title row. */
+/* Greeting / title row — the page's own header, in the same language as every
+ * section below it: the title, and a rule under it. */
 .topbar {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--sp-4);
-  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  /* No side padding: the margin insets it to the content column, so the rule
+   * starts and ends exactly where the content does. */
+  padding: var(--sp-5) 0 var(--sp-3);
+  margin: 0 var(--sp-6) var(--sp-4);
+  border-bottom: 1px solid var(--ink);
   background: transparent;
   flex-wrap: wrap;
   flex: none;
@@ -637,9 +678,180 @@ table tbody tr:hover {
 }
 .topbar-right {
   display: flex;
-  gap: var(--sp-2);
+  align-items: center;
+  gap: var(--sp-3);
   flex-wrap: wrap;
   padding-bottom: 6px;
+}
+/* ---------- Persoonlijk | Zakelijk ----------
+ *
+ * Two words separated by a vertical rule — the same idea as the nav's tabs
+ * (text, and a rule marking the active one), not another pill group. It sits in
+ * the header and in the profile's per-entity list, so both read as one control. */
+.scope-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: none;
+}
+.scope-rule {
+  width: 1px;
+  height: 1.1em;
+  background: var(--line);
+}
+.scope-option {
+  padding: 4px 2px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.scope-option:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: transparent;
+}
+.scope-option.scope-on,
+.scope-option.scope-on:hover {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--ink);
+}
+
+/* The profile's per-entity classification list. */
+.scope-list {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.scope-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.scope-item:last-child {
+  border-bottom: none;
+}
+.scope-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.scope-item-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+/* "Widget toevoegen" — the reference's Add widget, opening the same module
+ * picker the profile holds. */
+.topbar-add {
+  border-style: dashed;
+  color: var(--ink);
+}
+.topbar-add:hover {
+  border-color: var(--accent);
+}
+
+/* Import / bank-link outcome shown outside the profile (where the Import block
+ * itself lives). Same role="alert" text, one line above the content. */
+.shell-problems {
+  margin: 0 0 var(--sp-4);
+}
+
+/* ---------- Module picker (profile + "Widget toevoegen") ----------
+ *
+ * One row per module in the registry: a thumbnail drawn from these same
+ * tokens, the Dutch label, one line of what it does, and the switch that puts
+ * it in the nav or takes it out. */
+.module-picker {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.mp-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.mp-preview {
+  flex: none;
+  width: 96px;
+  line-height: 0;
+}
+.mp-thumb {
+  width: 96px;
+  height: 60px;
+  border-radius: 8px;
+}
+.mp-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.mp-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+.mp-what {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.mp-note {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+/* The switch. Off = a hairline track; on = the ink pill the nav's active tab
+ * uses, so "on" reads the same everywhere. */
+.mp-toggle {
+  flex: none;
+  width: 46px;
+  height: 26px;
+  padding: 3px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.mp-toggle .mp-knob {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--pill);
+  background: var(--muted);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.mp-toggle.on {
+  background: linear-gradient(180deg, var(--ink), var(--ink-soft));
+  border-color: var(--ink);
+}
+.mp-toggle.on .mp-knob {
+  background: var(--on-ink);
+  transform: translateX(20px);
+}
+.mp-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .content {
@@ -878,15 +1090,6 @@ table tbody tr:hover {
   color: var(--ink);
 }
 
-/* The app bar runs out of room before the grid does: with eleven tabs the rail
- * needs the full width to show the last one (Back-up) without scrolling, so the
- * "Lokaal · privé" line yields below a wide desktop. */
-@media (max-width: 1500px) {
-  .identity-card {
-    display: none;
-  }
-}
-
 @media (max-width: 900px) {
   /* Phone: the frame goes full-bleed, the page scrolls normally, and the shell
    * is one column of stacked cards. The app bar wraps to two rows so the nav
@@ -918,11 +1121,30 @@ table tbody tr:hover {
     z-index: 20;
     background: var(--bg);
   }
-  .appbar-lock {
-    padding: 6px 12px;
+  .appbar-profile {
+    padding: 4px 12px 4px 4px;
+  }
+  .profile-avatar {
+    width: 24px;
+    height: 24px;
   }
   .nav-item {
-    padding: 7px 10px;
+    padding: 7px 0;
+  }
+  .navrail {
+    gap: var(--sp-4);
+  }
+  /* A 96px thumbnail plus a switch leaves too little for the sentence on a
+   * phone; the preview shrinks rather than the text wrapping to four lines. */
+  .mp-preview,
+  .mp-thumb {
+    width: 64px;
+  }
+  .mp-thumb {
+    height: 40px;
+  }
+  .mp-item {
+    gap: var(--sp-3);
   }
   /* Anything scrolled into view (a module, a chat answer) clears the pinned
    * bar instead of starting underneath it. */
@@ -959,11 +1181,11 @@ table tbody tr:hover {
   }
   .card {
     padding: var(--sp-4);
-    border-radius: var(--r-card);
   }
   .topbar {
     align-items: flex-start;
-    padding: var(--sp-5) var(--sp-4) var(--sp-3);
+    padding: var(--sp-4) 0 var(--sp-3);
+    margin: 0 var(--sp-4) var(--sp-3);
   }
   /* The mobile reference leads with very large type, one column under it. */
   .topbar-title {

@@ -1,13 +1,37 @@
 import { norm } from "./hash.js";
 
+/** Normalisation used ONLY for category matching — never for transaction
+ *  identity. `norm` (hash.ts) is load-bearing for `tx.id`, so it must keep
+ *  lowercasing and collapsing whitespace and nothing more; this one is free to
+ *  be looser. On top of `norm` it:
+ *    - strips diacritics, so "Café" / "Pathé" / "Univé" match plain-ASCII entries;
+ *    - DROPS apostrophes and dots, so "Domino's" == "dominos" (including the
+ *      curly ’ some exports use) and "K.v.K." == "kvk", "A.S.R." == "asr";
+ *    - turns the remaining separators (`- / , * + _ ; : ( )` …) into spaces, so
+ *      the real counterparty strings banks deliver — "Nationale-Nederlanden",
+ *      "T-Mobile", "CCV*ALBERT HEIJN" — match a plainly-written entry.
+ *  It is applied to BOTH sides (entry and transaction text), so a rule the owner
+ *  typed with a hyphen keeps working too.
+ *
+ *  `&` is deliberately left alone: collapsing it would shorten "h&m" / "c&a"
+ *  into two-letter needles that substring-match unrelated words. */
+export const matchNorm = (s: unknown): string =>
+  norm(s)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['\u2019`.]/g, "")
+    .replace(/[-\u2013\u2014_/\\,;:*+()[\]{}|"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 /* Built-in Dutch category defaults. These apply automatically in categorize()
  * AFTER a user's own rules (and a manual tx.category), so they give sensible
  * categories out of the box for the average Dutch household while any
  * user-defined rule or manual override still wins.
  *
- * Matching is the same as user rules: the (normalized) `match` string is tested
- * as a substring of norm(counterparty + " " + description). Two consequences
- * shaped this list:
+ * Matching is the same as user rules: the (matchNorm'd) `match` string is tested
+ * as a substring of matchNorm(counterparty + " " + description). Three
+ * consequences shaped this list:
  *   1. ORDER MATTERS — the first match wins, so a specific product is listed
  *      before a broader merchant ("amazon prime" -> Entertainment appears above
  *      "amazon" -> Online shopping; "uber eats"/"bolt food" -> Eten sit above
@@ -15,11 +39,19 @@ import { norm } from "./hash.js";
  *   2. NO SHORT/AMBIGUOUS TOKENS — a match is a plain substring, so entries that
  *      would collide with common words are avoided (e.g. bare "spar" is a
  *      substring of "sparen" and would mislabel savings transfers; "ret",
- *      "cak", bare "bp"/"total"/"cz" are omitted for the same reason). Accented
- *      variants are listed explicitly ("cafe"/"café") because norm lowercases
- *      but does not strip accents. */
+ *      "cak", bare "bp"/"total"/"cz" are omitted for the same reason).
+ *   3. AN AMBIGUOUS WORD NEEDS A `sign` — the same word means different things
+ *      in the two directions ("salaris" incoming is the owner's income; the same
+ *      word outgoing is a company paying wages). Such an entry carries
+ *      `sign: "in" | "out"` and only applies to that direction. Without a sign
+ *      an entry applies to both, as before. A word that is ambiguous even WITH a
+ *      sign is left out entirely — an unmatched transaction stays "onbekend",
+ *      which is honest; a guessed category is not.
+ *
+ * (The accented duplicates — "cafe"/"café" — are now redundant because matchNorm
+ * strips diacritics. They are harmless and left in place.) */
 
-export type CategoryRule = { match: string; category: string };
+export type CategoryRule = { match: string; category: string; sign?: "in" | "out" };
 
 export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   // --- overlap priority: specific product before its broader merchant ---
@@ -31,6 +63,49 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "apple.com/bill", category: "Abonnementen" },
   { match: "microsoft 365", category: "Abonnementen" },
   { match: "office 365", category: "Abonnementen" },
+
+  // --- Zakelijke software, cloud & hosting. These sit at the TOP for two
+  //     reasons: "amazon web services" must beat "amazon" -> Online shopping,
+  //     and on a company account this block is where most of the month's spend
+  //     actually goes — without it a BV's Top-uitgaven is dominated by
+  //     "onbekend". Deliberately absent: the payment processors (Stripe,
+  //     Mollie, Adyen). Their rows are revenue in one direction and fees in the
+  //     other, and a substring rule cannot tell which — see rule 3 above. ---
+  { match: "amazon web services", category: "Abonnementen" },
+  { match: "aws emea", category: "Abonnementen" },
+  { match: "google workspace", category: "Abonnementen" },
+  { match: "google cloud", category: "Abonnementen" },
+  { match: "microsoft azure", category: "Abonnementen" },
+  { match: "anthropic", category: "Abonnementen" },
+  { match: "github", category: "Abonnementen" },
+  { match: "gitlab", category: "Abonnementen" },
+  { match: "atlassian", category: "Abonnementen" },
+  { match: "slack technologies", category: "Abonnementen" },
+  { match: "figma", category: "Abonnementen" },
+  { match: "vercel", category: "Abonnementen" },
+  { match: "netlify", category: "Abonnementen" },
+  { match: "cloudflare", category: "Abonnementen" },
+  { match: "digitalocean", category: "Abonnementen" },
+  { match: "hetzner", category: "Abonnementen" },
+  { match: "supabase", category: "Abonnementen" },
+  { match: "twilio", category: "Abonnementen" },
+  { match: "mailchimp", category: "Abonnementen" },
+  { match: "hubspot", category: "Abonnementen" },
+  { match: "zoom video", category: "Abonnementen" },
+  { match: "calendly", category: "Abonnementen" },
+  { match: "typeform", category: "Abonnementen" },
+  { match: "airtable", category: "Abonnementen" },
+  { match: "zapier", category: "Abonnementen" },
+  { match: "transip", category: "Abonnementen" },
+  { match: "hostnet", category: "Abonnementen" },
+  { match: "mijndomein", category: "Abonnementen" },
+  { match: "namecheap", category: "Abonnementen" },
+  { match: "godaddy", category: "Abonnementen" },
+  { match: "moneybird", category: "Abonnementen" },
+  { match: "exact online", category: "Abonnementen" },
+  { match: "e-boekhouden", category: "Abonnementen" },
+  { match: "snelstart", category: "Abonnementen" },
+  { match: "twinfield", category: "Abonnementen" },
 
   // --- Boodschappen ---
   { match: "albert heijn", category: "Boodschappen" },
@@ -141,6 +216,10 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "parkmobile", category: "Transport" },
   { match: "parkline", category: "Transport" },
   { match: "flitsmeister", category: "Transport" },
+  { match: "leaseplan", category: "Transport" },
+  { match: "athlon car lease", category: "Transport" },
+  { match: "arval", category: "Transport" },
+  { match: "ayvens", category: "Transport" },
 
   // --- Reizen ---
   { match: "booking.com", category: "Reizen" },
@@ -355,6 +434,12 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "svb", category: "Belastingen & overheid" },
   { match: "uwv", category: "Belastingen & overheid" },
   { match: "kvk", category: "Belastingen & overheid" },
+  { match: "kamer van koophandel", category: "Belastingen & overheid" },
+  { match: "loonheffing", category: "Belastingen & overheid" },
+  { match: "omzetbelasting", category: "Belastingen & overheid" },
+  { match: "vennootschapsbelasting", category: "Belastingen & overheid" },
+  { match: "inkomstenbelasting", category: "Belastingen & overheid" },
+  { match: "motorrijtuigenbelasting", category: "Belastingen & overheid" },
 
   // --- Sparen & beleggen ("spaarrekening" is a safe full word — bare "spar"
   //     is deliberately NOT used as it is a substring of "sparen") ---
@@ -410,9 +495,24 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "geld toevoegen", category: "Overboekingen" },
   { match: "tikkie", category: "Overboekingen" },
   { match: "naar creditcard", category: "Overboekingen" },
+
+  // --- Inkomen. Nothing above this line can ever produce "Inkomen", so before
+  //     these entries EVERY incoming transaction fell through to "onbekend" —
+  //     which also meant the AI pass spent its batch on income rows instead of
+  //     on the expenses Top-uitgaven shows.
+  //     "salaris" is sign-gated: incoming it is the owner's pay, outgoing it is
+  //     a company paying wages, and LaVega's taxonomy has no honest bucket for
+  //     that — so the "out" direction is left "onbekend" rather than guessed. ---
+  { match: "salaris", sign: "in", category: "Inkomen" },
+  { match: "zorgtoeslag", sign: "in", category: "Inkomen" },
+  { match: "huurtoeslag", sign: "in", category: "Inkomen" },
+  { match: "kinderbijslag", sign: "in", category: "Inkomen" },
 ];
 
 /* Pre-normalized once at module load so categorize() does a plain substring test
- * per entry (no per-transaction norm of the match strings). */
-export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: string }> =
-  NL_CATEGORY_RULES.map((r) => ({ m: norm(r.match), category: r.category }));
+ * per entry (no per-transaction matchNorm of the match strings). `sign` is
+ * carried through so categorize() can skip a direction-specific entry. */
+export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: string; sign?: "in" | "out" }> =
+  NL_CATEGORY_RULES.map((r) => (r.sign
+    ? { m: matchNorm(r.match), category: r.category, sign: r.sign }
+    : { m: matchNorm(r.match), category: r.category }));

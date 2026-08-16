@@ -13,11 +13,14 @@ const base = readFileSync(new URL("./styles/base.css", import.meta.url), "utf8")
 const charts = readFileSync(new URL("./styles/charts.css", import.meta.url), "utf8");
 const flat = (s: string) => s.replace(/\s+/g, " ");
 
+/* Belasting is deliberately NOT in this list any more: since the UI review it
+ * renders one module per tax with a stacked per-entity block instead of a
+ * table, so there is no card-table contract left to check there. Any view that
+ * DOES opt a table into the card layout still has to label its cells. */
 const CARD_TABLE_VIEWS = [
   "./views/Transacties.tsx",
   "./views/Rekeningen.tsx",
   "./views/Optimalisatie.tsx",
-  "./views/Belasting.tsx",
 ];
 
 test("every table that becomes cards on a phone labels its cells", () => {

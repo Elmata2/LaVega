@@ -1,0 +1,466 @@
+/* Layout for the four secondary tabs — Facturen, Valuta, Optimalisatie,
+ * Belasting (UI review, 2026-08-16).
+ *
+ * Rules this file obeys:
+ *   - NO new colours. Every value below is a token from tokens.css.
+ *   - It adds LAYOUT only; the components stay <Module>/<ModuleGrid> and the
+ *     existing .card/.table/.btn/.badge primitives.
+ *   - It is imported by the view files themselves, not by main.tsx, so the
+ *     four views carry their own layout and nothing else has to know.
+ *
+ * Layout language taken from Alexander's references: a section title with a
+ * rule under it (desktop homeview inspo), and the stacked from/to "Transfer
+ * money" block (Modules for homescreen example). Never the purple, never a
+ * card number. */
+
+/* ---------- Section header: a title with a rule under it ---------- */
+
+.view-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-2);
+  margin: var(--sp-5) 0 var(--sp-4);
+  border-bottom: 2px solid var(--ink);
+}
+.view-head:first-child {
+  margin-top: 0;
+}
+
+.view-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.view-head .eyebrow {
+  flex: none;
+}
+
+/* One sentence of lead, under a header. */
+.view-lead {
+  margin: 0 0 var(--sp-4);
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+/* ---------- Two equal columns, for "roughly equal in weight" ---------- */
+
+.module-grid.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.module-grid.grid-2 > .module-span-2,
+.module-grid.grid-2 > .module-span-3 {
+  grid-column: 1 / -1;
+}
+@media (max-width: 900px) {
+  .module-grid.grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Vertically stacked form (module-width) ---------- */
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.stack-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.stack-form input,
+.stack-form select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stack-form .saldo-input {
+  width: 100%;
+}
+
+.stack-form-row {
+  display: flex;
+  gap: var(--sp-3);
+}
+.stack-form-row > label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.stack-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* ---------- Drag-and-drop invoice zone ---------- */
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-height: 150px;
+  padding: var(--sp-5);
+  text-align: center;
+  border: 2px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.dropzone:hover,
+.dropzone:focus-visible {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.dropzone-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.dropzone-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+.dropzone-sub {
+  font-size: 0.8rem;
+  max-width: 34ch;
+}
+
+/* The one visually hidden file input the dropzone also opens on click. */
+.dropzone-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Transfer-money block (Valuta) ---------- */
+
+.xfer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  position: relative;
+}
+
+.xfer-leg {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  padding: var(--sp-4);
+}
+
+.xfer-leg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.xfer-leg-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.xfer-account {
+  max-width: 60%;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+  padding: 5px 10px;
+}
+
+.xfer-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.xfer-amount {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.xfer-amount:focus {
+  outline: none;
+}
+
+/* The read-out leg: same size as the input so the two legs line up. */
+.xfer-out {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.xfer-out-unknown {
+  color: var(--muted);
+  font-size: 1.35rem;
+}
+
+/* The dark currency pill from the reference. */
+.xfer-ccy {
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-radius: var(--pill);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.xfer-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.xfer-swap {
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  margin: calc(var(--sp-2) * -1) 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+.xfer-swap:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* ---------- Info button + panel ---------- */
+
+/* Same shape as .module-menu so the pair reads as one control group. */
+.module-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.module-info:hover,
+.module-info[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.info-panel {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.88rem;
+}
+.info-panel p {
+  margin: 0 0 var(--sp-2);
+}
+.info-panel p:last-child {
+  margin-bottom: 0;
+}
+.info-panel strong {
+  color: var(--ink);
+}
+
+/* ---------- Explicit reasoning that ends in a number ---------- */
+
+.reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.reason {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  line-height: 1.5;
+}
+
+.reason-figure {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.reason-lead {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+/* ---------- Informative empty state ---------- */
+
+.empty-guide {
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  padding: var(--sp-4);
+}
+.empty-guide > p {
+  margin: 0 0 var(--sp-3);
+}
+.empty-guide ul {
+  margin: 0 0 var(--sp-3);
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.empty-guide li {
+  margin-bottom: var(--sp-1);
+}
+.empty-guide > *:last-child {
+  margin-bottom: 0;
+}
+
+/* A preview that is explicitly NOT his data — dimmed and labelled, never
+ * written to the vault. */
+.demo-preview {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+}
+.demo-preview > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.demo-preview .table {
+  opacity: 0.75;
+}
+.demo-flag {
+  display: inline-block;
+  margin: var(--sp-3) 0 var(--sp-2);
+}
+
+/* ---------- Tax modules ---------- */
+
+.tax-entity {
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.tax-entity:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.tax-entity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.tax-entity-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.tax-entity-figure {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.tax-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.tax-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.tax-fields .saldo-input {
+  width: 110px;
+}
+
+.tax-caveats {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.tax-caveats li {
+  margin-bottom: var(--sp-1);
+}
+
+.tax-flows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  font-size: 0.85rem;
+}
+.tax-flow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}

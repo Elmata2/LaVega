@@ -11,21 +11,35 @@ import CashflowBlock from "../components/blocks/CashflowBlock";
 import RecenteTransactiesBlock from "../components/blocks/RecenteTransactiesBlock";
 import BetaalschemaBlock from "../components/blocks/BetaalschemaBlock";
 import TopUitgavenBlock from "../components/blocks/TopUitgavenBlock";
-import CategorieTrendBlock from "../components/blocks/CategorieTrendBlock";
+import KaartenBlock from "../components/blocks/KaartenBlock";
 import TravelBlock, { type TravelBlockProps } from "../components/blocks/TravelBlock";
 
 /* The homescreen: a grid of modules, nothing else.
  *
  * Every block lives in its own file under components/blocks/ and takes only
- * props, so a block can later be switched off per user (BACKLOG item 6 — the
- * modules are the point) without touching any other block. This view does two
- * things: derive the two values more than one block needs (the forecast, and
- * the alerts computed from it), and declare the order and spans.
+ * props, so a block can later be switched off per user (the module picker)
+ * without touching any other block. This view does two things: derive the two
+ * values more than one block needs (the forecast, and the alerts computed from
+ * it), and declare the order and spans.
  *
- * Layout, at three columns: Aandacht spans the row; then Saldo + Statistieken,
- * Positie + Cashflow, Verandering per categorie + Top uitgaven, Recente
- * transacties + Betaalschema, and Op reis across the last row. Every row fills
- * exactly, and the grid collapses to 2 then 1 column. */
+ * The order is Alexander's priority order from the 2026-08-16 review, not the
+ * order the blocks were built in:
+ *
+ *   Aandacht                 (3)  — anything wrong comes first
+ *   Totale positie   (2) + Positie per bedrijf (1)
+ *                                 — the most important number, with its graph;
+ *                                   the per-BV split shrunk to a small block
+ *   Statistieken             (3)  — the major block, both reference views
+ *   Recente transacties (2) + Betaalagenda (1)
+ *   Cashflow            (2) + Top uitgaven (1)
+ *   Je kaarten               (3)  — presentational, "which cards are connected"
+ *   Op reis                  (3)
+ *
+ * Every row fills exactly, and the grid collapses to 2 then 1 column.
+ *
+ * "Verandering per categorie" is gone: it and Statistieken asked the same
+ * question twice, so the comparison moved INTO Statistieken as its per-category
+ * per-month view. */
 
 type OverzichtProps = {
   accounts: Account[];
@@ -76,20 +90,16 @@ export default function Overzicht({
     <ModuleGrid label="Overzicht">
       <AandachtBlock alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
-      <SaldoBlock accounts={accounts} scheduledFlows={scheduledFlows} asOf={asOf} onNavigate={onNavigate} />
-      <StatistiekBlock txs={txs} />
-
-      <PositieBlock accounts={accounts} txs={txs} onNavigate={onNavigate} />
-      <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
-
-      <CategorieTrendBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
-      <TopUitgavenBlock
+      <SaldoBlock
+        accounts={accounts}
         txs={txs}
-        rules={rules}
-        own={own}
-        onSelectCategory={onSelectCategory}
-        onAsk={onAsk}
+        scheduledFlows={scheduledFlows}
+        asOf={asOf}
+        onNavigate={onNavigate}
       />
+      <PositieBlock accounts={accounts} onNavigate={onNavigate} />
+
+      <StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
 
       <RecenteTransactiesBlock
         txs={txs}
@@ -99,7 +109,18 @@ export default function Overzicht({
         onNavigate={onNavigate}
         onSelectCategory={onSelectCategory}
       />
-      <BetaalschemaBlock scheduledFlows={scheduledFlows} asOf={asOf} />
+      <BetaalschemaBlock scheduledFlows={scheduledFlows} txs={txs} asOf={asOf} />
+
+      <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
+      <TopUitgavenBlock
+        txs={txs}
+        rules={rules}
+        own={own}
+        onSelectCategory={onSelectCategory}
+        onAsk={onAsk}
+      />
+
+      <KaartenBlock accounts={accounts} onNavigate={onNavigate} />
 
       <TravelBlock {...travel} />
     </ModuleGrid>

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { Rule, Tx } from "./model.js";
 import { categorize } from "./views.js";
-import { NL_CATEGORY_RULES } from "./categories.js";
+import { NL_CATEGORY_RULES, matchNorm } from "./categories.js";
 
 const tx = (counterparty: string, description = "", category = ""): Tx => ({
   id: counterparty + description, accountKey: "A1", date: "2026-06-01", amount: -10,
@@ -55,8 +55,62 @@ test("bank fees -> Bankkosten; Revolut top-up -> Overboekingen", () => {
 test("no built-in match string normalizes to empty (would catch-all everything)", () => {
   for (const r of NL_CATEGORY_RULES) {
     expect(r.match.trim().length).toBeGreaterThan(0);
+    // matchNorm strips punctuation, so an entry made only of punctuation would
+    // normalize to "" and substring-match every transaction.
+    expect(matchNorm(r.match).length).toBeGreaterThan(0);
     expect(r.category.length).toBeGreaterThan(0);
   }
+});
+
+test("matchNorm folds the punctuation real bank strings arrive with", () => {
+  expect(matchNorm("Nationale-Nederlanden")).toBe("nationale nederlanden");
+  expect(matchNorm("K.v.K.")).toBe("kvk");
+  expect(matchNorm("CCV*ALBERT HEIJN")).toBe("ccv albert heijn");
+  expect(matchNorm("Domino’s Pizza")).toBe("dominos pizza");
+  expect(matchNorm("Café  Pathé")).toBe("cafe pathe");
+  // "&" is left alone on purpose: folding it would turn "h&m"/"c&a" into
+  // two-letter needles that substring-match unrelated words.
+  expect(matchNorm("H&M")).toBe("h&m");
+});
+
+test("punctuation in the counterparty no longer defeats a built-in default", () => {
+  // Each of these returned "onbekend" before matchNorm.
+  expect(cat(tx("Nationale-Nederlanden", "Premie"))).toBe("Verzekeringen");
+  expect(cat(tx("K.v.K. Handelsregister"))).toBe("Belastingen & overheid");
+  expect(cat(tx("Domino’s Pizza Rotterdam"))).toBe("Eten & drinken");
+});
+
+test("a user rule written with punctuation still matches plain bank text", () => {
+  const rules: Rule[] = [{ id: "r1", match: "Van der Meer-Advies B.V.", category: "Zakelijk advies" }];
+  expect(cat(tx("VAN DER MEER ADVIES BV", "factuur"), rules)).toBe("Zakelijk advies");
+});
+
+test("business software/cloud: the block a company account actually spends in", () => {
+  // "amazon web services" must beat the broader "amazon" -> Online shopping.
+  expect(cat(tx("AMAZON WEB SERVICES EMEA SARL"))).toBe("Abonnementen");
+  expect(cat(tx("Google Ireland Ltd", "Google Cloud EMEA"))).toBe("Abonnementen");
+  expect(cat(tx("ANTHROPIC PBC"))).toBe("Abonnementen");
+  expect(cat(tx("GITHUB INC"))).toBe("Abonnementen");
+  expect(cat(tx("Vercel Inc"))).toBe("Abonnementen");
+  expect(cat(tx("Moneybird B.V."))).toBe("Abonnementen");
+  // Consumer Amazon is untouched by the new block.
+  expect(cat(tx("Amazon EU SARL"))).toBe("Online shopping");
+});
+
+test("payment processors stay 'onbekend' on purpose — the sign cannot decide them", () => {
+  // A Mollie/Stripe row is revenue one way and a fee the other; a substring
+  // rule cannot tell, and a guess would pollute the books.
+  expect(cat(tx("MOLLIE B.V.", "Uitbetaling"))).toBe("onbekend");
+  expect(cat({ ...tx("STRIPE PAYMENTS UK"), amount: 250 })).toBe("onbekend");
+});
+
+test("sign-gated built-in: 'salaris' is Inkomen incoming, and NOT guessed outgoing", () => {
+  const incoming: Tx = { ...tx("Werkgever B.V.", "Salaris juli"), amount: 3200 };
+  expect(cat(incoming)).toBe("Inkomen");
+  // The same word outgoing is a company paying wages — no honest bucket, so it
+  // stays "onbekend" rather than being labelled the owner's income.
+  const outgoing: Tx = { ...tx("J. de Vries", "Salaris juli"), amount: -3200 };
+  expect(cat(outgoing)).toBe("onbekend");
 });
 
 import type { Account } from "./model.js";

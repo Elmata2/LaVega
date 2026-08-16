@@ -39,24 +39,30 @@
 
 /* ---------- Module card ---------- */
 
+/* Flatter than it was: the reference announces a block with a title and a rule
+ * under it, not with a round-edged tile, so the radius came down to the small
+ * one and the shadow went. The hairline border still holds the block together.
+ * Same treatment as .card / .card-header in base.css — one header language. */
 .module {
   display: flex;
   flex-direction: column;
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-sm);
   padding: var(--module-pad);
-  box-shadow: var(--shadow-sm);
 }
 
+/* The shared block header. Every block built on <Module> inherits the rule. */
 .module-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
   min-height: 32px;
+  padding-bottom: var(--sp-3);
   margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--ink);
 }
 
 /* Uppercase, letter-spaced, mono — the reference's card title register. */

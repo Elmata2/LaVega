@@ -77,6 +77,38 @@ test("categorizeTransactions is told how the owner re-files its suggestions", as
   expect(system).not.toContain("Albert Heijn");
 });
 
+test("a full month-sized batch fits the cap (the AI pass runs month by month)", () => {
+  // The browser points the pass at one month at a time, newest month first
+  // (core's uncategorizedByMonth). A busy month stays inside MAX_ITEMS.
+  const month = Array.from({ length: 200 }, (_, i) => ({ id: `t${i}`, text: "Onbekende Winkel", sign: "out" }));
+  expect(sanitizeCategorizeInput({ items: month }).items).toHaveLength(200);
+});
+
+test("redaction boundary end-to-end: nothing but {id,text,sign} reaches the model", async () => {
+  createMock.mockResolvedValue({ content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }] });
+  // A caller that smuggles amounts/IBANs/dates onto the item alongside the text.
+  const input = sanitizeCategorizeInput({
+    items: [
+      {
+        id: "t1",
+        text: "Onbekende Winkel XYZ",
+        sign: "out",
+        amount: -1234.56,
+        balance: 98765.43,
+        accountKey: "NL95INGB0674843703",
+        iban: "NL95INGB0674843703",
+        date: "2026-08-14",
+      },
+    ],
+  });
+  await categorizeTransactions(input, "k");
+  const sent = JSON.stringify(createMock.mock.calls[0][0].messages);
+  expect(sent).toContain("Onbekende Winkel XYZ");
+  for (const leak of ["1234.56", "98765.43", "NL95INGB0674843703", "2026-08-14"]) {
+    expect(sent).not.toContain(leak);
+  }
+});
+
 test("categorizeTransactions returns [] when there's no tool_use block", async () => {
   createMock.mockResolvedValue({ content: [{ type: "text", text: "nope" }] });
   expect(await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k")).toEqual([]);

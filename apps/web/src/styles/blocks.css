@@ -103,6 +103,122 @@
   width: 5rem;
 }
 
+/* A segmented view switch in a module's control slot (Statistieken's
+ * "Categorieën | Weekdagen"). Built from the same parts as .module-period: the
+ * nested surface, a hairline, a pill radius. The active tab is the app's solid
+ * dark nav pill, so the homescreen and the nav speak one language. */
+.module-tabs {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.module-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--pill);
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.module-tab:hover {
+  color: var(--ink);
+}
+.module-tab-on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* ---------- SaldoBlock (Totale positie) ---------- */
+
+.position-graph {
+  margin-top: var(--sp-4);
+}
+/* TrendChart's readout is the value under the pointer. The headline above the
+ * graph is already the position TODAY, so at rest the two would print the same
+ * figure at the same size; shrink the readout to what it is — a caption that
+ * follows the cursor. */
+.position-graph .lv-chart-readout-value {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* The "not enough history" sentence sits where the graph would be, at the
+ * graph's height, so the card does not jump when the history arrives. */
+.position-graph-empty {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+
+.position-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.position-compare-item {
+  min-width: 0;
+}
+.position-compare-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.position-compare-value {
+  font-weight: 600;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+/* Muted, never a euro sign: there is no earlier figure, not a figure of zero. */
+.position-compare-missing {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---------- PositieBlock (small) ---------- */
+
+.entity-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-3);
+}
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.entity-row:last-child {
+  border-bottom: none;
+}
+.entity-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.entity-row-balance {
+  flex: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- StatistiekBlock ---------- */
 
 .stat-figures {
@@ -119,8 +235,81 @@
 .stat-figure .module-figure-value {
   font-size: 1.6rem;
 }
-/* The chart itself (bars, legend, month labels, value axis) is the shared
- * CategoryBars component — styles/charts.css. Nothing block-specific left. */
+
+/* The sentence the weekday view exists for ("Vrijdag kost je gemiddeld …").
+ * Stated, not left to be read off the bars. */
+.stat-insight {
+  margin: 0 0 var(--sp-4);
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+/* The category legend doubles as the jump into Transacties, so each entry is a
+ * button that still reads as a legend item. */
+.stat-legend-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.stat-legend-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--pill);
+  background: transparent;
+  padding: 3px 10px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+.stat-legend-button:hover {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+/* CategoryBars prints its own legend; here the clickable one above already
+ * carries the same swatches, so the built-in one would be the list twice. */
+.stat-chart .lv-chart-legend {
+  display: none;
+}
+
+/* ---------- WeekdayBars ---------- */
+
+/* One bar per day, so it may be wider than the twelve-month case CategoryBars
+ * is capped for. */
+.weekday-bar {
+  max-width: 42px;
+  background: var(--neg);
+}
+/* The peak day is marked by its value chip, not by a second colour — spending
+ * is terracotta everywhere in the app and a recoloured bar would break that. */
+.weekday-bar-peak {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+/* The reference's floating value label above the highlighted bar. */
+.weekday-peak-chip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  background: var(--ink);
+  color: var(--on-ink);
+  border-radius: var(--pill);
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.weekday-label-peak {
+  color: var(--ink);
+  font-weight: 700;
+}
 
 /* ---------- RecenteTransactiesBlock ---------- */
 
@@ -150,6 +339,168 @@
   align-items: center;
   gap: var(--sp-3);
   flex: none;
+}
+/* Three cells now (tile · name · chip+amount), so the middle one has to be the
+ * one that takes the slack and truncates. */
+.tx-row .tx-row-info {
+  flex: 1;
+}
+.tx-row .tx-desc,
+.tx-row .tx-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The reference's merchant avatar, as a MONOGRAM. Never a fetched logo: a
+ * remote image request per merchant would leak who he pays to whoever hosts
+ * it. The colour is a stable hash of the name (see RecenteTransactiesBlock),
+ * drawn from the chart tokens only. */
+.tx-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--on-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Search in the module's control slot. Narrow enough to sit beside the title,
+ * and it gives up its width first when the header wraps on a phone. */
+.tx-search {
+  width: 15rem;
+  max-width: 100%;
+  border-radius: var(--pill);
+  padding: 6px 14px;
+  font-size: 0.8rem;
+}
+
+/* ---------- BetaalschemaBlock (Betaalagenda) ---------- */
+
+/* A row that came from pattern detection rather than a committed date. Muted
+ * on purpose: it is a prediction, and it must never look like a bill. */
+.pay-tag {
+  margin-left: var(--sp-2);
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ---------- KaartenBlock ---------- */
+
+.card-strip {
+  display: flex;
+  gap: var(--sp-4);
+  overflow-x: auto;
+  padding-bottom: var(--sp-2);
+  scroll-snap-type: x proximity;
+}
+.bank-card {
+  flex: none;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 260px;
+  min-height: 148px;
+  padding: var(--sp-4);
+  border-radius: var(--r);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-sm);
+}
+.bank-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.bank-card-bank {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bank-card-type {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+/* Where the reference prints a card number. LaVega has no PAN, so this is the
+ * tail of the REAL IBAN — or a plain statement that there is no IBAN. */
+.bank-card-number {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+.bank-card-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.bank-card-caption {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.bank-card-holder {
+  font-weight: 600;
+  max-width: 13ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bank-card-saldo {
+  text-align: right;
+  flex: none;
+}
+.bank-card-unknown {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+@media (max-width: 520px) {
+  .bank-card {
+    width: 232px;
+  }
+  .tx-search {
+    width: 100%;
+  }
+  /* A phone row has space for the merchant, the date, the chip and the amount.
+   * Entity and bank are the first thing worth dropping — measured: keeping them
+   * wrapped every row onto three lines and truncated "Albert Heijn" to
+   * "Albert …". */
+  .tx-meta-extra {
+    display: none;
+  }
+  .tx-tile {
+    width: 30px;
+    height: 30px;
+    font-size: 0.66rem;
+  }
+  .tx-chip {
+    font-size: 0.68rem;
+    padding: 3px 8px;
+  }
 }
 
 /* ---------- BetaalschemaBlock ---------- */

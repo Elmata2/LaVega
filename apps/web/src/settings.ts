@@ -167,6 +167,38 @@ export function addHandledInvoiceMessageIds(ids: string[]): void {
   }
 }
 
+const MODULES_KEY = "lavega.navModules";
+
+/** Which modules the owner put in his top navigation (see components/
+ *  moduleRegistry.tsx). A preference about HIS app, not data about his money,
+ *  so it lives in localStorage next to the buffer and the home country — it
+ *  survives a reload, it stays out of the vault, and a back-up file therefore
+ *  never carries one person's nav layout into another's vault.
+ *
+ *  Returns `null` when he has never chosen. "Not chosen" is not the same as
+ *  "chose nothing", and this function will not invent a default: the registry
+ *  decides what an unset preference means, and an explicitly emptied list
+ *  stays empty (bar the home module the registry always adds back). */
+export function getEnabledModules(): string[] | null {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(MODULES_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null; // garbage is "never chosen", not "chose nothing"
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
+}
+
+export function setEnabledModules(ids: string[]): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(MODULES_KEY, JSON.stringify(ids));
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 const HOME_COUNTRY_KEY = "lavega.homeCountry";
 
 /** The owner's home country as a 2-letter code, default NL. A local-first app

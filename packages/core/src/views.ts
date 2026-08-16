@@ -1,6 +1,6 @@
 import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
-import { NL_CATEGORY_RULES_NORMALIZED } from "./categories.js";
+import { NL_CATEGORY_RULES_NORMALIZED, matchNorm } from "./categories.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
  * take the already-loaded accounts/txs and return view-ready data, so the
@@ -97,14 +97,25 @@ export function ownAccounts(accounts: Account[]): OwnAccounts {
 /** Category for a tx, in precedence order: a non-empty tx.category (manual
  *  override) wins; else — when `own` is supplied — an "Eigen overboeking" if the
  *  counterparty/description names another of the user's own accounts; else the
- *  first user rule whose match text is a substring of counterparty+description
- *  (case/space-insensitive); else the first built-in Dutch default
- *  (NL_CATEGORY_RULES) that matches; else "onbekend". So internal transfers are
- *  separated out and the defaults categorize the rest out of the box, while a
- *  user's own rule or manual label always takes precedence over the defaults. */
+ *  first user rule whose match text is a substring of counterparty+description;
+ *  else the first built-in Dutch default (NL_CATEGORY_RULES) that matches; else
+ *  "onbekend". So internal transfers are separated out and the defaults
+ *  categorize the rest out of the box, while a user's own rule or manual label
+ *  always takes precedence over the defaults.
+ *
+ *  This runs at READ time on every transaction, stored or fresh — so improving
+ *  the rules improves an existing vault immediately; nothing has to be
+ *  re-imported. (`recategorize` in categorize.ts is the persisted counterpart,
+ *  for when the resolved category has to live on the transaction itself.)
+ *
+ *  Matching uses `matchNorm`, not `norm`: real counterparty strings arrive with
+ *  punctuation ("Nationale-Nederlanden", "CCV*ALBERT HEIJN", "K.v.K.") that a
+ *  lowercase-and-collapse-whitespace comparison misses. Both the entry and the
+ *  transaction text go through it, so a user rule typed with a hyphen or an
+ *  accent keeps matching. */
 export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   if (tx.category) return tx.category;
-  const hay = norm(tx.counterparty + " " + tx.description);
+  const hay = matchNorm(tx.counterparty + " " + tx.description);
   if (own && own.all.length) {
     // Compare against a space-stripped haystack so an IBAN printed with spaces
     // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
@@ -116,12 +127,17 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
     }
   }
   for (const r of rules) {
-    // Guard on the NORMALIZED match: a whitespace-only match norms to "" and
-    // would otherwise substring-match every tx, mislabeling the whole dataset.
-    const m = norm(r.match);
+    // Guard on the NORMALIZED match: a whitespace-only (or punctuation-only)
+    // match normalizes to "" and would otherwise substring-match every tx,
+    // mislabeling the whole dataset.
+    const m = matchNorm(r.match);
     if (m && hay.includes(m)) return r.category;
   }
+  // A direction-specific built-in (e.g. "salaris" -> Inkomen) only applies to
+  // its own direction; an entry without a `sign` applies to both.
+  const sign = tx.amount >= 0 ? "in" : "out";
   for (const r of NL_CATEGORY_RULES_NORMALIZED) {
+    if (r.sign && r.sign !== sign) continue;
     if (hay.includes(r.m)) return r.category;
   }
   return "onbekend";

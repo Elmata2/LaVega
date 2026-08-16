@@ -57,6 +57,7 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
   return (
     <Module
       title="Cashflow · 13 weken"
+      span={2}
       height="tall"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("forecast")}>

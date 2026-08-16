@@ -1,32 +1,62 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { monthlyTotals } from "@lavega/core";
+import { categorize, monthlyTotals } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import StatistiekBlock, { statSummary } from "./StatistiekBlock";
-import { txs } from "./fixtures";
+import StatistiekBlock, { monthAxisLabel, statSummary } from "./StatistiekBlock";
+import { freshTxs, own, rules, txs } from "./fixtures";
 
-test("StatistiekBlock renders a bar pair and a month label per month", () => {
-  const html = renderToStaticMarkup(<StatistiekBlock txs={txs} />);
+const render = (t = txs) =>
+  renderToStaticMarkup(<StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />);
+
+test("StatistiekBlock leads with the per-category-per-month view from the reference", () => {
+  const html = render();
   expect(html).toContain("Statistieken");
-  expect(html).toContain("Inkomsten");
-  expect(html).toContain("Uitgaven");
-  // Three months in the fixture (jun/jul/aug 2026), two bars each. The bars are
-  // HTML boxes, not SVG <rect>s (see components/CategoryBars.tsx), so labels
-  // and axis ticks stay at their real size when the grid collapses to one
-  // column on a phone.
-  expect(html.match(/class="lv-bar"/g)?.length).toBe(6);
+  // Both reference views are offered.
+  expect(html).toContain("Categorieën");
+  expect(html).toContain("Weekdagen");
+  // Grouped bars: three months of fixture data × three spend categories.
   expect(html).toContain('class="lv-bars-xaxis"');
   expect(html).toContain(">jun<");
   expect(html).toContain(">jul<");
   expect(html).toContain(">aug<");
+  expect(html.match(/class="lv-bar"/g)?.length).toBe(9);
+  // The categories are the ones the rules engine derived, not invented labels.
+  expect(html).toContain("Inkoop"); // manual label on t3/t6
+  expect(html).toContain("Energie"); // user rule on t5
+  expect(html).toContain(categorize(txs[1], rules, own)); // Dutch default on t2
+  // The averages under the chart survive the merge.
   expect(html).toContain("Gem. inkomsten p/m");
   expect(html).toContain(formatEuro((12_000 + 9_500) / 3));
 });
 
+test("StatistiekBlock is the major block and absorbs the category comparison", () => {
+  const html = render();
+  expect(html).toContain("module-span-3");
+  // The old separate "Verandering per categorie" block is gone; its question is
+  // this view.
+  expect(html).not.toContain("Verandering per categorie");
+});
+
+test("StatistiekBlock never draws a month it has no statement for", () => {
+  // The default period is twelve months but the fixture holds three, so the
+  // axis has three groups — nine empty ones would be nine bars of zero, i.e. a
+  // claim that nothing was spent in a month we never saw.
+  const html = render();
+  expect(html.match(/<span title="[^"]*">/g)?.length).toBeLessThanOrEqual(12);
+  expect(html).not.toContain(">mei<");
+  expect(html).not.toContain(">jan<");
+});
+
 test("StatistiekBlock renders an empty state instead of a chart with no transactions", () => {
-  const html = renderToStaticMarkup(<StatistiekBlock txs={[]} />);
+  const html = render([]);
   expect(html).toContain("Nog geen transacties");
   expect(html).not.toContain("lv-bar");
+});
+
+test("monthAxisLabel keeps month labels unique once the window passes a year", () => {
+  expect(monthAxisLabel("2026-08", 12)).toBe("aug");
+  expect(monthAxisLabel("2026-08", 18)).toBe("aug '26");
+  expect(monthAxisLabel("2025-08", 18)).toBe("aug '25");
 });
 
 test("statSummary windows the months and compares the last one to the average", () => {
@@ -52,4 +82,11 @@ test("statSummary reports no delta rather than 0% when there is nothing to compa
   expect(s.rows).toEqual([]);
   expect(s.deltaInPct).toBeNull();
   expect(s.deltaOutPct).toBeNull();
+});
+
+test("StatistiekBlock still renders with two days of history", () => {
+  // The weekday view is the one that refuses (see statistics.test.ts); the
+  // block itself must not crash on a nearly-empty vault.
+  const html = render(freshTxs);
+  expect(html).toContain("Statistieken");
 });

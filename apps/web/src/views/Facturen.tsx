@@ -4,6 +4,8 @@ import { makeInvoice, parseInvoiceFile, reconcileInvoices, scheduledInvoiceFlows
 import type { View } from "../App";
 import { formatEuro } from "../format";
 import { API_BASE } from "../api";
+import Module from "../components/Module";
+import ModuleGrid from "../components/ModuleGrid";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
@@ -13,6 +15,22 @@ import {
   setAiExtractionEnabled,
 } from "../settings";
 import { fetchQueue, pendingToInvoice, toPending, type PendingInvoice } from "../n8n";
+import "../styles/views.css";
+
+/* Facturen — reduced to EXACTLY three ways in (UI review, 2026-08-16):
+ *
+ *   1. the automatic feed from his own n8n,
+ *   2. drag & drop of an invoice file (PDF / CSV / UBL-XML),
+ *   3. manual entry.
+ *
+ * Only the SURFACE was simplified. Every safety rule the feature had is still
+ * here and still enforced in the same place:
+ *   - nothing books itself: an n8n row is a proposal until "Bevestigen";
+ *   - a row without a valid amount is refused (pendingToInvoice / handleAdd);
+ *   - an unreadable currency blocks the row instead of silently becoming EUR —
+ *     for the n8n queue AND for manual entry;
+ *   - the AI PDF read stays opt-in, per document, and only pre-fills a draft.
+ */
 
 /** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
  *  The browser only ever talks to our server — never api.anthropic.com. */
@@ -71,6 +89,10 @@ const STATUS_LABELS: Record<Invoice["status"], string> = {
   cancelled: "geannuleerd",
 };
 
+function isPdf(file: File): boolean {
+  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+}
+
 export default function Facturen({
   entities,
   invoices,
@@ -92,6 +114,8 @@ export default function Facturen({
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("EUR");
   const [importNote, setImportNote] = useState<string | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   // AI PDF extraction (opt-in, confirm-first). `aiEnabled` mirrors the
   // localStorage preference; `pendingSource`/`pendingConfidence` tag the NEXT
@@ -233,7 +257,16 @@ export default function Facturen({
   function handleAdd() {
     const cp = counterparty.trim();
     const amt = Number(amount.replace(",", "."));
-    if (!cp || !issueDate || !dueDate || !Number.isFinite(amt) || amt <= 0) return;
+    const ccy = currency.trim().toUpperCase();
+    // Refuse, and SAY why. Each of these was previously a silent no-op.
+    if (!cp) return setManualError("Vul een relatie in.");
+    if (!issueDate) return setManualError("Vul een factuurdatum in.");
+    if (!dueDate) return setManualError("Vul een vervaldatum in.");
+    if (!Number.isFinite(amt) || amt <= 0) return setManualError("Vul een geldig bedrag in — zonder bedrag wordt er niets geboekt.");
+    // Same rule as the n8n queue: an empty/unreadable currency is unknown, not
+    // euros. LaVega never turns a blank field into EUR by itself.
+    if (!/^[A-Z]{3}$/.test(ccy)) return setManualError("Vul de valuta in (3 letters) — LaVega gokt geen euro's.");
+    setManualError(null);
     const inv = makeInvoice({
       entity: entity || defaultEntity,
       direction,
@@ -242,7 +275,7 @@ export default function Facturen({
       issueDate,
       dueDate,
       amount: amt,
-      currency: currency.trim() || "EUR",
+      currency: ccy,
       status: "expected",
       sourceType: pendingSource,
       confidence: pendingSource === "llm" ? (pendingConfidence ?? undefined) : undefined,
@@ -321,6 +354,24 @@ export default function Facturen({
     });
   }
 
+  /** THE one file entry point — the same for a drop and for the file picker
+   *  behind it. A PDF can only be read by the AI extractor, so without the
+   *  opt-in it is refused with a reason instead of being parsed as text. */
+  function handleFile(file: File) {
+    setImportNote(null);
+    if (isPdf(file)) {
+      if (!aiEnabled) {
+        setImportNote(
+          `"${file.name}" is een PDF. Die kan alleen door de AI-lezer gelezen worden — zet hieronder "AI-facturen lezen" aan, of voer de factuur handmatig in. Er is niets verstuurd.`,
+        );
+        return;
+      }
+      void handleExtractPdf(file);
+      return;
+    }
+    handleImportFile(file);
+  }
+
   function toggleAi(next: boolean) {
     setAiEnabled(next);
     setAiExtractionEnabled(next);
@@ -328,9 +379,9 @@ export default function Facturen({
   }
 
   // Opt-in, per-document: only fires when the owner has enabled the toggle AND
-  // picked a specific PDF. Reads the file to base64 and POSTs it to OUR server
-  // proxy (never to Anthropic directly). On success it PRE-FILLS the existing
-  // form as a draft — nothing is saved until the owner clicks "Toevoegen".
+  // dropped/picked a specific PDF. Reads the file to base64 and POSTs it to OUR
+  // server proxy (never to Anthropic directly). On success it PRE-FILLS the
+  // manual form as a draft — nothing is saved until the owner clicks "Toevoegen".
   async function handleExtractPdf(file: File) {
     setAiBusy(true);
     setAiNote("Bezig met lezen…");
@@ -362,7 +413,10 @@ export default function Facturen({
       setIssueDate(fields.issueDate);
       setDueDate(fields.dueDate || fields.issueDate);
       setAmount(String(fields.amount));
-      setCurrency(fields.currency || "EUR");
+      // No currency read = no currency. Blanking it is deliberate: the manual
+      // form then refuses to book until he fills it in, instead of inheriting
+      // the "EUR" that happened to be standing in the field.
+      setCurrency(fields.currency ?? "");
       setPendingSource("llm");
       setPendingConfidence(confidence);
       const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
@@ -371,7 +425,8 @@ export default function Facturen({
       // the owner to check every field (no fabricated confidence number).
       const conf = typeof confidence === "number" ? ` (AI-inschatting zekerheid ${Math.round(confidence * 100)}%)` : "";
       const btw = vat !== null ? `, incl. btw ${formatEuro(vat)}` : "";
-      setAiNote(`AI-concept — controleer elk veld en bevestig${conf}${btw}.`);
+      const noCcy = fields.currency ? "" : " De valuta stond er niet in — vul hem zelf in.";
+      setAiNote(`AI-concept — controleer elk veld en bevestig${conf}${btw}.${noCcy}`);
     } catch {
       setAiNote("AI-extractie mislukt. Probeer het opnieuw.");
     } finally {
@@ -380,317 +435,337 @@ export default function Facturen({
   }
 
   return (
-    <section className="card" aria-label="Facturen">
-      <div className="card-header">
-        <h2>Facturen</h2>
-        <span className="eyebrow">verwachte kasstromen</span>
+    <>
+      <div className="view-head">
+        <h2>Drie manieren om een factuur binnen te krijgen</h2>
+        <span className="eyebrow">niets wordt automatisch geboekt</span>
       </div>
-      <p className="cell-sub">
-        Voer inkomende (verkoop, AR) en uitgaande (inkoop, AP) facturen in. Een
-        verwachte factuur verschijnt op de vervaldatum in het Overzicht en de Forecast
-        en wordt automatisch op "betaald" gezet zodra een passende banktransactie binnenkomt.
-      </p>
 
-      <div className="n8n-block">
-        <div className="n8n-head">
-          <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
-            Ophalen uit n8n
-          </button>{" "}
-          <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
-            Koppelingen instellen
-          </button>
-        </div>
-        <p className="cell-sub">
-          Haalt de facturen op die je eigen n8n uit je mailbox heeft gehaald. Er wordt
-          niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf.
-        </p>
-        {n8nNote && <p className="cell-sub">{n8nNote}</p>}
-
-        {pending.length > 0 && (
-          <>
-            <p className="cell-sub text-neg">
-              <strong>Let op — dit is de enige kopie.</strong> n8n leegt zijn wachtrij op het
-              moment dat hij antwoordt: nog eens ophalen levert deze {pending.length}{" "}
-              {pending.length === 1 ? "regel" : "regels"} niet terug. Ook herladen of
-              vergrendelen wist ze. Bevestig of verwerp ze nu.
+      <ModuleGrid label="Facturen invoeren">
+        {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
+        <Module title="1 · Automatisch (n8n)" height="tall">
+          <p className="cell-sub">
+            Haalt de facturen op die je eigen n8n uit je mailbox heeft gehaald. Er wordt
+            niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf.
+          </p>
+          <div className="stack-form-actions">
+            <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
+              Ophalen uit n8n
+            </button>
+            <button type="button" className="btn" onClick={() => onNavigate("koppelingen")}>
+              Koppelingen instellen
+            </button>
+          </div>
+          {n8nNote && <p className="cell-sub">{n8nNote}</p>}
+          {pending.length > 0 && (
+            <p className="cell-sub text-warn">
+              {pending.length} {pending.length === 1 ? "regel wacht" : "regels wachten"} op je beslissing — zie hieronder.
             </p>
-            <div className="n8n-rows">
-              {pending.map((p) => (
-                <div className="n8n-row" data-messageid={p.messageId} key={p.messageId}>
-                  <p className="n8n-row-source cell-sub">
-                    Uit de mail: {p.subject ?? "(geen onderwerp)"}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </p>
-                  <div className="facturen-form">
-                    <label>
-                      Entiteit{" "}
-                      <select value={p.entity} aria-label="Entiteit (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
-                        {entityChoices.map((e) => (
-                          <option key={e} value={e}>{e}</option>
-                        ))}
-                      </select>
-                    </label>{" "}
-                    <label>
-                      Richting{" "}
-                      <select value={p.direction} aria-label="Richting (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { direction: e.target.value as Invoice["direction"] })}>
-                        <option value="out">Uitgaand (inkoop)</option>
-                        <option value="in">Inkomend (verkoop)</option>
-                      </select>
-                    </label>{" "}
-                    <label>
-                      Relatie{" "}
-                      <input value={p.counterparty} aria-label="Relatie (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { counterparty: e.target.value })} />
-                    </label>{" "}
-                    <label>
-                      Factuurnr.{" "}
-                      <input value={p.invoiceNumber} aria-label="Factuurnummer (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { invoiceNumber: e.target.value })} />
-                    </label>{" "}
-                    <label>
-                      Factuurdatum{" "}
-                      <input type="date" value={p.issueDate} aria-label="Factuurdatum (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { issueDate: e.target.value })} />
-                    </label>{" "}
-                    <label>
-                      Vervaldatum{" "}
-                      <input type="date" value={p.dueDate} aria-label="Vervaldatum (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { dueDate: e.target.value })} />
-                    </label>{" "}
-                    <label>
-                      Bedrag{" "}
-                      <input className="saldo-input" type="number" step={0.01} min={0} value={p.amount}
-                        aria-label="Bedrag (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { amount: e.target.value })} />
-                    </label>{" "}
-                    <label>
-                      Valuta{" "}
-                      <input className="saldo-input" value={p.currency} maxLength={3}
-                        placeholder="onbekend" aria-label="Valuta (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { currency: e.target.value.toUpperCase() })} />
-                    </label>{" "}
-                    <label>
-                      Btw{" "}
-                      <input className="saldo-input" type="number" step={0.01} min={0} value={p.vat}
-                        placeholder="onbekend" aria-label="Btw (n8n)"
-                        onChange={(e) => patchRow(p.messageId, { vat: e.target.value })} />
-                    </label>{" "}
-                    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => confirmRow(p)}>
-                      Bevestigen
-                    </button>{" "}
-                    <button type="button" className="btn" disabled={busy} onClick={() => rejectRow(p)}>
-                      Verwerpen
-                    </button>
-                  </div>
-                  {!p.dueDate && (
-                    <p className="cell-sub">
-                      Geen vervaldatum gevonden — vul hem zelf in. LaVega verzint er geen
-                      betaaltermijn bij.
-                    </p>
-                  )}
-                  {!p.currency && (
-                    <p className="cell-sub">
-                      Geen valuta gevonden — vul hem zelf in. LaVega boekt niets in euro&apos;s
-                      omdat de factuur toevallig geen valuta noemde.
-                    </p>
-                  )}
-                  {p.vat === "" && (
-                    <p className="cell-sub">Btw stond niet in de factuur; leeg blijft “onbekend”, niet €&nbsp;0,00.</p>
-                  )}
-                  {rowErrors[p.messageId] && <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+          )}
+        </Module>
 
-      <div className="ai-extract" style={{ marginBottom: "var(--sp-3)" }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={aiEnabled}
-            disabled={busy}
-            aria-label="AI-facturen lezen"
-            onChange={(e) => toggleAi(e.target.checked)}
-          />{" "}
-          AI-facturen lezen (PDF → Claude)
-        </label>
-        <p className="cell-sub">
-          De gekozen PDF wordt via onze server naar Claude gestuurd om te lezen — opt-in, alleen
-          dat ene document, en je bevestigt zelf voor het meetelt.
-        </p>
-        {aiEnabled && (
-          <label>
-            PDF-factuur lezen{" "}
+        {/* ── 2. sleep een factuurbestand hierheen ────────────────────── */}
+        <Module title="2 · Sleep een factuur hierheen" height="tall">
+          <label
+            className={`dropzone${dragOver ? " dropzone-over" : ""}`}
+            aria-label="Factuurbestand hierheen slepen"
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const file = e.dataTransfer?.files?.[0];
+              if (file) handleFile(file);
+            }}
+          >
+            <span className="dropzone-title">Sleep een factuur hierheen</span>
+            <span className="dropzone-sub">PDF, CSV-export of UBL/EN-16931 XML. Of klik om te kiezen.</span>
+            {/* No `accept` filter for the non-PDF formats, same rationale as
+                Import.tsx: format is sniffed from content, not extension. */}
             <input
               type="file"
-              className="btn"
-              accept="application/pdf"
+              className="dropzone-input"
               disabled={busy || aiBusy}
-              aria-label="PDF-factuur lezen met AI"
+              aria-label="Factuurbestand kiezen"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
-                if (file) void handleExtractPdf(file);
+                if (file) handleFile(file);
               }}
             />
           </label>
-        )}
-        {aiNote && <p className="cell-sub">{aiNote}</p>}
-      </div>
+          <label style={{ marginTop: "var(--sp-3)", display: "block" }}>
+            <input
+              type="checkbox"
+              checked={aiEnabled}
+              disabled={busy}
+              aria-label="AI-facturen lezen"
+              onChange={(e) => toggleAi(e.target.checked)}
+            />{" "}
+            AI-facturen lezen (PDF → Claude)
+          </label>
+          <p className="cell-sub">
+            Alleen met deze schakelaar aan gaat een PDF via onze server naar Claude — dat ene
+            document, en je bevestigt zelf voor het meetelt.
+          </p>
+          {importNote && <p className="cell-sub">{importNote}</p>}
+          {aiNote && <p className="cell-sub">{aiNote}</p>}
+        </Module>
 
-      <div className="facturen-form">
-        <label>
-          Entiteit{" "}
-          <select value={entity} disabled={busy} aria-label="Entiteit"
-            onChange={(e) => setEntity(e.target.value)}>
-            {entityChoices.map((e) => (
-              <option key={e} value={e}>{e}</option>
+        {/* ── 3. handmatig ────────────────────────────────────────────── */}
+        <Module
+          title="3 · Handmatig"
+          height="tall"
+          footer={
+            <span>
+              Een verwachte factuur verschijnt op de vervaldatum in Overzicht en Forecast en gaat
+              zelf op “betaald” zodra een passende banktransactie binnenkomt.
+            </span>
+          }
+        >
+          <div className="stack-form">
+            <div className="stack-form-row">
+              <label>
+                Entiteit
+                <select value={entity} disabled={busy} aria-label="Entiteit" onChange={(e) => setEntity(e.target.value)}>
+                  {entityChoices.map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Richting
+                <select value={direction} disabled={busy} aria-label="Richting"
+                  onChange={(e) => setDirection(e.target.value as Invoice["direction"])}>
+                  <option value="out">Uitgaand (inkoop)</option>
+                  <option value="in">Inkomend (verkoop)</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Relatie
+              <input value={counterparty} disabled={busy} aria-label="Relatie"
+                onChange={(e) => setCounterparty(e.target.value)} />
+            </label>
+            <label>
+              Factuurnr.
+              <input value={invoiceNumber} disabled={busy} aria-label="Factuurnummer"
+                onChange={(e) => setInvoiceNumber(e.target.value)} />
+            </label>
+            <div className="stack-form-row">
+              <label>
+                Factuurdatum
+                <input type="date" value={issueDate} disabled={busy} aria-label="Factuurdatum"
+                  onChange={(e) => setIssueDate(e.target.value)} />
+              </label>
+              <label>
+                Vervaldatum
+                <input type="date" value={dueDate} disabled={busy} aria-label="Vervaldatum"
+                  onChange={(e) => setDueDate(e.target.value)} />
+              </label>
+            </div>
+            <div className="stack-form-row">
+              <label>
+                Bedrag
+                {pendingSource === "llm" && <span className="badge">AI-concept</span>}
+                <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
+                  disabled={busy} aria-label="Bedrag" onChange={(e) => setAmount(e.target.value)} />
+              </label>
+              <label>
+                Valuta
+                <input className="saldo-input" value={currency} maxLength={3} placeholder="onbekend"
+                  disabled={busy} aria-label="Valuta" onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+              </label>
+            </div>
+            <div className="stack-form-actions">
+              <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
+                Toevoegen
+              </button>
+              {pendingSource === "llm" && (
+                <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
+                  Verwijder AI-concept
+                </button>
+              )}
+            </div>
+            {manualError && <p className="cell-sub text-neg">{manualError}</p>}
+          </div>
+        </Module>
+      </ModuleGrid>
+
+      {/* ── De confirm-first wachtrij. Ongewijzigd gedrag. ─────────────── */}
+      {pending.length > 0 && (
+        <section className="card n8n-block" aria-label="Te bevestigen facturen">
+          <div className="card-header">
+            <h2>Te bevestigen</h2>
+            <span className="eyebrow">uit n8n · {pending.length}</span>
+          </div>
+          <p className="cell-sub text-neg">
+            <strong>Let op — dit is de enige kopie.</strong> n8n leegt zijn wachtrij op het
+            moment dat hij antwoordt: nog eens ophalen levert deze {pending.length}{" "}
+            {pending.length === 1 ? "regel" : "regels"} niet terug. Ook herladen of
+            vergrendelen wist ze. Bevestig of verwerp ze nu.
+          </p>
+          <div className="n8n-rows">
+            {pending.map((p) => (
+              <div className="n8n-row" data-messageid={p.messageId} key={p.messageId}>
+                <p className="n8n-row-source cell-sub">
+                  Uit de mail: {p.subject ?? "(geen onderwerp)"}
+                  {p.note ? ` · ${p.note}` : ""}
+                </p>
+                <div className="facturen-form">
+                  <label>
+                    Entiteit{" "}
+                    <select value={p.entity} aria-label="Entiteit (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
+                      {entityChoices.map((e) => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                    </select>
+                  </label>{" "}
+                  <label>
+                    Richting{" "}
+                    <select value={p.direction} aria-label="Richting (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { direction: e.target.value as Invoice["direction"] })}>
+                      <option value="out">Uitgaand (inkoop)</option>
+                      <option value="in">Inkomend (verkoop)</option>
+                    </select>
+                  </label>{" "}
+                  <label>
+                    Relatie{" "}
+                    <input value={p.counterparty} aria-label="Relatie (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { counterparty: e.target.value })} />
+                  </label>{" "}
+                  <label>
+                    Factuurnr.{" "}
+                    <input value={p.invoiceNumber} aria-label="Factuurnummer (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { invoiceNumber: e.target.value })} />
+                  </label>{" "}
+                  <label>
+                    Factuurdatum{" "}
+                    <input type="date" value={p.issueDate} aria-label="Factuurdatum (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { issueDate: e.target.value })} />
+                  </label>{" "}
+                  <label>
+                    Vervaldatum{" "}
+                    <input type="date" value={p.dueDate} aria-label="Vervaldatum (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { dueDate: e.target.value })} />
+                  </label>{" "}
+                  <label>
+                    Bedrag{" "}
+                    <input className="saldo-input" type="number" step={0.01} min={0} value={p.amount}
+                      aria-label="Bedrag (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { amount: e.target.value })} />
+                  </label>{" "}
+                  <label>
+                    Valuta{" "}
+                    <input className="saldo-input" value={p.currency} maxLength={3}
+                      placeholder="onbekend" aria-label="Valuta (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { currency: e.target.value.toUpperCase() })} />
+                  </label>{" "}
+                  <label>
+                    Btw{" "}
+                    <input className="saldo-input" type="number" step={0.01} min={0} value={p.vat}
+                      placeholder="onbekend" aria-label="Btw (n8n)"
+                      onChange={(e) => patchRow(p.messageId, { vat: e.target.value })} />
+                  </label>{" "}
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => confirmRow(p)}>
+                    Bevestigen
+                  </button>{" "}
+                  <button type="button" className="btn" disabled={busy} onClick={() => rejectRow(p)}>
+                    Verwerpen
+                  </button>
+                </div>
+                {!p.dueDate && (
+                  <p className="cell-sub">
+                    Geen vervaldatum gevonden — vul hem zelf in. LaVega verzint er geen
+                    betaaltermijn bij.
+                  </p>
+                )}
+                {!p.currency && (
+                  <p className="cell-sub">
+                    Geen valuta gevonden — vul hem zelf in. LaVega boekt niets in euro&apos;s
+                    omdat de factuur toevallig geen valuta noemde.
+                  </p>
+                )}
+                {p.vat === "" && (
+                  <p className="cell-sub">Btw stond niet in de factuur; leeg blijft “onbekend”, niet €&nbsp;0,00.</p>
+                )}
+                {rowErrors[p.messageId] && <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>}
+              </div>
             ))}
-          </select>
-        </label>{" "}
-        <label>
-          Richting{" "}
-          <select value={direction} disabled={busy} aria-label="Richting"
-            onChange={(e) => setDirection(e.target.value as Invoice["direction"])}>
-            <option value="out">Uitgaand (inkoop)</option>
-            <option value="in">Inkomend (verkoop)</option>
-          </select>
-        </label>{" "}
-        <label>
-          Relatie{" "}
-          <input value={counterparty} disabled={busy} aria-label="Relatie"
-            onChange={(e) => setCounterparty(e.target.value)} />
-        </label>{" "}
-        <label>
-          Factuurnr.{" "}
-          <input value={invoiceNumber} disabled={busy} aria-label="Factuurnummer"
-            onChange={(e) => setInvoiceNumber(e.target.value)} />
-        </label>{" "}
-        <label>
-          Factuurdatum{" "}
-          <input type="date" value={issueDate} disabled={busy} aria-label="Factuurdatum"
-            onChange={(e) => setIssueDate(e.target.value)} />
-        </label>{" "}
-        <label>
-          Vervaldatum{" "}
-          <input type="date" value={dueDate} disabled={busy} aria-label="Vervaldatum"
-            onChange={(e) => setDueDate(e.target.value)} />
-        </label>{" "}
-        <label>
-          Bedrag
-          {pendingSource === "llm" && (
-            <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>AI-concept</span>
-          )}{" "}
-          <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
-            disabled={busy} aria-label="Bedrag"
-            onChange={(e) => setAmount(e.target.value)} />
-        </label>{" "}
-        <label>
-          Valuta{" "}
-          <input className="saldo-input" value={currency} disabled={busy} aria-label="Valuta"
-            onChange={(e) => setCurrency(e.target.value)} />
-        </label>{" "}
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={handleAdd}>
-          Toevoegen
-        </button>
-        {pendingSource === "llm" && (
-          <>
-            {" "}
-            <button type="button" className="btn" disabled={busy} onClick={discardDraft}>
-              Verwijder AI-concept
-            </button>
-          </>
-        )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Wat er binnen is ───────────────────────────────────────────── */}
+      <div className="view-head">
+        <h2>Openstaand en geboekt</h2>
+        <span className="eyebrow">
+          {flows.length} openstaande {flows.length === 1 ? "factuur" : "facturen"} · netto verwacht{" "}
+          <span className={netCents >= 0 ? "text-pos" : "text-neg"}>{formatEuro(netCents / 100)}</span>
+        </span>
       </div>
 
-      <p className="cell-sub" style={{ marginTop: "var(--sp-3)" }}>
-        Of importeer facturen in bulk uit een CSV-export (elk boekhoudpakket heeft
-        een net iets andere kolomindeling — headers als "Relatie/Bedrag/Factuurdatum/
-        Vervaldatum/Richting" worden automatisch herkend, NL of EN) of een UBL/
-        EN-16931 XML-factuur.
-      </p>
-      <label>
-        CSV of UBL/XML importeren{" "}
-        {/* No `accept` filter, same rationale as Import.tsx: format is sniffed
-            from content, not extension. */}
-        <input
-          type="file"
-          className="btn"
-          disabled={busy}
-          aria-label="Facturen CSV of UBL/XML importeren"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) handleImportFile(file);
-          }}
-        />
-      </label>
-      {importNote && <p className="cell-sub">{importNote}</p>}
-
-      <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>
-        {flows.length} openstaande {flows.length === 1 ? "factuur" : "facturen"} in de forecast · netto verwacht{" "}
-        <span className={netCents >= 0 ? "text-pos" : "text-neg"}>{formatEuro(netCents / 100)}</span>
-      </p>
-
-      {invoices.length === 0 ? (
-        <p>Nog geen facturen.</p>
-      ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Relatie</th>
-                <th>Richting</th>
-                <th>Bedrag</th>
-                <th>Vervaldatum</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => {
-                const signed = inv.direction === "in" ? inv.amount : -inv.amount;
-                return (
-                  <tr key={inv.id}>
-                    <td>
-                      {inv.counterparty}
-                      {inv.invoiceNumber ? <span className="cell-sub"> · {inv.invoiceNumber}</span> : null}
-                    </td>
-                    <td>
-                      <span className="badge">{inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}</span>
-                    </td>
-                    <td className={signed >= 0 ? "text-pos" : "text-neg"}>{formatEuro(signed)}</td>
-                    <td>{inv.dueDate}</td>
-                    <td>
-                      <span className="badge">{STATUS_LABELS[inv.status]}</span>
-                    </td>
-                    <td>
-                      {inv.status === "expected" ? (
-                        <>
-                          <button type="button" className="btn" disabled={busy}
-                            onClick={() => setStatus(inv.id, "paid")}>
-                            markeer betaald
-                          </button>{" "}
-                          <button type="button" className="btn" disabled={busy}
-                            onClick={() => setStatus(inv.id, "cancelled")}>
-                            annuleer
-                          </button>
-                        </>
-                      ) : (
-                        <span className="cell-sub">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+      <section className="card" aria-label="Facturen">
+        {invoices.length === 0 ? (
+          <p className="cell-sub">Nog geen facturen.</p>
+        ) : (
+          <div className="table-wrap table-cards">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Relatie</th>
+                  <th>Richting</th>
+                  <th className="num">Bedrag</th>
+                  <th>Vervaldatum</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const signed = inv.direction === "in" ? inv.amount : -inv.amount;
+                  return (
+                    <tr key={inv.id}>
+                      <td data-label="Relatie">
+                        {inv.counterparty}
+                        {inv.invoiceNumber ? <span className="cell-sub"> · {inv.invoiceNumber}</span> : null}
+                      </td>
+                      <td data-label="Richting">
+                        <span className="badge">{inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}</span>
+                      </td>
+                      <td className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`} data-label="Bedrag">{formatEuro(signed)}</td>
+                      <td data-label="Vervaldatum">{inv.dueDate}</td>
+                      <td data-label="Status">
+                        <span className="badge">{STATUS_LABELS[inv.status]}</span>
+                      </td>
+                      <td>
+                        {inv.status === "expected" ? (
+                          <>
+                            <button type="button" className="btn" disabled={busy}
+                              onClick={() => setStatus(inv.id, "paid")}>
+                              markeer betaald
+                            </button>{" "}
+                            <button type="button" className="btn" disabled={busy}
+                              onClick={() => setStatus(inv.id, "cancelled")}>
+                              annuleer
+                            </button>
+                          </>
+                        ) : (
+                          <span className="cell-sub">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
   );
 }

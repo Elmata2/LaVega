@@ -1,15 +1,18 @@
 import type { ReactNode } from "react";
 import type { View } from "../App";
+import type { ModuleDef } from "./moduleRegistry";
 
-/* The app bar: brand, the tab set as a horizontal pill rail (the reference
- * dashboard's signature nav), and the lock control on the right. Replaces the
- * old left sidebar — the desktop reference puts navigation on top and gives the
- * full width to the module grid. The rail scrolls horizontally rather than
- * wrapping, so all twelve tabs stay reachable on a phone (where the old
- * sidebar hid the lock button entirely). */
+/* The app bar: brand, the owner's own module selection as a horizontal tab set,
+ * and the profile entry top right (the reference's avatar position).
+ *
+ * The rail no longer shows the whole catalogue — it shows exactly the modules
+ * switched on in the profile's picker, which is why it can afford the
+ * reference's quieter treatment: plain text tabs with a rule under the active
+ * one instead of round-edged tiles. Everything that is a setting rather than a
+ * place you work (Regels, Koppelingen, Back-up, Import, land, vergrendelen)
+ * lives behind the profile button. */
 
-type IconProps = { children: ReactNode };
-function Icon({ children }: IconProps) {
+function Icon({ children }: { children: ReactNode }) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       {children}
@@ -17,112 +20,15 @@ function Icon({ children }: IconProps) {
   );
 }
 
-const icons: Record<View, ReactNode> = {
-  overview: (
-    <Icon>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </Icon>
-  ),
-  transactions: (
-    <Icon>
-      <path d="M4 7h13M17 7l-3-3M17 7l-3 3" />
-      <path d="M20 17H7M7 17l3 3M7 17l3-3" />
-    </Icon>
-  ),
-  accounts: (
-    <Icon>
-      <path d="M3 10l9-6 9 6" />
-      <path d="M5 10v9M19 10v9M9 10v9M15 10v9" />
-      <path d="M3 19h18" />
-    </Icon>
-  ),
-  rules: (
-    <Icon>
-      <path d="M4 6h16M4 12h16M4 18h16" />
-      <circle cx="8" cy="6" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="18" r="1.6" fill="currentColor" stroke="none" />
-    </Icon>
-  ),
-  forecast: (
-    <Icon>
-      <path d="M4 16l5-6 4 3 7-9" />
-      <path d="M14 4h6v6" />
-    </Icon>
-  ),
-  optimalisatie: (
-    <Icon>
-      <path d="M9 18h6" />
-      <path d="M10 21h4" />
-      <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
-    </Icon>
-  ),
-  valuta: (
-    <Icon>
-      <path d="M4 7h13M17 7l-3-3M17 7l-3 3" />
-      <path d="M20 17H7M7 17l3 3M7 17l3-3" />
-    </Icon>
-  ),
-  belasting: (
-    <Icon>
-      <rect x="4" y="3" width="16" height="18" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
-    </Icon>
-  ),
-  facturen: (
-    <Icon>
-      <path d="M6 3h8l4 4v14H6z" />
-      <path d="M14 3v4h4" />
-      <path d="M9 13h6M9 17h6" />
-    </Icon>
-  ),
-  punten: (
-    <Icon>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M9.5 15h3.5a2 2 0 0 0 0-4h-2a2 2 0 0 1 0-4h3.5" />
-      <path d="M12 6.5v11" />
-    </Icon>
-  ),
-  koppelingen: (
-    <Icon>
-      <path d="M9 15l6-6" />
-      <path d="M10.5 6.5l1.8-1.8a3.5 3.5 0 1 1 5 5L15.5 11.5" />
-      <path d="M13.5 17.5l-1.8 1.8a3.5 3.5 0 1 1-5-5L8.5 12.5" />
-    </Icon>
-  ),
-  backup: (
-    <Icon>
-      <path d="M12 3v11" />
-      <path d="M8 10l4 4 4-4" />
-      <path d="M4 19h16" />
-    </Icon>
-  ),
-};
-
-const NAV_ITEMS: { key: View; label: string }[] = [
-  { key: "overview", label: "Overzicht" },
-  { key: "accounts", label: "Rekeningen" },
-  { key: "rules", label: "Regels" },
-  { key: "forecast", label: "Forecast" },
-  { key: "optimalisatie", label: "Optimalisatie" },
-  { key: "valuta", label: "Valuta" },
-  { key: "punten", label: "Punten" },
-  { key: "belasting", label: "Belasting" },
-  { key: "facturen", label: "Facturen" },
-  { key: "koppelingen", label: "Koppelingen" },
-  { key: "backup", label: "Back-up" },
-];
-
 type NavBarProps = {
   view: View;
+  /** The enabled modules, in registry order — see components/moduleRegistry. */
+  modules: ModuleDef[];
   onNavigate: (view: View) => void;
-  onLock: () => void;
+  onOpenProfile: () => void;
 };
 
-export default function NavBar({ view, onNavigate, onLock }: NavBarProps) {
+export default function NavBar({ view, modules, onNavigate, onOpenProfile }: NavBarProps) {
   return (
     <header className="appbar">
       <div className="brand">
@@ -131,32 +37,36 @@ export default function NavBar({ view, onNavigate, onLock }: NavBarProps) {
       </div>
 
       <nav className="navrail" aria-label="Weergaven">
-        {NAV_ITEMS.map((item) => (
+        {modules.map((m) => (
           <button
-            key={item.key}
+            key={m.id}
             type="button"
-            className={`nav-item${view === item.key ? " active" : ""}`}
-            aria-current={view === item.key ? "page" : undefined}
-            onClick={() => onNavigate(item.key)}
+            className={`nav-item${view === m.id ? " active" : ""}`}
+            aria-current={view === m.id ? "page" : undefined}
+            onClick={() => onNavigate(m.id)}
           >
             <span className="nav-icon" aria-hidden="true">
-              {icons[item.key]}
+              {m.icon}
             </span>
-            <span>{item.label}</span>
+            <span>{m.label}</span>
           </button>
         ))}
       </nav>
 
       <div className="appbar-right">
-        <span className="identity-card">Lokaal · privé</span>
-        <button type="button" className="appbar-lock" onClick={onLock}>
-          <span className="nav-icon" aria-hidden="true">
+        <button
+          type="button"
+          className={`appbar-profile${view === "profiel" ? " active" : ""}`}
+          aria-current={view === "profiel" ? "page" : undefined}
+          onClick={onOpenProfile}
+        >
+          <span className="profile-avatar" aria-hidden="true">
             <Icon>
-              <rect x="4" y="11" width="16" height="9" rx="2" />
-              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              <circle cx="12" cy="8.5" r="3.5" />
+              <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
             </Icon>
           </span>
-          <span>Vergrendel</span>
+          <span>Profiel</span>
         </button>
       </div>
     </header>

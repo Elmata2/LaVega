@@ -24,6 +24,18 @@ export const txs: Tx[] = [
   { id: "t6", accountKey: "A1", date: "2026-08-11", amount: -1_100, currency: "EUR", counterparty: "Brouwerij", description: "Leverancier", category: "Inkoop", manual: true },
 ];
 
+/** A vault that was opened two days ago: a saldo, and almost no history. The
+ *  case the position graph and the weekday pattern must REFUSE to draw rather
+ *  than draw flat. */
+export const freshAccounts: Account[] = [
+  { key: "F1", iban: "NL09KNAB0009", name: "Nieuw", bank: "Knab", entity: "Holding BV", currency: "EUR", balance: 1_000 },
+];
+
+export const freshTxs: Tx[] = [
+  { id: "f1", accountKey: "F1", date: "2026-08-14", amount: -20, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
+  { id: "f2", accountKey: "F1", date: "2026-08-15", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
+];
+
 export const rules: Rule[] = [{ id: "r1", match: "Vattenfall", category: "Energie" }];
 
 export const own: OwnAccounts = ownAccounts(accounts);
