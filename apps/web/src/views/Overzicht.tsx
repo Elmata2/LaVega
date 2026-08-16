@@ -54,7 +54,6 @@ type OverzichtProps = {
   onSelectCategory: (category: string) => void;
   /** Push a pre-filled question into the LaVega assistant (used by the
    *  per-category "vs. gemiddelde" benchmark button). */
-  onAsk: (text: string) => void;
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
 };
@@ -70,7 +69,6 @@ export default function Overzicht({
   onBufferChange,
   onNavigate,
   onSelectCategory,
-  onAsk,
   travel,
 }: OverzichtProps) {
   const forecast = useMemo(
@@ -117,7 +115,6 @@ export default function Overzicht({
         rules={rules}
         own={own}
         onSelectCategory={onSelectCategory}
-        onAsk={onAsk}
       />
 
       <KaartenBlock accounts={accounts} onNavigate={onNavigate} />

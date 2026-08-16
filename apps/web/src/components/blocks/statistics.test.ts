@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { Tx } from "@lavega/core";
 import { categorize } from "@lavega/core";
 import { categoryPerMonth, MIN_WEEKDAY_DAYS, weekdaySpend } from "./statistics";
 import { freshTxs, own, rules, txs } from "./fixtures";
@@ -34,7 +35,7 @@ test("categoryPerMonth counts how many categories it left out", () => {
 
 test("categoryPerMonth is empty rather than zeroed with nothing to chart", () => {
   const s = categoryPerMonth([], rules, own, 12, 4);
-  expect(s).toEqual({ months: [], categories: [], values: [], otherCount: 0 });
+  expect(s).toEqual({ months: [], categories: [], values: [], hasData: [], otherCount: 0 });
 });
 
 test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction", () => {
@@ -79,4 +80,17 @@ test("weekdaySpend reports nothing at all rather than a flat week with no data",
   expect(w.peak).toBeNull();
   expect(w.dayAverage).toBeNull();
   expect(w.rows.every((r) => r.average === null)).toBe(true);
+});
+
+test("a month with no data at all is marked, so it is never drawn as bars of zero", () => {
+  // January and March have transactions; February has none — an interior gap
+  // that clamping the window's ends cannot remove.
+  const gap: Tx[] = [
+    { ...txs[0], id: "g1", date: "2026-01-15", amount: -100, counterparty: "Albert Heijn" },
+    { ...txs[0], id: "g2", date: "2026-03-15", amount: -100, counterparty: "Albert Heijn" },
+  ];
+  const s = categoryPerMonth(gap, rules, own, "alle", 4);
+
+  expect(s.months).toEqual(["2026-01", "2026-02", "2026-03"]);
+  expect(s.hasData).toEqual([true, false, true]);
 });

@@ -33,11 +33,9 @@ type TopUitgavenBlockProps = {
   rules: Rule[];
   own: OwnAccounts;
   onSelectCategory: (category: string) => void;
-  /** Push a pre-filled question into the LaVega assistant. */
-  onAsk: (text: string) => void;
 };
 
-export default function TopUitgavenBlock({ txs, rules, own, onSelectCategory, onAsk }: TopUitgavenBlockProps) {
+export default function TopUitgavenBlock({ txs, rules, own, onSelectCategory }: TopUitgavenBlockProps) {
   const comparison = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
   const rows = comparison.rows.slice(0, ROWS);
 
@@ -72,20 +70,6 @@ export default function TopUitgavenBlock({ txs, rules, own, onSelectCategory, on
                   <span className="cat-share">{r.sharePct.toFixed(0)}%</span>
                   <span className="cat-amt">{formatEuro(r.out)}</span>
                   <CategoryDelta changePct={r.changePct} />
-                  <button
-                    type="button"
-                    className="cat-compare"
-                    title={`Vergelijk "${r.category}" met het Nederlandse gemiddelde (via de assistent)`}
-                    onClick={() =>
-                      onAsk(
-                        `Geef ik meer of minder uit aan "${r.category}" dan een gemiddeld Nederlands huishouden? ` +
-                          `Mijn uitgave in ${monthLabelNL(comparison.month)}: ${formatEuro(r.out)}. ` +
-                          `Zoek een actueel gemiddelde op (bijv. Nibud of CBS), vergelijk het met mijn bedrag en noem het verschil in %.`,
-                      )
-                    }
-                  >
-                    vs. gem.
-                  </button>
                 </span>
               </div>
               <div className="cat-bar">

@@ -9,7 +9,7 @@ import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
 import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getEnabledModules, setEnabledModules } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
-import { txsForAccounts, flowsForScope, entityOptionsFor } from "./scope.js";
+import { txsForAccounts, flowsForScope, entityOptionsFor, SCOPE_LABELS } from "./scope.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import NavBar from "./components/NavBar";
@@ -719,6 +719,21 @@ export default function App() {
             </p>
           )}
 
+          {/* An entity with no classification counts as Persoonlijk, so on a
+              vault where nothing has been classified yet, Zakelijk is empty.
+              Empty is a legitimate answer, but an empty app reads as a broken
+              one — say which it is, and where to fix it. */}
+          {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
+            <p className="text-muted shell-problems">
+              Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is dit
+              scherm leeg. Zet dat per rekening bij{" "}
+              <button type="button" className="card-link" onClick={() => setView("accounts")}>
+                Rekeningen
+              </button>
+              .
+            </p>
+          )}
+
           {view === "overview" && (
             <Overzicht
               accounts={currentScopedAccounts}
@@ -730,7 +745,6 @@ export default function App() {
               scheduledFlows={scopedScheduledFlows}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
-              onAsk={askAssistant}
               travel={{
                 accounts: scopedAccounts,
                 txs: scopedTxs,

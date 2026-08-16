@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx, CategoryDecision } from "@lavega/core";
-import { enrichTxs, filterTxs, categorize, uncategorizedTxs, CATEGORY_OPTIONS } from "@lavega/core";
+import { enrichTxs, filterTxs, categorize, uncategorizedByMonth, CATEGORY_OPTIONS } from "@lavega/core";
 import { formatEuro } from "../format";
 import { categorizeTxs } from "../api";
 import { getAiCategorizeEnabled, setAiCategorizeEnabled } from "../settings";
@@ -87,10 +87,21 @@ export default function Transacties({
   // --- AI categorization (opt-in, confirm-first) --------------------------
   // The transactions the AI flow can offer: those still "onbekend" under the
   // current rules, within the active scope. Sliced to the server's batch cap.
-  const onbekend = useMemo(
-    () => uncategorizedTxs(scopedTxs, rules, own).slice(0, MAX_CATEGORIZE_BATCH),
-    [scopedTxs, rules, own],
-  );
+  // NEWEST MONTH FIRST, not the flat list. Storage is import-ordered, so it is
+  // oldest-first, and slicing the flat list handed the model the OLDEST unknowns
+  // — while the blocks that actually show "onbekend" (Top-uitgaven, de
+  // categorie-trend) look at the LATEST month, which a capped run would never
+  // reach. Fill the batch from the newest month down.
+  const onbekend = useMemo(() => {
+    const out: Tx[] = [];
+    for (const m of uncategorizedByMonth(scopedTxs, rules, own)) {
+      for (const t of m.txs) {
+        if (out.length >= MAX_CATEGORIZE_BATCH) return out;
+        out.push(t);
+      }
+    }
+    return out;
+  }, [scopedTxs, rules, own]);
   const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiCategorizeEnabled());
   // idle → (consent) → loading → review → idle. `consent` only appears the
   // first time, before the owner opts in.

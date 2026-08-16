@@ -241,14 +241,22 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     into Transacties, so printing both was the same list twice. */}
                 <div className="stat-chart">
                 <CategoryBars
-                  groups={perCategory.months.map((m, i) => ({
-                    // CategoryBars keys a group by its label, so a window
-                    // longer than a year has to carry the year or two "aug"s
-                    // would collide.
-                    label: monthAxisLabel(m, perCategory.months.length),
-                    title: monthLabelNL(m),
-                    values: perCategory.values[i],
-                  }))}
+                  groups={perCategory.months
+                    .map((m, i) => ({ m, i }))
+                    // A month with NO data is left out entirely. Drawing it
+                    // would put bars of zero on the axis, which reads as "you
+                    // spent nothing that month" when the truth is that no
+                    // statement was imported for it. The note under the chart
+                    // names what is missing, so the gap is stated, not hidden.
+                    .filter(({ i }) => perCategory.hasData[i])
+                    .map(({ m, i }) => ({
+                      // CategoryBars keys a group by its label, so a window
+                      // longer than a year has to carry the year or two "aug"s
+                      // would collide.
+                      label: monthAxisLabel(m, perCategory.months.length),
+                      title: monthLabelNL(m),
+                      values: perCategory.values[i],
+                    }))}
                   series={categorySeries}
                   format={(v) => wholeEuro.format(v)}
                   ariaLabel="Uitgaven per categorie per maand"
@@ -256,6 +264,13 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   height={196}
                 />
                 </div>
+                {perCategory.hasData.some((k) => !k) && (
+                  <p className="cell-sub">
+                    Niet getoond:{" "}
+                    {perCategory.months.filter((_, i) => !perCategory.hasData[i]).map(monthLabelNL).join(", ")}
+                    {" "}— daar is geen afschrift van geïmporteerd. Een lege maand is geen maand zonder uitgaven.
+                  </p>
+                )}
               </>
             )
           ) : !enoughWeekdayHistory ? (

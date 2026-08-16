@@ -50,6 +50,12 @@ export type CategoryPerMonth = {
   categories: string[];
   /** values[monthIndex][categoryIndex], positive euros. */
   values: number[][];
+  /** Whether that month has ANY data at all. A month with no statement imported
+   *  is not a month in which nothing was spent, and drawing it as bars of zero
+   *  would say exactly that. The ends of the window are clamped above; this
+   *  catches an INTERIOR gap — data for January and March, nothing for
+   *  February — which no clamp can remove. */
+  hasData: boolean[];
   /** Categories that were dropped because the chart only shows the majors. */
   otherCount: number;
 };
@@ -63,7 +69,7 @@ export function categoryPerMonth(
   monthCount: number | "alle",
   topN: number,
 ): CategoryPerMonth {
-  const empty: CategoryPerMonth = { months: [], categories: [], values: [], otherCount: 0 };
+  const empty: CategoryPerMonth = { months: [], categories: [], values: [], hasData: [], otherCount: 0 };
   const rows = spendRows(txs, rules, own);
   if (rows.length === 0) return empty;
 
@@ -96,6 +102,7 @@ export function categoryPerMonth(
     months,
     categories,
     values: months.map((m) => categories.map((c) => grid.get(m)?.get(c) ?? 0)),
+    hasData: months.map((m) => grid.has(m)),
     otherCount: Math.max(0, ranked.length - categories.length),
   };
 }
