@@ -7,9 +7,9 @@ import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getEnabledModules, setEnabledModules } from "./settings.js";
+import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
-import { txsForAccounts, flowsForScope, entityOptionsFor, SCOPE_LABELS } from "./scope.js";
+import { txsForAccounts, flowsForScope, entityOptionsFor, screenOnSwitch, SCOPE_LABELS, type ParkedScreens, type ScopeScreen } from "./scope.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import NavBar from "./components/NavBar";
@@ -46,7 +46,12 @@ export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
-  const [entity, setEntity] = useState("BV1");
+  // Which entity an import files its accounts under. Persoonlijk, because that
+  // is what most statements are and because core's hard default for an
+  // unclassified entity is personal — so the imported accounts land in the half
+  // the app opens on instead of in a "BV1" nobody asked for. He can retype it
+  // before importing, and change it per account in Rekeningen afterwards.
+  const [entity, setEntity] = useState("Persoonlijk");
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -77,9 +82,28 @@ export default function App() {
   // travel agent looks up. A local preference, edited in the profile — held in
   // state so changing it re-renders everything that reads it.
   const [homeCountry, setHomeCountryState] = useState<string>(() => getHomeCountry());
+  // The level beneath it: "Texas" and "New York" are not the same tax question,
+  // and a country code cannot carry that. "" = he has not said, which nothing
+  // may read as a region. Typed by hand, always — LaVega never infers location.
+  const [homeRegion, setHomeRegionState] = useState<string>(() => getHomeRegion());
   function handleHomeCountryChange(code: string) {
     setHomeCountry(code);
     setHomeCountryState(getHomeCountry()); // read back: setHomeCountry rejects a non-ISO code
+    // A region belongs to a country. Keeping "Texas" while the country becomes
+    // Duitsland would leave a value on screen that means nothing anywhere.
+    setHomeRegion("");
+    setHomeRegionState("");
+  }
+  function handleHomeRegionChange(region: string) {
+    setHomeRegion(region);
+    setHomeRegionState(getHomeRegion()); // read back: the store trims and caps
+  }
+  // The owner's own name, shown at the top of his profile. A local preference —
+  // it stays in this browser, out of the vault, and out of every model prompt.
+  const [ownerName, setOwnerNameState] = useState<OwnerName>(() => getOwnerName());
+  function handleOwnerNameChange(next: OwnerName) {
+    setOwnerNameState(next); // keep the field exactly as typed, spaces and all
+    setOwnerName(next);
   }
   // Whether the server has an ANTHROPIC_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
@@ -132,6 +156,34 @@ export default function App() {
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
   const [fCategory, setFCategory] = useState("");
+
+  /* The switch is a round trip, not a reset. Each half keeps the module it was
+   * left on and its own view filters; crossing over parks one screen and
+   * restores the other. See scope.ts for why — an empty Zakelijk used to send
+   * him to Rekeningen and never bring the Overzicht back, and a filter naming a
+   * personal account used to ride along and empty the business half.
+   *
+   * A ref, not state: the parked screens are read and written at the moment of
+   * the switch and nothing renders from them, so they must never cause a
+   * render of their own. */
+  const parkedScreens = useRef<ParkedScreens>({});
+  function currentScreen(): ScopeScreen {
+    return { view, fEntity, fAccount, fSearch, fFrom, fTo, fCategory };
+  }
+  function handleScopeChange(next: EntityScope) {
+    if (next === scope) return;
+    parkedScreens.current[scope] = currentScreen();
+    const screen = screenOnSwitch(parkedScreens.current, next, currentScreen());
+    setView(screen.view);
+    setFEntity(screen.fEntity);
+    setFAccount(screen.fAccount);
+    setFSearch(screen.fSearch);
+    setFFrom(screen.fFrom);
+    setFTo(screen.fTo);
+    setFCategory(screen.fCategory);
+    setScope(next);
+  }
+
   const [ruleMatch, setRuleMatch] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
   // Alert buffer (cents): warn when the forecast dips below this, so shortfalls
@@ -705,7 +757,7 @@ export default function App() {
       <NavBar view={view} modules={navModules(modules)} onNavigate={setView} onOpenProfile={() => setView("profiel")} />
 
       <div className="shell-body">
-        <TopBar view={view} scope={scope} onScopeChange={setScope} onAddWidget={handleAddWidget} />
+        <TopBar view={view} scope={scope} onScopeChange={handleScopeChange} onAddWidget={handleAddWidget} />
 
         <main className="content">
           {/* Import moved into the profile, so import/bank-link messages would
@@ -844,6 +896,8 @@ export default function App() {
             <Optimalisatie
               txs={scopedTxs}
               accounts={currentScopedAccounts}
+              rules={rules}
+              own={own}
               asOf={asOf}
               busy={busy}
               onRateCommit={handleRateCommit}
@@ -896,6 +950,10 @@ export default function App() {
               onClassifyEntity={handleClassifyEntity}
               homeCountry={homeCountry}
               onHomeCountryChange={handleHomeCountryChange}
+              homeRegion={homeRegion}
+              onHomeRegionChange={handleHomeRegionChange}
+              ownerName={ownerName}
+              onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}
               entity={entity}
               onEntityChange={setEntity}

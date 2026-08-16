@@ -135,6 +135,13 @@
 
 /* ---------- SaldoBlock (Totale positie) ---------- */
 
+/* What the pill beside the big number is measured against, in words. Sits on
+ * the figure's baseline so it reads as part of the same sentence. */
+.figure-vs {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .position-graph {
   margin-top: var(--sp-4);
 }
@@ -221,6 +228,37 @@
 
 /* ---------- StatistiekBlock ---------- */
 
+/* The window every figure in the block belongs to, stated once at the top.
+ * This is what makes the block safe to read: "Uitgaven in deze periode" only
+ * means something when "deze periode" is on the screen. */
+.stat-window {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+/* The hand-picked range, beside the period pill. Two real date fields — the
+ * "Aangepast" option is a range, not another preset. */
+.stat-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-date {
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+.stat-range-sep {
+  color: var(--muted);
+}
+
 .stat-figures {
   display: flex;
   flex-wrap: wrap;
@@ -242,6 +280,13 @@
   margin: 0 0 var(--sp-4);
   font-size: 1rem;
   color: var(--ink);
+}
+/* The second half of that sentence: what the average is an average OF. Quieter
+ * than the claim it qualifies, but part of the same paragraph — it is the
+ * definition of the number, not a footnote. */
+.stat-insight-basis {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 /* The category legend doubles as the jump into Transacties, so each entry is a
@@ -340,8 +385,9 @@
   gap: var(--sp-3);
   flex: none;
 }
-/* Three cells now (tile · name · chip+amount), so the middle one has to be the
- * one that takes the slack and truncates. */
+/* Two cells (name+date · chip+amount). The monogram avatar that used to sit in
+ * front of the name is gone — it repeated the name in two letters — so the name
+ * takes the whole left column and truncates last. */
 .tx-row .tx-row-info {
   flex: 1;
 }
@@ -352,24 +398,6 @@
   white-space: nowrap;
 }
 
-/* The reference's merchant avatar, as a MONOGRAM. Never a fetched logo: a
- * remote image request per merchant would leak who he pays to whoever hosts
- * it. The colour is a stable hash of the name (see RecenteTransactiesBlock),
- * drawn from the chart tokens only. */
-.tx-tile {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  color: var(--on-ink);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
 /* Search in the module's control slot. Narrow enough to sit beside the title,
  * and it gives up its width first when the header wraps on a phone. */
 .tx-search {
@@ -377,6 +405,21 @@
   max-width: 100%;
   border-radius: var(--pill);
   padding: 6px 14px;
+  font-size: 0.8rem;
+}
+
+/* ---------- TopUitgavenBlock ---------- */
+
+/* Why there is no Δ column. Muted and dashed like every other "we do not know
+ * this" surface in the app — it is a statement about what LaVega can support,
+ * not a warning about the owner's spending. */
+.cat-nocompare {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
@@ -491,11 +534,6 @@
    * "Albert …". */
   .tx-meta-extra {
     display: none;
-  }
-  .tx-tile {
-    width: 30px;
-    height: 30px;
-    font-size: 0.66rem;
   }
   .tx-chip {
     font-size: 0.68rem;

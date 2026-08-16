@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import type { Account, EntityProfile, ScheduledFlow, Tx } from "@lavega/core";
 import { accountsInScope } from "@lavega/core";
-import { SCOPE_LABELS, SCOPE_ORDER, entityOptionsFor, flowsForScope, txsForAccounts } from "./scope.js";
+import { SCOPE_LABELS, SCOPE_ORDER, entityOptionsFor, flowsForScope, screenOnSwitch, txsForAccounts, unfilteredScreen } from "./scope.js";
 
 /* The Persoonlijk | Zakelijk switch: what the shell actually filters when it is
  * flipped. The classification itself is core's (entities.ts) — these prove the
@@ -88,4 +88,41 @@ test("the shell scopes on the classification, not on a second axis of its own", 
   // The classification is persisted in the vault, not invented per session.
   expect(app).toContain("storage.putEntityProfiles(profiles)");
   expect(app).toContain("storage.getEntityProfiles()");
+});
+
+/* --- The screen each half is left on -------------------------------------- */
+
+const screen = (view: Parameters<typeof unfilteredScreen>[0], over: Partial<ReturnType<typeof unfilteredScreen>> = {}) => ({
+  ...unfilteredScreen(view),
+  ...over,
+});
+
+test("a half you have never opened starts on the module you are on, with no filters", () => {
+  const current = screen("transactions", { fAccount: "prive", fCategory: "Boodschappen", fSearch: "ah" });
+  expect(screenOnSwitch({}, "business", current)).toEqual(unfilteredScreen("transactions"));
+});
+
+test("a filter naming an account of one half never crosses into the other", () => {
+  // The account key only exists in the half he came from, so carrying it across
+  // would narrow the other half to nothing while the control still names it.
+  const current = screen("transactions", { fAccount: "prive" });
+  expect(screenOnSwitch({}, "business", current).fAccount).toBe("");
+});
+
+test("a half you HAVE opened comes back exactly as it was left", () => {
+  const parked = { personal: screen("accounts", { fEntity: "Privé", fFrom: "2026-01-01" }) };
+  expect(screenOnSwitch(parked, "personal", screen("forecast"))).toEqual(parked.personal);
+});
+
+test("an emptied filter is a state that was left, not an unopened half", () => {
+  // A parked screen with every filter blank must still win over the fallback:
+  // "he cleared them" and "he has never been here" are different answers.
+  const parked = { business: unfilteredScreen("belasting") };
+  expect(screenOnSwitch(parked, "business", screen("overview")).view).toBe("belasting");
+});
+
+test("the import files new accounts under Persoonlijk, not under a BV nobody asked for", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  expect(app).toContain('useState("Persoonlijk")');
+  expect(app).not.toContain('useState("BV1")');
 });

@@ -157,41 +157,185 @@ export function categoryTotals(txs: Tx[], rules: Rule[], own?: OwnAccounts): Rec
 
 export type CategoryComparisonRow = {
   category: string;
-  out: number; // current-month spend, positive euros
-  sharePct: number; // % of the current month's total spend
-  prevOut: number; // previous-month spend, positive euros
+  out: number; // current-month spend on the COMPARED accounts, positive euros
+  sharePct: number; // % of the compared current-month total
+  prevOut: number; // previous-month spend on the SAME accounts, positive euros
   changePct: number | null; // vs previous month; null when there was no prior spend
 };
-export type CategoryComparison = { month: string; prevMonth: string; rows: CategoryComparisonRow[] };
+
+/** What we actually observed of one calendar month. `partial` is the honest
+ *  warning behind "eleven days against a full month": the newest transaction we
+ *  hold for this month falls before the month's last day, so the month is still
+ *  filling up (or the statement stops there). The raw dates are exposed too, so
+ *  the UI can be specific ("11 van 31 dagen") instead of vague. A month with no
+ *  data at all has empty dates, `daysObserved: 0` and `partial: true`. */
+export type MonthCoverage = {
+  month: string; // "YYYY-MM"
+  firstDate: string; // earliest tx date observed in the month, "" when none
+  lastDate: string; // newest tx date observed in the month, "" when none
+  daysObserved: number; // day-of-month of lastDate, 0 when none
+  daysInMonth: number;
+  partial: boolean;
+};
+
+/** Which accounts the comparison could honestly use, and what it therefore left
+ *  out. An account "covers" a month when its observed date range spans into
+ *  that month — so a card imported for August only does NOT cover July, while a
+ *  card that simply had no July transactions (but has June and August ones)
+ *  does, and its €0 for July is a real zero rather than a hole. */
+export type ComparisonCoverage = {
+  comparedAccountKeys: string[]; // accounts covering BOTH months — the like-for-like basis
+  excludedAccountKeys: string[]; // accounts covering exactly one of the two months
+  excludedOut: { current: number; previous: number }; // spend left out, positive euros
+  comparable: boolean; // at least one account covers both months
+};
+
+export type CategoryComparison = {
+  month: string;
+  prevMonth: string;
+  /** Empty when `coverage.comparable` is false — there is nothing to compare,
+   *  and a percentage would be a claim we cannot support. */
+  rows: CategoryComparisonRow[];
+  coverage: ComparisonCoverage;
+  current: MonthCoverage;
+  previous: MonthCoverage;
+};
 
 const TRANSFER_CATEGORY = "Eigen overboeking";
 const monthOf = (date: string): string => date.slice(0, 7); // "YYYY-MM"
+
+/** Days in a "YYYY-MM" month. Day 0 of the NEXT month is the last day of this
+ *  one; Date.UTC does the calendar carry, so December works too. */
+function daysInMonth(month: string): number {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** Step a "YYYY-MM" back by one month. */
+function prevMonthOf(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1)); // m is 1-based; m-2 = prev month (0-based)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+const emptyCoverage = (month: string): MonthCoverage => ({
+  month,
+  firstDate: "",
+  lastDate: "",
+  daysObserved: 0,
+  daysInMonth: month ? daysInMonth(month) : 0,
+  partial: true,
+});
 
 /** Internal category comparison for the LATEST month present in the data vs the
  *  month before it: each expense category's share of that month's spend and its
  *  change vs the prior month. Own transfers ("Eigen overboeking") are excluded
  *  (not spending). Deterministic — the "current" month is derived from the
- *  newest tx date, so it also works on historical/imported statements. Only
- *  categories with spend in the current month are returned, biggest first. */
+ *  newest tx date, so it also works on historical/imported statements.
+ *
+ *  LIKE FOR LIKE. Both months are restricted to the accounts whose observed data
+ *  reaches into BOTH of them. Without that, importing one bank for Jan–Aug and a
+ *  credit card for August only makes August carry a whole extra card that July
+ *  never had — a large, entirely fictional "increase". What was left out is
+ *  reported in `coverage` so the block can name it, and when NO account covers
+ *  both months the comparison is refused outright (`rows: []`,
+ *  `comparable: false`) rather than printing a percentage that cannot mean what
+ *  it appears to mean.
+ *
+ *  Comparing eleven days of August against a full July is the same lie in a
+ *  different shape, so `current`/`previous` carry each month's observed span and
+ *  a `partial` flag; the caller decides how loudly to say it. */
 export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts): CategoryComparison {
-  const dates = txs.map((t) => t.date).filter(Boolean);
-  if (dates.length === 0) return { month: "", prevMonth: "", rows: [] };
-  const month = monthOf(dates.reduce((a, b) => (a > b ? a : b)));
-  const [y, m] = month.split("-").map(Number);
-  const pd = new Date(Date.UTC(y, m - 2, 1)); // m is 1-based; m-2 = prev month (0-based)
-  const prevMonth = `${pd.getUTCFullYear()}-${String(pd.getUTCMonth() + 1).padStart(2, "0")}`;
+  const dated = txs.filter((t) => t.date);
+  if (dated.length === 0) {
+    return {
+      month: "",
+      prevMonth: "",
+      rows: [],
+      coverage: { comparedAccountKeys: [], excludedAccountKeys: [], excludedOut: { current: 0, previous: 0 }, comparable: false },
+      current: emptyCoverage(""),
+      previous: emptyCoverage(""),
+    };
+  }
+
+  const month = monthOf(dated.reduce((a, b) => (a.date > b.date ? a : b)).date);
+  const prevMonth = prevMonthOf(month);
+
+  // Per-account observed span. "Covers month M" = the span overlaps M, which is
+  // the closest thing to statement coverage we can derive from transactions
+  // alone — and, unlike "has a transaction in M", it does not punish an account
+  // that was simply unused for a month.
+  const span = new Map<string, { first: string; last: string }>();
+  for (const t of dated) {
+    const s = span.get(t.accountKey);
+    if (!s) span.set(t.accountKey, { first: t.date, last: t.date });
+    else {
+      if (t.date < s.first) s.first = t.date;
+      if (t.date > s.last) s.last = t.date;
+    }
+  }
+  const covers = (key: string, m: string): boolean => {
+    const s = span.get(key);
+    if (!s) return false;
+    return s.first <= `${m}-${String(daysInMonth(m)).padStart(2, "0")}` && s.last >= `${m}-01`;
+  };
+
+  const comparedAccountKeys: string[] = [];
+  const excludedAccountKeys: string[] = [];
+  for (const key of [...span.keys()].sort()) {
+    const inCur = covers(key, month);
+    const inPrev = covers(key, prevMonth);
+    if (inCur && inPrev) comparedAccountKeys.push(key);
+    else if (inCur || inPrev) excludedAccountKeys.push(key);
+  }
+  const compared = new Set(comparedAccountKeys);
+
+  // Month coverage is measured over the accounts actually compared when there
+  // are any — otherwise the whole dataset, so an uncomparable result still says
+  // how much of the newest month it holds.
+  const spanSource = compared.size > 0 ? dated.filter((t) => compared.has(t.accountKey)) : dated;
+  const coverageOf = (m: string): MonthCoverage => {
+    let firstDate = "";
+    let lastDate = "";
+    for (const t of spanSource) {
+      if (monthOf(t.date) !== m) continue;
+      if (firstDate === "" || t.date < firstDate) firstDate = t.date;
+      if (t.date > lastDate) lastDate = t.date;
+    }
+    if (lastDate === "") return emptyCoverage(m);
+    const total = daysInMonth(m);
+    const daysObserved = Number(lastDate.slice(8, 10));
+    return { month: m, firstDate, lastDate, daysObserved, daysInMonth: total, partial: daysObserved < total };
+  };
 
   const cur: Record<string, number> = {};
   const prev: Record<string, number> = {};
-  for (const t of txs) {
+  const excludedOut = { current: 0, previous: 0 };
+  for (const t of dated) {
     if (t.amount >= 0) continue; // spend only
+    const mo = monthOf(t.date);
+    if (mo !== month && mo !== prevMonth) continue;
     const c = categorize(t, rules, own);
     if (c === TRANSFER_CATEGORY) continue;
-    const mo = monthOf(t.date);
     const spend = -t.amount; // positive euros
+    if (!compared.has(t.accountKey)) {
+      if (mo === month) excludedOut.current += spend;
+      else excludedOut.previous += spend;
+      continue;
+    }
     if (mo === month) cur[c] = (cur[c] ?? 0) + spend;
-    else if (mo === prevMonth) prev[c] = (prev[c] ?? 0) + spend;
+    else prev[c] = (prev[c] ?? 0) + spend;
   }
+
+  const coverage: ComparisonCoverage = {
+    comparedAccountKeys,
+    excludedAccountKeys,
+    excludedOut,
+    comparable: comparedAccountKeys.length > 0,
+  };
+  const base = { month, prevMonth, coverage, current: coverageOf(month), previous: coverageOf(prevMonth) };
+  if (!coverage.comparable) return { ...base, rows: [] };
+
   const totalCur = Object.values(cur).reduce((s, v) => s + v, 0);
   const rows: CategoryComparisonRow[] = Object.keys(cur)
     .map((category) => {
@@ -206,7 +350,105 @@ export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts):
       };
     })
     .sort((a, b) => b.out - a.out);
-  return { month, prevMonth, rows };
+  return { ...base, rows };
+}
+
+/* ── The "smaller categories not shown" cut-off, per timeframe ─────────────
+ *
+ * A fixed rank (or a fixed euro floor) hides different things depending on how
+ * long the window is: €30 a month is 6% of a month and 0,5% of a year, so a
+ * category worth watching inside one month disappears against twelve. The
+ * threshold therefore scales WITH the window — it is a rate (per 30 days), not
+ * an amount — and everything folded away is returned, named, so the block can
+ * say what it hid instead of only counting it. */
+
+export type CategorySlice = {
+  category: string;
+  out: number;
+  sharePct: number;
+  /** True when the category fell under the window-relative floor. A hidden slice
+   *  with `false` was pushed out by the chart's cap instead — a different
+   *  sentence ("nog 3 categorieën, niet getekend") than "6 kleinere
+   *  categorieën", and the block should not conflate them. */
+  belowThreshold: boolean;
+};
+
+export type CategorySelection = {
+  /** The categories to draw, biggest first. */
+  shown: CategorySlice[];
+  /** Everything folded away, biggest first: below the threshold, or past the
+   *  chart's cap. Named so the caller can list them. */
+  hidden: CategorySlice[];
+  /** Combined spend / share of `hidden`. */
+  hiddenOut: number;
+  hiddenSharePct: number;
+  /** The window-relative floor actually applied, in the unit of the totals. */
+  thresholdOut: number;
+  /** The rate it came from, per 30 days, and the window it was scaled to. */
+  minPer30Days: number;
+  windowDays: number;
+  /** Total spend across all categories, in the unit of the totals. */
+  totalOut: number;
+};
+
+export type SelectCategoriesOptions = {
+  /** Length of the displayed window, in days. */
+  windowDays: number;
+  /** Most categories to draw — a chart cap, not a judgement about relevance. */
+  maxShown?: number;
+  /** A category is material when it averages at least this much per 30 days.
+   *  Same unit as the totals (euros for `categoryTotals`). */
+  minPer30Days?: number;
+};
+
+/** Split category totals into what a window of `windowDays` should show and what
+ *  it should fold away. Totals are positive spend, in any consistent unit; the
+ *  threshold is expressed in that same unit per 30 days and scaled to the
+ *  window, which is what makes the cut-off per-timeframe rather than global.
+ *  A non-positive `windowDays` yields a zero floor (nothing is dropped for being
+ *  small) — we do not invent a window we were not given. */
+export function selectMajorCategories(
+  totals: Iterable<readonly [string, number]>,
+  opts: SelectCategoriesOptions,
+): CategorySelection {
+  const maxShown = opts.maxShown ?? 4;
+  const minPer30Days = opts.minPer30Days ?? 25;
+  const windowDays = opts.windowDays > 0 ? opts.windowDays : 0;
+  const thresholdOut = (minPer30Days * windowDays) / 30;
+
+  const ranked = [...totals]
+    .filter(([, out]) => out > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const totalOut = ranked.reduce((s, [, out]) => s + out, 0);
+  const slice = ([category, out]: readonly [string, number]): CategorySlice => ({
+    category,
+    out,
+    sharePct: totalOut > 0 ? (out / totalOut) * 100 : 0,
+    belowThreshold: out < thresholdOut,
+  });
+
+  const material = ranked.filter(([, out]) => out >= thresholdOut);
+  const shown = material.slice(0, maxShown).map(slice);
+  const shownNames = new Set(shown.map((s) => s.category));
+  const hidden = ranked.filter(([c]) => !shownNames.has(c)).map(slice);
+  const hiddenOut = hidden.reduce((s, h) => s + h.out, 0);
+
+  return {
+    shown,
+    hidden,
+    hiddenOut,
+    hiddenSharePct: totalOut > 0 ? (hiddenOut / totalOut) * 100 : 0,
+    thresholdOut,
+    minPer30Days,
+    windowDays,
+    totalOut,
+  };
+}
+
+/** Calendar days covered by a list of "YYYY-MM" months — the `windowDays` to
+ *  hand `selectMajorCategories` when the window is expressed in months. */
+export function windowDaysFromMonths(months: string[]): number {
+  return months.reduce((s, m) => s + daysInMonth(m), 0);
 }
 
 /** Merge freshly-imported accounts with the existing ones, preserving the user's

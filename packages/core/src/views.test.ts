@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, ownAccounts, mergeImportedAccounts } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
@@ -173,8 +173,196 @@ test("categoryComparison: latest month vs prior — share % + change %, transfer
   expect(cmp.rows[0].category).toBe("Boodschappen");
 });
 
-test("categoryComparison: empty input yields empty result", () => {
-  expect(categoryComparison([], [])).toEqual({ month: "", prevMonth: "", rows: [] });
+test("categoryComparison: empty input yields empty result, and nothing comparable", () => {
+  const cmp = categoryComparison([], []);
+  expect(cmp.month).toBe("");
+  expect(cmp.prevMonth).toBe("");
+  expect(cmp.rows).toEqual([]);
+  expect(cmp.coverage).toEqual({
+    comparedAccountKeys: [],
+    excludedAccountKeys: [],
+    excludedOut: { current: 0, previous: 0 },
+    comparable: false,
+  });
+});
+
+/* ── Like-for-like coverage: the ~€24.000 rise that was not real ──────────── */
+
+const cmpTx = (accountKey: string, id: string, date: string, amount: number, cp: string): Tx => ({
+  id, accountKey, date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false,
+});
+const shopRules: Rule[] = [
+  { id: "b1", match: "albert heijn", category: "Boodschappen" },
+  { id: "kl", match: "kledingzaak", category: "Kleding" },
+];
+
+test("categoryComparison: a card imported for the current month only is left OUT of both sides", () => {
+  const rows: Tx[] = [
+    // ABN: a full run of months, so it covers July and August.
+    cmpTx("ABN", "a1", "2026-07-05", -100, "Albert Heijn"),
+    cmpTx("ABN", "a2", "2026-08-05", -110, "Albert Heijn"),
+    // Amex: August only — July never had this card.
+    cmpTx("AMEX", "x1", "2026-08-09", -24_000, "Kledingzaak"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.coverage.comparable).toBe(true);
+  expect(cmp.coverage.comparedAccountKeys).toEqual(["ABN"]);
+  expect(cmp.coverage.excludedAccountKeys).toEqual(["AMEX"]);
+  expect(cmp.coverage.excludedOut.current).toBeCloseTo(24_000, 5);
+  expect(cmp.coverage.excludedOut.previous).toBeCloseTo(0, 5);
+  // The Amex spend is not in the rows at all — no fictional new category, and
+  // Boodschappen is compared against the account that was there both months.
+  expect(cmp.rows.map((r) => r.category)).toEqual(["Boodschappen"]);
+  expect(cmp.rows[0].out).toBeCloseTo(110, 5);
+  expect(cmp.rows[0].prevOut).toBeCloseTo(100, 5);
+  expect(cmp.rows[0].changePct).toBeCloseTo(10, 5);
+});
+
+test("categoryComparison: when NO account covers both months, changePct is null — the whole comparison is refused", () => {
+  // Everything the vault holds is August: there is no July to compare against.
+  const rows: Tx[] = [
+    cmpTx("ABN", "a1", "2026-08-05", -100, "Albert Heijn"),
+    cmpTx("AMEX", "x1", "2026-08-09", -24_000, "Kledingzaak"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.month).toBe("2026-08");
+  expect(cmp.prevMonth).toBe("2026-07");
+  expect(cmp.coverage.comparable).toBe(false);
+  expect(cmp.coverage.comparedAccountKeys).toEqual([]);
+  expect(cmp.coverage.excludedAccountKeys).toEqual(["ABN", "AMEX"]);
+  expect(cmp.rows).toEqual([]);
+  // The rule the travel ranking lives by: no number is printed at all.
+  expect(cmp.rows.every((r) => r.changePct === null)).toBe(true);
+});
+
+test("categoryComparison: an account merely UNUSED in the previous month still counts as covered", () => {
+  const rows: Tx[] = [
+    cmpTx("ABN", "a0", "2026-06-05", -100, "Albert Heijn"),
+    cmpTx("ABN", "a1", "2026-07-05", -100, "Albert Heijn"),
+    cmpTx("ABN", "a2", "2026-08-05", -100, "Albert Heijn"),
+    // The card spans June->August but had no July transaction. That is a real
+    // zero, not a hole, so it belongs in the comparison.
+    cmpTx("AMEX", "x0", "2026-06-09", -50, "Kledingzaak"),
+    cmpTx("AMEX", "x1", "2026-08-09", -80, "Kledingzaak"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.coverage.comparedAccountKeys).toEqual(["ABN", "AMEX"]);
+  expect(cmp.coverage.excludedAccountKeys).toEqual([]);
+  const kleding = cmp.rows.find((r) => r.category === "Kleding")!;
+  expect(kleding.out).toBeCloseTo(80, 5);
+  expect(kleding.prevOut).toBeCloseTo(0, 5);
+  expect(kleding.changePct).toBeNull(); // no prior spend => no percentage
+});
+
+test("categoryComparison: the newest month is flagged PARTIAL when the data stops mid-month", () => {
+  const rows: Tx[] = [
+    cmpTx("ABN", "a1", "2026-07-05", -100, "Albert Heijn"),
+    cmpTx("ABN", "a2", "2026-07-31", -10, "Albert Heijn"),
+    cmpTx("ABN", "a3", "2026-08-11", -110, "Albert Heijn"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.current).toEqual({
+    month: "2026-08",
+    firstDate: "2026-08-11",
+    lastDate: "2026-08-11",
+    daysObserved: 11,
+    daysInMonth: 31,
+    partial: true,
+  });
+  // July ran to its last day, so it is not partial — eleven days against a full
+  // month is exactly the asymmetry the caller has to be able to see.
+  expect(cmp.previous).toMatchObject({ month: "2026-07", daysObserved: 31, daysInMonth: 31, partial: false });
+});
+
+test("categoryComparison: a February that runs to the 28th of a 28-day month is NOT partial", () => {
+  const rows: Tx[] = [
+    cmpTx("ABN", "a1", "2026-01-15", -100, "Albert Heijn"),
+    cmpTx("ABN", "a2", "2026-02-28", -100, "Albert Heijn"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.current).toMatchObject({ month: "2026-02", daysInMonth: 28, daysObserved: 28, partial: false });
+});
+
+test("categoryComparison: December rolls back to November, not to month 0", () => {
+  const rows: Tx[] = [
+    cmpTx("ABN", "a1", "2026-11-15", -100, "Albert Heijn"),
+    cmpTx("ABN", "a2", "2026-12-31", -150, "Albert Heijn"),
+  ];
+  const cmp = categoryComparison(rows, shopRules);
+  expect(cmp.month).toBe("2026-12");
+  expect(cmp.prevMonth).toBe("2026-11");
+  expect(cmp.rows[0].changePct).toBeCloseTo(50, 5);
+});
+
+/* ── The "smaller categories" cut-off, per timeframe ──────────────────────── */
+
+test("selectMajorCategories: the same category survives a one-month window and is folded away over a year", () => {
+  // €40 a month of "Cadeaus" against a €1.000-a-month household.
+  const oneMonth: [string, number][] = [
+    ["Boodschappen", 500],
+    ["Wonen", 400],
+    ["Cadeaus", 40],
+    ["Postzegels", 4],
+  ];
+  const short = selectMajorCategories(oneMonth, { windowDays: 31, maxShown: 4 });
+  expect(short.shown.map((s) => s.category)).toEqual(["Boodschappen", "Wonen", "Cadeaus"]);
+  expect(short.hidden.map((h) => h.category)).toEqual(["Postzegels"]);
+  expect(short.thresholdOut).toBeCloseTo((25 * 31) / 30, 5);
+
+  // Twelve months of the same spending: the €25/month floor scales to €300, so
+  // "Cadeaus" (€480/yr) is STILL shown — a fixed global floor would have hidden
+  // it, which is the defect.
+  const year: [string, number][] = oneMonth.map(([c, v]) => [c, v * 12]);
+  const long = selectMajorCategories(year, { windowDays: 365, maxShown: 4 });
+  expect(long.shown.map((s) => s.category)).toContain("Cadeaus");
+  expect(long.thresholdOut).toBeCloseTo((25 * 365) / 30, 5);
+  // €48/yr of postage really is noise at a year's scale, and it is named.
+  expect(long.hidden.map((h) => h.category)).toEqual(["Postzegels"]);
+});
+
+test("selectMajorCategories: what was folded away is named, totalled and shared", () => {
+  const sel = selectMajorCategories(
+    [["A", 500], ["B", 300], ["C", 200], ["D", 100], ["E", 60], ["F", 20]],
+    { windowDays: 30, maxShown: 3 },
+  );
+  expect(sel.shown.map((s) => s.category)).toEqual(["A", "B", "C"]);
+  // D and E clear the €25 floor but are past the chart's cap; F is below it.
+  // Both kinds are folded away, both are named, and the two are told apart so
+  // the block does not call a €100 category "kleiner".
+  expect(sel.hidden.map((h) => h.category)).toEqual(["D", "E", "F"]);
+  expect(sel.hidden.map((h) => h.belowThreshold)).toEqual([false, false, true]);
+  expect(sel.hiddenOut).toBeCloseTo(180, 5);
+  expect(sel.totalOut).toBeCloseTo(1180, 5);
+  expect(sel.hiddenSharePct).toBeCloseTo((180 / 1180) * 100, 5);
+  expect(sel.shown[0].sharePct).toBeCloseTo((500 / 1180) * 100, 5);
+});
+
+test("selectMajorCategories: a Map works, zero/negative totals are dropped, ties are stable", () => {
+  const sel = selectMajorCategories(
+    new Map([["A", 100], ["B", 100], ["Leeg", 0], ["Negatief", -10]]),
+    { windowDays: 30 },
+  );
+  expect(sel.shown.map((s) => s.category)).toEqual(["A", "B"]);
+  expect(sel.hidden).toEqual([]);
+});
+
+test("selectMajorCategories: no window means no floor — nothing is dropped for being small", () => {
+  const sel = selectMajorCategories([["A", 100], ["B", 1]], { windowDays: 0 });
+  expect(sel.thresholdOut).toBe(0);
+  expect(sel.shown.map((s) => s.category)).toEqual(["A", "B"]);
+});
+
+test("selectMajorCategories: an empty window yields zeroed shares, not NaN", () => {
+  const sel = selectMajorCategories([], { windowDays: 30 });
+  expect(sel).toMatchObject({ shown: [], hidden: [], hiddenOut: 0, hiddenSharePct: 0, totalOut: 0 });
+});
+
+test("windowDaysFromMonths counts real calendar days, leap year included", () => {
+  expect(windowDaysFromMonths(["2026-01"])).toBe(31);
+  expect(windowDaysFromMonths(["2026-02"])).toBe(28);
+  expect(windowDaysFromMonths(["2024-02"])).toBe(29);
+  expect(windowDaysFromMonths(["2026-06", "2026-07", "2026-08"])).toBe(30 + 31 + 31);
+  expect(windowDaysFromMonths([])).toBe(0);
 });
 
 test("a re-import keeps a bank/name the owner typed, but may fix a stale parser one", () => {

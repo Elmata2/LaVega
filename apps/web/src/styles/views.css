@@ -464,3 +464,86 @@
   justify-content: space-between;
   gap: var(--sp-3);
 }
+
+/* ---------- Profielkop ----------
+ *
+ * The owner at the top of his own profile: a drawn monogram (never a fetched
+ * avatar — a remote image would tell that server who uses LaVega), his name as
+ * the heading, and the two fields that set it. Same card surface as everything
+ * else; only the layout is new. */
+.profile-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+.profile-head-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.profile-head-text {
+  min-width: 0;
+  flex: 1;
+}
+.profile-head-name {
+  margin: 0 0 var(--sp-1);
+}
+.profile-head-fields {
+  margin-top: var(--sp-3);
+}
+@media (max-width: 640px) {
+  .profile-head {
+    flex-direction: column;
+  }
+}
+
+/* ---------- De uitleg achter een oog ----------
+ *
+ * Explanations that used to sit as rows of text above the fields they described.
+ * The eye is deliberately quiet and small: the field is the thing you came for,
+ * the explanation is what you ask for when you need it. Same surface and rule as
+ * .info-panel so the two read as one idea at two sizes. */
+.field-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.field-info:hover,
+.field-info[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.field-note {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.field-note strong,
+.field-note code {
+  color: var(--ink);
+}

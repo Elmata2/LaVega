@@ -32,7 +32,14 @@ test("KaartenBlock never renders a card number it does not have", () => {
   const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
   // No sixteen-digit PAN, and no four-group filler.
   expect(html).not.toMatch(/\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}/);
-  expect(html).toContain("Een kaartnummer heeft LaVega niet.");
+});
+
+test("KaartenBlock carries no note line under it", () => {
+  // The explanation that used to sit under the strip is gone (UI review round
+  // 2): the faces already show only what LaVega holds, so the paragraph was
+  // repeating the picture.
+  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
+  expect(html).not.toContain("module-foot");
 });
 
 test("KaartenBlock states what is missing instead of filling it in", () => {

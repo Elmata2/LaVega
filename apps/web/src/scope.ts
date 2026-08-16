@@ -1,5 +1,6 @@
 import type { Account, EntityProfile, EntityScope, ScheduledFlow, Tx } from "@lavega/core";
 import { entityScope } from "@lavega/core";
+import type { View } from "./App";
 
 /* Persoonlijk | Zakelijk — the shell's one filter.
  *
@@ -46,6 +47,54 @@ export function flowsForScope(
   profiles: readonly EntityProfile[] = [],
 ): ScheduledFlow[] {
   return flows.filter((f) => entityScope(f.entity, profiles) === scope);
+}
+
+/* --- The screen each half is left on --------------------------------------
+ *
+ * The bug this fixes: the switch changed WHICH money you see but nothing about
+ * WHERE you were, and the two halves shared one set of view filters. Two things
+ * followed, and between them they are exactly what "switching back does not
+ * bring back what was there before" describes:
+ *
+ *   · An unclassified vault has an empty Zakelijk. Its one actionable line
+ *     sends you to Rekeningen — "switching to Zakelijk shows only the
+ *     accounts" — and switching back re-scoped the data while leaving you
+ *     standing on that page. The Overzicht he was reading never came back.
+ *   · A filter naming a PERSONAL account (Rekeningen → "4 transacties") stayed
+ *     set when he crossed over, narrowing Zakelijk to nothing — an empty screen
+ *     with no stated reason.
+ *
+ * So the switch now parks the screen of the half you leave and restores the
+ * screen of the half you enter. A half you have never opened starts on the
+ * module you are on now, with NO filters: an account/entity/category filter
+ * names things that only exist in the half you just left, so carrying it across
+ * can only mislead. Pure; the shell does the state-setting. */
+
+/** Everything about the screen that belongs to one half of the money. */
+export type ScopeScreen = {
+  view: View;
+  fEntity: string;
+  fAccount: string;
+  fSearch: string;
+  fFrom: string;
+  fTo: string;
+  fCategory: string;
+};
+
+/** Where the parked screens live, keyed by half. A half with no entry has never
+ *  been opened — which is not the same as "was opened and had nothing". */
+export type ParkedScreens = Partial<Record<EntityScope, ScopeScreen>>;
+
+/** The same module, none of the filters. What a half you have never opened
+ *  shows the first time you cross into it. */
+export function unfilteredScreen(view: View): ScopeScreen {
+  return { view, fEntity: "", fAccount: "", fSearch: "", fFrom: "", fTo: "", fCategory: "" };
+}
+
+/** The screen to show after switching to `next`: the one that half was left on,
+ *  else the current module with the filters dropped. */
+export function screenOnSwitch(parked: ParkedScreens, next: EntityScope, current: ScopeScreen): ScopeScreen {
+  return parked[next] ?? unfilteredScreen(current.view);
 }
 
 /** The entities present in the given accounts, in first-seen order. The list

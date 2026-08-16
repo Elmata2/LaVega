@@ -156,6 +156,9 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
   const reserved = reservedCents(scheduledFlows, asOf);
 
   const hasGraph = series.coverageDays >= MIN_HISTORY_DAYS && series.points.length >= 2;
+  /** The pill beside the big number: the move against ONE WEEK AGO. Null when
+   *  the history does not reach back a week — then nothing is shown. */
+  const weekPct = changePct(knownSum, series.weekAgo);
 
   return (
     <Module
@@ -186,7 +189,12 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
         >
           {accounts.length === 0 ? "—" : formatEuro(knownSum)}
         </span>
-        <DeltaPill pct={changePct(knownSum, series.weekAgo)} upIsGood={true} />
+        <DeltaPill pct={weekPct} upIsGood={true} />
+        {/* A bare "▲ 3%" is unreadable: three percent since WHEN? The pill is
+            the move against the position one week ago, so the card says so
+            next to it — and says nothing at all when there is no week to
+            compare against. */}
+        {weekPct !== null && <span className="figure-vs">t.o.v. vorige week</span>}
       </div>
       <p className="module-figure-label">
         {accounts.length === 0

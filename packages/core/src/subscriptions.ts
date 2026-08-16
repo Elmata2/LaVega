@@ -11,7 +11,7 @@ export type Subscription = {
   key: string;              // norm(counterparty) + "|out"
   name: string;             // raw counterparty of the first occurrence
   function: string;         // "Videostreaming" | "Muziekstreaming" | ... | "Overig"
-  cadenceDays: number;      // 30 | 91 | 365
+  cadenceDays: number;      // 30 | 61 | 91 | 182 | 365
   monthlyCents: number;     // current price normalized to per-month (positive)
   firstAmountCents: number; // magnitude of the earliest occurrence
   lastAmountCents: number;  // magnitude of the latest occurrence (current price)
@@ -126,13 +126,82 @@ function std(nums: number[]): number {
   return Math.sqrt(nums.reduce((s, n) => s + (n - m) ** 2, 0) / (nums.length - 1));
 }
 
-/* Cadence bands accepted for a subscription: monthly, quarterly, yearly. Weekly
- * is deliberately excluded — a weekly fixed outflow is rarely a "subscription". */
+/* Cadence bands accepted for a subscription. Weekly is deliberately excluded —
+ * a weekly fixed outflow is rarely a "subscription".
+ *
+ * There is NO lookback window in this detector: it reads every transaction it is
+ * handed. What limits it is this table. Before 2026-08-17 it held three rows —
+ * monthly (26–36d, 3 occurrences), quarterly (84–98d, 2) and yearly (350–380d,
+ * 2) — which left a hole from 37 to 83 days and another from 99 to 349, so a
+ * two-monthly or half-yearly charge matched no band and could never appear. The
+ * two rows below close those holes; both need 3 occurrences, because two
+ * payments 60 days apart at a similar amount are just as likely to be two
+ * ordinary purchases at the same shop, and a third occurrence brings the
+ * interval-CV guard into play.
+ *
+ * The real constraint is therefore HISTORY, not a window: see
+ * `minHistoryDaysFor` and `subscriptionCoverage`. */
 const CADENCE_BANDS: ReadonlyArray<{ cadenceDays: number; min: number; max: number; minOcc: number }> = [
   { cadenceDays: 30, min: 26, max: 36, minOcc: 3 },
-  { cadenceDays: 91, min: 84, max: 98, minOcc: 2 },
+  { cadenceDays: 61, min: 55, max: 68, minOcc: 3 },
+  { cadenceDays: 91, min: 80, max: 100, minOcc: 2 },
+  { cadenceDays: 182, min: 170, max: 195, minOcc: 2 },
   { cadenceDays: 365, min: 350, max: 380, minOcc: 2 },
 ];
+
+/** Dutch name of each cadence, for the UI. */
+export const CADENCE_LABEL_NL: Readonly<Record<number, string>> = {
+  30: "maandelijks",
+  61: "tweemaandelijks",
+  91: "per kwartaal",
+  182: "halfjaarlijks",
+  365: "jaarlijks",
+};
+
+/** Shortest history in which a charge on this cadence could be seen at all:
+ *  the gaps between the minimum number of occurrences. A quarterly charge needs
+ *  one full gap (~91 days) before there is anything to recognise — which is why
+ *  a one- or two-month import can never show one, no matter how the detector is
+ *  tuned. Returns 0 for an unknown cadence. */
+export function minHistoryDaysFor(cadenceDays: number): number {
+  const band = CADENCE_BANDS.find((b) => b.cadenceDays === cadenceDays);
+  return band ? band.cadenceDays * (band.minOcc - 1) : 0;
+}
+
+export type SubscriptionCoverage = {
+  /** Oldest / newest outflow date in the data, "" when there are none. */
+  firstDate: string;
+  lastDate: string;
+  /** Days from the first outflow to the last, inclusive. 0 when there are none. */
+  historyDays: number;
+  /** Cadences this much history could show, shortest first. */
+  visibleCadences: number[];
+  /** Cadences it cannot show yet, shortest first — with the history each needs. */
+  hiddenCadences: { cadenceDays: number; needsDays: number }[];
+};
+
+/** How much of the subscription picture the data can possibly contain. This is
+ *  the honest answer to "why is my quarterly subscription missing?": with 47
+ *  days of statements the detector is not blind, the history simply does not
+ *  reach back far enough — and saying so beats showing an empty list. */
+export function subscriptionCoverage(txs: Tx[]): SubscriptionCoverage {
+  let firstDate = "";
+  let lastDate = "";
+  for (const t of txs) {
+    if (t.amount >= 0 || !t.date) continue;
+    if (firstDate === "" || t.date < firstDate) firstDate = t.date;
+    if (t.date > lastDate) lastDate = t.date;
+  }
+  const historyDays = firstDate === "" ? 0 : daysBetween(firstDate, lastDate) + 1;
+  const visibleCadences: number[] = [];
+  const hiddenCadences: { cadenceDays: number; needsDays: number }[] = [];
+  for (const b of CADENCE_BANDS) {
+    const needsDays = b.cadenceDays * (b.minOcc - 1);
+    if (historyDays >= needsDays) visibleCadences.push(b.cadenceDays);
+    else hiddenCadences.push({ cadenceDays: b.cadenceDays, needsDays });
+  }
+  return { firstDate, lastDate, historyDays, visibleCadences, hiddenCadences };
+}
 
 export type DetectSubscriptionOptions = { maxIntervalCv?: number; maxAmountCv?: number };
 

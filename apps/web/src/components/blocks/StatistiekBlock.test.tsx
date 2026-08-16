@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { categorize, monthlyTotals } from "@lavega/core";
+import { categorize } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import StatistiekBlock, { monthAxisLabel, statSummary } from "./StatistiekBlock";
+import StatistiekBlock, { customWindow, STAT_PERIODS } from "./StatistiekBlock";
 import { freshTxs, own, rules, txs } from "./fixtures";
 
 const render = (t = txs) =>
@@ -24,17 +24,87 @@ test("StatistiekBlock leads with the per-category-per-month view from the refere
   expect(html).toContain("Inkoop"); // manual label on t3/t6
   expect(html).toContain("Energie"); // user rule on t5
   expect(html).toContain(categorize(txs[1], rules, own)); // Dutch default on t2
-  // The averages under the chart survive the merge.
-  expect(html).toContain("Gem. inkomsten p/m");
-  expect(html).toContain(formatEuro((12_000 + 9_500) / 3));
 });
 
-test("StatistiekBlock is the major block and absorbs the category comparison", () => {
+test("StatistiekBlock offers his five periods plus a real custom range", () => {
   const html = render();
-  expect(html).toContain("module-span-3");
-  // The old separate "Verandering per categorie" block is gone; its question is
-  // this view.
-  expect(html).not.toContain("Verandering per categorie");
+  expect(STAT_PERIODS.map((p) => p.label)).toEqual([
+    "1 week",
+    "1 maand",
+    "3 maanden",
+    "6 maanden",
+    "12 maanden",
+    "Aangepast",
+  ]);
+  for (const p of STAT_PERIODS) expect(html).toContain(`>${p.label}<`);
+  // "Aangepast" is not selected, so its two date fields are not on screen yet.
+  expect(html).not.toContain('type="date"');
+});
+
+test("customWindow refuses to turn half a range into a window", () => {
+  expect(customWindow("2026-06-01", "2026-08-01")).toEqual({ start: "2026-06-01", end: "2026-08-01" });
+  // A single day is a legitimate range; an empty field or a backwards range is
+  // not a window at all — and is never quietly replaced by a preset.
+  expect(customWindow("2026-06-01", "2026-06-01")).toEqual({ start: "2026-06-01", end: "2026-06-01" });
+  expect(customWindow("", "2026-08-01")).toBeNull();
+  expect(customWindow("2026-06-01", "")).toBeNull();
+  expect(customWindow("2026-08-01", "2026-06-01")).toBeNull();
+});
+
+test("StatistiekBlock states the window every figure in it belongs to", () => {
+  const html = render();
+  // The default is twelve calendar months, ending at the newest transaction —
+  // and the block says where the data actually starts rather than implying it
+  // has a year of it.
+  expect(html).toContain("1 sep 2025 – 11 aug 2026");
+  expect(html).toContain("gegevens vanaf 9 jun 2026");
+  expect(html).toContain("Inkomsten in deze periode");
+  expect(html).toContain("Uitgaven in deze periode");
+  expect(html).toContain(formatEuro(12_000 + 9_500));
+  expect(html).toContain(formatEuro(420.5 + 1_880 + 250 + 1_100));
+});
+
+test("StatistiekBlock carries no note line under it any more", () => {
+  const html = render();
+  // The footer explaining what Δ meant is gone (UI review round 2) — with it
+  // went the per-month averages it was explaining.
+  expect(html).not.toContain("module-foot");
+  expect(html).not.toContain("Δ = ");
+  expect(html).not.toContain("Gem. inkomsten p/m");
+});
+
+test("the 'smaller categories' line names the window and the floor it is true for", () => {
+  // Nothing is under core's floor in the plain fixture, so nothing is claimed.
+  const html = render();
+  expect(html).not.toContain("kleinere categorie");
+
+  const many = [
+    ...txs,
+    { ...txs[1], id: "m1", date: "2026-08-04", amount: -40, counterparty: "NS", description: "Trein" },
+    { ...txs[1], id: "m2", date: "2026-08-05", amount: -30, counterparty: "Apotheek", description: "Zorg" },
+    { ...txs[1], id: "m3", date: "2026-08-06", amount: -20, counterparty: "Bioscoop", description: "Film" },
+  ];
+  // Three small ones, each under core's window-scaled floor: the line names the
+  // window it is true for, the floor, and that a shorter window moves it.
+  const html2 = render(many);
+  expect(html2).toContain("3 kleinere categorieën niet getoond in 9 jun – 11 aug 2026");
+  expect(html2).toContain(`elk onder ${formatEuro((25 * 64) / 30)} over deze 64 dagen`);
+  expect(html2).toContain("Een kortere periode legt die grens lager.");
+});
+
+test("only-small spending is reported as small, not as no spending at all", () => {
+  // Five euros spread over sixty-four days: under core's floor for this window,
+  // so nothing is charted — and an empty chart must not be captioned "geen
+  // uitgaven in deze periode", which would be false.
+  const tiny = [
+    { ...txs[1], id: "tiny1", date: "2026-06-09", amount: -3, counterparty: "Kiosk" },
+    { ...txs[1], id: "tiny2", date: "2026-08-11", amount: -2, counterparty: "Kiosk" },
+  ];
+  const html = render(tiny);
+  expect(html).toContain("Alleen kleine uitgaven in deze periode");
+  expect(html).toContain(formatEuro(5));
+  expect(html).toContain(`elk onder ${formatEuro((25 * 64) / 30)} over deze 64 dagen`);
+  expect(html).not.toContain("Geen uitgaven in deze periode");
 });
 
 test("StatistiekBlock never draws a month it has no statement for", () => {
@@ -51,37 +121,6 @@ test("StatistiekBlock renders an empty state instead of a chart with no transact
   const html = render([]);
   expect(html).toContain("Nog geen transacties");
   expect(html).not.toContain("lv-bar");
-});
-
-test("monthAxisLabel keeps month labels unique once the window passes a year", () => {
-  expect(monthAxisLabel("2026-08", 12)).toBe("aug");
-  expect(monthAxisLabel("2026-08", 18)).toBe("aug '26");
-  expect(monthAxisLabel("2025-08", 18)).toBe("aug '25");
-});
-
-test("statSummary windows the months and compares the last one to the average", () => {
-  const totals = monthlyTotals(txs);
-  expect(totals.map((m) => m.month)).toEqual(["2026-06", "2026-07", "2026-08"]);
-
-  const all = statSummary(totals, "alle");
-  expect(all.rows).toHaveLength(3);
-  expect(all.avgIn).toBeCloseTo((12_000 + 9_500) / 3, 6);
-  expect(all.avgOut).toBeCloseTo((420.5 + 1_880 + 250 + 1_100) / 3, 6);
-  // August has no income at all, so the last month is 100% below the average.
-  expect(all.lastIn).toBe(0);
-  expect(all.deltaInPct).toBeCloseTo(-100, 6);
-
-  // A window shorter than the history keeps only the newest months.
-  expect(statSummary(totals, "6").rows).toHaveLength(3);
-  const one = statSummary(totals.slice(-1), "alle");
-  expect(one.rows.map((m) => m.month)).toEqual(["2026-08"]);
-});
-
-test("statSummary reports no delta rather than 0% when there is nothing to compare", () => {
-  const s = statSummary([], "alle");
-  expect(s.rows).toEqual([]);
-  expect(s.deltaInPct).toBeNull();
-  expect(s.deltaOutPct).toBeNull();
 });
 
 test("StatistiekBlock still renders with two days of history", () => {

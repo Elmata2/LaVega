@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, Tx } from "@lavega/core";
+import type { Account, Rule, Tx } from "@lavega/core";
+import { ownAccounts } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 
 /* Optimalisatie after the rebalance (UI review, 2026-08-16):
@@ -19,9 +20,19 @@ function tx(id: string, date: string, amount: number, counterparty: string): Tx 
   return { id, accountKey: "ABN1", date, amount, currency: "EUR", counterparty, description: "", category: "", manual: false };
 }
 
+const RULES: Rule[] = [];
+
 function render(txs: Tx[], accounts: Account[] = ACCOUNTS) {
   return renderToStaticMarkup(
-    <Optimalisatie txs={txs} accounts={accounts} asOf="2026-08-16" busy={false} onRateCommit={() => {}} />,
+    <Optimalisatie
+      txs={txs}
+      accounts={accounts}
+      rules={RULES}
+      own={ownAccounts(accounts)}
+      asOf="2026-08-16"
+      busy={false}
+      onRateCommit={() => {}}
+    />,
   );
 }
 
@@ -90,4 +101,52 @@ test("a detected subscription is priced per year as well as per month", () => {
   expect(html).toContain("24,00");
   // No example rows leak into a filled block.
   expect(html).not.toContain("Voorbeeld — niet jouw data");
+});
+
+/* --- What the core lane exposes, consumed here (never re-derived) --------- */
+
+test("a short import says WHICH rhythms it cannot yet see — the answer to the missing Simeo", () => {
+  // Two months of statements. A quarterly charge needs one full gap before
+  // there is anything to recognise, so it cannot appear — and the screen has to
+  // say that rather than let an empty list read as "you have none".
+  const html = render([
+    tx("a1", "2026-06-14", -12.5, "Albert Heijn"),
+    tx("a2", "2026-07-14", -12.5, "Albert Heijn"),
+  ]);
+  expect(html).toContain("per kwartaal");
+  expect(html).toContain("jaarlijks");
+  expect(html).toContain("niet omdat het er niet is");
+});
+
+test("a year of history moves the quarterly window from 'cannot see' to 'can see'", () => {
+  const txs: Tx[] = [];
+  for (let m = 0; m < 12; m++) {
+    const month = String(m + 1).padStart(2, "0");
+    txs.push(tx(`q${m}`, `2026-${month}-06`, -9.99, "Spotify"));
+  }
+  const html = render(txs);
+  expect(html).toContain("335</strong> dagen afschrift");
+  // Quarterly is now within reach; only the yearly rhythm still needs more.
+  expect(html).toContain("per kwartaal, halfjaarlijks</strong> herkenbaar");
+  expect(html).toContain("Nog niet: jaarlijks (vanaf 365 dagen)");
+});
+
+test("the housing cost is READ from the transactions, never typed and never zero", () => {
+  const txs: Tx[] = [];
+  for (let m = 1; m <= 6; m++) {
+    const month = String(m).padStart(2, "0");
+    txs.push(tx(`h${m}`, `2026-${month}-01`, -1450, "Woningstichting Rochdale"));
+  }
+  const html = render(txs);
+  expect(html).toContain("Woonlasten");
+  expect(html).toContain("Woningstichting Rochdale");
+  expect(html).toContain("1.450,00");
+  expect(html).toContain("Zelf invullen"); // the point: he does not have to
+});
+
+test("no housing stream in the data prints 'onbekend', not € 0,00", () => {
+  const html = render([tx("x1", "2026-08-01", -12.5, "Albert Heijn")]);
+  expect(html).toContain("Woonlasten");
+  expect(html).toContain("niet in de data gezien");
+  expect(html).not.toContain("Zelf invullen");
 });

@@ -222,3 +222,79 @@ export function setHomeCountry(code: string): void {
     /* non-fatal for a preference */
   }
 }
+
+const HOME_REGION_KEY = "lavega.homeRegion";
+/** A subdivision name, not an essay. Long enough for "Newfoundland and
+ *  Labrador", short enough that a paste accident cannot fill the store. */
+const REGION_MAX = 80;
+
+/** The region/state under the home country — "Texas" is not the same tax
+ *  question as "New York", and no country code can carry that. Free text on
+ *  purpose: for most countries LaVega has no verified subdivision list, and a
+ *  dropdown of guesses in front of a tax decision is worse than a text field.
+ *
+ *  There is NO default. An empty string means "he has not said", which is a
+ *  different thing from a region — nothing downstream may read it as one. */
+export function getHomeRegion(): string {
+  try {
+    return (typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_REGION_KEY)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setHomeRegion(region: string): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(HOME_REGION_KEY, String(region ?? "").trim().slice(0, REGION_MAX));
+    }
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+const NAME_FIRST_KEY = "lavega.ownerFirstName";
+const NAME_LAST_KEY = "lavega.ownerLastName";
+/** A name, not a paste buffer. */
+const NAME_MAX = 60;
+
+export type OwnerName = { first: string; last: string };
+
+/** The owner's own name, so the profile reads as HIS screen rather than as a
+ *  settings page.
+ *
+ *  It is a preference and nothing more: localStorage, this browser, never in
+ *  the vault (so a back-up file cannot carry one person's name into another's
+ *  vault), never sent to the server, and deliberately not part of any agent or
+ *  chat context — the redaction boundary exists so a model never learns who the
+ *  owner is, and a display name would hand it over for free.
+ *
+ *  Empty strings mean "not given" and are never filled in with a guess. */
+export function getOwnerName(): OwnerName {
+  try {
+    if (typeof localStorage === "undefined") return { first: "", last: "" };
+    return {
+      first: localStorage.getItem(NAME_FIRST_KEY) ?? "",
+      last: localStorage.getItem(NAME_LAST_KEY) ?? "",
+    };
+  } catch {
+    return { first: "", last: "" };
+  }
+}
+
+export function setOwnerName(name: OwnerName): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(NAME_FIRST_KEY, String(name.first ?? "").trim().slice(0, NAME_MAX));
+    localStorage.setItem(NAME_LAST_KEY, String(name.last ?? "").trim().slice(0, NAME_MAX));
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+/** How to greet him: both names when he gave them, one when he gave one, and
+ *  nothing at all when he gave neither — the header says something else then,
+ *  rather than greeting an empty space. */
+export function ownerDisplayName(name: OwnerName): string {
+  return [name.first, name.last].map((s) => s.trim()).filter(Boolean).join(" ");
+}

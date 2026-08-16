@@ -22,6 +22,7 @@ export * from "./interest.js";
 export * from "./fx.js";
 export * from "./rewards.js";
 export * from "./forecast.js";
+export * from "./housing.js";
 export * from "./alerts.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";

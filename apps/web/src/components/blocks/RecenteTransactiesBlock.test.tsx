@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { formatEuro } from "../../format.js";
-import RecenteTransactiesBlock, { matchesSearch, monogram, tileColor } from "./RecenteTransactiesBlock";
+import RecenteTransactiesBlock, { matchesSearch } from "./RecenteTransactiesBlock";
 import { accounts, own, rules, txs } from "./fixtures";
 
 const render = (list = txs) =>
@@ -16,16 +16,18 @@ const render = (list = txs) =>
     />,
   );
 
-test("RecenteTransactiesBlock renders the reference's row: tile, date, chip, amount", () => {
+test("RecenteTransactiesBlock renders the reference's row: name, date, chip, amount", () => {
   const html = render();
   expect(html).toContain("Recente transacties");
   // Newest first.
   expect(html.indexOf("Brouwerij")).toBeLessThan(html.indexOf("Vattenfall"));
-  // A monogram tile stands in for the merchant logo — no remote image is
-  // requested anywhere in the markup.
-  expect(html).toContain("tx-tile");
-  expect(html).toContain(">BR<"); // Brouwerij
-  expect(html).toContain(">AH<"); // Albert Heijn
+  // The counterparty's NAME, in full — no logo, and no monogram standing in
+  // for one. A logo would mean a remote request per merchant, which would tell
+  // that server who he pays; a monogram only repeated the name in two letters.
+  expect(html).toContain(">Brouwerij<");
+  expect(html).toContain(">Vattenfall<");
+  expect(html).not.toContain("tx-tile");
+  expect(html).not.toContain(">BR<");
   expect(html).not.toContain("<img");
   expect(html).not.toContain("http");
   // Date, entity and bank; a manual label, a user rule and a Dutch default each
@@ -41,11 +43,14 @@ test("RecenteTransactiesBlock renders the reference's row: tile, date, chip, amo
   expect(html).toContain("Bekijk alles");
 });
 
-test("RecenteTransactiesBlock states that a booking time is not something it has", () => {
+test("RecenteTransactiesBlock never prints a booking time it does not have", () => {
   const html = render();
-  expect(html).toContain("geen tijdstip");
-  // And it never prints one.
+  // Bank exports carry a date and no clock, so the row shows the date alone —
+  // never an invented "00:00". The note line that used to explain this is gone
+  // (UI review round 2): the absence of a clock needs no paragraph.
   expect(html).not.toMatch(/\d{2}:\d{2}/);
+  expect(html).not.toContain("module-foot");
+  expect(html).toContain("11 aug");
 });
 
 test("RecenteTransactiesBlock renders an empty state with no transactions", () => {
@@ -54,18 +59,16 @@ test("RecenteTransactiesBlock renders an empty state with no transactions", () =
   expect(html).not.toContain("tx-chip");
 });
 
-test("monogram takes initials from the counterparty and never invents them", () => {
-  expect(monogram("Albert Heijn")).toBe("AH");
-  expect(monogram("Vattenfall")).toBe("VA");
-  expect(monogram("NS Groep B.V.")).toBe("NG");
-  // Nothing to take initials from is stated, not filled in.
-  expect(monogram("")).toBe("?");
-  expect(monogram("1234 5678")).toBe("?");
-});
-
-test("tileColor is stable per counterparty and stays inside the token palette", () => {
-  expect(tileColor("Albert Heijn")).toBe(tileColor("Albert Heijn"));
-  expect(tileColor("Albert Heijn")).toMatch(/^var\(--[a-z-]+\)$/);
+test("a transaction with no counterparty still shows something readable", () => {
+  // The monogram is gone, so the name is the only identity the row has: an
+  // empty counterparty falls back to the description, and then to a stated
+  // "unknown" — never to a blank cell.
+  const html = render([
+    { ...txs[0], id: "x1", counterparty: "", description: "Incasso", amount: -12 },
+    { ...txs[0], id: "x2", counterparty: "", description: "", amount: -13 },
+  ]);
+  expect(html).toContain(">Incasso<");
+  expect(html).toContain("Onbekende tegenpartij");
 });
 
 test("matchesSearch looks at counterparty, description and the derived category", () => {

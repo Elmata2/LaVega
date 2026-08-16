@@ -71,11 +71,6 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
           Rekeningen →
         </button>
       }
-      footer={
-        cards.length > 0
-          ? "Alleen wat LaVega echt weet: de bank, het soort rekening en de laatste vier cijfers van je eigen IBAN. Een kaartnummer heeft LaVega niet."
-          : undefined
-      }
     >
       {cards.length === 0 ? (
         <p className="block-empty">Nog geen rekeningen gekoppeld — importeer een bestand of koppel een bank.</p>

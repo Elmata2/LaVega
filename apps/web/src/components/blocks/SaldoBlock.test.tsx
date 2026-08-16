@@ -50,6 +50,36 @@ test("SaldoBlock draws the position graph and both comparisons when history allo
   expect(html).not.toContain("Nog geen week geschiedenis");
 });
 
+test("the percentage beside the big number says what it is measured against", () => {
+  const html = renderToStaticMarkup(
+    <SaldoBlock
+      accounts={accounts}
+      txs={txs}
+      scheduledFlows={scheduledFlows}
+      asOf={ASOF}
+      onNavigate={() => {}}
+    />,
+  );
+  // "▲ 1%" on its own is unreadable — one percent since when? The pill is the
+  // move against the position one week ago, and the card now says so.
+  expect(html).toContain("delta-pill");
+  expect(html).toContain("t.o.v. vorige week");
+});
+
+test("with no week of history there is neither a pill nor a claim about one", () => {
+  const html = renderToStaticMarkup(
+    <SaldoBlock
+      accounts={freshAccounts}
+      txs={freshTxs}
+      scheduledFlows={[]}
+      asOf={ASOF}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html).not.toContain("delta-pill");
+  expect(html).not.toContain("t.o.v. vorige week");
+});
+
 test("SaldoBlock refuses to draw a line it cannot back with history", () => {
   const html = renderToStaticMarkup(
     <SaldoBlock

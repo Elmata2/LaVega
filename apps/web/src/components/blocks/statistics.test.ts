@@ -1,14 +1,54 @@
 import { expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
 import { categorize } from "@lavega/core";
-import { categoryPerMonth, MIN_WEEKDAY_DAYS, weekdaySpend } from "./statistics";
+import {
+  bucketUnit,
+  categoryPerWindow,
+  MIN_WEEKDAY_DAYS,
+  monthAxisLabel,
+  newestTxDate,
+  presetWindow,
+  weekdaySpend,
+  windowTotals,
+} from "./statistics";
 import { freshTxs, own, rules, txs } from "./fixtures";
 
 const DEFAULT_CATEGORY = categorize(txs[1], rules, own); // Albert Heijn, via the Dutch defaults
 
-test("categoryPerMonth returns one column per month and one bar per major category", () => {
-  const s = categoryPerMonth(txs, rules, own, 12, 4);
-  expect(s.months).toEqual(["2026-06", "2026-07", "2026-08"]);
+/** The fixture's newest transaction — every preset window ends here. */
+const ANCHOR = "2026-08-11";
+const YEAR = presetWindow("12m", ANCHOR);
+
+test("newestTxDate takes the clock from the data, never from Date.now", () => {
+  expect(newestTxDate(txs)).toBe(ANCHOR);
+  expect(newestTxDate([])).toBeNull();
+});
+
+test("presetWindow resolves each preset into a real range", () => {
+  // A week is seven days back, inclusive; a month is the last thirty days —
+  // both rolling, both drawn in buckets that never cut a calendar month.
+  expect(presetWindow("1w", ANCHOR)).toEqual({ start: "2026-08-05", end: ANCHOR });
+  expect(presetWindow("1m", ANCHOR)).toEqual({ start: "2026-07-13", end: ANCHOR });
+  expect(presetWindow("3m", ANCHOR)).toEqual({ start: "2026-06-01", end: ANCHOR });
+  expect(presetWindow("6m", ANCHOR)).toEqual({ start: "2026-03-01", end: ANCHOR });
+  expect(presetWindow("12m", ANCHOR)).toEqual({ start: "2025-09-01", end: ANCHOR });
+});
+
+test("bucketUnit picks a bucket the window can actually fill", () => {
+  expect(bucketUnit(presetWindow("1w", ANCHOR))).toBe("dag");
+  expect(bucketUnit(presetWindow("1m", ANCHOR))).toBe("week");
+  expect(bucketUnit(presetWindow("1m", "2026-02-28"))).toBe("week");
+  expect(bucketUnit(presetWindow("3m", ANCHOR))).toBe("maand");
+  expect(bucketUnit(presetWindow("12m", ANCHOR))).toBe("maand");
+  // A hand-picked range is measured the same way — it is a range, not a preset.
+  expect(bucketUnit({ start: "2026-08-01", end: "2026-08-10" })).toBe("dag");
+  expect(bucketUnit({ start: "2026-06-01", end: "2026-07-15" })).toBe("week");
+});
+
+test("categoryPerWindow returns one group per month and one bar per major category", () => {
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  expect(s.unit).toBe("maand");
+  expect(s.buckets.map((b) => b.key)).toEqual(["2026-06", "2026-07", "2026-08"]);
   // Ranked by total spend in the window: Inkoop 2.980, boodschappen 420,50, Energie 250.
   expect(s.categories).toEqual(["Inkoop", DEFAULT_CATEGORY, "Energie"]);
   expect(s.values).toEqual([
@@ -16,30 +56,146 @@ test("categoryPerMonth returns one column per month and one bar per major catego
     [1_880, 0, 0],
     [1_100, 0, 250],
   ]);
-  expect(s.otherCount).toBe(0);
+  // Which categories are major is core's per-window call; nothing here is
+  // above the cap or under the floor, so nothing is folded away.
+  expect(s.selection?.hidden).toEqual([]);
+  expect(s.windowDays).toBe(64);
 });
 
-test("categoryPerMonth clamps a long period to the months there is data for", () => {
+test("categoryPerWindow clamps the window to the span the data covers", () => {
   // Twelve months requested, three months held: nine extra groups would each be
   // a bar of zero, which claims a month of no spending that was never observed.
-  expect(categoryPerMonth(txs, rules, own, 12, 4).months).toHaveLength(3);
-  expect(categoryPerMonth(txs, rules, own, "alle", 4).months).toHaveLength(3);
-  expect(categoryPerMonth(txs, rules, own, 2, 4).months).toEqual(["2026-07", "2026-08"]);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  expect(s.covered).toEqual({ start: "2026-06-09", end: ANCHOR });
+  expect(s.buckets).toHaveLength(3);
+  // And a window entirely outside the data covers nothing at all — no buckets,
+  // rather than a row of zeroes.
+  const before = categoryPerWindow(txs, rules, own, { start: "2025-01-01", end: "2025-03-01" }, 4);
+  expect(before.covered).toBeNull();
+  expect(before.buckets).toEqual([]);
+  expect(before.categories).toEqual([]);
 });
 
-test("categoryPerMonth counts how many categories it left out", () => {
-  const s = categoryPerMonth(txs, rules, own, 12, 1);
+test("categoryPerWindow marks a bucket the window only partly covers", () => {
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  // June starts on the 9th (the first transaction) and August stops at the
+  // 11th — neither is a whole month, and the tooltip says so.
+  expect(s.buckets[0].partial).toBe(true);
+  expect(s.buckets[0].title).toBe("jun 2026 — alleen 9 jun t/m 30 jun");
+  expect(s.buckets[1].partial).toBe(false);
+  expect(s.buckets[1].title).toBe("jul 2026");
+  expect(s.buckets[2].partial).toBe(true);
+});
+
+test("categoryPerWindow buckets a one-week window per day", () => {
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4);
+  expect(s.unit).toBe("dag");
+  // 5–11 August, clamped to the newest transaction on the 11th.
+  expect(s.buckets.map((b) => b.key)).toEqual(["2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10", "2026-08-11"]);
+  expect(s.buckets.every((b) => !b.partial)).toBe(true);
   expect(s.categories).toEqual(["Inkoop"]);
-  expect(s.otherCount).toBe(2);
+  // Only the 11th holds spending; the other days were observed and were empty.
+  expect(s.values.map((v) => v[0])).toEqual([0, 0, 0, 0, 0, 0, 1_100]);
+  expect(s.buckets.map((b) => b.hasData)).toEqual([false, false, false, false, false, false, true]);
 });
 
-test("categoryPerMonth is empty rather than zeroed with nothing to chart", () => {
-  const s = categoryPerMonth([], rules, own, 12, 4);
-  expect(s).toEqual({ months: [], categories: [], values: [], hasData: [], otherCount: 0 });
+test("categoryPerWindow buckets a month-long window per week", () => {
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1m", ANCHOR), 4);
+  expect(s.unit).toBe("week");
+  // 13 July – 11 August, in Monday-first weeks; the last one is cut short by
+  // the window and says so rather than looking like a full week.
+  expect(s.buckets.map((b) => b.key)).toEqual([
+    "2026-07-13",
+    "2026-07-20",
+    "2026-07-27",
+    "2026-08-03",
+    "2026-08-10",
+  ]);
+  expect(s.buckets.map((b) => b.partial)).toEqual([false, false, false, false, true]);
+  expect(s.buckets[4].title).toBe("Week van 10 aug — alleen 10 aug t/m 11 aug");
+  const inkoop = s.categories.indexOf("Inkoop");
+  const energie = s.categories.indexOf("Energie");
+  expect(s.values[3][energie]).toBe(250); // 3 August
+  expect(s.values[4][inkoop]).toBe(1_100); // 11 August
+});
+
+test("categoryPerWindow ranks the categories inside THIS window, against a floor scaled to it", () => {
+  // Over the year Inkoop is the biggest category; over the first fortnight of
+  // June it does not exist at all, and boodschappen is the only one there is.
+  const june = categoryPerWindow(txs, rules, own, { start: "2026-06-01", end: "2026-06-14" }, 4);
+  expect(june.categories).toEqual([DEFAULT_CATEGORY]);
+  expect(june.selection?.hidden).toEqual([]);
+
+  // The floor is core's, and it is a rate scaled to the window: six days of
+  // June carry a far lower bar than sixty-four days of summer.
+  expect(june.windowDays).toBe(6);
+  expect(june.selection?.thresholdOut).toBeCloseTo((25 * 6) / 30, 6);
+  const year = categoryPerWindow(txs, rules, own, YEAR, 4);
+  expect(year.selection?.thresholdOut).toBeCloseTo((25 * 64) / 30, 6);
+
+  // What the chart's cap pushes out is reported separately from what the floor
+  // dropped — they are different facts about the same window.
+  const capped = categoryPerWindow(txs, rules, own, YEAR, 1);
+  expect(capped.categories).toEqual(["Inkoop"]);
+  expect(capped.selection?.hidden.map((h) => h.category)).toEqual([DEFAULT_CATEGORY, "Energie"]);
+  expect(capped.selection?.hidden.every((h) => h.belowThreshold)).toBe(false);
+});
+
+test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", () => {
+  // € 20 of "Zorg" against sixty-four days is under core's floor (€ 53,33);
+  // against the six days it happened in, it is not.
+  const withSmall: Tx[] = [
+    ...txs,
+    { ...txs[1], id: "s1", date: "2026-06-10", amount: -20, counterparty: "Apotheek", description: "Zorg", category: "Zorg", manual: true },
+  ];
+  const year = categoryPerWindow(withSmall, rules, own, YEAR, 4);
+  expect(year.categories).not.toContain("Zorg");
+  expect(year.selection?.hidden.map((h) => [h.category, h.belowThreshold])).toEqual([["Zorg", true]]);
+
+  const week = categoryPerWindow(withSmall, rules, own, { start: "2026-06-08", end: "2026-06-13" }, 4);
+  expect(week.categories).toContain("Zorg");
+  expect(week.selection?.hidden).toEqual([]);
+});
+
+test("categoryPerWindow marks a month with no data at all, so it is never drawn as zero", () => {
+  // January and March have transactions; February has none — an interior gap
+  // that clamping the window's ends cannot remove.
+  const gap: Tx[] = [
+    { ...txs[0], id: "g1", date: "2026-01-15", amount: -100, counterparty: "Albert Heijn" },
+    { ...txs[0], id: "g2", date: "2026-03-15", amount: -100, counterparty: "Albert Heijn" },
+  ];
+  const s = categoryPerWindow(gap, rules, own, { start: "2026-01-01", end: "2026-03-31" }, 4);
+  expect(s.unit).toBe("maand");
+  expect(s.buckets.map((b) => b.key)).toEqual(["2026-01", "2026-02", "2026-03"]);
+  expect(s.buckets.map((b) => b.hasData)).toEqual([true, false, true]);
+});
+
+test("monthAxisLabel keeps month labels unique once the window passes a year", () => {
+  expect(monthAxisLabel("2026-08", 12)).toBe("aug");
+  expect(monthAxisLabel("2026-08", 18)).toBe("aug '26");
+  expect(monthAxisLabel("2025-08", 18)).toBe("aug '25");
+});
+
+test("windowTotals reports what came in and went out inside the window", () => {
+  const year = windowTotals(txs, rules, own, YEAR);
+  expect(year.inTotal).toBeCloseTo(12_000 + 9_500, 6);
+  expect(year.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
+
+  // A shorter window is a smaller total, not a rescaled one: no per-month
+  // average is extrapolated out of eleven days.
+  const august = windowTotals(txs, rules, own, presetWindow("1m", ANCHOR));
+  expect(august.inTotal).toBe(0);
+  expect(august.outTotal).toBeCloseTo(250 + 1_100, 6);
+
+  // A window the data does not reach into covers nothing.
+  const gap = windowTotals(txs, rules, own, { start: "2025-01-01", end: "2025-02-01" });
+  expect(gap.covered).toBeNull();
+  expect(gap.inTotal).toBe(0);
+  expect(gap.outTotal).toBe(0);
 });
 
 test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction", () => {
-  const w = weekdaySpend(txs, rules, own, 12);
+  const w = weekdaySpend(txs, rules, own, YEAR);
   expect(w.spanDays).toBe(64);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
 
@@ -62,7 +218,7 @@ test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction",
 
 test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
   // Two days of history: only Friday and Saturday ever occurred.
-  const w = weekdaySpend(freshTxs, rules, own, 12);
+  const w = weekdaySpend(freshTxs, rules, own, presetWindow("12m", "2026-08-15"));
   expect(w.spanDays).toBe(2);
   expect(w.spanDays).toBeLessThan(MIN_WEEKDAY_DAYS);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
@@ -75,22 +231,9 @@ test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
 });
 
 test("weekdaySpend reports nothing at all rather than a flat week with no data", () => {
-  const w = weekdaySpend([], rules, own, 12);
+  const w = weekdaySpend([], rules, own, YEAR);
   expect(w.spanDays).toBe(0);
   expect(w.peak).toBeNull();
   expect(w.dayAverage).toBeNull();
   expect(w.rows.every((r) => r.average === null)).toBe(true);
-});
-
-test("a month with no data at all is marked, so it is never drawn as bars of zero", () => {
-  // January and March have transactions; February has none — an interior gap
-  // that clamping the window's ends cannot remove.
-  const gap: Tx[] = [
-    { ...txs[0], id: "g1", date: "2026-01-15", amount: -100, counterparty: "Albert Heijn" },
-    { ...txs[0], id: "g2", date: "2026-03-15", amount: -100, counterparty: "Albert Heijn" },
-  ];
-  const s = categoryPerMonth(gap, rules, own, "alle", 4);
-
-  expect(s.months).toEqual(["2026-01", "2026-02", "2026-03"]);
-  expect(s.hasData).toEqual([true, false, true]);
 });

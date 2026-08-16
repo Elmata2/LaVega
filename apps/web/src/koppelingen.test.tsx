@@ -77,7 +77,15 @@ test("wissen clears both, so nothing can be fetched by accident", () => {
 
 test("there is no connection-test button — a test call would eat real invoices", () => {
   const c = render();
-  const labels = [...c.querySelectorAll("button")].map((b) => b.textContent ?? "");
-  expect(labels).toEqual(["Opslaan", "Wissen"]);
+  // The only ACTIONS are save and clear. The eyes carry no label of their own
+  // (they are icons), so they are named rather than counted.
+  const actions = [...c.querySelectorAll("button")].map((b) => b.textContent ?? "").filter(Boolean);
+  expect(actions).toEqual(["Opslaan", "Wissen"]);
+  expect([...c.querySelectorAll("button")].every((b) => !/test/i.test(b.getAttribute("aria-label") ?? ""))).toBe(true);
+
+  // And the reason is still on the page — behind the eye, not above the fields.
+  const eye = c.querySelector('[aria-label="Uitleg bij deze koppeling"]') as HTMLButtonElement;
+  expect(eye).not.toBeNull();
+  act(() => eye.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(c.textContent).toContain("geen testknop");
 });

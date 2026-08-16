@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate } from "@lavega/core";
+import type { Account, Tx, AccountRate, OwnAccounts, Rule } from "@lavega/core";
 import {
   accountLabel,
   detectSubscriptions,
   subscriptionPriceIncreases,
   subscriptionOverlaps,
+  subscriptionCoverage,
+  resolveHousingCost,
   analyzeInterest,
+  CADENCE_LABEL_NL,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
 } from "@lavega/core";
@@ -45,6 +48,11 @@ const RATES_SOURCE_LABEL: Record<RatesResult["source"], string> = {
 type OptimalisatieProps = {
   txs: Tx[];
   accounts: Account[];
+  /** Categorisation inputs — the housing cost is READ from the transactions
+   *  (core's `resolveHousingCost`), and that needs the same rules and own-account
+   *  set every other categorised view uses. */
+  rules: Rule[];
+  own: OwnAccounts;
   asOf: string;
   busy: boolean;
   onRateCommit: (key: string, value: string) => void;
@@ -114,12 +122,26 @@ function outflowFacts(txs: Tx[]) {
   return { outflows, merchants: byMerchant.size, repeated, first, last };
 }
 
-export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit }: OptimalisatieProps) {
+export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, onRateCommit }: OptimalisatieProps) {
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
   const totalMonthlyCents = useMemo(() => subs.reduce((s, x) => s + x.monthlyCents, 0), [subs]);
   const seen = useMemo(() => outflowFacts(txs), [txs]);
+
+  // Why a subscription can be MISSING. His Simeo is the case: a charge that
+  // repeats every three months cannot be recognised in two months of statements,
+  // no matter how the detector is tuned. Core measures which cadences the data
+  // can carry at all (`subscriptionCoverage`) — this view only says it out loud,
+  // so an empty list is a stated limit rather than a shrug.
+  const coverage = useMemo(() => subscriptionCoverage(txs), [txs]);
+  const cadenceName = (days: number) => CADENCE_LABEL_NL[days] ?? `elke ${days} dagen`;
+
+  // Woonlasten read from the data instead of typed in. Core owns the whole
+  // derivation (`resolveHousingCost`); the manual figure is `null` because there
+  // is nowhere to type one — which is the point. `monthlyCents: null` means
+  // LaVega does not know, and is printed as "onbekend", never as €0.
+  const housing = useMemo(() => resolveHousingCost(null, txs, rules, own), [txs, rules, own]);
 
   // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
   // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
@@ -172,6 +194,15 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
           <div className="eyebrow">overlap</div>
         </div>
         <div className="kpi">
+          <div className="kpi-label">Woonlasten</div>
+          <div className="kpi-value">{housing.monthlyCents === null ? "onbekend" : euro(housing.monthlyCents)}</div>
+          <div className="eyebrow">
+            {housing.monthlyCents === null
+              ? "niet in de data gezien"
+              : `${housing.proposal?.kind ?? "wonen"} · uit je transacties`}
+          </div>
+        </div>
+        <div className="kpi">
           <div className="kpi-label">Rente laten liggen</div>
           <div className={`kpi-value ${interest.totalExtraPerYearCents > 0 ? "text-warn" : "text-pos"}`}>
             {euro(interest.totalExtraPerYearCents)}
@@ -196,6 +227,46 @@ export default function Optimalisatie({ txs, accounts, asOf, busy, onRateCommit 
             )
           }
         >
+          {/* What the history can and cannot show, before anything is counted.
+              A quarterly charge needs one full gap before there is a pattern at
+              all, so with a short import "niets gevonden" and "kon niets vinden"
+              are different answers — and only core knows which one this is. */}
+          <p className="reason">
+            {coverage.historyDays === 0 ? (
+              "Nog geen uitgaande transacties, dus nog geen ritme om te herkennen."
+            ) : (
+              <>
+                LaVega kijkt over <strong>{coverage.historyDays}</strong> dagen afschrift (
+                {coverage.firstDate} – {coverage.lastDate}). Daarin is{" "}
+                <strong>{coverage.visibleCadences.map(cadenceName).join(", ") || "geen enkel ritme"}</strong>{" "}
+                herkenbaar.
+                {coverage.hiddenCadences.length > 0 && (
+                  <>
+                    {" "}Nog niet:{" "}
+                    {coverage.hiddenCadences
+                      .map((h) => `${cadenceName(h.cadenceDays)} (vanaf ${h.needsDays} dagen)`)
+                      .join(", ")}
+                    . Een abonnement met zo'n ritme staat hier dus niet omdat de geschiedenis nog niet ver
+                    genoeg terugloopt — niet omdat het er niet is.
+                  </>
+                )}
+              </>
+            )}
+          </p>
+
+          {/* The biggest recurring fixed cost there is, and he should not have
+              to type it: core reads it off the same transactions. Never a
+              number without the row it came from. */}
+          {housing.source === "detected" && housing.proposal && housing.monthlyCents !== null && (
+            <p className="reason">
+              Je grootste vaste last is <strong>{housing.proposal.kind}</strong> aan{" "}
+              <strong>{housing.proposal.counterparty}</strong>:{" "}
+              <span className="reason-figure">{euro(housing.monthlyCents)}</span> per maand, gezien in{" "}
+              {housing.proposal.occurrences} betalingen, laatst op {housing.proposal.lastDate}. Zelf invullen
+              hoeft niet — dit komt uit je eigen afschriften.
+            </p>
+          )}
+
           {subs.length === 0 ? (
             <div className="empty-guide">
               <p>

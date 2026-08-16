@@ -53,3 +53,35 @@ export function shiftMonth(ym: string, n: number): string {
   const d = new Date(Date.UTC(y, m - 1 - n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+/** First and last calendar day of a "YYYY-MM". */
+export function monthFirstDay(ym: string): string {
+  return `${ym}-01`;
+}
+export function monthLastDay(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  // Day 0 of the NEXT month is the last day of this one — leap years included.
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+/** The Monday of the week `iso` falls in. Monday-first, like weekdayIndex. */
+export function mondayOf(iso: string): string {
+  return shiftDate(iso, -weekdayIndex(iso));
+}
+
+/** "9 jun 2026" — the day label with its year, for the places where the year
+ *  is NOT already established by something next to it. */
+export function dayLabelYearNL(iso: string): string {
+  return `${dayLabelNL(iso)} ${iso.slice(0, 4)}`;
+}
+
+/** "1 jun – 16 aug 2026", or "12 nov 2025 – 16 aug 2026" across a year
+ *  boundary. Used wherever a block has to SAY which window a figure covers —
+ *  a number without its window is a number that cannot be checked. */
+export function rangeLabelNL(start: string, end: string): string {
+  const ys = start.slice(0, 4);
+  const ye = end.slice(0, 4);
+  return ys === ye
+    ? `${dayLabelNL(start)} – ${dayLabelNL(end)} ${ye}`
+    : `${dayLabelNL(start)} ${ys} – ${dayLabelNL(end)} ${ye}`;
+}

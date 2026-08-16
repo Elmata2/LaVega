@@ -7,6 +7,7 @@ import { entitySummaries } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./Profiel";
 import { enabledModules } from "../components/moduleRegistry";
+import { COUNTRY_CODES } from "../countries";
 import { getHomeCountry } from "../settings";
 
 /* Regels, Koppelingen, Back-up and Import were never workspaces — they are
@@ -48,8 +49,12 @@ function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onClassifyEntity: () => {},
     homeCountry: "NL",
     onHomeCountryChange: () => {},
+    homeRegion: "",
+    onHomeRegionChange: () => {},
+    ownerName: { first: "", last: "" },
+    onOwnerNameChange: () => {},
     onLock: () => {},
-    entity: "BV1",
+    entity: "Persoonlijk",
     onEntityChange: () => {},
     busy: false,
     problems: [],
@@ -70,6 +75,13 @@ function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   root = createRoot(container);
   act(() => root!.render(<Profiel {...props} />));
   return container;
+}
+
+/** React tracks an input's value, so a bare `el.value = x` is invisible to it —
+ *  the native setter has to be used or onChange never fires. */
+function setNativeValue(el: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function section(label: string): HTMLElement {
@@ -98,16 +110,90 @@ test("the module picker is on the profile, with Overzicht locked on", () => {
 test("the country that drives the tax rules is set here, and says what it covers", () => {
   const onHomeCountryChange = vi.fn();
   render({ onHomeCountryChange });
-  const select = section("Land").querySelector("select") as HTMLSelectElement;
+  const select = section("Land en regio").querySelector("select") as HTMLSelectElement;
   expect(select.value).toBe("NL");
   expect(getHomeCountry()).toBe("NL"); // the same preference App reads
-  expect(section("Land").textContent).toContain("alleen voor Nederland");
+  expect(section("Land en regio").textContent).toContain("alleen voor Nederland");
 
   act(() => {
     select.value = "BE";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(onHomeCountryChange).toHaveBeenCalledWith("BE");
+});
+
+test("the country list is EVERY country, in Dutch, sorted", () => {
+  render();
+  const options = [...section("Land en regio").querySelectorAll("select option")];
+  expect(options.length).toBe(COUNTRY_CODES.length);
+  expect(options.length).toBeGreaterThan(200); // a list, not a shortlist
+
+  const names = options.map((o) => o.textContent ?? "");
+  expect(names).toContain("Nederland");
+  expect(names).toContain("Verenigde Staten"); // Dutch, not "United States"
+  expect([...names].sort((a, b) => a.localeCompare(b, "nl"))).toEqual(names);
+});
+
+test("a region sits under the country, and is only a LIST where we have one", () => {
+  // His example: Texas is not New York. The US gets a real list…
+  render({ homeCountry: "US" });
+  const us = section("Land en regio");
+  expect(us.querySelector('input[list="home-regions"]')).not.toBeNull();
+  const states = [...us.querySelectorAll("datalist option")].map((o) => o.getAttribute("value"));
+  expect(states).toContain("Texas");
+  expect(states).toContain("New York");
+
+  // …and a country whose subdivisions LaVega cannot vouch for gets free text
+  // plus a sentence saying so, rather than a dropdown of guesses.
+  render({ homeCountry: "NL" });
+  const nl = section("Land en regio");
+  expect(nl.querySelector("datalist")).toBeNull();
+  expect(nl.textContent).toContain("geen geverifieerde regiolijst");
+});
+
+test("the region is typed by hand, and the app never infers where he is", () => {
+  const onHomeRegionChange = vi.fn();
+  render({ homeCountry: "US", onHomeRegionChange });
+  const input = section("Land en regio").querySelector('input[list="home-regions"]') as HTMLInputElement;
+  act(() => setNativeValue(input, "Texas"));
+  expect(onHomeRegionChange).toHaveBeenCalledWith("Texas");
+  expect(section("Land en regio").textContent).toContain("LaVega leidt nooit af waar je bent");
+});
+
+test("the profile opens with his own name, and says the name stays here", () => {
+  render({ ownerName: { first: "Alexander", last: "Steunenberg" } });
+  const head = section("Profiel");
+  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Alexander Steunenberg");
+  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("AS"); // drawn, never fetched
+  expect(head.textContent).toContain("nooit meegestuurd naar een model");
+});
+
+test("no name is 'no name', not a blank greeting", () => {
+  render();
+  const head = section("Profiel");
+  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Nog geen naam ingevuld");
+  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("");
+});
+
+test("typing a name reports both halves back, unmangled", () => {
+  const onOwnerNameChange = vi.fn();
+  render({ ownerName: { first: "Alexander", last: "" }, onOwnerNameChange });
+  const last = section("Profiel").querySelector('input[aria-label="Achternaam"]') as HTMLInputElement;
+  act(() => setNativeValue(last, "Steunenberg"));
+  expect(onOwnerNameChange).toHaveBeenCalledWith({ first: "Alexander", last: "Steunenberg" });
+});
+
+test("Koppelingen explains itself behind an eye, and the fields stay in the open", () => {
+  render();
+  // The value you came to set is visible without opening anything…
+  expect(container!.querySelector('[aria-label="n8n webhook-URL"]')).not.toBeNull();
+  expect(container!.textContent).not.toContain("Production URL — niet de Test URL");
+
+  const eye = container!.querySelector('[aria-label="Uitleg bij de webhook-URL"]') as HTMLButtonElement;
+  expect(eye).not.toBeNull();
+  expect(eye.getAttribute("aria-expanded")).toBe("false");
+  act(() => eye.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(container!.textContent).toContain("Production URL");
 });
 
 test("the half each entity belongs to is set here, and says what is not classified", () => {
