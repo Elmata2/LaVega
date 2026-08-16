@@ -202,35 +202,62 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://lavega.dev/api/invoices/ingest",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "x-ingest-token",
-              "value": "={{ $env.LAVEGA_INVOICE_TOKEN }}"
-            },
-            {
-              "name": "content-type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "// De rij blijft HIER staan, in n8n, niet op de LaVega-server.\n//\n// Dat is het hele punt van deze opzet: een factuurbedrag is van jou, en de\n// LaVega-server hoeft het nooit te zien. De browser haalt de rij straks\n// rechtstreeks bij deze workflow op. Het pad is dus: jouw mailbox -> jouw n8n\n// -> jouw browser. Geen enkele stap daarbuiten.\n//\n// getWorkflowStaticData overleeft een run, want n8n bewaart het bij de workflow\n// in zijn eigen database.\nconst store = $getWorkflowStaticData('global');\nif (!Array.isArray(store.queue)) store.queue = [];\n\nconst MAX_QUEUE = 200;\nconst seen = new Set(store.queue.map((r) => r.messageId));\nlet added = 0;\n\nfor (const item of $input.all()) {\n  for (const inv of (item.json.invoices || [])) {\n    // Dedup op messageId: de schedule loopt elk uur over dezelfde 7 dagen mail,\n    // dus zonder dit staat elke factuur er na een dag 24 keer in.\n    if (!inv.messageId || seen.has(inv.messageId)) continue;\n    seen.add(inv.messageId);\n    store.queue.push({ ...inv, queuedAt: new Date().toISOString() });\n    added++;\n  }\n}\n\n// Oudste eruit als het te lang wordt. Een rij die niemand ophaalt is een lek,\n// geen archief.\nif (store.queue.length > MAX_QUEUE) store.queue = store.queue.slice(-MAX_QUEUE);\n\nreturn [{ json: { added, inQueue: store.queue.length } }];"
       },
-      "id": "b1000000-0000-4000-8000-00000000000b",
-      "name": "Stuur naar LaVega",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "b1000000-0000-4000-8000-00000000000c",
+      "name": "Zet in de wachtrij",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         940,
         150
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "lavega-facturen",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://lavega.dev, http://localhost:5173"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-00000000000d",
+      "name": "LaVega vraagt de rij op",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        460
+      ],
+      "webhookId": "b1000000-0000-4000-8000-00000000000d"
+    },
+    {
+      "parameters": {
+        "jsCode": "// LaVega vraagt de rij op. Wij geven hem en gooien hem weg: één lezer, één keer.\n//\n// Weggooien na uitlezen is bewust. Wat de browser heeft, staat versleuteld in\n// de kluis; wat hier blijft staan, staat onversleuteld in de n8n-database. Hoe\n// korter dat duurt, hoe beter.\nconst store = $getWorkflowStaticData('global');\nconst queue = Array.isArray(store.queue) ? store.queue : [];\nstore.queue = [];\nreturn [{ json: { invoices: queue, servedAt: new Date().toISOString() } }];"
+      },
+      "id": "b1000000-0000-4000-8000-00000000000e",
+      "name": "Geef de rij en leeg hem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-00000000000f",
+      "name": "Antwoord aan LaVega",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        460
       ]
     }
   ],
@@ -348,7 +375,29 @@
       "main": [
         [
           {
-            "node": "Stuur naar LaVega",
+            "node": "Zet in de wachtrij",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LaVega vraagt de rij op": {
+      "main": [
+        [
+          {
+            "node": "Geef de rij en leeg hem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geef de rij en leeg hem": {
+      "main": [
+        [
+          {
+            "node": "Antwoord aan LaVega",
             "type": "main",
             "index": 0
           }
