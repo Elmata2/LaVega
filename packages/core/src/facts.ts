@@ -70,6 +70,44 @@ export function learnFacts(
   return { facts: upsertFacts(existing, valid), rejected };
 }
 
+/** Carry everything learned about one subject over to its new name.
+ *
+ *  Product names are GENERATED — a bank plus its account type becomes "ING
+ *  betaalpas" or "ING creditcard" — so correcting an account's type renames its
+ *  product. Facts are keyed by that name, so without this a rename silently
+ *  orphans everything learned about it, including the owner's own corrections,
+ *  which are exactly the ones that must never be lost. It is silent that makes
+ *  it bad: the card simply reads "voorwaarden nog onbekend" again and nobody
+ *  can tell that a corrected fee was thrown away.
+ *
+ *  Collisions keep the same precedence as `upsertFacts` — the owner wins. A user
+ *  fact already at the destination stays put; an agent fact there is replaced by
+ *  a carried user fact, and by a carried agent fact only when that one is newer. */
+export function renameFactSubject(
+  facts: readonly LearnedFact[],
+  agent: string,
+  from: string,
+  to: string,
+): LearnedFact[] {
+  if (!from.trim() || !to.trim() || norm(from) === norm(to)) return [...facts];
+  const a = norm(agent);
+  const isMoving = (f: LearnedFact) => norm(f.agent) === a && norm(f.subject) === norm(from);
+  const moving = facts.filter(isMoving);
+  if (moving.length === 0) return [...facts];
+
+  const byId = new Map(facts.filter((f) => !isMoving(f)).map((f) => [f.id, f]));
+  for (const f of moving) {
+    const moved: LearnedFact = { ...f, subject: to, id: factId(f.agent, to, f.key) };
+    const prev = byId.get(moved.id);
+    if (prev) {
+      if (prev.source === "user" && moved.source === "agent") continue;
+      if (prev.source === moved.source && prev.updatedAt > moved.updatedAt) continue;
+    }
+    byId.set(moved.id, moved);
+  }
+  return [...byId.values()];
+}
+
 /** The raw value for (agent, subject, key), or null when nothing is known. */
 export function factValue(facts: readonly LearnedFact[], agent: string, subject: string, key: string): string | null {
   const id = factId(agent, subject, key);

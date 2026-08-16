@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, makeFact, planTravel, countryCurrency, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { API_BASE } from "./api.js";
@@ -441,17 +441,39 @@ export default function App() {
   function handleEntityChange(key: string, newEntity: string) {
     setAccounts(reassignEntity(accounts, key, newEntity));
   }
+  // The product name an account had BEFORE the edit in progress. Facts are keyed
+  // by that generated name ("ING betaalpas"), so changing a bank or a type
+  // renames the product and would orphan everything learned about it — the
+  // owner's own corrections first of all. Captured on the first keystroke and
+  // kept until commit, so typing a bank letter by letter still compares against
+  // the name it had when the edit started, not against a half-typed one.
+  const productBeforeEdit = useRef(new Map<string, string>());
+
   // Persist one account after an inline edit (entity, bank, name). Same reason
   // the entity edit commits on blur: one ordered write per edit, never one per
   // keystroke (IndexedDB orders by transaction-creation time, so a burst could
   // land out of order and revert the final value).
   async function handleAccountCommit(account: Account) {
     await storage.putAccounts([account]);
+
+    const before = productBeforeEdit.current.get(account.key);
+    productBeforeEdit.current.delete(account.key);
+    const after = productOf(account);
+    if (!before || !after || before === after) return;
+    // Carry the facts along rather than silently starting from "onbekend".
+    const next = renameFactSubject(facts, TRAVEL_AGENT, before, after);
+    setFacts(next);
+    await storage.putFacts(next);
   }
 
   // Patch an account in memory while typing. `renamed` rides along from the
   // rename cell so a later re-import knows this bank/name was typed by hand.
   function handleAccountFieldChange(key: string, patch: Partial<Account>) {
+    if ("bank" in patch || "type" in patch || "name" in patch) {
+      const current = accounts.find((a) => a.key === key);
+      const product = current ? productOf(current) : "";
+      if (product && !productBeforeEdit.current.has(key)) productBeforeEdit.current.set(key, product);
+    }
     setAccounts(accounts.map((a) => (a.key === key ? { ...a, ...patch } : a)));
   }
 

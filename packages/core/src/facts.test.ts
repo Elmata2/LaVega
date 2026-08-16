@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { factId, makeFact, upsertFacts, factValue, factNumber, factsFor } from "./facts.js";
+import { factId, makeFact, upsertFacts, factValue, factNumber, factsFor, renameFactSubject } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
 const fact = (over: Partial<LearnedFact> = {}): LearnedFact =>
@@ -56,4 +56,51 @@ test("factValue and factsFor read back what was stored", () => {
   expect(factValue(facts, "travel", "Trading 212", "fxFeePct")).toBe("0");
   expect(factValue(facts, "travel", "Onbekend", "fxFeePct")).toBeNull();
   expect(factsFor(facts, "travel", "Trading 212").map((f) => f.key).sort()).toEqual(["cashbackPct", "fxFeePct"]);
+});
+
+/* --- renameFactSubject: a product name is generated, so it can change, and
+ * everything learned about it has to travel with it. --- */
+
+test("renameFactSubject carries facts to the new name and leaves nothing behind at the old one", () => {
+  const facts = [
+    fact({ key: "fxFeePct", value: "0" }),
+    fact({ key: "cashbackPct", value: "1.5" }),
+    fact({ subject: "Revolut betaalpas", key: "fxFeePct", value: "0" }),
+  ];
+  const out = renameFactSubject(facts, "travel", "Trading 212", "Trading 212 betaalpas");
+
+  expect(factValue(out, "travel", "Trading 212 betaalpas", "fxFeePct")).toBe("0");
+  expect(factValue(out, "travel", "Trading 212 betaalpas", "cashbackPct")).toBe("1.5");
+  expect(factValue(out, "travel", "Trading 212", "fxFeePct")).toBeNull();
+  // an unrelated subject is untouched
+  expect(factValue(out, "travel", "Revolut betaalpas", "fxFeePct")).toBe("0");
+  expect(out).toHaveLength(3);
+});
+
+test("renameFactSubject keeps a correction the owner made — that is the whole point", () => {
+  const facts = [fact({ key: "fxFeePct", value: "1.4", source: "user", note: "zelf nagekeken" })];
+  const out = renameFactSubject(facts, "travel", "Trading 212", "Trading 212 betaalpas");
+  const moved = out.find((f) => f.subject === "Trading 212 betaalpas");
+
+  expect(moved?.value).toBe("1.4");
+  expect(moved?.source).toBe("user");
+  expect(moved?.note).toBe("zelf nagekeken");
+});
+
+test("renameFactSubject never lets a carried agent fact overwrite the owner's at the destination", () => {
+  const facts = [
+    fact({ key: "fxFeePct", value: "0", source: "agent" }),
+    fact({ subject: "Trading 212 betaalpas", key: "fxFeePct", value: "2", source: "user" }),
+  ];
+  const out = renameFactSubject(facts, "travel", "Trading 212", "Trading 212 betaalpas");
+
+  expect(factValue(out, "travel", "Trading 212 betaalpas", "fxFeePct")).toBe("2");
+  expect(out).toHaveLength(1);
+});
+
+test("renameFactSubject is a no-op for the same name, a blank name, or an unknown subject", () => {
+  const facts = [fact()];
+  expect(renameFactSubject(facts, "travel", "Trading 212", " trading 212 ")).toHaveLength(1);
+  expect(factValue(renameFactSubject(facts, "travel", "Trading 212", ""), "travel", "Trading 212", "fxFeePct")).toBe("0");
+  expect(factValue(renameFactSubject(facts, "travel", "Knab", "Knab betaalpas"), "travel", "Trading 212", "fxFeePct")).toBe("0");
 });

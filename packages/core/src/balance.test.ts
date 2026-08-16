@@ -55,3 +55,32 @@ test("availableBalanceCents subtracts unpaid VAT reservations from the total", (
   expect(availableBalanceCents(1000, flows, "2026-04-01")).toBe(100000 - 45000); // €1000 - €450 = €550
   expect(availableBalanceCents(1000, [], "2026-04-01")).toBe(100000);
 });
+
+/* --- isCardAccount: which accounts read as a CREDIT card. The travel agent
+ * looks up a different tariff for a creditcard than for a betaalpas, so a
+ * wrong answer here is a wrong fee abroad, not a cosmetic label. --- */
+
+test("isCardAccount recognises a credit card by name, not only American Express", () => {
+  const acc = (bank: string, name = ""): Account =>
+    ({ key: "k", iban: "", name, bank, entity: "e", currency: "EUR", balance: null }) as Account;
+
+  expect(isCardAccount(acc("American Express"))).toBe(true);
+  expect(isCardAccount(acc("ING", "ING Creditcard"))).toBe(true);
+  expect(isCardAccount(acc("ABN AMRO", "Credit Card Gold"))).toBe(true);
+  expect(isCardAccount(acc("", "Amex activity"))).toBe(true);
+
+  // A debit card is not a credit card, however card-like its name is. Visa and
+  // Mastercard both issue debit cards, and the Trading 212 "212 Card" IS one.
+  expect(isCardAccount(acc("Trading 212", "212 Card"))).toBe(false);
+  expect(isCardAccount(acc("ING", "Visa Debit"))).toBe(false);
+  expect(isCardAccount(acc("bunq", "Mastercard betaalpas"))).toBe(false);
+  expect(isCardAccount(acc("ING", "Betaalrekening"))).toBe(false);
+});
+
+test("accountType: a named credit card defaults to Creditcard, and an explicit type still wins", () => {
+  const base = { key: "k", iban: "", entity: "e", currency: "EUR", balance: null };
+  expect(accountType({ ...base, bank: "ING", name: "ING Creditcard" } as Account)).toBe("Creditcard");
+  expect(accountType({ ...base, bank: "Trading 212", name: "212 Card" } as Account)).toBe("Betaalrekening");
+  // the owner's own choice is never second-guessed
+  expect(accountType({ ...base, bank: "ING", name: "ING Creditcard", type: "Betaalrekening" } as Account)).toBe("Betaalrekening");
+});

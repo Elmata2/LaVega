@@ -3,10 +3,24 @@ import { reservedCents } from "./scheduledFlows.js";
 
 /** A credit-card account: a manually-entered saldo is the amount OWED, so it
  *  counts as NEGATIVE (debt) in the net position while the UI shows the owed
- *  amount as a positive. Detected by bank name for now (Amex is always a card);
- *  extend as more card sources are added. */
+ *  amount as a positive.
+ *
+ *  This used to match American Express and nothing else, which meant a real ING
+ *  or ABN AMRO credit card imported without an explicit type fell through to
+ *  "Betaalrekening" — and the travel agent then asked for that bank's DEBIT card
+ *  tariff and ranked the card at 1.4% instead of 2%. Same class of error as
+ *  "rank PRODUCTS, not banks", one layer further down.
+ *
+ *  An explicit `a.type` set by the owner still wins over this; see accountType. */
+/** Says "credit card" in so many words. Deliberately NOT `visa` or `mastercard`:
+ *  both brands issue debit cards too, so matching them would recreate the exact
+ *  mistake this is here to prevent — a Trading 212 "212 Card" is a Mastercard
+ *  DEBIT card, and calling it a creditcard sends the travel agent looking up the
+ *  wrong tariff. Nor plain "card"/"kaart", for the same reason. */
+const READS_AS_CREDIT_CARD = /\b(creditcard|credit card|amex|american express)\b/i;
+
 export function isCardAccount(a: Account): boolean {
-  return a.bank === "American Express";
+  return READS_AS_CREDIT_CARD.test(`${a.bank ?? ""} ${a.name ?? ""}`);
 }
 
 export const ACCOUNT_TYPES = ["Betaalrekening", "Spaarrekening", "Creditcard", "Beleggingsrekening", "Overig"] as const;
