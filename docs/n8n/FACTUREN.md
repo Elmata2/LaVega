@@ -1,23 +1,21 @@
-# n8n — facturen uit Gmail en Outlook
+# n8n — facturen uit Gmail
 
-`lavega-invoices.json` leest je mailbox, laat Claude bepalen of er een factuur in
+`lavega-invoices.json` leest je Gmail, laat Claude bepalen of er een factuur in
 zit, haalt de bedragen eruit, en houdt ze vast **in n8n** tot LaVega ze ophaalt.
 Er wordt niets automatisch geboekt: jij bevestigt elke regel.
 
 Backlog-item 3. De lang uitgestelde "Phase 2b e-mailconnectors" wordt hiermee
 overgeslagen: de OAuth-koppeling zit in **n8n**, niet in LaVega. LaVega bezit
-dus nooit een Google- of Microsoft-token.
+dus nooit een Google-token.
+
+Outlook zit er bewust niet in. De stappen staan onderaan, voor later.
 
 ## Het pad van de gegevens: jouw mailbox → jouw n8n → jouw browser
 
-De eerste opzet stuurde de facturen naar de LaVega-server. Dat is bewust
-teruggedraaid, omdat je zo lang mogelijk lokaal wilt blijven — en het kan ook
-lokaal:
-
 ```
-Gmail / Outlook  ──►  n8n (jouw Railway)  ──►  browser (kluis, versleuteld)
-                          │
-                          └─ de LaVega-server komt hier niet in voor
+Gmail  ──►  n8n (jouw Railway)  ──►  browser (kluis, versleuteld)
+                │
+                └─ de LaVega-server komt hier niet in voor
 ```
 
 De rij staat in `getWorkflowStaticData`, dus in de database van je eigen n8n.
@@ -30,52 +28,34 @@ Harde eis 2 uit `docs/CONTEXT.md` blijft hiermee overeind: de LaVega-server ziet
 geen persoonlijke bedragen. Alleen Anthropic ziet de factuur zelf, want die moet
 hem lezen — net als bij de andere agents, en met dezelfde afweging.
 
-## Stap 1 — Outlook koppelen (Microsoft Entra ID)
+## Stap 1 — Gmail koppelen (Google Cloud)
 
 Je hebt de **callback-URL van n8n** nodig. Die staat in n8n zelf: *Credentials →
-New → Microsoft Outlook OAuth2 API*, bovenaan. Hij ziet eruit als
+New → Gmail OAuth2 API*, bovenaan. Hij ziet eruit als
 `https://<jouw-n8n>/rest/oauth2-credential/callback`. Kopieer hem eerst.
-
-1. Ga naar **entra.microsoft.com** → *Applications* → *App registrations* →
-   **New registration**.
-2. Naam: `LaVega n8n`. Bij *Supported account types*:
-   - werk- of schoolaccount → **Single tenant**;
-   - een gewoon outlook.com-adres → **Accounts in any organizational directory
-     and personal Microsoft accounts**.
-3. *Redirect URI*: kies **Web** en plak de callback-URL van n8n. Registreren.
-4. **Overview**: noteer *Application (client) ID* en *Directory (tenant) ID*.
-5. *Certificates & secrets* → **New client secret** → kopieer de **Value**,
-   niet de Secret ID. Die waarde is daarna niet meer te zien.
-6. *API permissions* → **Add a permission** → *Microsoft Graph* → **Delegated
-   permissions** → zet aan: `Mail.Read`, `offline_access`, `User.Read`.
-   Alleen lezen; er staat geen enkele schrijfrechten bij.
-   Werk je in een bedrijfstenant, klik dan **Grant admin consent**.
-7. In n8n: *Credentials → Microsoft Outlook OAuth2 API* → plak Client ID en
-   Client Secret. Bij **Single tenant** moet je de tenant-ID in de auth-URL's
-   zetten in plaats van `common`. Klik **Connect my account** en log in.
-
-## Stap 2 — Gmail koppelen (Google Cloud)
 
 1. **console.cloud.google.com** → nieuw project, bijvoorbeeld `lavega-n8n`.
 2. *APIs & Services* → *Library* → zoek **Gmail API** → **Enable**.
-3. *OAuth consent screen* → **External** → vul naam en e-mail in.
+3. *OAuth consent screen* → **External** → vul naam en e-mailadres in.
 4. *Scopes* → **Add or remove scopes** → voeg toe:
-   `https://www.googleapis.com/auth/gmail.readonly`. Meer niet.
+   `https://www.googleapis.com/auth/gmail.readonly`. Meer niet. Alleen lezen.
 5. *Test users* → voeg je eigen adres toe.
 6. *Credentials* → **Create credentials** → *OAuth client ID* → **Web
-   application** → bij *Authorized redirect URIs* dezelfde n8n-callback-URL.
+   application** → bij *Authorized redirect URIs* de n8n-callback-URL plakken.
 7. Client ID en Client Secret in n8n bij *Gmail OAuth2 API*, dan **Connect my
    account**.
 
 > **Val hier niet in.** Blijft de consent screen op **Testing** staan, dan laat
 > Google je refresh-token na **7 dagen** verlopen en stopt de workflow er
 > wekelijks mee. Zet hem op **In production** (*Publish app*). Voor alleen je
-> eigen account is verificatie niet nodig; je krijgt één keer een
-> "unverified app"-scherm dat je kunt doorklikken.
+> eigen account is verificatie niet nodig; je klikt één keer langs een
+> "unverified app"-scherm.
 
-Gebruik je maar één van de twee? Verwijder dan de andere bronnode én zijn
-verbinding naar *Samenvoegen*. Een node zonder credential laat de hele run
-vallen.
+## Stap 2 — De sleutel voor het lezen
+
+`FT_ANTHROPIC_KEY` in n8n (dezelfde die de kaarttarieven gebruikt). n8n leest
+omgevingsvariabelen alleen bij het opstarten: **herstart de n8n-service** na het
+toevoegen.
 
 ## Stap 3 — De webhook waarmee LaVega ophaalt
 
@@ -83,42 +63,44 @@ vallen.
    Auth** en maak daar een credential voor:
    - Header Name: `x-lavega-token`
    - Value: `openssl rand -hex 24`
-2. Activeer de workflow (schakelaar rechtsboven). Een webhook werkt alleen in
-   een actieve workflow — in de test-modus luistert hij maar één keer.
+2. **Activeer de workflow** (schakelaar rechtsboven). Een webhook werkt alleen
+   in een actieve workflow — in de test-modus luistert hij maar één keer.
 3. Kopieer de **Production URL** van de webhook.
 4. Zet die URL en dat token straks in LaVega onder *Koppelingen*. LaVega bewaart
    beide lokaal, net als je andere instellingen.
 
-De node staat al ingesteld op `allowedOrigins: https://lavega.dev,
+De node staat ingesteld op `allowedOrigins: https://lavega.dev,
 http://localhost:5173`. Draai je LaVega op een andere poort, pas dat dan aan,
 anders blokkeert de browser het antwoord.
 
-## Stap 4 — De sleutel voor het lezen
+## Wat er in de Gmail-node is gezet, en waarom
 
-`FT_ANTHROPIC_KEY` in n8n (dezelfde die de kaarttarieven gebruikt). n8n leest
-omgevingsvariabelen alleen bij het opstarten: **herstart de n8n-service** na het
-toevoegen.
+Twee instellingen waar dit zonder mankeren op stukloopt:
+
+| Instelling | Waarde | Waarom |
+|---|---|---|
+| **Read Status** | `both` | n8n staat standaard op **alleen ongelezen**. Een factuur die je al gelezen had zou dan nooit meekomen, en de workflow zou "werken" en stil niets opleveren. |
+| **Download Attachments** | aan, náást *Simplify* | Dit veld hoort bij Simplify, niet bij *Options*. Staat het in Options, dan negeert n8n het en komt er nooit een PDF mee. |
+| **Simplify** | uit | Aan levert alleen headers, dus geen bijlagen en geen tekst. |
+| **Search** | `newer_than:7d (factuur OR invoice OR rekening OR receipt)` | Te breed kost tokens, te smal mist facturen. Begin liever te smal. |
 
 ## Wat je moet controleren bij de eerste run
 
-- **De twee bronnodes.** Gmail en Outlook veranderen hun parameters per
-  node-versie. Open ze en controleer dat "Download Attachments" aan staat en dat
-  het zoekfilter bestaat in jouw versie. Dit is het meest waarschijnlijke punt
-  waar de eerste run struikelt.
+- Draai *Handmatig starten* en kijk of *Normaliseer bericht* berichten met
+  `pdfs` erin oplevert. Zijn de PDF's leeg, dan staat Download Attachments niet
+  goed.
+- Kijk wat *Zet in de wachtrij* teruggeeft: `{added, inQueue}`.
+- Roep daarna de webhook-URL aan. Je hoort dezelfde facturen terug te krijgen,
+  en een **tweede** aanroep hoort leeg te zijn — dat is de rij die zichzelf
+  opruimt.
 - **PDF-ondersteuning.** De bijlage gaat als `document`-blok naar Claude. Geeft
   *Lees de factuur* een 400 over het documenttype, voeg dan de header
   `anthropic-beta: pdfs-2024-09-25` toe aan die node.
-- **Het zoekfilter.** Gmail staat op `newer_than:7d` en op factuur / invoice /
-  rekening / receipt. Te breed kost tokens, te smal mist facturen. Begin liever
-  te smal.
-- **De wachtrij.** Draai *Handmatig starten* en kijk wat *Zet in de wachtrij*
-  teruggeeft: `{added, inQueue}`. Roep daarna de webhook-URL aan; je hoort
-  dezelfde facturen terug te krijgen, en een tweede aanroep hoort leeg te zijn.
 
 ## Grenzen
 
-- Maximaal 25 berichten per bron per run, maximaal 3 PDF's per bericht, elk
-  maximaal 4 MB. Een mail zonder PDF én zonder bruikbare tekst wordt overgeslagen.
+- Maximaal 25 berichten per run, maximaal 3 PDF's per bericht, elk maximaal
+  4 MB. Een mail zonder PDF én zonder bruikbare tekst wordt overgeslagen.
 - Maximaal 200 facturen in de rij; daarboven vallen de oudste eruit. Een rij die
   niemand ophaalt is een lek, geen archief.
 - Ontdubbeld op `messageId`, want de schedule loopt elk uur over dezelfde zeven
@@ -129,3 +111,26 @@ toevoegen.
 - Nog te bouwen in LaVega: het scherm *Koppelingen* voor URL en token, en de
   bevestigingsrij in *Facturen*. Tot dan levert de webhook wel, maar heeft
   LaVega nog geen knop om hem op te halen.
+
+---
+
+## Outlook later toevoegen
+
+Niet nodig nu. Als het zover is:
+
+1. In n8n een **Microsoft Outlook OAuth2 API**-credential maken en de
+   callback-URL kopiëren.
+2. **entra.microsoft.com** → *App registrations* → **New registration**:
+   - *Supported account types*: werkaccount → **Single tenant**; een gewoon
+     outlook.com-adres → **any organizational directory + personal accounts**.
+   - *Redirect URI*: type **Web**, de n8n-callback-URL.
+   - *Certificates & secrets* → **New client secret** → kopieer de **Value**,
+     niet de Secret ID. Die is daarna niet meer te zien.
+   - *API permissions* → Graph → **Delegated** → `Mail.Read`, `offline_access`,
+     `User.Read`. In een bedrijfstenant: **Grant admin consent**.
+   - Bij **Single tenant** moet de tenant-ID in de auth-URL's in plaats van
+     `common`.
+3. In de workflow: een node `Outlook: recente mail` erbij, een **Merge** ertussen
+   (Gmail op input 1, Outlook op input 2), en `Normaliseer bericht` moet dan ook
+   de Outlook-vorm aankunnen: `receivedDateTime`, `bodyPreview`, en
+   `from.emailAddress.address`.

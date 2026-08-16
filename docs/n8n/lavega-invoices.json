@@ -39,12 +39,13 @@
         "returnAll": false,
         "limit": 25,
         "simple": false,
+        "downloadAttachments": true,
         "filters": {
+          "readStatus": "both",
+          "includeSpamTrash": false,
           "q": "newer_than:7d (factuur OR invoice OR rekening OR receipt)"
         },
-        "options": {
-          "downloadAttachments": true
-        }
+        "options": {}
       },
       "id": "b1000000-0000-4000-8000-000000000003",
       "name": "Gmail: recente mail",
@@ -52,49 +53,13 @@
       "typeVersion": 2.1,
       "position": [
         -620,
-        60
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "resource": "message",
-        "operation": "getAll",
-        "returnAll": false,
-        "limit": 25,
-        "filters": {
-          "custom": "contains(subject,'factuur') or contains(subject,'invoice') or contains(subject,'rekening')"
-        },
-        "options": {
-          "downloadAttachments": true
-        }
-      },
-      "id": "b1000000-0000-4000-8000-000000000004",
-      "name": "Outlook: recente mail",
-      "type": "n8n-nodes-base.microsoftOutlook",
-      "typeVersion": 2,
-      "position": [
-        -620,
-        240
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "numberInputs": 2
-      },
-      "id": "b1000000-0000-4000-8000-000000000005",
-      "name": "Samenvoegen",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        -380,
         150
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Gmail en Outlook leveren een ander bericht-object. Hier wordt het één vorm,\n// zodat alles erna niet hoeft te weten waar een mail vandaan kwam.\n//\n// Bijlagen: n8n zet ze in item.binary, met .data al base64. Alleen PDF's gaan\n// mee; een logo van 4 kB in de handtekening is geen factuur en kost wel tokens.\nconst MAX_PDFS = 3;\nconst MAX_PDF_BYTES = 4 * 1024 * 1024; // Claude weigert grotere documenten\nconst out = [];\n\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const bin = item.binary || {};\n\n  // Outlook heeft receivedDateTime + from.emailAddress; Gmail heeft threadId en\n  // (met simple:false) headers. Beide varianten worden hier afgevangen.\n  const isOutlook = !!j.receivedDateTime || !!j.bodyPreview;\n  const headers = j.headers || {};\n  const subject = j.subject || headers.subject || '';\n  const from = isOutlook\n    ? (j.from && j.from.emailAddress ? (j.from.emailAddress.address || '') : '')\n    : (headers.from || j.From || '');\n  const date = j.receivedDateTime || headers.date || j.internalDate || '';\n  const text = String(j.text || j.bodyPreview || j.snippet || (j.body && j.body.content) || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 6000);\n\n  const pdfs = [];\n  for (const key of Object.keys(bin)) {\n    const b = bin[key];\n    if (!b || !b.data) continue;\n    const type = String(b.mimeType || '').toLowerCase();\n    const name = String(b.fileName || key);\n    if (type !== 'application/pdf' && !/\\.pdf$/i.test(name)) continue;\n    // base64 is ~4/3 van de bytes; zo weten we de grootte zonder te decoderen.\n    if ((b.data.length * 3) / 4 > MAX_PDF_BYTES) continue;\n    pdfs.push({ name, data: b.data });\n    if (pdfs.length >= MAX_PDFS) break;\n  }\n\n  out.push({ json: {\n    source: isOutlook ? 'outlook' : 'gmail',\n    messageId: String(j.id || j.messageId || ''),\n    subject, from, date, text, pdfs,\n    // Zonder PDF én zonder bruikbare tekst valt er niets te lezen.\n    ok: pdfs.length > 0 || text.length > 40,\n  } });\n}\nreturn out;"
+        "jsCode": "// Eén vorm voor alles wat hierna komt, en meteen de bijlagen eruit gevist.\n//\n// n8n zet bijlagen in item.binary, met .data al base64. Alleen PDF's gaan mee;\n// een logo van 4 kB uit de handtekening is geen factuur en kost wel tokens.\nconst MAX_PDFS = 3;\nconst MAX_PDF_BYTES = 4 * 1024 * 1024; // Claude weigert grotere documenten\nconst out = [];\n\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const bin = item.binary || {};\n  const headers = j.headers || {};\n\n  const subject = j.subject || headers.subject || '';\n  const from = headers.from || j.From || '';\n  const date = headers.date || j.internalDate || '';\n  const text = String(j.text || j.snippet || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 6000);\n\n  const pdfs = [];\n  for (const key of Object.keys(bin)) {\n    const b = bin[key];\n    if (!b || !b.data) continue;\n    const type = String(b.mimeType || '').toLowerCase();\n    const name = String(b.fileName || key);\n    if (type !== 'application/pdf' && !/\\.pdf$/i.test(name)) continue;\n    // base64 is ~4/3 van de bytes; zo weten we de grootte zonder te decoderen.\n    if ((b.data.length * 3) / 4 > MAX_PDF_BYTES) continue;\n    pdfs.push({ name, data: b.data });\n    if (pdfs.length >= MAX_PDFS) break;\n  }\n\n  out.push({ json: {\n    source: 'gmail',\n    messageId: String(j.id || j.messageId || ''),\n    subject, from, date, text, pdfs,\n    // Zonder PDF én zonder bruikbare tekst valt er niets te lezen.\n    ok: pdfs.length > 0 || text.length > 40,\n  } });\n}\nreturn out;"
       },
       "id": "b1000000-0000-4000-8000-000000000006",
       "name": "Normaliseer bericht",
@@ -269,11 +234,6 @@
             "node": "Gmail: recente mail",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Outlook: recente mail",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -285,38 +245,11 @@
             "node": "Gmail: recente mail",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Outlook: recente mail",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
     },
     "Gmail: recente mail": {
-      "main": [
-        [
-          {
-            "node": "Samenvoegen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Outlook: recente mail": {
-      "main": [
-        [
-          {
-            "node": "Samenvoegen",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Samenvoegen": {
       "main": [
         [
           {
