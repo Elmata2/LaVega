@@ -7,7 +7,18 @@ Status legend: `todo` · `questions-open` · `building` · `in-test` · `done`
 
 ---
 
-## 1. Cross-agent money optimisation ("where do I put / convert / spend it")  — `questions-open`
+## 1. Cross-agent money optimisation ("where do I put / convert / spend it")  — `in-test`
+
+> **Built and on master** (2026-08-13 → 08-15, `04e8da0` … `134f111`) as the **travel money
+> agent**. Spec: `docs/superpowers/specs/2026-08-13-travel-money-agent-design.md`.
+> Shipped: `planTravel()` in `packages/core/src/travel.ts` (deterministic store / convert /
+> spend ranking, local — the model never sees balances), `POST /api/agent/travel-facts`,
+> the `TravelBlock` on Overzicht, server-side card-terms cache, and the n8n ingest that
+> fetches each product's own tariff page instead of searching for it.
+> **Open:** the n8n workflow is imported but does not complete yet — set
+> `LAVEGA_INGEST_TOKEN` in the n8n environment (see `docs/n8n/README.md`). The Railway
+> side (`CARD_TERMS_INGEST_TOKEN` on `@lavega/web`) is set and verified 2026-08-16.
+> The cache is in server memory, so it is empty after every deploy until a run lands.
 
 One combined answer built from three agents that today don't talk to each other:
 
@@ -29,7 +40,15 @@ destination is new information.
 Open questions: trigger/placement, source of fee+cashback+rate facts (live web search
 vs. curated table), whether a "my cards and their terms" registry is needed.
 
-## 2. Agent architecture: skills / workflows that actually learn  — `todo`
+## 2. Agent architecture: skills / workflows that actually learn  — `building` (first slice done)
+
+> **Landed with item 1:** `LearnedFact` in the vault (`VaultData.facts?`, additive, no
+> migration) with the learning contract **`source: "user"` always wins and an agent run
+> never overwrites it**; and the first instruction-file agent —
+> `apps/server/src/agent/prompts/travel.md` defines the travel agent like a skill.
+> The n8n card-terms workflow is the first "workflow instead of one-shot prompt".
+> **Still open:** move chat / categorize / invoice / tax onto the same instruction-file +
+> LearnedFact pattern, and decide how facts feed back into those agents.
 
 From an Instagram reel on Claude Skills (not viewable here — going on Alexander's summary).
 Wants the agents rebuilt as **proper agents with instructions** — Skill-style, or even
