@@ -133,3 +133,91 @@ not just a feature request:
 The insight to design for: **the surprise prepayment**. People spend money that was never
 theirs. This is a forecast/reservation problem as much as a tax-rules problem — and LaVega
 already has the set-aside machinery (VAT set-aside + scheduled flows) to build on.
+
+---
+
+# UI review — dictated by Alexander, 2026-08-16
+
+Walkthrough of the rebuilt app. Captured verbatim in intent; the wording is mine.
+Status legend as above. Items marked **[later]** are his own "put it in the backlog".
+
+## A. The shell — a Profile owns everything that is not a workspace
+
+**The top nav is right, but overcrowded.** The fix is not to shorten names, it is to stop
+showing tabs nobody uses.
+
+- **Profile, top right.** It holds the module picker and everything that is a setting
+  rather than a place you work.
+- **Module picker.** Every module is listed with a **short preview** — what it looks like
+  and what it does — and a toggle. Toggled on, it appears in the horizontal top nav.
+  Toggled off, it disappears. This is the point of the modular grid: the nav becomes
+  the user's own selection instead of the full catalogue.
+- **Move into the profile:** Regels, Koppelingen, Backup ("set name for backup"),
+  Import (which accounts to import), Vergrendel/uitloggen, notifications, and the
+  country/region that drives the tax rules.
+- **Stays in the nav:** Overzicht, Forecast, and whatever the user switches on.
+- **Remove** the "lokaal & privé" badge. At launch that has to be evident from the
+  product, not asserted in the chrome.
+- **Remove** the floating chat widget for now. **[later]** decide what it becomes.
+- **Add widget** control, like the desktop reference.
+- **Header style:** take the reference's treatment — a title with a black rule under it,
+  rather than today's round-edged tiles. Cleaner.
+- **[later]** Colours and font sizing. He is not sure yet, and it is a cheap change once
+  the content is settled. Do not touch until the content work is done.
+
+## B. Overzicht
+
+- **Entity switcher → `Persoonlijk | Zakelijk`**, split by a vertical rule. Per-company
+  splitting only if users turn out to need it. **Not a priority.**
+- **New block: the cards you hold.** Purely presentational — card art plus the holder's
+  name, as in `Modules for homescreen 5/7.png`. It does little functionally and is worth
+  a lot: it shows at a glance which cards are connected.
+- **Totaalpositie** is the most important number on the page. Keep the click-through to
+  Rekeningen. **Add a graph under it:** the total position, against last week and last
+  month.
+- **Statistics is where the value is.** Make it live and make it the major block. Take
+  both references: grouped bars per category per month (`homescreen 5`), and the **trend
+  line across days of the week** (`homescreen 7`). The insight is "which day costs me
+  money" — Friday nights are expensive, and that is something to be warned about before
+  it happens, not after. Possibly merged with "verandering per categorie", which is the
+  same question asked twice.
+- **Positie over je bedrijven**: interesting, but far too large. Shrink it.
+- **Cashflow + buffer**: good as is. **[later]** the forecast itself needs work.
+- **Top-uitgaven shows "onbekend"**, which wastes the block. The **pre-made rules should
+  already be applying** — check what was built earlier. On top of that, an **AI pass that
+  categorises what is still uncategorised**, from a prompt, live, and probably month by
+  month.
+- **Recente transacties**: optional module. From `desktop homeview inspo.png`: merchant
+  logo, time, and our category per row, plus a search and a "bekijk alles" that lands in
+  Transacties.
+- **Betaalagenda**: same reference. Once recurring bills are detected, show them here for
+  users who want it.
+- **[later]** The travel block needs work. Note: the "Ververs voorwaarden" button DOES
+  exist (TravelBlock.tsx:185) — he could not find it, which is a discoverability defect,
+  not a missing feature.
+
+## C. Rekeningen
+
+Works: bank, rename, type, entity, transactions, delete, filter per company.
+
+- **Idea to test:** group by bank, with the bank's logo, and the cards at that bank as
+  sub-rows behind a click. Not certain it is better — try it.
+
+## D. The other tabs
+
+- **Regels** → move into the profile. It is a setting, not a workspace.
+- **Forecast** → stays in the nav. **[later]** needs work.
+- **Optimalisatie**: the reasoning must be explicit and end in a number — "you hold X at
+  ABN at 1.4%, bank Y pays 3.01%, so moving it earns you €Z". **Rebalance the layout:**
+  savings-rate optimisation smaller, **subscriptions much larger** and roughly equal in
+  weight. Seed a few test subscriptions so it can be judged full.
+- **Valuta**: rebuild around the reference's *Transfer money* block
+  (`Modules for homescreen example.png`) — from card, to card, amount, currency, and what
+  actually arrives. Add an **info button** beside the "..." menu: "this is the best
+  conversion your own cards allow", and "switching to Wise would beat it".
+- **Punten**: **[later]** the real question is whether an AI can fetch the balances with
+  the owner's approval. UI could be nicer.
+- **Belasting**: drop the grey instruction sentence under the title. Add a module per tax
+  that is actually relevant, driven by the country in the profile (NL income tax, etc.).
+- **Facturen**: the UI is bad. Reduce it to exactly three ways in — the automatic n8n
+  feed, manual entry, and **drag and drop an invoice file**. Nothing else.
