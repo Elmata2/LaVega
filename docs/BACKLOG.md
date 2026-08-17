@@ -47,6 +47,34 @@ substantially shipped, both UI review rounds built, 870 tests passing.
 | **D7** | **Disclaimers and terms** | At launch, not in the working screen. |
 | **D8** | **Never pushed.** Nothing in this session is on lavega.dev. | Awaiting his go-ahead. |
 
+## Decided 2026-08-17 — invoices arrive by forwarding address, OAuth is v2
+
+**The MVP: each user gets `<slug>-<random>@invoices.lavega.dev`** and forwards invoices to it (or
+sets one Gmail filter). Cloudflare Email Routing plus an Email Worker receives the mail and POSTs it
+to the n8n webhook, so everything downstream is the pipeline already built and debugged. Design:
+`docs/superpowers/specs/2026-08-17-invoice-forwarding-address-design.md`.
+
+Why not the obvious "Connect Gmail" button first: `gmail.readonly` is a Google **restricted** scope,
+so a public app needs OAuth verification **plus a CASA Tier 2 assessment, renewed every 12 months**,
+from about $3,000 upward — a bill before the first customer, in exchange for access to the user's
+whole mailbox. `lavega.dev` is already on Cloudflare with no MX records, so the forwarding route
+costs nothing to host. Dext, Hubdoc and Xero all solve it this way.
+
+**OAuth "Connect Gmail" — v2, with these limitations recorded so they are not rediscovered:**
+1. Restricted scope: verification + CASA Tier 2, **annual**, ~$3,000+.
+2. Background sync needs a **server-held refresh token** with standing whole-mailbox access, because
+   the browser is closed when the job runs. That ends local-first for this feature and needs a
+   deliberate decision against `CONTEXT.md` constraint 2.
+3. Encrypting extracted invoices to the user's public key reduces exposure **at rest only** —
+   plaintext still exists in server memory during extraction, and the token stays a live key.
+4. n8n becomes one workflow over many users: an HTTP Request node per user token, since the Gmail
+   node binds to a single credential.
+5. **Outlook may be the cheaper first OAuth** (publisher verification, no paid annual assessment as
+   far as we know — verify before planning around it).
+
+Nothing built for the forwarding route is wasted: extraction, queue, confirm-first review and dedup
+all sit downstream of how the mail arrived.
+
 ---
 
 ## 1. Cross-agent money optimisation ("where do I put / convert / spend it")  — `in-test`
