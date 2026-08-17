@@ -6,6 +6,10 @@ state.json
 *.pem
 .env
 .env.*
+# ...except the template, which carries no secrets and is the only way a new
+# machine knows which variables exist at all.
+!.env.example
+!**/.env.example
 .DS_Store
 .superpowers/
 .gstack/
