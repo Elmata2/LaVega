@@ -868,6 +868,7 @@ export default function App() {
                 busy,
                 aiAvailable: llmConfigured,
                 onRefreshTerms: handleRefreshTravelTerms,
+                onRecheckAi: () => void recheckLlm(),
                 onCorrectFact: (fact) => void saveFacts([fact]),
               }}
               onSelectCategory={(c) => {

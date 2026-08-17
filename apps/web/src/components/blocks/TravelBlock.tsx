@@ -24,6 +24,7 @@ export type TravelBlockProps = {
   busy: boolean;
   /** Whether the server has an API key — hides the refresh action when not. */
   aiAvailable: boolean;
+  onRecheckAi: () => void;
   /** Look up current terms for the providers with unknown terms. */
   onRefreshTerms: (destination: string) => void;
   /** Persist a corrected fact. The correction outlives every later refresh. */
@@ -252,16 +253,20 @@ function nameList(providers: string[]): string {
  *  It used to live in the module's "…" slot, where Alexander could not find it
  *  (B3) — a card-link in a header corner, next to nothing that said why you
  *  would press it. Here it sits inside the sentence that states the problem, so
- *  the explanation and the fix are one thing. When there is nothing a click can
- *  fix (no key, no cards) there is deliberately NO button: an action that
- *  cannot work is worse than none. */
-function TermsNotice({
-  state, busy, aiAvailable, onSearch,
+ *  the explanation and the fix are one thing. Where nothing a click can fix
+ *  (no cards) there is deliberately NO button: an action that cannot work is
+ *  worse than none. The no-key state is the exception, and it took a real
+ *  report to see why: LaVega asks the server about its key only at page load,
+ *  so a tab that opened first keeps saying "no key" after one is set. Without a
+ *  control there, the only cure was knowing to reload — so it gets one. */
+export function TermsNotice({
+  state, busy, aiAvailable, onSearch, onRecheckAi,
 }: {
   state: TermsState;
   busy: boolean;
   aiAvailable: boolean;
   onSearch: () => void;
+  onRecheckAi: () => void;
 }) {
   if (state.kind === "euro") return null;
 
@@ -276,12 +281,23 @@ function TermsNotice({
     </button>
   );
 
+  // A control, not only a sentence. LaVega asks the server whether it has a key
+  // ONCE, when the page loads, so a tab opened before the key was set repeats
+  // "no key" for the rest of its life — a true sentence about a stale fact, and
+  // from the outside indistinguishable from a broken feature. Without this
+  // button there is nothing to press in exactly the state that needs pressing,
+  // and the only cure is knowing to reload.
   const noKeyLine = (
-    <p className="cell-sub">
-      Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken kan hier niet —
-      verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de percentages zelf in onder
-      “Waarom?”. Wat jij invult wordt nooit door een agent overschreven.
-    </p>
+    <>
+      <p className="cell-sub">
+        Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken kan hier niet —
+        verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de percentages zelf in onder
+        “Waarom?”. Wat jij invult wordt nooit door een agent overschreven.
+      </p>
+      <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
+        Sleutel net ingesteld? Opnieuw controleren
+      </button>
+    </>
   );
 
   if (state.kind === "no-products") {
@@ -373,7 +389,7 @@ export function figureAge(updatedAt: string, asOf: string): string {
 }
 
 export default function TravelBlock({
-  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onCorrectFact,
+  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onRecheckAi, onCorrectFact,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
   // One disclosure for the whole block. The answer is the product; everything
@@ -448,7 +464,7 @@ export default function TravelBlock({
 
           {/* Why, and the one control that changes it — under the answer, not
               hidden in the header. */}
-          {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} onSearch={search} />}
+          {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} onSearch={search} onRecheckAi={onRecheckAi} />}
 
           <button
             type="button"

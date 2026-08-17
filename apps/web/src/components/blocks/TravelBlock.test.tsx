@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
-import TravelBlock, { termsState, type TravelBlockProps, figureAge } from "./TravelBlock";
+import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice } from "./TravelBlock";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -21,7 +21,7 @@ const props: TravelBlockProps = {
   homeCountry: "NL",
   busy: false,
   aiAvailable: false,
-  onRefreshTerms: () => {},
+  onRefreshTerms: () => {}, onRecheckAi: () => {},
   onCorrectFact: () => {},
 };
 
@@ -364,4 +364,22 @@ test("a figure is dated by how old it is, so a stale one cannot pass as fresh", 
   expect(figureAge("2026-08-13", "2026-08-17")).toContain("4 dagen geleden");
   // bank.nl's own stated check date, seven months back — it must READ old.
   expect(figureAge("2026-01-15", "2026-08-17")).toContain("maanden geleden");
+});
+
+test("the no-key state offers a way to re-check, because the key check runs once at page load", () => {
+  // This is the state that says "this server has no AI key" — and it is exactly
+  // the state where that fact may already be stale, since LaVega asks the server
+  // only at mount. Without a control here the only cure is knowing to reload,
+  // which the screen never says.
+  const html = renderToStaticMarkup(
+    <TermsNotice
+      state={{ kind: "no-key", unknown: ["ING betaalpas"] }}
+      busy={false}
+      aiAvailable={false}
+      onSearch={() => {}}
+      onRecheckAi={() => {}}
+    />,
+  );
+  expect(html).toContain("geen AI-sleutel");
+  expect(html).toContain("Opnieuw controleren");
 });
