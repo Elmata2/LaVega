@@ -167,6 +167,20 @@ function pickBody(j) {
 }
 
 /**
+ * Alleen tekens die in base64 voorkomen, en een lengte die een veelvoud van vier
+ * is. Een opslagverwijzing bevat een dubbele punt en streepjes en valt hier dus
+ * meteen af — precies het onderscheid dat we nodig hebben.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isBase64(value) {
+  const clean = String(value).replace(/\s+/g, '');
+  if (clean.length === 0 || clean.length % 4 !== 0) return false;
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(clean);
+}
+
+/**
  * Uit alle bijlagen alleen de PDF's, met een reden voor elke die afvalt.
  * @param {MailAttachment[]} attachments
  * @returns {{ pdfs: InvoicePdf[], skipped: string[] }}
@@ -193,6 +207,15 @@ function pickPdfs(attachments) {
     const bytes = Math.floor((attachment.data.length * 3) / 4);
     if (bytes > MAX_PDF_BYTES) {
       skipped.push(name + ': ' + Math.round(bytes / 1024 / 1024) + ' MB, groter dan de limiet van 4 MB');
+      continue;
+    }
+    // Is dit ECHT base64? Toen n8n zijn binaire opslag buiten het item had staan,
+    // bevatte `data` een verwijzing ("filesystem-v2:workflows/...") in plaats van
+    // de bytes. Die ging ongecontroleerd mee en Claude antwoordde met "Invalid
+    // base64 data" — een fout die pas bij de aanbieder aan het licht kwam. Liever
+    // hier weigeren en het MELDEN dan iets versturen dat we niet gelezen hebben.
+    if (!isBase64(attachment.data)) {
+      skipped.push(name + ': de inhoud is geen base64 maar een verwijzing — controleer N8N_DEFAULT_BINARY_DATA_MODE');
       continue;
     }
     if (pdfs.length >= MAX_PDFS) {

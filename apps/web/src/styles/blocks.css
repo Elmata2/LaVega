@@ -52,6 +52,65 @@
 
 /* ---------- AandachtBlock ---------- */
 
+/* The empty state is two sentences now — the all-clear, then what "clear"
+ * covers — so they need to be spaced as a paragraph pair, not run together. */
+.alert-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.alert-empty p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Alerts grouped under their severity. Core already ranks them; grouping is
+ * what makes that ranking visible — and readable to a screen reader, which the
+ * bare aria-hidden 🔴/🟠/🟡 never were. */
+.alert-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.alert-tier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.alert-tier-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* The tier's own colour on the WORD only. The rows keep the app's normal ink:
+ * colouring a whole block of text red is louder than the thing it describes. */
+.alert-tier-critical {
+  color: var(--neg);
+}
+.alert-tier-warning {
+  color: var(--warn);
+}
+.alert-tier-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0 5px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .alert-rows {
   display: flex;
   flex-direction: column;
@@ -629,6 +688,46 @@
  * .travel-step) are already in base.css and reused as-is. Only the ranked
  * ROUTES are new, and they are built from the same parts: a surface-2 card, a
  * hairline border, tokenised spacing. No new colour is introduced here. */
+
+/* The answer card when nothing could be priced. The green left edge means "this
+ * is the winning route"; there is no winning route here, so it is the muted
+ * hairline instead. A reason is not a recommendation. */
+.travel-winner-unpriced {
+  border-left-color: var(--line);
+}
+
+/* Why there is no priced route, and the single control that changes it.
+ * Directly under the answer, because "Ververs voorwaarden" in the module's "…"
+ * corner was invisible (B3) — and because the sentence explaining the problem
+ * and the button fixing it belong to each other. */
+.travel-terms {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.travel-terms p {
+  margin: 0;
+  line-height: 1.5;
+}
+/* Blocked states — nothing a click here can fix (no key on this server, or a
+ * lookup that came back empty). Amber, the app's existing attention token; no
+ * new colour, and never the red of a money problem, because it is not one. */
+.travel-terms-blocked {
+  border-left: 4px solid var(--warn);
+}
+.travel-terms code {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+.travel-terms-action {
+  flex: none;
+}
 
 .travel-why {
   margin-top: var(--sp-3);

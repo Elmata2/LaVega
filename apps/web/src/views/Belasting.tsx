@@ -38,6 +38,9 @@ type BelastingProps = {
   accounts: Account[];
   asOf: string;
   vatSettings: VatSettings[];
+  /** The flows of the scope on screen — the same subset every other view gets.
+   *  Saving is a merge against exactly this list (App's saveScheduledFlows), so
+   *  returning a list built from it can never delete a flow outside the scope. */
   scheduledFlows: ScheduledFlow[];
   busy: boolean;
   onSaveVatSettings: (s: VatSettings[]) => void;

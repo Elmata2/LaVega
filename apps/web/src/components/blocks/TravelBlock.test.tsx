@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
-import TravelBlock, { type TravelBlockProps } from "./TravelBlock";
+import TravelBlock, { termsState, type TravelBlockProps } from "./TravelBlock";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -31,8 +31,8 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
   expect(html).toContain("Op reis");
   expect(html).toContain("Ik reis vanuit NL naar");
   expect(html).toContain("Kies een land");
-  // No destination picked, so there is no plan and no refresh control yet.
-  expect(html).not.toContain("module-controls");
+  // No destination picked, so there is no plan and no terms notice yet.
+  expect(html).not.toContain("travel-terms");
 });
 
 /* --- The block with a destination. Needs a real DOM because the destination,
@@ -106,6 +106,16 @@ function renderWithDestination(overrides: Partial<TravelBlockProps> = {}) {
   const select = container.querySelector("select")!;
   act(() => setNativeValue(select, "US"));
   return container;
+}
+
+/** Re-render the same root with changed props, keeping the block's own state
+ *  (the chosen destination, the session's search log). */
+function rerender(overrides: Partial<TravelBlockProps> = {}) {
+  act(() => {
+    root!.render(
+      <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} {...overrides} />,
+    );
+  });
 }
 
 test("the block leads with the plan's headline — the one answer, in euros", () => {
@@ -203,4 +213,147 @@ test("convertFeePct is correctable inline and fires the same callback shape as f
   expect(Object.keys(convert).sort()).toEqual(Object.keys(fx).sort());
   expect(convert.source).toBe(fx.source);
   expect(convert.agent).toBe(fx.agent);
+});
+
+/* --- L1: never advise an action that cannot work. -------------------------
+ *
+ * The reported bug was "clicking a destination says 'ververs eerst de
+ * voorwaarden'" while the server had no ANTHROPIC_API_KEY, so the refresh it
+ * asked for answered 503. The block receives `aiAvailable`; these pin that it
+ * now uses it, and that the three no-price situations read as three. --- */
+
+// Nothing learned at all: no card is priced, so there is no route to show.
+const noFacts: LearnedFact[] = [];
+
+test("termsState separates a missing key, a lookup never run, and a lookup that found nothing", () => {
+  const plan = planTravel({
+    accounts: travelAccounts, txs: [], rates: [], facts: noFacts, destination: "US", asOf: ASOF,
+  });
+  expect(plan.journeys.some((j) => j.known)).toBe(false); // the situation under test
+
+  expect(termsState(plan, false, false).kind).toBe("no-key");
+  expect(termsState(plan, false, true).kind).toBe("no-key"); // no key beats everything
+  expect(termsState(plan, true, false).kind).toBe("never-searched");
+  expect(termsState(plan, true, true).kind).toBe("searched-empty");
+
+  // A priced plan is "known", and it still reports which cards are missing.
+  const priced = planTravel({
+    accounts: travelAccounts, txs: [], rates: [], facts: travelFacts, destination: "US", asOf: ASOF,
+  });
+  const known = termsState(priced, true, false);
+  expect(known.kind).toBe("known");
+  expect(known.kind === "known" && known.lastUpdated).toBe("2026-08-01");
+
+  // Euro destinations need no terms at all, key or no key.
+  const euro = planTravel({
+    accounts: travelAccounts, txs: [], rates: [], facts: noFacts, destination: "ES", asOf: ASOF,
+  });
+  expect(termsState(euro, false, false).kind).toBe("euro");
+});
+
+test("with no API key the block names the key, not a refresh that cannot work", () => {
+  const c = renderWithDestination({ facts: noFacts, aiAvailable: false });
+
+  expect(c.textContent).toContain("deze server heeft geen AI-sleutel");
+  expect(c.textContent).toContain("ANTHROPIC_API_KEY");
+  // The exact advice that cost him an afternoon.
+  expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
+  // And no button offering it, anywhere in the block.
+  const labels = [...c.querySelectorAll("button")].map((b) => b.textContent ?? "");
+  expect(labels.some((l) => /Ververs|Zoek voorwaarden|Opnieuw zoeken/.test(l))).toBe(false);
+
+  // It points at the correction that DOES work without a key.
+  expect(c.textContent).toContain("vul de percentages zelf in");
+});
+
+test("never looked up says exactly that, and puts the lookup one click away", () => {
+  const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
+
+  expect(c.textContent).toContain("nog nooit opgezocht");
+  expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
+
+  const button = byText("button", "Zoek voorwaarden");
+  expect(button.textContent).toContain("(2)"); // both cards, counted
+  expect(button.className).toContain("btn-primary");
+});
+
+test("a lookup that came back empty is not the same sentence as one never run", () => {
+  const asked: string[] = [];
+  const c = renderWithDestination({
+    facts: noFacts, aiAvailable: true, onRefreshTerms: (d: string) => asked.push(d),
+  });
+  expect(c.textContent).toContain("nog nooit opgezocht");
+
+  click(byText("button", "Zoek voorwaarden"));
+  expect(asked).toEqual(["US"]);
+
+  // The request goes out and comes back with nothing learned.
+  rerender({ facts: noFacts, aiAvailable: true, busy: true });
+  expect(c.textContent).toContain("Bezig met zoeken…");
+  rerender({ facts: noFacts, aiAvailable: true, busy: false });
+
+  expect(c.textContent).toContain("geen bruikbaar tarief terug");
+  expect(c.textContent).not.toContain("nog nooit opgezocht");
+  expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
+  // Retrying is still offered — it is a real thing to try, unlike a refresh
+  // against a server with no key.
+  expect(byText("button", "Opnieuw zoeken")).toBeTruthy();
+});
+
+test("an unpriced answer card is not marked as a winning route", () => {
+  const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
+  expect(c.querySelector(".travel-winner-unpriced")).not.toBeNull();
+  expect(c.querySelector(".travel-journey-best")).toBeNull();
+
+  // ...and the "Wisselen" step does not repeat the impossible advice either.
+  click(byText("button", "Waarom?"));
+  expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
+});
+
+/* --- B3: the control has to be findable. --------------------------------- */
+
+test("the terms control sits in the body under the answer, not in the module header", () => {
+  const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
+
+  const controls = c.querySelector(".module-controls");
+  expect(controls).toBeNull(); // it used to hide here
+
+  const notice = c.querySelector(".travel-terms")!;
+  expect(notice).not.toBeNull();
+  expect(notice.querySelector("button")).not.toBeNull();
+  // The notice explains itself: the button never stands on its own.
+  expect((notice.textContent ?? "").length).toBeGreaterThan(40);
+
+  // It follows the answer directly, so it is read in the same glance.
+  const winner = c.querySelector(".travel-winner")!;
+  expect(winner.nextElementSibling).toBe(notice);
+});
+
+test("a card whose direct leg is priced but whose route is not is reported as a gap, not as known", () => {
+  const c = renderWithDestination({ aiAvailable: true });
+  const notice = c.querySelector(".travel-terms")!;
+
+  // ING's fxFeePct is known, so core's `unknownProviders` is empty and the
+  // block used to be able to say "alles bekend". Its move-it-first route has no
+  // convertFeePct, and that route renders "onbekend" two paragraphs down — so
+  // the notice has to name it rather than claim everything is priced.
+  expect(notice.textContent).toContain("ING betaalpas");
+  // Core's own reason for the gap, repeated rather than guessed at.
+  expect(notice.textContent).toContain("wisselkosten nog onbekend");
+  expect(notice.textContent).not.toContain("Alle routes zijn beprijsd");
+  expect(byText("button", "Zoek voorwaarden").textContent).toContain("(1)");
+});
+
+test("with every route priced the control stays visible as a refresh, with its date", () => {
+  const complete = [
+    ...travelFacts,
+    fact("ING betaalpas", "convertFeePct", "1.2"),
+    fact("ING betaalpas", "transferFreeViaIdeal", "1"),
+  ];
+  const c = renderWithDestination({ aiAvailable: true, facts: complete });
+  const notice = c.querySelector(".travel-terms")!;
+
+  expect(notice.textContent).toContain("Alle routes zijn beprijsd");
+  expect(notice.textContent).toContain("Laatst opgezocht op 1 aug 2026");
+  expect(byText("button", "Ververs voorwaarden")).toBeTruthy();
 });

@@ -29,7 +29,8 @@
   margin-top: 0;
 }
 
-.view-head h2 {
+.view-head h2,
+.view-head h3 {
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.5rem;
@@ -546,4 +547,346 @@
 .field-note strong,
 .field-note code {
   color: var(--ink);
+}
+
+/* A second header inside one card (e.g. "Saldo toevoegen" under "Punten") —
+ * the same rule, one step quieter than the view's own title. */
+.view-head h3 {
+  font-size: 1.2rem;
+}
+
+/* ---------- Rekeningen, gegroepeerd per bank ----------
+ *
+ * NO LOGOS ARE FETCHED. A bank's logo lives on that bank's server, and asking
+ * for it tells that server which banks the owner holds — a privacy leak paid for
+ * a decoration. The bank's identity here is drawn from tokens: a coloured tile
+ * with the bank's initials in the display face, next to its name as a wordmark.
+ * The five tones are the non-semantic tokens only; --pos / --neg / --warn stay
+ * reserved for money in, money out and attention. */
+
+.bank-modes {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.bank-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.bank-group {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+}
+.bank-group-open {
+  border-color: var(--accent);
+}
+
+.bank-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.bank-group-head:hover {
+  background: var(--surface-2);
+}
+
+.bank-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--on-ink);
+  background: var(--ink);
+}
+.bank-mark-a { background: var(--accent); }
+.bank-mark-b { background: var(--ink); }
+.bank-mark-c { background: var(--chart-blue); }
+.bank-mark-d { background: var(--chart-purple); }
+.bank-mark-e { background: var(--chart-teal); }
+/* No bank name to draw a mark from: an empty outline, not a made-up colour. */
+.bank-mark-x {
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+.bank-group-id {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bank-group-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.bank-group-meta {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.bank-group-saldo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bank-group-unknown {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.bank-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.bank-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.bank-group-open .bank-chevron {
+  transform: rotate(180deg);
+}
+
+.bank-group-body {
+  border-top: 1px solid var(--line);
+  padding: var(--sp-4);
+  background: var(--surface-2);
+}
+
+.bank-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.bank-tab {
+  background: var(--surface);
+}
+.bank-tab-type {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.bank-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: var(--sp-4);
+}
+
+.bank-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-4);
+}
+.bank-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.bank-field input,
+.bank-field select {
+  max-width: 100%;
+}
+
+.bank-panel-iban {
+  margin: var(--sp-3) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.bank-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .bank-group-head {
+    flex-wrap: wrap;
+  }
+  .bank-group-toggle {
+    width: 100%;
+  }
+}
+
+/* ---------- Punten ----------
+ *
+ * One card per programme. The number is large because it is the thing you came
+ * for; the date under it is not optional decoration but the only honest frame
+ * around it — LaVega knows when the owner last confirmed the balance and nothing
+ * about it since. */
+
+.punt-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.punt-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  padding: var(--sp-4);
+}
+/* Only a number that is actually over its term gets the attention edge. */
+.punt-card.punt-overdue {
+  border-left-color: var(--warn);
+}
+.punt-card.punt-due {
+  border-left-color: var(--accent);
+}
+
+.punt-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.punt-id {
+  min-width: 0;
+}
+.punt-program {
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.punt-category {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.punt-badge-overdue {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.punt-badge-due {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.punt-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.punt-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.punt-unit {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.punt-asof {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.punt-worth {
+  margin: var(--sp-2) 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.punt-ask {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.punt-ask label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--ink);
+  margin-bottom: var(--sp-2);
+}
+.punt-ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.punt-ask-row .saldo-input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.punt-error {
+  margin: var(--sp-2) 0 0;
+  font-size: 0.82rem;
+  color: var(--neg);
+}
+
+.punt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: auto;
+  padding-top: var(--sp-3);
+}
+.punt-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.punt-interval select {
+  font-size: 0.8rem;
+  padding: 2px 6px;
+}
+
+.punt-form {
+  max-width: 720px;
+}
+@media (max-width: 640px) {
+  .punt-form .stack-form-row {
+    flex-direction: column;
+  }
 }

@@ -10,6 +10,7 @@ import { hasLegacyData } from "./migrate.js";
 import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import { txsForAccounts, flowsForScope, entityOptionsFor, screenOnSwitch, SCOPE_LABELS, type ParkedScreens, type ScopeScreen } from "./scope.js";
+import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import NavBar from "./components/NavBar";
@@ -18,7 +19,6 @@ import { enabledModules as resolveModules, navModules, type ModuleId } from "./c
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
 import Rekeningen from "./views/Rekeningen";
-import Regels from "./views/Regels";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
@@ -40,6 +40,18 @@ const storage = createEncryptedStorage();
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
+/* "rules" has NO route any more: Regels is a setting, so it renders inline in
+ * Profiel and nothing calls setView("rules"). Its branch below is gone. The
+ * union still lists it only because components/TopBar.tsx types its page-title
+ * table as Record<View, string> and still has a "Regels" entry — dropping the
+ * member there is one line in a file this change does not own, and that title
+ * map is a label lookup, not a way to reach the view.
+ *
+ * "koppelingen" and "backup" look equally orphaned and are NOT: Facturen sends
+ * you to Koppelingen ("Koppelingen instellen", Facturen.tsx:480), and the
+ * post-migration screen sends you to Back-up ("Maak nu een back-up",
+ * VaultGate.tsx:284 → onBackup → setView("backup")). Both also render inline in
+ * Profiel; these two are the deep links into them, so their branches stay. */
 export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup" | "profiel";
 
 export default function App() {
@@ -352,12 +364,9 @@ export default function App() {
     await storage.putRules(next);
   }
 
-  // Scheduled flows (incl. VAT set-asides) and per-BV VAT settings are UI-owned
-  // as whole lists (replace-all persistence), same pattern as saveRules.
-  async function saveScheduledFlows(next: ScheduledFlow[]) {
-    setScheduledFlows(next);
-    await storage.putScheduledFlows(next);
-  }
+  // Per-BV VAT settings are UI-owned as a whole list (replace-all persistence),
+  // same pattern as saveRules. Scheduled flows are NOT — see saveScheduledFlows,
+  // which has to merge because every view is handed only its own scope's flows.
   async function saveVatSettings(next: VatSettings[]) {
     setVatSettings(next);
     await storage.putVatSettings(next);
@@ -496,9 +505,15 @@ export default function App() {
   // manual plans) PLUS the flows projected from `expected` invoices. Merging here
   // means invoices show up in Overzicht/Forecast with no extra forecast wiring;
   // paid/cancelled invoices project no flow, so a settled invoice drops out.
+  //
+  // The invoice half is DERIVED, never stored: it is recomputed from `invoices`
+  // on every render, which is why a paid invoice simply stops producing one. It
+  // is hoisted into its own memo because the save path needs the very same list
+  // to be sure it never writes one of these back into the vault.
+  const invoiceFlows = useMemo(() => scheduledInvoiceFlows(invoices), [invoices]);
   const allScheduledFlows = useMemo(
-    () => [...scheduledFlows, ...scheduledInvoiceFlows(invoices)],
-    [scheduledFlows, invoices],
+    () => [...scheduledFlows, ...invoiceFlows],
+    [scheduledFlows, invoiceFlows],
   );
   // Scheduled flows constrained to BOTH scopes, so Overzicht/Forecast never
   // show a company's VAT reservation while you are looking at your private
@@ -508,6 +523,19 @@ export default function App() {
     () => scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
     [allScheduledFlows, scope, entityProfiles, entityScope],
   );
+
+  // Save a view's scheduled flows. Deliberately NOT replace-all like saveRules:
+  // a view only ever receives `scopedScheduledFlows`, so its list says nothing
+  // about the flows outside that scope and writing it whole would delete them.
+  // `mergeScheduledFlows` is given exactly what the view was shown, so a flow it
+  // dropped is a real deletion and a flow it never saw is left alone — and the
+  // invoice-derived flows it hands back are not stored. Declared after the memos
+  // it reads; it only ever runs from an event handler, never during a render.
+  async function saveScheduledFlows(next: ScheduledFlow[]) {
+    const merged = mergeScheduledFlows(scheduledFlows, scopedScheduledFlows, next, invoiceFlows);
+    setScheduledFlows(merged);
+    await storage.putScheduledFlows(merged);
+  }
 
   // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
   // more — the floating chat widget it fed is not rendered while its future is
@@ -882,18 +910,6 @@ export default function App() {
             />
           )}
 
-          {view === "rules" && (
-            <Regels
-              rules={rules}
-              busy={busy}
-              ruleMatch={ruleMatch}
-              onRuleMatchChange={setRuleMatch}
-              ruleCategory={ruleCategory}
-              onRuleCategoryChange={setRuleCategory}
-              onSaveRules={saveRules}
-            />
-          )}
-
           {view === "forecast" && (
             <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} scheduledFlows={scopedScheduledFlows} />
           )}
@@ -922,11 +938,7 @@ export default function App() {
               accounts={scopedAccounts}
               asOf={asOf}
               vatSettings={vatSettings}
-              // Deliberately the UNSCOPED list: Belasting saves flows back through
-              // onSaveScheduledFlows, which persists replace-all, so handing it a
-              // scoped list would delete every flow outside the current half.
-              // Scoping this needs a merge-based save first — see the backlog.
-              scheduledFlows={scheduledFlows}
+              scheduledFlows={scopedScheduledFlows}
               busy={busy}
               onSaveVatSettings={saveVatSettings}
               onSaveScheduledFlows={saveScheduledFlows}

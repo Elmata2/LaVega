@@ -211,6 +211,15 @@ een node die uit de pas loopt laat de testsuite vallen.
 - **PDF-ondersteuning.** De bijlage gaat als `document`-blok naar Claude. Geeft
   *Lees de factuur* een 400 over het documenttype, voeg dan de header
   `anthropic-beta: pdfs-2024-09-25` toe aan die node.
+- **`Invalid base64 data` (opgelost 2026-08-17).** Staat
+  `N8N_DEFAULT_BINARY_DATA_MODE` niet op `default`, dan bewaart n8n de bytes
+  búiten het item: `binary[key].data` bevat dan een verwijzing
+  (`filesystem-v2:...`) en `binary[key].id` is gevuld. Die verwijzing werd als
+  base64 doorgestuurd en Anthropic weigerde hem — terecht. Nu beslist **`b.id`**
+  of de bytes opgehaald moeten worden met `getBinaryDataBuffer`, niet of `data`
+  toevallig leeg is. En wat er dan nog uitkomt wordt gecontroleerd: is het geen
+  base64, dan gaat de bijlage niet mee en staat de reden in `skipped`. Liever
+  weigeren dan iets versturen dat we niet gelezen hebben.
 
 ## Grenzen
 

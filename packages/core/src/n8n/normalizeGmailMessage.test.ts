@@ -176,3 +176,32 @@ test("een onbewerkte payload (Simplify aan) levert een uitleg in plaats van stil
   expect(message.ok).toBe(false);
   expect(message.reason).toContain("Simplify uit");
 });
+
+test("een verwijzing in plaats van base64 wordt geweigerd en gemeld, niet verstuurd", () => {
+  // Wat n8n levert wanneer N8N_DEFAULT_BINARY_DATA_MODE niet op `default` staat:
+  // `data` is dan een pad naar de opslag, geen inhoud. Dit ging eerder
+  // ongecontroleerd mee en Claude antwoordde met "Invalid base64 data".
+  const message = normalizeGmailMessage({ id: "m-ref" }, [
+    {
+      key: "attachment_0",
+      fileName: "factuur.pdf",
+      mimeType: "application/pdf",
+      data: "filesystem-v2:workflows/abc/executions/123/binary_data/xyz",
+    },
+  ]);
+
+  expect(message.pdfs).toEqual([]);
+  expect(message.skipped[0]).toContain("geen base64");
+  expect(message.skipped[0]).toContain("N8N_DEFAULT_BINARY_DATA_MODE");
+});
+
+test("echte base64 komt er gewoon door", () => {
+  const real = Buffer.from("%PDF-1.4 hallo").toString("base64");
+  const message = normalizeGmailMessage({ id: "m-ok" }, [
+    { key: "attachment_0", fileName: "factuur.pdf", mimeType: "application/pdf", data: real },
+  ]);
+
+  expect(message.pdfs).toHaveLength(1);
+  expect(message.pdfs[0].data).toBe(real);
+  expect(message.skipped).toEqual([]);
+});
