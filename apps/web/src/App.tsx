@@ -716,7 +716,27 @@ export default function App() {
   // Ask the travel agent for the current terms of the providers whose terms we
   // don't know yet. Only provider NAMES and a country pair leave the browser —
   // the ranking that needs his balances already happened locally.
+  /** Re-ask the server whether it has an AI key. The mount-time check runs once
+   *  with empty deps, so a tab opened before the key was configured keeps
+   *  reporting "deze server heeft geen AI-sleutel" forever — which is a true
+   *  sentence about a stale fact, and indistinguishable from a broken feature.
+   *  Re-checking when he actually reaches for AI costs one tiny GET. */
+  async function recheckLlm(): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/status`);
+      if (!res.ok) return llmConfigured;
+      const data = (await res.json()) as { configured?: boolean };
+      setLlmConfigured(!!data.configured);
+      return !!data.configured;
+    } catch {
+      return llmConfigured; // offline: keep what we knew, do not claim worse
+    }
+  }
+
   async function handleRefreshTravelTerms(destination: string) {
+    // He may have added the key since this tab loaded. Ask again before telling
+    // him it cannot be done.
+    await recheckLlm();
     setBusy(true);
     try {
       const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
