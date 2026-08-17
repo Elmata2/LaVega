@@ -356,3 +356,34 @@ His verdict on round 1: "major, major improvement". What follows is the de-dupli
   ask once, then compute.
 - **Enable Banking multi-account** after the MVP, not before.
 - Disclaimers and terms belong at launch, not in the working screen.
+
+## Decided 2026-08-17 — LaVega configures n8n itself
+
+His choice: paste the n8n base URL and an n8n API key once, and let LaVega do the rest. What that
+removes: exporting and importing the JSON, generating a token, creating the Header Auth credential,
+copying the webhook URL into Koppelingen, and pressing "Ophalen".
+
+**What can never be automated, in any option:** attaching the Gmail credential. Google's consent is
+interactive by design, and n8n's public API deliberately does not expose a way to LIST credentials,
+so LaVega cannot discover the one he already made and bind it. That stays a single manual step,
+done once, and the UI must say so plainly rather than appearing to fail.
+
+**The prerequisite he must set, and the reason this might not work at all:** n8n's REST API sends no
+CORS headers by default, so a browser cannot call it cross-origin. On his own instance that is two
+variables:
+
+    N8N_DEFAULT_CORS=true
+    N8N_CORS_ALLOW_ORIGIN=https://lavega.dev,http://localhost:5174
+
+Keeping the call in the BROWSER is what preserves the posture: the n8n API key never touches the
+LaVega server. Proxying it server-side would work around CORS but would park a key that can create
+and modify workflows on a shared host — a worse trade than the manual paste it replaces.
+
+So: build it browser-direct, and when CORS blocks it, **name those two variables in the error**
+rather than reporting a generic failure. The manual paste stays as the fallback and must keep
+working — it is the path that needs nothing from his n8n at all.
+
+Shape: find-or-create the workflow by name → create the Header Auth credential with a generated
+token → activate → read the production webhook URL back → store URL and token locally → pull the
+queue on open and on a timer. The workflow JSON ships inside the web bundle, so the repo stays the
+source of truth for what gets pushed.
