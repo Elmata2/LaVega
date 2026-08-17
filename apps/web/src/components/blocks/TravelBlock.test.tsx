@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
-import TravelBlock, { termsState, type TravelBlockProps } from "./TravelBlock";
+import TravelBlock, { termsState, type TravelBlockProps, figureAge } from "./TravelBlock";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -356,4 +356,12 @@ test("with every route priced the control stays visible as a refresh, with its d
   expect(notice.textContent).toContain("Alle routes zijn beprijsd");
   expect(notice.textContent).toContain("Laatst opgezocht op 1 aug 2026");
   expect(byText("button", "Ververs voorwaarden")).toBeTruthy();
+});
+
+test("a figure is dated by how old it is, so a stale one cannot pass as fresh", () => {
+  expect(figureAge("2026-08-17", "2026-08-17")).toBe("vandaag opgezocht");
+  expect(figureAge("2026-08-16", "2026-08-17")).toBe("gisteren opgezocht");
+  expect(figureAge("2026-08-13", "2026-08-17")).toContain("4 dagen geleden");
+  // bank.nl's own stated check date, seven months back — it must READ old.
+  expect(figureAge("2026-01-15", "2026-08-17")).toContain("maanden geleden");
 });

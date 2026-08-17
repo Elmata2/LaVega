@@ -44,6 +44,10 @@ export type ProviderTerms = {
   pointsPerEuro?: number;
   transferFreeViaIdeal?: number;
   note?: string;
+  /** When the SOURCE says the figure was last checked. bank.nl stamps its rows;
+   *  an agent lookup states nothing because it is as of now. Used to date the
+   *  fact by when it was TRUE rather than when we received it. */
+  checkedAt?: string;
 };
 
 /** Ask the travel agent for the CURRENT terms of the providers you bank with.

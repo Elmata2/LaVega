@@ -746,9 +746,16 @@ export default function App() {
 
       const learned: LearnedFact[] = [];
       for (const t of terms) {
+        // Date the figure by WHEN IT WAS TRUE, not when we happened to receive
+        // it. A comparison table states its own last-checked date (bank.nl says
+        // 2026-01-15); stamping that as "today" would tell him a seven-month-old
+        // koersopslag was found this morning — the same lie the precedence
+        // ladder was just fixed to stop believing. No stated date means an agent
+        // lookup, which is as of now.
+        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
         const put = (key: string, value: number | undefined) => {
           if (value === undefined) return; // unverified stays unknown, never 0
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: today, note: t.note }));
+          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
         };
         put("fxFeePct", t.fxFeePct);
         put("convertFeePct", t.convertFeePct);

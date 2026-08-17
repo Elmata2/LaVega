@@ -358,6 +358,20 @@ function TermsNotice({
   );
 }
 
+/** How old a figure is, in words, because a bare date does not tell you whether
+ *  to trust it. "vandaag opgezocht" and "gecontroleerd 15 jan" are different
+ *  claims, and a koersopslag from seven months ago should look seven months old
+ *  on screen rather than hide behind a formatted date. */
+export function figureAge(updatedAt: string, asOf: string): string {
+  const days = Math.round((Date.parse(asOf) - Date.parse(updatedAt)) / 86_400_000);
+  if (!Number.isFinite(days)) return `opgezocht ${updatedAt}`;
+  if (days <= 0) return "vandaag opgezocht";
+  if (days === 1) return "gisteren opgezocht";
+  if (days < 14) return `${days} dagen geleden opgezocht`;
+  if (days < 60) return `${Math.round(days / 7)} weken geleden gecontroleerd`;
+  return `${Math.round(days / 30)} maanden geleden gecontroleerd`;
+}
+
 export default function TravelBlock({
   accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onCorrectFact,
 }: TravelBlockProps) {
@@ -553,7 +567,7 @@ export default function TravelBlock({
                               )}
                               {option.feeSource === "user" && <span className="eyebrow"> · door jou ingesteld</span>}
                               {option.feeSource === "agent" && option.feeUpdatedAt && (
-                                <span className="eyebrow"> · opgezocht {option.feeUpdatedAt}</span>
+                                <span className="eyebrow"> · {figureAge(option.feeUpdatedAt, asOf)}</span>
                               )}
                             </span>
                             <span className="travel-leg-cost">

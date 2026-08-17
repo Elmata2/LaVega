@@ -1,13 +1,16 @@
 {
-  "name": "LaVega — kaartvoorwaarden",
+  "name": "LaVega — kaartvoorwaarden warmhouden",
   "nodes": [
     {
       "parameters": {},
-      "id": "a1000000-0000-4000-8000-000000000001",
+      "id": "c1000000-0000-4000-8000-000000000001",
       "name": "Handmatig starten",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-620, 120]
+      "position": [
+        -620,
+        60
+      ]
     },
     {
       "parameters": {
@@ -20,151 +23,94 @@
           ]
         }
       },
-      "id": "a1000000-0000-4000-8000-000000000002",
+      "id": "c1000000-0000-4000-8000-000000000002",
       "name": "Elke dag 06:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-620, 300]
+      "position": [
+        -620,
+        240
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// De aanbieders waarvan LaVega de voorwaarden ophaalt van hun EIGEN tariefpagina.\n//\n// ALLEEN bronnen die een gewone HTTP-fetch echt toelaten staan hier. Gemeten op\n// 2026-08-16, met en zonder browser-User-Agent:\n//   ABN AMRO betaal/creditcard  200  (LUKT ALLEEN met de User-Agent-header die\n//                                     op de node ernaast staat; zonder die\n//                                     header loopt de verbinding in een timeout)\n//   bunq                        200\n//   Wise                        200  (gemeten 2026-08-16)\n//   Knab                        200  (gemeten 2026-08-16)\n//   Rabobank                    403\n//   N26 / Trade Republic        404  URL bestaat niet\n//   Revolut                     403  \"Just a quick security check\" (Cloudflare)\n//   Trading 212                 403  Cloudflare\n//   ING (beide)                 verbinding verbroken, ook via HTTP/1.1 (Akamai)\n//   American Express Gold       200  (de oude URL was verhuisd; deze klopt)\n//\n// Die vier zijn niet met een header te repareren: het is een bot-check, geen\n// opmaakprobleem. Een reader-proxy (r.jina.ai) werd zelf ook geblokkeerd.\n// Ze worden daarom overgelaten aan de reis-agent in LaVega, die ze met web\n// search WEL vindt (gemeten: Revolut 0%, ING creditcard 2%, T212 0%).\n//\n// Dus: deze workflow doet wat een fetch betrouwbaar kan, de agent doet de rest.\n// Zet een aanbieder hier pas bij als een kale fetch zijn pagina teruggeeft.\n//\n// `provider` MOET exact overeenkomen met wat LaVega toont: bank + \"betaalpas\"\n// of \"creditcard\" (zie productOf() in packages/core/src/travel.ts).\nreturn [\n  { json: { provider: 'ABN AMRO betaalpas',  url: 'https://www.abnamro.nl/nl/prive/betalen/in-het-buitenland/index.html' } },\n  { json: { provider: 'ABN AMRO creditcard', url: 'https://www.abnamro.nl/nl/prive/creditcards/tarieven.html' } },\n  { json: { provider: 'bunq betaalpas',      url: 'https://www.bunq.com/nl/pricing' } },\n  { json: { provider: 'Wise betaalpas',      url: 'https://wise.com/nl/pricing/' } },\n  { json: { provider: 'Knab betaalpas',      url: 'https://www.knab.nl/tarieven' } },\n  // American Express: de oude URL gaf 404, die pagina was verhuisd. Deze werkt\n  // (gemeten 2026-08-16, 200). Let op de naam: LaVega vraagt vandaag om\n  // \"American Express creditcard\", want productOf() kent geen kaartvariant. De\n  // eigenaar heeft de GOLD CARD, dus dat is de pagina die hier staat. Krijgt hij\n  // er een tweede Amex bij, dan moet LaVega eerst variant-namen leren; nu zou\n  // een tweede kaart deze cijfers stil overschrijven.\n  { json: { provider: 'American Express creditcard', url: 'https://www.americanexpress.com/nl-nl/creditcard/gold-card/' } },\n];"
+        "jsCode": "// Wat dit oplevert en waarom het zo weinig is.\n//\n// De vorige versie haalde per product een vaste tarievenpagina op en liet Claude\n// die lezen. Dat is op 2026-08-16/17 gemeten en het werkte niet: Amex' URL gaf\n// 404, ABN's pagina bleek marketingtekst, ABN's tarievenpagina een lege\n// JS-schil, Revolut en Trading 212 antwoorden 403 achter Cloudflare, ING\n// verbreekt de verbinding, en Knabs pagina met meerdere producten leverde de\n// CREDITCARD (2%) terwijl om de betaalpas was gevraagd — die 1,4% kost. Eén\n// verkeerd getal is erger dan geen getal, want een verkeerd getal wordt gebruikt.\n//\n// LaVega's eigen /api/agent/travel-facts doet het wel goed, en die code draagt\n// twee dingen die tijd hebben gekost om te leren: tool_choice moet AUTO zijn\n// (geforceerd antwoordt het model vóór het één keer heeft gezocht, gemeten: nul\n// zoekopdrachten, lege velden), en het antwoord wordt vastgepind op het product\n// waarnaar gevraagd is. Dat hier namaken betekent die twee lessen kopiëren en\n// daarna uit elkaar laten groeien.\n//\n// Dus doet deze workflow nog maar één ding: hij TIKT het endpoint aan. Dat\n// antwoordt meteen met wat bekend is en zoekt de gaten op de achtergrond op. Eén\n// keer per dag betekent: als iemand het reisblok opent, staat het antwoord er al.\n// Dat haalt de enige echte zwakte van de agent weg — de wachttijd — zonder aan\n// zijn nauwkeurigheid te komen.\n\n// Welke producten warm gehouden worden. Publieke productnamen, verder niets:\n// er gaat geen enkel gegeven over de rekeningen van de eigenaar doorheen.\n//\n// De namen MOETEN overeenkomen met wat productOf() in packages/core/src/travel.ts\n// oplevert — bank + \"betaalpas\" of \"creditcard\" — anders komt het antwoord onder\n// een sleutel te staan die LaVega nooit opvraagt.\nconst PRODUCTS = [\n  'ING betaalpas', 'ING creditcard',\n  'ABN AMRO betaalpas', 'ABN AMRO creditcard',\n  'Rabobank betaalpas', 'Rabobank creditcard',\n  'Knab betaalpas', 'bunq betaalpas',\n  'Revolut betaalpas', 'Wise betaalpas',\n  'Trading 212 betaalpas', 'American Express creditcard',\n];\n\n// Bestemmingen waarvoor de voorwaarden vooraf worden opgehaald. Tarieven\n// verschillen per markt, dus de cache is per valuta.\nreturn [\n  { json: { homeCountry: 'NL', destination: 'US', currency: 'USD', providers: PRODUCTS, knownFacts: [] } },\n  { json: { homeCountry: 'NL', destination: 'GB', currency: 'GBP', providers: PRODUCTS, knownFacts: [] } },\n];"
       },
-      "id": "a1000000-0000-4000-8000-000000000003",
-      "name": "Aanbieders + tariefpagina",
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "name": "Producten + bestemmingen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-380, 200]
+      "position": [
+        -380,
+        150
+      ]
     },
     {
       "parameters": {
-        "url": "={{ $json.url }}",
+        "method": "POST",
+        "url": "https://lavega.dev/api/agent/travel-facts",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" },
-            { "name": "Accept-Language", "value": "nl-NL,nl;q=0.9,en;q=0.8" },
-            { "name": "Accept", "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-          ]
-        },
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true,
-              "responseFormat": "text"
-            }
-          },
-          "timeout": 30000
-        }
-      },
-      "id": "a1000000-0000-4000-8000-000000000004",
-      "name": "Haal tariefpagina op",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [-140, 200],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// HTML -> platte tekst. Het model hoeft geen opmaak te zien, en een kale\n// pagina scheelt tokens en tijd. Alles boven 18k tekens gaat eraf: tarieven\n// staan vrijwel altijd in het eerste deel, en een lange staart aan footer-\n// en cookieteksten helpt niet.\nconst out = [];\nfor (const item of $input.all()) {\n  const provider = item.json.provider;\n  const url = item.json.url;\n  const raw = typeof item.json.data === 'string' ? item.json.data : '';\n  if (!raw) { out.push({ json: { provider, url, text: '', ok: false } }); continue; }\n  const text = raw\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 18000);\n  out.push({ json: { provider, url, text, ok: text.length > 200 } });\n}\nreturn out;"
-      },
-      "id": "a1000000-0000-4000-8000-000000000005",
-      "name": "HTML naar tekst",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [100, 200]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "version": 2 },
-          "conditions": [
             {
-              "leftValue": "={{ $json.ok }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "name": "content-type",
+              "value": "application/json"
             }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "a1000000-0000-4000-8000-000000000006",
-      "name": "Pagina gelukt?",
-      "type": "n8n-nodes-base.filter",
-      "typeVersion": 2.2,
-      "position": [320, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.FT_ANTHROPIC_KEY || $env.ANTHROPIC_API_KEY }}" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-5',\n  max_tokens: 1024,\n  system: 'Je leest de tarievenpagina van een betaalproduct en haalt er cijfers uit. Antwoord UITSLUITEND met JSON, zonder uitleg eromheen: {\"fxFeePct\": number|null, \"cashbackPct\": number|null, \"pointsPerEuro\": number|null, \"transferFreeViaIdeal\": 0|1|null, \"note\": string}. fxFeePct = de koersopslag in procenten bovenop de interbancaire koers bij een betaling in vreemde valuta met DIT product. Laat een veld null als de pagina het niet vermeldt — verzin nooit een getal, een verkeerd tarief stuurt iemand met de verkeerde kaart op reis. Zet uitzonderingen (weekendtoeslag, gratis-limiet per maand, kosten voor contant opnemen) in note, niet in de getallen.',\n  messages: [{ role: 'user', content: 'Product: ' + $json.provider + '\\nBron: ' + $json.url + '\\n\\n' + $json.text }]\n}) }}",
-        "options": { "timeout": 120000 }
-      },
-      "id": "a1000000-0000-4000-8000-000000000007",
-      "name": "Lees tarieven uit de pagina",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [540, 200],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Het antwoord van het model naar de vorm die LaVega verwacht.\n//\n// De productnaam zit NIET in het antwoord van Claude, dus die halen we op uit\n// de filter-node ervoor: die stuurt 1-op-1 in dezelfde volgorde door, zodat\n// item i hier hoort bij aanbieder i daar. (Bewust de filter-node en niet\n// \"HTML naar tekst\", want de filter gooit mislukte pagina's eruit en dan\n// lopen de posities niet meer gelijk.)\n// Een mislukte modelaanroep mag NIET stil als \"0 facturen\" eindigen.\n//\n// De HTTP-node staat op continueRegularOutput, zodat \u00e9\u00e9n rotte mail de run niet\n// sloopt. Dat is goed, maar het verbergt ook een kapotte sleutel: dan komt elke\n// aanroep als fout binnen, levert dit blok netjes een lege lijst, en meldt n8n\n// een geslaagde run. Precies dat is gebeurd - \"This organization has been\n// disabled\" verscheen nergens in de uitkomst.\n//\n// Dus: fouten tellen, en als ALLES faalde de run alsnog rood maken.\nconst failed = (j) => !!(j && (j.error || j.type === 'error'));\nconst problems = [];\nfor (const it of $input.all()) {\n  const j = it.json || {};\n  if (!failed(j)) continue;\n  const e = j.error || j;\n  problems.push(String((e && e.error && e.error.message) || (e && e.message) || 'onbekende fout').slice(0, 300));\n}\nif (problems.length > 0 && problems.length === $input.all().length) {\n  throw new Error('Alle modelaanroepen mislukten: ' + problems[0]);\n}\n\nconst sources = $('Pagina gelukt?').all();\nconst items = $input.all();\nconst rows = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const name = sources[i]?.json?.provider;\n  if (!name) continue;\n  const text = items[i]?.json?.content?.[0]?.text ?? '';\n  const match = typeof text === 'string' ? text.match(/\\{[\\s\\S]*\\}/) : null;\n  if (!match) continue;\n  let parsed;\n  try { parsed = JSON.parse(match[0]); } catch (e) { continue; }\n\n  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : undefined);\n  const row = {\n    provider: name,\n    fxFeePct: num(parsed.fxFeePct),\n    cashbackPct: num(parsed.cashbackPct),\n    pointsPerEuro: num(parsed.pointsPerEuro),\n    transferFreeViaIdeal: parsed.transferFreeViaIdeal === 1 ? 1 : parsed.transferFreeViaIdeal === 0 ? 0 : undefined,\n    note: typeof parsed.note === 'string' ? parsed.note.slice(0, 900) : undefined,\n  };\n  // Zonder bruikbaar getal weigert LaVega de rij toch \u2014 \"onbekend\" is een\n  // eerlijker uitkomst dan een gok, en dan kun jij hem zelf invullen.\n  const usable = ['fxFeePct', 'cashbackPct', 'pointsPerEuro', 'transferFreeViaIdeal'].some((k) => row[k] !== undefined);\n  if (usable) rows.push(row);\n}\n\nreturn [{ json: { homeCountry: 'NL', currency: 'USD', terms: rows } }];"
-      },
-      "id": "a1000000-0000-4000-8000-000000000008",
-      "name": "Naar LaVega-vorm",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [760, 200],
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "notes": "Zet hier `currency` op de valuta van je bestemming. USD = Verenigde Staten."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://lavega.dev/api/card-terms/ingest",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-ingest-token", "value": "={{ $env.LAVEGA_INGEST_TOKEN }}" },
-            { "name": "content-type", "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
-      "id": "a1000000-0000-4000-8000-000000000009",
-      "name": "Stuur naar LaVega",
+      "id": "c1000000-0000-4000-8000-000000000004",
+      "name": "Warm de cache",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [980, 200]
+      "position": [
+        -140,
+        150
+      ]
     }
   ],
   "connections": {
-    "Handmatig starten": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
-    "Elke dag 06:00": { "main": [[{ "node": "Aanbieders + tariefpagina", "type": "main", "index": 0 }]] },
-    "Aanbieders + tariefpagina": { "main": [[{ "node": "Haal tariefpagina op", "type": "main", "index": 0 }]] },
-    "Haal tariefpagina op": { "main": [[{ "node": "HTML naar tekst", "type": "main", "index": 0 }]] },
-    "HTML naar tekst": { "main": [[{ "node": "Pagina gelukt?", "type": "main", "index": 0 }]] },
-    "Pagina gelukt?": { "main": [[{ "node": "Lees tarieven uit de pagina", "type": "main", "index": 0 }]] },
-    "Lees tarieven uit de pagina": { "main": [[{ "node": "Naar LaVega-vorm", "type": "main", "index": 0 }]] },
-    "Naar LaVega-vorm": { "main": [[{ "node": "Stuur naar LaVega", "type": "main", "index": 0 }]] }
+    "Handmatig starten": {
+      "main": [
+        [
+          {
+            "node": "Producten + bestemmingen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elke dag 06:00": {
+      "main": [
+        [
+          {
+            "node": "Producten + bestemmingen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Producten + bestemmingen": {
+      "main": [
+        [
+          {
+            "node": "Warm de cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
-  "pinData": {}
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
