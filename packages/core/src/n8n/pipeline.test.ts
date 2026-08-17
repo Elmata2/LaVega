@@ -5,6 +5,8 @@ import { noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaV
 import { addToQueue } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
 import { RAW_HTML_ONLY, RAW_LINK_ONLY, RAW_NO_BODY, RAW_PDF_INVOICE } from "./__fixtures__/rawMail.js";
+import { normalizeInboundMail } from "./normalizeInboundMail.js";
+import { INBOUND_STORAGE_REFERENCE, INBOUND_WITH_PDF } from "./__fixtures__/inboundPayload.js";
 
 /* Eén droogloop van de hele workflow op vier echte mailvormen, met het model
  * vervangen door een vast antwoord. Wat dit bewijst: de vier vormen komen alle
@@ -123,6 +125,59 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
     expect("amount" in notice).toBe(false);
     expect("amountCents" in notice).toBe(false);
   }
+});
+
+test("een doorgestuurde mail loopt door precies hetzelfde pad en komt met herkomst in de rij", () => {
+  const message = normalizeInboundMail(INBOUND_WITH_PDF);
+  expect(message.ok).toBe(true);
+
+  // Dezelfde twee nodes als bij Gmail — er is geen tweede pad.
+  const request = buildClaudeRequest(message);
+  const size = requestSize(request);
+  expect(size.documents).toBe(1);
+  expect(size.pdfBytes).toBeGreaterThan(100);
+
+  const entry = toQueueEntry(message, {
+    isInvoice: true,
+    kind: "invoice",
+    invoiceNumber: "2026-0207",
+    amount: 968,
+    currency: "EUR",
+    counterparty: "Van Dijk Installatietechniek BV",
+    direction: "expense",
+  });
+
+  const store: Record<string, unknown> = {};
+  const result = addToQueue(
+    store,
+    { invoices: [entry.invoice], notices: [], processedIds: [message.messageId] } as never,
+    "2026-08-17T09:00:00.000Z",
+  );
+  expect(result.addedInvoices).toBe(1);
+
+  const row = (store.queue as Record<string, unknown>[])[0];
+  expect(row).toMatchObject({
+    source: "inbound-mail",
+    amountCents: 96800,
+    from: "Van Dijk Installatietechniek <facturen@vandijk-installatie.nl>",
+    deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+    queueKey: "alexander-7f3a",
+    // SPF stond op pass, DKIM en DMARC op none. Dat is 'passed' — en dat betekent
+    // alleen dat het domein klopte, niet dat de factuur echt is.
+    senderCheck: "passed",
+  });
+});
+
+test("een doorgestuurde mail zonder leesbare inhoud wordt een melding, geen stilte", () => {
+  const message = normalizeInboundMail(INBOUND_STORAGE_REFERENCE);
+  expect(message.ok).toBe(false);
+  const notice = noticeForUnreadable({ ...message, reason: message.reason });
+  expect(notice.kind).toBe("unreadable");
+  expect(notice.reason).toContain("de bijlage ging niet mee");
+  expect(notice.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
+  expect(notice.senderCheck).toBe("failed");
+  // Geen Gmail-link, want dit is geen Gmail-bericht.
+  expect(notice.mailUrl).toBe("");
 });
 
 test("een tweede run op dezelfde mailbox stuurt niets opnieuw naar het model", () => {

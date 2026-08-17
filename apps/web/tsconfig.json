@@ -4,7 +4,13 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "noEmit": true
+    "noEmit": true,
+    // The n8n workflow that LaVega pushes is imported straight from
+    // docs/n8n/lavega-invoices.json (see src/n8n-provision.ts) so the repo keeps
+    // ONE copy of it. Vite/Rollup bundle a JSON import natively; TypeScript
+    // needs this flag to resolve it, and `include` needs the file itself because
+    // it lives outside src/.
+    "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src", "../../docs/n8n/lavega-invoices.json"]
 }

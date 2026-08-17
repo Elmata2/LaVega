@@ -134,6 +134,101 @@ export function setN8nInvoiceToken(token: string): void {
   }
 }
 
+/* --- The owner's own n8n API access (see n8n-provision.ts).
+ * The base URL of HIS n8n and an API key for it. Same rule as the two above and
+ * for the same reason, one notch sharper: this key can create and modify
+ * workflows. It stays in THIS browser, it is never put in the vault (a back-up
+ * file would then carry it), and it is never sent to the LaVega server — a
+ * server-side proxy would work around CORS but would park a workflow-modifying
+ * key on a shared host. --- */
+
+const N8N_BASE_KEY = "lavega.n8nBaseUrl";
+const N8N_API_KEY_KEY = "lavega.n8nApiKey";
+
+export function getN8nBaseUrl(): string {
+  try {
+    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_BASE_KEY)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setN8nBaseUrl(url: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_BASE_KEY, String(url ?? "").trim());
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+export function getN8nApiKey(): string {
+  try {
+    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_API_KEY_KEY)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setN8nApiKey(key: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_API_KEY_KEY, String(key ?? "").trim());
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+/* --- Het doorstuuradres voor facturen (docs/superpowers/specs/
+ * 2026-08-17-invoice-forwarding-address-design.md).
+ *
+ * Cloudflare routeert het HELE domein als catch-all, dus een nieuw adres kost
+ * geen enkele instelling ergens: het lokale deel IS de wachtrijsleutel. Daarom
+ * wordt hij hier één keer verzonnen en daarna nooit meer — een adres dat
+ * verandert is een adres waar post naartoe blijft gaan die niemand meer leest.
+ * --- */
+
+export const INVOICE_FORWARD_DOMAIN = "invoices.lavega.dev";
+const FORWARD_KEY = "lavega.invoiceForwardAddress";
+/** Zo veel willekeur dat niemand hem kan raden, kort genoeg om over te typen. */
+const FORWARD_RANDOM_CHARS = 10;
+const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: dit adres wordt overgetikt
+const FORWARD_PATTERN = new RegExp(`^lavega-[a-z0-9]{4,32}@${INVOICE_FORWARD_DOMAIN.replace(/\./g, "\\.")}$`);
+
+/** Het opgeslagen adres, of "" als er nog nooit een gemaakt is. "" betekent
+ *  "nog geen", nooit "gebruik maar iets" — er wordt hier niets verzonnen. */
+export function getInvoiceForwardAddress(): string {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(FORWARD_KEY);
+    return raw && FORWARD_PATTERN.test(raw) ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
+function randomLocalSuffix(): string {
+  const c = globalThis.crypto;
+  if (!c || typeof c.getRandomValues !== "function") {
+    throw new Error("Deze browser heeft geen crypto.getRandomValues — LaVega weigert een raadbaar adres te maken.");
+  }
+  const buf = new Uint8Array(FORWARD_RANDOM_CHARS);
+  c.getRandomValues(buf);
+  return Array.from(buf, (b) => FORWARD_ALPHABET[b % FORWARD_ALPHABET.length]).join("");
+}
+
+/** Het adres van deze kluis-browser: bestaat hij al, dan komt precies díe terug.
+ *  `makeSuffix` is injecteerbaar zodat een test kan bewijzen dat een tweede
+ *  aanroep met ándere willekeur tóch hetzelfde adres oplevert. */
+export function ensureInvoiceForwardAddress(makeSuffix: () => string = randomLocalSuffix): string {
+  const existing = getInvoiceForwardAddress();
+  if (existing) return existing;
+  const address = `lavega-${makeSuffix()}@${INVOICE_FORWARD_DOMAIN}`;
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(FORWARD_KEY, address);
+  } catch {
+    /* non-fatal for a preference */
+  }
+  return address;
+}
+
 const N8N_HANDLED_KEY = "lavega.n8nHandledMessageIds";
 /** Keep the newest N decided messageIds. The n8n queue holds at most 200 and
  *  covers 7 days of mail, so this window is far wider than anything that can

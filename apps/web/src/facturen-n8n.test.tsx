@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { act, useState } from "react";
+import { StrictMode, act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Invoice } from "@lavega/core";
-import Facturen from "./views/Facturen";
+import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
 import { getHandledInvoiceMessageIds, setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
 
@@ -310,4 +310,153 @@ test("Gedaan files the notice as handled so the hourly re-scan can't put it back
   // Tweede ophaal met dezelfde melding: hij komt niet terug.
   const again = await fetchOnce(serving([{ invoices: [], notices: [NOTICE] }]));
   expect(again.querySelector('[data-noticeid="msg-kpn"]')).toBeNull();
+});
+
+/* ── Automatisch ophalen ────────────────────────────────────────────────────
+ *
+ * De knop hoeft niet meer. Wat WEL moet blijven kloppen, en waarom het hier
+ * getest wordt: de webhook leegt zijn wachtrij terwijl hij antwoordt, dus een
+ * opgehaalde regel is de enige kopie die bestaat. Twee gelijktijdige verzoeken
+ * zouden één wachtrij over twee antwoorden verdelen, en een ophaalactie die
+ * begon vóór een beslissing zou die beslissing kunnen terugdraaien. */
+
+/** A fetch whose response the test decides when to deliver, so a second caller
+ *  can arrive while the first is still in flight. */
+function deferredFetch() {
+  let deliver: (body: unknown) => void = () => {};
+  const pending = new Promise<unknown>((resolve) => {
+    deliver = resolve;
+  });
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls++;
+    const body = await pending;
+    return { ok: true, status: 200, json: async () => body };
+  }) as unknown as typeof fetch;
+  return { fetchImpl, calls: () => calls, deliver: (body: unknown) => deliver(body) };
+}
+
+/** Serves the first body at once and then hands over to a deferred second call —
+ *  the shape needed to decide on a row WHILE a later pull is in flight. */
+function servingThenDeferred(first: unknown) {
+  let deliver: (body: unknown) => void = () => {};
+  const later = new Promise<unknown>((resolve) => {
+    deliver = resolve;
+  });
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls++;
+    const body = calls === 1 ? first : await later;
+    return { ok: true, status: 200, json: async () => body };
+  }) as unknown as typeof fetch;
+  return { fetchImpl, calls: () => calls, deliver: (body: unknown) => deliver(body) };
+}
+
+function renderStrict(fetchImpl: typeof fetch, invoices: Invoice[] = []) {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <StrictMode>
+        <Harness fetchImpl={fetchImpl} invoices={invoices} />
+      </StrictMode>,
+    );
+  });
+  return container;
+}
+
+async function flush() {
+  await act(async () => {});
+}
+
+test("de wachtrij wordt opgehaald zodra Facturen opent — zonder dat hij iets indrukt", async () => {
+  const c = render(serving([{ invoices: [ROW] }]));
+  await flush();
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  expect(c.textContent).toContain("1 factuur opgehaald");
+  expect(saved).toHaveLength(0); // nog steeds niets geboekt: het blijft een voorstel
+});
+
+test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij intussen op de knop drukt", async () => {
+  const { fetchImpl, calls, deliver } = deferredFetch();
+  const c = renderStrict(fetchImpl);
+  // React 18 monteert een StrictMode-boom twee keer. Twee GET's zouden hier één
+  // wachtrij over twee antwoorden verdelen.
+  expect(calls()).toBe(1);
+
+  // En een druk op de knop terwijl er al één loopt, start er geen tweede: hij
+  // krijgt hetzelfde verzoek terug.
+  click(byText("button", "Ophalen uit n8n"));
+  expect(calls()).toBe(1);
+
+  deliver({ invoices: [ROW] });
+  await flush();
+  expect(calls()).toBe(1);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+});
+
+test("zonder URL en token wordt er bij het openen niets opgehaald", async () => {
+  localStorage.clear();
+  const { fetchImpl, calls } = deferredFetch();
+  render(fetchImpl);
+  await flush();
+  // Geen verzoek, en dus ook geen rode melding op een scherm waar hij hem niet
+  // kan oplossen — de knop "Koppelingen instellen" staat er wel.
+  expect(calls()).toBe(0);
+});
+
+test("de timer haalt opnieuw op zolang het scherm open staat, en stopt als het sluit", async () => {
+  vi.useFakeTimers();
+  try {
+    const c = render(serving([{ invoices: [] }, { invoices: [ROW] }]));
+    await act(async () => {});
+    expect(c.textContent).toContain("De wachtrij in n8n was leeg");
+
+    await act(async () => {
+      vi.advanceTimersByTime(PULL_INTERVAL_MS);
+    });
+    await act(async () => {});
+    expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("een regel die hij afhandelt terwijl er een ophaalactie loopt, komt niet terug", async () => {
+  // ROW komt binnen bij het openen. Daarna start een tweede ophaalactie die pas
+  // later antwoordt; ondertussen verwerpt hij ROW. Het antwoord van die tweede
+  // actie mag ROW niet terugzetten — dat zou een beslissing ongedaan maken.
+  const { fetchImpl, deliver } = servingThenDeferred({ invoices: [ROW] });
+  const c = render(fetchImpl);
+  await flush();
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+
+  await clickAsync(byText("button", "Ophalen uit n8n")); // start #2, blijft hangen
+  click(byText(".n8n-row button", "Verwerpen"));
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+
+  const OTHER = { ...ROW, messageId: "msg-2", counterparty: "Andere BV" };
+  deliver({ invoices: [OTHER] });
+  await flush();
+
+  const rows = [...c.querySelectorAll(".n8n-row")].map((r) => r.getAttribute("data-messageid"));
+  expect(rows).toEqual(["msg-2"]); // de nieuwe regel wél, de verworpen niet
+  expect(saved).toHaveLength(0);
+});
+
+test("een regel die hij bevestigt terwijl er een ophaalactie loopt, wordt niet opnieuw aangeboden", async () => {
+  const { fetchImpl, deliver } = servingThenDeferred({ invoices: [ROW] });
+  const c = render(fetchImpl);
+  await flush();
+
+  await clickAsync(byText("button", "Ophalen uit n8n")); // start #2, blijft hangen
+  click(byText(".n8n-row button", "Bevestigen"));
+  expect(saved).toHaveLength(1);
+
+  // n8n's uurlijkse run over dezelfde week mail biedt hem opnieuw aan.
+  deliver({ invoices: [ROW] });
+  await flush();
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+  expect(saved).toHaveLength(1); // en er is niets dubbel geboekt
 });

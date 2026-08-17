@@ -33,8 +33,13 @@
  */
 
 /**
+ * De vorm waar alles ná dit punt op werkt. `source` staat er als unie in en niet
+ * als 'gmail': dit is de GEDEELDE vorm, en normalizeInboundMail.js levert hem
+ * ook. Zou hier 'gmail' staan, dan zou de tweede envelop een eigen type nodig
+ * hebben, en een eigen type is het begin van een tweede pijplijn.
+ *
  * @typedef {Object} NormalizedMessage
- * @property {'gmail'} source
+ * @property {'gmail'|'inbound-mail'} source
  * @property {string} messageId
  * @property {string} subject
  * @property {string} from
@@ -182,10 +187,17 @@ function isBase64(value) {
 
 /**
  * Uit alle bijlagen alleen de PDF's, met een reden voor elke die afvalt.
+ *
+ * `source` bepaalt alleen de TEKST van die redenen, niet de regels. Dat moet
+ * wel: "controleer N8N_DEFAULT_BINARY_DATA_MODE" is voor een mail die via het
+ * doorstuuradres binnenkwam een instelling die er niets mee te maken heeft, en
+ * een melding die naar de verkeerde knop wijst is erger dan geen melding.
+ *
  * @param {MailAttachment[]} attachments
+ * @param {'gmail'|'inbound-mail'} source
  * @returns {{ pdfs: InvoicePdf[], skipped: string[] }}
  */
-function pickPdfs(attachments) {
+function pickPdfs(attachments, source) {
   /** @type {InvoicePdf[]} */
   const pdfs = [];
   /** @type {string[]} */
@@ -200,7 +212,11 @@ function pickPdfs(attachments) {
       // n8n bewaart binaire data soms buiten het item (N8N_DEFAULT_BINARY_DATA_MODE
       // op filesystem/s3/database). Dan staat hier geen base64 en mag dit NIET
       // als "geen bijlage" doorgaan.
-      skipped.push(name + ': n8n leverde geen inhoud (binaire opslag staat niet op default)');
+      skipped.push(
+        source === 'inbound-mail'
+          ? name + ': de Worker stuurde geen inhoud mee voor deze bijlage'
+          : name + ': n8n leverde geen inhoud (binaire opslag staat niet op default)',
+      );
       continue;
     }
     // base64 is ~4/3 van de bytes; zo weten we de grootte zonder te decoderen.
@@ -215,7 +231,12 @@ function pickPdfs(attachments) {
     // base64 data" — een fout die pas bij de aanbieder aan het licht kwam. Liever
     // hier weigeren en het MELDEN dan iets versturen dat we niet gelezen hebben.
     if (!isBase64(attachment.data)) {
-      skipped.push(name + ': de inhoud is geen base64 maar een verwijzing — controleer N8N_DEFAULT_BINARY_DATA_MODE');
+      skipped.push(
+        source === 'inbound-mail'
+          ? name +
+              ': de inhoud is geen base64 maar een verwijzing — de Worker stuurde een opslagverwijzing in plaats van de bytes'
+          : name + ': de inhoud is geen base64 maar een verwijzing — controleer N8N_DEFAULT_BINARY_DATA_MODE',
+      );
       continue;
     }
     if (pdfs.length >= MAX_PDFS) {
@@ -245,7 +266,7 @@ function normalizeGmailMessage(json, attachments) {
   const body = pickBody(j);
   const textChars = body.text.length;
   const text = body.text.slice(0, MAX_TEXT_CHARS);
-  const picked = pickPdfs(Array.isArray(attachments) ? attachments : []);
+  const picked = pickPdfs(Array.isArray(attachments) ? attachments : [], 'gmail');
 
   const ok = picked.pdfs.length > 0 || text.length >= MIN_TEXT_CHARS;
   let reason = '';
@@ -278,4 +299,4 @@ function normalizeGmailMessage(json, attachments) {
   };
 }
 
-export { MAX_PDFS, MAX_PDF_BYTES, MAX_TEXT_CHARS, MIN_TEXT_CHARS, stripHtml, tidyText, pickBody, pickPdfs, normalizeGmailMessage };
+export { MAX_PDFS, MAX_PDF_BYTES, MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, isBase64, stripHtml, tidyText, pickBody, pickPdfs, normalizeGmailMessage };

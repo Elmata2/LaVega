@@ -132,3 +132,73 @@ test("een onleesbare mail wordt een melding met de reden uit de normalisatie", (
 test("zonder messageId is er geen link naar de mail, en dat wordt niet verzonnen", () => {
   expect(gmailUrl("")).toBe("");
 });
+
+/* ── Herkomst bij het doorstuuradres ──────────────────────────────────────── */
+
+const INBOUND_MSG = {
+  source: "inbound-mail",
+  messageId: "<hn-2026-4412@hostingnoord.nl>",
+  subject: "Factuur HN-2026-4412",
+  from: "Hosting Noord <facturen@hostingnoord.nl>",
+  date: "Mon, 17 Aug 2026 08:04:11 +0200",
+  deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+  queueKey: "alexander-7f3a",
+  senderCheck: "passed",
+  senderChecks: { spf: "pass", dkim: "pass", dmarc: "pass" },
+};
+
+test("een doorgestuurde factuur draagt adres én afzender mee tot in de rij", () => {
+  const entry = toQueueEntry(INBOUND_MSG, INVOICE_ANSWER);
+  expect(entry.invoice).toMatchObject({
+    source: "inbound-mail",
+    from: "Hosting Noord <facturen@hostingnoord.nl>",
+    deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+    queueKey: "alexander-7f3a",
+    senderCheck: "passed",
+    senderChecks: { spf: "pass", dkim: "pass", dmarc: "pass" },
+  });
+});
+
+test("een afzender die SPF/DKIM niet haalt levert een gemarkeerde regel op, geen weggegooide", () => {
+  const entry = toQueueEntry(
+    { ...INBOUND_MSG, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    INVOICE_ANSWER,
+  );
+  expect(entry.invoice?.senderCheck).toBe("failed");
+  expect(entry.invoice?.amountCents).toBe(181500);
+  expect(entry.dropped).toBeNull();
+});
+
+test("een onbekende senderCheck wordt 'unknown', nooit 'passed'", () => {
+  const entry = toQueueEntry({ ...INBOUND_MSG, senderCheck: "prima hoor" }, INVOICE_ANSWER);
+  expect(entry.invoice?.senderCheck).toBe("unknown");
+});
+
+test("een doorgestuurde mail krijgt GEEN Gmail-link: die zou nergens op uitkomen", () => {
+  const entry = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "notification", note: "Log in bij de leverancier." });
+  expect(entry.notice?.mailUrl).toBe("");
+  expect(entry.notice?.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
+
+  const unreadable = noticeForUnreadable({ ...INBOUND_MSG, reason: "Niets leesbaars." });
+  expect(unreadable.mailUrl).toBe("");
+  expect(unreadable.senderCheck).toBe("passed");
+});
+
+test("een Gmail-regel krijgt de herkomstvelden juist NIET: leeg zou suggereren dat we ze kwijt zijn", () => {
+  const invoice = toQueueEntry(MSG, INVOICE_ANSWER).invoice ?? {};
+  expect("deliveredTo" in invoice).toBe(false);
+  expect("queueKey" in invoice).toBe(false);
+  expect("senderCheck" in invoice).toBe(false);
+  // De afzender staat er wél op, ook bij Gmail — die wisten we altijd al.
+  expect(invoice).toMatchObject({ from: "Van Dijk <facturen@vandijk-installatie.nl>" });
+
+  const notice = toQueueEntry(MSG, { isInvoice: false, kind: "notification" }).notice ?? {};
+  expect("deliveredTo" in notice).toBe(false);
+  expect(notice).toMatchObject({ mailUrl: "https://mail.google.com/mail/u/0/#all/18f0abc0000" });
+});
+
+test("een melding blijft ook mét herkomst zonder bedragveld", () => {
+  const notice = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "reminder" }).notice ?? {};
+  expect("amount" in notice).toBe(false);
+  expect("amountCents" in notice).toBe(false);
+});

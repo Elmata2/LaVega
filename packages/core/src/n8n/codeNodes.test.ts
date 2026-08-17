@@ -56,6 +56,46 @@ test("de onleesbare mail heeft een uitgang: de If-node splitst in twee takken", 
   expect(workflow.connections["Melding: zelf ophalen"].main[0][0].node).toBe("Zet in de wachtrij");
 });
 
+test("de tweede ingang deelt het pad van Gmail en dupliceert het niet", () => {
+  const hook = node("b1000000-0000-4000-8000-000000000012");
+  expect(hook.type).toBe("n8n-nodes-base.webhook");
+  expect(hook.parameters.httpMethod).toBe("POST");
+  // Zonder headerAuth is dit adres een open brievenbus: iedereen die de URL
+  // raadt kan regels in de wachtrij zetten.
+  expect(hook.parameters.authentication).toBe("headerAuth");
+  // onReceived zou de Worker een 200 geven vóórdat er iets verwerkt is; een mail
+  // die daarna omvalt zou dan verdwijnen terwijl de afzender denkt dat hij
+  // aankwam. Dat is precies het ene wat niet mag.
+  expect(hook.parameters.responseMode).toBe("lastNode");
+
+  expect(workflow.connections["E-mail binnen"].main[0][0].node).toBe("Normaliseer binnengekomen mail");
+  // Eén ding bewijst dat het pad gedeeld is: de nieuwe tak komt uit op dezelfde
+  // If-node, en dus op dezelfde "Bouw Claude-verzoek" → "Lees de factuur" →
+  // "Zet in de wachtrij" als Gmail.
+  expect(workflow.connections["Normaliseer binnengekomen mail"].main[0][0].node).toBe("Iets te lezen?");
+  const codeNodes = workflow.nodes.filter((n) => n.type === "n8n-nodes-base.code").map((n) => n.name);
+  expect(codeNodes.filter((n) => n === "Bouw Claude-verzoek")).toHaveLength(1);
+  expect(workflow.nodes.filter((n) => n.name === "Lees de factuur")).toHaveLength(1);
+});
+
+test("de binnengekomen-mail-node draagt de herkomst door tot in de wachtrij", () => {
+  const request = node("b1000000-0000-4000-8000-000000000008").parameters.jsCode as string;
+  const toLaVega = node("b1000000-0000-4000-8000-00000000000a").parameters.jsCode as string;
+  for (const field of ["deliveredTo", "queueKey", "senderCheck", "senderChecks"]) {
+    expect(request).toContain(field + ": message." + field);
+    expect(toLaVega).toContain(field + ": src." + field);
+  }
+});
+
+test("de binnengekomen-mail-node valt om op een lege body in plaats van hem te slikken", () => {
+  const code = node("b1000000-0000-4000-8000-000000000011").parameters.jsCode as string;
+  expect(code).toContain("throw new Error(");
+  expect(code).toContain("normalizeInboundMail(body)");
+  // Geen seenIds-filter: een mail die hij opnieuw doorstuurt hoort opnieuw
+  // verwerkt te worden.
+  expect(code).not.toContain("seen.has(");
+});
+
 test("de webhook geeft de meldingen mee terug en leegt beide rijen", () => {
   const serve = node("b1000000-0000-4000-8000-00000000000e");
   expect(serve.parameters.jsCode).toContain("store.notices = [];");

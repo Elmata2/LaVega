@@ -10,12 +10,21 @@ dus nooit een Google-token.
 
 Outlook zit er bewust niet in. De stappen staan onderaan, voor later.
 
+> **Er is een tweede ingang: een doorstuuradres.** Dezelfde workflow neemt ook
+> mail aan die je naar `<naam>-<code>@invoices.lavega.dev` doorstuurt, via een
+> Cloudflare Email Worker. Dat pad heeft geen Google-OAuth nodig en leest geen
+> mailbox — alleen wat jij doorstuurt komt aan. Instellen, deployen en wat je bij
+> de eerste doorgestuurde factuur nakijkt: **`docs/n8n/DOORSTUURADRES.md`**.
+> Alles ná de webhook is de workflow op deze pagina; er is geen tweede
+> verwerkingspad.
+
 ## Het pad van de gegevens: jouw mailbox → jouw n8n → jouw browser
 
 ```
-Gmail  ──►  n8n (jouw Railway)  ──►  browser (kluis, versleuteld)
-                │
-                └─ de LaVega-server komt hier niet in voor
+Gmail ─────────────────┐
+                       ├─►  n8n (jouw Railway)  ──►  browser (kluis, versleuteld)
+doorstuuradres ────────┘         │
+  (Cloudflare Worker)            └─ de LaVega-server komt hier niet in voor
 ```
 
 De rij staat in `getWorkflowStaticData`, dus in de database van je eigen n8n.
@@ -245,6 +254,11 @@ een node die uit de pas loopt laat de testsuite vallen.
   je hem zelf moet ophalen. Er zit geen bedragveld in.
 - Spam blijft onzichtbaar: `includeSpamTrash` staat uit, en dat blijft zo, want
   aanzetten haalt ook verwijderde mail terug.
+- Een regel die via het **doorstuuradres** binnenkwam draagt `deliveredTo`,
+  `queueKey`, `from` en `senderCheck` mee; een regel uit Gmail draagt die velden
+  níet, want er wás geen doorstuuradres. `senderCheck: 'passed'` betekent alleen
+  dat het domein SPF of DKIM doorstond — nooit dat de factuur echt is. Zie
+  `DOORSTUURADRES.md`; die velden staan nog **niet** in beeld in `apps/web`.
 - Je eigen verzonden facturen komen mee (die zoekwoorden staan er ook in) en zijn
   bedoeld als `income`. Heb je zo'n factuur zelf al ingetypt, dan kan hij als
   tweede regel terugkomen als de vervaldatum net anders is.

@@ -1,0 +1,37 @@
+# De Cloudflare Email Worker die facturen op het doorstuuradres aanneemt.
+#
+# Deployen (er staat GEEN wrangler in de repo — die haal je per keer op, zodat
+# er geen 30 MB dependency in een pad meeloopt dat een factuur draagt):
+#
+#     cd apps/email-worker
+#     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET     # eenmalig
+#     pnpm dlx wrangler@4 deploy
+#
+# De volledige stappen — Email Routing aanzetten, de catch-all-regel, de
+# n8n-credential — staan in docs/n8n/DOORSTUURADRES.md.
+
+name = "lavega-email-in"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Node-compatibiliteit is NIET aangezet, en dat is opzet: deze Worker gebruikt
+# alleen TextDecoder, TextEncoder en fetch. Alles wat op bytes werkt staat als
+# gewone functie in src/parseMail.ts, juist om hier geen Buffer nodig te hebben.
+compatibility_flags = []
+
+[observability]
+enabled = true
+
+[vars]
+# De PRODUCTION-URL van de n8n-webhook "E-mail binnen" — niet de test-URL.
+# Die eindigt op /webhook/lavega-mail-in; de test-URL op /webhook-test/... en
+# die luistert maar één keer.
+#
+# Vul je eigen n8n-host in vóór de eerste deploy. Blijft dit leeg, dan weigert
+# de Worker elke mail met precies die mededeling in de bounce — hij doet niet
+# alsof het gelukt is.
+N8N_WEBHOOK_URL = ""
+
+# N8N_SHARED_SECRET staat hier NIET. Het is een secret:
+#     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET
+# Secrets komen de repo niet in. Zie docs/CONTEXT.md, harde eis 2.

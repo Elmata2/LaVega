@@ -27,13 +27,29 @@
  */
 
 /**
- * Haal de `export { ... };`-regel eraf: n8n's Code-node kent geen modules.
+ * Haal de module-regels eraf: n8n's Code-node kent geen modules.
+ *
+ * Twee vormen verdwijnen:
+ *   - `export { ... };` — de exportlijst onderaan elk bestand;
+ *   - `import { ... } from './...';` — hoe een bestand hiernaast (bijv.
+ *     normalizeInboundMail.js) zegt dat het `pickBody` en `pickPdfs` uit
+ *     normalizeGmailMessage.js gebruikt.
+ *
+ * Die import mág weg omdat `sources` de bestanden in volgorde achter elkaar
+ * plakt: in de gegenereerde node staat het bronbestand er letterlijk boven, dus
+ * de functies bestaan daar in dezelfde scope. Zonder deze strip zou er een
+ * `import`-regel in de Code-node belanden en zou de node meteen omvallen —
+ * precies het soort fout dat pas bij de eerste echte factuur opvalt.
+ *
  * Verder blijft de tekst letterlijk gelijk — dat is het hele punt.
  * @param {string} source
  * @returns {string}
  */
-function stripExports(source) {
-  return source.replace(/^export \{[\s\S]*?\};[ \t]*$/gm, '').trimEnd();
+function stripModuleSyntax(source) {
+  return source
+    .replace(/^export \{[\s\S]*?\};[ \t]*$/gm, '')
+    .replace(/^import [\s\S]*?from '[^']*';[ \t]*$/gm, '')
+    .trimEnd();
 }
 
 /**
@@ -44,7 +60,7 @@ function stripExports(source) {
 function buildCodeNode(sources, adapter) {
   const body = sources
     .map(function (source) {
-      return stripExports(source);
+      return stripModuleSyntax(source);
     })
     .join('\n\n');
   return body + '\n\n' + adapter.trim() + '\n';
@@ -100,6 +116,32 @@ const NORMALISE_ADAPTER = [
   'return out;',
 ].join('\n');
 
+const INBOUND_ADAPTER = [
+  SHARED_NOTE,
+  '',
+  '// Eén POST van de Cloudflare Email Worker = één doorgestuurde mail. De',
+  "// webhook-node zet de JSON-body op item.json.body; staat daar niets, dan is",
+  '// dat GEEN lege mail maar een verkeerd afgeleverd verzoek, en dan moet deze',
+  '// node omvallen zodat de Worker een niet-2xx ziet en de afzender een bounce',
+  '// krijgt. Stil doorgaan zou de mail laten verdwijnen — het enige wat we hier',
+  '// echt niet mogen.',
+  'const items = $input.all();',
+  'const out = [];',
+  'for (const item of items) {',
+  '  const body = (item.json && item.json.body) || null;',
+  "  if (!body || typeof body !== 'object') {",
+  "    throw new Error('De webhook kreeg geen JSON-body. Controleer of de Worker Content-Type: application/json stuurt en of de node op POST staat.');",
+  '  }',
+  '  out.push({ json: normalizeInboundMail(body) });',
+  '}',
+  '// GEEN filter op seenIds hier, anders dan bij Gmail. De Gmail-tak loopt elk',
+  '// uur over dezelfde zeven dagen en moet zichzelf remmen; een doorgestuurde',
+  '// mail is een handeling van de eigenaar. Stuurt hij er één opnieuw door omdat',
+  '// de eerste niet aankwam, dan hoort die opnieuw verwerkt te worden — en niet',
+  '// stil te verdwijnen omdat hij ooit al eens langskwam.',
+  'return out;',
+].join('\n');
+
 const REQUEST_ADAPTER = [
   SHARED_NOTE,
   '',
@@ -114,6 +156,13 @@ const REQUEST_ADAPTER = [
   '    subject: message.subject,',
   '    from: message.from,',
   '    date: message.date,',
+  '    // Herkomst. Bij Gmail zijn deze drie undefined en laat provenanceOf ze',
+  '    // dan ook wég uit de regel; bij een doorgestuurde mail zijn ze het enige',
+  '    // waarmee hij een onverwachte regel kan beoordelen.',
+  '    deliveredTo: message.deliveredTo,',
+  '    queueKey: message.queueKey,',
+  '    senderCheck: message.senderCheck,',
+  '    senderChecks: message.senderChecks,',
   '    // In de run zelf te zien wat er de deur uit ging. 768 invoer-tokens zonder',
   '    // document was het teken dat er niets meeging; dit maakt dat zichtbaar',
   '    // zonder de tokenteller van Anthropic te hoeven lezen.',
@@ -168,6 +217,10 @@ const TO_LAVEGA_ADAPTER = [
   '    subject: src.subject,',
   '    from: src.from,',
   '    date: src.date,',
+  '    deliveredTo: src.deliveredTo,',
+  '    queueKey: src.queueKey,',
+  '    senderCheck: src.senderCheck,',
+  '    senderChecks: src.senderChecks,',
   '  };',
   "  const text = j.content && j.content[0] ? j.content[0].text : '';",
   '  const entry = toQueueEntry(msg, parseModelJson(text));',
@@ -199,6 +252,10 @@ const UNREADABLE_ADAPTER = [
   '    from: m.from,',
   '    date: m.date,',
   '    reason: m.reason,',
+  '    deliveredTo: m.deliveredTo,',
+  '    queueKey: m.queueKey,',
+  '    senderCheck: m.senderCheck,',
+  '    senderChecks: m.senderChecks,',
   '  }));',
   '}',
   '// Beoordeeld zonder model, dus wél als gezien onthouden: één melding volstaat.',
@@ -236,6 +293,15 @@ const NODE_SPECS = [
     adapter: NORMALISE_ADAPTER,
   },
   {
+    // Twee bronbestanden, en de volgorde is niet vrij: normalizeInboundMail.js
+    // gebruikt pickBody/pickPdfs/asString uit normalizeGmailMessage.js, en die
+    // moeten in de gegenereerde node dus BOVEN staan.
+    id: 'b1000000-0000-4000-8000-000000000011',
+    name: 'Normaliseer binnengekomen mail',
+    sources: ['normalizeGmailMessage.js', 'normalizeInboundMail.js'],
+    adapter: INBOUND_ADAPTER,
+  },
+  {
     id: 'b1000000-0000-4000-8000-000000000008',
     name: 'Bouw Claude-verzoek',
     sources: ['buildClaudeRequest.js'],
@@ -261,4 +327,4 @@ const NODE_SPECS = [
   },
 ];
 
-export { NODE_SPECS, buildCodeNode, stripExports };
+export { NODE_SPECS, buildCodeNode, stripModuleSyntax };

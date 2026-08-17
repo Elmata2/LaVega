@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // WebWorker levert ReadableStream, TextDecoder, TextEncoder, Headers en
+    // fetch — precies wat de Workers-runtime ook heeft, zonder dat er een
+    // @cloudflare/workers-types geïnstalleerd hoeft te worden. Deze Worker heeft
+    // met opzet nul afhankelijkheden; zie src/types.d.ts.
+    "lib": ["ES2022", "WebWorker"],
+    "types": []
+  },
+  // Alleen src. De testbestanden staan hier bewust buiten: ze importeren
+  // `vitest` en (voor de contracttest) packages/core, en die zouden een
+  // node_modules in deze map vereisen. De Worker heeft nul afhankelijkheden en
+  // dat is de eigenschap die dat waard is. De tests dráaien gewoon — vitest
+  // typecheckt niet, en dat staat zo in de rapportage.
+  "include": ["src"]
+}

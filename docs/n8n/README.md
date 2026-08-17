@@ -1,4 +1,14 @@
-# n8n — kaartvoorwaarden voor LaVega
+# n8n-workflows voor LaVega
+
+| Bestand | Waarover |
+|---|---|
+| `FACTUREN.md` | facturen uit Gmail → Claude → wachtrij (`lavega-invoices.json`) |
+| `DOORSTUURADRES.md` | facturen doorsturen naar een eigen adres, via een Cloudflare Email Worker — dezelfde workflow, tweede ingang |
+| deze pagina | kaartvoorwaarden (`lavega-card-terms.json`) |
+
+---
+
+## Kaartvoorwaarden
 
 `lavega-card-terms.json` haalt per betaalproduct de **eigen tarievenpagina** op,
 laat Claude daar de cijfers uit lezen, en stuurt die naar LaVega.

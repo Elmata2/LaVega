@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
 import { makeInvoice, parseInvoiceFile, reconcileInvoices, scheduledInvoiceFlows } from "@lavega/core";
 import type { View } from "../App";
@@ -99,6 +99,11 @@ function isPdf(file: File): boolean {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 }
 
+/** How often this screen re-checks his n8n while it is open. The workflow itself
+ *  runs hourly, so anything faster only costs an empty round-trip — five minutes
+ *  is short enough that a mail forwarded during a session shows up on its own. */
+export const PULL_INTERVAL_MS = 5 * 60 * 1000;
+
 export default function Facturen({
   entities,
   invoices,
@@ -157,11 +162,76 @@ export default function Facturen({
     return () => window.removeEventListener("beforeunload", warn);
   }, [pending.length, notices.length]);
 
+  // ONE fetch at a time, ever. The webhook empties its queue as it answers, so
+  // two overlapping GETs would split one queue across two responses — and the
+  // second handler would overwrite the first's rows in App with a stale copy of
+  // `pending`. The timer, the open-the-screen pull and the button therefore all
+  // go through this promise: a caller that arrives while one is running gets
+  // that same promise instead of starting a second call.
+  const inFlight = useRef<Promise<void> | null>(null);
+  // Set once and never reset, so React 18's StrictMode double-mount (and any
+  // remount of this view) cannot turn "pull when Facturen opens" into two pulls.
+  const autoPulled = useRef(false);
+  // The rows as they are RIGHT NOW, not as they were when the running fetch
+  // started. A pull that began five minutes ago must merge into the list he has
+  // been deciding on in the meantime — otherwise a row he just confirmed or
+  // rejected would come back from a stale closure.
+  const pendingRef = useRef(pending);
+  const noticesRef = useRef(notices);
+  useEffect(() => {
+    pendingRef.current = pending;
+    noticesRef.current = notices;
+  }, [pending, notices]);
+
+  /* ── Automatisch ophalen ──────────────────────────────────────────────────
+   *
+   * He should not have to press a button to see mail that already arrived. So
+   * the queue is pulled when this screen opens and every PULL_INTERVAL_MS after
+   * that; the button stays for an immediate re-check.
+   *
+   * Three things this must not break, all of them because the webhook empties
+   * its queue as it answers and a fetched row is therefore the only copy:
+   *   1. the rows land in App, not here, so navigating away mid-decision keeps
+   *      them (that is why `pending` is a prop);
+   *   2. exactly one request at a time — see `inFlight`;
+   *   3. a run that started before he decided on a row merges into the CURRENT
+   *      list — see `pendingRef`.
+   *
+   * And it does not fire at all when there is nothing to fetch WITH: an
+   * unconfigured LaVega would otherwise open this screen with a red failure he
+   * cannot act on from here. */
+  const fetchLatest = useRef(handleFetchN8n);
+  fetchLatest.current = handleFetchN8n;
+  useEffect(() => {
+    const configured = () => getN8nInvoiceUrl().trim() !== "" && getN8nInvoiceToken().trim() !== "";
+    if (!configured()) return;
+    if (!autoPulled.current) {
+      autoPulled.current = true;
+      void fetchLatest.current();
+    }
+    const id = setInterval(() => {
+      if (configured()) void fetchLatest.current();
+    }, PULL_INTERVAL_MS);
+    return () => clearInterval(id);
+    // Deliberately empty: the timer belongs to this screen being open, not to
+    // any value it renders, and `fetchLatest` keeps it calling the newest one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Every outcome gets its own sentence, and none of the failures may read like
   // a success. The two that can cost data (a broken connection, an unreadable
   // body) say so plainly, because on those we cannot tell whether n8n already
   // emptied its queue.
-  async function handleFetchN8n() {
+  function handleFetchN8n(): Promise<void> {
+    if (inFlight.current) return inFlight.current;
+    const run = runFetchN8n().finally(() => {
+      inFlight.current = null;
+    });
+    inFlight.current = run;
+    return run;
+  }
+
+  async function runFetchN8n() {
     setN8nBusy(true);
     setN8nNote("Bezig met ophalen…");
     try {
@@ -188,18 +258,20 @@ export default function Facturen({
       }
 
       const handled = new Set(getHandledInvoiceMessageIds());
-      const already = new Set(pending.map((p) => p.messageId));
+      const currentPending = pendingRef.current;
+      const currentNotices = noticesRef.current;
+      const already = new Set(currentPending.map((p) => p.messageId));
       const fresh = outcome.rows.filter((r) => !handled.has(r.messageId) && !already.has(r.messageId));
       const duplicates = outcome.rows.length - fresh.length;
       if (fresh.length > 0) {
-        onPendingChange([...pending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
+        onPendingChange([...currentPending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
       }
       // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
-      const knownNotices = new Set(notices.map((n) => n.messageId));
+      const knownNotices = new Set(currentNotices.map((n) => n.messageId));
       const freshNotices = outcome.notices.filter(
         (n) => !handled.has(n.messageId) && !knownNotices.has(n.messageId),
       );
-      if (freshNotices.length > 0) onNoticesChange([...notices, ...freshNotices]);
+      if (freshNotices.length > 0) onNoticesChange([...currentNotices, ...freshNotices]);
       const parts: string[] = [];
       if (outcome.rows.length === 0) {
         parts.push("De wachtrij in n8n was leeg. Er is niets opgehaald — dat is geen bevestiging dat er facturen zijn.");
@@ -470,8 +542,10 @@ export default function Facturen({
         {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
         <Module title="1 · Automatisch (n8n)" height="tall">
           <p className="cell-sub">
-            Haalt de facturen op die je eigen n8n uit je mailbox heeft gehaald. Er wordt
-            niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf.
+            LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna
+            elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. Er wordt
+            niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf. De knop
+            hieronder is voor een directe hercontrole.
           </p>
           <div className="stack-form-actions">
             <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
