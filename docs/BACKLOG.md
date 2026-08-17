@@ -60,6 +60,28 @@ from about $3,000 upward — a bill before the first customer, in exchange for a
 whole mailbox. `lavega.dev` is already on Cloudflare with no MX records, so the forwarding route
 costs nothing to host. Dext, Hubdoc and Xero all solve it this way.
 
+### Two things this route defers, recorded 2026-08-17
+
+**1. The address IS a credential.** For a single operator the pull works because his browser knows
+his own webhook URL and token. Ship this to strangers and that URL and token are the same for
+everyone — the app carries them — and one user's queue is separated from another's only by the
+random part of the address. So anyone who learns your full address can pull your queue.
+
+That is acceptable for an MVP and it is how several "forward your receipts here" products actually
+work, but it must be **stated plainly in the UI rather than discovered**. The replacement, when
+there are real users: bind the queue to the vault instead of to the address, so possession of the
+address is not possession of the invoices.
+
+**2. Operator and user are different people, and the UI must not mix them.** The n8n base URL and
+API key are for the OPERATOR, once. A user must never see them, never know n8n exists, and never
+hold a key for infrastructure they do not run. A user sees exactly one thing: their forwarding
+address.
+
+The auto-provisioning is therefore a **maintenance convenience, not a product feature**: it buys
+nothing for first-time setup (that is already done by hand) and everything for pushing a changed
+workflow — which happened five times in one day. If CORS makes it painful on his n8n, drop it and
+no user loses anything.
+
 **OAuth "Connect Gmail" — v2, with these limitations recorded so they are not rediscovered:**
 1. Restricted scope: verification + CASA Tier 2, **annual**, ~$3,000+.
 2. Background sync needs a **server-held refresh token** with standing whole-mailbox access, because
