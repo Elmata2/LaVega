@@ -414,6 +414,28 @@
   color: var(--ink);
   font-weight: 700;
 }
+/* "What a normal day costs" — the baseline the block's own sentence compares
+ * the peak against. SOLID, so it is not mistaken for a gridline or for the
+ * dashed connector running through the bars; both of those are dashed. */
+.weekday-average {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--muted);
+  pointer-events: none;
+}
+.weekday-average-label {
+  position: absolute;
+  right: 0;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--surface);
+  padding-left: 4px;
+}
 
 /* ---------- RecenteTransactiesBlock ---------- */
 

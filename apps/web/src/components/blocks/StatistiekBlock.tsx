@@ -348,11 +348,20 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   </>
                 )}
               </p>
+              {/* B6, decided rather than decorated: no fitted trend line here.
+                  Monday…Sunday is a cycle, not a time axis, so a slope across
+                  it only says where the week was cut — start on Sunday and the
+                  same data "trends" the other way. What the sentence above DOES
+                  compare against is a normal day, and the chart had no mark for
+                  it, so that comparison could not be checked by eye. This is
+                  that baseline: a measured number, absent when unmeasured. */}
               <WeekdayBars
                 days={(weekdays?.rows ?? []).map((r) => ({ label: r.short, value: r.average }))}
                 format={(v) => wholeEuro.format(v)}
                 ariaLabel="Gemiddelde uitgaven per weekdag"
                 peakIndex={peak?.index ?? -1}
+                averageValue={weekdays?.dayAverage ?? null}
+                averageLabel="gewone dag"
                 height={196}
               />
             </>

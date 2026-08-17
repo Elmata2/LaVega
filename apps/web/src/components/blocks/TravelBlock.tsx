@@ -296,7 +296,6 @@ function TermsNotice({
   }
 
   if (state.kind === "known") {
-    const asOfLine = state.lastUpdated ? ` Laatst opgezocht op ${dayLabelYearNL(state.lastUpdated)}.` : "";
     const gaps = state.unknown.length + state.unpriced.length;
     return (
       <div className="travel-terms" role="status">
@@ -313,7 +312,12 @@ function TermsNotice({
             {state.unpriced.map((u) => `${u.provider} — ${u.why}`).join("; ")}. Die routes staan zonder bedrag.
           </p>
         )}
-        {gaps === 0 && <p className="cell-sub">Alle routes zijn beprijsd.{asOfLine}</p>}
+        {gaps === 0 && <p className="cell-sub">Alle routes zijn beprijsd.</p>}
+        {/* Only ever a date we actually hold: a fee the owner typed himself
+            carries no lookup date, and no date is printed for it. */}
+        {state.lastUpdated && (
+          <p className="cell-sub">Laatst opgezocht op {dayLabelYearNL(state.lastUpdated)}.</p>
+        )}
         {aiAvailable
           ? searchButton(false, gaps > 0 ? `Zoek voorwaarden (${gaps})` : "Ververs voorwaarden")
           : noKeyLine}

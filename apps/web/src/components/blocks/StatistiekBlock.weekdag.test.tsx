@@ -59,3 +59,22 @@ test("the weekday view refuses a pattern it cannot support and says why", () => 
   expect(html).not.toContain("weekday-bar");
   expect(html).not.toContain("kost je gemiddeld");
 });
+
+test("the 'gewone dag' the sentence compares against is drawn on the chart (B6)", () => {
+  const html = renderWeekdayView();
+  // The sentence claims "X% meer dan een gewone dag"; without a mark for that
+  // day, the claim was unverifiable against the picture next to it.
+  expect(html).toContain("meer dan een gewone dag");
+  expect(html).toContain("weekday-average");
+  expect(html).toContain("gewone dag");
+
+  // It is a baseline, not a fitted trend: exactly one horizontal reference, and
+  // the only path in the chart is still the single dashed connector.
+  expect(html.match(/class="weekday-average"/g)?.length).toBe(1);
+  expect(html.match(/<path /g)?.length).toBe(1);
+});
+
+test("no weekday chart, no baseline — it is never drawn on an unsupported window", () => {
+  const html = renderWeekdayView(freshTxs);
+  expect(html).not.toContain("weekday-average");
+});

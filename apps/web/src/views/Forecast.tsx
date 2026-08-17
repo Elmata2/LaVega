@@ -1,7 +1,15 @@
 import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
 import { forecastCashflow } from "@lavega/core";
 import { formatEuro } from "../format";
-import { bannerState, isThinData, splitDrivers, type BannerState } from "../forecast-view";
+import {
+  bannerState,
+  confidenceLabel,
+  coverageNotes,
+  hasBand,
+  isThinData,
+  splitDrivers,
+  type BannerState,
+} from "../forecast-view";
 import TrendChart, { type TrendPoint } from "../components/TrendChart";
 
 type ForecastProps = {
@@ -30,7 +38,7 @@ type LowestPoint = {
   weekNumber: number;
   date: string;
   closingCents: number;
-  lowerCents: number;
+  lowerCents: number | null; // null when the engine could not measure a band
 };
 
 /** Finds the weekly point with the lowest projected closing balance — used
@@ -52,7 +60,7 @@ function findLowestPoint(f: EntityForecast): LowestPoint | null {
     weekNumber: best + 1,
     date: p.date,
     closingCents: p.projectedClosingCents,
-    lowerCents: p.lowerCents ?? p.projectedClosingCents,
+    lowerCents: p.lowerCents,
   };
 }
 
@@ -69,9 +77,17 @@ function ForecastBanner({
   lowest: LowestPoint | null;
   bufferCents: number;
 }) {
+  // "insufficient" borrows the neutral treatment: like an unknown opening it is
+  // a "we cannot tell you this", not a verdict. There is deliberately no green
+  // reassurance behind it.
   const stateClass =
-    state === "shortfall" ? "forecast-banner-shortfall" : state === "unknown" ? "forecast-banner-unknown" : "forecast-banner-none";
-  const titleClass = state === "shortfall" ? "text-neg" : state === "unknown" ? "text-muted" : "text-pos";
+    state === "shortfall"
+      ? "forecast-banner-shortfall"
+      : state === "none"
+        ? "forecast-banner-none"
+        : "forecast-banner-unknown";
+  const titleClass = state === "shortfall" ? "text-neg" : state === "none" ? "text-pos" : "text-muted";
+  const atRisk = f.atRisk ?? null;
 
   return (
     <section className={`card forecast-banner ${stateClass}`} aria-label="Tekort-signalering">
@@ -86,17 +102,25 @@ function ForecastBanner({
           {state === "unknown" && (
             <>Positie onbekend (alleen CSV-rekeningen zonder saldo) — we tonen de verwachte stromen, geen saldo-lijn.</>
           )}
+          {state === "insufficient" && <>Nog geen prognose te maken — er is niets om op te projecteren.</>}
           {state === "none" && <>Geen tekort verwacht in de komende 13 weken.</>}
         </p>
         {state === "none" && lowest && (
           <p className="forecast-banner-sub">
-            Krapste punt: week {lowest.weekNumber} — verwacht €{euroNumber(lowest.closingCents)} (ondergrens €
-            {euroNumber(lowest.lowerCents)}), boven je buffer van €{euroNumber(bufferCents)}.
+            Krapste punt: week {lowest.weekNumber} — verwacht €{euroNumber(lowest.closingCents)}
+            {lowest.lowerCents !== null && <> (ondergrens €{euroNumber(lowest.lowerCents)})</>}, boven je buffer van €
+            {euroNumber(bufferCents)}.
           </p>
         )}
-        {thin && (
+        {state === "none" && atRisk && (
+          <p className="forecast-banner-sub">
+            Wel een risico: binnen de gemeten bandbreedte kan het saldo rond {atRisk.date} tot {formatEuro(atRisk.balanceCents / 100)} zakken
+            — onder je buffer van €{euroNumber(bufferCents)}.
+          </p>
+        )}
+        {thin && state !== "insufficient" && (
           <p className="forecast-banner-note">
-            Onvoldoende terugkerende historie voor een betrouwbare prognose — voeg meer maanden/rekeningen toe.
+            Geen lopende terugkerende stromen herkend — de prognose leunt volledig op losse uitgaven en ingeplande posten.
           </p>
         )}
       </div>
@@ -104,14 +128,18 @@ function ForecastBanner({
   );
 }
 
-/** 13-week cashflow chart: median line + filled P-band + a dashed buffer line,
- *  over 14 points ("nu" = asOf/opening, then the 13 weekly points).
+/** 13-week cashflow chart: the expected line, the measured band, and a dashed
+ *  buffer line, over 14 points ("nu" = asOf/opening, then the 13 weekly points).
  *
  *  Since U3 this is the shared TrendChart — the same component the Overzicht
- *  cashflow module draws, here with the value axis switched on. That removed
- *  the third copy of the x/y scaling in this app, and with it the hardcoded
- *  rgba(78,122,58,0.13) band colour, which was the one colour in the charts
- *  that was not a token. */
+ *  cashflow module draws, here with the value axis switched on.
+ *
+ *  The band is drawn only when the engine could MEASURE one. It used to be
+ *  filled in from a fallback constant whenever the opening balance was known,
+ *  which drew a narrow, confident-looking ribbon around scopes we knew almost
+ *  nothing about. No band now means no band on screen, and the coverage list
+ *  underneath says why. It is one standard deviation of measured variation —
+ *  not a percentile, despite what this comment used to call it. */
 function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: LowestPoint | null; bufferCents: number }) {
   if (f.openingCents === null) {
     return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
@@ -121,14 +149,17 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
   }
 
   const opening = f.openingCents;
+  const showBand = hasBand(f);
   const points: TrendPoint[] = [
     { label: "nu", value: opening / 100 },
     ...f.points.map((p, i) => ({ label: `w${i + 1}`, value: (p.projectedClosingCents ?? opening) / 100 })),
   ];
-  const band = {
-    lower: [opening / 100, ...f.points.map((p) => (p.lowerCents ?? opening) / 100)],
-    upper: [opening / 100, ...f.points.map((p) => (p.upperCents ?? opening) / 100)],
-  };
+  const band = showBand
+    ? {
+        lower: [opening / 100, ...f.points.map((p) => (p.lowerCents ?? p.projectedClosingCents ?? opening) / 100)],
+        upper: [opening / 100, ...f.points.map((p) => (p.upperCents ?? p.projectedClosingCents ?? opening) / 100)],
+      }
+    : undefined;
   const lowestIsShortfall = lowest !== null && f.shortfall !== null && lowest.date === f.shortfall.date;
 
   return (
@@ -153,16 +184,18 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
             style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
             aria-hidden="true"
           />
-          Verwacht (mediaan)
+          Verwacht
         </span>
-        <span className="forecast-chart-legend-item">
-          <span
-            className="forecast-chart-legend-swatch forecast-chart-legend-band"
-            style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
-            aria-hidden="true"
-          />
-          Bandbreedte
-        </span>
+        {showBand && (
+          <span className="forecast-chart-legend-item">
+            <span
+              className="forecast-chart-legend-swatch forecast-chart-legend-band"
+              style={{ background: f.shortfall ? "var(--neg)" : "var(--pos)" }}
+              aria-hidden="true"
+            />
+            Gemeten bandbreedte
+          </span>
+        )}
         <span className="forecast-chart-legend-item">
           <span className="forecast-chart-legend-swatch" style={{ background: "var(--warn)" }} aria-hidden="true" />
           Buffer €{euroNumber(bufferCents)}
@@ -189,7 +222,9 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
   const state = bannerState(f);
   const thin = isThinData(f);
   const lowest = findLowestPoint(f);
+  const notes = coverageNotes(f);
   const { inkomsten, uitgaven } = splitDrivers(f.drivers);
+  const ended = f.basis?.endedStreams ?? [];
 
   return (
     <>
@@ -199,7 +234,10 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
         <section className="card" aria-label="13-weeks cashflow-forecast">
           <div className="card-header">
             <h2>13-weeks cashflow-forecast</h2>
-            <span className="eyebrow">{scopeLabel}</span>
+            <span className="eyebrow">
+              {scopeLabel}
+              {f.basis && <> · {confidenceLabel(f.basis.confidence)}</>}
+            </span>
           </div>
           <ForecastChart f={f} lowest={lowest} bufferCents={bufferCents} />
         </section>
@@ -207,7 +245,7 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
         <section className="card" aria-label="Drivers per week">
           <h2>Drivers · per week (gem.)</h2>
           {f.drivers.length === 0 ? (
-            <p>Nog geen terugkerende stromen herkend.</p>
+            <p>Nog geen lopende terugkerende stromen herkend.</p>
           ) : (
             <>
               <h3 className="drivers-heading">Verwachte inkomsten</h3>
@@ -239,11 +277,46 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
               )}
             </>
           )}
+
+          {ended.length > 0 && (
+            <>
+              <h3 className="drivers-heading">Gestopt · niet meegeteld</h3>
+              <div className="drivers-list">
+                {ended.map((s) => (
+                  <div className="driver-row" key={s.key}>
+                    <span className="driver-label text-muted">
+                      {s.counterparty} <span className="eyebrow">laatst {s.lastDate}</span>
+                    </span>
+                    <span className="text-muted driver-amount">€{euroNumber(s.amountCents)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
 
+      {/* Waarop de prognose rust. This block is the answer to "prove you
+          forecast more accurately than my spreadsheet": a spreadsheet is
+          trusted because its owner can see every cell, so the forecast has to
+          show its own inputs and, above all, where they run out. */}
+      {notes.length > 0 && (
+        <section className="card" aria-label="Waar deze prognose op rust">
+          <h3 className="drivers-heading">Waar deze prognose op rust</h3>
+          <div className="drivers-list">
+            {notes.map((n) => (
+              <p className="drivers-empty" key={n.id}>
+                {n.text}
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
+
       <p className="card forecast-footnote">
-        Deterministische 13-weeks forecast (herkende terugkerende betalingen + roll-forward). Geen ML. Cijfers indicatief.
+        Deterministische 13-weeks forecast: herkende terugkerende betalingen op hun eigen kalenderdatum, ingeplande posten en — bij genoeg
+        historie — een uitgavenpatroon. De bandbreedte is één standaardafwijking van gemeten variatie, geen betrouwbaarheidsinterval. Geen
+        ML; elk cijfer is met de hand na te rekenen.
       </p>
     </>
   );

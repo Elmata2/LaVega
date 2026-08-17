@@ -15,7 +15,18 @@ import { barPercent, niceDomain, smoothPath, type Pt } from "../../chart.js";
  * The peak day gets the reference's little value chip above it — that is the
  * whole message of the chart ("Friday costs you money"), so it is stated rather
  * than left to be read off an axis. No colour is added: the bars are the
- * app's outflow terracotta, the line is the muted hairline grey. */
+ * app's outflow terracotta, the line is the muted hairline grey.
+ *
+ * ON TREND LINES (backlog B6). The dashed path is a CONNECTOR, not a trend, and
+ * no fitted trend was added here — a slope across Monday…Sunday would be an
+ * artefact of where you cut the week. Start the axis on Sunday and the same
+ * spending "trends" the other way; the ordering is cyclical, so its gradient
+ * carries no information. What the block's own sentence does compare against is
+ * a normal day, and until now the chart had no mark for it: "Friday is 40% above
+ * average" was a claim the picture could not be checked against. That is the
+ * `averageValue` reference line — a horizontal baseline at a measured number,
+ * drawn only when it was measured. It is not a trend and does not pretend to
+ * be. */
 
 export type WeekdayBar = {
   label: string;
@@ -29,15 +40,31 @@ export type WeekdayBarsProps = {
   ariaLabel: string;
   /** Index of the bar that carries the value chip, or -1 for none. */
   peakIndex?: number;
+  /** What a normal day costs, as a horizontal reference. `null`/absent = not
+   *  measured, and then no line is drawn — a baseline at an assumed number
+   *  would be the same lie as a zero-height bar. */
+  averageValue?: number | null;
+  /** What the reference line is, in the owner's words. */
+  averageLabel?: string;
   height?: number;
 };
 
-export default function WeekdayBars({ days, format, ariaLabel, peakIndex = -1, height = 180 }: WeekdayBarsProps) {
+/** A baseline is only worth drawing when there are several days to compare it
+ *  against; with one measured day the "average" IS that day and the line would
+ *  simply sit on top of its bar, implying a comparison nobody made. */
+const MIN_DAYS_FOR_AVERAGE = 3;
+
+export default function WeekdayBars({
+  days, format, ariaLabel, peakIndex = -1, averageValue = null, averageLabel = "gemiddelde dag", height = 180,
+}: WeekdayBarsProps) {
   if (days.length === 0) return null;
 
   const known = days.map((d) => d.value).filter((v): v is number => v !== null);
   const domain = niceDomain(0, Math.max(0, ...known), 4);
   const max = domain.max;
+
+  const average =
+    averageValue !== null && averageValue > 0 && known.length >= MIN_DAYS_FOR_AVERAGE ? averageValue : null;
 
   // Bar-group centres in the 0–100 box; the groups share the area equally.
   const centre = (i: number) => Math.round(((i + 0.5) / days.length) * 10_000) / 100;
@@ -93,6 +120,16 @@ export default function WeekdayBars({ days, format, ariaLabel, peakIndex = -1, h
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
+          )}
+
+          {/* What a normal day costs. Solid, so it does not read as another
+              gridline (dashed) or as the connector (dashed, muted). */}
+          {average !== null && (
+            <span className="weekday-average" style={{ top: `${100 - barPercent(average, max)}%` }}>
+              <span className="weekday-average-label">
+                {averageLabel} {format(average)}
+              </span>
+            </span>
           )}
 
           {peak !== null && (

@@ -143,6 +143,12 @@ export function bankInitials(bank: string): string {
   return (w.length <= 3 ? w : w.slice(0, 2)).toUpperCase();
 }
 
+/** Bank names and account keys carry spaces and punctuation; an id attribute
+ *  may not. Only used to wire a tab to its panel. */
+const slug = (s: string): string => s.replace(/[^a-z0-9]+/gi, "-") || "geen";
+
+const tabId = (groupId: string, accountKey: string): string => `bank-tab-${slug(groupId)}-${slug(accountKey)}`;
+
 /* ------------------------------------------------------------------------- */
 
 /** A destructive action is never one click: the button swaps into a
@@ -495,7 +501,6 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
             const chosen = selected[g.id];
             const activeKey = chosen && keys.includes(chosen) ? chosen : keys[0];
             const activeRow = g.rows.find((r) => r.account.key === activeKey) ?? g.rows[0];
-            const tabId = `bank-tab-${g.id || "geen"}-${activeRow.account.key}`;
             return (
               <div className={`bank-group${open ? " bank-group-open" : ""}`} key={g.id}>
                 <button
@@ -534,7 +539,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                               key={r.account.key}
                               type="button"
                               role="tab"
-                              id={`bank-tab-${g.id || "geen"}-${r.account.key}`}
+                              id={tabId(g.id, r.account.key)}
                               className={`pill bank-tab${isActive ? " pill-active" : ""}`}
                               aria-selected={isActive}
                               onClick={() => setSelected((s) => ({ ...s, [g.id]: r.account.key }))}
@@ -554,7 +559,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                       key={activeRow.account.key}
                       row={activeRow}
                       busy={busy}
-                      labelledBy={g.rows.length > 1 ? tabId : undefined}
+                      labelledBy={g.rows.length > 1 ? tabId(g.id, activeRow.account.key) : undefined}
                       onEntityChange={onEntityChange}
                       onAccountCommit={onAccountCommit}
                       onAccountFieldChange={onAccountFieldChange}

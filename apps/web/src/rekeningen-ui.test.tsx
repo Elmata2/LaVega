@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useState } from "react";
+import { act, useState, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
@@ -118,8 +118,10 @@ test("no markup in the grouped view points at a remote asset", () => {
 
 /* ── the view ──────────────────────────────────────────────────────────── */
 
+type Props = ComponentProps<typeof Rekeningen>;
+
 const noop = () => {};
-function props() {
+function props(): Props {
   return {
     accounts: ACCOUNTS, txs: TXS, busy: false,
     onEntityChange: noop, onAccountCommit: noop, onAccountFieldChange: noop,
@@ -138,7 +140,7 @@ afterEach(() => {
   container = null;
 });
 
-function render(overrides: Partial<ReturnType<typeof props>> = {}) {
+function render(overrides: Partial<Props> = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -308,7 +310,7 @@ test("the duplicate banner still sits above the groups", () => {
       canonicalId: "dup1",
       survivor: ACCOUNTS[0],
       accounts: [ACCOUNTS[0], ACCOUNTS[1]],
-    }] as ReturnType<typeof props>["duplicateGroups"],
+    }] as Props["duplicateGroups"],
   });
   expect(container!.querySelector(".dup-banner")!.textContent).toContain("lijken dezelfde rekening");
   expect(container!.querySelectorAll(".bank-group").length).toBeGreaterThan(0);

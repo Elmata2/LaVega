@@ -60,6 +60,10 @@ const CHECKS = [
   "rekeningen zonder saldo",
 ];
 
+/** Below this, folding costs more than it saves: the "Toon 2 ter info" button
+ *  takes the same line the two rows would have. */
+const INFO_FOLD_MIN = 3;
+
 export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: AandachtBlockProps) {
   // Draft while typing, commit on blur. Resyncs when the stored buffer changes
   // elsewhere (e.g. a restored back-up).
@@ -79,7 +83,7 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
   const infoCount = byTier.find((g) => g.tier.severity === "info")?.rows.length ?? 0;
   // Only fold the info tier, and only when something above it is competing for
   // the same glance. On its own it is the whole block, so it stays open.
-  const foldInfo = pressing > 0 && infoCount > 0 && !showInfo;
+  const foldInfo = pressing > 0 && infoCount >= INFO_FOLD_MIN && !showInfo;
 
   /* A buffer of zero is not "no preference": it silently turns the shortfall
    * alert into an overdraft alert, because the forecast only flags a week whose

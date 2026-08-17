@@ -135,6 +135,13 @@ function button(selector: string, text: string): HTMLButtonElement {
   return found;
 }
 
+/** Same, but on a button whose label is a sentence rather than one word. */
+function buttonLike(selector: string, text: string): HTMLButtonElement {
+  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) => (b.textContent ?? "").includes(text));
+  if (!found) throw new Error(`geen knop met "${text}" (${selector})`);
+  return found;
+}
+
 const scopeButton = (label: string) => button("button.scope-option", label);
 
 async function click(el: HTMLButtonElement) {
@@ -207,7 +214,9 @@ test("a filter naming an account of one half never narrows the other half", asyn
   // Rekeningen → click the personal account's transaction count → Transacties,
   // filtered to that account.
   await click(button("button.nav-item", "Rekeningen"));
-  await click(button("button.card-link", "4"));
+  // Rekeningen groups per bank (B4): open the bank, then its account's count.
+  await click(buttonLike("button.bank-group-head", "TEST"));
+  await click(buttonLike("button.card-link", "4 transacties bekijken"));
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
 

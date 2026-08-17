@@ -251,7 +251,7 @@ export default function Valuta({ accounts, facts = [] }: ValutaProps) {
                     <>
                       Tegen de middenkoers is dit {fmt(grossReceived ?? 0, to)} waard, maar de kosten van je
                       eigen kaarten zijn nog niet bekend — en LaVega rekent een onbekende kostenpost niet als
-                      nul. Ververs eerst de voorwaarden in het reisblok op Overzicht.
+                      nul. Het reisblok op Overzicht laat zien wat er nog mist en of het hier op te zoeken is.
                     </>
                   )}
               </>
@@ -317,7 +317,16 @@ export default function Valuta({ accounts, facts = [] }: ValutaProps) {
               <ul>
                 <li>Een route ontstaat uit een betaalrekening of creditcard mét bekende bank.</li>
                 <li>Rekeningen zonder bank kunnen niet opgezocht worden en tellen niet mee.</li>
-                <li>De voorwaarden zelf komen uit het reisblok op Overzicht ("Ververs voorwaarden").</li>
+                {/* Deliberately NOT "klik op Ververs voorwaarden": dat knopje bestaat
+                    juist in deze situatie vaak niet. Het reisblok toont geen zoekknop
+                    als de server geen AI-sleutel heeft of als er geen kaart met bank is
+                    — dan zou verversen niets doen. Het blok zegt zelf welke van die
+                    gevallen het is, dus we verwijzen ernaar in plaats van een handeling
+                    voor te schrijven die hier kan mislukken. */}
+                <li>
+                  De voorwaarden zelf komen uit het reisblok op Overzicht. Dat blok zegt erbij of
+                  opzoeken hier mogelijk is — en zo niet, waarom niet.
+                </li>
               </ul>
             </div>
           ) : (

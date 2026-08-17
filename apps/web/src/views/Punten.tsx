@@ -47,6 +47,10 @@ export function programCategory(program: string): string | null {
   return REWARD_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
 }
 
+/** A programme id (a normalised name, so it carries spaces) turned into
+ *  something legal in an HTML id attribute. */
+const slug = (s: string): string => s.replace(/[^a-z0-9]+/gi, "-");
+
 export function addDaysISO(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const t = new Date(Date.UTC(y, m - 1, d + n));
@@ -214,10 +218,10 @@ export default function Punten({
 
                 {asking ? (
                   <div className="punt-ask">
-                    <label htmlFor={`punt-ask-${b.id}`}>{status.question}</label>
+                    <label htmlFor={`punt-ask-${slug(b.id)}`}>{status.question}</label>
                     <div className="punt-ask-row">
                       <input
-                        id={`punt-ask-${b.id}`}
+                        id={`punt-ask-${slug(b.id)}`}
                         className="saldo-input"
                         inputMode="decimal"
                         placeholder={unit === "eur" ? "bijv. 42" : "bijv. 245000"}

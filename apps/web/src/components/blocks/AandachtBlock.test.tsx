@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
@@ -74,7 +74,7 @@ afterEach(() => {
   container = null;
 });
 
-function render(node: React.ReactElement): HTMLElement {
+function render(node: ReactElement): HTMLElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -116,4 +116,11 @@ test("info alerts stay open when they are the only thing there — folding them 
   const c = render(<AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />);
   expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
   expect(c.textContent).not.toContain("Toon 3 ter info");
+});
+
+test("one or two info alerts are never folded — the toggle would cost the space it saves", () => {
+  const critical: Alert = { id: "s", severity: "critical", title: "Verwacht tekort", detail: "…" };
+  const c = render(<AandachtBlock alerts={[critical, ...info(2)]} bufferCents={250_000} onBufferChange={() => {}} />);
+  expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
+  expect(c.querySelector(".alert-tier button")).toBeNull(); // no fold toggle
 });

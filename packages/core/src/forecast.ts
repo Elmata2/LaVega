@@ -113,11 +113,18 @@ function occurrenceAt(anchor: string, cadenceDays: number, k: number): string {
   return addDays(anchor, cadenceDays * k);
 }
 
-/** Day index relative to a fixed reference Monday (2000-01-03). `idx % 7 === 0`
- *  is a Monday, `=== 6` a Sunday — which is how the weekly series below tells a
- *  whole observed week from a partial one. */
+/** Day index relative to a fixed reference Monday (2000-01-03). `weekday(idx)`
+ *  is 0 on a Monday and 6 on a Sunday — which is how the weekly series below
+ *  tells a whole observed week from a partial one. */
 function dayIndex(iso: string): number {
   return daysBetween("2000-01-03", iso);
+}
+
+/** Weekday of a day index, 0 = Monday. Written the long way because JS `%`
+ *  keeps the sign of the dividend, so a date before the reference Monday would
+ *  otherwise give a negative "weekday" and silently mis-bucket the week. */
+function weekday(idx: number): number {
+  return ((idx % 7) + 7) % 7;
 }
 
 /** Median of a numeric array (sorts a copy; never mutates the input). */
@@ -458,8 +465,8 @@ function buildForecast(
   // are half the story were simply missing from the sample.
   const firstIdx = firstTxDate ? dayIndex(firstTxDate) : 0;
   const lastIdx = lastTxDate ? dayIndex(lastTxDate) : -1;
-  const firstFullWeek = Math.floor(firstIdx / 7) + (firstIdx % 7 === 0 ? 0 : 1);
-  const lastFullWeek = Math.floor(lastIdx / 7) - (lastIdx % 7 === 6 ? 0 : 1);
+  const firstFullWeek = Math.floor(firstIdx / 7) + (weekday(firstIdx) === 0 ? 0 : 1);
+  const lastFullWeek = Math.floor(lastIdx / 7) - (weekday(lastIdx) === 6 ? 0 : 1);
   const fullWeeks = dated.length > 0 ? Math.max(0, lastFullWeek - firstFullWeek + 1) : 0;
 
   let incidentalWeeklyStd = 0;
