@@ -130,6 +130,10 @@ export default function App() {
   // deliberately not rendered for now (his UI review: "remove it, decide later
   // what it becomes"), so the question is parked here until it comes back —
   // the component file and this wiring stay so that is a one-line change.
+  // Providers the server said it is still looking up. The travel block needs
+  // this to say "still searching" instead of "nothing came back" — two very
+  // different sentences that used to be one.
+  const [pendingTerms, setPendingTerms] = useState<string[]>([]);
   const [askText, setAskText] = useState<string | null>(null);
   const [askNonce, setAskNonce] = useState(0);
   function askAssistant(text: string) {
@@ -785,6 +789,7 @@ export default function App() {
       }
       if (learned.length > 0) await saveFacts(learned);
 
+      setPendingTerms(pending);
       if (pending.length > 0) {
         setProblems([
           `LaVega zoekt de voorwaarden van ${pending.join(", ")} nu op — dat duurt een minuut of twee. Klik daarna nog eens op "Zoek voorwaarden", of vul ze zelf in met "aanpassen".`,
@@ -868,6 +873,7 @@ export default function App() {
                 busy,
                 aiAvailable: llmConfigured,
                 onRefreshTerms: handleRefreshTravelTerms,
+                pendingTerms,
                 onRecheckAi: () => void recheckLlm(),
                 onCorrectFact: (fact) => void saveFacts([fact]),
               }}

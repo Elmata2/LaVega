@@ -383,3 +383,23 @@ test("the no-key state offers a way to re-check, because the key check runs once
   expect(html).toContain("geen AI-sleutel");
   expect(html).toContain("Opnieuw controleren");
 });
+
+test("'still looking' is not the same claim as 'nothing came back'", () => {
+  const plan = planTravel({ accounts, txs: [], rates: [], facts: [], destination: "US", asOf: ASOF });
+
+  // The server said it is working on ING. Reporting that as a failed search told
+  // the owner his lookup had come back empty while a banner two lines up said it
+  // was still running — and the fee appeared moments later.
+  const busy = termsState(plan, true, true, ["ING betaalpas"]);
+  expect(busy.kind).toBe("searching");
+  if (busy.kind === "searching") expect(busy.pending).toContain("ING betaalpas");
+
+  // Nothing pending: then, and only then, it really did come back empty.
+  expect(termsState(plan, true, true, []).kind).toBe("searched-empty");
+
+  const html = renderToStaticMarkup(
+    <TermsNotice state={busy} busy={false} aiAvailable={true} onSearch={() => {}} onRecheckAi={() => {}} />,
+  );
+  expect(html).toContain("zoekt nu op");
+  expect(html).not.toContain("geen bruikbaar tarief");
+});

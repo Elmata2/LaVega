@@ -24,6 +24,8 @@ export type TravelBlockProps = {
   busy: boolean;
   /** Whether the server has an API key — hides the refresh action when not. */
   aiAvailable: boolean;
+  /** Providers the server said it is still looking up, from the last reply. */
+  pendingTerms?: readonly string[];
   onRecheckAi: () => void;
   /** Look up current terms for the providers with unknown terms. */
   onRefreshTerms: (destination: string) => void;
@@ -178,6 +180,7 @@ function journeyKey(j: Journey): string {
  *   no-products     nothing to compare: no card or payment account with a bank
  *   no-key          this server cannot look anything up — refreshing is futile
  *   never-searched  it has simply never been asked; the ask is one click away
+ *   searching       the server is still looking; asking again shortly will help
  *   searched-empty  it WAS asked in this session and nothing usable came back
  *
  * The last two are the split core cannot make for us: a lookup that finds
@@ -196,9 +199,16 @@ export type TermsState =
   | { kind: "known"; unknown: string[]; unpriced: { provider: string; why: string }[]; lastUpdated: string | null }
   | { kind: "no-key"; unknown: string[] }
   | { kind: "never-searched"; unknown: string[] }
+  /** The server accepted the ask and is looking in the background. This is NOT
+   *  "nothing came back": conflating the two told the owner his search had
+   *  failed while a banner two lines up said it was still running, and the fee
+   *  he was told did not exist appeared moments later. A lookup takes 40s to a
+   *  few minutes; saying so is the whole difference between patience and a bug
+   *  report. */
+  | { kind: "searching"; pending: string[] }
   | { kind: "searched-empty"; unknown: string[] };
 
-export function termsState(plan: TravelPlan, aiAvailable: boolean, searched: boolean): TermsState {
+export function termsState(plan: TravelPlan, aiAvailable: boolean, searched: boolean, pending: readonly string[] = []): TermsState {
   if (plan.currency === "EUR") return { kind: "euro" };
   if (plan.spend.length === 0) return { kind: "no-products" };
   const unknown = plan.unknownProviders;
@@ -223,6 +233,10 @@ export function termsState(plan: TravelPlan, aiAvailable: boolean, searched: boo
     };
   }
   if (!aiAvailable) return { kind: "no-key", unknown };
+  // Still running beats "found nothing". The server told us which providers it
+  // is working on; repeating that is honest, and it is also the answer.
+  const stillGoing = unknown.filter((p) => pending.includes(p));
+  if (stillGoing.length > 0) return { kind: "searching", pending: stillGoing };
   return searched ? { kind: "searched-empty", unknown } : { kind: "never-searched", unknown };
 }
 
@@ -232,6 +246,8 @@ function termsHeadline(state: TermsState): string | null {
   switch (state.kind) {
     case "no-products":
       return "Nog geen betaalpas of creditcard met een bank erbij — er valt nog niets te vergelijken.";
+    case "searching":
+      return "LaVega zoekt de voorwaarden nu op — dat duurt een minuut of twee.";
     case "no-key":
       return "LaVega kan de voorwaarden hier niet opzoeken: deze server heeft geen AI-sleutel.";
     case "never-searched":
@@ -350,6 +366,18 @@ export function TermsNotice({
     );
   }
 
+  if (state.kind === "searching") {
+    return (
+      <div className="travel-terms" role="status">
+        <p className="cell-sub">
+          De server zoekt nu op: {nameList(state.pending)}. Dat duurt een minuut of twee — hij doet het op de
+          achtergrond, dus je hoeft niet te wachten. Kijk zo nog eens.
+        </p>
+        {searchButton(false, "Kijk of ze er al zijn")}
+      </div>
+    );
+  }
+
   if (state.kind === "never-searched") {
     return (
       <div className="travel-terms" role="status">
@@ -389,7 +417,7 @@ export function figureAge(updatedAt: string, asOf: string): string {
 }
 
 export default function TravelBlock({
-  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, onRefreshTerms, onRecheckAi, onCorrectFact,
+  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, pendingTerms = [], onRefreshTerms, onRecheckAi, onCorrectFact,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
   // One disclosure for the whole block. The answer is the product; everything
@@ -426,7 +454,7 @@ export default function TravelBlock({
     : null;
 
   const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
-  const terms = plan ? termsState(plan, aiAvailable, searched.includes(destination)) : null;
+  const terms = plan ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms) : null;
   // Core's headline advises a refresh whenever no route is priced; when the
   // refresh cannot work, or was never the missing piece, we say what is.
   const headline = (terms && termsHeadline(terms)) ?? plan?.headline ?? "";
