@@ -7,6 +7,48 @@ Status legend: `todo` · `questions-open` · `building` · `in-test` · `done`
 
 ---
 
+# WHAT IS STILL OPEN — 2026-08-17
+
+**This section is the single source of truth.** Everything below it is the historical record of
+how each item was captured; read that for intent, read this for state.
+
+Closed since 2026-08-16, in 22 commits (`16f107e` … `44b6d6c`): original items 1–8 all shipped or
+substantially shipped, both UI review rounds built, 870 tests passing.
+
+## Live defects
+
+| # | What | Notes |
+|---|---|---|
+| **L1** | **The travel agent returns zero card terms.** Clicking a destination gives "nog geen route met bekende voorwaarden". He re-ran the ingest and got nothing. | He asked to DISCUSS before it is fixed. Second symptom pointing at the same area as the invoice PDF bug. |
+| **L2** | **The invoice flow is untested end to end.** The extraction fix is merged but has never made a live run. | Blocked on his four n8n steps: create the Gmail label `lavega`, re-import, re-attach the credential, check `N8N_DEFAULT_BINARY_DATA_MODE`. |
+
+## Buildable now
+
+| # | What |
+|---|---|
+| **B1** | **Aandacht/priority block** — his "still needs work" from round 1, never revisited. |
+| **B2** | **The forecast itself** — the cashflow block is liked; the forecast behind it is not finished. |
+| **B3** | **Travel block discoverability** — "Ververs voorwaarden" exists (`TravelBlock.tsx:185`) but he could not find it. |
+| **B4** | **Rekeningen grouped by bank**, with the bank's logo and its cards behind a click. His own words: "maybe just test this out, I'm not sure yet." |
+| **B5** | **Punten UI** nicer. |
+| **B6** | **Trend lines on statistics**, but only if they genuinely add something. |
+| **B7** | **Three cleanups from the adversarial pass**: retire the dead `category-trend.ts` (+ its 7 misleadingly-green tests), remove the unreachable `rules`/`koppelingen`/`backup` view branches, and give `saveScheduledFlows` a merge-based save so Belasting can finally take a scoped flow list. |
+
+## Blocked on a decision or a constraint
+
+| # | What | The obstacle |
+|---|---|---|
+| **D1** | **Real card art** (his Amex Gold request) | Trademarked artwork, so bundling is a licensing question; fetching at runtime tells that server which cards he holds. Possible instead: product-specific generated art from our own tokens. |
+| **D2** | **Points derived from transactions** once he grants access once (Amex, ING) | His framing: ask once, then compute. Needs the access model decided. |
+| **D3** | **Enable Banking multi-account** | His instruction: after the MVP, not before. |
+| **D4** | **Colours and font sizing** | His instruction: after the content is settled. Cheap then, wasteful now. |
+| **D5** | **Notifications in the profile** | There is no notification mechanism in the app yet, so there is nothing to configure. Needs the feature first. |
+| **D6** | **What the chat widget becomes** | Removed from the chrome; his `[later]`. |
+| **D7** | **Disclaimers and terms** | At launch, not in the working screen. |
+| **D8** | **Never pushed.** Nothing in this session is on lavega.dev. | Awaiting his go-ahead. |
+
+---
+
 ## 1. Cross-agent money optimisation ("where do I put / convert / spend it")  — `in-test`
 
 > **Built and on master** (2026-08-13 → 08-15, `04e8da0` … `134f111`) as the **travel money
