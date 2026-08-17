@@ -298,3 +298,33 @@ test("without a comparison layer wired in, nothing changes", async () => {
   const res = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
   expect(res.pending).toEqual(["ING betaalpas"]);
 });
+
+/* --- Age beats precision once the gap is wide enough. Alexander's objection:
+ * "we cannot accept a 7-month-old information gap in today's economy". A
+ * koersopslag checked in January is not more trustworthy than one found this
+ * morning merely because its source is tidier. --- */
+
+test("a fresh agent figure is NOT overwritten by a months-old comparison figure", () => {
+  ingestCardTerms("NL", "USD", [{ provider: "Knab betaalpas", fxFeePct: 1.4 }], "agent");
+
+  // bank.nl states its own check date, and it is seven months back.
+  const stale = ingestCardTerms(
+    "NL",
+    "USD",
+    [{ provider: "Knab betaalpas", fxFeePct: 2, checkedAt: "2026-01-15" }],
+    "comparison",
+  );
+
+  expect(stale.accepted).toBe(0);
+  const held = getCardTerms(input(["Knab betaalpas"]), "k", { lookup: (async () => []) as never });
+  expect(held.terms[0].fxFeePct).toBe(1.4); // today's figure survives
+});
+
+test("a comparison figure DOES replace an agent figure of similar age — precision still decides", () => {
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 9.9 }], "agent");
+  const now = ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4 }], "comparison");
+
+  expect(now.accepted).toBe(1);
+  const held = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never });
+  expect(held.terms[0].fxFeePct).toBe(1.4);
+});

@@ -123,6 +123,10 @@ export type ProviderTerms = {
   pointsPerEuro?: number;
   transferFreeViaIdeal?: number;
   note?: string;
+  /** When the SOURCE says the figure was last checked (bank.nl stamps this).
+   *  Absent means "as of when we fetched it". Used by the precedence ladder:
+   *  a fee checked seven months ago must not overwrite one found today. */
+  checkedAt?: string;
 };
 
 const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 4 } as const;

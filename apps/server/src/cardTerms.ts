@@ -76,10 +76,41 @@ function stated(t: ProviderTerms): Partial<ProviderTerms> {
  *  bank.nl publishes a koersopslag and nothing else, so letting it land would
  *  otherwise wipe a cashback the agent had found. The entry's `source` becomes
  *  that of the most recent accepted write. */
+/** How old a stored figure may be before a LESS precise but newer one may
+ *  replace it. Alexander's objection, and he is right: "we cannot accept a
+ *  7-month-old information gap in today's economy". A koersopslag checked in
+ *  January is not more trustworthy than one found this morning merely because
+ *  its source is tidier. Precision decides between figures of similar age;
+ *  beyond this gap, age decides. */
+const STALE_GAP_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** When the figure was true, as best we know: the source's own stated check
+ *  date if it has one, else when we stored it. bank.nl stamps its rows; an
+ *  agent lookup is by definition as of now. */
+function figureDate(e: Entry): number {
+  const stated = e.terms.checkedAt ? Date.parse(e.terms.checkedAt) : NaN;
+  return Number.isFinite(stated) ? stated : e.at;
+}
+
 function write(key: string, terms: ProviderTerms, source: TermsSource): boolean {
   const prev = cache.get(key);
-  // Never overwrite a FRESHER, more precise figure. Expired is fair game.
-  if (prev && fresh(prev) && PRECISION[source] < PRECISION[prev.source]) return false;
+  const incomingDate = terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
+    ? Date.parse(terms.checkedAt)
+    : Date.now();
+  // Age beats precision once the gap is wide enough. Without this the ladder
+  // says a tidy source wins forever, and a stale figure freezes in place -
+  // which is exactly how bank.nl's January table would have overwritten a
+  // lookup done today.
+  if (prev && fresh(prev)) {
+    const gap = incomingDate - figureDate(prev); // positive = the incoming figure is newer
+    // Much OLDER: refused however tidy its source. This is the rule that stops
+    // bank.nl's January table from overwriting a lookup done this morning.
+    if (gap < -STALE_GAP_MS) return false;
+    // Much NEWER: accepted even from a less precise source, because a current
+    // figure beats a stale one for a fee that moves.
+    // Similar age: precision decides, as before.
+    if (gap <= STALE_GAP_MS && PRECISION[source] < PRECISION[prev.source]) return false;
+  }
   if (!prev && cache.size >= MAX_TRACKED) {
     // Evict the oldest entry rather than growing without bound.
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];

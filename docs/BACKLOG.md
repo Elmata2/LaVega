@@ -60,6 +60,12 @@ from about $3,000 upward — a bill before the first customer, in exchange for a
 whole mailbox. `lavega.dev` is already on Cloudflare with no MX records, so the forwarding route
 costs nothing to host. Dext, Hubdoc and Xero all solve it this way.
 
+> **BLOCKED 2026-08-17 — Cloudflare access sits with the cofounder, not Alexander.** Everything up
+> to the DNS is built and testable; switching on Email Routing and deploying the Worker needs whoever
+> holds that account. Two steps for them: enable Email Routing on `lavega.dev` (it adds MX + TXT
+> automatically; there are no MX records today, so nothing is displaced and it is reversible), then
+> deploy the Worker and point a **catch-all** at it. Nothing else in LaVega waits on this.
+
 ### Two things this route defers, recorded 2026-08-17
 
 **1. The address IS a credential.** For a single operator the pull works because his browser knows

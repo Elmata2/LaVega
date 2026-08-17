@@ -284,10 +284,13 @@ export function bankNameMatches(pageBank: string, ownBank: string): boolean {
 export function comparisonTermsFor(
   rows: readonly BankNlRow[],
   product: string,
-): { provider: string; fxFeePct: number; note: string } | null {
+): { provider: string; fxFeePct: number; note: string; checkedAt?: string } | null {
   const want = splitProductName(product);
   if (!want) return null;
   const row = rows.find((r) => r.card === want.card && bankNameMatches(r.bank, want.bank));
   if (!row) return null;
-  return { provider: String(product).trim(), fxFeePct: row.fxFeePct, note: row.note };
+  // The page stamps when it was last checked. Carry that as a FIELD, not only
+  // buried in the note text: how old a fee is decides whether it may still
+  // overwrite a fresher one, and a date nobody can read is a date nobody can use.
+  return { provider: String(product).trim(), fxFeePct: row.fxFeePct, note: row.note, checkedAt: row.checkedAt ?? undefined };
 }
