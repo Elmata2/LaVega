@@ -18,6 +18,38 @@ const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.me
 
 export const app = new Hono();
 
+/** A loopback origin — localhost or 127.0.0.1, any port. */
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/**
+ * CORS for local development only, and only for a loopback origin.
+ *
+ * In production the web app is served from THIS origin, so none of this applies
+ * and nothing changes. In development Vite serves the app on :5173 (or the next
+ * free port) while the server runs on :8787, which makes every agent call
+ * cross-origin. Without these headers the browser blocks the request, the fetch
+ * throws, and `App.tsx`'s status check falls into its catch and concludes the
+ * server has no AI key. That is exactly what happened: both servers answered
+ * `configured: true` to curl while the app on screen insisted there was no key.
+ *
+ * Deliberately NOT `Access-Control-Allow-Origin: *` the way /api/rates is. Those
+ * two endpoints return public data; these routes SPEND the owner's Anthropic
+ * key, so an open policy would let any page on the internet spend it. Only a
+ * loopback origin is echoed back, which no remote site can claim.
+ */
+app.use("/api/*", async (c, next) => {
+  const origin = c.req.header("Origin");
+  if (origin && LOOPBACK_ORIGIN.test(origin)) {
+    c.header("Access-Control-Allow-Origin", origin);
+    c.header("Vary", "Origin");
+    c.header("Access-Control-Allow-Headers", "content-type, x-ingest-token, x-lavega-token");
+    c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    // A JSON POST triggers a preflight; answer it here or the real call never runs.
+    if (c.req.method === "OPTIONS") return c.body(null, 204);
+  }
+  await next();
+});
+
 app.get("/health", (c) => c.json({ ok: true }));
 
 /**
