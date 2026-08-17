@@ -20,7 +20,7 @@ substantially shipped, both UI review rounds built, 870 tests passing.
 | # | What | Notes |
 |---|---|---|
 | **L1** | **The travel agent returns zero card terms.** Clicking a destination gives "nog geen route met bekende voorwaarden". He re-ran the ingest and got nothing. | He asked to DISCUSS before it is fixed. Second symptom pointing at the same area as the invoice PDF bug. |
-| **L2** | **The invoice flow is untested end to end.** The extraction fix is merged but has never made a live run. | Blocked on his four n8n steps: create the Gmail label `lavega`, re-import, re-attach the credential, check `N8N_DEFAULT_BINARY_DATA_MODE`. |
+| ~~**L2**~~ | ~~The invoice flow is untested end to end.~~ **DONE 2026-08-17** — a live run returned `{addedInvoices: 1, inQueue: 1, remembered: 1}`. Three stacked faults closed: `downloadAttachments` in the wrong place, the body starving on HTML-only mail, and a storage reference shipped as base64. | Remaining: pull the queue into LaVega (Koppelingen URL + token → *Ophalen uit n8n* in Facturen) and confirm the row. |
 
 ## Buildable now
 
