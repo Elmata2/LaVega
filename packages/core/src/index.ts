@@ -25,6 +25,7 @@ export * from "./rewards.js";
 export * from "./forecast.js";
 export * from "./housing.js";
 export * from "./alerts.js";
+export * from "./investing/index.js";
 export * from "./parsers/csv.js";
 export * from "./parsers/bankCsv.js";
 export * from "./parsers/invoiceCsv.js";

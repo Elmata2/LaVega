@@ -1,0 +1,9 @@
+LaVega vendors the following third-party source, per the policy recorded in
+https://github.com/Elmata2/LaVega/issues/36.
+
+## gloomberb
+
+packages/adapters/vendor/gloomberb/ — https://github.com/gloom-sh/gloomberb
+MIT License, Copyright (c) 2026 Gloomberb Contributors.
+See packages/adapters/vendor/gloomberb/README.md for the vendored commit and
+what was changed.

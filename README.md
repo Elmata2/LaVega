@@ -12,3 +12,9 @@ pnpm install
 pnpm test
 pnpm dev
 ```
+
+## Credits
+
+LaVega's Interactive Brokers Flex Web Service client is adapted from
+[gloomberb](https://github.com/gloom-sh/gloomberb) (MIT). See
+[NOTICE](NOTICE) for the full list of vendored third-party code.

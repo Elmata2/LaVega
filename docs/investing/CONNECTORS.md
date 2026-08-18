@@ -52,7 +52,7 @@ export interface BrokerAccessAdapter {
 
 Per-broker failures go in `problems` so one broken connection doesn't block the rest, exactly as `BankAccessAdapter` does it. An adapter that can't reach its broker returns a `BrokerResult` with empty arrays and a populated `problems`; it does not throw.
 
-`Position` and `Trade` land in `packages/core/investing/`. `Trade` carries an `id` computed the same way `tx.id` is — a hash over the identifying fields plus an occurrence counter — because scheduled syncs re-fetch overlapping windows and would otherwise double-count. Follow `packages/core/src/hash.ts`; do not invent a second hashing scheme.
+`Position` and `Trade` land in `packages/core/src/investing/`. Positions carry the broker symbol, quantity, average/market price, market value, currency, and statement date. Trades carry ISO date, symbol, buy/sell side, quantity, price, amount, currency, commission, and an optional broker trade ID. Monetary values use the instrument/trade currency; quantities use broker units. `Trade` carries an `id` computed by `assignTradeIds` using the same hash and occurrence-counter pattern as bank transactions. Adapters return `Omit<Trade, "id">[]`; core stamps IDs after combining adapter results.
 
 ## Credentials & secrets
 
@@ -110,7 +110,7 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 **Fetch flow:** Flex is two-step — `SendRequest` returns a reference code, then `GetStatement` must be polled with that code until the report is ready. The adapter polls synchronously with backoff inside `sync()`, timing out at ~30–60s; a timeout surfaces via `problems[]`. Blocking is acceptable because this runs on a schedule, not behind a user-facing click.
 
-**Dependency:** `fast-xml-parser` (new). The Flex report is flat but attribute-based (`<OpenPosition symbol="..." position="..." />`) — not worth hand-rolling.
+**Dependency:** none. Flex reports used by the adapter are flat, attribute-based rows (`<OpenPosition symbol="..." position="..." />` and `<Trade ... />`). A small parser handles those rows, XML entities, IBKR's `YYYYMMDD;HHMMSS` date format, and per-row problems without adding an XML runtime dependency.
 
 **Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions and Trades sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID.
 

@@ -6,3 +6,7 @@ export * from "./banking/BankAccessAdapter.js";
 export * from "./banking/fileImport.js";
 export * from "./banking/enableBankingMap.js";
 export * from "./rates/ratesProvider.js";
+export * from "./brokers/BrokerAccessAdapter.js";
+export * from "./brokers/ibkr/flexStatementClient.js";
+export * from "./brokers/ibkr/flexAdapter.js";
+export * from "./brokers/ibkr/flexParser.js";
