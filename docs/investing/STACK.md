@@ -68,6 +68,22 @@ Brokers supply positions and trades, not price series — external price and FX 
 
 **Sync model this hosting must serve** (from `CONNECTORS.md`): IBKR and Trading 212 sync daily and automatically; DeGiro is manual, user-triggered file upload, no scheduling at all. **Decision: one shared Cron Trigger, one `wrangler.toml` entry**, firing a single daily job that loops both adapters — not a separate trigger per adapter. Each adapter's failure lands in its own `problems[]` (the existing `BrokerAccessAdapter` shape), so one broker going down doesn't block the other; nothing in `CONNECTORS.md` gives IBKR and Trading 212 different run-time needs, so a second trigger would just be one more moving part for no benefit. Local tier's answer is above, under Local tier. Investing-side only: Enable Banking's sync on the personal side has no scheduler today either — it's pulled on-demand, not cron-driven — and stays out of this ticket's scope ([Sync scheduling mechanism](https://github.com/Elmata2/LaVega/issues/31)).
 
+## Observability & error reporting
+
+**Hosted tier: Sentry (Workers SDK).** Captures uncaught exceptions from the daily Cron Trigger job, and — since `BrokerAccessAdapter` never throws — also calls `captureMessage()` at warning level for every non-empty `problems[]` result, naming the broker and reason. Without that second path, this ticket's own motivating scenario (IBKR failing mid-backoff) would never reach Sentry, since a Flex poll timeout surfaces via `problems[]`, not an exception.
+
+Ruled out: Workers-native (Tail Workers + Logpush + Workers Analytics Engine) — Logpush needs Workers Paid, which conflicts with #24's free-tier-not-plan-gated reasoning for picking Workers in the first place. Sentry's free tier (5k events/month) covers one daily cron job with room to spare.
+
+**DSN custody:** a Workers Secret, not the `CredentialStore`/`KeySource` seam (#27) — it's one static ops-level value for the whole deployment, not per-tenant data.
+
+**Scrubbing:** a `beforeSend` hook strips anything matching broker Query ID / API-key shape before an event leaves the Worker — `problems[]` messages can echo raw provider error text.
+
+**Alerting:** Sentry's built-in email notification. No Slack/Discord webhook for v1.
+
+**Local/self-hosted tier: stdout logs only.** No Sentry wiring by default — an optional DSN env var lets a self-hoster opt in themselves; matches the local-tier stance elsewhere in this map (#24, #35) of never forcing a third-party cloud dependency onto the self-hosted deploy.
+
+([Observability / error reporting for investing-server hosted tier](https://github.com/Elmata2/LaVega/issues/32))
+
 ## Browser-access approach for API-less brokers
 
 **DeGiro v1 is manual CSV import, reusing the `FileImport` seam.** No credentials, no login, no local Playwright, no managed/remote browser vendor. DeGiro gets a file-import profile behind the same `FileImport` seam `BankAccessAdapter` already uses for MT940/CAMT/CSV bank statements — the user exports their own portfolio/transaction data from DeGiro's web app and uploads it ([Decide browser-access approach for API-less brokers](https://github.com/Elmata2/LaVega/issues/25)).
@@ -118,7 +134,6 @@ Deliberately **not** specified here. Named so the next effort knows where the ed
 
 - **`apps/investing-web` UI/UX design** — layout, information hierarchy, what the overview page actually looks like. Visual identity (palette, type, frame/radius/shadow language) is settled above; this is layout only.
 - **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals — carried forward unchanged from `CONNECTORS.md`'s Future work.
-- **Observability / error reporting** for the hosted tier's scheduled jobs ([#32](https://github.com/Elmata2/LaVega/issues/32)).
 - **Testing shape for the investing side** — not yet ticketed.
 - **DeGiro local-Playwright automation**, live scheduled sync driving DeGiro's real UI instead of manual CSV export ([#33](https://github.com/Elmata2/LaVega/issues/33)).
 - **Confirm-on-build items:** whether EODHD remains worth offering as an optional local provider now that Yahoo is the free default ([#37](https://github.com/Elmata2/LaVega/issues/37)); written confirmation of marketstack's redistribution licence reading ([#38](https://github.com/Elmata2/LaVega/issues/38)).
