@@ -33,8 +33,8 @@
       "pdfUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
       "pdfCheckedAt": "2026-06-15",
       "lastValue": 1.4,
-      "lastRoute": "provider-pdf",
-      "lastReason": "provider-page: no figure · provider-pdf: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ing-creditcard": {
       "product": "ING creditcard",
@@ -51,7 +51,7 @@
       "pdfNote": "ING_Kostenoverzicht 2026-06-15 does carry this rate (ING Creditcard More 2,00%; Creditcard Extra 0,00% tot EUR 1000 p/m, daarna 2,00%), but the package table puts the label 'Koersopslag non-euro' on the line BELOW the figures, so readIngTariffs - which only emits lines containing 'koersopslag' - cannot reach it, and figures[0] is the betaalpas row (1,40%). Left unrouted rather than covered with the debit card's number.",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "ing-platinumcard": {
       "product": "ING Platinumcard",
@@ -84,9 +84,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": 2,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established",
+      "lastValue": 1.2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
       "figureNote": "THE RECORDED 2% IS ANOTHER PRODUCT'S ROW. Re-measured 2026-08-18 on the live page: the sweep's regex takes the FIRST koersopslag on the page, which is 'Opnemen van contant geld (biljetten) in het buitenland met een creditcard ... In buitenlands geld 4% + 2,00 % valutakoersopslag' - the credit card's ATM row. The betaalpas rate is further down: 'Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer'. It is refused today (conditionsKnown=false), and lastReason says only 'conditions not established', which reads as 'we have the number, we lack the cap'. We do not have the number. Do not promote this figure by establishing conditions for it; provider-page needs product-row attribution first."
     },
     "abn-amro-creditcard": {
@@ -105,9 +105,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "abn-amro-gold-card": {
       "product": "ABN AMRO Gold Card",
@@ -125,7 +125,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "rabobank-betaalpas": {
       "product": "Rabobank betaalpas",
@@ -139,9 +139,9 @@
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastValue": 1.4,
+      "lastRoute": "wayback",
+      "lastReason": "wayback: conditions not established"
     },
     "rabobank-creditcard": {
       "product": "Rabobank creditcard",
@@ -155,9 +155,9 @@
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": "wayback: conditions not established"
     },
     "rabo-goldcard": {
       "product": "Rabo GoldCard",
@@ -171,9 +171,9 @@
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": "wayback: conditions not established"
     },
     "sns-betaalpas": {
       "product": "SNS betaalpas",
@@ -190,9 +190,9 @@
       ],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "sns-creditcard": {
       "product": "SNS creditcard",
@@ -210,9 +210,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "asn-betaalpas": {
       "product": "ASN betaalpas",
@@ -228,9 +228,9 @@
       ],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "asn-creditcard": {
       "product": "ASN Creditcard",
@@ -248,9 +248,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "regiobank-betaalpas": {
       "product": "RegioBank betaalpas",
@@ -266,9 +266,9 @@
       ],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "regiobank-creditcard": {
       "product": "RegioBank creditcard",
@@ -285,9 +285,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=yes (PDF extractor required), pdfUrl=none)"
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": "wayback: conditions not established"
     },
     "knab-betaalpas": {
       "product": "Knab betaalpas",
@@ -306,8 +306,8 @@
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established"
     },
     "knab-creditcard": {
       "product": "Knab creditcard",
@@ -325,9 +325,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": 1.4,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
       "figureNote": "THE RECORDED 1,4% IS THE DEBIT CARD'S ROW. Re-measured 2026-08-18 on knab.nl/tarieven: the first match is 'Betalen en opname van contant geld buiten eurolanden - Mastercard wisselkoers + 1,4% koersopslag', which is the betaalrekening. The credit card's own row, further down, reads 'Betalingen in vreemde valuta 2% koersopslag'. Both products share one termsUrl and the regex cannot tell the rows apart. Refused today; do not promote it."
     },
     "triodos-betaalpas": {
@@ -346,7 +346,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "bunq-free-betaalpas": {
       "product": "bunq Free betaalpas",
@@ -365,9 +365,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 3,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "bunq-core-betaalpas": {
       "product": "bunq Core betaalpas",
@@ -386,9 +386,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "bunq-pro-betaalpas": {
       "product": "bunq Pro betaalpas",
@@ -408,7 +408,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-elite-betaalpas": {
       "product": "bunq Elite betaalpas",
@@ -427,9 +427,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "bunq-creditcard": {
       "product": "bunq creditcard",
@@ -448,7 +448,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-termijndeposito": {
       "product": "bunq Termijndeposito",
@@ -467,7 +467,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-beleggingsrekening": {
       "product": "bunq beleggingsrekening",
@@ -485,7 +485,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-crypto": {
       "product": "bunq crypto",
@@ -503,7 +503,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-free-business-betaalpas": {
       "product": "bunq Free Business betaalpas",
@@ -522,7 +522,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-core-business-betaalpas": {
       "product": "bunq Core Business betaalpas",
@@ -541,7 +541,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-pro-business-betaalpas": {
       "product": "bunq Pro Business betaalpas",
@@ -560,7 +560,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-elite-business-betaalpas": {
       "product": "bunq Elite Business betaalpas",
@@ -579,7 +579,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "revolut-standard-betaalpas": {
       "product": "Revolut Standard betaalpas",
@@ -593,9 +593,9 @@
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastValue": 1,
+      "lastRoute": "wayback",
+      "lastReason": null
     },
     "revolut-plus-betaalpas": {
       "product": "Revolut Plus betaalpas",
@@ -609,9 +609,9 @@
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastValue": 0.5,
+      "lastRoute": "wayback",
+      "lastReason": null
     },
     "revolut-premium-betaalpas": {
       "product": "Revolut Premium betaalpas",
@@ -627,7 +627,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "revolut-metal-betaalpas": {
       "product": "Revolut Metal betaalpas",
@@ -643,7 +643,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "n26-standard-betaalpas": {
       "product": "N26 Standard betaalpas",
@@ -665,7 +665,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "n26-smart-betaalpas": {
       "product": "N26 Smart betaalpas",
@@ -687,7 +687,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "n26-go-betaalpas": {
       "product": "N26 Go betaalpas",
@@ -709,7 +709,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "n26-metal-betaalpas": {
       "product": "N26 Metal betaalpas",
@@ -731,7 +731,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "n26-instant-savings": {
       "product": "N26 Instant Savings",
@@ -750,7 +750,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "n26-flexible-cash-fund": {
       "product": "N26 flexible cash fund",
@@ -769,7 +769,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "wise-betaalpas": {
       "product": "Wise betaalpas",
@@ -789,7 +789,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "wise-rente": {
       "product": "Wise Rente",
@@ -808,7 +808,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "wise-aandelen": {
       "product": "Wise Aandelen",
@@ -827,7 +827,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "trade-republic-betaalpas": {
       "product": "Trade Republic betaalpas",
@@ -848,7 +848,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=yes via SSR payload, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "trade-republic-spaarrekening-rente-op-kassaldo": {
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
@@ -867,7 +867,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=yes via SSR payload, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "212-card": {
       "product": "212 Card",
@@ -888,7 +888,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "trading-212-interest-on-cash": {
       "product": "Trading 212 interest on cash",
@@ -906,7 +906,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=yes (conditions only), pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "trading-212-beleggingsrekening": {
       "product": "Trading 212 beleggingsrekening",
@@ -924,7 +924,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=yes (conditions only), pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "openbank-betaalpas-r42-betaalpas": {
       "product": "Openbank betaalpas (R42 Betaalpas)",
@@ -943,7 +943,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-blue-card": {
       "product": "American Express Blue Card",
@@ -964,7 +964,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-green-card": {
       "product": "American Express Green Card",
@@ -985,7 +985,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-gold-card": {
       "product": "American Express Gold Card",
@@ -1006,7 +1006,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-platinum-card": {
       "product": "American Express Platinum Card",
@@ -1027,7 +1027,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "flying-blue-american-express-entry-card": {
       "product": "Flying Blue - American Express Entry Card",
@@ -1048,7 +1048,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "flying-blue-american-express-silver-card": {
       "product": "Flying Blue - American Express Silver Card",
@@ -1068,7 +1068,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "flying-blue-american-express-gold-card": {
       "product": "Flying Blue - American Express Gold Card",
@@ -1089,7 +1089,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "flying-blue-american-express-platinum-card": {
       "product": "Flying Blue - American Express Platinum Card",
@@ -1109,7 +1109,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-business-entry-card": {
       "product": "American Express Business Entry Card",
@@ -1129,7 +1129,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-business-green-card": {
       "product": "American Express Business Green Card",
@@ -1149,7 +1149,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-business-gold-card": {
       "product": "American Express Business Gold Card",
@@ -1169,7 +1169,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-corporate-card": {
       "product": "American Express Corporate Card",
@@ -1189,7 +1189,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "american-express-corporate-gold-card": {
       "product": "American Express Corporate Gold Card",
@@ -1209,7 +1209,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "klm-american-express-corporate-card": {
       "product": "KLM American Express Corporate Card",
@@ -1228,7 +1228,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "ics-visa-world-card": {
       "product": "ICS Visa World Card",
@@ -1247,9 +1247,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-visa-world-card-gold": {
       "product": "ICS Visa World Card Gold",
@@ -1269,7 +1269,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "ics-visa-world-card-platinum": {
       "product": "ICS Visa World Card Platinum",
@@ -1288,9 +1288,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-visa-world-card-panda": {
       "product": "ICS Visa World Card Panda",
@@ -1309,9 +1309,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-mastercard-classic": {
       "product": "ICS Mastercard Classic",
@@ -1330,9 +1330,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-mastercard-gold": {
       "product": "ICS Mastercard Gold",
@@ -1351,9 +1351,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-mastercard-black": {
       "product": "ICS Mastercard Black",
@@ -1372,9 +1372,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "ics-visa-world-card-business": {
       "product": "ICS Visa World Card Business",
@@ -1394,8 +1394,8 @@
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established"
     },
     "ics-visa-world-card-business-gold": {
       "product": "ICS Visa World Card Business Gold",
@@ -1415,8 +1415,8 @@
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established"
     },
     "ics-mastercard-business": {
       "product": "ICS Mastercard Business",
@@ -1436,8 +1436,8 @@
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established"
     },
     "ics-mastercard-corporate": {
       "product": "ICS Mastercard Corporate",
@@ -1457,8 +1457,8 @@
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
-      "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established"
     },
     "anwb-visa-classic-card": {
       "product": "ANWB Visa Classic Card",
@@ -1476,9 +1476,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established"
     },
     "anwb-visa-silver-card": {
       "product": "ANWB Visa Silver Card",
@@ -1497,7 +1497,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "anwb-visa-gold-card": {
       "product": "ANWB Visa Gold Card",
@@ -1516,7 +1516,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "crypto-com-prepaid-card-basic-midnight-blue": {
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
@@ -1536,7 +1536,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "crypto-com-prepaid-card-plus-ruby-steel": {
       "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
@@ -1556,7 +1556,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "crypto-com-prepaid-card-pro-jade-green-royal-indigo": {
       "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
@@ -1576,7 +1576,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "crypto-com-prepaid-card-private-icy-white-rose-gold": {
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
@@ -1596,7 +1596,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "crypto-com-prepaid-card-private-obsidian": {
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
@@ -1616,7 +1616,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "nexo-card": {
       "product": "Nexo Card",
@@ -1635,9 +1635,9 @@
       ],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastValue": 0.2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "krak-card-kraken": {
       "product": "Krak Card (Kraken)",
@@ -1658,7 +1658,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "plutus-card": {
       "product": "Plutus Card",
@@ -1678,7 +1678,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bleap-card": {
       "product": "Bleap Card",
@@ -1697,7 +1697,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "zeal-card-gnosis-pay-rails": {
       "product": "Zeal Card (Gnosis Pay rails)",
@@ -1718,7 +1718,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "gnosis-pay-card-direct-consumer": {
       "product": "Gnosis Pay Card (direct consumer)",
@@ -1734,7 +1734,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "bybit-card": {
       "product": "Bybit Card",
@@ -1750,7 +1750,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=js-shell, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "coinbase-card": {
       "product": "Coinbase Card",
@@ -1766,7 +1766,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "wirex-card-wirex-one": {
       "product": "Wirex Card (Wirex One)",
@@ -1782,7 +1782,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "binance-card": {
       "product": "Binance Card",
@@ -1798,7 +1798,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=unfetchable, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "paysafecard-prepaid-code-paysafewallet": {
       "product": "paysafecard (prepaid code / PaysafeWallet)",
@@ -1817,7 +1817,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "tria-card": {
       "product": "Tria Card",
@@ -1833,7 +1833,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "bigbank-flexibel-sparen": {
       "product": "Bigbank Flexibel Sparen",
@@ -1853,7 +1853,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "bunq-spaarrekening-massinterest": {
       "product": "bunq spaarrekening (MassInterest)",
@@ -1872,7 +1872,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "santander-consumer-bank-spaarrekening": {
       "product": "Santander Consumer Bank Spaarrekening",
@@ -1891,7 +1891,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "garanti-bbva-international-gouden-internet-rekening": {
       "product": "Garanti BBVA International Gouden Internet Rekening",
@@ -1907,7 +1907,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "dhb-bank-saveonlinerekening": {
       "product": "DHB Bank S@veOnlinerekening",
@@ -1927,7 +1927,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "anadolubank-alfa-slimmer-sparen": {
       "product": "Anadolubank Alfa Slimmer Sparen",
@@ -1946,7 +1946,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "scalable-capital-scalable-overnight": {
       "product": "Scalable Capital Scalable Overnight",
@@ -1965,7 +1965,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "raisin-spaarrekening-platform-19-partner-banks": {
       "product": "Raisin spaarrekening (platform, 19 partner banks)",
@@ -1984,7 +1984,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "klarna-flex-rekening": {
       "product": "Klarna Flex rekening",
@@ -2003,7 +2003,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "ayvens-bank-flexibel-sparen": {
       "product": "Ayvens Bank Flexibel Sparen",
@@ -2021,7 +2021,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "argenta-internetspaarrekening": {
       "product": "Argenta Internetspaarrekening",
@@ -2039,7 +2039,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "openbank-welkom-spaarrekening": {
       "product": "Openbank Welkom Spaarrekening",
@@ -2059,7 +2059,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "openbank-open-spaarrekening": {
       "product": "Openbank Open Spaarrekening",
@@ -2079,7 +2079,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "yapi-kredi-bank-euro-plus-spaarrekening": {
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
@@ -2098,7 +2098,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "nibc-spaarrekening": {
       "product": "NIBC Spaarrekening",
@@ -2118,7 +2118,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "nibc-kwartaalspaarrekening": {
       "product": "NIBC Kwartaalspaarrekening",
@@ -2138,7 +2138,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "lloyds-bank-spaarrekening": {
       "product": "Lloyds Bank Spaarrekening",
@@ -2158,7 +2158,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "nationale-nederlanden-internetsparen": {
       "product": "Nationale-Nederlanden Internetsparen",
@@ -2177,7 +2177,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "centraal-beheer-rentepl-s-rekening": {
       "product": "Centraal Beheer RentePlús Rekening",
@@ -2196,7 +2196,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "knab-flexibel-sparen": {
       "product": "Knab Flexibel Sparen",
@@ -2216,7 +2216,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "abn-amro-direct-sparen": {
       "product": "ABN AMRO Direct Sparen",
@@ -2232,7 +2232,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=marketing-only, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "ing-oranje-spaarrekening": {
       "product": "ING Oranje Spaarrekening",
@@ -2248,7 +2248,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "rabobank-rabo-spaarrekening": {
       "product": "Rabobank Rabo SpaarRekening",
@@ -2264,7 +2264,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     },
     "asn-bank-asn-ideaalsparen": {
       "product": "ASN Bank ASN Ideaalsparen",
@@ -2283,7 +2283,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "sns-internet-sparen": {
       "product": "SNS Internet Sparen",
@@ -2302,7 +2302,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "regiobank-spaar-op-maat-vrij": {
       "product": "RegioBank Spaar-op-Maat Vrij",
@@ -2321,7 +2321,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "triodos-bank-internet-sparen": {
       "product": "Triodos Bank Internet Sparen",
@@ -2340,7 +2340,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "brand-new-day-de-spaarrekening": {
       "product": "Brand New Day De Spaarrekening",
@@ -2359,7 +2359,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "nexent-bank-spaarrekening": {
       "product": "Nexent Bank Spaarrekening",
@@ -2378,7 +2378,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure"
     },
     "revolut-dagelijkse-spaarrekening": {
       "product": "Revolut Dagelijkse Spaarrekening",
@@ -2394,7 +2394,7 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "wayback: no figure"
     }
   }
 }
