@@ -1,6 +1,10 @@
 import type { Account, Rule, Tx } from "./model.js";
-import { categorize, type OwnAccounts } from "./views.js";
+import { categorize, ownAccounts, type OwnAccounts } from "./views.js";
 import { accountType } from "./balance.js";
+import type { LearnedFact } from "./facts.js";
+import { factNumber } from "./facts.js";
+import { resolveAccountRate, type RateBenchmark, type RateSource } from "./interest.js";
+import { productOf, TRAVEL_AGENT } from "./travel.js";
 
 /** Money moved between the owner's own accounts is not spending. Same category
  *  the forecast excludes, for the same reason: a €50k sweep to savings is not
@@ -79,4 +83,49 @@ export function annualSpendCents(
     kind: accountType(account) === "Creditcard" ? "exact" : "upper-bound",
     observedDays,
   };
+}
+
+/** What one account he already holds earns and returns.
+ *
+ *  Two rates on two DIFFERENT bases, deliberately kept apart: savings earns on
+ *  the balance sitting there, cashback returns on what is spent. Adding them
+ *  into one percentage would read well and mean nothing. */
+export type AccountReturn = {
+  account: Account;
+  savingsPct: number | null;
+  savingsSource: RateSource;
+  cashbackPct: number | null;
+  balanceCents: number;
+  spend: SpendBase;
+};
+
+export function accountReturns(
+  accounts: Account[],
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts | undefined,
+  facts: readonly LearnedFact[],
+  rates: readonly RateBenchmark[],
+  asOf: string,
+): AccountReturn[] {
+  // A caller with no own-accounts set does not mean "he has none": these ARE
+  // his accounts, so build it from them rather than counting a sweep to his own
+  // savings as spending. A set passed in wins - it may cover accounts outside
+  // this (entity-scoped) list, and a wider set excludes more, never less.
+  const mine = own ?? ownAccounts(accounts);
+
+  return accounts.map((account) => {
+    const { ratePct, source } = resolveAccountRate(account, txs, asOf, rates);
+    // Cashback belongs to the PRODUCT, so it is keyed the same way the travel
+    // agent keys it — one correction moves both surfaces at once.
+    const product = productOf(account);
+    return {
+      account,
+      savingsPct: ratePct,
+      savingsSource: source,
+      cashbackPct: product ? factNumber(facts, TRAVEL_AGENT, product, "cashbackPct") : null,
+      balanceCents: account.balance === null ? 0 : Math.round(account.balance * 100),
+      spend: annualSpendCents(account, txs, rules, mine, asOf),
+    };
+  });
 }

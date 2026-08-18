@@ -109,3 +109,59 @@ test("an ordinary import lag is not staleness: the boundary is MAX_SPEND_GAP_DAY
   expect(upTo("2026-05-19").perYearCents).toBeNull(); // one day too old
   expect(upTo("2026-05-19").kind).toBe("unknown");
 });
+
+import { accountReturns } from "./returns.js";
+import { makeFact } from "./facts.js";
+import { TRAVEL_AGENT } from "./travel.js";
+
+const cashbackFact = (subject: string, value: string) =>
+  makeFact({ agent: TRAVEL_AGENT, subject, key: "cashbackPct", value,
+             source: "agent", updatedAt: "2026-08-18" });
+
+test("cashback is read from the product fact, and a card without one stays UNKNOWN", () => {
+  const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening", balance: 20_000 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 5_000 });
+  const facts = [cashbackFact("Trading 212 betaalpas", "1.5")];
+
+  const out = accountReturns([t212, ing], [], [], undefined, facts, [], "2026-08-18");
+  const byKey = Object.fromEntries(out.map((r) => [r.account.key, r]));
+
+  expect(byKey.t212.cashbackPct).toBe(1.5);
+  // ING has no cashback fact. It is NOT 0% — nobody said so.
+  expect(byKey.ing.cashbackPct).toBeNull();
+});
+
+test("the balance rate keeps the source it came from, and cents are integers", () => {
+  const savings = acc({ key: "spaar", bank: "Trading 212", name: "Spaar",
+                        type: "Spaarrekening", balance: 20_000, interestRate: 3.5 });
+  const out = accountReturns([savings], [], [], undefined, [], [], "2026-08-18");
+
+  expect(out[0].savingsPct).toBe(3.5);
+  expect(out[0].savingsSource).toBe("manual"); // he typed it; nothing may overrule that
+  expect(out[0].balanceCents).toBe(2_000_000);
+});
+
+test("an account with no saldo reports zero cents rather than guessing one", () => {
+  const unknown = acc({ key: "x", balance: null });
+  expect(accountReturns([unknown], [], [], undefined, [], [], "2026-08-18")[0].balanceCents).toBe(0);
+});
+
+test("a caller who passes no own-accounts set still does not count a sweep as spending", () => {
+  // accountReturns is handed the accounts themselves, so it can build the own
+  // set the exclusion needs. Without this, a €5.000 move to his own savings is
+  // spend on the paying account - and on a payment account that inflated base
+  // is what the cashback percentage multiplies.
+  const pay = acc({ key: "ing", iban: "NL01INGB0001111111", type: "Betaalrekening" });
+  const savings = acc({ key: "spaar", iban: "NL01INGB0002222222", name: "Spaar" });
+  const txs = [
+    tx({ id: "a", accountKey: "ing", date: "2026-03-01", amount: -300 }),
+    tx({ id: "b", accountKey: "ing", date: "2026-08-27", amount: -5000,
+         counterparty: "NL01INGB0002222222", description: "naar spaarrekening" }),
+  ];
+
+  const out = accountReturns([pay, savings], txs, [], undefined, [], [], "2026-08-27");
+  const ing = out.find((r) => r.account.key === "ing");
+
+  expect(ing?.spend.perYearCents).toBe(Math.round((30_000 * 365) / 179));
+  expect(ing?.spend.kind).toBe("upper-bound");
+});
