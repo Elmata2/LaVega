@@ -376,6 +376,8 @@ test("the no-key state offers a way to re-check, because the key check runs once
       state={{ kind: "no-key", unknown: ["ING betaalpas"] }}
       busy={false}
       aiAvailable={false}
+      termsAsked={0}
+      termsGaveUp={false}
       onSearch={() => {}}
       onRecheckAi={() => {}}
     />,
@@ -398,8 +400,45 @@ test("'still looking' is not the same claim as 'nothing came back'", () => {
   expect(termsState(plan, true, true, []).kind).toBe("searched-empty");
 
   const html = renderToStaticMarkup(
-    <TermsNotice state={busy} busy={false} aiAvailable={true} onSearch={() => {}} onRecheckAi={() => {}} />,
+    <TermsNotice state={busy} busy={false} aiAvailable={true} termsAsked={0} termsGaveUp={false} onSearch={() => {}} onRecheckAi={() => {}} />,
   );
-  expect(html).toContain("zoekt nu op");
+  expect(html).toContain("zoekt de voorwaarden op");
   expect(html).not.toContain("geen bruikbaar tarief");
+});
+
+test("while the server is looking, the block SHOWS it working and counts up", () => {
+  // The HTTP call returns in ~200ms; the lookup runs for minutes. Tracking the
+  // request left the screen still while the work happened, which is what made
+  // him ask whether anything was working at all.
+  const html = renderToStaticMarkup(
+    <TermsNotice
+      state={{ kind: "searching", pending: ["Revolut betaalpas", "Trading 212 betaalpas"] }}
+      busy={false}
+      aiAvailable={true}
+      termsAsked={4}
+      termsGaveUp={false}
+      onSearch={() => {}}
+      onRecheckAi={() => {}}
+    />,
+  );
+
+  expect(html).toContain("spinner");
+  expect(html).toContain("2 van 4 gevonden"); // 4 asked, 2 still pending
+  expect(html).toContain("werkt zichzelf bij");
+  expect(html).toContain('aria-live="polite"'); // it changes under him; say so
+});
+
+test("when the lookups run out of time it says so, rather than spinning forever", () => {
+  const html = renderToStaticMarkup(
+    <TermsNotice
+      state={{ kind: "searching", pending: ["Revolut betaalpas"] }}
+      busy={false}
+      aiAvailable={true}
+      termsAsked={1}
+      termsGaveUp={true}
+      onSearch={() => {}}
+      onRecheckAi={() => {}}
+    />,
+  );
+  expect(html).toContain("Er kwam niets meer binnen");
 });

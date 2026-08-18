@@ -134,6 +134,12 @@ export default function App() {
   // this to say "still searching" instead of "nothing came back" — two very
   // different sentences that used to be one.
   const [pendingTerms, setPendingTerms] = useState<string[]>([]);
+  /** How many providers the last ask covered, so the indicator can count up
+   *  ("2 van 4 gevonden") instead of only counting what is left. */
+  const [termsAsked, setTermsAsked] = useState(0);
+  /** The lookups ran their course without finishing. Said out loud rather than
+   *  leaving a spinner turning forever, which is its own kind of lie. */
+  const [termsGaveUp, setTermsGaveUp] = useState(false);
   const [askText, setAskText] = useState<string | null>(null);
   const [askNonce, setAskNonce] = useState(0);
   function askAssistant(text: string) {
@@ -737,6 +743,54 @@ export default function App() {
     }
   }
 
+  /** Re-ask the cached endpoint until nothing is pending. Each pass writes what
+   *  has landed, so the count moves and he can see it working. Bounded: a lookup
+   *  that has not finished in this long is not going to, and a spinner that
+   *  never stops says less than an honest "we gave up". */
+  const POLL_MS = 15_000;
+  const POLL_CEILING_MS = 6 * 60_000;
+
+  async function pollTravelTerms(
+    destination: string,
+    providers: string[],
+    knownFacts: { subject: string; key: string; value: string }[],
+  ) {
+    const until = Date.now() + POLL_CEILING_MS;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      let reply: Awaited<ReturnType<typeof travelFacts>>;
+      try {
+        reply = await travelFacts({
+          homeCountry,
+          destination,
+          currency: countryCurrency(destination) ?? "",
+          providers,
+          knownFacts,
+        });
+      } catch {
+        return; // offline or the server went away: stop, do not claim progress
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const learned: LearnedFact[] = [];
+      for (const t of reply.terms) {
+        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+        const put = (key: string, value: number | undefined) => {
+          if (value === undefined) return;
+          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
+        };
+        put("fxFeePct", t.fxFeePct);
+        put("convertFeePct", t.convertFeePct);
+        put("cashbackPct", t.cashbackPct);
+        put("pointsPerEuro", t.pointsPerEuro);
+        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+      }
+      if (learned.length > 0) await saveFacts(learned);
+      setPendingTerms(reply.pending);
+      if (reply.pending.length === 0) return;
+    }
+    setTermsGaveUp(true);
+  }
+
   async function handleRefreshTravelTerms(destination: string) {
     // He may have added the key since this tab loaded. Ask again before telling
     // him it cannot be done.
@@ -790,6 +844,14 @@ export default function App() {
       if (learned.length > 0) await saveFacts(learned);
 
       setPendingTerms(pending);
+      setTermsAsked(providers.length);
+      setTermsGaveUp(false);
+      // The HTTP call is done in ~200ms; the LOOKUPS keep running on the server
+      // for 40s to a few minutes. Tracking the request left the screen still
+      // while the real work was happening, which is exactly what made him guess
+      // whether anything was working. So poll the cheap cached endpoint until
+      // the pending list drains, and stop rather than spin forever.
+      if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
       if (pending.length > 0) {
         setProblems([
           `LaVega zoekt de voorwaarden van ${pending.join(", ")} nu op — dat duurt een minuut of twee. Klik daarna nog eens op "Zoek voorwaarden", of vul ze zelf in met "aanpassen".`,
@@ -874,6 +936,8 @@ export default function App() {
                 aiAvailable: llmConfigured,
                 onRefreshTerms: handleRefreshTravelTerms,
                 pendingTerms,
+                termsAsked,
+                termsGaveUp,
                 onRecheckAi: () => void recheckLlm(),
                 onCorrectFact: (fact) => void saveFacts([fact]),
               }}

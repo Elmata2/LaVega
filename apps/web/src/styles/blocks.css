@@ -830,3 +830,30 @@
     display: none;
   }
 }
+
+/* Busy indicator for a lookup that runs on the SERVER, long after the request
+   that started it returned. Drawn, never fetched: an image would be a network
+   request that says who is using the app. */
+.travel-searching {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.travel-searching .spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: lavega-spin 900ms linear infinite;
+}
+@keyframes lavega-spin {
+  to { transform: rotate(360deg); }
+}
+/* A turning thing is motion someone may have asked not to see. Stated rather
+   than animated: the border alone still reads as "working". */
+@media (prefers-reduced-motion: reduce) {
+  .travel-searching .spinner { animation: none; }
+}

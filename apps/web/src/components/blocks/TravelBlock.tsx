@@ -26,6 +26,10 @@ export type TravelBlockProps = {
   aiAvailable: boolean;
   /** Providers the server said it is still looking up, from the last reply. */
   pendingTerms?: readonly string[];
+  /** How many providers the ask covered, so progress can count UP. */
+  termsAsked?: number;
+  /** The lookups ran out of time. Better said than left spinning. */
+  termsGaveUp?: boolean;
   onRecheckAi: () => void;
   /** Look up current terms for the providers with unknown terms. */
   onRefreshTerms: (destination: string) => void;
@@ -276,11 +280,13 @@ function nameList(providers: string[]): string {
  *  so a tab that opened first keeps saying "no key" after one is set. Without a
  *  control there, the only cure was knowing to reload — so it gets one. */
 export function TermsNotice({
-  state, busy, aiAvailable, onSearch, onRecheckAi,
+  state, busy, aiAvailable, termsAsked, termsGaveUp, onSearch, onRecheckAi,
 }: {
   state: TermsState;
   busy: boolean;
   aiAvailable: boolean;
+  termsAsked: number;
+  termsGaveUp: boolean;
   onSearch: () => void;
   onRecheckAi: () => void;
 }) {
@@ -370,13 +376,27 @@ export function TermsNotice({
   }
 
   if (state.kind === "searching") {
+    // The HTTP call finished in a fraction of a second; the LOOKUP has not.
+    // Showing the request's progress left the screen still while the work ran,
+    // so this shows the work: a count that moves as each one lands.
+    const found = Math.max(0, termsAsked - state.pending.length);
     return (
-      <div className="travel-terms" role="status">
-        <p className="cell-sub">
-          De server zoekt nu op: {nameList(state.pending)}. Dat duurt een minuut of twee — hij doet het op de
-          achtergrond, dus je hoeft niet te wachten. Kijk zo nog eens.
+      <div className="travel-terms" role="status" aria-live="polite">
+        <p className="cell-sub travel-searching">
+          <span className="spinner" aria-hidden="true" />
+          <span>
+            LaVega zoekt de voorwaarden op van {nameList(state.pending)}
+            {termsAsked > 0 && <> — {found} van {termsAsked} gevonden</>}. Dat duurt een minuut of twee; dit
+            scherm werkt zichzelf bij.
+          </span>
         </p>
-        {searchButton(false, "Kijk of ze er al zijn")}
+        {termsGaveUp && (
+          <p className="cell-sub text-warn">
+            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in onder “Waarom?” —
+            wat jij invult wordt nooit overschreven.
+          </p>
+        )}
+        {searchButton(false, "Nu opnieuw kijken")}
       </div>
     );
   }
@@ -420,7 +440,7 @@ export function figureAge(updatedAt: string, asOf: string): string {
 }
 
 export default function TravelBlock({
-  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, pendingTerms = [], onRefreshTerms, onRecheckAi, onCorrectFact,
+  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, pendingTerms = [], termsAsked = 0, termsGaveUp = false, onRefreshTerms, onRecheckAi, onCorrectFact,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
   // One disclosure for the whole block. The answer is the product; everything
@@ -495,7 +515,7 @@ export default function TravelBlock({
 
           {/* Why, and the one control that changes it — under the answer, not
               hidden in the header. */}
-          {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} onSearch={search} onRecheckAi={onRecheckAi} />}
+          {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} termsAsked={termsAsked} termsGaveUp={termsGaveUp} onSearch={search} onRecheckAi={onRecheckAi} />}
 
           <button
             type="button"
