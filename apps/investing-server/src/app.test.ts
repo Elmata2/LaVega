@@ -1,11 +1,27 @@
-import { expect, test } from "vitest";
-import { app } from "./app.js";
+import { expect, test, vi } from "vitest";
+import { app, createApp } from "./app.js";
+import { createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+});
+
+test("price sync requires server-readable consent before outbound requests", async () => {
+  const fetchJsonWithCrumb = vi.fn();
+  const investingApp = createApp({
+    store: createInMemoryPriceStore(),
+    provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
+  });
+  const init = { method: "POST", body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }), headers: { "content-type": "application/json" } } as const;
+  const blocked = await investingApp.request("/api/prices/sync", init);
+  expect(blocked.status).toBe(412);
+  expect(fetchJsonWithCrumb).not.toHaveBeenCalled();
+  expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: false });
+  await investingApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+  expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: true });
 });
 
 test("GET /api/config/status reports missing keys without returning key values", async () => {
