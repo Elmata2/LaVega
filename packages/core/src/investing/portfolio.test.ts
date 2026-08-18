@@ -38,6 +38,11 @@ test("normalizes benchmark to portfolio's first value", () => {
   ]);
 });
 
+test("normalizes benchmark from first date shared with portfolio", () => {
+  const portfolio: PortfolioValuePoint[] = [{ date: "2026-01-05", value: 2310, unpriced: [] }];
+  expect(normalizeBenchmarkSeries(BENCHMARK_BARS, portfolio)).toEqual([{ date: "2026-01-05", value: 2310 }]);
+});
+
 test.each([
   ["1M", "2026-01-02"],
   ["6M", "2025-08-02"],

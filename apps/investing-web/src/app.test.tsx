@@ -20,7 +20,7 @@ test("overview shell fetches and displays investing server health", async () => 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("investing-server: healthy");
+  expect(container.textContent).toContain("investing-server: beschikbaar");
   expect(fetch).toHaveBeenCalledWith("/health");
   root.unmount();
 });
@@ -35,7 +35,7 @@ test("positions route renders its empty state", async () => {
     root.render(<MemoryRouter initialEntries={["/positions"]}><App /></MemoryRouter>);
   });
 
-  expect(container.textContent).toContain("No positions loaded");
-  expect(container.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
+  expect(container.textContent).toContain("Geen posities geladen");
+  expect(container.querySelector('nav[aria-label="Hoofdnavigatie"]')).not.toBeNull();
   root.unmount();
 });

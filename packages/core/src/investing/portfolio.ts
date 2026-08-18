@@ -62,10 +62,11 @@ export function computePortfolioValueSeries(
 
 /** Normalize benchmark closes to the portfolio's first priced value. */
 export function normalizeBenchmarkSeries(bars: PriceBar[], portfolio: PortfolioValuePoint[]): BenchmarkPoint[] {
-  const firstPortfolio = portfolio.find((point) => point.unpriced.length === 0);
-  const firstBar = [...bars].sort((a, b) => a.date.localeCompare(b.date))[0];
+  const sortedBars = [...bars].sort((a, b) => a.date.localeCompare(b.date));
+  const firstPortfolio = portfolio.find((point) => point.unpriced.length === 0 && sortedBars.some((bar) => bar.date === point.date));
+  const firstBar = sortedBars.find((bar) => bar.date === firstPortfolio?.date);
   if (!firstPortfolio || !firstBar || firstBar.close === 0) return [];
-  return [...bars].sort((a, b) => a.date.localeCompare(b.date)).map((bar) => ({ date: bar.date, value: firstPortfolio.value * bar.close / firstBar.close }));
+  return sortedBars.filter((bar) => bar.date >= firstBar.date).map((bar) => ({ date: bar.date, value: firstPortfolio.value * bar.close / firstBar.close }));
 }
 
 function subtractMonths(date: string, months: number): string {

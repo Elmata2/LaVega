@@ -20,8 +20,8 @@ export default {
         secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
         muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
         accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
-        positive: "hsl(var(--positive))",
-        negative: "hsl(var(--negative))",
+        positive: "hsl(var(--pos))",
+        negative: "hsl(var(--neg))",
         warning: "hsl(var(--warning))",
         chart: {
           blue: "hsl(var(--chart-blue))",

@@ -23,8 +23,10 @@
     --border: 40 17% 88%;
     --input: 40 17% 88%;
     --ring: 202 55% 27%;
-    --positive: 101 35% 35%;
-    --negative: 11 59% 44%;
+    --pos: 101 35% 35%;
+    --neg: 11 59% 44%;
+    --positive: var(--pos);
+    --negative: var(--neg);
     --warning: 39 71% 41%;
     --chart-blue: 211 47% 44%;
     --chart-purple: 249 42% 59%;
