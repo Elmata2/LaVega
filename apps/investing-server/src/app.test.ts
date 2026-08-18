@@ -20,7 +20,8 @@ test("price sync requires server-readable consent before outbound requests", asy
   expect(blocked.status).toBe(412);
   expect(fetchJsonWithCrumb).not.toHaveBeenCalled();
   expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: false });
-  await investingApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+  const consentResponse = await investingApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+  expect(consentResponse.headers.get("set-cookie")).toContain("lavega-yahoo-consent=accepted");
   expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: true });
 });
 

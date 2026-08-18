@@ -137,7 +137,11 @@ function isCoreFile(file: string): boolean {
 }
 
 function isStorageAdapterFile(file: string): boolean {
-  return file === "packages/adapters/src/index.ts" || file.startsWith("packages/adapters/src/storage/");
+  return file === "packages/adapters/src/index.ts"
+    || file.startsWith("packages/adapters/src/storage/")
+    // CredentialStore's local implementation is the one intentional consumer
+    // of encrypted storage outside the storage barrel.
+    || file === "packages/adapters/src/credentials/localCredentialStore.ts";
 }
 
 function isNodeBuiltinOrIo(specifier: string): boolean {
