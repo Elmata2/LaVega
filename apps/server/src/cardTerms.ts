@@ -37,7 +37,15 @@ const MAX_TRACKED = 60;
 export type TermsSource = "provider" | "comparison" | "agent";
 const PRECISION: Record<TermsSource, number> = { provider: 3, comparison: 2, agent: 1 };
 
-type Entry = { terms: ProviderTerms; at: number; source: TermsSource };
+type Entry = {
+  terms: ProviderTerms;
+  at: number;
+  source: TermsSource;
+  /** An agent lookup has already run for this key in this TTL, whatever it
+   *  returned. Without this, a provider the agent has no cashback figure for
+   *  would be re-asked on every single request, forever. */
+  agentTried?: boolean;
+};
 
 const cache = new Map<string, Entry>();
 const inFlight = new Set<string>();
@@ -137,9 +145,27 @@ function write(key: string, terms: ProviderTerms, source: TermsSource): boolean 
  *  and the answer lands in the cache for the next one. A failure is swallowed
  *  on purpose — the provider simply stays unknown, which the UI already shows
  *  honestly ("voorwaarden nog onbekend") and the owner can type in himself. */
+/** Does a cached row still need the agent?
+ *
+ *  A comparison table answers ONE question: the koersopslag. The ranking also
+ *  needs cashback and the conversion leg. Treating any fresh row as finished
+ *  meant bank.nl filled fxFeePct in one fetch, the row counted as fresh, and the
+ *  agent that would have supplied the rest never ran — so cashback stayed
+ *  unknown for every Dutch bank bank.nl covers, while providers it does NOT
+ *  cover (American Express) got a full lookup. The floor was blocking the
+ *  ceiling.
+ *
+ *  `agentTried` stops the opposite failure: a provider that genuinely has no
+ *  cashback programme would otherwise be re-asked on every request forever. */
+function incomplete(e: Entry): boolean {
+  if (e.agentTried) return false;
+  return e.terms.cashbackPct === undefined || e.terms.convertFeePct === undefined;
+}
+
 function startLookup(provider: string, base: Omit<TravelInput, "providers">, apiKey: string, deps: Deps): void {
   const key = keyOf(provider, base.homeCountry, base.currency);
-  if (inFlight.has(key) || fresh(cache.get(key))) return;
+  const held = cache.get(key);
+  if (inFlight.has(key) || (fresh(held) && !incomplete(held as Entry))) return;
   inFlight.add(key);
   void (async () => {
     try {
@@ -150,6 +176,10 @@ function startLookup(provider: string, base: Omit<TravelInput, "providers">, api
       // that failure and stop us retrying. Better to leave it unknown and let
       // the next ask try again.
       if (found.length > 0 && usable(found[0])) write(key, found[0], "agent");
+      // Record the attempt either way: a provider with no cashback programme
+      // must not be re-asked on every request for the rest of the TTL.
+      const after = cache.get(key);
+      if (after) cache.set(key, { ...after, agentTried: true });
     } catch {
       /* stays unknown; the UI says so and the owner can correct it */
     } finally {
@@ -218,8 +248,15 @@ export function getCardTerms(input: TravelInput, apiKey: string, deps: Deps = {}
   const gaps: string[] = [];
   for (const provider of providers) {
     const hit = cache.get(keyOf(provider, base.homeCountry, base.currency));
+    if (fresh(hit) && !incomplete(hit as Entry)) {
+      terms.push(hit!.terms);
+      continue;
+    }
+    // Fresh but thin: serve what we have NOW and let the agent fill the rest in
+    // the background. Nobody waits, and the gap closes by itself.
     if (fresh(hit)) {
       terms.push(hit!.terms);
+      startLookup(provider, base, apiKey, deps);
       continue;
     }
     // Stale-while-revalidate, the same fallback order rates.ts uses (fresh ->

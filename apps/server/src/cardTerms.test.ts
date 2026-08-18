@@ -350,3 +350,41 @@ test("a field the incoming row does not state is still kept", () => {
   expect(row.cashbackPct).toBe(1);
   expect(row.checkedAt).toBe("2026-08-18");
 });
+
+test("a comparison row is served AND still sent to the agent, because it answers only one question", async () => {
+  // bank.nl publishes a koersopslag and nothing else. Treating that row as
+  // finished meant the agent never ran, so cashback stayed unknown for every
+  // Dutch bank the table covers — the floor was blocking the ceiling.
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4, checkedAt: "2026-01-15" }], "comparison");
+
+  let askedFor: string[] = [];
+  const lookup = async (input: { providers: string[] }) => {
+    askedFor = input.providers;
+    return [{ provider: "ING betaalpas", fxFeePct: 1.2, cashbackPct: 0, convertFeePct: 0 }];
+  };
+
+  const first = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  expect(first.terms[0].fxFeePct).toBe(1.4); // served immediately, nobody waits
+  expect(askedFor).toEqual(["ING betaalpas"]); // ...and the agent was asked anyway
+  await settle();
+
+  const second = getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  expect(second.terms[0].cashbackPct).toBe(0); // the gap closed by itself
+});
+
+test("a provider with no cashback figure is not re-asked forever", async () => {
+  let calls = 0;
+  const lookup = async () => {
+    calls += 1;
+    return [{ provider: "ING betaalpas", fxFeePct: 1.2 }]; // never states cashback
+  };
+
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+
+  expect(calls).toBe(1);
+});
