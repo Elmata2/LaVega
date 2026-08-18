@@ -1,0 +1,2023 @@
+{
+  "lastRun": null,
+  "note": "Watchlist baseline from the discovery sweep of 18 August 2026 (see watchlist.md). 124 products across 104 terms URLs: 101 readable by plain fetch, 23 needing the agent. Deliberately holds NO RATES — it is a diff anchor for identity and routing only. Every product's lastChecked is null because no collection run has happened yet; the first real sweep sets it and reports changes rather than re-dumping. httpStatus/readable are the values MEASURED on the sweep date, so a later change in either is itself a reportable move (a page going 200 -> 403, or marketing-only -> yes).",
+  "counts": {
+    "products": 124,
+    "readableByFetch": 101,
+    "needsAgent": 23,
+    "conditionalHeadlineRate": 104,
+    "notOpenableToNL": 7,
+    "uniqueTermsUrls": 104,
+    "byKind": {
+      "betaalpas": 32,
+      "creditcard": 40,
+      "spaarrekening": 34,
+      "beleggingsrekening": 5,
+      "prepaid": 6,
+      "crypto": 7
+    }
+  },
+  "products": {
+    "ing-betaalpas": {
+      "product": "ING betaalpas",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.ing.nl/particulier/betalen/passen/buitenland",
+      "availableToNL": true,
+      "httpStatus": "connection killed (curl 92 on HTTP/2, curl 28/56 on HTTP/1.1)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "ing-creditcard": {
+      "product": "ING creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.ing.nl/particulier/betalen/tarieven",
+      "availableToNL": true,
+      "httpStatus": "connection killed",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ing-platinumcard": {
+      "product": "ING Platinumcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "connection killed",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "abn-amro-betaalpas": {
+      "product": "ABN AMRO betaalpas",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "abn-amro-creditcard": {
+      "product": "ABN AMRO creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "conditions",
+        "(merchant offers)"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "abn-amro-gold-card": {
+      "product": "ABN AMRO Gold Card",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/abnamro",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "conditions"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "rabobank-betaalpas": {
+      "product": "Rabobank betaalpas",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden",
+      "availableToNL": true,
+      "httpStatus": "403 (18.728-byte interstitial)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "rabobank-creditcard": {
+      "product": "Rabobank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "rabo-goldcard": {
+      "product": "Rabo GoldCard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "sns-betaalpas": {
+      "product": "SNS betaalpas",
+      "issuer": "ASN Bank N.V. (formerly SNS Bank N.V. / de Volksbank)",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "sns-creditcard": {
+      "product": "SNS creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "asn-betaalpas": {
+      "product": "ASN betaalpas",
+      "issuer": "ASN Bank N.V.",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "asn-creditcard": {
+      "product": "ASN Creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "regiobank-betaalpas": {
+      "product": "RegioBank betaalpas",
+      "issuer": "ASN Bank N.V. (formerly RegioBank N.V.)",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.regiobank.nl/service/betalen/buitenland.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "regiobank-creditcard": {
+      "product": "RegioBank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "availableToNL": true,
+      "httpStatus": "200 (serves PDF bytes)",
+      "readable": "yes (PDF extractor required)",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "knab-betaalpas": {
+      "product": "Knab betaalpas",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.knab.nl/tarieven",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "knab-creditcard": {
+      "product": "Knab creditcard",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.knab.nl/tarieven",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "triodos-betaalpas": {
+      "product": "Triodos betaalpas",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.triodos.nl/service/particulieren/betalen/betaalpas",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [
+        "conditions only"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "bunq-free-betaalpas": {
+      "product": "bunq Free betaalpas",
+      "issuer": "bunq B.V. (NL banking licence); Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-free",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-core-betaalpas": {
+      "product": "bunq Core betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-core",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-pro-betaalpas": {
+      "product": "bunq Pro betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-pro",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-elite-betaalpas": {
+      "product": "bunq Elite betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-elite",
+      "availableToNL": true,
+      "httpStatus": "200 (after refetch)",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-creditcard": {
+      "product": "bunq creditcard",
+      "issuer": "bunq B.V. (self-issued, Mastercard) — notably NOT ICS",
+      "kind": "creditcard",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/features/credit-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-termijndeposito": {
+      "product": "bunq Termijndeposito",
+      "issuer": "bunq B.V.",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/features/savings-accounts",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-beleggingsrekening": {
+      "product": "bunq beleggingsrekening",
+      "issuer": "Ginmon (execution/custody) inside the bunq app",
+      "kind": "beleggingsrekening",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-pro",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-crypto": {
+      "product": "bunq crypto",
+      "issuer": "Payward Europe Solutions Ltd t/a Kraken (Central Bank of Ireland); staking by Payward Commercial Ltd",
+      "kind": "crypto",
+      "termsUrl": "https://www.bunq.com/nl-nl/personal/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-free-business-betaalpas": {
+      "product": "bunq Free Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/business/plans",
+      "availableToNL": true,
+      "httpStatus": "200 (after refetch)",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-core-business-betaalpas": {
+      "product": "bunq Core Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/business/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-pro-business-betaalpas": {
+      "product": "bunq Pro Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/business/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-elite-business-betaalpas": {
+      "product": "bunq Elite Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bunq.com/nl-nl/business/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "revolut-standard-betaalpas": {
+      "product": "Revolut Standard betaalpas",
+      "issuer": "Revolut Bank UAB (Lithuania), in NL via passport/branch",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.revolut.com/nl-NL/legal/standard-fees/",
+      "availableToNL": true,
+      "httpStatus": "403 (Cloudflare)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "revolut-plus-betaalpas": {
+      "product": "Revolut Plus betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "revolut-premium-betaalpas": {
+      "product": "Revolut Premium betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.revolut.com/nl-NL/legal/premium-fees/",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "revolut-metal-betaalpas": {
+      "product": "Revolut Metal betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.revolut.com/nl-NL/legal/metal-fees/",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-standard-betaalpas": {
+      "product": "N26 Standard betaalpas",
+      "issuer": "N26 Bank AG (Germany) — German IBAN even for Dutch residents; Mastercard Debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://n26.com/en-eu/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "cashback",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-smart-betaalpas": {
+      "product": "N26 Smart betaalpas",
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://n26.com/en-eu/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "cashback",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-go-betaalpas": {
+      "product": "N26 Go betaalpas",
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://n26.com/en-eu/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "cashback",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-metal-betaalpas": {
+      "product": "N26 Metal betaalpas",
+      "issuer": "N26 Bank AG; metal Mastercard Debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://n26.com/en-eu/metal",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "cashback",
+        "interest",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-instant-savings": {
+      "product": "N26 Instant Savings",
+      "issuer": "N26 Bank AG; German Deposit Guarantee Scheme",
+      "kind": "spaarrekening",
+      "termsUrl": "https://n26.com/en-eu/savings-account",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "n26-flexible-cash-fund": {
+      "product": "N26 flexible cash fund",
+      "issuer": "Fidelity International (fund manager), distributed by N26",
+      "kind": "beleggingsrekening",
+      "termsUrl": "https://n26.com/en-eu/metal",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "wise-betaalpas": {
+      "product": "Wise betaalpas",
+      "issuer": "Wise Europe SA (Belgium) for EEA customers; Visa/Mastercard debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://wise.com/nl/pricing/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "wise-rente": {
+      "product": "Wise Rente",
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
+      "termsUrl": "https://wise.com/nl/pricing/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "wise-aandelen": {
+      "product": "Wise Aandelen",
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
+      "termsUrl": "https://wise.com/nl/pricing/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "trade-republic-betaalpas": {
+      "product": "Trade Republic betaalpas",
+      "issuer": "Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      "availableToNL": true,
+      "httpStatus": "200 (payload) / 200 shell (HTML)",
+      "readable": "yes via SSR payload",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "trade-republic-spaarrekening-rente-op-kassaldo": {
+      "product": "Trade Republic spaarrekening (rente op kassaldo)",
+      "issuer": "Trade Republic Bank GmbH; funds held at partner banks — 'je krijgt rente van onze partnerbanken'",
+      "kind": "spaarrekening",
+      "termsUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      "availableToNL": true,
+      "httpStatus": "200 (payload) / 200 shell (HTML)",
+      "readable": "yes via SSR payload",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "212-card": {
+      "product": "212 Card",
+      "issuer": "Paynetics (card issuer); NL customers under Trading 212 Markets Ltd (Cyprus) or Trading 212 EU GmbH (Germany)",
+      "kind": "betaalpas",
+      "termsUrl": "https://helpcentre.trading212.com/hc/en-us/articles/19288398028317-What-are-the-fees-for-using-the-212-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "trading-212-interest-on-cash": {
+      "product": "Trading 212 interest on cash",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH; cash at third-party banks or in Qualifying Money Market Funds",
+      "kind": "spaarrekening",
+      "termsUrl": "https://helpcentre.trading212.com/hc/en-us/articles/15475153380637-What-is-interest-on-cash",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes (conditions only)",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "trading-212-beleggingsrekening": {
+      "product": "Trading 212 beleggingsrekening",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH",
+      "kind": "beleggingsrekening",
+      "termsUrl": "https://helpcentre.trading212.com/hc/en-us/articles/30752021087005-What-fees-does-Trading-212-charge-for-crypto-trading",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes (conditions only)",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "openbank-betaalpas-r42-betaalpas": {
+      "product": "Openbank betaalpas (R42 Betaalpas)",
+      "issuer": "Open Bank S.A. (Spain, Santander group) — Spanish IBAN used in NL; Mastercard",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.openbank.nl/betaalrekening",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-blue-card": {
+      "product": "American Express Blue Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/blue-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-green-card": {
+      "product": "American Express Green Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-gold-card": {
+      "product": "American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "american-express-platinum-card": {
+      "product": "American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "flying-blue-american-express-entry-card": {
+      "product": "Flying Blue - American Express Entry Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "flying-blue-american-express-silver-card": {
+      "product": "Flying Blue - American Express Silver Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "flying-blue-american-express-gold-card": {
+      "product": "Flying Blue - American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "flying-blue-american-express-platinum-card": {
+      "product": "Flying Blue - American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-business-entry-card": {
+      "product": "American Express Business Entry Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-entry-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-business-green-card": {
+      "product": "American Express Business Green Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-green-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-business-gold-card": {
+      "product": "American Express Business Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-gold-card/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-corporate-card": {
+      "product": "American Express Corporate Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-card/",
+      "availableToNL": false,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "american-express-corporate-gold-card": {
+      "product": "American Express Corporate Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-gold-card/",
+      "availableToNL": false,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "klm-american-express-corporate-card": {
+      "product": "KLM American Express Corporate Card",
+      "issuer": "American Express (self-issued in NL; co-brand with KLM / Flying Blue / bluebiz)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-klm-card/",
+      "availableToNL": false,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "points",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card": {
+      "product": "ICS Visa World Card",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card-gold": {
+      "product": "ICS Visa World Card Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card-platinum": {
+      "product": "ICS Visa World Card Platinum",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card-panda": {
+      "product": "ICS Visa World Card Panda",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary) — co-brand with Wereld Natuur Fonds (WWF)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-mastercard-classic": {
+      "product": "ICS Mastercard Classic",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-mastercard-gold": {
+      "product": "ICS Mastercard Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-gold",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-mastercard-black": {
+      "product": "ICS Mastercard Black",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card-business": {
+      "product": "ICS Visa World Card Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-visa-world-card-business-gold": {
+      "product": "ICS Visa World Card Business Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-mastercard-business": {
+      "product": "ICS Mastercard Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "ics-mastercard-corporate": {
+      "product": "ICS Mastercard Corporate",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "termsUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "anwb-visa-classic-card": {
+      "product": "ANWB Visa Classic Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
+      "termsUrl": "https://www.anwb.nl/creditcard/informatie/kosten",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "anwb-visa-silver-card": {
+      "product": "ANWB Visa Silver Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
+      "termsUrl": "https://www.anwb.nl/creditcard/silver-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "anwb-visa-gold-card": {
+      "product": "ANWB Visa Gold Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
+      "termsUrl": "https://www.anwb.nl/creditcard/gold-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "crypto-com-prepaid-card-basic-midnight-blue": {
+      "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "termsUrl": "https://crypto.com/nl/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "crypto-com-prepaid-card-plus-ruby-steel": {
+      "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "termsUrl": "https://crypto.com/nl/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "crypto-com-prepaid-card-pro-jade-green-royal-indigo": {
+      "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "termsUrl": "https://crypto.com/nl/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "crypto-com-prepaid-card-private-icy-white-rose-gold": {
+      "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "termsUrl": "https://crypto.com/nl/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "crypto-com-prepaid-card-private-obsidian": {
+      "product": "Crypto.com Prepaid Card — Private (Obsidian)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "termsUrl": "https://crypto.com/nl/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "nexo-card": {
+      "product": "Nexo Card",
+      "issuer": "Nexo (dual Credit/Debit mode card; the issuing e-money institution is NOT named anywhere on the page)",
+      "kind": "creditcard",
+      "termsUrl": "https://nexo.com/crypto-card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "fxFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "krak-card-kraken": {
+      "product": "Krak Card (Kraken)",
+      "issuer": "Monavate UAB, Lithuania (EEA); Monavate Ltd in the UK — Mastercard debit",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.kraken.com/krak/card",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "fxFee",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "plutus-card": {
+      "product": "Plutus Card",
+      "issuer": "Plutus (Visa debit, NL IBAN per their marketing; issuing EMI not named on the plans page)",
+      "kind": "betaalpas",
+      "termsUrl": "https://plutus.it/plans",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bleap-card": {
+      "product": "Bleap Card",
+      "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
+      "kind": "crypto",
+      "termsUrl": "https://www.bleap.finance/en-us/card/cashback",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "zeal-card-gnosis-pay-rails": {
+      "product": "Zeal Card (Gnosis Pay rails)",
+      "issuer": "Monavate Limited (UK, FCA EMI, FRN 901097) with Gnosis Pay Co Ltd — Visa debit",
+      "kind": "crypto",
+      "termsUrl": "https://www.zeal.app/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "cashback",
+        "fxFee",
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "gnosis-pay-card-direct-consumer": {
+      "product": "Gnosis Pay Card (direct consumer)",
+      "issuer": "Gnosis Pay Co Ltd / Monavate Limited",
+      "kind": "crypto",
+      "termsUrl": "https://gnosispay.com/",
+      "availableToNL": false,
+      "httpStatus": "200 homepage; 404 on /card, /pricing and /personal",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "bybit-card": {
+      "product": "Bybit Card",
+      "issuer": "Bybit EU (EUR card for EEA residents); issuing EMI not obtainable",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.bybit.eu/en/cards",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "js-shell",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "coinbase-card": {
+      "product": "Coinbase Card",
+      "issuer": "Coinbase (EEA); issuing EMI not obtainable",
+      "kind": "betaalpas",
+      "termsUrl": "https://www.coinbase.com/nl/card",
+      "availableToNL": true,
+      "httpStatus": "403 (Cloudflare)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "wirex-card-wirex-one": {
+      "product": "Wirex Card (Wirex One)",
+      "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
+      "kind": "crypto",
+      "termsUrl": "https://www.wirexapp.com/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "binance-card": {
+      "product": "Binance Card",
+      "issuer": "Binance (EEA programme, formerly Visa)",
+      "kind": "crypto",
+      "termsUrl": "https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381",
+      "availableToNL": false,
+      "httpStatus": "202 with a ZERO-BYTE body",
+      "readable": "unfetchable",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "paysafecard-prepaid-code-paysafewallet": {
+      "product": "paysafecard (prepaid code / PaysafeWallet)",
+      "issuer": "Paysafe",
+      "kind": "prepaid",
+      "termsUrl": "https://www.paysafecard.com/nl-nl/kosten-limieten/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "annualFee",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "tria-card": {
+      "product": "Tria Card",
+      "issuer": "Tria (self-custodial Visa; issuing EMI not stated)",
+      "kind": "crypto",
+      "termsUrl": "https://www.tria.so/",
+      "availableToNL": "unverified",
+      "httpStatus": "200",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bigbank-flexibel-sparen": {
+      "product": "Bigbank Flexibel Sparen",
+      "issuer": "Bigbank AS (Estonia) — Estonian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.bigbank.nl/sparen/flexibel-sparen/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "bunq-spaarrekening-massinterest": {
+      "product": "bunq spaarrekening (MassInterest)",
+      "issuer": "bunq B.V. (NL) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "santander-consumer-bank-spaarrekening": {
+      "product": "Santander Consumer Bank Spaarrekening",
+      "issuer": "Santander Consumer Bank — the page footer shows 'RPR Gent, BTW BE0763.791.559' (Belgian entity) while geld.nl labels the DGS Spanish; the two disagree",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.santanderconsumerbank.nl/sparen",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "garanti-bbva-international-gouden-internet-rekening": {
+      "product": "Garanti BBVA International Gouden Internet Rekening",
+      "issuer": "Garanti BBVA International N.V. (NL) — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://garantibank.nl/products/gouden-internet-rekening",
+      "availableToNL": true,
+      "httpStatus": "403 (Akamai)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "dhb-bank-saveonlinerekening": {
+      "product": "DHB Bank S@veOnlinerekening",
+      "issuer": "Demir-Halk Bank (Nederland) N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.dhbbank.nl/dhb-saveonlinerekening",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "anadolubank-alfa-slimmer-sparen": {
+      "product": "Anadolubank Alfa Slimmer Sparen",
+      "issuer": "Anadolubank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.anadolubank.nl/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "scalable-capital-scalable-overnight": {
+      "product": "Scalable Capital Scalable Overnight",
+      "issuer": "Scalable Capital Bank GmbH (Germany) — German DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://nl.scalable.capital/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "raisin-spaarrekening-platform-19-partner-banks": {
+      "product": "Raisin spaarrekening (platform, 19 partner banks)",
+      "issuer": "Raisin GmbH is the platform; the deposit is held by the partner bank (Banca Progetto, Banca CF+, FCM Bank, Inbank, Morrow Bank, Nordax Bank, Renault Bank, Avarda Bank, Lea Bank, BW-Bank, Resurs Bank, Collector, Carrefour Banque S.A, Imprebanca, Izola Bank, EuroExtra, Klarna, Bank B, Alisa Bank)",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.raisin.nl/spaarrekening/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "klarna-flex-rekening": {
+      "product": "Klarna Flex rekening",
+      "issuer": "Klarna Bank AB (Sweden) — Swedish DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.klarna.com/nl/flex-rekening/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "ayvens-bank-flexibel-sparen": {
+      "product": "Ayvens Bank Flexibel Sparen",
+      "issuer": "Ayvens Bank N.V. (formerly LeasePlan Bank, renamed Oct 2024) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.ayvensbank.nl/actuele-rentestanden",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "argenta-internetspaarrekening": {
+      "product": "Argenta Internetspaarrekening",
+      "issuer": "Argenta Spaarbank N.V., Dutch branch — Belgian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.argenta.nl/sparen/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [
+        "interest (wrong product only)"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "openbank-welkom-spaarrekening": {
+      "product": "Openbank Welkom Spaarrekening",
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.openbank.nl/spaarrekening",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "openbank-open-spaarrekening": {
+      "product": "Openbank Open Spaarrekening",
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.openbank.nl/gratis-spaarrekening",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "yapi-kredi-bank-euro-plus-spaarrekening": {
+      "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
+      "issuer": "Yapi Kredi Bank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.yapikredi.nl/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "nibc-spaarrekening": {
+      "product": "NIBC Spaarrekening",
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.nibc.nl/sparen/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "nibc-kwartaalspaarrekening": {
+      "product": "NIBC Kwartaalspaarrekening",
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.nibc.nl/sparen/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "lloyds-bank-spaarrekening": {
+      "product": "Lloyds Bank Spaarrekening",
+      "issuer": "Lloyds Bank GmbH — German DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.lloydsbank.nl/sparen/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "nationale-nederlanden-internetsparen": {
+      "product": "Nationale-Nederlanden Internetsparen",
+      "issuer": "Nationale-Nederlanden Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.nn.nl/Particulier/Sparen/Internetsparen.htm",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "centraal-beheer-rentepl-s-rekening": {
+      "product": "Centraal Beheer RentePlús Rekening",
+      "issuer": "Achmea Bank N.V. (Centraal Beheer) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.centraalbeheer.nl/sparen",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "knab-flexibel-sparen": {
+      "product": "Knab Flexibel Sparen",
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group) — Austrian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.knab.nl/sparen",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions",
+        "annualFee"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "abn-amro-direct-sparen": {
+      "product": "ABN AMRO Direct Sparen",
+      "issuer": "ABN AMRO Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.abnamro.nl/nl/prive/sparen/rente.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "marketing-only",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "ing-oranje-spaarrekening": {
+      "product": "ING Oranje Spaarrekening",
+      "issuer": "ING Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.ing.nl/particulier/sparen/spaarrente",
+      "availableToNL": true,
+      "httpStatus": "connection killed",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "rabobank-rabo-spaarrekening": {
+      "product": "Rabobank Rabo SpaarRekening",
+      "issuer": "Coöperatieve Rabobank U.A. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.rabobank.nl/particulieren/sparen/rente",
+      "availableToNL": true,
+      "httpStatus": "403",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": false,
+      "lastChecked": null
+    },
+    "asn-bank-asn-ideaalsparen": {
+      "product": "ASN Bank ASN Ideaalsparen",
+      "issuer": "ASN Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.asnbank.nl/sparen/rente.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "sns-internet-sparen": {
+      "product": "SNS Internet Sparen",
+      "issuer": "SNS Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "regiobank-spaar-op-maat-vrij": {
+      "product": "RegioBank Spaar-op-Maat Vrij",
+      "issuer": "RegioBank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.regiobank.nl/sparen/actuele-rentes.html",
+      "availableToNL": false,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "triodos-bank-internet-sparen": {
+      "product": "Triodos Bank Internet Sparen",
+      "issuer": "Triodos Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.triodos.nl/sparen",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "brand-new-day-de-spaarrekening": {
+      "product": "Brand New Day De Spaarrekening",
+      "issuer": "Brand New Day Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "termsUrl": "https://new.brandnewday.nl/spaarrekening/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "nexent-bank-spaarrekening": {
+      "product": "Nexent Bank Spaarrekening",
+      "issuer": "Nexent Bank N.V. — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.nexentbank.nl/",
+      "availableToNL": true,
+      "httpStatus": "200",
+      "readable": "yes",
+      "route": "fetch",
+      "fieldsOnPage": [
+        "interest",
+        "conditions"
+      ],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    },
+    "revolut-dagelijkse-spaarrekening": {
+      "product": "Revolut Dagelijkse Spaarrekening",
+      "issuer": "Revolut Bank UAB (Lithuania) — Lithuanian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "termsUrl": "https://www.revolut.com/nl-NL/savings/",
+      "availableToNL": true,
+      "httpStatus": "403 (Cloudflare)",
+      "readable": "bot-blocked",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": true,
+      "lastChecked": null
+    }
+  }
+}

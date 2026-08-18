@@ -3,6 +3,10 @@ dist/
 .turbo/
 config.json
 state.json
+# ...except the product catalogue's diff anchor. It carries no secrets and no
+# rates — only product identity and fetch routing — and it is USELESS outside
+# git: its whole job is to make a moved figure show up as a reviewable diff.
+!docs/catalog/state.json
 *.pem
 .env
 .env.*
