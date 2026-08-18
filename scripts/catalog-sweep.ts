@@ -322,6 +322,45 @@ async function readArchived(url: string): Promise<{ text: string; url: string; d
  *  is left here is the call itself, because that is I/O and packages/core stays
  *  clean of it. The reply is parsed by parseExtractReply or discarded; there is
  *  no path from a model's output into the catalogue that skips those checks. */
+/** A key that is out of credit, revoked or simply wrong is NOT a per-product route
+ *  failure, and swallowing it as one is exactly how a sweep produces a full
+ *  artifact that no model ever read: every model rung fails, the free regex rungs
+ *  keep returning figures, the blackout guard at the bottom sees a healthy
+ *  httpResponses count, and the run commits. Measured on 2026-08-18 — a 400 "Your
+ *  credit balance is too low" landed in lastReason indistinguishable from a bank's
+ *  403, and the run carried on fetching for twenty minutes. Die on the FIRST one
+ *  instead, before a single byte is written. */
+function abortIfKeyUnusable(e: unknown): void {
+  const status = (e as { status?: number } | null)?.status;
+  if (status !== 400 && status !== 401 && status !== 403) return;
+  const raw = String((e as Error | null)?.message ?? e);
+  const msg = raw.toLowerCase();
+  // Matched on the MESSAGE, not the status: the API answers billing failures with
+  // 400 invalid_request_error, the same status as a genuinely malformed request,
+  // and only the text separates "top up your account" from "this page was too big".
+  const fatal = ["credit balance", "billing", "quota", "authentication", "invalid x-api-key", "permission", "disabled"];
+  if (!fatal.some((f) => msg.includes(f))) return;
+  console.error(`\nFATAL - the Anthropic key cannot be used: ${raw}`);
+  console.error("Nothing was written. A sweep whose model rungs all fail still produces figures from");
+  console.error("the free rungs, and committing that artifact would claim a reading nobody did.");
+  process.exit(1);
+}
+
+/** Every model call in this script goes through here, so a new call site cannot
+ *  forget the guard. */
+async function createGuarded(
+  client: Anthropic,
+  body: Anthropic.MessageCreateParamsNonStreaming,
+  options?: { timeout?: number; maxRetries?: number },
+): Promise<Anthropic.Message> {
+  try {
+    return await client.messages.create(body, options as never);
+  } catch (e) {
+    abortIfKeyUnusable(e);
+    throw e;
+  }
+}
+
 async function askModel(product: string, sourceUrl: string, text: string): Promise<ExtractedFigure | null> {
   if (text.length > MAX_MODEL_CHARS) {
     throw new Error(`page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`);
@@ -329,7 +368,7 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   const req = { product, sourceUrl, text };
   const { system, user } = buildExtractPrompt(req);
   const client = new Anthropic({ apiKey: apiKey ?? undefined });
-  const res = await client.messages.create(
+  const res = await createGuarded(client, 
     {
       model: EXTRACT_MODEL,
       max_tokens: 8192,
@@ -519,7 +558,7 @@ async function findSource(
   // came back made the expensive failures free, which is the wrong way round —
   // ing-creditcard timed out and left the counter reading "0/10 searches".
   searchesUsed++;
-  const res = await client.messages.create(
+  const res = await createGuarded(client, 
     {
       model: FIND_MODEL,
       max_tokens: 2048,
@@ -810,6 +849,14 @@ if (dry) { console.log("\n--dry: nothing written"); process.exit(0); }
 // failed sweep must not be indistinguishable from a swept-and-found-nothing one.
 if (attemptsMade > 0 && httpResponses === 0) {
   console.error(`\nREFUSING TO WRITE: ${attemptsMade} routes attempted, not one fetch answered. That is this machine's network, not the providers'.`);
+  process.exit(1);
+}
+// The same failure one layer out: the model was ASKED for and never once answered
+// (all timed out, all refused, the rung threw every time). The figures that remain
+// are the regex's, and the regex is the thing the model exists to correct - ABN
+// AMRO's betaalpas reads 2% there when the page says 1,2%.
+if (useAgent && modelCalls === 0) {
+  console.error(`\nREFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`);
   process.exit(1);
 }
 if (figuresBefore > 0 && figuresFound === 0) {
