@@ -13,6 +13,14 @@ export type Position = {
   asOf: string;
 };
 
+/** Daily closing price used by investing-side portfolio calculations. */
+export type PriceBar = {
+  symbol: string;
+  date: string;
+  close: number;
+  currency: string;
+};
+
 export type TradeSide = "buy" | "sell" | "other";
 
 /** A broker-reported execution. `amount` and `commission` use currency. */
