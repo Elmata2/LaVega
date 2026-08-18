@@ -24,3 +24,18 @@ test("overview shell fetches and displays investing server health", async () => 
   expect(fetch).toHaveBeenCalledWith("/health");
   root.unmount();
 });
+
+test("positions route renders its empty state", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, service: "investing-server" }))));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<MemoryRouter initialEntries={["/positions"]}><App /></MemoryRouter>);
+  });
+
+  expect(container.textContent).toContain("No positions loaded");
+  expect(container.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
+  root.unmount();
+});
