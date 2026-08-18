@@ -60,8 +60,30 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     source: "ibkr-flex",
     problems: [],
-    positions: [expect.objectContaining({ entity: "personal", symbol: "AAPL", quantity: 2, marketValue: 220 })],
-    trades: [expect.objectContaining({ entity: "personal", symbol: "AAPL", side: "buy", brokerTradeId: "tx-1" })],
+    positions: [{
+      entity: "personal",
+      symbol: "AAPL",
+      isin: "US0378331005",
+      description: "Apple & Co",
+      quantity: 2,
+      averagePrice: 100,
+      marketPrice: 110,
+      marketValue: 220,
+      currency: "USD",
+      asOf: "2026-08-18",
+    }],
+    trades: [{
+      entity: "personal",
+      date: "2026-08-18",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 2,
+      price: 100,
+      amount: -200,
+      currency: "USD",
+      commission: 1,
+      brokerTradeId: "tx-1",
+    }],
   });
   expect(requests).toHaveLength(3);
   expect(requests[0]).toContain("t=valid-token");

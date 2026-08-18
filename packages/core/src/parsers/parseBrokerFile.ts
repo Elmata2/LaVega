@@ -91,7 +91,9 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
   const marketValue = pick(idx, ["market value", "value", "waarde", "total value", "value in eur", "waarde in eur", "local value"]);
   const asOf = pick(idx, ["as of", "date", "datum", "peildatum", "valuation date"]);
 
-  const transactionExport = date > -1 && product > -1 && quantity > -1 && price > -1 && total > -1 && (isin > -1 || orderId > -1);
+  const identifiedAsDeGiro = /degiro/i.test(filename) ||
+    (isin > -1 && currency > -1 && (product > -1 || symbol > -1) && (date > -1 || asOf > -1));
+  const transactionExport = identifiedAsDeGiro && date > -1 && product > -1 && quantity > -1 && price > -1 && total > -1 && (isin > -1 || orderId > -1);
   const cashflowExport = date > -1 && total > -1 && product < 0 && (/cash ?flow|cashflow|value date|valutadatum|description|omschrijving/.test(h) || /degiro/i.test(filename));
   if (!transactionExport) {
     if (cashflowExport) return { positions: [], trades: [], source: "DeGiro cashflow", problems: ["DeGiro cashflow-export bevat geen transacties"] };

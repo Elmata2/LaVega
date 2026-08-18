@@ -1,25 +1,23 @@
-// --- LaVega edit: upstream imported these two from its own `../config`,
-// which also pulls in IBKR Gateway/TWS API types LaVega doesn't vendor.
-// Inlined here instead of importing from that file. See README.md.
-import { httpFetch } from "./http-transport.js";
+// First-party client based on Gloomberb implementation.
+import { httpFetch } from "../../../vendor/gloomberb/http-transport.js";
 
 export interface FlexQueryConfig {
   token: string;
   queryId: string;
   endpoint?: string;
+  /** Test/config override; production defaults match IBKR's expected delay. */
+  initialWaitMs?: number;
+  pollDelayMs?: number;
+  maxDownloadAttempts?: number;
 }
 
 export const IBKR_STATEMENT_URL =
   "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
-// --- end LaVega edit
-
 const IBKR_STATEMENT_GET_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement";
 const FLEX_USER_AGENT = "Gloomberb/1.0 Flex";
-const FLEX_STATEMENT_CACHE_MS = 15 * 60_000;
 const FLEX_STATEMENT_INITIAL_WAIT_MS = 3_000;
 const FLEX_STATEMENT_POLL_DELAY_MS = 5_000;
 const FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS = 60;
-const flexStatementCache = new Map<string, { createdAt: number; promise: Promise<string> }>();
 
 type FlexRequestPhase = "request" | "download";
 
@@ -161,9 +159,9 @@ export async function requestFlexStatement(config: FlexQueryConfig): Promise<str
 async function getFlexStatement(
   token: string,
   referenceCode: string,
-  context: Partial<Pick<FlexQueryConfig, "endpoint" | "queryId">> = {},
+  context: Partial<Pick<FlexQueryConfig, "endpoint" | "queryId" | "initialWaitMs" | "pollDelayMs" | "maxDownloadAttempts">> = {},
 ): Promise<string> {
-  await new Promise((resolve) => setTimeout(resolve, FLEX_STATEMENT_INITIAL_WAIT_MS));
+  await new Promise((resolve) => setTimeout(resolve, context.initialWaitMs ?? FLEX_STATEMENT_INITIAL_WAIT_MS));
 
   const endpoint = resolveFlexGetEndpoint(context.endpoint);
   const url = buildFlexUrl(endpoint, {
@@ -171,7 +169,7 @@ async function getFlexStatement(
     q: referenceCode,
     v: "3",
   });
-  for (let attempt = 0; attempt < FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < (context.maxDownloadAttempts ?? FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS); attempt += 1) {
     let resp: Response;
     let text: string;
     try {
@@ -192,7 +190,7 @@ async function getFlexStatement(
     }
 
     if (text.includes("Statement generation in progress")) {
-      await new Promise((resolve) => setTimeout(resolve, FLEX_STATEMENT_POLL_DELAY_MS));
+      await new Promise((resolve) => setTimeout(resolve, context.pollDelayMs ?? FLEX_STATEMENT_POLL_DELAY_MS));
       continue;
     }
 
@@ -219,24 +217,6 @@ async function getFlexStatement(
 }
 
 export async function loadFlexStatement(config: FlexQueryConfig): Promise<string> {
-  const cacheKey = `${config.endpoint || IBKR_STATEMENT_URL}|${config.token}|${config.queryId}`;
-  const existing = flexStatementCache.get(cacheKey);
-  if (existing && Date.now() - existing.createdAt < FLEX_STATEMENT_CACHE_MS) {
-    return existing.promise;
-  }
-
-  const promise = (async () => {
-    const referenceCode = await requestFlexStatement(config);
-    return getFlexStatement(config.token, referenceCode, config);
-  })();
-  flexStatementCache.set(cacheKey, { createdAt: Date.now(), promise });
-  promise.catch(() => {
-    const cached = flexStatementCache.get(cacheKey);
-    if (cached?.promise === promise) flexStatementCache.delete(cacheKey);
-  });
-  setTimeout(() => {
-    const cached = flexStatementCache.get(cacheKey);
-    if (cached?.promise === promise) flexStatementCache.delete(cacheKey);
-  }, FLEX_STATEMENT_CACHE_MS);
-  return promise;
+  const referenceCode = await requestFlexStatement(config);
+  return getFlexStatement(config.token, referenceCode, config);
 }

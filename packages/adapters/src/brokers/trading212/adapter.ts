@@ -141,6 +141,13 @@ async function positions(url: string, config: Trading212Config): Promise<Trading
   if (!items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
     throw new Error("Trading 212 holdings items are malformed");
   }
+  const unsupported = items.find((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const row = item as Trading212Order;
+    const account = value(row, "accountType", "account", "accountName");
+    return account !== undefined && !/^(invest|stocks\s*isa)$/i.test(String(account));
+  });
+  if (unsupported) throw new Error("Trading 212 holdings include unsupported account type");
   return items as Trading212Order[];
 }
 
