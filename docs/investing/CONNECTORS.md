@@ -90,7 +90,7 @@ DeGiro has **no official API** — its own helpdesk states third-party scripts a
 
 **Data:** both positions and full transaction/order history, from DeGiro's own account/portfolio export.
 
-> **Confirm on build:** DeGiro's export is assumed to include trade-level order history, not just a positions snapshot. This wasn't verified against DeGiro's own documentation while writing this spec — confirm against a real export before implementing the parser, and adjust the "Data" line above if it only covers positions.
+> **Verified for #47/#49:** DeGiro exports are semicolon-delimited CSV files. Transaction exports contain Date/Datum, Product, ISIN, Quantity/Aantal, Price/Koers, Total/Totaal, Currency/Valuta, transaction-cost and Order ID columns. Portfolio exports contain Product/ISIN (and often Symbol), Amount/Quantity, Price and Value columns, with optional Currency and export date. Portfolio price is treated as market price; absent average price and value fields remain null. Cash-flow exports have no product/order fields and are reported as cashflow-only.
 
 **Hosted/cloud tier:** DeGiro's CSV import works there too — file upload has no custody problem the way credentials would, so this isn't local-only ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 

@@ -33,3 +33,4 @@ export * from "./parsers/invoiceUbl.js";
 export * from "./parsers/parseInvoiceFile.js";
 export * from "./parsers/mt940.js";
 export * from "./parsers/parseBankFile.js";
+export * from "./parsers/parseBrokerFile.js";
