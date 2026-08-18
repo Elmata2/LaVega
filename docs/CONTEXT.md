@@ -93,4 +93,5 @@ Port Kasoverzicht's parser suite into Vitest: synthetic export fixtures per bank
 - Don't let `core/` import I/O or a concrete adapter — keep the seams clean.
 - Don't change `tx.id` without a migration.
 - Don't drop the local-first default without a deliberate, recorded decision.
+- Investing local tier must never require a LaVega account, a LaVega-run service, or any key of ours — self-hoster brings their own broker credentials and their own LLM/market-data keys, full stop. Hosted paid tier is additive only (issue #27).
 - Don't add features, abstractions, or error handling for cases that can't happen — build the simplest thing that serves the current feature.
