@@ -48,7 +48,9 @@ type AccountReturn = {
   /** What spending returns. The cashbackPct LearnedFact that already exists, keyed by productOf(). */
   cashbackPct: number | null;
   balanceCents: number;
-  /** Observed outflow through this account over the measured window, annualised. */
+  /** Card spending through this account over the measured window, annualised.
+   *  See "What counts as spending" — this is the number cashback multiplies,
+   *  and getting it wrong inflates the answer. */
   spendPerYearCents: number | null;
 };
 ```
@@ -63,6 +65,29 @@ Rules carried over unchanged, because they are why the rest of the app can be tr
 - **Coverage honesty.** `spendPerYearCents` is annualised from an observed window; when the window is
   too short to annualise, it is `null` and the action says so rather than projecting from three
   weeks. Same rule the forecast and the month comparison now live by.
+
+## What counts as spending — the one ambiguity worth settling now
+
+Cashback pays on **card purchases**. It does not pay on a transfer to your own savings, on rent
+leaving by direct debit, or on an iDEAL payment. Counting every outflow as "spend" would inflate the
+cashback figure by whatever share of the account is rent, tax and transfers — which for a business
+account is most of it.
+
+So:
+
+- **Own transfers are excluded**, using the same `Eigen overboeking` rule the forecast now uses.
+- **On a credit card, every outflow is card spend** by definition. That figure is exact.
+- **On a payment account, LaVega cannot reliably tell a card payment from a direct debit** — the
+  bank export does not always say. So the figure there is an **upper bound**, and it must be
+  labelled as one rather than presented as measured.
+
+The consequence is worth stating plainly rather than hiding: on a payment account the cashback
+action says "tot €X per jaar", not "€X per jaar". A number that might be double the truth, printed
+without that word, is exactly the failure this app has spent three days removing.
+
+If bank exports turn out to carry a reliable card/direct-debit marker for his banks, this becomes
+exact and the hedge is dropped. Worth checking against real MT940 and CAMT data before assuming
+either way.
 
 ## The two actions
 
@@ -133,4 +158,6 @@ If a neutral source appears, the switch half slots in behind the same `AccountRe
   with the two bases kept apart, not one blended rate.
 - An action is not produced when either side is unknown, and the gap is reported with the provider
   named.
+- Spending excludes own transfers; a credit-card account yields an exact figure while a payment
+  account yields one labelled as an upper bound.
 - Web: the Cashback module renders from props and states its own coverage.
