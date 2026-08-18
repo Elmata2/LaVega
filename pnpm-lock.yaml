@@ -28,6 +28,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.12
         version: 2.0.12(hono@4.12.32)
+      '@lavega/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       hono:
         specifier: ^4.12.32
         version: 4.12.32
@@ -41,6 +44,9 @@ importers:
 
   apps/investing-web:
     dependencies:
+      '@lavega/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
