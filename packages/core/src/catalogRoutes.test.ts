@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { ladderOrder, runLadder, type RouteAttempt } from "./catalogRoutes.js";
+import { ladderOrder, partialOrder, runLadder, type RouteAttempt } from "./catalogRoutes.js";
 import { isCovered, type CatalogValue } from "./catalog.js";
 
 const value = (route: CatalogValue["route"]): CatalogValue => ({
@@ -126,4 +126,65 @@ test("the recorded reason names which of the four parts was missing", async () =
     expect(out.reason).toBe(expected);
     expect(isCovered(out.value ?? undefined)).toBe(false);
   }
+});
+
+test("when nothing is covered the best-EVIDENCED partial is kept, not the highest rung's", async () => {
+  // Measured live on 2026-08-18 and the reason this rule is not the ladder's.
+  // ABN AMRO's tariff page states 1,2% for the debit card and 2,00% for the credit
+  // card and for cash withdrawal, one under the other. The provider-page regex
+  // takes 2%; the model quotes "Met Betaalpas € 0,15 en 1,2% valutakoersopslag per
+  // keer" under "Betalen via betaalautomaat buitenland in buitenlands geld" and
+  // reports 1,2%, which is the truth. Neither is covered — the page never settles
+  // the conditions — so the ladder runs out and one of the two is written to
+  // docs/catalog/state.json and catalog.json. Keeping the higher RUNG wrote 2%.
+  const regex: CatalogValue = { ...value("provider-page"), value: 2, conditionsKnown: false };
+  const model: CatalogValue = { ...value("agent"), value: 1.2, conditionsKnown: false };
+  const out = await runLadder([
+    { route: "provider-page", run: async () => regex },
+    { route: "agent", run: async () => model },
+  ]);
+
+  expect(out.value).toEqual(model);
+  expect(isCovered(out.value ?? undefined)).toBe(false); // still refused, as it must be
+  // Both shortfalls are still reported: the surviving partial does not erase the
+  // fact that the free rung also produced something.
+  expect(out.tried).toEqual(["provider-page", "agent"]);
+  expect(out.reason).toBe("provider-page: conditions not established · agent: conditions not established");
+});
+
+test("the partial order is by evidence, and the caller can read it", () => {
+  // The quote-checked rungs first (the model's reply is rejected unless the
+  // sentence is in the page, the number is in that sentence, and the heading
+  // stands at or before it), then the tariff-PDF parser, then the two that
+  // pattern-match a percentage with nothing tying it to the product asked about.
+  expect(partialOrder()).toEqual(["wayback", "agent", "provider-pdf", "provider-page", "comparison"]);
+  // And it is NOT the ladder order — if these ever coincide, one of them is wrong.
+  expect(partialOrder()).not.toEqual(ladderOrder());
+});
+
+test("a covered answer still beats a better-evidenced partial, and stops the ladder", async () => {
+  // The evidence order governs partials ONLY. A covered figure from any rung ends
+  // the ladder where it stands, which is what keeps the free rungs worth running.
+  let agentRan = false;
+  const out = await runLadder([
+    { route: "provider-pdf", run: async () => value("provider-pdf") },
+    { route: "agent", run: async () => { agentRan = true; return value("agent"); } },
+  ]);
+
+  expect(out.value?.route).toBe("provider-pdf");
+  expect(agentRan).toBe(false);
+});
+
+test("the earlier rung wins when two partials sit in the same evidence group", async () => {
+  // wayback and agent are both model-extracted and both quote-checked, so nothing
+  // separates them on evidence; the archive sorts first because it is the rung the
+  // sweep only reaches when the live page cannot be read at all.
+  const archived: CatalogValue = { ...value("wayback"), value: 1.4, conditionsKnown: false };
+  const live: CatalogValue = { ...value("agent"), value: 1.9, conditionsKnown: false };
+  const out = await runLadder([
+    { route: "agent", run: async () => live },
+    { route: "wayback", run: async () => archived },
+  ]);
+
+  expect(out.value).toEqual(archived);
 });

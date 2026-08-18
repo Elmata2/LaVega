@@ -12,6 +12,37 @@ export function ladderOrder(): CatalogRoute[] {
   return [...ORDER];
 }
 
+/** Which PARTIAL to keep when NO rung came back covered — and deliberately not
+ *  the ladder order.
+ *
+ *  The ladder is ordered by cost and by how authoritative a source is. That is the
+ *  right order for choosing a COVERED answer, and the wrong one for choosing
+ *  between two figures that both fell short, because what separates those is not
+ *  the source's authority but whether the rung can show the number belongs to THIS
+ *  product. Measured on two products this week:
+ *
+ *  - ABN AMRO betaalpas: the provider-page regex reads 2% (the credit card's rate,
+ *    and a cash-withdrawal row at that) while the model reads 1,2% quoting
+ *    "Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer" under the heading
+ *    "Betalen via betaalautomaat buitenland in buitenlands geld". The truth is 1,2%.
+ *  - Knab creditcard: the regex reads the debit row's 1,4%; the model reads 2%
+ *    quoting "Betalingen in vreemde valuta 2% koersopslag" under "Knab Creditcard".
+ *
+ *  Both are refused before the app either way, so nothing wrong is ever served.
+ *  But state.json's lastValue and the change-detection diff are read by people,
+ *  and a committed artifact carrying the wrong row's number is a rumour with our
+ *  name on it. So a partial that was checked against the text it came out of —
+ *  quote found in the page, the number found inside that quote, the heading
+ *  standing at or before it — outranks one that was pattern-matched out of
+ *  stripped HTML with nothing tying it to the product asked about.
+ *
+ *  Within each group the ladder's own order is kept. */
+const PARTIAL_ORDER: CatalogRoute[] = ["wayback", "agent", "provider-pdf", "provider-page", "comparison"];
+
+export function partialOrder(): CatalogRoute[] {
+  return [...PARTIAL_ORDER];
+}
+
 /** Which of the four parts a figure is missing. Mirrors isCovered's checks so the
  *  recorded reason names the actual shortfall rather than a guess at it. */
 function shortfall(v: CatalogValue): string {
@@ -49,7 +80,10 @@ export async function runLadder(attempts: readonly RouteAttempt[]): Promise<Ladd
       const value = await attempt.run();
       if (value && isCovered(value)) return { value, tried, reason: null };
       if (value) {
-        partial ??= value; // the highest rung's partial, not the last one's
+        // The best-EVIDENCED partial, not the highest rung's: see PARTIAL_ORDER.
+        if (!partial || PARTIAL_ORDER.indexOf(value.route) < PARTIAL_ORDER.indexOf(partial.route)) {
+          partial = value;
+        }
         reasons.push(`${attempt.route}: ${shortfall(value)}`);
       } else {
         reasons.push(`${attempt.route}: no figure`);
