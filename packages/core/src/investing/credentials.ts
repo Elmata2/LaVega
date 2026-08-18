@@ -25,3 +25,18 @@ export interface CredentialStore {
   getCredentials<T extends CredentialBroker>(tenantId: string, broker: T): Promise<Extract<BrokerCredentials, { broker: T }> | null>;
   putCredentials(credentials: BrokerCredentials): Promise<void>;
 }
+
+export type KeyName = "llm" | "market-data";
+
+export type KeyStatus = {
+  name: KeyName;
+  envVar: string;
+  configured: boolean;
+  missingMessage: string | null;
+};
+
+/** Server-side secret seam. Implementations must never send key values to clients. */
+export interface KeySource {
+  getKey(name: KeyName): string | null;
+  getStatus(name: KeyName): KeyStatus;
+}

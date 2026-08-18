@@ -5,6 +5,8 @@ export * from "./prices/PriceStore.js";
 export * from "./prices/inMemoryPriceStore.js";
 export * from "./prices/indexedDbPriceStore.js";
 export * from "./crypto/vaultCrypto.js";
+export * from "./credentials/localCredentialStore.js";
+export * from "./credentials/localKeySource.js";
 export * from "./banking/BankAccessAdapter.js";
 export * from "./banking/fileImport.js";
 export * from "./banking/enableBankingMap.js";
