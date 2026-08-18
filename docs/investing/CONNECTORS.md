@@ -141,7 +141,7 @@ Deliberately **not** specified here. Named so the next effort knows where the ed
 
 - **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals, fed by a market-data provider. Feeds the intended intelligent-agent portfolio-analysis layer. Explicitly split out of the broker adapter ([#4](https://github.com/Elmata2/LaVega/issues/4)); a broker is not a market-data source.
 - **Additional brokers** — Revolut Invest, Bux, eToro and others are wanted, deferred until the big-three adapters prove the interface ([#3](https://github.com/Elmata2/LaVega/issues/3)).
-- **Sync scheduling mechanism** — DeGiro is manual (file upload), IBKR and Trading 212 are both daily-scheduled. Whether one shared scheduler drives them or each adapter self-schedules is still open.
+- **Sync scheduling mechanism** — resolved: one shared Cron Trigger on the hosted tier, app-open sync (gated by `lastSyncedAt`) on the local tier. See `docs/investing/STACK.md`'s Hosting & runtime section ([#31](https://github.com/Elmata2/LaVega/issues/31)).
 - **DeGiro local-Playwright automation** — live, scheduled sync driving DeGiro's real web UI instead of manual CSV export, deferred out of v1 ([#33](https://github.com/Elmata2/LaVega/issues/33)). Research already done: `docs/investing/research/browser-infrastructure.md` ([#19](https://github.com/Elmata2/LaVega/issues/19)).
 - **`apps/investing-web` UI/UX** — this spec is connectors only.
 - **Hosted/cloud tier** — a standing directional constraint (any hosted tier is additive, never required), not a decision this spec makes.

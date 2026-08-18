@@ -2,7 +2,7 @@
 
 _The spec for the investing proposition's technology stack. Read `docs/CONTEXT.md` and `docs/investing/CONNECTORS.md` first — this file assumes both._
 
-Charted via the [Investing stack & platform](https://github.com/Elmata2/LaVega/issues/15) wayfinder map. Every decision below links to the ticket that made it. `apps/investing-web` UI/UX design, instrument enrichment, and the sync-scheduling mechanism itself are deliberately out of this spec — see [Future work](#future-work).
+Charted via the [Investing stack & platform](https://github.com/Elmata2/LaVega/issues/15) wayfinder map. Every decision below links to the ticket that made it. `apps/investing-web` UI/UX design and instrument enrichment are deliberately out of this spec — see [Future work](#future-work).
 
 ## Dashboard requirements
 
@@ -49,6 +49,8 @@ Brokers supply positions and trades, not price series — external price and FX 
 
 **Local tier:** a Docker image running `investing-server`, with the storage backend gated by environment variable ([#23](https://github.com/Elmata2/LaVega/issues/23)) — self-hostable, and matches how a scaled-for-others deployment would look too.
 
+**Local-tier sync trigger: app-open, no cron.** The self-hosted Docker image has no Workers-style scheduler behind it, so IBKR and Trading 212 sync when the app opens, gated by a per-adapter `lastSyncedAt` timestamp that skips re-fetching within 24h of the last successful sync. The same sync endpoint could later serve an optional host-level cron for self-hosters who want it running with the app closed — worth documenting if someone asks for it, not worth building speculatively now.
+
 **Hosted tier: Cloudflare Workers.**
 
 - Cron Triggers are native on the free tier, not plan-gated — unlike Vercel, which caps Function duration at 10s on Hobby and needs Pro for anything past that.
@@ -64,7 +66,7 @@ Brokers supply positions and trades, not price series — external price and FX 
 
 ([Hosting & runtime for investing-server](https://github.com/Elmata2/LaVega/issues/24))
 
-**Sync model this hosting must serve** (from `CONNECTORS.md`): IBKR and Trading 212 sync daily and automatically; DeGiro is manual, user-triggered file upload, no scheduling at all. How the daily sync is actually triggered inside a Cron Trigger is a separate, still-open question ([Sync scheduling mechanism](https://github.com/Elmata2/LaVega/issues/31)).
+**Sync model this hosting must serve** (from `CONNECTORS.md`): IBKR and Trading 212 sync daily and automatically; DeGiro is manual, user-triggered file upload, no scheduling at all. **Decision: one shared Cron Trigger, one `wrangler.toml` entry**, firing a single daily job that loops both adapters — not a separate trigger per adapter. Each adapter's failure lands in its own `problems[]` (the existing `BrokerAccessAdapter` shape), so one broker going down doesn't block the other; nothing in `CONNECTORS.md` gives IBKR and Trading 212 different run-time needs, so a second trigger would just be one more moving part for no benefit. Local tier's answer is above, under Local tier. Investing-side only: Enable Banking's sync on the personal side has no scheduler today either — it's pulled on-demand, not cron-driven — and stays out of this ticket's scope ([Sync scheduling mechanism](https://github.com/Elmata2/LaVega/issues/31)).
 
 ## Browser-access approach for API-less brokers
 
@@ -116,7 +118,6 @@ Deliberately **not** specified here. Named so the next effort knows where the ed
 
 - **`apps/investing-web` UI/UX design** — layout, information hierarchy, what the overview page actually looks like. Visual identity (palette, type, frame/radius/shadow language) is settled above; this is layout only.
 - **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals — carried forward unchanged from `CONNECTORS.md`'s Future work.
-- **Sync scheduling mechanism** — how the Cron Trigger actually fires each broker's daily sync ([#31](https://github.com/Elmata2/LaVega/issues/31)).
 - **Observability / error reporting** for the hosted tier's scheduled jobs ([#32](https://github.com/Elmata2/LaVega/issues/32)).
 - **Testing shape for the investing side** — not yet ticketed.
 - **DeGiro local-Playwright automation**, live scheduled sync driving DeGiro's real UI instead of manual CSV export ([#33](https://github.com/Elmata2/LaVega/issues/33)).
