@@ -1,4 +1,4 @@
-import type { TradeSide, TradeWithoutId } from "@lavega/core";
+import type { Position, TradeSide, TradeWithoutId } from "@lavega/core";
 import type { BrokerAccessAdapter, BrokerResult } from "../BrokerAccessAdapter.js";
 
 export type Trading212Config = {
@@ -9,6 +9,7 @@ export type Trading212Config = {
 
 type Trading212Order = Record<string, unknown>;
 type Trading212Page = { items: Trading212Order[]; nextPagePath?: string };
+type Trading212Positions = Trading212Order[];
 
 const SOURCE = "trading-212";
 
@@ -70,8 +71,33 @@ function mapOrder(order: Trading212Order, entity: string): TradeWithoutId {
   };
 }
 
-function result(trades: TradeWithoutId[], problems: string[]): BrokerResult {
-  return { positions: [], trades, source: SOURCE, problems };
+function mapPosition(raw: Trading212Order, entity: string): Position {
+  // The beta docs name this endpoint and fields, but do not publish a stable
+  // response schema. Keep aliases here until a recorded Invest/Stocks ISA
+  // response confirms the exact names. Nested instrument fields are accepted
+  // because some beta responses place ISIN/name below `instrument`.
+  const instrument = raw.instrument && typeof raw.instrument === "object" && !Array.isArray(raw.instrument)
+    ? raw.instrument as Trading212Order
+    : {};
+  const get = (...keys: string[]) => value(raw, ...keys) ?? value(instrument, ...keys);
+  const symbol = String(get("ticker", "symbol") ?? "");
+  if (!symbol) throw new Error("Trading 212 position symbol is missing");
+  return {
+    entity,
+    symbol,
+    ...(typeof get("isin") === "string" ? { isin: get("isin") as string } : {}),
+    ...(typeof get("name", "description") === "string" ? { description: get("name", "description") as string } : {}),
+    quantity: number(get("quantity", "position"), "position quantity"),
+    averagePrice: nullableNumber(get("averagePrice", "avgPrice")),
+    marketPrice: nullableNumber(get("currentPrice", "marketPrice", "price")),
+    marketValue: nullableNumber(get("marketValue", "value", "currentValue")),
+    currency: String(get("currency", "currencyCode") ?? ""),
+    asOf: date(get("asOf", "date", "updatedAt") ?? new Date().toISOString()),
+  };
+}
+
+function result(positions: Position[], trades: TradeWithoutId[], problems: string[]): BrokerResult {
+  return { positions, trades, source: SOURCE, problems };
 }
 
 async function page(url: string, config: Trading212Config): Promise<Trading212Page> {
@@ -95,11 +121,35 @@ async function page(url: string, config: Trading212Config): Promise<Trading212Pa
   };
 }
 
+async function positions(url: string, config: Trading212Config): Promise<Trading212Positions> {
+  const response = await fetch(url, {
+    headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
+  });
+  if (!response.ok) throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json();
+  // Trading 212 docs reference this endpoint but do not confirm whether beta
+  // returns a bare array or an envelope. Accept both documented possibilities;
+  // reject everything else so a changed payload becomes visible as a problem.
+  const items = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object"
+      ? (payload as { items?: unknown; positions?: unknown; holdings?: unknown }).items
+        ?? (payload as { positions?: unknown }).positions
+        ?? (payload as { holdings?: unknown }).holdings
+      : undefined;
+  if (!Array.isArray(items)) throw new Error("Trading 212 holdings response is malformed");
+  if (!items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
+    throw new Error("Trading 212 holdings items are malformed");
+  }
+  return items as Trading212Order[];
+}
+
 export function createTrading212Adapter(config: Trading212Config): BrokerAccessAdapter {
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
   return {
     async sync({ entity }) {
+      const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
       const problems: string[] = [];
       let nextUrl = new URL("/api/v0/equity/history/orders", config.baseUrl).toString();
@@ -118,7 +168,22 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       } catch (error) {
         problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
       }
-      return result(trades, problems);
+      try {
+        // This equity endpoint is the shared read scope for Trading 212 Invest
+        // and Stocks ISA accounts. Multi-currency accounts are outside the
+        // connector contract; no order-capable endpoint is called here.
+        const holdingsUrl = new URL("/api/v0/equity/positions", config.baseUrl).toString();
+        for (const holding of await positions(holdingsUrl, config)) {
+          try {
+            positionsResult.push(mapPosition(holding, entity));
+          } catch (error) {
+            problems.push(error instanceof Error ? error.message : "Trading 212 holding is invalid");
+          }
+        }
+      } catch (error) {
+        problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
+      }
+      return result(positionsResult, trades, problems);
     },
   };
 }
