@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
+import { LOCAL_TENANT_ID } from "@lavega/core";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
 import { createEncryptedStorage } from "./encryptedStorage.js";
 
@@ -345,4 +346,33 @@ test("a stale-tracked rewards balance round-trips with its interval and snooze",
   s.lock();
   expect(await s.unlock("pw")).toBe(true);
   expect(await s.getRewards()).toEqual([reward]);
+});
+
+test("broker credentials stay encrypted, are absent while locked, and restore with the vault", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const source = createEncryptedStorage("lavega-vault-test-credentials-source");
+  await source.setup("pw");
+  const ibkr = { broker: "ibkr" as const, tenantId: LOCAL_TENANT_ID, token: "flex-token-secret", queryId: "987654" };
+  const trading212 = { broker: "trading212" as const, tenantId: LOCAL_TENANT_ID, token: "t212-key", secret: "t212-secret" };
+
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "ibkr")).toBeNull();
+  await source.putCredentials(ibkr);
+  await source.putCredentials(trading212);
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "ibkr")).toEqual(ibkr);
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "trading212")).toEqual(trading212);
+
+  const backup = source.export();
+  expect(backup).not.toBeNull();
+  expect(JSON.stringify(backup)).not.toContain("flex-token-secret");
+  expect(JSON.stringify(backup)).not.toContain("t212-secret");
+
+  source.lock();
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "ibkr")).toBeNull();
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "trading212")).toBeNull();
+  expect(await source.unlock("pw")).toBe(true);
+  expect(await source.getCredentials(LOCAL_TENANT_ID, "ibkr")).toEqual(ibkr);
+
+  const restored = createEncryptedStorage("lavega-vault-test-credentials-restored");
+  expect(await restored.restore(backup!, "pw")).toBe(true);
+  expect(await restored.getCredentials(LOCAL_TENANT_ID, "trading212")).toEqual(trading212);
 });
