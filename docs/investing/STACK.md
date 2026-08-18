@@ -12,7 +12,7 @@ v1 ships three charts, no more: **portfolio value vs. benchmark** (line, EUR-con
 
 `apps/investing-web` inherits the personal side's **React + Vite** pattern — no SSR; hosted-tier auth and multi-tenancy stay in the Hono API server, the same client/server split as today. Revisit only if hosting concretely needs server-rendering. Routing is **React Router**, library mode, decided now since the dashboard will have multiple views. Data fetching/caching (TanStack Query) is deliberately deferred — local reads go through `StorageAdapter`/IndexedDB, no remote server-state to cache yet; add it when hosted-tier sync introduces real remote fetching ([investing-web UI framework](https://github.com/Elmata2/LaVega/issues/17)).
 
-Styling is **shadcn/ui (Tailwind + Radix)** — a deliberate divergence from `apps/web`'s hand-written CSS and `tokens.css`. shadcn's CSS-variable theming plays the same token-layer role `tokens.css` does; whether it inherits the personal side's actual palette is a separate, not-yet-decided question ([investing-web visual identity](https://github.com/Elmata2/LaVega/issues/29)).
+Styling is **shadcn/ui (Tailwind + Radix)** — a deliberate divergence from `apps/web`'s hand-written CSS and `tokens.css`. shadcn's CSS-variable theming plays the same token-layer role `tokens.css` does, and it carries the same values: `investing-web` is the same LaVega brand, re-expressed as Tailwind/shadcn variables rather than reusing the `tokens.css` file itself (mechanically impossible once styling moved to Tailwind). Palette, type (EB Garamond / Inter), and the `--pos`/`--neg` pair carry over unchanged; the data-viz palette extends from 3 hues to ~5 to cover the allocation donut's categories. The frame/radius/shadow language carries over too — the floating rounded shell (`--r-lg`, `--shadow-float`) on a soft gutter, flat border-only cards (`--r-sm`, no shadow) — rejecting shadcn's own tighter/flatter defaults, confirmed by a side-by-side prototype. Wire it with **cva** for type-safe, variant-driven Tailwind styling ([investing-web visual identity](https://github.com/Elmata2/LaVega/issues/29)).
 
 ## Charting library
 
@@ -114,7 +114,7 @@ Applied concretely to the Gloomberb teardown: `docs/investing/research/gloomberb
 
 Deliberately **not** specified here. Named so the next effort knows where the edges are:
 
-- **`apps/investing-web` UI/UX design**, including whether it inherits the personal side's visual identity (`tokens.css`) or gets its own ([#29](https://github.com/Elmata2/LaVega/issues/29)).
+- **`apps/investing-web` UI/UX design** — layout, information hierarchy, what the overview page actually looks like. Visual identity (palette, type, frame/radius/shadow language) is settled above; this is layout only.
 - **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals — carried forward unchanged from `CONNECTORS.md`'s Future work.
 - **Sync scheduling mechanism** — how the Cron Trigger actually fires each broker's daily sync ([#31](https://github.com/Elmata2/LaVega/issues/31)).
 - **Observability / error reporting** for the hosted tier's scheduled jobs ([#32](https://github.com/Elmata2/LaVega/issues/32)).
