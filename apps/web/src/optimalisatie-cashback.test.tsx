@@ -92,3 +92,20 @@ test("knowing both cashback rates but not what he spends says exactly that", () 
   expect(html).not.toContain("Je betaalt al met de kaart");
   expect(html).not.toContain("per jaar</span>");
 });
+
+test("the gap names a way to close it that actually exists", () => {
+  // The reisblok has an "aanpassen" field for wisselkosten and omwisselkosten
+  // and for NOTHING else — there is no cashback input anywhere in the app, and
+  // even those two only appear once a bestemming has been chosen. Telling him
+  // to "vul het zelf in bij het reisblok" is advice that cannot be followed in
+  // the state it is printed in, and this is the module's DEFAULT state: a fresh
+  // vault has no cashbackPct fact until the reisagent looks one up.
+  const html = render({ facts: [] });
+  expect(html).toContain("Cashback onbekend voor");
+  expect(html).not.toContain("Vul het zelf in");
+  // The path that does work: the travel agent writes cashbackPct, and it needs
+  // a destination before it will run.
+  expect(html).toContain("reisblok op Overzicht");
+  expect(html).toContain("bestemming");
+  expect(html).toContain("Zoek voorwaarden");
+});

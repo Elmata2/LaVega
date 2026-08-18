@@ -578,8 +578,16 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           })}
           {cashbackGaps.length > 0 && (
             <p className="cell-sub">
-              Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Vul het zelf in bij het
-              reisblok — wat jij invult wordt nooit overschreven.
+              {/* Name a way to close the gap that EXISTS. There is no cashback
+                  input anywhere in the app: the reisblok offers "aanpassen" for
+                  fxFeePct and convertFeePct and nothing else, and even those
+                  appear only once a destination is chosen. The travel agent is
+                  what writes a cashbackPct, and it needs that destination before
+                  it will look anything up — so that is what the sentence asks
+                  for. "Vul het zelf in" asked for a field he does not have. */}
+              Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Niemand heeft ze nog
+              opgezocht: kies een bestemming in het reisblok op Overzicht en klik{" "}
+              <strong>Zoek voorwaarden</strong> — dan vult LaVega ze hier in.
             </p>
           )}
         </Module>
