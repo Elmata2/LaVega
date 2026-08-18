@@ -14,6 +14,15 @@
  *   pnpm catalog:sweep                          # every product
  *   pnpm catalog:sweep -- --only ing-betaalpas  # one, while iterating
  *   pnpm catalog:sweep -- --dry                 # report, write nothing
+ *   pnpm catalog:sweep -- --no-agent            # free tiers only, no model calls
+ *
+ * The model runs HERE and only here. It is the sweep's last rung, and it is what
+ * makes `conditionsKnown` true honestly: a regex reads a number, a model reading
+ * the same page can also say what the number depends on. The agent was rejected
+ * for the running app because it takes 40 seconds to five minutes — in a
+ * scheduled offline sweep that slowness is free. It runs only when
+ * ANTHROPIC_API_KEY is in the environment (the npm script reads apps/server/.env
+ * if it exists), so a run without a key is the old free sweep, unchanged.
  *
  * NOTE on --only: it is a plain substring match on the product id, so `--only ing`
  * also selects every *spaarrekening* (the word "rekening" ends in "ing"). Name the
@@ -21,8 +30,10 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import Anthropic from "@anthropic-ai/sdk";
 import { runLadder, type RouteAttempt, type CatalogValue } from "@lavega/core";
 import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
+import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply } from "@lavega/core";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const STATE = "docs/catalog/state.json";
@@ -35,6 +46,24 @@ const TIMEOUT_MS = 20_000;
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : null;
 const dry = args.includes("--dry");
+
+/** The extractor model. Opus rather than Haiku because the job is not "find the
+ *  percentage" — the crude regex already does that and gets ABN AMRO's betaalpas
+ *  wrong — it is "decide which row belongs to this product and whether the page
+ *  settles its conditions". That is the judgement the whole rung exists for, and
+ *  a weekly offline sweep is where paying for it is cheapest. */
+const EXTRACT_MODEL = "claude-opus-5";
+/** Slowness is free here, hanging is not: one wedged request must not eat the
+ *  Action's 45-minute budget. Generous, because the model is allowed to think. */
+const MODEL_TIMEOUT_MS = 180_000;
+/** Above this the page is refused rather than trimmed. Silently truncating the
+ *  text would hand the model a document whose tariff table may have been cut off
+ *  and take its answer as if it had read the whole thing. */
+const MAX_MODEL_CHARS = 200_000;
+/** Never printed, never written to either artifact. Absent = the free sweep. */
+const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
+const useAgent = !args.includes("--no-agent") && !!apiKey;
+let modelCalls = 0;
 
 /** How many of this run's fetches got an answer of ANY kind, 403s included.
  *  Zero, with attempts made, means the machine had no network — see the guard at
@@ -65,6 +94,70 @@ async function getPdfText(url: string): Promise<string> {
   return execFileSync("pdftotext", ["-layout", "/tmp/catalog.pdf", "-"], { encoding: "utf8" });
 }
 
+/** HTML with its tags gone, which is what both the regex rung and the model read. */
+function strip(html: string): string {
+  return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ");
+}
+
+/** Two rungs now read the same URL — the regex and the model — and 82 URLs serve
+ *  124 products, so without this the sweep fetches some pages five times and the
+ *  providers see a burst that looks like scraping. One fetch per URL per run,
+ *  failures cached too so a dead host is not retried per product. */
+const pageCache = new Map<string, Promise<string>>();
+function readPage(url: string, kind: "html" | "pdf"): Promise<string> {
+  const key = `${kind}:${url}`;
+  let hit = pageCache.get(key);
+  if (!hit) {
+    hit = kind === "pdf" ? getPdfText(url) : getText(url).then(strip);
+    pageCache.set(key, hit);
+  }
+  return hit;
+}
+
+/** One product, one page, one question, through the tool in packages/core.
+ *
+ *  Everything model-shaped that could be pure IS pure and lives in
+ *  catalogExtract.ts — the prompt, the schema, and every check on the reply. What
+ *  is left here is the call itself, because that is I/O and packages/core stays
+ *  clean of it. The reply is parsed by parseExtractReply or discarded; there is
+ *  no path from a model's output into the catalogue that skips those checks. */
+async function askModel(product: string, sourceUrl: string, text: string): Promise<CatalogValue | null> {
+  if (text.length > MAX_MODEL_CHARS) {
+    throw new Error(`page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`);
+  }
+  const req = { product, sourceUrl, text };
+  const { system, user } = buildExtractPrompt(req);
+  const client = new Anthropic({ apiKey: apiKey ?? undefined });
+  const res = await client.messages.create(
+    {
+      model: EXTRACT_MODEL,
+      max_tokens: 8192,
+      system,
+      tools: [EXTRACT_TOOL as unknown as Anthropic.Tool],
+      // Deliberately NOT a forced tool call. "This page does not state it for this
+      // product" has to remain sayable, and forcing the tool turns that answer
+      // into a fabricated one.
+      messages: [{ role: "user", content: user }],
+    },
+    { timeout: MODEL_TIMEOUT_MS },
+  );
+  modelCalls++;
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") return null; // the model declined — a real answer
+  const figure = parseExtractReply(block.input, req, today);
+  if (!figure) return null;
+  return {
+    value: figure.value,
+    route: "agent",
+    sourceUrl,
+    // The SOURCE's date when the document states one, never the sweep date
+    // dressed up as it.
+    checkedAt: readDocumentDate(text) ?? today,
+    conditions: figure.conditions,
+    conditionsKnown: figure.conditionsKnown,
+  };
+}
+
 const state = JSON.parse(readFileSync(STATE, "utf8"));
 const ids: string[] = Object.keys(state.products).filter((id) => !only || id.includes(only));
 /** How many products the PREVIOUS run found any figure for — covered or not.
@@ -83,7 +176,7 @@ for (const id of ids) {
     attempts.push({
       route: "provider-pdf",
       run: async () => {
-        const text = await getPdfText(p.pdfUrl);
+        const text = await readPage(p.pdfUrl, "pdf");
         const figures = readIngTariffs(text);
         const f = figures.find((x) => x.field === "fxFeePct");
         if (!f) return null;
@@ -110,7 +203,9 @@ for (const id of ids) {
     attempts.push({
       route: "provider-page",
       run: async () => {
-        const text = (await getText(p.termsUrl)).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+        // The cache hands back tag-stripped text with its line breaks intact (the
+        // model rung needs them to see headings); this rung wants one flat line.
+        const text = (await readPage(p.termsUrl, "html")).replace(/\s+/g, " ");
         const m = /(\d{1,2})[,.](\d{1,2})\s*%[^.]{0,40}koersopslag|koersopslag[^.]{0,40}?(\d{1,2})[,.](\d{1,2})\s*%/i.exec(text);
         if (!m) return null;
         const value = Number(`${m[1] ?? m[3]}.${m[2] ?? m[4]}`);
@@ -120,6 +215,21 @@ for (const id of ids) {
         // is exactly how Revolut shipped at 0%.
         return { value, route: "provider-page", sourceUrl: p.termsUrl, checkedAt: today,
                  conditions: null, conditionsKnown: false };
+      },
+    });
+  }
+  // THE RUNG THAT CAN EARN conditionsKnown. It sorts last in the ladder, so it
+  // only runs when nothing above it came back COVERED — which today is almost
+  // always, because provider-page cannot establish a condition and says so. The
+  // provider's own PDF is preferred over its HTML when both exist: the tariff
+  // sheet is where the caps and tiers actually are.
+  if (useAgent && (p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
+    attempts.push({
+      route: "agent",
+      run: async () => {
+        const url: string = p.pdfUrl ?? p.termsUrl;
+        const text = await readPage(url, p.pdfUrl ? "pdf" : "html");
+        return askModel(p.product, url, text);
       },
     });
   }
@@ -167,6 +277,14 @@ if (changes.length) console.log(`\nCHANGED:\n  ${changes.join("\n  ")}`);
 
 const figuresFound = entries.filter((e) => e.fields.fxFeePct).length;
 console.log(`figures found: ${figuresFound} (previous run: ${figuresBefore})  ·  fetches answered: ${httpResponses}/${attemptsMade}`);
+// Whether the model rung ran at all is part of reading the coverage number: the
+// same sweep with and without a key produces two different products, and "0
+// agent" next to a low covered-count is the explanation rather than a mystery.
+console.log(
+  useAgent
+    ? `model: ${EXTRACT_MODEL}, ${modelCalls} call(s)`
+    : `model: not run (${apiKey ? "--no-agent" : "no ANTHROPIC_API_KEY in the environment"})`,
+);
 
 if (dry) { console.log("\n--dry: nothing written"); process.exit(0); }
 
