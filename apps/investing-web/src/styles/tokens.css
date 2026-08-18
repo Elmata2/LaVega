@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 27% 97%;
+    --foreground: 60 7% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 60 7% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 60 7% 10%;
+    --primary: 202 55% 27%;
+    --primary-foreground: 40 27% 97%;
+    --secondary: 40 20% 93%;
+    --secondary-foreground: 60 7% 10%;
+    --muted: 40 20% 93%;
+    --muted-foreground: 48 5% 41%;
+    --accent: 202 55% 27%;
+    --accent-foreground: 40 27% 97%;
+    --border: 40 17% 88%;
+    --input: 40 17% 88%;
+    --ring: 202 55% 27%;
+    --positive: 101 35% 35%;
+    --negative: 11 59% 44%;
+    --warning: 39 71% 41%;
+    --chart-blue: 211 47% 44%;
+    --chart-purple: 249 42% 59%;
+    --chart-teal: 174 51% 37%;
+    --chart-amber: 39 71% 48%;
+    --chart-coral: 11 59% 55%;
+    --radius: 18px;
+    --radius-card: 22px;
+    --radius-frame: 26px;
+    --radius-pill: 999px;
+    --shadow-soft: 0 1px 2px rgba(26, 26, 23, .04), 0 18px 40px -28px rgba(26, 26, 23, .16);
+    --shadow-float: 0 32px 64px -28px rgba(26, 26, 23, .3), 0 6px 16px -10px rgba(26, 26, 23, .12);
+    --font-display: "EB Garamond", Georgia, serif;
+    --font-body: "Inter", system-ui, sans-serif;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; font-family: var(--font-body); }
+  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
+}
+
+@layer components {
+  .pressable { @apply transition-transform duration-150 ease-out active:scale-[.98]; }
+}
