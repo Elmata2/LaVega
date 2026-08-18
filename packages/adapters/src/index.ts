@@ -11,3 +11,4 @@ export * from "./brokers/BrokerAccessAdapter.js";
 export * from "./brokers/ibkr/flexStatementClient.js";
 export * from "./brokers/ibkr/flexAdapter.js";
 export * from "./brokers/ibkr/flexParser.js";
+export * from "./market-data/yahoo/index.js";
