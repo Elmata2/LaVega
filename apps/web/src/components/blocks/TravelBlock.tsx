@@ -346,9 +346,12 @@ export function TermsNotice({
         )}
         {gaps === 0 && <p className="cell-sub">Alle routes zijn beprijsd.</p>}
         {/* Only ever a date we actually hold: a fee the owner typed himself
-            carries no lookup date, and no date is printed for it. */}
+            carries no lookup date, and no date is printed for it.
+            "Opgezocht" used to claim LaVega did the looking on that date — but
+            a bank.nl figure was checked by bank.nl and merely fetched by us. A
+            neutral verb is true of both sources. */}
         {state.lastUpdated && (
-          <p className="cell-sub">Laatst opgezocht op {dayLabelYearNL(state.lastUpdated)}.</p>
+          <p className="cell-sub">Cijfers laatst gecontroleerd op {dayLabelYearNL(state.lastUpdated)}.</p>
         )}
         {aiAvailable
           ? searchButton(false, gaps > 0 ? `Zoek voorwaarden (${gaps})` : "Ververs voorwaarden")

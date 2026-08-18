@@ -116,7 +116,19 @@ function write(key: string, terms: ProviderTerms, source: TermsSource): boolean 
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
     if (oldest) cache.delete(oldest[0]);
   }
-  cache.set(key, { terms: prev ? { ...prev.terms, ...stated(terms) } : terms, at: Date.now(), source });
+  // Merge the FIGURES, never the date. Fields the incoming row does not state are
+  // kept (bank.nl publishes only a koersopslag, so letting it land must not wipe
+  // a cashback the agent found) — but `checkedAt` describes WHEN A SOURCE
+  // CHECKED, and it belongs to the write that carried it, not to the entry.
+  //
+  // Left to merge, it detached from its own number: bank.nl stamped 2026-01-15,
+  // the agent then found 1,2% today, and the merged entry served a figure looked
+  // up this morning under January's date. The screen dutifully printed "laatst
+  // opgezocht op 15 jan 2026" about something minutes old. A source that states
+  // no date is as of now, which `at` already records.
+  const merged = prev ? { ...prev.terms, ...stated(terms) } : { ...terms };
+  if (terms.checkedAt === undefined) delete merged.checkedAt;
+  cache.set(key, { terms: merged, at: Date.now(), source });
   return true;
 }
 

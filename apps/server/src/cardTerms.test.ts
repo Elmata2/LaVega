@@ -328,3 +328,25 @@ test("a comparison figure DOES replace an agent figure of similar age — precis
   const held = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never });
   expect(held.terms[0].fxFeePct).toBe(1.4);
 });
+
+test("a source's check date does not outlive the figure it described", () => {
+  // bank.nl stamps its rows. The agent does not: its answer is as of now.
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.4, checkedAt: "2026-01-15" }], "comparison");
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.2, cashbackPct: 0 }], "agent");
+
+  const held = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never });
+  const row = held.terms[0];
+
+  expect(row.fxFeePct).toBe(1.2);        // today's figure won
+  expect(row.checkedAt).toBeUndefined(); // ...and January's date did not follow it
+});
+
+test("a field the incoming row does not state is still kept", () => {
+  ingestCardTerms("NL", "USD", [{ provider: "bunq betaalpas", fxFeePct: 2, cashbackPct: 1 }], "agent");
+  // bank.nl publishes only a koersopslag; it must not wipe the cashback.
+  ingestCardTerms("NL", "USD", [{ provider: "bunq betaalpas", fxFeePct: 1.9, checkedAt: "2026-08-18" }], "comparison");
+
+  const row = getCardTerms(input(["bunq betaalpas"]), "k", { lookup: (async () => []) as never }).terms[0];
+  expect(row.cashbackPct).toBe(1);
+  expect(row.checkedAt).toBe("2026-08-18");
+});

@@ -354,7 +354,7 @@ test("with every route priced the control stays visible as a refresh, with its d
   const notice = c.querySelector(".travel-terms")!;
 
   expect(notice.textContent).toContain("Alle routes zijn beprijsd");
-  expect(notice.textContent).toContain("Laatst opgezocht op 1 aug 2026");
+  expect(notice.textContent).toContain("Cijfers laatst gecontroleerd op 1 aug 2026");
   expect(byText("button", "Ververs voorwaarden")).toBeTruthy();
 });
 
