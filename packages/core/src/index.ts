@@ -19,6 +19,7 @@ export * from "./taxSheet.js";
 export * from "./categories.js";
 export * from "./subscriptions.js";
 export * from "./interest.js";
+export * from "./returns.js";
 export * from "./fx.js";
 export * from "./rewards.js";
 export * from "./forecast.js";
