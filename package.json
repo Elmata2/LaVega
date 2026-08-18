@@ -10,7 +10,7 @@
     "test": "turbo run test",
     "test:watch": "turbo watch test",
     "dev": "turbo run dev",
-    "build": "pnpm --filter @lavega/web build",
+    "build": "turbo run build",
     "start": "pnpm --filter @lavega/server start",
     "typecheck": "turbo run typecheck",
     "sync:n8n": "node scripts/sync-n8n-code.mjs"
