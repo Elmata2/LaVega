@@ -133,7 +133,7 @@ Trading 212 does have an official public API (`https://docs.trading212.com/api`)
 
 Deliberately **not** specified here. Named so the next effort knows where the edges are:
 
-- **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals, fed by a market-data provider. Feeds the intended intelligent-agent portfolio-analysis layer, whose reserved seam is specified in `docs/investing/AGENT_SEAM.md` ([#26](https://github.com/Elmata2/LaVega/issues/26)). Explicitly split out of the broker adapter ([#4](https://github.com/Elmata2/LaVega/issues/4)); a broker is not a market-data source.
+- **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals, fed by a market-data provider. Feeds the intended intelligent-agent portfolio-analysis layer. Explicitly split out of the broker adapter ([#4](https://github.com/Elmata2/LaVega/issues/4)); a broker is not a market-data source.
 - **Additional brokers** — Revolut Invest, Bux, eToro and others are wanted, deferred until the big-three adapters prove the interface ([#3](https://github.com/Elmata2/LaVega/issues/3)).
 - **Sync scheduling mechanism** — DeGiro is manual, IBKR and Trading 212 are both daily-scheduled. Whether one shared scheduler drives them or each adapter self-schedules is still open.
 - **`apps/investing-web` UI/UX** — this spec is connectors only.
