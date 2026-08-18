@@ -138,7 +138,7 @@ Local implementation is IndexedDB with a `(symbol, date)` composite index and a 
 
 ### Market data
 
-The existing `MarketDataRouter` and `Provider` shape in `packages/adapters/src/marketData/providerRouter.ts` are the seam; no new routing abstraction. The local tier registers:
+The existing `MarketDataRouter` and `Provider` shape in `packages/adapters/src/market-data/providerRouter.ts` are the seam; no new routing abstraction. The local tier registers:
 
 - **price** — the existing Yahoo Finance client in `packages/adapters/src/market-data/yahoo/`.
 - **fx** — Frankfurter/ECB, reusing the pattern already in `apps/server/src/fx.ts`.
@@ -182,7 +182,7 @@ A good test here asserts behaviour a user or a caller could observe, and nothing
 
 1. **`packages/core/src/investing/` pure functions** — the highest seam and where most coverage belongs. Portfolio value series, benchmark normalisation, FX conversion, allocation bucketing by instrument and by broker, trade and dividend marker placement, range filtering. Input is plain arrays of `Position`, `Trade`, and `PriceBar`; output is plain arrays. No fakes needed at all.
 2. **`PriceStore` contract** — one shared contract test run against both an in-memory fake and the IndexedDB implementation, covering range boundaries (inclusive ends, empty range, single day), `lastDate` on an empty store, upsert-as-update rather than duplicate, and `purgeAll` leaving the store readable and empty.
-3. **`MarketDataRouter` wiring** — stub `Provider` implementations already have prior art in `packages/adapters/src/marketData/providerRouter.test.ts`. Assert that a failing price provider falls through rather than throwing, that a null result is not treated as a value, and that the `identifier` lane is unaffected by the `price` lane's outcome.
+3. **`MarketDataRouter` wiring** — stub `Provider` implementations already have prior art in `packages/adapters/src/market-data/providerRouter.test.ts`. Assert that a failing price provider falls through rather than throwing, that a null result is not treated as a value, and that the `identifier` lane is unaffected by the `price` lane's outcome.
 4. **Yahoo client** — extend the existing tests in `packages/adapters/src/market-data/yahoo/` with fixture-backed responses, covering the rate-limited and blocked cases as `problems[]` rather than exceptions, and asserting no request is issued before consent is recorded.
 5. **`apps/investing-server` routes** — Hono's `app.request()` against the app instance, following `apps/server/src/index.test.ts`. Assert the 24-hour `lastSyncedAt` gate skips, that "sync now" bypasses it, that a broker returning `problems[]` yields a successful response carrying those problems, and that no key value appears in any response body.
 6. **Import boundaries** — extend the existing architecture test from [#39](https://github.com/Elmata2/LaVega/issues/39) so `core` still cannot import I/O, and so `investing-server` and its transitive adapter imports cannot import `node:` builtins.
