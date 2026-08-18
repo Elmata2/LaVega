@@ -1,0 +1,697 @@
+{
+  "generatedAt": "2026-08-18",
+  "entries": [
+    {
+      "id": "ing-betaalpas",
+      "product": "ING betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-creditcard",
+      "product": "ING creditcard",
+      "fields": {}
+    },
+    {
+      "id": "ing-platinumcard",
+      "product": "ING Platinumcard",
+      "fields": {}
+    },
+    {
+      "id": "abn-amro-betaalpas",
+      "product": "ABN AMRO betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "provider-page",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "abn-amro-creditcard",
+      "product": "ABN AMRO creditcard",
+      "fields": {}
+    },
+    {
+      "id": "abn-amro-gold-card",
+      "product": "ABN AMRO Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "rabobank-betaalpas",
+      "product": "Rabobank betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "rabobank-creditcard",
+      "product": "Rabobank creditcard",
+      "fields": {}
+    },
+    {
+      "id": "rabo-goldcard",
+      "product": "Rabo GoldCard",
+      "fields": {}
+    },
+    {
+      "id": "sns-betaalpas",
+      "product": "SNS betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "sns-creditcard",
+      "product": "SNS creditcard",
+      "fields": {}
+    },
+    {
+      "id": "asn-betaalpas",
+      "product": "ASN betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "asn-creditcard",
+      "product": "ASN Creditcard",
+      "fields": {}
+    },
+    {
+      "id": "regiobank-betaalpas",
+      "product": "RegioBank betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "regiobank-creditcard",
+      "product": "RegioBank creditcard",
+      "fields": {}
+    },
+    {
+      "id": "knab-betaalpas",
+      "product": "Knab betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "provider-page",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "knab-creditcard",
+      "product": "Knab creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "provider-page",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalpas",
+      "product": "Triodos betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-free-betaalpas",
+      "product": "bunq Free betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-core-betaalpas",
+      "product": "bunq Core betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-pro-betaalpas",
+      "product": "bunq Pro betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-elite-betaalpas",
+      "product": "bunq Elite betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-creditcard",
+      "product": "bunq creditcard",
+      "fields": {}
+    },
+    {
+      "id": "bunq-termijndeposito",
+      "product": "bunq Termijndeposito",
+      "fields": {}
+    },
+    {
+      "id": "bunq-beleggingsrekening",
+      "product": "bunq beleggingsrekening",
+      "fields": {}
+    },
+    {
+      "id": "bunq-crypto",
+      "product": "bunq crypto",
+      "fields": {}
+    },
+    {
+      "id": "bunq-free-business-betaalpas",
+      "product": "bunq Free Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-core-business-betaalpas",
+      "product": "bunq Core Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-pro-business-betaalpas",
+      "product": "bunq Pro Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-elite-business-betaalpas",
+      "product": "bunq Elite Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-standard-betaalpas",
+      "product": "Revolut Standard betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-plus-betaalpas",
+      "product": "Revolut Plus betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-premium-betaalpas",
+      "product": "Revolut Premium betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-metal-betaalpas",
+      "product": "Revolut Metal betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-standard-betaalpas",
+      "product": "N26 Standard betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-smart-betaalpas",
+      "product": "N26 Smart betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-go-betaalpas",
+      "product": "N26 Go betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-metal-betaalpas",
+      "product": "N26 Metal betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-instant-savings",
+      "product": "N26 Instant Savings",
+      "fields": {}
+    },
+    {
+      "id": "n26-flexible-cash-fund",
+      "product": "N26 flexible cash fund",
+      "fields": {}
+    },
+    {
+      "id": "wise-betaalpas",
+      "product": "Wise betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "wise-rente",
+      "product": "Wise Rente",
+      "fields": {}
+    },
+    {
+      "id": "wise-aandelen",
+      "product": "Wise Aandelen",
+      "fields": {}
+    },
+    {
+      "id": "trade-republic-betaalpas",
+      "product": "Trade Republic betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "trade-republic-spaarrekening-rente-op-kassaldo",
+      "product": "Trade Republic spaarrekening (rente op kassaldo)",
+      "fields": {}
+    },
+    {
+      "id": "212-card",
+      "product": "212 Card",
+      "fields": {}
+    },
+    {
+      "id": "trading-212-interest-on-cash",
+      "product": "Trading 212 interest on cash",
+      "fields": {}
+    },
+    {
+      "id": "trading-212-beleggingsrekening",
+      "product": "Trading 212 beleggingsrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-betaalpas-r42-betaalpas",
+      "product": "Openbank betaalpas (R42 Betaalpas)",
+      "fields": {}
+    },
+    {
+      "id": "american-express-blue-card",
+      "product": "American Express Blue Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-green-card",
+      "product": "American Express Green Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-gold-card",
+      "product": "American Express Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-platinum-card",
+      "product": "American Express Platinum Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-entry-card",
+      "product": "Flying Blue - American Express Entry Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-silver-card",
+      "product": "Flying Blue - American Express Silver Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-gold-card",
+      "product": "Flying Blue - American Express Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-platinum-card",
+      "product": "Flying Blue - American Express Platinum Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-entry-card",
+      "product": "American Express Business Entry Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-green-card",
+      "product": "American Express Business Green Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-gold-card",
+      "product": "American Express Business Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-corporate-card",
+      "product": "American Express Corporate Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-corporate-gold-card",
+      "product": "American Express Corporate Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "klm-american-express-corporate-card",
+      "product": "KLM American Express Corporate Card",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card",
+      "product": "ICS Visa World Card",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card-gold",
+      "product": "ICS Visa World Card Gold",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card-platinum",
+      "product": "ICS Visa World Card Platinum",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card-panda",
+      "product": "ICS Visa World Card Panda",
+      "fields": {}
+    },
+    {
+      "id": "ics-mastercard-classic",
+      "product": "ICS Mastercard Classic",
+      "fields": {}
+    },
+    {
+      "id": "ics-mastercard-gold",
+      "product": "ICS Mastercard Gold",
+      "fields": {}
+    },
+    {
+      "id": "ics-mastercard-black",
+      "product": "ICS Mastercard Black",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card-business",
+      "product": "ICS Visa World Card Business",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-visa-world-card-business-gold",
+      "product": "ICS Visa World Card Business Gold",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-business",
+      "product": "ICS Mastercard Business",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-corporate",
+      "product": "ICS Mastercard Corporate",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "anwb-visa-classic-card",
+      "product": "ANWB Visa Classic Card",
+      "fields": {}
+    },
+    {
+      "id": "anwb-visa-silver-card",
+      "product": "ANWB Visa Silver Card",
+      "fields": {}
+    },
+    {
+      "id": "anwb-visa-gold-card",
+      "product": "ANWB Visa Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-basic-midnight-blue",
+      "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-plus-ruby-steel",
+      "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-pro-jade-green-royal-indigo",
+      "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-private-icy-white-rose-gold",
+      "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-private-obsidian",
+      "product": "Crypto.com Prepaid Card — Private (Obsidian)",
+      "fields": {}
+    },
+    {
+      "id": "nexo-card",
+      "product": "Nexo Card",
+      "fields": {}
+    },
+    {
+      "id": "krak-card-kraken",
+      "product": "Krak Card (Kraken)",
+      "fields": {}
+    },
+    {
+      "id": "plutus-card",
+      "product": "Plutus Card",
+      "fields": {}
+    },
+    {
+      "id": "bleap-card",
+      "product": "Bleap Card",
+      "fields": {}
+    },
+    {
+      "id": "zeal-card-gnosis-pay-rails",
+      "product": "Zeal Card (Gnosis Pay rails)",
+      "fields": {}
+    },
+    {
+      "id": "gnosis-pay-card-direct-consumer",
+      "product": "Gnosis Pay Card (direct consumer)",
+      "fields": {}
+    },
+    {
+      "id": "bybit-card",
+      "product": "Bybit Card",
+      "fields": {}
+    },
+    {
+      "id": "coinbase-card",
+      "product": "Coinbase Card",
+      "fields": {}
+    },
+    {
+      "id": "wirex-card-wirex-one",
+      "product": "Wirex Card (Wirex One)",
+      "fields": {}
+    },
+    {
+      "id": "binance-card",
+      "product": "Binance Card",
+      "fields": {}
+    },
+    {
+      "id": "paysafecard-prepaid-code-paysafewallet",
+      "product": "paysafecard (prepaid code / PaysafeWallet)",
+      "fields": {}
+    },
+    {
+      "id": "tria-card",
+      "product": "Tria Card",
+      "fields": {}
+    },
+    {
+      "id": "bigbank-flexibel-sparen",
+      "product": "Bigbank Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "bunq-spaarrekening-massinterest",
+      "product": "bunq spaarrekening (MassInterest)",
+      "fields": {}
+    },
+    {
+      "id": "santander-consumer-bank-spaarrekening",
+      "product": "Santander Consumer Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "garanti-bbva-international-gouden-internet-rekening",
+      "product": "Garanti BBVA International Gouden Internet Rekening",
+      "fields": {}
+    },
+    {
+      "id": "dhb-bank-saveonlinerekening",
+      "product": "DHB Bank S@veOnlinerekening",
+      "fields": {}
+    },
+    {
+      "id": "anadolubank-alfa-slimmer-sparen",
+      "product": "Anadolubank Alfa Slimmer Sparen",
+      "fields": {}
+    },
+    {
+      "id": "scalable-capital-scalable-overnight",
+      "product": "Scalable Capital Scalable Overnight",
+      "fields": {}
+    },
+    {
+      "id": "raisin-spaarrekening-platform-19-partner-banks",
+      "product": "Raisin spaarrekening (platform, 19 partner banks)",
+      "fields": {}
+    },
+    {
+      "id": "klarna-flex-rekening",
+      "product": "Klarna Flex rekening",
+      "fields": {}
+    },
+    {
+      "id": "ayvens-bank-flexibel-sparen",
+      "product": "Ayvens Bank Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "argenta-internetspaarrekening",
+      "product": "Argenta Internetspaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-welkom-spaarrekening",
+      "product": "Openbank Welkom Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-open-spaarrekening",
+      "product": "Openbank Open Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "yapi-kredi-bank-euro-plus-spaarrekening",
+      "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nibc-spaarrekening",
+      "product": "NIBC Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nibc-kwartaalspaarrekening",
+      "product": "NIBC Kwartaalspaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "lloyds-bank-spaarrekening",
+      "product": "Lloyds Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nationale-nederlanden-internetsparen",
+      "product": "Nationale-Nederlanden Internetsparen",
+      "fields": {}
+    },
+    {
+      "id": "centraal-beheer-rentepl-s-rekening",
+      "product": "Centraal Beheer RentePlús Rekening",
+      "fields": {}
+    },
+    {
+      "id": "knab-flexibel-sparen",
+      "product": "Knab Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "abn-amro-direct-sparen",
+      "product": "ABN AMRO Direct Sparen",
+      "fields": {}
+    },
+    {
+      "id": "ing-oranje-spaarrekening",
+      "product": "ING Oranje Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "rabobank-rabo-spaarrekening",
+      "product": "Rabobank Rabo SpaarRekening",
+      "fields": {}
+    },
+    {
+      "id": "asn-bank-asn-ideaalsparen",
+      "product": "ASN Bank ASN Ideaalsparen",
+      "fields": {}
+    },
+    {
+      "id": "sns-internet-sparen",
+      "product": "SNS Internet Sparen",
+      "fields": {}
+    },
+    {
+      "id": "regiobank-spaar-op-maat-vrij",
+      "product": "RegioBank Spaar-op-Maat Vrij",
+      "fields": {}
+    },
+    {
+      "id": "triodos-bank-internet-sparen",
+      "product": "Triodos Bank Internet Sparen",
+      "fields": {}
+    },
+    {
+      "id": "brand-new-day-de-spaarrekening",
+      "product": "Brand New Day De Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nexent-bank-spaarrekening",
+      "product": "Nexent Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "revolut-dagelijkse-spaarrekening",
+      "product": "Revolut Dagelijkse Spaarrekening",
+      "fields": {}
+    }
+  ]
+}

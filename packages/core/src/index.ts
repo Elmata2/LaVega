@@ -13,6 +13,7 @@ export * from "./travel.js";
 export * from "./bankNl.js";
 export * from "./catalog.js";
 export * from "./pdfText.js";
+export * from "./catalogRoutes.js";
 export * from "./categorize.js";
 export * from "./scheduledFlows.js";
 export * from "./invoices.js";
