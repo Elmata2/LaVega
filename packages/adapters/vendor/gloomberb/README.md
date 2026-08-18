@@ -21,8 +21,9 @@ LaVega's own Flex XML parsing (positions + trades, mapped to
 `FlexQueryConfig` alongside IBKR Gateway/TWS API config types LaVega has no
 use for (v1 is Flex-only, see `CONNECTORS.md`). That import was replaced with
 an inline `FlexQueryConfig` interface and `IBKR_STATEMENT_URL` constant,
-copied verbatim from `gloomberb`'s `src/plugins/ibkr/config.ts`. No other
-line changed — diff the rest of the file against the commit above to confirm.
+copied verbatim from `gloomberb`'s `src/plugins/ibkr/config.ts`. LaVega also
+removed the module-level statement promise cache and added optional poll timing
+overrides so callers and tests own request lifetime and timing.
 
 `http-transport.ts` is unchanged.
 

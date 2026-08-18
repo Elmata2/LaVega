@@ -113,6 +113,10 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   if (!xml.includes("<FlexStatements") && !xml.includes("<FlexQueryResponse")) {
     return { positions: [], trades: [], problems: ["IBKR Flex response is not a statement"] };
   }
+  if ((xml.includes("<FlexStatements") && !xml.includes("</FlexStatements>"))
+    || (xml.includes("<FlexQueryResponse") && !xml.includes("</FlexQueryResponse>"))) {
+    return { positions: [], trades: [], problems: ["IBKR Flex response is malformed"] };
+  }
 
   const positions: Position[] = [];
   const trades: TradeWithoutId[] = [];
