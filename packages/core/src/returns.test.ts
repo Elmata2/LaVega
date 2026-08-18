@@ -165,3 +165,60 @@ test("a caller who passes no own-accounts set still does not count a sweep as sp
   expect(ing?.spend.perYearCents).toBe(Math.round((30_000 * 365) / 179));
   expect(ing?.spend.kind).toBe("upper-bound");
 });
+
+import { optimiseReturns } from "./returns.js";
+
+test("his own case: two actions on two bases, not one blended rate", () => {
+  // Trading 212: 3,5% on balance and 1,5% cashback. ING: 1,5% and 0%.
+  const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening",
+                     balance: 0, interestRate: 3.5 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening",
+                    balance: 20_000, interestRate: 1.5 });
+  const facts = [cashbackFact("Trading 212 betaalpas", "1.5"), cashbackFact("ING betaalpas", "0")];
+  // A year of ING spending at €2.500/month.
+  const txs = Array.from({ length: 12 }, (_, i) =>
+    tx({ id: "s" + i, accountKey: "ing", amount: -2500,
+         date: `2025-${String(i + 1).padStart(2, "0")}-15` }));
+
+  const { actions } = optimiseReturns(
+    accountReturns([t212, ing], txs, [], undefined, facts, [], "2026-01-15"),
+  );
+
+  const move = actions.find((a) => a.kind === "move-balance");
+  const route = actions.find((a) => a.kind === "route-spending");
+
+  // €20.000 × (3,5% − 1,5%) = €400/jaar
+  expect(move?.gainPerYearCents).toBe(40_000);
+  expect(move?.from.key).toBe("ing");
+  expect(move?.to.key).toBe("t212");
+
+  // Spending stays on its own base and is flagged as an upper bound.
+  expect(route?.from.key).toBe("ing");
+  expect(route?.to.key).toBe("t212");
+  expect(route?.approximate).toBe(true);
+  expect(route!.gainPerYearCents).toBeGreaterThan(0);
+
+  // Biggest first.
+  expect(actions[0].gainPerYearCents).toBeGreaterThanOrEqual(actions[1].gainPerYearCents);
+});
+
+test("an unknown side produces a GAP, never an action", () => {
+  const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening", balance: 0 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 20_000, interestRate: 1.5 });
+  // No cashback fact for either, and no rate for T212.
+  const { actions, gaps } = optimiseReturns(
+    accountReturns([t212, ing], [], [], undefined, [], [], "2026-08-18"),
+  );
+
+  expect(actions.find((a) => a.kind === "route-spending")).toBeUndefined();
+  expect(gaps.map((g) => g.product)).toContain("Trading 212 betaalpas");
+  expect(gaps.every((g) => g.missing === "cashbackPct" || g.missing === "savingsPct")).toBe(true);
+});
+
+test("no action when the winner is the account already holding the money", () => {
+  const best = acc({ key: "t212", bank: "Trading 212", balance: 20_000, interestRate: 3.5 });
+  const { actions } = optimiseReturns(
+    accountReturns([best], [], [], undefined, [], [], "2026-08-18"),
+  );
+  expect(actions.find((a) => a.kind === "move-balance")).toBeUndefined();
+});

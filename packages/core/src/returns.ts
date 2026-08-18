@@ -129,3 +129,83 @@ export function accountReturns(
     };
   });
 }
+
+/** One concrete thing he can do, with the arithmetic attached so the UI never
+ *  has to invent any. */
+export type ReturnAction = {
+  kind: "move-balance" | "route-spending";
+  from: Account;
+  to: Account;
+  fromPct: number;
+  toPct: number;
+  /** The euros the difference applies to: a balance, or a year of spending. */
+  baseCents: number;
+  gainPerYearCents: number;
+  /** The base is an upper bound (a payment account), so the UI must say "tot". */
+  approximate: boolean;
+};
+
+/** A comparison we could not make, and the product whose figure would fix it.
+ *  Reported rather than silently skipped: a missing fee is a question, and the
+ *  owner is the one who can answer it. */
+export type ReturnGap = { product: string; missing: "cashbackPct" | "savingsPct" };
+
+/** Below this the advice is noise. Same threshold `analyzeInterest` uses. */
+const MARGIN_PCT = 0.1;
+
+export function optimiseReturns(
+  returns: readonly AccountReturn[],
+): { actions: ReturnAction[]; gaps: ReturnGap[] } {
+  const actions: ReturnAction[] = [];
+  const gaps: ReturnGap[] = [];
+
+  const bestSavings = returns
+    .filter((r) => r.savingsPct !== null)
+    .sort((a, b) => (b.savingsPct as number) - (a.savingsPct as number))[0];
+  const bestCashback = returns
+    .filter((r) => r.cashbackPct !== null)
+    .sort((a, b) => (b.cashbackPct as number) - (a.cashbackPct as number))[0];
+
+  for (const r of returns) {
+    const product = productOf(r.account);
+    if (r.savingsPct === null) {
+      if (product) gaps.push({ product, missing: "savingsPct" });
+    } else if (bestSavings && r.account.key !== bestSavings.account.key && r.balanceCents > 0) {
+      const delta = (bestSavings.savingsPct as number) - r.savingsPct;
+      if (delta > MARGIN_PCT) {
+        actions.push({
+          kind: "move-balance",
+          from: r.account,
+          to: bestSavings.account,
+          fromPct: r.savingsPct,
+          toPct: bestSavings.savingsPct as number,
+          baseCents: r.balanceCents,
+          gainPerYearCents: Math.round((r.balanceCents * delta) / 100),
+          approximate: false,
+        });
+      }
+    }
+
+    if (r.cashbackPct === null) {
+      if (product) gaps.push({ product, missing: "cashbackPct" });
+      continue;
+    }
+    // No spend base means no honest multiplication. Skip rather than assume.
+    if (r.spend.perYearCents === null) continue;
+    if (!bestCashback || r.account.key === bestCashback.account.key) continue;
+    const delta = (bestCashback.cashbackPct as number) - r.cashbackPct;
+    if (delta <= MARGIN_PCT) continue;
+    actions.push({
+      kind: "route-spending",
+      from: r.account,
+      to: bestCashback.account,
+      fromPct: r.cashbackPct,
+      toPct: bestCashback.cashbackPct as number,
+      baseCents: r.spend.perYearCents,
+      gainPerYearCents: Math.round((r.spend.perYearCents * delta) / 100),
+      approximate: r.spend.kind === "upper-bound",
+    });
+  }
+
+  return { actions: actions.sort((a, b) => b.gainPerYearCents - a.gainPerYearCents), gaps };
+}
