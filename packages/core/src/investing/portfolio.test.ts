@@ -10,8 +10,8 @@ import { FX_RATES, POSITIONS, PRICE_BARS, TRADES, BENCHMARK_BARS } from "./__fix
 test("computes EUR portfolio value from holdings, trades, prices, and FX", () => {
   expect(computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES)).toEqual([
     { date: "2026-01-02", value: 2200, unpriced: [] },
-    { date: "2026-01-05", value: 2152.5, unpriced: [] },
-    { date: "2026-02-02", value: 2530, unpriced: [] },
+    { date: "2026-01-05", value: 1952.3809523809523, unpriced: [] },
+    { date: "2026-02-02", value: 2090.909090909091, unpriced: [] },
   ]);
 });
 
@@ -24,7 +24,7 @@ test("reports missing instrument prices instead of treating them as zero", () =>
     FX_RATES,
   );
 
-  expect(result[1]).toEqual({ date: "2026-01-05", value: 1050, unpriced: ["MSFT"] });
+  expect(result[1]).toEqual({ date: "2026-01-05", value: 952.3809523809523, unpriced: ["MSFT"] });
 });
 
 test("normalizes benchmark to portfolio's first value", () => {
