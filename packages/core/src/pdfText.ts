@@ -6,12 +6,34 @@
  *  These documents are legally required, stable across editions, and carry the
  *  CONDITIONS as well as the rates, which is the half that is otherwise hardest
  *  to get. */
-export type PdfFigure = { field: "fxFeePct"; value: number; line: string; conditions: string | null };
+export type PdfFigure = {
+  field: "fxFeePct";
+  value: number;
+  line: string;
+  /** The clause that governs this figure, or null for "this row states none".
+   *  null is NOT "unknown" — see `conditionsKnown`. */
+  conditions: string | null;
+  /** Whether this parser ESTABLISHED the conditions, rather than merely failing
+   *  to match one. The sweep used to hard-code this as true for every PDF figure,
+   *  which made "my regex found no threshold" and "this rate has no conditions"
+   *  the same value — the conflation the Revolut incident is named after. */
+  conditionsKnown: boolean;
+};
 
 /** "1,40 %" and "2,00%" both appear in the same document. */
 const PCT = /(\d{1,2})[,.](\d{1,2})\s*%/;
-/** A threshold that makes the rate conditional: "tot € 500 per creditcardperiode". */
-const THRESHOLD = /\b(tot|boven|vanaf)\b[^%]{0,60}?€\s?[\d.]+[^%]{0,40}/i;
+/** A threshold that makes the rate conditional: "tot € 500 per creditcardperiode".
+ *
+ *  The tail is WORDS ONLY, and deliberately so. `pdftotext -layout` interleaves
+ *  the columns of a tariff table, so the row arrives as "• Vreemde valuta opnemen
+ *  tot € 500 euro per | 4,00% van het opgenomen bedrag" with the clause's real
+ *  ending ("creditcardperiode") on the next line. A greedy `[^%]{0,40}` swallowed
+ *  the 4,00 — the ATM withdrawal FEE from the column beside it — and the stored
+ *  condition read "tot € 500 euro per 4,00". `conditions` is rendered as a note
+ *  on screen and read aloud by the chat agent, so that is user-visible text
+ *  asserting a number the threshold does not contain. A number after the amount
+ *  belongs to another column until something proves otherwise. */
+const THRESHOLD = /\b(tot|boven|vanaf)\b[^%]{0,60}?€\s?[\d.]+(?:\s+[A-Za-zÀ-ÿ][\w-]*){0,10}/i;
 /** The same pattern, scanning, so the clause that GOVERNS a figure can be picked
  *  out rather than merely the first one on the row. */
 const THRESHOLD_ALL = new RegExp(THRESHOLD.source, "gi");
@@ -82,7 +104,12 @@ export function readIngTariffs(text: string): PdfFigure[] {
           const cond =
             governingThreshold(line, m.index) ??
             governingThreshold(evidence, evidence.length - line.length + m.index);
-          out.push({ field: "fxFeePct", value, line: evidence, conditions: cond });
+          // Established only when NAMED. Silence in a three-line window is not
+          // evidence of absence: this very document caps the ING Creditcard Max
+          // 0% in footnote 2 ("tot het aangegeven maximum per creditcardperiode")
+          // with nothing in its row to show for it, and no local rule can tell
+          // that row apart from the debit card's genuinely uncapped 1,40%.
+          out.push({ field: "fxFeePct", value, line: evidence, conditions: cond, conditionsKnown: cond !== null });
         }
       }
       // a line about koersopslag with no number states nothing
@@ -92,4 +119,28 @@ export function readIngTariffs(text: string): PdfFigure[] {
     if (context.length > CONTEXT_LINES) context.shift();
   }
   return out;
+}
+
+const MONTHS_NL = [
+  "januari", "februari", "maart", "april", "mei", "juni",
+  "juli", "augustus", "september", "oktober", "november", "december",
+];
+
+/** "Deze brochure is geldig vanaf 15 juni 2026" -> "2026-06-15".
+ *
+ *  A figure keeps the date of the SOURCE that stated it. The sweep re-reads the
+ *  VALUE from this URL every week while its date came from a constant typed into
+ *  state.json by hand — and ING reuses the asset URL across editions (the file is
+ *  still named `_2023.pdf` and holds the June 2026 edition). So the next edition's
+ *  rate would have arrived stamped with this edition's date: dating a figure by
+ *  something other than the source that stated it, which this project has now
+ *  shipped twice. The document says it in machine-readable words on page 1. */
+export function readDocumentDate(text: string): string | null {
+  const m = /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  if (!m) return null;
+  const month = MONTHS_NL.indexOf(m[2].toLowerCase());
+  if (month < 0) return null;
+  const day = Number(m[1]);
+  if (!(day >= 1 && day <= 31)) return null;
+  return `${m[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }

@@ -1,6 +1,6 @@
 {
   "lastRun": "2026-08-18",
-  "note": "Watchlist baseline from the discovery sweep of 18 August 2026 (see watchlist.md). 124 products across 104 terms URLs: 101 readable by plain fetch, 23 needing the agent. Deliberately holds NO RATES — it is a diff anchor for identity and routing only. Every product's lastChecked is null because no collection run has happened yet; the first real sweep sets it and reports changes rather than re-dumping. httpStatus/readable are the values MEASURED on the sweep date, so a later change in either is itself a reportable move (a page going 200 -> 403, or marketing-only -> yes).",
+  "note": "Watchlist baseline from the discovery sweep of 18 August 2026 (see watchlist.md). 124 products across 104 terms URLs: 101 readable by plain fetch, 23 needing the agent. Deliberately holds NO RATES — it is a diff anchor for identity and routing only. Every product's lastChecked is null because no collection run has happened yet; the first real sweep sets it and reports changes rather than re-dumping. httpStatus/readable are the values MEASURED on the sweep date, so a later change in either is itself a reportable move (a page going 200 -> 403, or marketing-only -> yes). | 2026-08-18: provider-page matches the FIRST koersopslag on a page, and 4 ICS business cards, 3 ANWB cards, 14 Amex cards and both Knab cards each share one URL - so a page-level match is not yet a product-level fact. Two figures were hand-verified as another row's (see figureNote on abn-amro-betaalpas and knab-creditcard). Row attribution is owed before any task raises coverage from provider-page. | 2026-08-18, MEASURED: the readable flags were recorded with curl, and node's fetch (what the sweep actually uses) disagrees on some hosts. rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden -> HTTP 200, 459 kB, 32x 'koersopslag', 22 percentage figures, where curl was 403. ing.nl/particulier/betalen/passen/buitenland -> 200, 26 kB (no percentages: shadow DOM). ing.nl spaarrente -> 200. revolut.com legal/standard-fees -> 403 to node too, coinbase.com/nl/card -> 403 to node too. Four URLs measured, not thirteen - do not generalise the rest without measuring them (that is error 3). Rabobank alone is 3 products with a live table, and it is the next slice's cheapest win, but provider-page must learn product-row attribution first or it will read the wrong row off a 22-figure page.",
   "counts": {
     "products": 124,
     "readableByFetch": 101,
@@ -24,7 +24,7 @@
       "kind": "betaalpas",
       "termsUrl": "https://www.ing.nl/particulier/betalen/passen/buitenland",
       "availableToNL": true,
-      "httpStatus": "connection killed (curl 92 on HTTP/2, curl 28/56 on HTTP/1.1)",
+      "httpStatus": "node fetch: 200, 26 kB, 12x 'koersopslag' but no percentage in the stripped HTML (shadow DOM) — measured 2026-08-18. curl: connection killed (92 on HTTP/2, 28/56 on HTTP/1.1). readable=yes describes what the sweep's own fetch gets, which is not what curl gets.",
       "readable": "yes",
       "route": "provider-pdf",
       "fieldsOnPage": [],
@@ -34,7 +34,7 @@
       "pdfCheckedAt": "2026-06-15",
       "lastValue": 1.4,
       "lastRoute": "provider-pdf",
-      "lastReason": null
+      "lastReason": "provider-page: no figure · provider-pdf: conditions not established"
     },
     "ing-creditcard": {
       "product": "ING creditcard",
@@ -86,7 +86,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastReason": "provider-page: conditions not established",
+      "figureNote": "THE RECORDED 2% IS ANOTHER PRODUCT'S ROW. Re-measured 2026-08-18 on the live page: the sweep's regex takes the FIRST koersopslag on the page, which is 'Opnemen van contant geld (biljetten) in het buitenland met een creditcard ... In buitenlands geld 4% + 2,00 % valutakoersopslag' - the credit card's ATM row. The betaalpas rate is further down: 'Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer'. It is refused today (conditionsKnown=false), and lastReason says only 'conditions not established', which reads as 'we have the number, we lack the cap'. We do not have the number. Do not promote this figure by establishing conditions for it; provider-page needs product-row attribution first."
     },
     "abn-amro-creditcard": {
       "product": "ABN AMRO creditcard",
@@ -326,7 +327,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "provider-page",
-      "lastReason": "provider-page: conditions not established"
+      "lastReason": "provider-page: conditions not established",
+      "figureNote": "THE RECORDED 1,4% IS THE DEBIT CARD'S ROW. Re-measured 2026-08-18 on knab.nl/tarieven: the first match is 'Betalen en opname van contant geld buiten eurolanden - Mastercard wisselkoers + 1,4% koersopslag', which is the betaalrekening. The credit card's own row, further down, reads 'Betalingen in vreemde valuta 2% koersopslag'. Both products share one termsUrl and the regex cannot tell the rows apart. Refused today; do not promote it."
     },
     "triodos-betaalpas": {
       "product": "Triodos betaalpas",

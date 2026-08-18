@@ -5,9 +5,21 @@ on:
   workflow_dispatch:            # and on demand, because the first runs need watching
 permissions:
   contents: write
+# A manual dispatch racing the Monday cron would give two jobs committing and
+# pushing the same two files; the second push then fails on a branch that moved
+# under it. One at a time, and never cancel a run mid-sweep — a cancelled sweep
+# writes nothing at all (both writes are after the loop), but a cancelled COMMIT
+# would leave the pair half-written.
+concurrency:
+  group: catalog-sweep
+  cancel-in-progress: false
 jobs:
   sweep:
     runs-on: ubuntu-latest
+    # The sweep's own worst case is ~80 minutes (98 routes x a 20s timeout, plus
+    # pdftotext). The default is six hours, which is a long time to hold a runner
+    # for a job that has already hung.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

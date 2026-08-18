@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { readIngTariffs } from "./pdfText.js";
+import { readDocumentDate, readIngTariffs } from "./pdfText.js";
 
 const TEXT = readFileSync(new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url), "utf8");
 
@@ -81,4 +81,69 @@ test("a tier's condition comes from its own row, not from the row above it", () 
 
   expect(above.length).toBeGreaterThan(0);
   for (const f of above) expect(f.conditions).toMatch(/boven/i);
+});
+
+test("a threshold clause stops before the neighbouring column's number", () => {
+  // pdftotext -layout interleaves the columns, so the withdrawal row arrives as
+  // "• Vreemde valuta opnemen tot € 500 euro per | 4,00% van het opgenomen bedrag"
+  // with the clause's real tail ("creditcardperiode") on the NEXT line. A greedy
+  // trailing run swallowed the 4,00 — the ATM withdrawal FEE from the column
+  // beside it — and the condition read "tot € 500 euro per 4,00".
+  //
+  // This is not cosmetic: `conditions` is rendered as a note on screen and read
+  // aloud by the chat agent, so it is user-visible text asserting a number that
+  // is not part of the threshold at all.
+  const withdrawal = readIngTariffs(TEXT).filter((f) => /opnemen tot € 500 euro/i.test(f.line));
+
+  expect(withdrawal.length).toBeGreaterThan(0);
+  for (const f of withdrawal) {
+    expect(f.conditions).toMatch(/tot € 500/i);
+    expect(f.conditions).not.toMatch(/4,00/);
+  }
+});
+
+test("a figure the parser could not find a cap for is NOT reported as unconditional", () => {
+  // The sweep hard-coded conditionsKnown:true on every PDF figure, so "my regex
+  // matched no threshold" and "this rate has no conditions" became the same
+  // value — the exact conflation the Revolut incident is named after.
+  //
+  // The cap here is phrased with "maximaal", stated AFTER the figure. Neither
+  // shape is in THRESHOLD's vocabulary, so `conditions` is null. The figure is
+  // then a 0% with a real source and a real date and nothing to say it expires
+  // EUR 1.000 into the month: covered, ranked first, and wrong.
+  const [f] = readIngTariffs("• In vreemde valuta 0,00% koersopslag (maximaal € 1.000 per maand, daarna 2,00%)");
+
+  expect(f.value).toBe(0);
+  expect(f.conditions).toBeNull();
+  expect(f.conditionsKnown).toBe(false);
+});
+
+test("only a NAMED clause establishes conditions — absence of a match never does", () => {
+  // This document contains its own counterexample to "no threshold in the block
+  // means unconditional": the ING Creditcard Max row reads "• Vreemde valuta
+  // opnemen / met een minimum van € 4,50 + / 0,00% koersopslag" with no cap in
+  // sight, while footnote 2 says the 0% applies "tot het aangegeven maximum per
+  // creditcardperiode". A three-line window cannot see a footnote, so silence in
+  // the window is not evidence of absence — and the debit card's genuinely
+  // uncapped 1,40% is indistinguishable from it by any local rule.
+  //
+  // So the parser affirms conditions only when it NAMES them. That costs us the
+  // one figure the sweep had marked covered, which is the honest price: the
+  // alternative is a rule that also marks the capped 0% covered.
+  const figures = readIngTariffs(TEXT);
+
+  for (const f of figures) expect(f.conditionsKnown).toBe(f.conditions !== null);
+  expect(figures.some((f) => f.conditions !== null && f.conditionsKnown)).toBe(true);
+  expect(figures.filter((f) => f.value === 0 && f.conditions === null)[0].conditionsKnown).toBe(false);
+});
+
+test("the document's own validity date is read from it, not stamped by the fetch", () => {
+  // "A figure keeps the date of the SOURCE that stated it." pdfCheckedAt was a
+  // constant typed into state.json by hand, while the sweep re-reads the VALUE
+  // every Monday: ING reuses this asset URL across editions (the file is still
+  // named _2023.pdf and holds the June 2026 edition), so the next edition's rate
+  // would have been stamped with this edition's date. That is error #2 with a
+  // delay fuse on it.
+  expect(readDocumentDate(TEXT)).toBe("2026-06-15");
+  expect(readDocumentDate("geen datum hier")).toBeNull();
 });
