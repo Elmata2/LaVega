@@ -22,13 +22,13 @@ export function AllocationDonut({ instrument, broker }: AllocationDonutProps) {
     <CardHeader className="flex-row items-start justify-between gap-4">
       <div><p className="text-sm font-medium text-muted-foreground">Verdeling</p><CardTitle>Portefeuille</CardTitle></div>
       <div aria-label="Verdeling groeperen" className="flex rounded-pill bg-secondary p-1" role="group">
-        <Button aria-pressed={group === "instrument"} className="rounded-pill" onClick={() => setGroup("instrument")} size="sm" variant={group === "instrument" ? "default" : "ghost"}>Instrument</Button>
+        <Button aria-pressed={group === "instrument"} className="rounded-pill" onClick={() => setGroup("instrument")} size="sm" variant={group === "instrument" ? "default" : "ghost"}>Belegging</Button>
         <Button aria-pressed={group === "broker"} className="rounded-pill" onClick={() => setGroup("broker")} size="sm" variant={group === "broker" ? "default" : "ghost"}>Broker</Button>
       </div>
     </CardHeader>
     <CardContent>
       {priced.length === 0 && allocation.unpriced.length === 0 ? <EmptyState title="Geen posities" description="Jouw verdeling verschijnt na de eerste brokersynchronisatie." /> : <div className="grid gap-5 sm:grid-cols-[minmax(180px,220px)_1fr] sm:items-center">
-        <div className="relative" role="img" aria-label={`Portefeuilleverdeling per ${group === "instrument" ? "instrument" : "broker"}`}>
+        <div className="relative" role="img" aria-label={`Portefeuilleverdeling per ${group === "instrument" ? "belegging" : "broker"}`}>
           {priced.length > 0 ? <ChartContainer className="h-[220px]" aria-hidden="true"><PieChart><Pie data={priced} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius="62%" outerRadius="88%" paddingAngle={2} strokeWidth={0}>{priced.map((bucket, index) => <Cell key={bucket.key} fill={colors[index % colors.length]} />)}</Pie></PieChart></ChartContainer> : <div className="flex h-[220px] items-center justify-center rounded-full border-[22px] border-secondary text-center text-xs text-muted-foreground">Niet geprijsd</div>}
         </div>
         <ul aria-label="Verdelingsdetails" className="space-y-3 text-sm">

@@ -20,7 +20,7 @@ function render(instrument: Allocation = allocation, broker: Allocation = alloca
 
 test("renders accessible allocation and switches grouping", () => {
   const { container, root } = render(allocation, { buckets: [{ key: "Broker A", label: "Broker A", value: 100, unpriced: false }], unpriced: [] });
-  expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("instrument");
+  expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("belegging");
   act(() => { (container.querySelector('button[aria-pressed="false"]') as HTMLButtonElement).click(); });
   expect(container.textContent).toContain("Broker A");
   root.unmount();
