@@ -1,3 +1,35 @@
+# THE ENDGOAL
+
+**A live catalogue of every money product a Dutch person can use, with — for each one — a value, the
+source it came from, the date it was true, and the conditions attached to it. Refreshed on a
+schedule. Feeding every agent in the app.**
+
+That is the whole thing. When it exists, the answers Alexander wants become arithmetic:
+
+> "Je gaat naar de VS. Zet je geld op Trading 212 (3,5% in plaats van 1,5% bij ING), wissel bij Wise,
+> en betaal met Revolut — 0% tot € 1.000 deze maand, daarna is ING goedkoper."
+
+Every one of those clauses is a lookup against the catalogue plus his own balances. None of it needs
+a new agent, a new screen, or a new idea. It needs the table.
+
+**Done means all four parts, for all 124 products, not three parts for most of them:**
+
+| Part | Why it is not optional |
+|---|---|
+| **value** | Obviously |
+| **source** | A number without a source is a rumour and cannot be checked |
+| **date** | We shipped a figure from January under today's date. Twice |
+| **conditions** | 104 of 124 rates are conditional. Revolut's 0% ranked first on a rate that expires € 1.000 into the month |
+
+A product with a rate and no conditions is **not covered**. That is the definition that keeps 99%
+from being a lie, and it is the one most likely to be dropped when the deadline gets close.
+
+**What it unlocks, in order:** the travel agent stops being limited to products he owns · the cashback
+agent gets its "switch" half back · the savings comparison extends past geld.nl's gaps · referral and
+signup bonuses become a fourth column nobody has today.
+
+---
+
 # Getting the catalogue to 99% — design
 
 **The ask:** 99% coverage of every card and account a Dutch person can use. The sweep found **124

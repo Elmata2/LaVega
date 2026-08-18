@@ -36,6 +36,15 @@ account issued in the user's home country:
 - `note` — anything a traveller would be caught out by: monthly fee-free limits,
   weekend surcharges, promo rates that expire, "only on the paid tier".
 
+  **A free rate that runs out is the single most important thing to capture, and
+  it has been missed before.** Revolut Standard converts at 0% up to €1.000 per
+  month and charges 1% above it; Plus is €3.000 then 0,5%. Reported as a bare
+  "0%", that made LaVega recommend Revolut to someone spending €3.000 and tell
+  him it would cost nothing. If a rate has an allowance, a cap, a tier condition
+  or an expiry, the number is the rate INSIDE the allowance and the note must
+  state the limit and what applies beyond it. A conditional rate reported as
+  unconditional is worse than no answer, because it is acted on.
+
 Rules that matter more than completeness:
 
 - **Omit any field you cannot verify.** A missing field is handled properly by

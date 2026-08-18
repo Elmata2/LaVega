@@ -15,6 +15,19 @@ how each item was captured; read that for intent, read this for state.
 Closed since 2026-08-16, in 22 commits (`16f107e` … `44b6d6c`): original items 1–8 all shipped or
 substantially shipped, both UI review rounds built, 870 tests passing.
 
+## THE ENDGOAL — a live product catalogue
+
+**Every money product a Dutch person can use, each with a value, its source, its date and its
+conditions, refreshed on a schedule, feeding every agent.**
+
+124 products found (`docs/catalog/watchlist.md`). The routes are measured and the two ceilings are
+gone — provider PDFs turned out to carry both ING's and Amex's figures, with conditions, by plain
+curl. Spec: `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md`.
+
+Not done until all four parts exist for all of them. A rate without its conditions is not covered:
+104 of 124 rates are conditional, and Revolut's 0% ranked first in the shipped app on a rate that
+expires €1.000 into the month.
+
 ## Live defects
 
 | # | What | Notes |

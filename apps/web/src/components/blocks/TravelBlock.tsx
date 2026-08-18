@@ -505,6 +505,16 @@ export default function TravelBlock({
               when nothing can be priced, the reason nothing can be. */}
           <div className={`travel-winner${bestJourney ? "" : " travel-winner-unpriced"}`}>
             <div className="travel-winner-name">{headline}</div>
+            {/* The winner's own caveat, next to the answer rather than behind a
+                disclosure. Revolut is why: its 0% holds only inside a €1.000
+                monthly limit, and "dat kost je niets op € 1.000" was being said
+                without it — a conditional rate stated as absolute. If a provider
+                attached a condition to its rate, the recommendation carries it. */}
+            {bestJourney?.note && (
+              <p className="cell-sub travel-winner-caveat">
+                <strong>Let op:</strong> {bestJourney.note}
+              </p>
+            )}
             {bestJourney && (
               <div className="cell-sub">
                 Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst

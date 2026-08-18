@@ -247,6 +247,15 @@ export type Journey = {
   costOnReference: number | null;
   known: boolean;
   why: string;
+  /** The provider's own caveat about the card leg — a monthly free allowance, a
+   *  weekend surcharge, a fair-usage cap.
+   *
+   *  Carried onto the journey because the recommendation is where it matters.
+   *  Revolut is the case that proved it: its 0% holds only inside a €1.000
+   *  monthly limit, after which it is 1%. LaVega ranked it first on an
+   *  unconditional 0% and said "dat kost je niets" — a conditional rate stated
+   *  as absolute, which is the most damaging way to be wrong. */
+  note: string | null;
 };
 
 /** Rank every way of paying abroad, cheapest first, in hard cash only.
@@ -279,6 +288,7 @@ export function rankJourneys(
       costOnReference: costOnReferenceSpend(s.netCostPct),
       known: s.known,
       why: s.known ? `direct betalen: ${s.why}` : "voorwaarden nog onbekend",
+      note: s.note,
     });
 
     // Moving first only exists as a choice when there is somewhere to move FROM
@@ -315,6 +325,7 @@ export function rankJourneys(
         : convertPct === null
           ? "wisselkosten nog onbekend"
           : "overboekkosten nog onbekend",
+      note: s.note,
     });
   }
 

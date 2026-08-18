@@ -292,3 +292,18 @@ test("planTravel carries the priced journeys and leads with one sentence", () =>
   expect(es.journeys).toEqual([]);
   expect(es.headline).toContain("euro");
 });
+
+test("the winning journey carries the provider's caveat, so a capped rate cannot read as absolute", () => {
+  // Revolut converts at 0% up to EUR 1.000 a month and 1% above it. Reported as
+  // a bare 0% it made LaVega rank it first and say "dat kost je niets".
+  const facts = upsertFacts([], [
+    { ...fact("Revolut betaalpas", "fxFeePct", "0"),
+      note: "0% tot € 1.000 per maand, daarna 1% fair-usage." },
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+  ]);
+  const js = rankJourneys(ROUTE_ACCOUNTS, facts);
+  const winner = js.find((j) => j.known);
+
+  expect(winner?.provider).toBe("Revolut betaalpas");
+  expect(winner?.note).toContain("tot € 1.000 per maand");
+});
