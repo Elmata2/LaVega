@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { annualSpendCents, MIN_SPEND_DAYS } from "./returns.js";
+import { annualSpendCents, MAX_SPEND_GAP_DAYS, MIN_SPEND_DAYS } from "./returns.js";
 import { ownAccounts } from "./views.js";
 
 const acc = (over: Partial<Account>): Account =>
@@ -72,4 +72,40 @@ test("money coming IN is not spending, and an account with no outflow is unknown
     tx({ id: "b", accountKey: "ing", date: "2026-08-27", amount: 2500 }),
   ];
   expect(annualSpendCents(pay, txs, [], undefined, "2026-08-27").perYearCents).toBeNull();
+});
+
+test("an account nothing has flowed through for two years is UNKNOWN, not a live spend base", () => {
+  // Six months of real, long-enough history — that ended two years ago. An
+  // annual figure off this would win a ranking against an account he actually
+  // uses, which is the wrong answer with a measurement's face on it.
+  const card = acc({ key: "amex", bank: "American Express", type: "Creditcard" });
+  const txs = [
+    tx({ id: "a", accountKey: "amex", date: "2024-03-01", amount: -300 }),
+    tx({ id: "b", accountKey: "amex", date: "2024-08-27", amount: -300 }),
+  ];
+  const base = annualSpendCents(card, txs, [], undefined, "2026-08-18");
+
+  expect(base.observedDays).toBeGreaterThan(MIN_SPEND_DAYS);
+  expect(base.kind).toBe("unknown");
+  expect(base.perYearCents).toBeNull();
+});
+
+test("an ordinary import lag is not staleness: the boundary is MAX_SPEND_GAP_DAYS", () => {
+  const pay = acc({ key: "ing", type: "Betaalrekening" });
+  const upTo = (last: string) =>
+    annualSpendCents(
+      pay,
+      [
+        tx({ id: "a", accountKey: "ing", date: "2026-01-01", amount: -300 }),
+        tx({ id: "b", accountKey: "ing", date: last, amount: -300 }),
+      ],
+      [],
+      undefined,
+      "2026-08-18",
+    );
+
+  expect(MAX_SPEND_GAP_DAYS).toBe(90);
+  expect(upTo("2026-05-20").perYearCents).not.toBeNull(); // exactly 90 days back
+  expect(upTo("2026-05-19").perYearCents).toBeNull(); // one day too old
+  expect(upTo("2026-05-19").kind).toBe("unknown");
 });
