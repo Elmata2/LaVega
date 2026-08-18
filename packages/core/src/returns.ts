@@ -4,7 +4,7 @@ import { accountType } from "./balance.js";
 import type { LearnedFact } from "./facts.js";
 import { factNumber } from "./facts.js";
 import { resolveAccountRate, type RateBenchmark, type RateSource } from "./interest.js";
-import { productOf, TRAVEL_AGENT } from "./travel.js";
+import { isSpendable, productOf, TRAVEL_AGENT } from "./travel.js";
 
 /** Money moved between the owner's own accounts is not spending. Same category
  *  the forecast excludes, for the same reason: a €50k sweep to savings is not
@@ -138,6 +138,14 @@ export type ReturnAction = {
   to: Account;
   fromPct: number;
   toPct: number;
+  /** Where each percentage CAME FROM. Carried because `resolveAccountRate`
+   *  assumes 0% for a payment account nobody typed a rate into, and estimates a
+   *  savings rate from the bank's public tariff - both are numbers nobody
+   *  stated about this account, and a renderer that cannot see the source would
+   *  print them as measured. Always `manual` on a rate he typed in himself.
+   *  On a route-spending action both are the cashback fact's own source. */
+  fromSource: RateSource;
+  toSource: RateSource;
   /** The euros the difference applies to: a balance, or a year of spending. */
   baseCents: number;
   gainPerYearCents: number;
@@ -145,10 +153,19 @@ export type ReturnAction = {
   approximate: boolean;
 };
 
-/** A comparison we could not make, and the product whose figure would fix it.
- *  Reported rather than silently skipped: a missing fee is a question, and the
- *  owner is the one who can answer it. */
-export type ReturnGap = { product: string; missing: "cashbackPct" | "savingsPct" };
+/** A comparison we could not make, and what would fix it. Reported rather than
+ *  silently skipped: a missing figure is a question, and the owner is the one
+ *  who can answer it. */
+export type ReturnGap = {
+  /** The exact fact key a cashback correction must land on - `productOf()`, the
+   *  same key the travel agent writes. Meaningful for `cashbackPct` only: a
+   *  savings rate belongs to the ACCOUNT, not to a product, so name that gap
+   *  with `accountLabel(account)` instead. */
+  product: string;
+  /** The account the gap was found on. */
+  account: Account;
+  missing: "cashbackPct" | "savingsPct";
+};
 
 /** Below this the advice is noise. Same threshold `analyzeInterest` uses. */
 const MARGIN_PCT = 0.1;
@@ -159,17 +176,39 @@ export function optimiseReturns(
   const actions: ReturnAction[] = [];
   const gaps: ReturnGap[] = [];
 
-  const bestSavings = returns
-    .filter((r) => r.savingsPct !== null)
-    .sort((a, b) => (b.savingsPct as number) - (a.savingsPct as number))[0];
+  // One question, asked once. A cashback fact belongs to the PRODUCT, so
+  // answering it once moves every account at that bank - printing it per
+  // account prints the same question twice. A rate belongs to the account.
+  const asked = new Set<string>();
+  const ask = (g: ReturnGap) => {
+    const key = g.missing === "cashbackPct" ? `c|${g.product}` : `s|${g.account.key}`;
+    if (asked.has(key)) return;
+    asked.add(key);
+    gaps.push(g);
+  };
+
+  const currencyOf = (a: Account) => String(a.currency ?? "").trim().toUpperCase();
+
+  /** The best rate you could move THIS money to without converting it. A
+   *  conversion sits between the balance and the rate, costs a spread nothing
+   *  here prices, and leaves a gain nobody can redo against a statement - so a
+   *  balance is only ever compared with accounts in its own currency. */
+  const bestSavingsIn = (currency: string) =>
+    returns
+      .filter((r) => r.savingsPct !== null && currencyOf(r.account) === currency)
+      .sort((a, b) => (b.savingsPct as number) - (a.savingsPct as number))[0];
+
+  // Only things you can actually pay with may win the cashback ranking. See
+  // `isSpendable`: without it a Spaarrekening inherits its bank's card fact.
   const bestCashback = returns
-    .filter((r) => r.cashbackPct !== null)
+    .filter((r) => r.cashbackPct !== null && isSpendable(r.account))
     .sort((a, b) => (b.cashbackPct as number) - (a.cashbackPct as number))[0];
 
   for (const r of returns) {
     const product = productOf(r.account);
+    const bestSavings = bestSavingsIn(currencyOf(r.account));
     if (r.savingsPct === null) {
-      if (product) gaps.push({ product, missing: "savingsPct" });
+      ask({ product, account: r.account, missing: "savingsPct" });
     } else if (bestSavings && r.account.key !== bestSavings.account.key && r.balanceCents > 0) {
       const delta = (bestSavings.savingsPct as number) - r.savingsPct;
       if (delta > MARGIN_PCT) {
@@ -179,6 +218,8 @@ export function optimiseReturns(
           to: bestSavings.account,
           fromPct: r.savingsPct,
           toPct: bestSavings.savingsPct as number,
+          fromSource: r.savingsSource,
+          toSource: bestSavings.savingsSource,
           baseCents: r.balanceCents,
           gainPerYearCents: Math.round((r.balanceCents * delta) / 100),
           approximate: false,
@@ -186,8 +227,12 @@ export function optimiseReturns(
       }
     }
 
+    // Cashback is a question about a card. A savings or investment account has
+    // none, so asking what its cashback is invents a product he does not hold.
+    if (!isSpendable(r.account)) continue;
+
     if (r.cashbackPct === null) {
-      if (product) gaps.push({ product, missing: "cashbackPct" });
+      if (product) ask({ product, account: r.account, missing: "cashbackPct" });
       continue;
     }
     // No spend base means no honest multiplication. Skip rather than assume.
@@ -201,6 +246,9 @@ export function optimiseReturns(
       to: bestCashback.account,
       fromPct: r.cashbackPct,
       toPct: bestCashback.cashbackPct as number,
+      // A cashback figure is a stated fact or it is null; it is never assumed.
+      fromSource: "manual",
+      toSource: "manual",
       baseCents: r.spend.perYearCents,
       gainPerYearCents: Math.round((r.spend.perYearCents * delta) / 100),
       approximate: r.spend.kind === "upper-bound",

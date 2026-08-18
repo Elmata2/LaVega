@@ -222,3 +222,73 @@ test("no action when the winner is the account already holding the money", () =>
   );
   expect(actions.find((a) => a.kind === "move-balance")).toBeUndefined();
 });
+
+/* --- What the review found once the arithmetic was trusted ---------------- *
+ * The euros were right; what they were MADE OF was not. Four defects, each
+ * reproduced before it was fixed: a savings account being asked for a card's
+ * cashback, the same question printed once per account, spending routed to
+ * something you cannot pay with, and a balance moved into another currency. */
+
+test("a savings account is never asked what its cashback is", () => {
+  // productOf() calls everything that is not a credit card a "betaalpas", so a
+  // Spaarrekening used to emit {"Bunq betaalpas", "cashbackPct"} — a fabricated
+  // product name carrying a question about a card that does not exist.
+  const spaar = acc({ key: "bunq-s", bank: "Bunq", name: "Spaar", type: "Spaarrekening", balance: 20_000 });
+  const { gaps } = optimiseReturns(accountReturns([spaar], [], [], undefined, [], [], "2026-08-18"));
+
+  expect(gaps.filter((g) => g.missing === "cashbackPct")).toEqual([]);
+  // Its RATE is a fair question, and the gap names the account it was found on
+  // rather than a product this account never had.
+  expect(gaps.map((g) => [g.missing, g.account.key])).toEqual([["savingsPct", "bunq-s"]]);
+});
+
+test("one cashback question per product, not one per account", () => {
+  const a1 = acc({ key: "ing1", name: "Betaalrekening", balance: 1000 });
+  const a2 = acc({ key: "ing2", name: "Tweede rekening", balance: 1000 });
+  const { gaps } = optimiseReturns(accountReturns([a1, a2], [], [], undefined, [], [], "2026-08-18"));
+
+  // The fact is the PRODUCT's: answering it once moves both accounts, so asking
+  // twice is the same question printed twice.
+  expect(gaps.filter((g) => g.missing === "cashbackPct").map((g) => g.product)).toEqual(["ING betaalpas"]);
+});
+
+test("spending is never routed to an account you cannot pay with", () => {
+  // Same productOf() collapsing: a Trading 212 Spaarrekening inherits the
+  // "Trading 212 betaalpas" cashback fact and used to win the ranking, which
+  // read as "pay for your groceries with your savings account".
+  const spaar = acc({ key: "t212s", bank: "Trading 212", name: "Spaar", type: "Spaarrekening", balance: 0 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 20_000, interestRate: 1.5 });
+  const facts = [cashbackFact("Trading 212 betaalpas", "1.5"), cashbackFact("ING betaalpas", "0")];
+  const txs = Array.from({ length: 12 }, (_, i) =>
+    tx({ id: "s" + i, accountKey: "ing", amount: -2500,
+         date: `2025-${String(i + 1).padStart(2, "0")}-15` }));
+
+  const { actions } = optimiseReturns(
+    accountReturns([spaar, ing], txs, [], undefined, facts, [], "2026-01-15"),
+  );
+  expect(actions.find((a) => a.kind === "route-spending")).toBeUndefined();
+});
+
+test("money is never moved into another currency", () => {
+  // A conversion sits between the €20.000 and the 4,5%, so the gain cannot be
+  // redone against a statement — and no FX cost appears anywhere in it.
+  const usd = acc({ key: "wise", bank: "Wise", name: "USD saldo", type: "Spaarrekening",
+                    currency: "USD", balance: 0, interestRate: 4.5 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 20_000, interestRate: 1.5 });
+
+  const { actions } = optimiseReturns(accountReturns([usd, ing], [], [], undefined, [], [], "2026-08-18"));
+  expect(actions.find((a) => a.kind === "move-balance")).toBeUndefined();
+});
+
+test("an action carries where each rate came from, so no assumption prints as a fact", () => {
+  // ING has no rente typed in, so resolveAccountRate ASSUMES 0%. That number
+  // drives the euros; the action has to admit where it came from.
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 20_000 });
+  const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening", balance: 0, interestRate: 3.5 });
+
+  const { actions } = optimiseReturns(accountReturns([ing, t212], [], [], undefined, [], [], "2026-08-18"));
+  const move = actions.find((a) => a.kind === "move-balance");
+
+  expect(move?.fromSource).toBe("assumed");
+  expect(move?.toSource).toBe("manual");
+});

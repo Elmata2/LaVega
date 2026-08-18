@@ -123,14 +123,23 @@ export function accountLabel(a: Account): string {
   return String(a.bank || a.name || a.key || "deze rekening").trim();
 }
 
-/** Products you could actually pay with abroad: cards and payment accounts at a
- *  known bank. Savings and investment accounts are not payment instruments, and
- *  an account with no bank can't be looked up (see `providerOf`). */
+/** Can you actually pay with this? Cards and payment accounts at a known bank
+ *  qualify; savings and investment accounts are not payment instruments, and an
+ *  account with no bank can't be looked up (see `providerOf`).
+ *
+ *  Exported because `productOf` calls everything that is not a credit card a
+ *  "betaalpas": without this predicate a Spaarrekening inherits its bank's card
+ *  terms and can be crowned the thing to pay with, which is advice that cannot
+ *  be followed in the state it appears in. Anything ranking products by
+ *  `productOf` needs the same filter. */
+export function isSpendable(a: Account): boolean {
+  const t = accountType(a);
+  return (t === "Creditcard" || t === "Betaalrekening") && providerOf(a) !== "";
+}
+
+/** Products you could actually pay with abroad. */
 function spendableAccounts(accounts: Account[]): Account[] {
-  return accounts.filter((a) => {
-    const t = accountType(a);
-    return (t === "Creditcard" || t === "Betaalrekening") && providerOf(a) !== "";
-  });
+  return accounts.filter(isSpendable);
 }
 
 /** Rank what to pay with. Known terms sort by net cost (cheapest first); cards
