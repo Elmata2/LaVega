@@ -15,6 +15,12 @@ const TRANSFER_CATEGORY = "Eigen overboeking";
  *  measurement. Matches the forecast's own floor for the same judgement. */
 export const MIN_SPEND_DAYS = 60;
 
+/** Below half a year, an annualised figure is a multiplication rather than an
+ *  observation: 61 days scales by six, and one holiday booking inside it
+ *  becomes six holidays. Above this the seasonal error is small enough to
+ *  state plainly. */
+export const CONFIDENT_SPEND_DAYS = 180;
+
 /** How long an account may be silent before its history stops describing what
  *  it spends NOW. Measured from the last transaction to `asOf`, not from the
  *  window: six months of real spending that ended two years ago still divides
@@ -27,6 +33,11 @@ export const MAX_SPEND_GAP_DAYS = 90;
 const DAY_MS = 86_400_000;
 
 /**
+ *  Note what this does NOT answer: how well the annual total is known. `kind`
+ *  is about WHICH outflows count; `extrapolated` is about how much data they
+ *  were measured over. Conflating the two let a credit card with 61 days of
+ *  history print a 6x extrapolation with no hedge at all.
+ *
  *  `exact`       a credit card: every outflow on it IS card spend
  *  `upper-bound` a payment account: the bank export does not reliably say
  *                whether an outflow was a card payment or a direct debit, so
@@ -42,6 +53,11 @@ export type SpendBase = {
   kind: SpendKind;
   /** Days between the first and last transaction we hold for this account. */
   observedDays: number;
+  /** The annual figure was multiplied up from well under a year, so it carries
+   *  whatever seasonality and one-offs that window happened to hold. A single
+   *  holiday booking inside 61 days becomes six of them a year. True here means
+   *  the UI must hedge even when `kind` is "exact". */
+  extrapolated: boolean;
 };
 
 function daysBetween(from: string, to: string): number {
@@ -57,7 +73,7 @@ export function annualSpendCents(
   asOf: string,
 ): SpendBase {
   const mine = txs.filter((t) => t.accountKey === account.key && t.date <= asOf);
-  if (mine.length === 0) return { perYearCents: null, kind: "unknown", observedDays: 0 };
+  if (mine.length === 0) return { perYearCents: null, kind: "unknown", observedDays: 0, extrapolated: false };
 
   const dates = mine.map((t) => t.date).sort();
   const lastDate = dates[dates.length - 1];
@@ -65,7 +81,7 @@ export function annualSpendCents(
 
   // Silent too long: the history is real but it is no longer about today.
   if (daysBetween(lastDate, asOf) > MAX_SPEND_GAP_DAYS) {
-    return { perYearCents: null, kind: "unknown", observedDays };
+    return { perYearCents: null, kind: "unknown", observedDays, extrapolated: false };
   }
 
   let outCents = 0;
@@ -76,12 +92,13 @@ export function annualSpendCents(
   }
 
   if (observedDays < MIN_SPEND_DAYS || outCents === 0) {
-    return { perYearCents: null, kind: "unknown", observedDays };
+    return { perYearCents: null, kind: "unknown", observedDays, extrapolated: false };
   }
   return {
     perYearCents: Math.round((outCents * 365) / observedDays),
     kind: accountType(account) === "Creditcard" ? "exact" : "upper-bound",
     observedDays,
+    extrapolated: observedDays < CONFIDENT_SPEND_DAYS,
   };
 }
 
@@ -251,7 +268,10 @@ export function optimiseReturns(
       toSource: "manual",
       baseCents: r.spend.perYearCents,
       gainPerYearCents: Math.round((r.spend.perYearCents * delta) / 100),
-      approximate: r.spend.kind === "upper-bound",
+      // EITHER axis forces the hedge. An exact-kind figure stretched from two
+      // months is still a guess about a year, and printing it bare is the
+      // claim-more-than-you-know failure this codebase exists to avoid.
+      approximate: r.spend.kind === "upper-bound" || r.spend.extrapolated,
     });
   }
 

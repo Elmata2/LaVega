@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { annualSpendCents, MAX_SPEND_GAP_DAYS, MIN_SPEND_DAYS } from "./returns.js";
+import { annualSpendCents, CONFIDENT_SPEND_DAYS, MAX_SPEND_GAP_DAYS, MIN_SPEND_DAYS } from "./returns.js";
 import { ownAccounts } from "./views.js";
 
 const acc = (over: Partial<Account>): Account =>
@@ -291,4 +291,49 @@ test("an action carries where each rate came from, so no assumption prints as a 
 
   expect(move?.fromSource).toBe("assumed");
   expect(move?.toSource).toBe("manual");
+});
+
+/* --- "exact" answers WHICH outflows count, not how well the year is known.
+ * A credit card with two transactions 61 days apart was printing a six-fold
+ * extrapolation with no hedge, because only the upper-bound axis was checked. --- */
+
+test("a credit card stretched from two months is hedged, even though its kind is exact", () => {
+  const card = acc({ key: "amex", bank: "American Express", type: "Creditcard", balance: 0 });
+  const txs = [
+    tx({ id: "a", accountKey: "amex", date: "2026-06-27", amount: -8000, counterparty: "Vliegtickets" }),
+    tx({ id: "b", accountKey: "amex", date: "2026-08-27", amount: -10 }),
+  ];
+  const base = annualSpendCents(card, txs, [], undefined, "2026-08-27");
+
+  expect(base.kind).toBe("exact");        // every outflow on a card IS card spend
+  expect(base.extrapolated).toBe(true);   // ...but 61 days is not a year
+  expect(base.observedDays).toBeLessThan(CONFIDENT_SPEND_DAYS);
+});
+
+test("a full year on the same card is not hedged", () => {
+  const card = acc({ key: "amex", bank: "American Express", type: "Creditcard", balance: 0 });
+  const txs = Array.from({ length: 12 }, (_, i) =>
+    tx({ id: "m" + i, accountKey: "amex", amount: -500,
+         date: `2025-${String(i + 1).padStart(2, "0")}-15` }));
+  const base = annualSpendCents(card, txs, [], undefined, "2026-01-15");
+
+  expect(base.kind).toBe("exact");
+  expect(base.extrapolated).toBe(false);
+});
+
+test("the hedge reaches the action, so the screen cannot state a figure it cannot support", () => {
+  const card = acc({ key: "amex", bank: "American Express", type: "Creditcard", balance: 0 });
+  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 0 });
+  const facts = [cashbackFact("American Express creditcard", "0"), cashbackFact("ING betaalpas", "1.5")];
+  const txs = [
+    tx({ id: "a", accountKey: "amex", date: "2026-06-27", amount: -8000, counterparty: "Vliegtickets" }),
+    tx({ id: "b", accountKey: "amex", date: "2026-08-27", amount: -10 }),
+  ];
+
+  const { actions } = optimiseReturns(
+    accountReturns([card, ing], txs, [], undefined, facts, [], "2026-08-27"),
+  );
+  const route = actions.find((a) => a.kind === "route-spending");
+
+  expect(route?.approximate).toBe(true);
 });
