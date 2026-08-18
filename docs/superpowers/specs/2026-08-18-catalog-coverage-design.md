@@ -1,0 +1,98 @@
+# Getting the catalogue to 99% — design
+
+**The ask:** 99% coverage of every card and account a Dutch person can use. The sweep found **124
+products**; 99% means at most one or two left unanswered.
+
+It is reachable. But it is only an honest number if "covered" is defined before we chase it, because
+two of these products will never have a primary source.
+
+## What "covered" has to mean
+
+A figure is **covered** when we hold a value, the source it came from, and the date it was true.
+Three parts, not one. A number without a source is a rumour, and a number without a date was our bug
+twice this week.
+
+Two metrics, both reported, because one alone misleads:
+
+- **Coverage** — how many products have a figure at all. This is the 99% target.
+- **Coverage by tier** — how many of those come from the provider's own page versus a comparison
+  table versus a model that searched. 99% coverage that is half model-derived is a different product
+  from 99% primary, and a single number would hide that.
+
+And a third, which his own objection this week demands: **currency**. A figure from January is
+covered and stale. Each field gets an age budget by how fast it actually moves — FX markups shift
+about yearly, savings rates monthly, promotions weekly. Past its budget a figure stays visible and
+is marked overdue; it is never silently dropped or silently trusted.
+
+## The route ladder
+
+Per product, tried in order, first success wins, the tier recorded with the value.
+
+| # | Route | Cost | Measured today |
+|---|---|---|---|
+| 1 | Provider's own page, plain fetch + browser UA | ~free | **101 of 124 products** across 82 URLs |
+| 2 | Provider's own page via the **Wayback Machine** | ~free | **Proved on Rabobank**: the page that 403s us served 437 kB with a real table — `betaalpas 1,4% koersopslag`, `creditcard 2%`, and the withdrawal rows bank.nl folds away. Snapshots are dated by construction |
+| 3 | **Headless browser in CI** | free CI minutes | For pages whose numbers arrive by JavaScript. Unproven for our cases — see the open question |
+| 4 | Neutral comparison table (bank.nl) | ~free | 12 rows, 7 banks, debit and credit apart, self-dated |
+| 5 | **Agent + web search** | tokens | Measured accurate: Revolut 0%, ING 1,4%, ING creditcard 2%, ABN 1,2% and 2%, Trading 212 0%, and it corrected bank.nl on Knab |
+| 6 | Unknown, with the reason named | — | The honest floor |
+
+Route 3 belongs in **GitHub Actions on a schedule**, not in n8n or a Worker: the runner already has a
+browser, the minutes are free, and the output is a commit — so every changed figure arrives as a
+reviewable diff. That is the same discipline as the competitor tracker's `state.json`, which is where
+this whole approach comes from.
+
+## The two ceilings, measured rather than assumed
+
+**ING has no primary route at any tier.** `ing.nl` refuses at the network layer on HTTP/2 *and*
+HTTP/1.1; a browser User-Agent does not help; there is no ICS backdoor (`icscards.nl/ing` is a
+measured 404); and the Wayback CDX index holds snapshots from **2010** with nothing for the current
+URLs. ING is route 5 or 6, permanently, unless they change their edge rules. Its figures today rest
+entirely on bank.nl, stamped seven months ago.
+
+**American Express publishes no FX markup in HTML anywhere.** Zero hits for *koersopslag*,
+*wisselkoers*, *valuta* or *buitenland* across all eight consumer pages; the two FX pages are
+byte-identical with a JS-loaded table that returned a literal placeholder. A headless browser may
+render it. That is the single most valuable thing route 3 could prove, and it is not yet proved.
+
+So 99% is reachable **only if routes 5 and 6 are respectable outcomes**, shown on screen as what they
+are. Chasing 99% primary would mean scraping affiliate sites, and that trade was already refused for
+good reason.
+
+## The harder half nobody counts: conditions
+
+**104 of 124 products have a conditional headline rate** — staking, a paid tier, a package, a promo
+window, a monthly cap. Trading 212's 1,5% needs Cashback Reinvest *and* an active subscription.
+Crypto cards want a token locked for months.
+
+Coverage of the *number* is much easier than coverage of the *condition*, and a catalogue at 99% on
+numbers and 60% on conditions would be **more** misleading than one at 80% on both — because the
+missing condition is invisible while the missing number is not.
+
+So the 99% target applies to `{value, source, date, conditions}` as a unit. A product whose rate we
+know but whose conditions we do not is **not covered**. This is the requirement most likely to be
+quietly dropped under time pressure, which is why it is stated here.
+
+## Change detection, not re-derivation
+
+Copied from the competitor tracker because it already works: the sweep compares against
+`docs/catalog/state.json` and reports **what changed**. A new value replaces an old one only with a
+source; otherwise it is a delta for review. Nothing is silently overwritten, and the owner's own
+correction still wins over every tier — that rule is already enforced in `upsertFacts`.
+
+## Cadence
+
+Weekly full sweep, daily on the volatile subset. Routes 1, 2 and 4 cost effectively nothing and can
+run daily in full. Route 5 is the only one that costs real money, and it covers about five products.
+
+## Open questions
+
+1. **Does a headless browser actually rescue the JS-rendered pages?** Amex is the test case. Worth
+   one spike before building route 3, since it decides whether Amex is covered or permanently
+   agent-derived.
+2. **Do the EU-mandated Fee Information Documents help?** The Payment Accounts Directive requires a
+   standardised fee document per payment account. Two guessed URLs failed today (ING timed out,
+   Rabobank 403) — but a standardised, legally required document would be a better source than any
+   marketing page, and it has not been searched for properly.
+3. **Raisin's 19 partner banks** were verified on one and assumed for the other 18. Either verify or
+   drop the assumption from the watchlist.
