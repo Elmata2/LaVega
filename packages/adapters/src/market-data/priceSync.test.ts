@@ -24,6 +24,15 @@ test("does not call Yahoo before consent, then keeps consent for later calls", a
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
 });
 
+test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked price request"])("preserves provider problem %s through router sync", async (problem) => {
+  const store = createInMemoryPriceStore();
+  const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, never, never, never, never>({
+    price: [{ sourceKey: "yahoo", priority: 10, get: async () => ({ bars: [], problems: [problem] }) }],
+    fx: [], identifier: [],
+  });
+  await expect(syncPrices({ store, router, request: { symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", today: "2026-01-01" } })).resolves.toMatchObject({ problems: [problem] });
+});
+
 test.each([
   [`[${rateLimitedYahooFixture.status}] ${rateLimitedYahooFixture.body}`, "rate-limited"],
   [`[${blockedYahooFixture.status}] ${blockedYahooFixture.body}`, "blocked"],

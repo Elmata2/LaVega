@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
-import { createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
+import { createInMemoryPriceStore, createMemoryYahooConsentStore, createYahooPriceProvider } from "@lavega/adapters";
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
@@ -19,10 +19,33 @@ test("price sync requires server-readable consent before outbound requests", asy
   const blocked = await investingApp.request("/api/prices/sync", init);
   expect(blocked.status).toBe(412);
   expect(fetchJsonWithCrumb).not.toHaveBeenCalled();
-  expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: false });
+  expect((await (await investingApp.request("/api/market-data/consent")).json()).accepted).toBe(false);
   const consentResponse = await investingApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
-  expect(consentResponse.headers.get("set-cookie")).toContain("lavega-yahoo-consent=accepted");
-  expect(await (await investingApp.request("/api/market-data/consent")).json()).toEqual({ accepted: true });
+  expect(consentResponse.headers.get("set-cookie")).toBeNull();
+  expect((await (await investingApp.request("/api/market-data/consent")).json()).accepted).toBe(true);
+});
+
+test("fresh app does not trust consent cookie from an earlier installation", async () => {
+  const freshApp = createApp({ provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb: vi.fn() } as never }) });
+  const response = await freshApp.request("/api/prices/sync", {
+    method: "POST",
+    headers: { cookie: "lavega-yahoo-consent=accepted", "content-type": "application/json" },
+    body: JSON.stringify({ symbols: [] }),
+  });
+  expect(response.status).toBe(412);
+});
+
+test("router problems reach HTTP response unchanged", async () => {
+  const consentStore = createMemoryYahooConsentStore(true);
+  const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: ["Yahoo Finance rate-limited price request"] }) };
+  const investingApp = createApp({ consentStore, provider: provider as never });
+  const response = await investingApp.request("/api/prices/sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }),
+  });
+  expect(await response.json()).toMatchObject({ problems: ["Yahoo Finance rate-limited price request"] });
+  expect(provider.get).toHaveBeenCalledOnce();
 });
 
 test("GET /api/config/status reports missing keys without returning key values", async () => {
