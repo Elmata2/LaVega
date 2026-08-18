@@ -31,6 +31,7 @@ function render(txs: Tx[], accounts: Account[] = ACCOUNTS) {
       own={ownAccounts(accounts)}
       asOf="2026-08-16"
       busy={false}
+      facts={[]}
       onRateCommit={() => {}}
     />,
   );

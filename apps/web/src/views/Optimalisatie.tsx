@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, OwnAccounts, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, LearnedFact, OwnAccounts, Rule } from "@lavega/core";
 import {
   accountLabel,
+  accountReturns,
+  isSpendable,
+  optimiseReturns,
+  MIN_SPEND_DAYS,
   detectSubscriptions,
   subscriptionPriceIncreases,
   subscriptionOverlaps,
@@ -55,6 +59,9 @@ type OptimalisatieProps = {
   own: OwnAccounts;
   asOf: string;
   busy: boolean;
+  /** What the agents have learned, for the cashback figures. Keyed by
+   *  productOf(), the same key the travel agent uses. */
+  facts: readonly LearnedFact[];
   onRateCommit: (key: string, value: string) => void;
 };
 
@@ -122,7 +129,7 @@ function outflowFacts(txs: Tx[]) {
   return { outflows, merchants: byMerchant.size, repeated, first, last };
 }
 
-export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, onRateCommit }: OptimalisatieProps) {
+export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, facts, onRateCommit }: OptimalisatieProps) {
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
@@ -169,6 +176,26 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, o
   // known rente — surfaced in the guidance so the €0 isn't a dead end.
   const noSaldo = interest.accountRates.filter((a) => a.account.balance === null).length;
   const unknownRate = interest.accountRates.filter((a) => a.ratePct === null).length;
+
+  // Two rates on two bases, from the accounts he already holds. Core owns the
+  // whole derivation; this view only prints it.
+  const returns = useMemo(
+    () => accountReturns(accounts, txs, rules, own, facts, rates.rates, asOf),
+    [accounts, txs, rules, own, facts, rates, asOf],
+  );
+  const { actions, gaps } = useMemo(() => optimiseReturns(returns), [returns]);
+  const routing = actions.filter((a) => a.kind === "route-spending");
+  const cashbackGaps = gaps.filter((g) => g.missing === "cashbackPct");
+  // Why the module can be empty, in the order the reasons actually apply. "Je
+  // betaalt al met de beste kaart" is only true when there IS a card and there
+  // IS measured spending; printed over an empty vault it is advice that cannot
+  // be true in the state it appears in.
+  const spendable = returns.filter((r) => isSpendable(r.account));
+  const rankable = spendable.filter((r) => r.cashbackPct !== null);
+  const measured = rankable.filter((r) => r.spend.perYearCents !== null);
+  // How the base was measured, so the figure can be checked against the same
+  // afschrift it was read from rather than taken on trust.
+  const spendOf = useMemo(() => new Map(returns.map((r) => [r.account.key, r.spend])), [returns]);
 
   return (
     <>
@@ -504,6 +531,57 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, o
               {rates.source !== "live" && "Voor live tarieven: start de rente-service (pnpm dev:server)."}
             </p>
           </details>
+        </Module>
+
+        {/* ── Cashback: dezelfde vraag, maar op wat je uitgeeft ──────────── */}
+        <Module
+          span={2}
+          title="Cashback"
+          footer={<span>Percentages gelden op wat je uitgeeft, niet op je saldo.</span>}
+        >
+          {routing.length === 0 && cashbackGaps.length === 0 && (
+            <p className="block-empty">
+              {spendable.length === 0
+                ? "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken."
+                : rankable.length >= 2 && measured.length === 0
+                  ? `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${MIN_SPEND_DAYS} dagen). Zonder die basis is er een percentage, maar geen bedrag.`
+                  : "Je betaalt al met de kaart die het meeste teruggeeft."}
+            </p>
+          )}
+          {routing.map((a) => {
+            const base = spendOf.get(a.from.key);
+            return (
+              <div className="reason-list" key={a.from.key + a.to.key}>
+                <div className="position-row">
+                  <span>
+                    Betaal met <strong>{a.to.bank}</strong> in plaats van {a.from.bank} — {pct(a.toPct)} tegen{" "}
+                    {pct(a.fromPct)}.
+                  </span>
+                  <span className="text-pos">
+                    {a.approximate ? "tot " : ""}
+                    {euro(a.gainPerYearCents)} per jaar
+                  </span>
+                </div>
+                {/* Where the euros come from. "tot" is not a hedge for its own
+                    sake: on a betaalrekening the base still has rent and
+                    incasso's inside it, so the figure is the most it could be
+                    and the sentence has to say why. */}
+                <p className="cell-sub">
+                  Gerekend over {a.approximate ? "maximaal " : ""}
+                  {euro(a.baseCents)} aan uitgaven per jaar
+                  {base ? `, gemeten over ${base.observedDays} dagen afschrift` : ""}.
+                  {a.approximate &&
+                    " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was — huur en incasso's zitten er dus nog in."}
+                </p>
+              </div>
+            );
+          })}
+          {cashbackGaps.length > 0 && (
+            <p className="cell-sub">
+              Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Vul het zelf in bij het
+              reisblok — wat jij invult wordt nooit overschreven.
+            </p>
+          )}
         </Module>
       </ModuleGrid>
     </>

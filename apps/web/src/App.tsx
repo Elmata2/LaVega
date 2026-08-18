@@ -956,6 +956,7 @@ export default function App() {
               own={own}
               asOf={asOf}
               busy={busy}
+              facts={facts}
               onRateCommit={handleRateCommit}
             />
           )}
