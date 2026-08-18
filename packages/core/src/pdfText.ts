@@ -12,6 +12,37 @@ export type PdfFigure = { field: "fxFeePct"; value: number; line: string; condit
 const PCT = /(\d{1,2})[,.](\d{1,2})\s*%/;
 /** A threshold that makes the rate conditional: "tot € 500 per creditcardperiode". */
 const THRESHOLD = /\b(tot|boven|vanaf)\b[^%]{0,60}?€\s?[\d.]+[^%]{0,40}/i;
+/** The same pattern, scanning, so the clause that GOVERNS a figure can be picked
+ *  out rather than merely the first one on the row. */
+const THRESHOLD_ALL = new RegExp(THRESHOLD.source, "gi");
+/** A word that flips the tier mid-sentence: "Tot € 1000 geen koersopslag …,
+ *  daarboven 2,00%". Both tiers on ONE line, so nearest-preceding is not enough —
+ *  the threshold there names the tier in which the rate is ZERO. */
+const TIER_FLIP = /\b(daarboven|daarna|erna)\b/i;
+
+/** The threshold clause that governs the figure at `pctIndex`, or null.
+ *
+ *  Two rules, both learned from the real document:
+ *
+ *  1. Only a clause BEFORE the figure can govern it, and of those the nearest
+ *     preceding one wins. A clause after the figure describes the next row.
+ *  2. If a tier-flip word sits between that clause and the figure, the clause
+ *     names the OTHER tier, so the condition must run through the flip word.
+ *     Otherwise the rate carries the condition under which it does NOT apply —
+ *     worse than no condition, because it looks established. */
+function governingThreshold(text: string, pctIndex: number): string | null {
+  THRESHOLD_ALL.lastIndex = 0;
+  let governing: RegExpExecArray | null = null;
+  for (let m = THRESHOLD_ALL.exec(text); m; m = THRESHOLD_ALL.exec(text)) {
+    if (m.index >= pctIndex) break;
+    governing = m;
+  }
+  if (!governing) return null;
+  const span = text.slice(governing.index, pctIndex);
+  const flip = TIER_FLIP.exec(span);
+  if (!flip) return governing[0].trim();
+  return span.slice(0, flip.index + flip[0].length).trim();
+}
 
 /** How many preceding lines travel with a figure as its evidence.
  *
@@ -48,8 +79,10 @@ export function readIngTariffs(text: string): PdfFigure[] {
           // 2,00%" are adjacent rows, and taking the nearest threshold stamps the
           // 2% with the cap under which it does not apply. Only when the row
           // states no threshold does the block above it speak for it.
-          const cond = THRESHOLD.exec(line) ?? THRESHOLD.exec(evidence);
-          out.push({ field: "fxFeePct", value, line: evidence, conditions: cond ? cond[0].trim() : null });
+          const cond =
+            governingThreshold(line, m.index) ??
+            governingThreshold(evidence, evidence.length - line.length + m.index);
+          out.push({ field: "fxFeePct", value, line: evidence, conditions: cond });
         }
       }
       // a line about koersopslag with no number states nothing

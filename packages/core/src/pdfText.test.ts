@@ -30,12 +30,46 @@ test("a capped rate whose threshold sits on the line above is never emitted as a
   // The withdrawal rows split one fact across three lines: "• Vreemde valuta
   // opnemen tot € 500 euro per / creditcardperiode2 ... + / 0,00% koersopslag".
   // Read one line at a time, that 0% arrives with no conditions at all — the
-  // Revolut mistake, produced by our own parser instead of inherited. ING
-  // publishes no unconditional 0% koersopslag anywhere in this document.
-  const zeros = readIngTariffs(TEXT).filter((f) => f.value === 0);
+  // Revolut mistake, produced by our own parser instead of inherited.
+  //
+  // Scoped to the zeros whose own evidence states a cap. An earlier version of
+  // this test asserted over ALL zeros, on the premise that "ING publishes no
+  // unconditional 0% koersopslag anywhere in this document". That premise was
+  // false, and false in this project's error-3 shape: it was concluded from a
+  // fixture slice that stopped five lines short of the ING Creditcard Max block,
+  // which publishes exactly such a rate. See the next test.
+  const capped = readIngTariffs(TEXT).filter((f) => f.value === 0 && /\btot €/i.test(f.line));
 
-  expect(zeros.length).toBeGreaterThan(0);
-  for (const z of zeros) expect(z.conditions).not.toBeNull();
+  expect(capped.length).toBeGreaterThan(0);
+  for (const z of capped) expect(z.conditions).not.toBeNull();
+});
+
+test("a 0% the source really does state without a cap stays unconditional", () => {
+  // ING Creditcard Max: "• Vreemde valuta opnemen / met een minimum van € 4,50 + /
+  // 0,00% koersopslag" — no creditcardperiode cap anywhere in that block, unlike
+  // every other card in the table. conditions: null means UNCONDITIONAL, and this
+  // row genuinely is. The rule cuts both ways: unknown is never zero, and a
+  // documented zero is not to be pattern-matched into a condition it does not
+  // have. This is a regression guard on the corrected premise above.
+  const bare = readIngTariffs(TEXT).filter((f) => f.value === 0 && f.conditions === null);
+
+  expect(bare.length).toBe(1);
+  expect(bare[0].line).toContain("0,00% koersopslag");
+  expect(bare[0].line).not.toMatch(/\btot €/i);
+});
+
+test("a two-tier statement on ONE line is not stamped with the tier where the rate is zero", () => {
+  // The ING Creditcard Extra footnote puts BOTH tiers on one line:
+  // "*** Tot € 1000 geen koersopslag per maandcyclus per creditcard contract,
+  // daarboven 2,00%". Own-row-wins cannot separate them, so the first threshold
+  // match — "Tot € 1000", the tier in which the rate is ZERO — gets stamped onto
+  // the 2,00%. A rate carrying the condition under which it does NOT apply is
+  // worse than a rate with no condition, because it looks established.
+  const footnote = readIngTariffs(TEXT).filter((f) => /maandcyclus/i.test(f.line));
+
+  expect(footnote.length).toBe(1);
+  expect(footnote[0].value).toBe(2);
+  expect(footnote[0].conditions).toMatch(/daarboven/i);
 });
 
 test("a tier's condition comes from its own row, not from the row above it", () => {
