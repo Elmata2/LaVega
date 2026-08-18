@@ -48,7 +48,7 @@ export interface BrokerAccessAdapter {
 }
 ```
 
-`sync()` rather than `load()` because every broker path here is API-driven, not file-driven — there is no `{filename, text}` to pass.
+`sync()` rather than `load()` because most broker paths here are API-driven, not file-driven — there is no `{filename, text}` to pass. DeGiro is the exception: it goes through `FileImport`, the same seam `BankAccessAdapter` already uses for its statement profiles, not through `BrokerAccessAdapter.sync()`. See [DeGiro](#degiro).
 
 Per-broker failures go in `problems` so one broken connection doesn't block the rest, exactly as `BankAccessAdapter` does it. An adapter that can't reach its broker returns a `BrokerResult` with empty arrays and a populated `problems`; it does not throw.
 
@@ -62,33 +62,39 @@ Local-first by default, inherited unchanged from the personal side ([#5](https:/
 
 | Broker | Persisted? | Why |
 |---|---|---|
-| DeGiro | **Never** | Username/password/OTP. Anything that can read the store could trigger an unattended login — the exact path to account lockout ([#7](https://github.com/Elmata2/LaVega/issues/7)). Re-entered every sync. |
+| DeGiro | N/A | No login. v1 is manual CSV import — the user exports their own portfolio/transaction file from DeGiro's web app and uploads it. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
 | Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)). |
 | Trading 212 | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)). |
 
 ## Risk-disclosure gates
 
-Two of the three adapters ship behind a **one-time consent checkbox** shown before the first sync, persisted locally so it doesn't re-nag. The UI gate is the one that matters; the same text is mirrored here for self-hosting users reading the docs.
+One of the three adapters ships behind a **one-time consent checkbox** shown before the first sync, persisted locally so it doesn't re-nag. The UI gate is the one that matters; the same text is mirrored here for self-hosting users reading the docs.
 
-- **DeGiro** — "Uses DeGiro's private, undocumented API. This is not an official integration, and your account could be locked or suspended."
 - **Trading 212** — "This key may be able to place trades if its scope isn't read-only. Verify the scope in the Trading 212 app before granting."
 - **Interactive Brokers** — no gate. Official API, no lockout risk. Setup instructions only.
+- **DeGiro** — no gate. No login, no API call, nothing to consent to — the user is just uploading a file they exported themselves ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 
 ---
 
 ## DeGiro
 
-**Status: unofficial. Highest-risk connector in v1.**
+**Status: manual CSV import. No login, no API, no automation in v1** ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 
-DeGiro has **no official API** — its own helpdesk states third-party scripts and API wrappers violate its terms ([#7](https://github.com/Elmata2/LaVega/issues/7)). Everything below drives DeGiro's internal web-app endpoints, reverse-engineered from the browser client.
+DeGiro has **no official API** — its own helpdesk states third-party scripts and API wrappers violate its terms ([#7](https://github.com/Elmata2/LaVega/issues/7)), and driving DeGiro's UI (local Playwright or otherwise) has its own account-lockout and credential-custody problems ([#19](https://github.com/Elmata2/LaVega/issues/19)). v1 sidesteps all of that: the user exports their own portfolio/transaction data from DeGiro's web app and uploads it, the same way bank statements reach `BankAccessAdapter` today.
 
-**Approach:** clean-room TypeScript port, **not** an npm dependency ([#10](https://github.com/Elmata2/LaVega/issues/10)). Reference implementation: `icastillejogomez/degiro-api` (TS, MIT, active). Port only the read endpoints LaVega needs, shaped like the existing `eb-client.ts` — thin typed client, credentials passed in explicitly, no hidden state. Do not port order-placement endpoints.
+**Approach:** reuse the `FileImport` seam, not `BrokerAccessAdapter.sync()`. A DeGiro import profile parses the exported file into `{positions, trades}`, mirroring how `BankAccessAdapter` already has MT940/CAMT/CSV bank profiles behind the same `{filename, text}` shape. No credentials, no session, nothing to store or re-enter.
 
-**Auth:** username + password, plus TOTP or in-app mobile approval. Returns a `session_id` passed as a query param on every call. No OAuth, no refresh token. Trading session times out at ~30 minutes.
+**Auth:** none. There is no login step in this adapter at all.
 
-**Sync model: manual / user-triggered only. Never scheduled polling.** This is the load-bearing constraint of this adapter. A documented account lockout exists from re-logins at roughly 30-minute cadence, and DeGiro publishes no safe cadence, so even a conservative background schedule carries unquantifiable ban risk.
+**Sync model: manual, user-triggered file upload.** No scheduling, no polling — there's no session to keep alive or lock out.
 
-**Data:** both positions (`positionReport`) and historical transactions (`transactions` / order history) — pulled together in v1, not staged. Same session plumbing either way, and `trades` has to be populated for the contract to be usable at all.
+**Data:** both positions and full transaction/order history, from DeGiro's own account/portfolio export.
+
+> **Confirm on build:** DeGiro's export is assumed to include trade-level order history, not just a positions snapshot. This wasn't verified against DeGiro's own documentation while writing this spec — confirm against a real export before implementing the parser, and adjust the "Data" line above if it only covers positions.
+
+**Hosted/cloud tier:** DeGiro's CSV import works there too — file upload has no custody problem the way credentials would, so this isn't local-only ([#25](https://github.com/Elmata2/LaVega/issues/25)).
+
+**Deferred:** driving DeGiro's real web UI (local Playwright) to get live, scheduled sync without a manual export step is real future work, not part of v1. See [Future work](#future-work).
 
 ## Interactive Brokers
 
@@ -135,6 +141,7 @@ Deliberately **not** specified here. Named so the next effort knows where the ed
 
 - **Instrument enrichment layer** — industry, sub-industry, company size, fundamentals, fed by a market-data provider. Feeds the intended intelligent-agent portfolio-analysis layer. Explicitly split out of the broker adapter ([#4](https://github.com/Elmata2/LaVega/issues/4)); a broker is not a market-data source.
 - **Additional brokers** — Revolut Invest, Bux, eToro and others are wanted, deferred until the big-three adapters prove the interface ([#3](https://github.com/Elmata2/LaVega/issues/3)).
-- **Sync scheduling mechanism** — DeGiro is manual, IBKR and Trading 212 are both daily-scheduled. Whether one shared scheduler drives them or each adapter self-schedules is still open.
+- **Sync scheduling mechanism** — DeGiro is manual (file upload), IBKR and Trading 212 are both daily-scheduled. Whether one shared scheduler drives them or each adapter self-schedules is still open.
+- **DeGiro local-Playwright automation** — live, scheduled sync driving DeGiro's real web UI instead of manual CSV export, deferred out of v1 ([#33](https://github.com/Elmata2/LaVega/issues/33)). Research already done: `docs/investing/research/browser-infrastructure.md` ([#19](https://github.com/Elmata2/LaVega/issues/19)).
 - **`apps/investing-web` UI/UX** — this spec is connectors only.
 - **Hosted/cloud tier** — a standing directional constraint (any hosted tier is additive, never required), not a decision this spec makes.
