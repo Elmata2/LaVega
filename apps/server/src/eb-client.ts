@@ -1,4 +1,3 @@
-import { createSign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -32,8 +31,8 @@ export interface EbClientConfig {
   privateKeyFile: string | null;
 }
 
-function base64url(input: string | Buffer): string {
-  const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
+function base64url(input: string | Buffer | Uint8Array): string {
+  const buf = typeof input === "string" ? Buffer.from(input, "utf8") : Buffer.from(input);
   return buf.toString("base64url");
 }
 
@@ -41,12 +40,78 @@ function resolvePrivateKeyPath(privateKeyFile: string): string {
   return path.isAbsolute(privateKeyFile) ? privateKeyFile : path.join(SERVER_DIR, privateKeyFile);
 }
 
+/** DER length octets (definite form: short for <128, long form above). */
+function derLength(len: number): number[] {
+  if (len < 0x80) return [len];
+  const bytes: number[] = [];
+  for (let n = len; n > 0; n >>= 8) bytes.unshift(n & 0xff);
+  return [0x80 | bytes.length, ...bytes];
+}
+
+/** DER TLV: tag + length + content. */
+function derWrap(tag: number, content: Uint8Array): Uint8Array<ArrayBuffer> {
+  const length = derLength(content.length);
+  const out = new Uint8Array(1 + length.length + content.length);
+  out[0] = tag;
+  out.set(length, 1);
+  out.set(content, 1 + length.length);
+  return out;
+}
+
+// SEQUENCE { OID rsaEncryption, NULL } — the fixed AlgorithmIdentifier every
+// PKCS#8 RSA key carries.
+const RSA_ALGORITHM_IDENTIFIER = Uint8Array.from([
+  0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00,
+]);
+
+/**
+ * Wrap a PKCS#1 ("BEGIN RSA PRIVATE KEY") DER body in the PKCS#8
+ * ("BEGIN PRIVATE KEY") envelope: `SEQUENCE { version 0, AlgorithmIdentifier,
+ * OCTET STRING <pkcs1Der> }`. WebCrypto's `importKey("pkcs8", ...)` only
+ * accepts PKCS#8 — and Enable Banking's onboarding docs generate keys with
+ * `openssl genrsa`, which emits PKCS#1.
+ */
+function pkcs1ToPkcs8(pkcs1Der: Uint8Array): Uint8Array<ArrayBuffer> {
+  const version = Uint8Array.from([0x02, 0x01, 0x00]); // INTEGER 0
+  const privateKeyOctetString = derWrap(0x04, pkcs1Der);
+  const body = new Uint8Array(
+    version.length + RSA_ALGORITHM_IDENTIFIER.length + privateKeyOctetString.length,
+  );
+  body.set(version, 0);
+  body.set(RSA_ALGORITHM_IDENTIFIER, version.length);
+  body.set(privateKeyOctetString, version.length + RSA_ALGORITHM_IDENTIFIER.length);
+  return derWrap(0x30, body); // SEQUENCE
+}
+
+function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
+  const base64 = pem.replace(/-----(BEGIN|END) [^-]+-----/g, "").replace(/\s+/g, "");
+  return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+/**
+ * Import a PEM RSA private key (PKCS#1 or PKCS#8) as a WebCrypto signing
+ * key. `crypto.subtle` is global in Node, Cloudflare Workers, and Vercel
+ * Edge alike — unlike `node:crypto`, so this makes the signer portable.
+ */
+async function importSigningKey(pem: string): Promise<CryptoKey> {
+  const der = pemToDer(pem);
+  const pkcs8Der = /BEGIN RSA PRIVATE KEY/.test(pem) ? pkcs1ToPkcs8(der) : der;
+  return crypto.subtle.importKey(
+    "pkcs8",
+    pkcs8Der,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
 /**
  * Build a RS256-signed JWT for Enable Banking's API: header carries
  * `kid: applicationId`; claims are `iss`/`aud`/`iat`/`exp` (1h TTL). No JWT
- * library — plain `node:crypto` + base64url, matching the reference.
+ * library — plain WebCrypto (`crypto.subtle.sign`) + base64url, matching
+ * the reference.
  */
-export function ebJWT(config: EbClientConfig): string {
+export async function ebJWT(config: EbClientConfig): Promise<string> {
   const { applicationId, privateKeyFile } = config;
   if (!applicationId) {
     throw new Error("Enable Banking: applicationId is missing from config");
@@ -70,8 +135,13 @@ export function ebJWT(config: EbClientConfig): string {
   const header = { typ: "JWT", alg: "RS256", kid: applicationId };
   const claims = { iss: EB_ISSUER, aud: EB_AUDIENCE, iat, exp: iat + JWT_TTL_SECONDS };
   const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claims))}`;
-  const signature = createSign("RSA-SHA256").update(signingInput).sign(privateKey);
-  return `${signingInput}.${base64url(signature)}`;
+  const signingKey = await importSigningKey(privateKey);
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    signingKey,
+    new TextEncoder().encode(signingInput),
+  );
+  return `${signingInput}.${base64url(new Uint8Array(signature))}`;
 }
 
 /** A non-2xx response from the Enable Banking API. */
@@ -118,7 +188,7 @@ export async function eb(
   const res = await fetch(`${baseUrl}${urlPath}`, {
     method,
     headers: {
-      Authorization: `Bearer ${ebJWT(config)}`,
+      Authorization: `Bearer ${await ebJWT(config)}`,
       "Content-Type": "application/json",
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,

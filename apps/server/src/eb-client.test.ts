@@ -7,11 +7,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { eb, ebJWT, EnableBankingApiError, type EbClientConfig } from "./eb-client.js";
 
-function makeTestKeypair() {
+function makeTestKeypair(privateKeyType: "pkcs1" | "pkcs8" = "pkcs1") {
   return generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs1", format: "pem" },
+    privateKeyEncoding: { type: privateKeyType, format: "pem" },
   });
 }
 
@@ -20,59 +20,64 @@ function decodeSegment(segment: string): Buffer {
 }
 
 describe("ebJWT", () => {
-  test("builds a RS256 JWT with the correct header, claims, and a verifiable signature", () => {
-    const { publicKey, privateKey } = makeTestKeypair();
-    const dir = mkdtempSync(path.join(tmpdir(), "lavega-eb-jwt-"));
-    const keyPath = path.join(dir, "test-key.pem");
-    writeFileSync(keyPath, privateKey);
+  test.each([["pkcs1"], ["pkcs8"]] as const)(
+    "builds a RS256 JWT with the correct header, claims, and a verifiable signature (%s key)",
+    async (privateKeyType) => {
+      const { publicKey, privateKey } = makeTestKeypair(privateKeyType);
+      const dir = mkdtempSync(path.join(tmpdir(), "lavega-eb-jwt-"));
+      const keyPath = path.join(dir, "test-key.pem");
+      writeFileSync(keyPath, privateKey);
 
-    try {
-      const config: EbClientConfig = {
-        applicationId: "test-application-id",
-        privateKeyFile: keyPath,
-      };
-      const before = Math.floor(Date.now() / 1000);
-      const token = ebJWT(config);
-      const after = Math.floor(Date.now() / 1000);
+      try {
+        const config: EbClientConfig = {
+          applicationId: "test-application-id",
+          privateKeyFile: keyPath,
+        };
+        const before = Math.floor(Date.now() / 1000);
+        const token = await ebJWT(config);
+        const after = Math.floor(Date.now() / 1000);
 
-      const parts = token.split(".");
-      expect(parts).toHaveLength(3);
-      const [headerB64, payloadB64, sigB64] = parts;
+        const parts = token.split(".");
+        expect(parts).toHaveLength(3);
+        const [headerB64, payloadB64, sigB64] = parts;
 
-      const header = JSON.parse(decodeSegment(headerB64).toString("utf8"));
-      expect(header).toEqual({ typ: "JWT", alg: "RS256", kid: "test-application-id" });
+        const header = JSON.parse(decodeSegment(headerB64).toString("utf8"));
+        expect(header).toEqual({ typ: "JWT", alg: "RS256", kid: "test-application-id" });
 
-      const claims = JSON.parse(decodeSegment(payloadB64).toString("utf8"));
-      expect(claims.iss).toBe("enablebanking.com");
-      expect(claims.aud).toBe("api.enablebanking.com");
-      expect(claims.iat).toBeGreaterThanOrEqual(before);
-      expect(claims.iat).toBeLessThanOrEqual(after);
-      expect(claims.exp - claims.iat).toBe(3600);
+        const claims = JSON.parse(decodeSegment(payloadB64).toString("utf8"));
+        expect(claims.iss).toBe("enablebanking.com");
+        expect(claims.aud).toBe("api.enablebanking.com");
+        expect(claims.iat).toBeGreaterThanOrEqual(before);
+        expect(claims.iat).toBeLessThanOrEqual(after);
+        expect(claims.exp - claims.iat).toBe(3600);
 
-      const signingInput = `${headerB64}.${payloadB64}`;
-      const verifier = createVerify("RSA-SHA256");
-      verifier.update(signingInput);
-      const verified = verifier.verify(publicKey, decodeSegment(sigB64));
-      expect(verified).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+        const signingInput = `${headerB64}.${payloadB64}`;
+        const verifier = createVerify("RSA-SHA256");
+        verifier.update(signingInput);
+        const verified = verifier.verify(publicKey, decodeSegment(sigB64));
+        expect(verified).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test("throws a clear error when applicationId is missing", async () => {
+    await expect(
+      ebJWT({ applicationId: null, privateKeyFile: "/tmp/whatever.pem" }),
+    ).rejects.toThrow(/applicationId/i);
   });
 
-  test("throws a clear error when applicationId is missing", () => {
-    expect(() => ebJWT({ applicationId: null, privateKeyFile: "/tmp/whatever.pem" })).toThrow(
-      /applicationId/i,
+  test("throws a clear error when privateKeyFile is missing", async () => {
+    await expect(ebJWT({ applicationId: "abc", privateKeyFile: null })).rejects.toThrow(
+      /privateKeyFile/i,
     );
   });
 
-  test("throws a clear error when privateKeyFile is missing", () => {
-    expect(() => ebJWT({ applicationId: "abc", privateKeyFile: null })).toThrow(/privateKeyFile/i);
-  });
-
-  test("throws a clear error when the private key file does not exist on disk", () => {
-    expect(() =>
+  test("throws a clear error when the private key file does not exist on disk", async () => {
+    await expect(
       ebJWT({ applicationId: "abc", privateKeyFile: "/definitely/not/a/real/path/key.pem" }),
-    ).toThrow(/private key/i);
+    ).rejects.toThrow(/private key/i);
   });
 });
 
