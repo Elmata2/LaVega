@@ -10,6 +10,7 @@ import {
   type PriceProviderResult,
   type PriceStore,
   type YahooPriceRequest,
+  hasYahooFinanceRequestConsent,
 } from "@lavega/adapters";
 
 type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore };
@@ -34,6 +35,7 @@ export function createApp(dependencies?: Partial<PriceDependencies>) {
     return c.json({ accepted: true });
   });
   investingApp.post("/api/prices/sync", async (c) => {
+    if (hasYahooFinanceRequestConsent(c.req.raw)) consent.recordConsent();
     if (!consent.hasConsent()) return c.json({ bars: [], fetched: [], problems: ["Yahoo Finance disclosure consent required"] }, 412);
     const body: { symbols?: Array<Omit<YahooPriceRequest, "from" | "to">>; today?: string } = await c.req.json<{ symbols?: Array<Omit<YahooPriceRequest, "from" | "to">>; today?: string }>().catch(() => ({ symbols: undefined, today: undefined }));
     const instruments = body.symbols ?? [];

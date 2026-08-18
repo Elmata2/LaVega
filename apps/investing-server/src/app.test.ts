@@ -25,6 +25,17 @@ test("price sync requires server-readable consent before outbound requests", asy
   expect((await (await investingApp.request("/api/market-data/consent")).json()).accepted).toBe(true);
 });
 
+test("persistent consent store keeps accepted installation across app instances", async () => {
+  const consentStore = createMemoryYahooConsentStore();
+  const firstApp = createApp({ consentStore });
+  await firstApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+
+  const secondApp = createApp({ consentStore });
+  const response = await secondApp.request("/api/market-data/consent");
+  expect(response.status).toBe(200);
+  expect((await response.json()).accepted).toBe(true);
+});
+
 test("fresh app does not trust consent cookie from an earlier installation", async () => {
   const freshApp = createApp({ provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb: vi.fn() } as never }) });
   const response = await freshApp.request("/api/prices/sync", {
@@ -33,6 +44,16 @@ test("fresh app does not trust consent cookie from an earlier installation", asy
     body: JSON.stringify({ symbols: [] }),
   });
   expect(response.status).toBe(412);
+});
+
+test("fresh app accepts explicit browser consent header, not legacy cookie", async () => {
+  const freshApp = createApp({ provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb: vi.fn() } as never }) });
+  const response = await freshApp.request("/api/prices/sync", {
+    method: "POST",
+    headers: { "x-lavega-yahoo-consent": "accepted", "content-type": "application/json" },
+    body: JSON.stringify({ symbols: [] }),
+  });
+  expect(response.status).toBe(200);
 });
 
 test("router problems reach HTTP response unchanged", async () => {

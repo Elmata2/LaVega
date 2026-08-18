@@ -6,6 +6,7 @@ import { rateLimitedYahooFixture } from "./yahoo/__fixtures__/rate-limited.js";
 import { createYahooPriceProvider, type PriceProviderResult, type YahooPriceRequest } from "./yahoo/priceProvider.js";
 import { createInMemoryPriceStore } from "../prices/inMemoryPriceStore.js";
 import { syncPrices } from "./priceSync.js";
+import { YahooHttpClient } from "./yahoo/http.js";
 
 const request = { ticker: "ASML", exchange: "AMS", symbol: "ASML", currency: "EUR", today: "2026-01-03" };
 
@@ -34,10 +35,16 @@ test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked pr
 });
 
 test.each([
-  [`[${rateLimitedYahooFixture.status}] ${rateLimitedYahooFixture.body}`, "rate-limited"],
-  [`[${blockedYahooFixture.status}] ${blockedYahooFixture.body}`, "blocked"],
-])("reports Yahoo fixture response %s as %s", async (error, expected) => {
-  const provider = createYahooPriceProvider({ consent: createMemoryYahooConsentStore(true), client: { fetchJsonWithCrumb: async () => { throw new Error(error); } } as never });
+  [rateLimitedYahooFixture, "rate-limited"],
+  [blockedYahooFixture, "blocked"],
+])("reports Yahoo HTTP fixture response %o as %s", async (fixture, expected) => {
+  const fetchFn = vi.fn(async (url: RequestInfo | URL) => {
+    const target = String(url);
+    if (target === "https://fc.yahoo.com/") return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (target.includes("getcrumb")) return new Response("crumb");
+    return new Response(fixture.body, { status: fixture.status });
+  }) as unknown as typeof fetch;
+  const provider = createYahooPriceProvider({ consent: createMemoryYahooConsentStore(true), client: new YahooHttpClient(fetchFn, 20_000, 0) });
   await expect(provider.get(request)).resolves.toMatchObject({ problems: [expect.stringContaining(expected)] });
 });
 

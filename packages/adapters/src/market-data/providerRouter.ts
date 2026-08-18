@@ -29,17 +29,26 @@ export async function firstProviderResult<Request, Result>(
   providers: readonly Provider<Request, Result>[],
   request: Request,
   log: (sourceKey: string, error: unknown) => void = () => undefined,
+  hasProblems: (result: Result) => boolean = () => false,
 ): Promise<ProviderResult<Result> | null> {
   const ordered = [...providers].sort((a, b) => b.priority - a.priority);
+  let problemResult: ProviderResult<Result> | null = null;
   for (const provider of ordered) {
     try {
       const value = await provider.get(request);
-      if (value !== null) return { sourceKey: provider.sourceKey, value };
+      if (value !== null) {
+        const result = { sourceKey: provider.sourceKey, value };
+        if (hasProblems(value)) {
+          problemResult = result;
+          continue;
+        }
+        return result;
+      }
     } catch (error) {
       log(provider.sourceKey, error);
     }
   }
-  return null;
+  return problemResult;
 }
 
 /** Sort cached values without dropping expired values; callers may use them as a last resort. */
@@ -69,7 +78,10 @@ export class MarketDataRouter<PriceRequest, Price, FxRequest, Fx, IdentifierRequ
   ) {}
 
   getPrice(request: PriceRequest): Promise<ProviderResult<Price> | null> {
-    return firstProviderResult(this.providers.price, request, this.log);
+    return firstProviderResult(this.providers.price, request, this.log, (value) => {
+      const problems = (value as { problems?: unknown }).problems;
+      return Array.isArray(problems) && problems.length > 0;
+    });
   }
 
   getFx(request: FxRequest): Promise<ProviderResult<Fx> | null> {

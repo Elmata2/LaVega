@@ -10,7 +10,7 @@ export class YahooHttpClient {
   private crumb: string | null = null;
   private cookie: string | null = null;
   private crumbPromise: Promise<void> | null = null;
-  constructor(private readonly fetchFn: YahooFetch = fetch.bind(globalThis), private readonly timeoutMs = 20_000) {}
+  constructor(private readonly fetchFn: YahooFetch = fetch.bind(globalThis), private readonly timeoutMs = 20_000, private readonly retryBaseMs = RETRY_BASE_MS) {}
 
   defaultHeaders(): Record<string, string> {
     return { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", Accept: "application/json,text/plain,*/*", Referer: "https://finance.yahoo.com/" };
@@ -32,5 +32,5 @@ export class YahooHttpClient {
     return this.crumbPromise;
   }
 
-  private async withRetry<T>(fn: () => Promise<T>): Promise<T> { let error: unknown; for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) { try { return await fn(); } catch (caught) { error = caught; if (attempt === MAX_RETRIES || !RETRYABLE.test(String(caught))) throw caught; await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, RETRY_BASE_MS * 2 ** attempt))); } } throw error; }
+  private async withRetry<T>(fn: () => Promise<T>): Promise<T> { let error: unknown; for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) { try { return await fn(); } catch (caught) { error = caught; if (attempt === MAX_RETRIES || !RETRYABLE.test(String(caught))) throw caught; await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, this.retryBaseMs * 2 ** attempt))); } } throw error; }
 }

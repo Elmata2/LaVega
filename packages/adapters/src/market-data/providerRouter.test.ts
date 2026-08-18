@@ -43,6 +43,28 @@ test("router skips provider errors and continues", async () => {
   expect(log).toHaveBeenCalledWith("broken", expect.any(Error));
 });
 
+test("price lane falls through provider problems to a healthy fallback", async () => {
+  type PriceResult = { bars: Array<{ close: number }>; problems: string[] };
+  const first: Provider<unknown, PriceResult> = { sourceKey: "yahoo", priority: 20, get: async () => ({ bars: [], problems: ["Yahoo blocked"] }) };
+  const fallback: Provider<unknown, PriceResult> = { sourceKey: "fallback", priority: 10, get: async () => ({ bars: [{ close: 100 }], problems: [] }) };
+  const router = new MarketDataRouter<unknown, PriceResult, never, never, never, never>({
+    price: [first, fallback], fx: [], identifier: [],
+  });
+
+  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [{ close: 100 }], problems: [] } });
+});
+
+test("price lane preserves provider problems when all providers fail", async () => {
+  const router = new MarketDataRouter({
+    price: [
+      { sourceKey: "yahoo", priority: 20, get: async () => ({ bars: [], problems: ["Yahoo blocked"] }) },
+      { sourceKey: "fallback", priority: 10, get: async () => ({ bars: [], problems: ["Fallback unavailable"] }) },
+    ], fx: [], identifier: [],
+  });
+
+  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [], problems: ["Fallback unavailable"] } });
+});
+
 test("router supports FX and identifier lanes", async () => {
   const router = new MarketDataRouter({
     price: [],
