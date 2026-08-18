@@ -31,6 +31,7 @@ Per product, tried in order, first success wins, the tier recorded with the valu
 | # | Route | Cost | Measured today |
 |---|---|---|---|
 | 1 | Provider's own page, plain fetch + browser UA | ~free | **101 of 124 products** across 82 URLs |
+| 1b | **The provider's own PDF** — tariff sheet, cardmember agreement, fee document | ~free | **The route nobody looked for, and it dissolves both ceilings.** See "Corrections" below |
 | 2 | Provider's own page via the **Wayback Machine** | ~free | **Proved on Rabobank**: the page that 403s us served 437 kB with a real table — `betaalpas 1,4% koersopslag`, `creditcard 2%`, and the withdrawal rows bank.nl folds away. Snapshots are dated by construction |
 | 3 | **Headless browser in CI** | free CI minutes | For pages whose numbers arrive by JavaScript. Unproven for our cases — see the open question |
 | 4 | Neutral comparison table (bank.nl) | ~free | 12 rows, 7 banks, debit and credit apart, self-dated |
@@ -42,7 +43,13 @@ browser, the minutes are free, and the output is a commit — so every changed f
 reviewable diff. That is the same discipline as the competitor tracker's `state.json`, which is where
 this whole approach comes from.
 
-## The two ceilings, measured rather than assumed
+## The two ceilings — REMOVED 2026-08-18, see Corrections
+
+The section below is kept as written because the reasoning was sound and the conclusion was wrong,
+which is worth being able to re-read. Both ceilings were dissolved by a route neither of us had
+tried: the provider's own PDF.
+
+## The two ceilings, measured rather than assumed (SUPERSEDED)
 
 **ING has no primary route at any tier.** `ing.nl` refuses at the network layer on HTTP/2 *and*
 HTTP/1.1; a browser User-Agent does not help; there is no ICS backdoor (`icscards.nl/ing` is a
@@ -96,3 +103,74 @@ run daily in full. Route 5 is the only one that costs real money, and it covers 
    marketing page, and it has not been searched for properly.
 3. **Raisin's 19 partner banks** were verified on one and assumed for the other 18. Either verify or
    drop the assumption from the watchlist.
+
+
+---
+
+# Corrections — 2026-08-18, after the spikes
+
+Three probes ran: a headless browser, the EU fee documents, and whether conditions are extractable.
+Each finding below was re-verified by hand before being written here.
+
+## Both ceilings were an error of mine, and the same error twice
+
+**ING is not agent-only.** Its tariff sheet is a PDF on `assets.ing.com` — a different host with no
+edge protection. Verified with **no User-Agent at all**: HTTP 200, 174.665 bytes, carrying
+`koersopslag niet-euro 1,40%`, `Vreemde valuta opnemen € 3,50 + 1,40% koersopslag`, and the
+credit-card tiering **with its conditions**: `ING Studenten Creditcard More — in vreemde valuta tot
+€ 500 per creditcardperiode 0,00%, boven € 500 2,00%`. The Wayback index shows that asset URL
+serving 200 since February 2024, so discovery is one-off and refresh is a plain curl.
+
+**American Express is not agent-only either.** The markup is in the Cardmember Agreement PDF, plain
+curl, HTTP 200: `2.6. Transactie in vreemde valuta — Wisselkoersopslag op het omgewisselde bedrag in
+euro. 2,5%`. The earlier sweep grepped marketing HTML for "koersopslag" instead of following the
+legal-documents index into a PDF.
+
+The mistake in both cases was the same: **I tested the HTML host and concluded about the bank.** A
+network-level block on `ing.nl` says nothing about `assets.ing.com`. Generalising from one URL to a
+whole provider is now the third recurring error of this project, after counting CSS percent-signs as
+tariffs and dating a figure by when we received it.
+
+**So the routing rule changes:** before declaring a provider unreachable, look for its PDF. Tariff
+sheets, cardmember agreements and fee documents are legally required, live on unprotected asset
+hosts, are stable across editions, and carry the conditions as well as the rates — which is the half
+that is otherwise hardest to get.
+
+## A live wrong number in the product: Revolut is not 0%
+
+The per-plan pages state that 0% applies only inside a monthly limit:
+
+> Standard: wissellimiet €1.000 per maand, daarna **1%** fair-usage · Plus: €3.000, daarna **0,5%** ·
+> Premium, Metal, Ultra: geen limiet
+
+LaVega currently holds `Revolut betaalpas — fxFeePct 0` and the travel agent ranks it top on that.
+For a traveller spending more than €1.000 in a month, **that recommendation is wrong**, and it is
+wrong in the most damaging direction: a conditional rate presented as unconditional. This is exactly
+what the `conditions` field exists to prevent, and it is now a concrete reason to land it rather than
+a theoretical one.
+
+## Headless is not the same as a browser
+
+Measured on the same machine, same URLs:
+
+| | Cloudflare (Revolut) | ING html host |
+|---|---|---|
+| curl + browser UA | 403 | connection killed |
+| **headless** Chrome / Playwright | **403 — parks on the challenge, never resolves** | ERR_HTTP2_PROTOCOL_ERROR |
+| **headed** real Chrome | **200, real page** | 200, renders |
+
+So "use a browser" is not one option, it is two, and only the visible one gets through — which is
+awkward to schedule and should not be assumed away. Since ING is now solved by its PDF, the only
+thing still wanting a headed browser is Revolut, and its per-plan pages may yet have a PDF too.
+
+**A trap for any future browser scraper:** ING's pages are 95 shadow roots deep.
+`document.body.innerText` returns 0 characters while a shadow-DOM-traversing walk returns 28–34k. A
+scraper reading `innerText` or raw HTML will call the page empty and be wrong.
+
+## Smaller corrections
+
+- ABN AMRO's tariff **index** is a link hub, not a JS-hidden table — the browser proved there is
+  nothing there to render. Its sibling pages carry the real tables.
+- ABN AMRO Direct Sparen was listed unreadable; it reads by plain curl at
+  `/nl/prive/rente/actuele-rente.html` (58 percentage figures). The watchlist URL had gone stale and
+  now 302s to a marketing page — the same stale-URL class as the Amex 404.

@@ -1,5 +1,26 @@
 # LaVega Product Watchlist — Dutch consumer money products
 
+> ## ⚠ Corrected 18 August 2026 — read this before using the routing below
+>
+> Three spikes ran after this sweep and **two products marked unreachable are not**. The routing
+> decisions in this file are stale where they touch ING and American Express.
+>
+> **Look for the provider's PDF before declaring it unreachable.** Tariff sheets, cardmember
+> agreements and fee documents are legally required, sit on unprotected asset hosts, are stable
+> across editions, and carry the *conditions* as well as the rates.
+>
+> | Product | This file says | Verified by hand |
+> |---|---|---|
+> | ING (all cards) | bot-blocked, agent-only | **Plain curl, no User-Agent needed.** `assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf` — 200, 174.665 B, `koersopslag niet-euro 1,40%` plus the credit-card tiering with its conditions |
+> | American Express | no FX markup published anywhere | **Plain curl.** The Cardmember Agreement PDF, §2.6: `Wisselkoersopslag ... 2,5%` |
+> | Revolut | 403, agent-only | Headed Chrome only — **headless parks on the Cloudflare challenge and never resolves** |
+> | ABN AMRO Direct Sparen | unreadable | Reads by plain curl at `/nl/prive/rente/actuele-rente.html`; the URL in this file has gone stale |
+>
+> **And one live data error this sweep did not catch:** Revolut is *not* 0%. Its own per-plan pages
+> say 0% applies only inside a monthly limit — Standard €1.000 then **1%**, Plus €3.000 then **0,5%**.
+> LaVega currently ranks Revolut top on an unconditional 0%. See
+> `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md` for the full corrections.
+
 Sweep of **18 August 2026**. This is a watchlist, **not a price list**: it records *what products exist*,
 *where their terms live*, and *whether we can actually read them*. No rates are collected here as product
 data. Every figure quoted below is evidence that a page is readable and that the number sits **next to the
