@@ -1,3 +1,5 @@
+import { cookieHeaderFromSetCookie } from "./setCookie.js";
+
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1500;
 const RETRYABLE = /429|403|401|502|503|504|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed/i;
@@ -26,7 +28,7 @@ export class YahooHttpClient {
   private async ensureCrumb(): Promise<void> {
     if (this.crumb && this.cookie) return;
     if (this.crumbPromise) return this.crumbPromise;
-    this.crumbPromise = (async () => { try { const cookieResponse = await this.fetchFn("https://fc.yahoo.com/", { headers: this.defaultHeaders(), redirect: "manual" }); const setCookie = cookieResponse.headers.get("set-cookie"); if (!setCookie) throw new Error("Failed to get Yahoo cookie"); this.cookie = setCookie.split(",").map((part) => part.split(";")[0]!.trim()).join("; "); const crumbResponse = await this.fetchFn("https://query2.finance.yahoo.com/v1/test/getcrumb", { headers: { ...this.defaultHeaders(), Cookie: this.cookie } }); if (!crumbResponse.ok) throw new Error(`Failed to get crumb: ${crumbResponse.status}`); this.crumb = await crumbResponse.text(); if (!this.crumb) throw new Error("Empty crumb response"); } catch (error) { this.crumb = null; this.cookie = null; throw error; } finally { this.crumbPromise = null; } })();
+    this.crumbPromise = (async () => { try { const cookieResponse = await this.fetchFn("https://fc.yahoo.com/", { headers: this.defaultHeaders(), redirect: "manual" }); this.cookie = cookieHeaderFromSetCookie(cookieResponse.headers); const crumbResponse = await this.fetchFn("https://query2.finance.yahoo.com/v1/test/getcrumb", { headers: { ...this.defaultHeaders(), Cookie: this.cookie } }); if (!crumbResponse.ok) throw new Error(`Failed to get crumb: ${crumbResponse.status}`); this.crumb = await crumbResponse.text(); if (!this.crumb) throw new Error("Empty crumb response"); } catch (error) { this.crumb = null; this.cookie = null; throw error; } finally { this.crumbPromise = null; } })();
     return this.crumbPromise;
   }
 
