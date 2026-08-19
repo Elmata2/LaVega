@@ -14,7 +14,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-async function createRuntimeApp() {
+export async function createRuntimeApp() {
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) return app;
   const sentry = await import("@sentry/node");

@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "start:docker": "tsx src/docker.ts",
     "build": "tsc -p .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
