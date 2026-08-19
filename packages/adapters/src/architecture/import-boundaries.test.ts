@@ -103,6 +103,11 @@ function isInvestingServerEntry(file: string): boolean {
   return file === "apps/investing-server/src/index.ts";
 }
 
+function isInvestingServerNodeAdapter(file: string, specifier: string): boolean {
+  return file === "apps/investing-server/src/index.ts"
+    && specifier === "./fileCredentialStore.js";
+}
+
 function findInvestingServerNodeImports(modules: SourceModule[]): ImportEdge[] {
   const modulesByFile = new Map(modules.map((module) => [module.file, module]));
   const files = new Set(modulesByFile.keys());
@@ -125,6 +130,9 @@ function findInvestingServerNodeImports(modules: SourceModule[]): ImportEdge[] {
       // The Node server adapter is the only Node entry dependency. Its import
       // is allowed here; request-path modules remain Workers-portable.
       if (isInvestingServerEntry(file) && edge.specifier === "@hono/node-server") continue;
+      if (isInvestingServerNodeAdapter(file, edge.specifier)) {
+        continue;
+      }
       const target = resolveLocalImport(file, edge.specifier, files);
       if (target) queue.push(target);
     }

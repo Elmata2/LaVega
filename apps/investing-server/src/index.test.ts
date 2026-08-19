@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createRuntimeBrokerCredentialSetup } from "./index.js";
-import { createLocalCredentialStore } from "@lavega/adapters";
+import { createFileCredentialStore } from "./fileCredentialStore.js";
 
 function fakeVault(status: "empty" | "locked" | "unlocked") {
   return {
@@ -9,7 +9,7 @@ function fakeVault(status: "empty" | "locked" | "unlocked") {
     unlock: vi.fn(async () => true),
     lock: vi.fn(),
     putCredentials: vi.fn(async () => undefined),
-  } as unknown as ReturnType<typeof createLocalCredentialStore>;
+  } as unknown as ReturnType<typeof createFileCredentialStore>;
 }
 
 test("credential setup creates encrypted vault and stores IBKR credentials", async () => {
