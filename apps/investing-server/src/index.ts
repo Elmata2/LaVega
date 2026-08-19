@@ -1,10 +1,8 @@
-import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { createApp } from "./app.js";
 import { createProblemReporter } from "./observability.js";
 import { buildInvestingDashboard, type Dividend, type Position, type Trade } from "@lavega/core";
 import {
-  createInMemoryPriceStore,
   createFrankfurterFxProvider,
   createIbkrFlexAdapter,
   createLocalCredentialStore,
@@ -17,15 +15,7 @@ import {
 
 export { app };
 
-const port = Number(process.env.PORT) || 8788;
 const LOCAL_TENANT_ID = "local";
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const runtimeApp = await createRuntimeApp();
-  serve({ fetch: runtimeApp.fetch, port, hostname: "0.0.0.0" }, (info) => {
-    console.log(`LaVega investing server listening on 0.0.0.0:${info.port}`);
-  });
-}
 
 function environment(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -65,11 +55,11 @@ export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResu
   };
 }
 
-export type RuntimeAppOptions = { priceStore?: PriceStore };
+export type RuntimeAppOptions = { priceStore: PriceStore };
 
-export async function createRuntimeApp(options: RuntimeAppOptions = {}) {
+export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
-  const priceStore = options.priceStore ?? createInMemoryPriceStore();
+  const priceStore = options.priceStore;
   const fxProvider = createFrankfurterFxProvider();
   let positions: Position[] = [];
   let trades: Trade[] = [];
