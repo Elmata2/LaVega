@@ -79,6 +79,11 @@ function numArg(flag: string, fallback: number): number {
  *  settles its conditions". That is the judgement the whole rung exists for, and
  *  a weekly offline sweep is where paying for it is cheapest. */
 const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || "claude-opus-5";
+/** A HARD CEILING, in dollars, because a projection is not a promise. Mine ran
+ *  2.8x low on the 81-product sweep — slicing cut the input as measured, but the
+ *  fallback made 119 calls for 81 products and output tokens ran double what I
+ *  assumed. An estimate that can be wrong needs a stop, not more confidence. */
+const MAX_USD = Number(process.env.CATALOG_MAX_USD ?? "0") || null;
 /** Slowness is free here, hanging is not: one wedged request must not eat the
  *  Action's 45-minute budget. Generous, because the model is allowed to think. */
 const MODEL_TIMEOUT_MS = 180_000;
@@ -144,6 +149,20 @@ const PRICE: Record<string, { in: number; out: number }> = {
 };
 const SEARCH_PRICE_PER_1000 = 10;
 
+/** Charged AFTER a call, so the ceiling can be crossed by at most one call's worth
+ *  — you cannot know a reply's output tokens before you have it. */
+function stopIfOverBudget(): void {
+  if (!MAX_USD) return;
+  const spent = spendTotalUsd();
+  if (spent < MAX_USD) return;
+  console.error(`\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).`);
+  if (onFatal) {
+    try { onFatal(); } catch (e) { console.error(`  (could not save partial results: ${(e as Error).message})`); }
+  }
+  console.error("Products already read are kept; the rest are untouched. Raise CATALOG_MAX_USD to continue.");
+  process.exit(1);
+}
+
 function recordSpend(model: string, usage: Anthropic.Usage): void {
   const s = spend.get(model) ?? { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 };
   s.calls++;
@@ -155,15 +174,28 @@ function recordSpend(model: string, usage: Anthropic.Usage): void {
   spend.set(model, s);
 }
 
+/** One implementation of the price arithmetic. The ceiling and the report must
+ *  never be able to disagree about what has been spent. */
+function modelUsd(model: string, s: Spend): number {
+  const p = PRICE[model] ?? { in: 0, out: 0 };
+  return (
+    ((s.input + s.cacheWrite * 1.25 + s.cacheRead * 0.1) / 1e6) * p.in +
+    (s.output / 1e6) * p.out +
+    (s.searches / 1000) * SEARCH_PRICE_PER_1000
+  );
+}
+
+function spendTotalUsd(): number {
+  let t = 0;
+  for (const [model, s] of spend) t += modelUsd(model, s);
+  return t;
+}
+
 function spendLines(): string[] {
   const out: string[] = [];
   let total = 0;
   for (const [model, s] of spend) {
-    const p = PRICE[model] ?? { in: 0, out: 0 };
-    const usd =
-      ((s.input + s.cacheWrite * 1.25 + s.cacheRead * 0.1) / 1e6) * p.in +
-      (s.output / 1e6) * p.out +
-      (s.searches / 1000) * SEARCH_PRICE_PER_1000;
+    const usd = modelUsd(model, s);
     total += usd;
     out.push(
       `  ${model.padEnd(16)} ${String(s.calls).padStart(3)} call(s)  ${s.input + s.cacheRead + s.cacheWrite} in / ${s.output} out` +
@@ -442,6 +474,7 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   );
   modelCalls++;
   recordSpend(EXTRACT_MODEL, res.usage);
+  stopIfOverBudget();
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") return null; // the model declined — a real answer
   return parseExtractReply(block.input, req, today);
@@ -676,7 +709,32 @@ function mergeSubset(rows: typeof entries): number {
     ? JSON.parse(readFileSync(CATALOG, "utf8"))
     : { entries: [] };
   const swept = new Set(rows.map((e) => e.id));
-  const merged = [...prev.entries.filter((e) => !swept.has(e.id)), ...rows];
+  // A SWEEP MUST NOT MAKE THE ARTIFACT WORSE. Measured today: a run with no API
+  // key replaced ABN AMRO betaalpas — 1,2% covered, dated 2026-01-01 from its Fee
+  // Information Document — with the regex's 2% (the creditcard's row), refused and
+  // stamped today. Nothing wrong reached the app, because refused figures are not
+  // served, but a good figure was lost to a worse one by a run that simply could
+  // not do its job. The same evidence-ranking already applied to partials WITHIN
+  // a run (keep the best-evidenced, not the highest rung) has to hold ACROSS runs.
+  //
+  // Keep the newcomer when it is covered, or when what stood there was not. Refuse
+  // it when it would demote a covered entry — and say so, because a silent skip
+  // reads as "nothing changed" when something was actively prevented.
+  const byId = new Map(prev.entries.map((e) => [e.id, e]));
+  const kept: string[] = [];
+  const winners = rows.filter((row) => {
+    const before = byId.get(row.id);
+    const wasCovered = !!before?.fields?.fxFeePct && isCovered(before.fields.fxFeePct);
+    const nowCovered = !!row.fields.fxFeePct && isCovered(row.fields.fxFeePct);
+    if (wasCovered && !nowCovered) { kept.push(row.id); return false; }
+    return true;
+  });
+  if (kept.length) {
+    console.log(`  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`);
+  }
+  const wonIds = new Set(winners.map((e) => e.id));
+  const merged = [...prev.entries.filter((e) => !wonIds.has(e.id)), ...winners];
+  void swept;
   const order = Object.keys(state.products);
   merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");

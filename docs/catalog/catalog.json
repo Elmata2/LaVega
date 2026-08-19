@@ -10,7 +10,7 @@
           "route": "agent",
           "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
           "checkedAt": "2026-06-15",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met de Betaalpas in het buitenland bij winkels, tankstations, restaurants, etc. in vreemde valuta (betalingen in euro's € 0,00); volgens noot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag. Hetzelfde percentage (1,40% koersopslag niet-euro Betaalpas) staat vermeld bij ING Go, ING More, ING Extra en ING Max; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
           "conditionsKnown": true
         }
       }
@@ -24,7 +24,7 @@
           "route": "agent",
           "sourceUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
           "checkedAt": "2022-10-01",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met een creditcard bij winkels, tankstations, restaurants, etc. \"In vreemde valuta\" (betalen \"In euro's\" is € 0,00); volgens voetnoot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag, met de wisselkoersen van MasterCard International voor haar creditcards. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
           "conditionsKnown": true
         }
       }
@@ -52,7 +52,7 @@
           "route": "agent",
           "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
           "checkedAt": "2026-01-01",
-          "conditions": null,
+          "conditions": "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop (de koersopslag bij geldopname in vreemde valuta is een aparte regel met eigen tariefklassen)",
           "conditionsKnown": true
         }
       }
@@ -66,7 +66,7 @@
           "route": "agent",
           "sourceUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
           "checkedAt": "2026-08-19",
-          "conditions": null,
+          "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta, die door Mastercard naar euro's worden omgerekend op basis van de Wisselkoers (de door Mastercard vastgestelde wisselkoers vermeerderd met een opslag); de omrekening gebeurt op de datum van de betaling of geldopname. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
           "conditionsKnown": true
         }
       }
@@ -80,7 +80,7 @@
           "route": "agent",
           "sourceUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
           "checkedAt": "2026-08-19",
-          "conditions": null,
+          "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta: deze worden door Mastercard omgerekend naar euro's op basis van de Wisselkoers (de door Mastercard vastgestelde koers vermeerderd met een opslag); de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
           "conditionsKnown": true
         }
       }
@@ -91,10 +91,10 @@
       "fields": {
         "fxFeePct": {
           "value": 1.4,
-          "route": "agent",
-          "sourceUrl": "https://media.rabobank.com/asset/5f815909-c7d5-498a-a1d6-9f954441bd8b/Tarieven-en-limieten-particulier-betalingsverkeer-2026.pdf",
-          "checkedAt": "2026-08-19",
-          "conditions": null,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260423003428id_/https://www.rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden",
+          "checkedAt": "2026-04-23",
+          "conditions": "Geldt bij betalen met je betaalpas in vreemde valuta (in euro's geen extra kosten); dezelfde 1,4% koersopslag staat vermeld bij alle betaalpakketten (Rabo Standaard, Rabo Comfort, Rabo RiantPakket, Rabo Free, Rabo JongerenRekening). Contant geld opnemen in vreemde valuta is een aparte post (bijv. € 3,50 + 1,4% koersopslag).",
           "conditionsKnown": true
         }
       }
@@ -105,10 +105,10 @@
       "fields": {
         "fxFeePct": {
           "value": 2,
-          "route": "agent",
-          "sourceUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
-          "checkedAt": "2026-01-07",
-          "conditions": null,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
+          "checkedAt": "2026-04-12",
+          "conditions": "Geldt voor de RaboCard: \"Betaal je met een andere munt (vreemde valuta) dan de euro, dan betaal je daar iets extra over\" — bij betalen in euro's, ook in het buitenland, zijn er geen extra kosten. Bij opname van contant geld bij een geldautomaat of aan de balie geldt € 4,50 per opname + 2% koersopslag. \"(Online) dienstverleners, banken of winkeliers vragen soms een toeslag bij betalingen of geldopnames met jouw creditcard.\"",
           "conditionsKnown": true
         }
       }
@@ -119,10 +119,10 @@
       "fields": {
         "fxFeePct": {
           "value": 2,
-          "route": "agent",
-          "sourceUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
-          "checkedAt": "2026-01-07",
-          "conditions": null,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260411080707id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard",
+          "checkedAt": "2026-04-11",
+          "conditions": "Geldt alleen als je betaalt \"in een andere muntsoort, dus een vreemde valuta\"; betalingen in euro's, ook in het buitenland, kennen geen extra kosten (\"kosten euro's geen extra kosten\"). Bij geld opnemen in vreemde valuta geldt daarnaast € 4,50 per opname + 2% koersopslag. (Online) dienstverleners, banken of winkeliers kunnen bovendien zelf een toeslag vragen.",
           "conditionsKnown": true
         }
       }
@@ -136,7 +136,7 @@
           "route": "agent",
           "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
           "checkedAt": "2026-02-01",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (in euro is het € 0,00); bij betalen in een andere geldsoort dan de euro worden de wisselkoersen van Mastercard of Visa gebruikt. Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname).",
           "conditionsKnown": true
         }
       }
@@ -164,7 +164,7 @@
           "route": "agent",
           "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
           "checkedAt": "2026-07-01",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met een betaalpas in het buitenland in vreemde valuta (1,4% van het betaalde bedrag); betalen in euro € 0. Voor de omrekening worden de wisselkoersen van Mastercard of Visa gebruikt. Geldt voor ASN Bankrekening, ASN Basisbankrekening, ASN Studentenrekening en ASN Jongerenpakket. Contant geld opnemen in vreemde valuta is een aparte tarief (1,4% + € 3,50 per opname).",
           "conditionsKnown": true
         }
       }
@@ -178,7 +178,7 @@
           "route": "agent",
           "sourceUrl": "https://www.icscards.nl/webdocuments/626/Algemene%20Voorwaarden%20ASN%20Creditcard%20-%2040",
           "checkedAt": "2026-08-19",
-          "conditions": null,
+          "conditions": "Geldt bij betalingen en geldopnames in vreemde valuta, die door Visa (Visa Cards) of Mastercard (Mastercards) worden omgerekend naar euro's op basis van de Wisselkoers; de opslag komt bovenop die Wisselkoers. Voor geldopnames worden daarnaast aparte kosten in rekening gebracht (artikel 12.3).",
           "conditionsKnown": true
         }
       }
@@ -192,7 +192,7 @@
           "route": "agent",
           "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
           "checkedAt": "2026-02-01",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (een andere geldsoort dan de euro); betalen in euro is € 0,00. Plus eventuele lokale kosten bij een betaling. Voor opname van contant geld in vreemde valuta geldt een ander tarief (1,4% + € 3,50 per opname). Omrekening gebeurt met de wisselkoersen van Mastercard (Maestro, Debit Mastercard) of Visa (VPay, Visa Debit).",
           "conditionsKnown": true
         }
       }
@@ -205,8 +205,8 @@
           "value": 2,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20241121084450id_/https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
-          "checkedAt": "2024-11-21",
-          "conditions": null,
+          "checkedAt": "2024-07-01",
+          "conditions": "Geldt bij betalen met de RegioBank Creditcard in vreemde valuta; betalen in euro in Nederland en andere Eurolanden is € 0,00. Voor opname van contant geld in vreemde valuta geldt een ander tarief (4% van het opgenomen bedrag + 2% valutawisselkosten).",
           "conditionsKnown": true
         }
       }
@@ -487,7 +487,7 @@
           "route": "agent",
           "sourceUrl": "https://helpcentre.trading212.com/hc/en-us/articles/17749229128221-Can-I-use-the-card-if-I-travel-abroad",
           "checkedAt": "2026-08-19",
-          "conditions": null,
+          "conditions": "Applies to card payments/transactions: \"All card transactions have 0% FX fee, even if the purchase is in a currency the customer doesn't hold. Other fees may apply.\" The separate \"0.15% FX fee applies only when the customer manually converts money in the app ... It does not apply to card payments.\" Card use abroad is possible only \"as long as the payment is executed within one of the supported countries\".",
           "conditionsKnown": true
         }
       }
@@ -525,8 +525,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Geldt voor een \"Transactie in vreemde valuta\": wisselkoersopslag op het omgewisselde bedrag in euro, d.w.z. \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; bij een transactie die eerst in USD en dan in euro's wordt omgezet brengen wij \"slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\". Deze overeenkomst geldt voor American Express Consumenten Kaarthouders (per maart 2022).",
+          "conditionsKnown": true
         }
       }
     },
@@ -539,8 +539,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; volgens 6.15 geldt de opslag voor 'transacties die niet in euro zijn uitgevoerd', wordt bij omzetting via de VS-dollar slechts eenmaal een wisselkoersopslag in rekening gebracht, en brengen wij geen wisselkoersopslag in rekening wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's heeft omgezet.",
+          "conditionsKnown": true
         }
       }
     },
@@ -553,8 +553,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro, voor transacties (en terugbetalingen) die niet in euro zijn uitgevoerd; bij omrekening via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie vóór verwerking in euro's om te zetten, brengen wij geen wisselkoersopslag in rekening. Geldt volgens de Overeenkomst voor de American Express Consumenten Kaarthouders (per maart 2022).",
+          "conditionsKnown": true
         }
       }
     },
@@ -567,8 +567,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Geldt onder de \"Overeenkomst voor de American Express Consumenten Kaarthouders\" (per maart 2022) voor transacties in vreemde valuta: de wisselkoersopslag geldt \"voor transacties die niet in euro zijn uitgevoerd\" en wordt berekend op het omgewisselde bedrag in euro; bij een transactie in een andere vreemde valuta dan Amerikaanse dollars wordt eerst naar dollars en dan naar euro's omgezet, maar \"brengen wij slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\".",
+          "conditionsKnown": true
         }
       }
     },
@@ -581,8 +581,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, d.w.z. de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht, en als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht",
+          "conditionsKnown": true
         }
       }
     },
@@ -595,8 +595,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta (\"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"); bij transacties in andere valuta dan de Amerikaanse dollar wordt via USD omgerekend maar wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzet voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht. Voorwaarden gelden voor de American Express Consumenten Kaarthouders (overeenkomst per maart 2022).",
+          "conditionsKnown": true
         }
       }
     },
@@ -609,8 +609,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta; geldt volgens 6.15 voor 'transacties die niet in euro zijn uitgevoerd' en wordt slechts eenmaal in rekening gebracht (ook als eerst naar Amerikaanse dollars en dan naar euro's wordt omgezet). Wanneer u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, brengen wij geen wisselkoersopslag in rekening. Dit is de algemene overeenkomst voor American Express Consumenten Kaarthouders; er wordt geen apart tarief voor de Flying Blue Gold Card genoemd.",
+          "conditionsKnown": true
         }
       }
     },
@@ -623,8 +623,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, ofwel \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; geldt onder deze Overeenkomst voor de American Express Consumenten Kaarthouders (niet productspecifiek geprijsd per kaart). Laat u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten voordat deze aan American Express wordt voorgelegd, dan \"zullen wij geen wisselkoersopslag in rekening brengen\".",
+          "conditionsKnown": true
         }
       }
     },
@@ -637,8 +637,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
           "checkedAt": "2023-03-15",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Geldt als \"wisselkoersopslag op het omgewisselde bedrag in euro\" bij een \"Transactie in vreemde valuta\", d.w.z. \"de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd\"; bij een transactie in andere valuta dan USD wordt eerst naar dollars en dan naar euro's omgezet, maar \"wij brengen slechts eenmaal een wisselkoersopslag in rekening\"; laat de kaarthouder een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten, dan \"zullen wij geen wisselkoersopslag in rekening brengen\". Document is de Overeenkomst voor de American Express Business Card per 15 maart 2023.",
+          "conditionsKnown": true
         }
       }
     },
@@ -651,8 +651,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
           "checkedAt": "2023-03-15",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een 'Transactie in vreemde valuta', d.w.z. de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd; geldt onder de Overeenkomst voor de American Express Business Card (per 15 maart 2023). Als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór indiening in euro's omzet, geldt: 'zullen wij geen wisselkoersopslag in rekening brengen'.",
+          "conditionsKnown": true
         }
       }
     },
@@ -665,8 +665,8 @@
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
           "checkedAt": "2023-03-15",
-          "conditions": null,
-          "conditionsKnown": false
+          "conditions": "Geldt volgens deze overeenkomst voor de American Express Business Card: wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd; bij niet-dollartransacties wordt eerst naar Amerikaanse dollars en dan naar euro's omgezet maar slechts eenmaal een wisselkoersopslag in rekening gebracht; als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true
         }
       }
     },
@@ -692,7 +692,16 @@
     {
       "id": "klm-american-express-corporate-card",
       "product": "KLM American Express Corporate Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_KLM_Corporate_Cardmember_TCs_Dec2022.pdf",
+          "checkedAt": "2026-08-19",
+          "conditions": "Verschuldigd wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro; de opslag komt bovenop de American Express-wisselkoers. Wordt de Transactie door een derde (bijvoorbeeld het Kaartaccepterend Bedrijf) vóór indiening omgerekend in Euro's, dan brengen wij geen wisselkoersopslag in rekening. Geldt voor de KLM American Express Corporate Card; contante opnames kennen daarnaast een aparte vergoeding van 3,8%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ics-visa-world-card",

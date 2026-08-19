@@ -132,7 +132,7 @@ describe("buildExtractPrompt", () => {
 });
 
 describe("EXTRACT_TOOL", () => {
-  it("requires the figure, the section that attributes it, and the three fields that read its silence", () => {
+  it("requires the figure, the section that attributes it, and the four fields that read its silence", () => {
     const schema = EXTRACT_TOOL.input_schema as {
       required: string[];
       properties: Record<string, { description: string; enum?: unknown[] }>;
@@ -144,6 +144,7 @@ describe("EXTRACT_TOOL", () => {
       "quote",
       "section",
       "documentKind",
+      "documentScope",
       "capsExpressedElsewhere",
       "unconditionalBasis",
     ]);
@@ -186,6 +187,7 @@ describe("parseExtractReply", () => {
       // "ongeacht het bedrag en het pakket" is the page settling the question, so
       // this survives on a MARKETING page with no cap anywhere in it. Basis
       // "stated" was always allowed and is not narrowed by the new rule.
+      documentScope: null,
       documentKind: "marketing",
       capsExpressedElsewhere: false,
       unconditionalBasis: "stated",
@@ -412,7 +414,8 @@ describe("parseExtractReply", () => {
         conditions: null,
         conditionsKnown: true,
         quote: DEBIT_ROW,
-        documentKind: "tariff-schedule",
+        documentScope: null,
+      documentKind: "tariff-schedule",
         capsExpressedElsewhere: true,
         unconditionalBasis: "exhaustive-document",
       });
@@ -671,5 +674,72 @@ describe("scope is a condition, not an absence of one", () => {
     }, { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX }, "2026-08-19");
     // capsExpressedElsewhere is false, so exhaustiveness proves nothing here.
     expect(got === null || got.conditionsKnown === false).toBe(true);
+  });
+});
+
+/* A SCOPED DOCUMENT CANNOT ESTABLISH UNCONDITIONALITY.
+ *
+ * ABN AMRO's Fee Information Document is headed "Naam van de rekening: BasisPakket
+ * Betalen" and prices the betaalpas at 1,2%; the provider's own page carries an
+ * asterisk saying other pakketten differ. The rate is right for that package and
+ * silent about the rest, so serving it as unconditional hands it to customers it
+ * is wrong for — the Revolut failure wearing a different hat.
+ */
+describe("documentScope", () => {
+  const FID = [
+    "Informatiedocument betreffende de vergoedingen",
+    "Naam van de rekening: BasisPakket Betalen",
+    "Datum: 1 januari 2026",
+    "Betalen met een betaalpas in vreemde valuta   Per keer   € 0,15 en 1,2% valutakoersopslag",
+    "Betalen met een creditcard in vreemde valuta   Per keer   gratis + 2,00% valutakoersopslag",
+    "Geldopname in vreemde valuta tot € 500 per maand 0,00%, daarboven 2,00%",
+  ].join("\n");
+  const req = { product: "ABN AMRO betaalpas", sourceUrl: "https://assets.abnamro.com/f.pdf", text: FID };
+
+  const reply = (over: Record<string, unknown>) => ({
+    fxFeePct: 1.2,
+    conditions: null,
+    conditionsKnown: true,
+    quote: "Betalen met een betaalpas in vreemde valuta   Per keer   € 0,15 en 1,2% valutakoersopslag",
+    section: "Informatiedocument betreffende de vergoedingen",
+    documentKind: "tariff-schedule",
+    documentScope: "BasisPakket Betalen",
+    capsExpressedElsewhere: true,
+    unconditionalBasis: "exhaustive-document",
+    ...over,
+  });
+
+  it("REFUSES a null claim when the document prices only one package", () => {
+    // Every other precondition is satisfied — tariff schedule, caps elsewhere, an
+    // unqualified row — and it must still fail on the scope alone.
+    const got = parseExtractReply(reply({}), req, "2026-08-19");
+    expect(got === null || got.conditionsKnown === false).toBe(true);
+  });
+
+  it("ACCEPTS the same figure when the scope is named in conditions instead", () => {
+    const got = parseExtractReply(reply({
+      conditions: "Geldt voor het BasisPakket Betalen; andere pakketten kennen afwijkende kosten.",
+      unconditionalBasis: null,
+    }), req, "2026-08-19");
+    expect(got).not.toBeNull();
+    expect(got!.conditionsKnown).toBe(true);
+    expect(got!.conditions).toContain("BasisPakket");
+  });
+
+  it("still allows a null claim from a document covering the whole range", () => {
+    const got = parseExtractReply(reply({ documentScope: null }), req, "2026-08-19");
+    expect(got).not.toBeNull();
+    expect(got!.conditionsKnown).toBe(true);
+    expect(got!.conditions).toBeNull();
+  });
+
+  it("treats an empty or whitespace scope as no scope, not as a scope", () => {
+    const got = parseExtractReply(reply({ documentScope: "   " }), req, "2026-08-19");
+    expect(got!.conditionsKnown).toBe(true);
+  });
+
+  it("carries the scope back out, so a reviewer can see what it was read from", () => {
+    const got = parseExtractReply(reply({ conditions: "Geldt voor BasisPakket Betalen.", unconditionalBasis: null }), req, "2026-08-19");
+    expect(got!.documentScope).toBe("BasisPakket Betalen");
   });
 });
