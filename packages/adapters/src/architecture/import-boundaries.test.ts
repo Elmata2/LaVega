@@ -103,9 +103,14 @@ function isInvestingServerEntry(file: string): boolean {
   return file === "apps/investing-server/src/index.ts";
 }
 
+/**
+ * Node-only stores the entry point injects into otherwise portable code. Each
+ * is a default argument, so a Workers build supplies its own implementation.
+ */
+const INVESTING_SERVER_NODE_ADAPTERS = new Set(["./fileCredentialStore.js", "./fileBrokerSyncStateStore.js"]);
+
 function isInvestingServerNodeAdapter(file: string, specifier: string): boolean {
-  return file === "apps/investing-server/src/index.ts"
-    && specifier === "./fileCredentialStore.js";
+  return file === "apps/investing-server/src/index.ts" && INVESTING_SERVER_NODE_ADAPTERS.has(specifier);
 }
 
 function findInvestingServerNodeImports(modules: SourceModule[]): ImportEdge[] {

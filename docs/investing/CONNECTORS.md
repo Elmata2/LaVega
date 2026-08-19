@@ -122,16 +122,32 @@ Trading 212 does have an official public API (`https://docs.trading212.com/api`)
 
 **This corrects a line in `docs/CONTEXT.md`:** "Trading 212 = cashflows only, not securities trades" is true of Trading 212's **CSV export**, but *not* of its API, which exposes real order history via `GET /api/v0/equity/history/orders` (cursor-paginated via `nextPagePath`, similar in shape to the Enable Banking `continuation_key` pattern already in this codebase).
 
-**Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key.
+**Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key. Confirmed against the published spec.
 
-**Sync model: scheduled, automatic, daily.** Deliberately coarse — per-endpoint numeric rate limits are still unconfirmed, so staying daily avoids tripping an unknown ceiling. Revisit the interval once limits are confirmed.
+**Rate limits: confirmed, per endpoint, and tight.** Taken from Trading 212's OpenAPI description ([`api.json`](https://docs.trading212.com/_spec/api.json)); limits apply per account *and* per IP.
+
+| Endpoint | Limit |
+|---|---|
+| `GET /api/v0/equity/history/orders` | 6 req / 1m |
+| `GET /api/v0/equity/history/dividends` | 6 req / 1m |
+| `GET /api/v0/equity/history/transactions` | 6 req / 1m |
+| `GET /api/v0/equity/positions` | 1 req / 1s |
+| `GET /api/v0/equity/account/summary` | 1 req / 5s |
+| `GET /api/v0/equity/metadata/instruments` | 1 req / 50s |
+
+Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (Unix seconds) and `-used`. **Trading 212 does not send `Retry-After`**, so `x-ratelimit-reset` is the only header that says when a window reopens — an adapter that backs off exponentially instead gives up seconds into a 60-second window. The adapter paces itself off `-remaining`/`-reset`, waits out spent windows, and reports a `retryAfter` on `BrokerResult` when it runs out of wait budget so the scheduler can hold off rather than re-run rejected requests.
+
+**Paging:** `limit` defaults to 20 and maxes at 50. Always request 50 — the default costs 2.5x the requests for the same history against a 6-per-minute budget.
+
+**Sync model: scheduled, automatic, daily.** Deliberately coarse, and now also bounded by the confirmed limits above. Sync state (`lastSyncedAt` plus any rate-limit cooldown) is persisted, so a restart does not turn into a fresh full sync.
 
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
 
-**Open items carried into implementation.** None of these change the shape decided above; all three are confirm-on-build:
-- exact positions/holdings endpoint name and fields (referenced in the docs but not confirmed from source)
-- per-endpoint numeric rate limits
-- whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable)
+**Open items carried into implementation.**
+- ~~per-endpoint numeric rate limits~~ — confirmed, see the table above.
+- ~~exact positions/holdings endpoint name~~ — confirmed as `GET /api/v0/equity/positions`, returning a bare `Position[]`.
+- **Response field names are confirmed and the adapter does not match them.** `items` on `GET /api/v0/equity/history/orders` are `HistoricalOrder = { fill: Fill, order: Order }`, not flat rows: the ticker is `order.ticker` / `order.instrument.ticker`, side is `order.side`, price is `fill.price`, timestamp is `fill.filledAt`. `Position` uses `averagePricePaid` (not `averagePrice`) and puts market value under `walletImpact.currentValue`. Against real payloads the adapter therefore drops **every** trade and returns positions with a null average price and market value — silently, with no entry in `problems`. Open: rewrite `mapOrder`/`mapPosition` against the schemas, and decide whether a trade row is per fill or per order (`order.filledValue` is the whole order's value, so per-fill rows would double-count a partially filled order).
+- whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable). The spec does show per-scope 403s (`history:orders`, `portfolio`), so scopes exist; whether a read-only set can be granted is still unconfirmed.
 
 ---
 

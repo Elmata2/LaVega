@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
+import { createMemoryBrokerSyncStateStore } from "@lavega/adapters";
 import { createRuntimeBrokerCredentialSetup, createRuntimeBrokerSync } from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 
@@ -56,7 +57,7 @@ test("runtime broker sync coalesces concurrent runs", async () => {
   let positionRequests = 0;
   const baseUrl = await serve(async (request, response) => {
     await new Promise((resolve) => setTimeout(resolve, 10));
-    if (request.url === "/api/v0/equity/history/orders") {
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) {
       orderRequests += 1;
       return json(response, { items: [{ id: 1, ticker: "AAPL", direction: "BUY", filledQuantity: 1, fillPrice: 10, totalCost: 10, currency: "EUR", dateExecuted: "2026-08-18T10:15:00Z" }] });
     }
@@ -67,7 +68,7 @@ test("runtime broker sync coalesces concurrent runs", async () => {
   const credentials = {
     getCredentials: vi.fn(async (_tenantId: string, broker: string) => broker === "trading212" ? { broker: "trading212", tenantId: "local", token: "token", secret: "secret" } : null),
   } as unknown as ReturnType<typeof createFileCredentialStore>;
-  const sync = createRuntimeBrokerSync(undefined, credentials);
+  const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore());
 
   const [first, second] = await Promise.all([sync(true), sync(true)]);
 

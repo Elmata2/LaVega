@@ -5,13 +5,14 @@ import { buildInvestingDashboard, type Dividend, type Position, type Trade } fro
 import {
   createFrankfurterFxProvider,
   createIbkrFlexAdapter,
-  createMemoryBrokerSyncStateStore,
   createTrading212Adapter,
   syncScheduledBrokers,
+  type BrokerSyncStateStore,
   type PriceStore,
   type ScheduledSyncResult,
 } from "@lavega/adapters";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
 
 export { app };
 
@@ -37,8 +38,11 @@ export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentia
   };
 }
 
-export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createFileCredentialStore()): (force: boolean) => Promise<ScheduledSyncResult> {
-  const state = createMemoryBrokerSyncStateStore();
+export function createRuntimeBrokerSync(
+  onCompleted?: (result: ScheduledSyncResult) => void,
+  credentials = createFileCredentialStore(),
+  state: BrokerSyncStateStore = createFileBrokerSyncStateStore(),
+): (force: boolean) => Promise<ScheduledSyncResult> {
   let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = [

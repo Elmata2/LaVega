@@ -12,8 +12,39 @@ type Trading212Page = { items: Trading212Order[]; nextPagePath?: string };
 type Trading212Positions = Trading212Order[];
 
 const SOURCE = "trading-212";
+const ORDER_HISTORY_PATH = "/api/v0/equity/history/orders";
+const POSITIONS_PATH = "/api/v0/equity/positions";
+/** Provider maximum. The default of 20 costs 2.5x the requests for the same history. */
+const ORDER_HISTORY_PAGE_SIZE = 50;
 const MAX_RATE_LIMIT_RETRIES = 3;
-const MAX_RATE_LIMIT_WAIT_MS = 60_000;
+/** One order-history window is 60s; leave room for a reset timestamp plus clock skew. */
+const MAX_RATE_LIMIT_WAIT_MS = 120_000;
+/** Total time one sync may spend waiting out windows before it returns what it has. */
+const MAX_RATE_LIMIT_TOTAL_WAIT_MS = 300_000;
+const RATE_LIMIT_MARGIN_MS = 1_000;
+
+/** Signals that the provider window, not the request, ended the sync. Carries the cooldown. */
+class Trading212RateLimitError extends Error {
+  readonly retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    super("Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown");
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function headerNumber(response: Response, name: string): number | null {
+  const raw = response.headers.get(name)?.trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Trading 212 publishes `x-ratelimit-reset` as a Unix timestamp in seconds. */
+function resetAtMs(response: Response): number | null {
+  const reset = headerNumber(response, "x-ratelimit-reset");
+  return reset === null ? null : reset * 1_000;
+}
 
 function rateLimitWaitMs(response: Response, retry: number): number {
   const retryAfter = response.headers.get("retry-after")?.trim();
@@ -23,11 +54,52 @@ function rateLimitWaitMs(response: Response, retry: number): number {
     const timestamp = Date.parse(retryAfter);
     if (Number.isFinite(timestamp)) return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
   }
+  // Trading 212 does not document or send Retry-After. `x-ratelimit-reset` is the
+  // only header that states when the window actually reopens; blind exponential
+  // backoff tops out at 7s against a 60s window and always gives up too early.
+  const reset = resetAtMs(response);
+  if (reset !== null) return Math.min(Math.max(0, reset - Date.now()) + RATE_LIMIT_MARGIN_MS, MAX_RATE_LIMIT_WAIT_MS);
   return Math.min(1_000 * (2 ** retry), MAX_RATE_LIMIT_WAIT_MS);
 }
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+type RateLimiter = ReturnType<typeof createRateLimiter>;
+
+/**
+ * Paces requests against the per-endpoint budget Trading 212 reports on every
+ * response, so a sync waits out a spent window instead of spending a request to
+ * discover it is spent.
+ */
+function createRateLimiter() {
+  const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
+  let totalWaitMs = 0;
+
+  const sleep = async (milliseconds: number): Promise<void> => {
+    if (milliseconds <= 0) return;
+    if (totalWaitMs + milliseconds > MAX_RATE_LIMIT_TOTAL_WAIT_MS) throw new Trading212RateLimitError(milliseconds);
+    totalWaitMs += milliseconds;
+    await wait(milliseconds);
+  };
+
+  return {
+    async reserve(path: string): Promise<void> {
+      const budget = budgets.get(path);
+      if (!budget || budget.remaining > 0) return;
+      budgets.delete(path);
+      await sleep(budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
+    },
+    observe(path: string, response: Response): void {
+      if (response.status === 429) return;
+      const remaining = headerNumber(response, "x-ratelimit-remaining");
+      const reset = resetAtMs(response);
+      if (remaining === null || reset === null) return;
+      budgets.set(path, { remaining, resetAtMs: reset });
+    },
+    sleep,
+  };
 }
 
 function value(order: Trading212Order, ...keys: string[]): unknown {
@@ -94,10 +166,10 @@ function mapOrder(order: Trading212Order, entity: string): TradeWithoutId | null
 }
 
 function mapPosition(raw: Trading212Order, entity: string): Position {
-  // The beta docs name this endpoint and fields, but do not publish a stable
-  // response schema. Keep aliases here until a recorded Invest/Stocks ISA
-  // response confirms the exact names. Nested instrument fields are accepted
-  // because some beta responses place ISIN/name below `instrument`.
+  // KNOWN GAP: the published schema names `averagePricePaid` and puts market
+  // value under `walletImpact.currentValue`, so both come back null against a
+  // real payload. The aliases below only cover the shape this adapter was
+  // written against. See docs/investing/CONNECTORS.md, Trading 212 open items.
   const instrument = raw.instrument && typeof raw.instrument === "object" && !Array.isArray(raw.instrument)
     ? raw.instrument as Trading212Order
     : {};
@@ -119,14 +191,20 @@ function mapPosition(raw: Trading212Order, entity: string): Position {
   };
 }
 
-function result(positions: Position[], trades: TradeWithoutId[], problems: string[]): BrokerResult {
-  return { positions, trades, source: SOURCE, problems };
+function result(positions: Position[], trades: TradeWithoutId[], problems: string[], retryAfterMs: number | null): BrokerResult {
+  return {
+    positions,
+    trades,
+    source: SOURCE,
+    problems,
+    ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
+  };
 }
 
-async function page(url: string, config: Trading212Config): Promise<Trading212Page> {
-  // Trading 212 beta docs do not confirm per-endpoint numeric rate limits. Keep
-  // sync bounded to one sequential request per cursor until provider confirms them.
-  const response = await request(url, config);
+async function page(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Page> {
+  // Order history allows 6 requests per minute. `limiter` waits out a spent
+  // window between cursors, so sync stays one sequential request per cursor.
+  const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 request failed with HTTP ${response.status}`);
   const payload: unknown = await response.json();
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
@@ -142,23 +220,26 @@ async function page(url: string, config: Trading212Config): Promise<Trading212Pa
   };
 }
 
-async function request(url: string, config: Trading212Config): Promise<Response> {
+async function request(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Response> {
+  const path = new URL(url).pathname;
   for (let retry = 0; ; retry += 1) {
+    await limiter.reserve(path);
     const response = await fetch(url, {
       headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
     });
-    if (response.status !== 429 || retry >= MAX_RATE_LIMIT_RETRIES) return response;
-    await wait(rateLimitWaitMs(response, retry));
+    limiter.observe(path, response);
+    if (response.status !== 429) return response;
+    if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
+    await limiter.sleep(rateLimitWaitMs(response, retry));
   }
 }
 
-async function positions(url: string, config: Trading212Config): Promise<Trading212Positions> {
-  const response = await request(url, config);
+async function positions(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Positions> {
+  const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
   const payload: unknown = await response.json();
-  // Trading 212 docs reference this endpoint but do not confirm whether beta
-  // returns a bare array or an envelope. Accept both documented possibilities;
-  // reject everything else so a changed payload becomes visible as a problem.
+  // The published schema returns a bare array. The envelope forms are kept as a
+  // tolerated fallback; everything else becomes a visible problem.
   const items = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object"
@@ -188,10 +269,17 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
       const problems: string[] = [];
-      let nextUrl = new URL("/api/v0/equity/history/orders", config.baseUrl).toString();
+      const limiter = createRateLimiter();
+      let retryAfterMs: number | null = null;
+      const noteRateLimit = (error: unknown) => {
+        if (error instanceof Trading212RateLimitError) retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
+      };
+      const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
+      historyUrl.searchParams.set("limit", String(ORDER_HISTORY_PAGE_SIZE));
+      let nextUrl = historyUrl.toString();
       try {
         while (nextUrl) {
-          const current = await page(nextUrl, config);
+          const current = await page(nextUrl, config, limiter);
           for (const order of current.items) {
             try {
               const trade = mapOrder(order, entity);
@@ -205,14 +293,16 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
         }
       } catch (error) {
+        noteRateLimit(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
       }
       try {
         // This equity endpoint is the shared read scope for Trading 212 Invest
         // and Stocks ISA accounts. Multi-currency accounts are outside the
-        // connector contract; no order-capable endpoint is called here.
-        const holdingsUrl = new URL("/api/v0/equity/positions", config.baseUrl).toString();
-        for (const holding of await positions(holdingsUrl, config)) {
+        // connector contract; no order-capable endpoint is called here. It has
+        // its own 1-per-second budget, so it still runs after a history cutoff.
+        const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
+        for (const holding of await positions(holdingsUrl, config, limiter)) {
           try {
             positionsResult.push(mapPosition(holding, entity));
           } catch (error) {
@@ -220,9 +310,10 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           }
         }
       } catch (error) {
+        noteRateLimit(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
       }
-      return result(positionsResult, trades, problems);
+      return result(positionsResult, trades, problems, retryAfterMs);
     },
   };
 }

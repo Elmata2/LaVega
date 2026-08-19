@@ -7,6 +7,12 @@ export type BrokerResult = {
   dividends?: Dividend[];
   source: string;
   problems: string[];
+  /**
+   * ISO timestamp before which the broker refused further requests. Set only
+   * when the provider rate-limited the sync, so the scheduler can hold off
+   * instead of re-running the same rejected requests on the next app open.
+   */
+  retryAfter?: string;
 };
 
 export interface BrokerAccessAdapter {
