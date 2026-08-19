@@ -767,7 +767,7 @@ const ids: string[] = Object.keys(state.products).filter((id) => !only || matche
 const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).length;
 let attemptsMade = 0;
 
-const entries: { id: string; product: string; fields: Partial<Record<CatalogField, CatalogValue>> }[] = [];
+const entries: { id: string; product: string; issuer?: string; kind?: string; fields: Partial<Record<CatalogField, CatalogValue>> }[] = [];
 
 /** THE FIGURE A PRODUCT ANSWERS WITH, whichever question it was asked. Counting
  *  fxFeePct alone made a savings sweep report "covered 0/3" while printing three
@@ -1070,7 +1070,11 @@ for (const id of ids) {
   // uncovered.
   state.products[id].lastReason = reason;
   const field: "fxFeePct" | "interestPct" = savings ? "interestPct" : "fxFeePct";
-  entries.push({ id, product: p.product, fields: value ? { [field]: value } : {} });
+  // The artifact carries the issuer and kind as well as the figure. Without them
+  // it cannot be read on its own — the web app would have to bundle the 117 kB
+  // state file just to learn that "ABN AMRO Direct Sparen" is ABN AMRO's, and a
+  // consumer of a published catalogue should not need our working notes.
+  entries.push({ id, product: p.product, issuer: p.issuer, kind: p.kind, fields: value ? { [field]: value } : {} });
   // The figure and its conditions are printed, not just a tick. --dry writes
   // nothing, so this console line is the ONLY artifact of a dry run, and
   // "✓ ING creditcard  provider-pdf" does not tell you WHICH number it believed —

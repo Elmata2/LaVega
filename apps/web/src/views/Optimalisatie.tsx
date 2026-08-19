@@ -17,6 +17,7 @@ import {
   RATES_AS_OF,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { CATALOGUE_RATES } from "../catalogue-rates";
 import { formatEuro } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -152,7 +153,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
 
   // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
   // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
-  const provider = useMemo(() => createRatesProvider({ url: RATES_URL }), []);
+  const provider = useMemo(() => createRatesProvider({ url: RATES_URL, catalogueRates: CATALOGUE_RATES }), []);
   const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {

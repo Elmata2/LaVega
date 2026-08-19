@@ -4,6 +4,8 @@
     {
       "id": "ing-betaalpas",
       "product": "ING betaalpas",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -18,6 +20,8 @@
     {
       "id": "ing-creditcard",
       "product": "ING creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -32,6 +36,8 @@
     {
       "id": "ing-platinumcard",
       "product": "ING Platinumcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 0,
@@ -46,6 +52,8 @@
     {
       "id": "abn-amro-betaalpas",
       "product": "ABN AMRO betaalpas",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.2,
@@ -60,6 +68,8 @@
     {
       "id": "abn-amro-creditcard",
       "product": "ABN AMRO creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -74,6 +84,8 @@
     {
       "id": "abn-amro-gold-card",
       "product": "ABN AMRO Gold Card",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -88,6 +100,8 @@
     {
       "id": "rabobank-betaalpas",
       "product": "Rabobank betaalpas",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -102,6 +116,8 @@
     {
       "id": "rabobank-creditcard",
       "product": "Rabobank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -116,6 +132,8 @@
     {
       "id": "rabo-goldcard",
       "product": "Rabo GoldCard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -130,6 +148,8 @@
     {
       "id": "sns-betaalpas",
       "product": "SNS betaalpas",
+      "issuer": "ASN Bank N.V. (formerly SNS Bank N.V. / de Volksbank)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -144,6 +164,8 @@
     {
       "id": "sns-creditcard",
       "product": "SNS creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -158,6 +180,8 @@
     {
       "id": "asn-betaalpas",
       "product": "ASN betaalpas",
+      "issuer": "ASN Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -172,6 +196,8 @@
     {
       "id": "asn-creditcard",
       "product": "ASN Creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -186,6 +212,8 @@
     {
       "id": "regiobank-betaalpas",
       "product": "RegioBank betaalpas",
+      "issuer": "ASN Bank N.V. (formerly RegioBank N.V.)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -200,6 +228,8 @@
     {
       "id": "regiobank-creditcard",
       "product": "RegioBank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -214,6 +244,8 @@
     {
       "id": "knab-betaalpas",
       "product": "Knab betaalpas",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
@@ -228,6 +260,8 @@
     {
       "id": "knab-creditcard",
       "product": "Knab creditcard",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -242,6 +276,8 @@
     {
       "id": "triodos-betaalpas",
       "product": "Triodos betaalpas",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1,
@@ -256,6 +292,8 @@
     {
       "id": "bunq-free-betaalpas",
       "product": "bunq Free betaalpas",
+      "issuer": "bunq B.V. (NL banking licence); Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 3,
@@ -270,6 +308,8 @@
     {
       "id": "bunq-core-betaalpas",
       "product": "bunq Core betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -284,6 +324,8 @@
     {
       "id": "bunq-pro-betaalpas",
       "product": "bunq Pro betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -298,6 +340,8 @@
     {
       "id": "bunq-elite-betaalpas",
       "product": "bunq Elite betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -312,6 +356,8 @@
     {
       "id": "bunq-creditcard",
       "product": "bunq creditcard",
+      "issuer": "bunq B.V. (self-issued, Mastercard) — notably NOT ICS",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -326,21 +372,29 @@
     {
       "id": "bunq-termijndeposito",
       "product": "bunq Termijndeposito",
+      "issuer": "bunq B.V.",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "bunq-beleggingsrekening",
       "product": "bunq beleggingsrekening",
+      "issuer": "Ginmon (execution/custody) inside the bunq app",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "bunq-crypto",
       "product": "bunq crypto",
+      "issuer": "Payward Europe Solutions Ltd t/a Kraken (Central Bank of Ireland); staking by Payward Commercial Ltd",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "bunq-free-business-betaalpas",
       "product": "bunq Free Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -355,6 +409,8 @@
     {
       "id": "bunq-core-business-betaalpas",
       "product": "bunq Core Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -369,6 +425,8 @@
     {
       "id": "bunq-pro-business-betaalpas",
       "product": "bunq Pro Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -383,11 +441,15 @@
     {
       "id": "bunq-elite-business-betaalpas",
       "product": "bunq Elite Business betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "revolut-standard-betaalpas",
       "product": "Revolut Standard betaalpas",
+      "issuer": "Revolut Bank UAB (Lithuania), in NL via passport/branch",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1,
@@ -402,6 +464,8 @@
     {
       "id": "revolut-plus-betaalpas",
       "product": "Revolut Plus betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -416,36 +480,50 @@
     {
       "id": "revolut-premium-betaalpas",
       "product": "Revolut Premium betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "revolut-metal-betaalpas",
       "product": "Revolut Metal betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-standard-betaalpas",
       "product": "N26 Standard betaalpas",
+      "issuer": "N26 Bank AG (Germany) — German IBAN even for Dutch residents; Mastercard Debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-smart-betaalpas",
       "product": "N26 Smart betaalpas",
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-go-betaalpas",
       "product": "N26 Go betaalpas",
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-metal-betaalpas",
       "product": "N26 Metal betaalpas",
+      "issuer": "N26 Bank AG; metal Mastercard Debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-instant-savings",
       "product": "N26 Instant Savings",
+      "issuer": "N26 Bank AG; German Deposit Guarantee Scheme",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 0.3,
@@ -460,6 +538,8 @@
     {
       "id": "n26-flexible-cash-fund",
       "product": "N26 flexible cash fund",
+      "issuer": "Fidelity International (fund manager), distributed by N26",
+      "kind": "beleggingsrekening",
       "fields": {
         "interestPct": {
           "value": 2.32,
@@ -474,31 +554,43 @@
     {
       "id": "wise-betaalpas",
       "product": "Wise betaalpas",
+      "issuer": "Wise Europe SA (Belgium) for EEA customers; Visa/Mastercard debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "wise-rente",
       "product": "Wise Rente",
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "wise-aandelen",
       "product": "Wise Aandelen",
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "trade-republic-betaalpas",
       "product": "Trade Republic betaalpas",
+      "issuer": "Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "trade-republic-spaarrekening-rente-op-kassaldo",
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
+      "issuer": "Trade Republic Bank GmbH; funds held at partner banks — 'je krijgt rente van onze partnerbanken'",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "212-card",
       "product": "212 Card",
+      "issuer": "Paynetics (card issuer); NL customers under Trading 212 Markets Ltd (Cyprus) or Trading 212 EU GmbH (Germany)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0,
@@ -513,16 +605,22 @@
     {
       "id": "trading-212-interest-on-cash",
       "product": "Trading 212 interest on cash",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH; cash at third-party banks or in Qualifying Money Market Funds",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "trading-212-beleggingsrekening",
       "product": "Trading 212 beleggingsrekening",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "openbank-betaalpas-r42-betaalpas",
       "product": "Openbank betaalpas (R42 Betaalpas)",
+      "issuer": "Open Bank S.A. (Spain, Santander group) — Spanish IBAN used in NL; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.5,
@@ -537,6 +635,8 @@
     {
       "id": "american-express-blue-card",
       "product": "American Express Blue Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -551,6 +651,8 @@
     {
       "id": "american-express-green-card",
       "product": "American Express Green Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -565,6 +667,8 @@
     {
       "id": "american-express-gold-card",
       "product": "American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -579,6 +683,8 @@
     {
       "id": "american-express-platinum-card",
       "product": "American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -593,6 +699,8 @@
     {
       "id": "flying-blue-american-express-entry-card",
       "product": "Flying Blue - American Express Entry Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -607,6 +715,8 @@
     {
       "id": "flying-blue-american-express-silver-card",
       "product": "Flying Blue - American Express Silver Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -621,6 +731,8 @@
     {
       "id": "flying-blue-american-express-gold-card",
       "product": "Flying Blue - American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -635,6 +747,8 @@
     {
       "id": "flying-blue-american-express-platinum-card",
       "product": "Flying Blue - American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -649,6 +763,8 @@
     {
       "id": "american-express-business-entry-card",
       "product": "American Express Business Entry Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -663,6 +779,8 @@
     {
       "id": "american-express-business-green-card",
       "product": "American Express Business Green Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -677,6 +795,8 @@
     {
       "id": "american-express-business-gold-card",
       "product": "American Express Business Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -691,11 +811,15 @@
     {
       "id": "american-express-corporate-card",
       "product": "American Express Corporate Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {}
     },
     {
       "id": "american-express-corporate-gold-card",
       "product": "American Express Corporate Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -710,6 +834,8 @@
     {
       "id": "klm-american-express-corporate-card",
       "product": "KLM American Express Corporate Card",
+      "issuer": "American Express (self-issued in NL; co-brand with KLM / Flying Blue / bluebiz)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -724,6 +850,8 @@
     {
       "id": "ics-visa-world-card",
       "product": "ICS Visa World Card",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -738,6 +866,8 @@
     {
       "id": "ics-visa-world-card-gold",
       "product": "ICS Visa World Card Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -752,6 +882,8 @@
     {
       "id": "ics-visa-world-card-platinum",
       "product": "ICS Visa World Card Platinum",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -766,6 +898,8 @@
     {
       "id": "ics-visa-world-card-panda",
       "product": "ICS Visa World Card Panda",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary) — co-brand with Wereld Natuur Fonds (WWF)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -780,6 +914,8 @@
     {
       "id": "ics-mastercard-classic",
       "product": "ICS Mastercard Classic",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -794,6 +930,8 @@
     {
       "id": "ics-mastercard-gold",
       "product": "ICS Mastercard Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -808,6 +946,8 @@
     {
       "id": "ics-mastercard-black",
       "product": "ICS Mastercard Black",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -822,6 +962,8 @@
     {
       "id": "ics-visa-world-card-business",
       "product": "ICS Visa World Card Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -836,6 +978,8 @@
     {
       "id": "ics-visa-world-card-business-gold",
       "product": "ICS Visa World Card Business Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -850,6 +994,8 @@
     {
       "id": "ics-mastercard-business",
       "product": "ICS Mastercard Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -864,6 +1010,8 @@
     {
       "id": "ics-mastercard-corporate",
       "product": "ICS Mastercard Corporate",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -878,6 +1026,8 @@
     {
       "id": "anwb-visa-classic-card",
       "product": "ANWB Visa Classic Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -892,6 +1042,8 @@
     {
       "id": "anwb-visa-silver-card",
       "product": "ANWB Visa Silver Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -906,6 +1058,8 @@
     {
       "id": "anwb-visa-gold-card",
       "product": "ANWB Visa Gold Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -920,6 +1074,8 @@
     {
       "id": "crypto-com-prepaid-card-basic-midnight-blue",
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
       "fields": {
         "fxFeePct": {
           "value": 0.2,
@@ -934,6 +1090,8 @@
     {
       "id": "crypto-com-prepaid-card-plus-ruby-steel",
       "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
       "fields": {
         "fxFeePct": {
           "value": 0.2,
@@ -948,6 +1106,8 @@
     {
       "id": "crypto-com-prepaid-card-pro-jade-green-royal-indigo",
       "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
       "fields": {
         "fxFeePct": {
           "value": 0.2,
@@ -962,16 +1122,22 @@
     {
       "id": "crypto-com-prepaid-card-private-icy-white-rose-gold",
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
       "fields": {}
     },
     {
       "id": "crypto-com-prepaid-card-private-obsidian",
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
       "fields": {}
     },
     {
       "id": "nexo-card",
       "product": "Nexo Card",
+      "issuer": "Nexo (dual Credit/Debit mode card; the issuing e-money institution is NOT named anywhere on the page)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 0.2,
@@ -986,6 +1152,8 @@
     {
       "id": "krak-card-kraken",
       "product": "Krak Card (Kraken)",
+      "issuer": "Monavate UAB, Lithuania (EEA); Monavate Ltd in the UK — Mastercard debit",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1,
@@ -1000,6 +1168,8 @@
     {
       "id": "plutus-card",
       "product": "Plutus Card",
+      "issuer": "Plutus (Visa debit, NL IBAN per their marketing; issuing EMI not named on the plans page)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
@@ -1014,21 +1184,29 @@
     {
       "id": "bleap-card",
       "product": "Bleap Card",
+      "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "zeal-card-gnosis-pay-rails",
       "product": "Zeal Card (Gnosis Pay rails)",
+      "issuer": "Monavate Limited (UK, FCA EMI, FRN 901097) with Gnosis Pay Co Ltd — Visa debit",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "gnosis-pay-card-direct-consumer",
       "product": "Gnosis Pay Card (direct consumer)",
+      "issuer": "Gnosis Pay Co Ltd / Monavate Limited",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "bybit-card",
       "product": "Bybit Card",
+      "issuer": "Bybit EU (EUR card for EEA residents); issuing EMI not obtainable",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
@@ -1043,31 +1221,43 @@
     {
       "id": "coinbase-card",
       "product": "Coinbase Card",
+      "issuer": "Coinbase (EEA); issuing EMI not obtainable",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "wirex-card-wirex-one",
       "product": "Wirex Card (Wirex One)",
+      "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "binance-card",
       "product": "Binance Card",
+      "issuer": "Binance (EEA programme, formerly Visa)",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "paysafecard-prepaid-code-paysafewallet",
       "product": "paysafecard (prepaid code / PaysafeWallet)",
+      "issuer": "Paysafe",
+      "kind": "prepaid",
       "fields": {}
     },
     {
       "id": "tria-card",
       "product": "Tria Card",
+      "issuer": "Tria (self-custodial Visa; issuing EMI not stated)",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "bigbank-flexibel-sparen",
       "product": "Bigbank Flexibel Sparen",
+      "issuer": "Bigbank AS (Estonia) — Estonian DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 2,
@@ -1082,6 +1272,8 @@
     {
       "id": "bunq-spaarrekening-massinterest",
       "product": "bunq spaarrekening (MassInterest)",
+      "issuer": "bunq B.V. (NL) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.51,
@@ -1096,6 +1288,8 @@
     {
       "id": "santander-consumer-bank-spaarrekening",
       "product": "Santander Consumer Bank Spaarrekening",
+      "issuer": "Santander Consumer Bank — the page footer shows 'RPR Gent, BTW BE0763.791.559' (Belgian entity) while geld.nl labels the DGS Spanish; the two disagree",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 2.1,
@@ -1110,11 +1304,15 @@
     {
       "id": "garanti-bbva-international-gouden-internet-rekening",
       "product": "Garanti BBVA International Gouden Internet Rekening",
+      "issuer": "Garanti BBVA International N.V. (NL) — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "dhb-bank-saveonlinerekening",
       "product": "DHB Bank S@veOnlinerekening",
+      "issuer": "Demir-Halk Bank (Nederland) N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.85,
@@ -1129,6 +1327,8 @@
     {
       "id": "anadolubank-alfa-slimmer-sparen",
       "product": "Anadolubank Alfa Slimmer Sparen",
+      "issuer": "Anadolubank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.9,
@@ -1143,6 +1343,8 @@
     {
       "id": "scalable-capital-scalable-overnight",
       "product": "Scalable Capital Scalable Overnight",
+      "issuer": "Scalable Capital Bank GmbH (Germany) — German DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 2.5,
@@ -1157,11 +1359,15 @@
     {
       "id": "raisin-spaarrekening-platform-19-partner-banks",
       "product": "Raisin spaarrekening (platform, 19 partner banks)",
+      "issuer": "Raisin GmbH is the platform; the deposit is held by the partner bank (Banca Progetto, Banca CF+, FCM Bank, Inbank, Morrow Bank, Nordax Bank, Renault Bank, Avarda Bank, Lea Bank, BW-Bank, Resurs Bank, Collector, Carrefour Banque S.A, Imprebanca, Izola Bank, EuroExtra, Klarna, Bank B, Alisa Bank)",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "klarna-flex-rekening",
       "product": "Klarna Flex rekening",
+      "issuer": "Klarna Bank AB (Sweden) — Swedish DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.95,
@@ -1176,6 +1382,8 @@
     {
       "id": "ayvens-bank-flexibel-sparen",
       "product": "Ayvens Bank Flexibel Sparen",
+      "issuer": "Ayvens Bank N.V. (formerly LeasePlan Bank, renamed Oct 2024) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.85,
@@ -1190,11 +1398,15 @@
     {
       "id": "argenta-internetspaarrekening",
       "product": "Argenta Internetspaarrekening",
+      "issuer": "Argenta Spaarbank N.V., Dutch branch — Belgian DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "openbank-welkom-spaarrekening",
       "product": "Openbank Welkom Spaarrekening",
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.8,
@@ -1209,6 +1421,8 @@
     {
       "id": "openbank-open-spaarrekening",
       "product": "Openbank Open Spaarrekening",
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.8,
@@ -1223,6 +1437,8 @@
     {
       "id": "yapi-kredi-bank-euro-plus-spaarrekening",
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
+      "issuer": "Yapi Kredi Bank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.8,
@@ -1237,6 +1453,8 @@
     {
       "id": "nibc-spaarrekening",
       "product": "NIBC Spaarrekening",
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.55,
@@ -1251,6 +1469,8 @@
     {
       "id": "nibc-kwartaalspaarrekening",
       "product": "NIBC Kwartaalspaarrekening",
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.6,
@@ -1265,6 +1485,8 @@
     {
       "id": "lloyds-bank-spaarrekening",
       "product": "Lloyds Bank Spaarrekening",
+      "issuer": "Lloyds Bank GmbH — German DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.5,
@@ -1279,6 +1501,8 @@
     {
       "id": "nationale-nederlanden-internetsparen",
       "product": "Nationale-Nederlanden Internetsparen",
+      "issuer": "Nationale-Nederlanden Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.3,
@@ -1293,6 +1517,8 @@
     {
       "id": "centraal-beheer-rentepl-s-rekening",
       "product": "Centraal Beheer RentePlús Rekening",
+      "issuer": "Achmea Bank N.V. (Centraal Beheer) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.5,
@@ -1307,6 +1533,8 @@
     {
       "id": "knab-flexibel-sparen",
       "product": "Knab Flexibel Sparen",
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group) — Austrian DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.25,
@@ -1321,6 +1549,8 @@
     {
       "id": "abn-amro-direct-sparen",
       "product": "ABN AMRO Direct Sparen",
+      "issuer": "ABN AMRO Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.25,
@@ -1335,11 +1565,15 @@
     {
       "id": "ing-oranje-spaarrekening",
       "product": "ING Oranje Spaarrekening",
+      "issuer": "ING Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "rabobank-rabo-spaarrekening",
       "product": "Rabobank Rabo SpaarRekening",
+      "issuer": "Coöperatieve Rabobank U.A. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.5,
@@ -1354,11 +1588,15 @@
     {
       "id": "asn-bank-asn-ideaalsparen",
       "product": "ASN Bank ASN Ideaalsparen",
+      "issuer": "ASN Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "sns-internet-sparen",
       "product": "SNS Internet Sparen",
+      "issuer": "SNS Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.3,
@@ -1373,6 +1611,8 @@
     {
       "id": "regiobank-spaar-op-maat-vrij",
       "product": "RegioBank Spaar-op-Maat Vrij",
+      "issuer": "RegioBank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.3,
@@ -1387,6 +1627,8 @@
     {
       "id": "triodos-bank-internet-sparen",
       "product": "Triodos Bank Internet Sparen",
+      "issuer": "Triodos Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.15,
@@ -1401,6 +1643,8 @@
     {
       "id": "brand-new-day-de-spaarrekening",
       "product": "Brand New Day De Spaarrekening",
+      "issuer": "Brand New Day Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.3,
@@ -1415,6 +1659,8 @@
     {
       "id": "nexent-bank-spaarrekening",
       "product": "Nexent Bank Spaarrekening",
+      "issuer": "Nexent Bank N.V. — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {
         "interestPct": {
           "value": 1.25,
@@ -1429,6 +1675,8 @@
     {
       "id": "revolut-dagelijkse-spaarrekening",
       "product": "Revolut Dagelijkse Spaarrekening",
+      "issuer": "Revolut Bank UAB (Lithuania) — Lithuanian DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {}
     }
   ]
