@@ -5,13 +5,13 @@ import { buildInvestingDashboard, type Dividend, type Position, type Trade } fro
 import {
   createFrankfurterFxProvider,
   createIbkrFlexAdapter,
-  createLocalCredentialStore,
   createMemoryBrokerSyncStateStore,
   createTrading212Adapter,
   syncScheduledBrokers,
   type PriceStore,
   type ScheduledSyncResult,
 } from "@lavega/adapters";
+import { createFileCredentialStore } from "./fileCredentialStore.js";
 
 export { app };
 
@@ -22,7 +22,9 @@ function environment(name: string): string | undefined {
   return value || undefined;
 }
 
-export function createRuntimeBrokerCredentialSetup(credentials: ReturnType<typeof createLocalCredentialStore>) {
+type RuntimeCredentialStore = ReturnType<typeof createFileCredentialStore>;
+
+export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentialStore) {
   return async (input: BrokerCredentialInput): Promise<void> => {
     const status = await credentials.status();
     if (status === "empty") await credentials.setup(input.passphrase);
@@ -35,7 +37,7 @@ export function createRuntimeBrokerCredentialSetup(credentials: ReturnType<typeo
   };
 }
 
-export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createLocalCredentialStore(environment("LAVEGA_VAULT_DB"))): (force: boolean) => Promise<ScheduledSyncResult> {
+export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createFileCredentialStore(environment("LAVEGA_VAULT_FILE") ?? "/data/credentials.json")): (force: boolean) => Promise<ScheduledSyncResult> {
   const state = createMemoryBrokerSyncStateStore();
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = [
@@ -77,7 +79,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   let trades: Trade[] = [];
   let dividends: Dividend[] = [];
   let syncProblems: string[] = [];
-  const credentials = createLocalCredentialStore(environment("LAVEGA_VAULT_DB"));
+  const credentials = createFileCredentialStore(environment("LAVEGA_VAULT_FILE") ?? "/data/credentials.json");
   const brokerSync = createRuntimeBrokerSync((result) => {
     const outcomes = result.outcomes.filter((outcome) => outcome.result !== null);
     positions = outcomes.flatMap((outcome) => outcome.result?.positions ?? []);
