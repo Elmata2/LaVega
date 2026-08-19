@@ -43,6 +43,59 @@ Betalingen in vreemde valuta — 2% koersopslag.
 Contant geld opnemen — 4% van het opgenomen bedrag.
 `;
 
+/** THE ING CASE, reproduced. An exhaustive tariff sheet: the debit row is priced
+ *  with no qualifier, and the sheet PROVES it writes a cap when one exists by
+ *  printing the creditcard's EUR 500 tier two rows down. Silence on the debit row
+ *  is therefore a finding about that row. */
+const TARIFF_CAPPED = `Tarievenwijzer betaalrekening en creditcard — versie 1 juli 2026
+
+Betaalpas
+Betalen in vreemde valuta                                     1,20% koersopslag
+Geld opnemen in vreemde valuta                                1,20% koersopslag + € 3,50 per opname
+
+Creditcard
+Betalen in vreemde valuta tot EUR 500 per creditcardperiode   0,00%
+Betalen in vreemde valuta boven EUR 500                       2,00%
+Overboeking binnen Nederland                                  € 0,00`;
+
+/** THE SAME SHEET with the two capped rows deleted and nothing else changed. Now
+ *  nothing in the document shows that it expresses caps at all, so its silence
+ *  about the debit row proves nothing. This is the fixture that keeps the rule
+ *  honest — derived from the text above rather than retyped, so it cannot drift
+ *  apart from it. */
+const TARIFF_FLAT = TARIFF_CAPPED.split("\n")
+  .filter((l) => !l.includes("EUR 500"))
+  .join("\n");
+
+const DEBIT_ROW = "Betalen in vreemde valuta 1,20% koersopslag";
+
+/** A page that is SELLING. It even states a cap — on the withdrawal row — so it
+ *  passes every text-level test the tariff sheet passes. It is excluded by what
+ *  it IS: a marketing page is not trying to be complete, so its omissions are not
+ *  disclosures. Revolut's page looked exactly this reasonable. */
+const MARKETING = `Wereldpas — betaal overal, zonder verrassingen
+
+Betaal in 150 valuta met 0,5% koersopslag.
+Gratis geld opnemen tot € 500 per maand, daarna 2%.
+Vraag de kaart vandaag aan en ontvang de eerste 3 maanden gratis.`;
+
+/** Revolut's shape, stated as a tariff row: the rate and its ceiling on one line.
+ *  The 0% is real and it is not unconditional, and no claim about the document can
+ *  make it so, because the row itself says otherwise. */
+const REVOLUT_TARIFF = `Revolut Standard — Tarieven
+
+Wisselkoersopslag: 0% tot EUR 1.000 per maand, daarna 1%.
+Geldopname: 5 opnames per maand tot EUR 200 kosteloos.`;
+
+/** Terms that answer the question outright. Note that the sentence contains the
+ *  words 'maximum' and 'pakket' — in order to RULE THEM OUT. That is why basis
+ *  "stated" is judged on what the sentence says and not on whether it mentions
+ *  limits. */
+const TERMS_STATED = `Productvoorwaarden Wereldpas
+
+Artikel 7 Koersopslag
+Wij brengen 1,50% koersopslag in rekening op alle transacties in vreemde valuta, zonder maximum en ongeacht het gekozen pakket.`;
+
 function req(product: string, text: string): ExtractRequest {
   return { product, sourceUrl: "https://example.test/tarieven", text };
 }
@@ -61,20 +114,48 @@ describe("buildExtractPrompt", () => {
     expect(system).toContain("conditionsKnown");
     expect(system).toMatch(/do NOT call the tool/);
   });
+
+  it("teaches what silence about a cap is worth, and that marketing silence is worth nothing", () => {
+    const { system } = buildExtractPrompt(req("ING betaalpas", TARIFF_CAPPED));
+    // The three fields the rule turns on are named and explained, not just listed.
+    for (const field of ["documentKind", "capsExpressedElsewhere", "unconditionalBasis"]) {
+      expect(system).toContain(field);
+    }
+    expect(system).toContain("tariff-schedule");
+    expect(system).toContain("exhaustive-document");
+    // The exclusion has to be stated as an exclusion, since a model that thinks
+    // "this marketing page is thorough enough" is the bug that shipped.
+    expect(system).toMatch(/may NOT use 'exhaustive-document' on a marketing page/);
+    // And the reply must know that guessing here is not rewarded.
+    expect(system).toMatch(/comes back as conditionsKnown false/);
+  });
 });
 
 describe("EXTRACT_TOOL", () => {
-  it("requires the four things plus the section that attributes them", () => {
+  it("requires the figure, the section that attributes it, and the three fields that read its silence", () => {
     const schema = EXTRACT_TOOL.input_schema as {
       required: string[];
-      properties: Record<string, { description: string }>;
+      properties: Record<string, { description: string; enum?: unknown[] }>;
     };
-    expect(schema.required).toEqual(["fxFeePct", "conditions", "conditionsKnown", "quote", "section"]);
+    expect(schema.required).toEqual([
+      "fxFeePct",
+      "conditions",
+      "conditionsKnown",
+      "quote",
+      "section",
+      "documentKind",
+      "capsExpressedElsewhere",
+      "unconditionalBasis",
+    ]);
     // Each field carries its reason, because a schema without one gets filled in
     // carelessly — the descriptions are part of the extractor, not decoration.
     for (const key of schema.required) {
       expect(schema.properties[key].description.length).toBeGreaterThan(60);
     }
+    // Closed sets, so "probably a tariff page" cannot arrive as a free string the
+    // parser then has to interpret.
+    expect(schema.properties.documentKind.enum).toEqual(["tariff-schedule", "terms", "marketing", "other"]);
+    expect(schema.properties.unconditionalBasis.enum).toEqual(["stated", "exhaustive-document", null]);
   });
 });
 
@@ -89,6 +170,9 @@ describe("parseExtractReply", () => {
         quote:
           "Betaal je buiten de eurolanden? Dan brengen we 1,4% koersopslag in rekening over het betaalde bedrag, ongeacht het bedrag en het pakket.",
         section: "Betalen in het buitenland",
+        documentKind: "marketing",
+        capsExpressedElsewhere: false,
+        unconditionalBasis: "stated",
       },
       r,
       SWEEP,
@@ -99,6 +183,12 @@ describe("parseExtractReply", () => {
       conditionsKnown: true,
       quote:
         "Betaal je buiten de eurolanden? Dan brengen we 1,4% koersopslag in rekening over het betaalde bedrag, ongeacht het bedrag en het pakket.",
+      // "ongeacht het bedrag en het pakket" is the page settling the question, so
+      // this survives on a MARKETING page with no cap anywhere in it. Basis
+      // "stated" was always allowed and is not narrowed by the new rule.
+      documentKind: "marketing",
+      capsExpressedElsewhere: false,
+      unconditionalBasis: "stated",
     });
   });
 
@@ -112,6 +202,11 @@ describe("parseExtractReply", () => {
         quote:
           "Wisselen tot € 1.000 per maand tegen de interbancaire koers, 0% wisselkoersopslag; daarboven geldt een fair-usage opslag van 1%.",
         section: "Standard",
+        documentKind: "marketing",
+        capsExpressedElsewhere: true,
+        // Contradictory: a figure with named conditions concluded nothing about
+        // their absence. It is dropped rather than carried into the artifact.
+        unconditionalBasis: "stated",
       },
       r,
       SWEEP,
@@ -120,6 +215,7 @@ describe("parseExtractReply", () => {
     expect(got?.conditionsKnown).toBe(true);
     expect(got?.conditions).toContain("€ 1.000");
     expect(got?.conditions).toContain("1%");
+    expect(got?.unconditionalBasis).toBeNull();
   });
 
   it("carries conditionsKnown FALSE through when the page settles nothing", () => {
@@ -180,6 +276,9 @@ describe("parseExtractReply", () => {
         conditionsKnown: true,
         quote: "Dan brengen we 1,4%   koersopslag\n in rekening over het betaalde bedrag",
         section: "Betalen in het buitenland",
+        documentKind: "marketing",
+        capsExpressedElsewhere: false,
+        unconditionalBasis: "stated",
       },
       r,
       SWEEP,
@@ -283,5 +382,245 @@ describe("parseExtractReply", () => {
     expect(parseExtractReply({ ...base, fxFeePct: "1,4" }, r, SWEEP)).toBeNull();
     expect(parseExtractReply({ ...base, fxFeePct: -1 }, r, SWEEP)).toBeNull();
     expect(parseExtractReply({ ...base, fxFeePct: 350 }, r, SWEEP)).toBeNull();
+  });
+
+  /** THE SILENCE RULE.
+   *
+   *  Nineteen figures were refused for one reason: the source priced the rate and
+   *  never mentioned a cap. That refusal is right on a page that is selling and
+   *  wrong on a document written to enumerate every charge. These tests are the
+   *  boundary between the two, and most of them are the failing side of it — a
+   *  rule that only ever says yes is not a rule. */
+  describe("silence about a cap", () => {
+    /** The reply an honest model gives on the ING sheet. Individual tests bend one
+     *  field at a time so the failure is attributable to that field. */
+    const ING_REPLY = {
+      fxFeePct: 1.2,
+      conditions: null,
+      conditionsKnown: true,
+      quote: DEBIT_ROW,
+      section: "Betaalpas",
+      documentKind: "tariff-schedule",
+      capsExpressedElsewhere: true,
+      unconditionalBasis: "exhaustive-document",
+    };
+
+    it("EARNS null conditions on a tariff schedule that prices a cap elsewhere (the ING case)", () => {
+      const got = parseExtractReply(ING_REPLY, req("ING betaalpas", TARIFF_CAPPED), SWEEP);
+      expect(got).toEqual({
+        value: 1.2,
+        conditions: null,
+        conditionsKnown: true,
+        quote: DEBIT_ROW,
+        documentKind: "tariff-schedule",
+        capsExpressedElsewhere: true,
+        unconditionalBasis: "exhaustive-document",
+      });
+    });
+
+    it("REFUSES the same claim on the same sheet with the capped row removed", () => {
+      // The document no longer demonstrates that it writes caps down, so the
+      // unqualified debit row demonstrates nothing either. This is the test that
+      // keeps the rule from collapsing into "silence means no cap".
+      const got = parseExtractReply(
+        { ...ING_REPLY, capsExpressedElsewhere: false },
+        req("ING betaalpas", TARIFF_FLAT),
+        SWEEP,
+      );
+      expect(got?.value).toBe(1.2);
+      expect(got?.conditionsKnown).toBe(false);
+      expect(got?.unconditionalBasis).toBeNull();
+    });
+
+    it("REFUSES exhaustiveness the reply itself did not claim caps for", () => {
+      // The sheet does print caps, but this reply says it saw none. The rule runs on
+      // what the reply reports, not on what the parser can find for it: a model that
+      // did not notice the EUR 500 tier did not do the reading the rule assumes.
+      const got = parseExtractReply(
+        { ...ING_REPLY, capsExpressedElsewhere: false },
+        req("ING betaalpas", TARIFF_CAPPED),
+        SWEEP,
+      );
+      expect(got?.value).toBe(1.2);
+      expect(got?.conditionsKnown).toBe(false);
+    });
+
+    it("REFUSES a capsExpressedElsewhere the document does not back up", () => {
+      // Same flat sheet, but the reply asserts the caps are there. The assertion is
+      // about this text, so it is checked against this text — otherwise the field
+      // that carries the whole rule is a field the model can simply set to true.
+      const got = parseExtractReply(ING_REPLY, req("ING betaalpas", TARIFF_FLAT), SWEEP);
+      expect(got?.value).toBe(1.2);
+      expect(got?.conditionsKnown).toBe(false);
+      expect(got?.capsExpressedElsewhere).toBe(true); // reported faithfully, just not believed
+    });
+
+    it("does not read a validity date as a cap", () => {
+      // "geldig vanaf 1 juli 2026" is on nearly every tariff sheet and bounds
+      // nothing. A corroboration that accepted it would corroborate everything.
+      const dated = TARIFF_FLAT.replace("versie 1 juli 2026", "geldig vanaf 1 juli 2026");
+      expect(dated).toContain("geldig vanaf");
+      const got = parseExtractReply(ING_REPLY, req("ING betaalpas", dated), SWEEP);
+      expect(got?.value).toBe(1.2);
+      expect(got?.conditionsKnown).toBe(false);
+    });
+
+    it("REFUSES exhaustiveness on a marketing page, whatever else the page contains", () => {
+      // This page states a cap on its withdrawal row, so it passes every text-level
+      // test the tariff sheet passes. Marketing is excluded by KIND: a page that is
+      // selling is not attempting to be complete, so its omissions disclose nothing.
+      const got = parseExtractReply(
+        {
+          fxFeePct: 0.5,
+          conditions: null,
+          conditionsKnown: true,
+          quote: "Betaal in 150 valuta met 0,5% koersopslag.",
+          section: "Wereldpas — betaal overal, zonder verrassingen",
+          documentKind: "marketing",
+          capsExpressedElsewhere: true,
+          unconditionalBasis: "exhaustive-document",
+        },
+        req("Wereldpas", MARKETING),
+        SWEEP,
+      );
+      expect(got?.value).toBe(0.5);
+      expect(got?.conditionsKnown).toBe(false);
+      expect(got?.unconditionalBasis).toBeNull();
+    });
+
+    it("REFUSES exhaustiveness on the ING sheet itself once the kind is marketing or other", () => {
+      // The mirror of the case above: identical text, identical caps, and the rule
+      // still turns on the kind. Nothing about the text can promote a selling page.
+      for (const documentKind of ["marketing", "other"]) {
+        const got = parseExtractReply({ ...ING_REPLY, documentKind }, req("ING betaalpas", TARIFF_CAPPED), SWEEP);
+        expect(got?.conditionsKnown, documentKind).toBe(false);
+      }
+    });
+
+    it("accepts terms as an exhaustive document, since voorwaarden are written to be complete", () => {
+      const got = parseExtractReply(
+        { ...ING_REPLY, documentKind: "terms" },
+        req("ING betaalpas", TARIFF_CAPPED),
+        SWEEP,
+      );
+      expect(got?.conditionsKnown).toBe(true);
+      expect(got?.unconditionalBasis).toBe("exhaustive-document");
+    });
+
+    it("REFUSES exhaustiveness when the kind is missing or unrecognised", () => {
+      for (const documentKind of [undefined, "", "tariff", "TARIFF-SCHEDULE", 3, null]) {
+        const got = parseExtractReply({ ...ING_REPLY, documentKind }, req("ING betaalpas", TARIFF_CAPPED), SWEEP);
+        expect(got?.conditionsKnown, String(documentKind)).toBe(false);
+        expect(got?.documentKind, String(documentKind)).toBeNull();
+      }
+    });
+
+    it("REFUSES a basis it does not recognise, including a truthy one", () => {
+      for (const unconditionalBasis of [undefined, null, "", "assumed", "exhaustive", true, 1]) {
+        const got = parseExtractReply(
+          { ...ING_REPLY, unconditionalBasis },
+          req("ING betaalpas", TARIFF_CAPPED),
+          SWEEP,
+        );
+        expect(got?.conditionsKnown, String(unconditionalBasis)).toBe(false);
+      }
+    });
+
+    it("keeps the Revolut headline out: a row that carries its own ceiling is not unqualified", () => {
+      const r = req("Revolut Standard", REVOLUT_TARIFF);
+      const quote = "Wisselkoersopslag: 0% tot EUR 1.000 per maand, daarna 1%.";
+
+      // Written up properly, the cap goes in conditions and the figure is covered.
+      const honest = parseExtractReply(
+        {
+          fxFeePct: 0,
+          conditions: "0% tot EUR 1.000 per maand, daarna 1%",
+          conditionsKnown: true,
+          quote,
+          section: "Revolut Standard — Tarieven",
+          documentKind: "tariff-schedule",
+          capsExpressedElsewhere: true,
+          unconditionalBasis: null,
+        },
+        r,
+        SWEEP,
+      );
+      expect(honest?.value).toBe(0);
+      expect(honest?.conditionsKnown).toBe(true);
+      expect(honest?.conditions).toContain("EUR 1.000");
+
+      // The shipped bug, dressed in the new field: a real tariff row, caps really
+      // expressed elsewhere on the page, and the 0% claimed as unconditional. The
+      // premise of exhaustiveness is that THIS row carries no qualifier, and this
+      // row plainly does.
+      const bug = parseExtractReply(
+        {
+          fxFeePct: 0,
+          conditions: null,
+          conditionsKnown: true,
+          quote,
+          section: "Revolut Standard — Tarieven",
+          documentKind: "tariff-schedule",
+          capsExpressedElsewhere: true,
+          unconditionalBasis: "exhaustive-document",
+        },
+        r,
+        SWEEP,
+      );
+      expect(bug?.value).toBe(0);
+      expect(bug?.conditionsKnown).toBe(false);
+      expect(bug?.unconditionalBasis).toBeNull();
+    });
+
+    it("takes 'stated' when the document says it outright, with no cap anywhere in it", () => {
+      const got = parseExtractReply(
+        {
+          fxFeePct: 1.5,
+          conditions: null,
+          conditionsKnown: true,
+          quote:
+            "Wij brengen 1,50% koersopslag in rekening op alle transacties in vreemde valuta, zonder maximum en ongeacht het gekozen pakket.",
+          section: "Artikel 7 Koersopslag",
+          documentKind: "terms",
+          capsExpressedElsewhere: false,
+          unconditionalBasis: "stated",
+        },
+        req("Wereldpas", TERMS_STATED),
+        SWEEP,
+      );
+      expect(got?.value).toBe(1.5);
+      expect(got?.conditionsKnown).toBe(true);
+      expect(got?.unconditionalBasis).toBe("stated");
+    });
+
+    it("still refuses null conditions asserted with no basis at all — the old bar, unmoved", () => {
+      const got = parseExtractReply(
+        {
+          fxFeePct: 1,
+          conditions: null,
+          conditionsKnown: true,
+          quote: "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
+          section: "Betaalpas in het buitenland",
+          documentKind: "other",
+          capsExpressedElsewhere: false,
+          unconditionalBasis: null,
+        },
+        req("Triodos betaalpas", TRIODOS),
+        SWEEP,
+      );
+      expect(got?.value).toBe(1);
+      expect(got?.conditionsKnown).toBe(false);
+    });
+
+    it("never promotes conditionsKnown: a reply that says false stays false however well justified", () => {
+      const got = parseExtractReply(
+        { ...ING_REPLY, conditionsKnown: false },
+        req("ING betaalpas", TARIFF_CAPPED),
+        SWEEP,
+      );
+      expect(got?.value).toBe(1.2);
+      expect(got?.conditionsKnown).toBe(false);
+      expect(got?.unconditionalBasis).toBeNull();
+    });
   });
 });
