@@ -1825,9 +1825,9 @@
       "lastValue": 0.2,
       "lastRoute": "agent",
       "lastReason": null,
-      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
       "docKind": "html",
-      "docDate": "2026-07-31",
+      "docDate": "2026-01-01",
       "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with one timing reservation. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residential scope). Quote ver"
     },
     "crypto-com-prepaid-card-pro-jade-green-royal-indigo": {
@@ -1849,9 +1849,9 @@
       "lastValue": 0.2,
       "lastRoute": "agent",
       "lastReason": null,
-      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
       "docKind": "html",
-      "docDate": "2026-07-31",
+      "docDate": "2026-01-01",
       "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with the same timing reservation as the Plus tier. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residen"
     },
     "crypto-com-prepaid-card-private-icy-white-rose-gold": {
@@ -1873,9 +1873,9 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
       "docKind": "html",
-      "docDate": "2026-07-31",
+      "docDate": "2026-01-01",
       "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and this is the strongest of the five because the exemption survives BOTH schedules. Same verified document (200, issuer domain,"
     },
     "crypto-com-prepaid-card-private-obsidian": {
@@ -1897,9 +1897,9 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
       "docKind": "html",
-      "docDate": "2026-07-31",
+      "docDate": "2026-01-01",
       "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on the same basis as Icy White / Rose Gold, and the exemption again survives both schedules. Same verified document (200, issuer "
     },
     "nexo-card": {
@@ -1990,7 +1990,7 @@
       "lastReason": "provider-page: no figure · agent: no figure",
       "docUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
       "docKind": "html",
-      "docDate": "2026-05-25",
+      "docDate": "2026-04-20",
       "docNote": "route-verified 2026-08-19; CONFIRMED as a card-fee/SEPA source, REFUSED as an FX rate - and the claim's own instruction to read it narrowly is correct, so I am upholdi"
     },
     "zeal-card-gnosis-pay-rails": {
@@ -2013,10 +2013,11 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: 403",
-      "docUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+      "docUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
       "docKind": "html",
-      "docDate": "2026-04-27",
-      "docNote": "skeptic-confirmed 2026-08-19; Per-product attribution is clean here because the fee document belongs to the card's operator (Gnosis Pay) and Zeal's own page independently states it"
+      "docDate": "2026-07-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Per-product attribution is clean here because the fee document belongs to the card's operator (Gnosis Pay) and Zeal's own page independently states it",
+      "docFetch": "jina"
     },
     "gnosis-pay-card-direct-consumer": {
       "product": "Gnosis Pay Card (direct consumer)",
@@ -2033,10 +2034,11 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "wayback: no figure · agent: 403",
-      "docUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+      "docUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
       "docKind": "html",
-      "docDate": "2026-06-22",
-      "docNote": "route-verified 2026-08-19; CONFIRMED (help.gnosispay.com/hc/en-us/articles/40288567337876, 'Intermediary Cashback Programme', live via the same API, draft:false). Verb"
+      "docDate": "2026-07-15",
+      "docNote": "route-verified 2026-08-19; CONFIRMED (help.gnosispay.com/hc/en-us/articles/40288567337876, 'Intermediary Cashback Programme', live via the same API, draft:false). Verb",
+      "docFetch": "jina"
     },
     "bybit-card": {
       "product": "Bybit Card",
@@ -2095,7 +2097,8 @@
       "lastReason": "wayback: no figure · agent: no figure",
       "docUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
       "docKind": "html",
-      "docNote": "route-verified 2026-08-19; CONFIRMED as a refusal, and the refusal is the correct call - keep the rate null. help.wirexapp.com/article/wirex-fees-1379 serves HTTP 200 "
+      "docNote": "route-verified 2026-08-19; CONFIRMED as a refusal, and the refusal is the correct call - keep the rate null. help.wirexapp.com/article/wirex-fees-1379 serves HTTP 200 ",
+      "docDate": "2024-01-11"
     },
     "binance-card": {
       "product": "Binance Card",
@@ -2514,7 +2517,8 @@
       "lastReason": "agent: conditions not established",
       "docUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
       "docKind": "html",
-      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I reproduced the 1,50%/1,60% hazard the submission flagged. Fetched today, HTTP 200. Body verbatim: 'Kwartaal­spaarrekening 1,60% spaar"
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I reproduced the 1,50%/1,60% hazard the submission flagged. Fetched today, HTTP 200. Body verbatim: 'Kwartaal­spaarrekening 1,60% spaar",
+      "docDate": "2026-08-04"
     },
     "lloyds-bank-spaarrekening": {
       "product": "Lloyds Bank Spaarrekening",
@@ -2640,7 +2644,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://assets.ing.com/m/164f8ec0df799d44/original/Historische-rentetarieven-particulier-2026.pdf",
+      "docDate": "2026-01-01",
+      "docFetch": "jina"
     },
     "rabobank-rabo-spaarrekening": {
       "product": "Rabobank Rabo SpaarRekening",
@@ -2804,7 +2811,7 @@
       "docUrl": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/",
       "docKind": "html",
       "docFetch": "jina",
-      "docDate": "2026-07-25",
+      "docDate": "2026-07-09",
       "docNote": "skeptic-confirmed 2026-08-19; REFUTED AS SUBMITTED AND CORRECTED — do NOT pin the submitted row. Two failures. (1) The submitted claim that 'the exact per-plan rate is not publishe"
     }
   }

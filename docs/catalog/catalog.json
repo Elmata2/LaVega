@@ -331,9 +331,9 @@
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
-          "checkedAt": "2026-08-19",
-          "conditions": null,
-          "conditionsKnown": false
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION AND THE COLUMN IS THE SCOPE. The sheet is an 8-column plan table (bunq Elite | bunq Pro | bunq Core | bunq Free | bunq Elite Business | bunq Pro Business | bunq Core Business | bunq Free Business) and this quote is the bunq Pro cell of the row labelled 'Kaartbetaling (vreemde valuta)', inside the section headed 'Passen'. NO CAP, NO TIER, NO ALLOWANCE for bunq Pro — and the row itself positively establishes that, because the SAME row does price a cap in two other columns: the bunq Free and bunq Free Business cells carry 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' and the Pro cell does not. A silent Pro cell in a row that demonstrably writes caps where they exist is informative, not merely silent. NOTE ON THE WORDING: 'valutaschommelin gen preventie' is how pdftotext returns the hyphenated cell — the document means 'valutaschommelingen preventie', quoted unfixed per instruction. The 0.5% is a spread added to the Mastercard rate, not a separate line-item fee; the running text on p.18 confirms 'Voor transacties die worden uitgevoerd in andere valuta dan euro, wordt het bedrag van de transactie omgezet naar euro via de Mastercard wisselkoers' and 'Wij kunnen ook valutaschommelingen preventie in rekening brengen voor uw transactie.' Footnote 7 prices the same 0,5% on cash withdrawals needing conversion. bunq issues one card type (Mastercard); there is no separate debit/credit FX row.",
+          "conditionsKnown": true
         }
       }
     },
@@ -400,9 +400,9 @@
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
-          "checkedAt": "2026-08-19",
-          "conditions": "\"Dit geldt voor € ...\" — in de bunq Free / bunq Free Business kolom van de rij Kaartbetaling (vreemde valuta) staat een extra beperking (\"Dit geldt voor € ...\"), waarvan het bedrag in de beschikbare paginatekst is afgekapt",
-          "conditionsKnown": false
+          "checkedAt": "2026-08-03",
+          "conditions": "THIS IS THE CAPPED PLAN AND THE CAP IS THE WHOLE STORY. Column 8 (bunq Free Business) of the row 'Kaartbetaling (vreemde valuta)'. 0.5% applies only to the first € 1000 of foreign-currency card spend per year; above that the fee is 1.5% of the transaction amount — three times higher. Serving 0.5% here without the cap would be the same failure mode as the Revolut 0% miss. The identical cap text sits in the bunq Free (personal) column; the six paid plans (Elite/Pro/Core personal and business) carry the 0.5% cell with NO cap text. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it, and the ZERO-WIDTH SPACE between 'gen preventie' and 'Dit geldt voor' is in the PDF, not added by me.",
+          "conditionsKnown": true
         }
       }
     },
@@ -416,9 +416,9 @@
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
-          "checkedAt": "2026-08-19",
-          "conditions": null,
-          "conditionsKnown": false
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 7 (bunq Core Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, positively established: the same row carries 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate, not a separate fee line.",
+          "conditionsKnown": true
         }
       }
     },
@@ -432,9 +432,9 @@
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
-          "checkedAt": "2026-08-19",
-          "conditions": null,
-          "conditionsKnown": false
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 6 (bunq Pro Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, and that is positively established rather than assumed: the identical row prices 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns, so the document does write the cap where one exists. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it. The 0.5% is a spread inside the Mastercard exchange rate.",
+          "conditionsKnown": true
         }
       }
     },
@@ -443,7 +443,16 @@
       "product": "bunq Elite Business betaalpas",
       "issuer": "bunq B.V.; Mastercard",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 5 (bunq Elite Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. This row previously had NO figure at all in the catalog; the figure is 0.5% and it is the same in every one of the eight columns. NO CAP for this plan, positively established: the same row carries the €1000-per-year cap text in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "revolut-standard-betaalpas",
@@ -496,28 +505,64 @@
       "product": "N26 Standard betaalpas",
       "issuer": "N26 Bank AG (Germany) — German IBAN even for Dutch residents; Mastercard Debit",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the document expresses the 0 as words, not a numeral: the row reads 'Free' + 'Conversion to real exchange rate without foreign currency surcharge'. No '0' appears in the row, so a literal value-in-quote check will fail on this and the other zero-FX findings; the value-in-DOCUMENT and quote-in-document checks both pass. SCOPE: the price list's cover names the countries it governs and the Netherlands is on that list ('Price List applicable to users who register with an address in Belgium, Denmark, Estonia, Finland, Greece, Iceland, Ireland, Latvia, Liechtenstein, Lithuania, Luxembourg, Netherlands, Norway, Poland, Portugal, Slovakia, Slovenia, Sweden, Switzerland'). The 0% is CARD PAYMENTS only. Cash withdrawal in a foreign currency is NOT free on this plan: the separate row 'Mastercard withdrawals at ATMs in other currencies:' gives 'For Business, Current Account, N26 Smart, N26 Business Smart                 1.7% of amount drawn' — the standard N26 account is the 'Current Account' line, so 1.7% applies to Standard. EUR-ATM fair-use is separate again (2 free withdrawals/calendar month, EUR 2.00 each thereafter).",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-smart-betaalpas",
       "product": "N26 Smart betaalpas",
       "issuer": "N26 Bank AG; Mastercard Debit",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL is named on the price list's country cover. The FX row is not plan-differentiated — one row covers all N26 plans. 0% is CARD PAYMENTS only; foreign-currency ATM withdrawals cost 1.7% on Smart: 'For Business, Current Account, N26 Smart, N26                 1.7% of amount drawn'. EUR-ATM fair use on Smart is 3 free withdrawals per calendar month, EUR 2.00 each thereafter. Smart costs '4.90 € per month (membership fee)'.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-go-betaalpas",
       "product": "N26 Go betaalpas",
       "issuer": "N26 Bank AG; Mastercard Debit",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-metal-betaalpas",
       "product": "N26 Metal betaalpas",
       "issuer": "N26 Bank AG; metal Mastercard Debit",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Metal also gets foreign-currency ATM withdrawals free ('For, N26 Go, N26 Business Go, N26 Metal and N26               Free'). EUR-ATM fair use on Metal is 8 free withdrawals per calendar month, EUR 2.00 each thereafter. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-instant-savings",
@@ -586,14 +631,32 @@
       "product": "Trade Republic betaalpas",
       "issuer": "Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+          "checkedAt": "2026-05-11",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. The rate applied is Visa's, not Trade Republic's own: a second entry on the same page reads 'Je profiteert direct van de leidende Visa-wisselkoersen bij uitgaven in het buitenland. We rekenen geen valutawisselvergoedingen.' DCC WARNING published by the issuer itself: 'Betaal altijd in de lokale valuta als je erom wordt gevraagd, anders kunnen verkopers extra valutawisselvergoedingen rekenen.' ATM: free worldwide but only above € 100 per withdrawal — a separate entry states 'Voor opnames onder de €100 € geldt een vergoeding van €1.' Card carries no subscription fee. All Trade Republic card tiers share these terms ('bieden allemaal dezelfde voordelen').",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "trade-republic-spaarrekening-rente-op-kassaldo",
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
       "issuer": "Trade Republic Bank GmbH; funds held at partner banks — 'je krijgt rente van onze partnerbanken'",
       "kind": "spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 3,
+          "route": "agent",
+          "sourceUrl": "https://traderepublic.com/nl-nl/rente/_payload.json",
+          "checkedAt": "2026-07-14",
+          "conditions": "THIS IS A NEW-CUSTOMER PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare. Three hard conditions, all from the issuer: (1) new customers only — a disclaimer on the same page reads 'Aanbieding van 3 % per jaar geldt uitsluitend voor nieuwe klanten, algemene voorwaarden zijn van toepassing'; (2) it must be switched on — 'Activeer 3 % rente op je kassaldo tot €50.000, voor nieuwe klanten'; (3) it is capped at €50.000, above which the rate drops to the ECB deposit facility rate, which the same sentence puts at 2,25 %. Accrued daily, paid monthly, withdrawable any time. The money is not held by Trade Republic: 'Als je het hebt geactiveerd in je app, krijg je rente van onze partnerbanken. Rentes kunnen veranderen.' CONTRADICTION WORTH FLAGGING: elsewhere on the same page a Dutch-branch section claims 'blijf je de volledige ECB-rente ontvangen op je saldo — zonder limiet', and an offer-details card claims 'geen saldolimiet' — the FAQ quoted above is the more specific and more conservative statement, so I used it.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "212-card",
@@ -1109,6 +1172,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Effective 1 October 2026, Ruby tier: non-EUR purchases and ATM transactions within the EU & UK 0.2%; outside the EU & UK no fee up to EUR 400 per calendar month, 2.0% thereafter (until 30 September 2026 Ruby falls under \"Other Card Tiers: No fee\")",
           "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "The two values are the table's two rate columns, headed 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' and 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. For Plus both read 2%, so 2% is the ongoing rate with no legacy first-year uplift. The same 2% appears on crypto.com/nl/cards for Ruby Steel. CAP: the article's other table reads 'Level Up Plan Monthly Spending Cap Eligible for Rewards (USD or the equivalent amount in other fiat currencies) Basic (previously Midnight) N/A Plus (previously Ruby) Prepaid Card: $1,250' — spend above $1,250 per calendar month earns nothing, resetting 00:00:00 UTC on the first of the month. TIER GATE: requires an active Level Up Plus subscription — crypto.com/nl/cards prices Ruby Steel at '€3.99/month or €39.90 yearly (16% off) or €450 12-month CRO staking' — and 'You will be downgraded to the Basic plan if you unlock or unstake your CRO after the holding period, or if you cancel your subscription and your current billing cycle has ended.' PAID IN CRO, not euro, credited to the Token Wallet after each eligible purchase; certain merchant categories, channels and countries are excluded.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1125,6 +1196,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Jade / Indigo tier, effective 1 October 2026: 0.2% applies to non-EUR purchases within the EU &amp; UK; outside the EU &amp; UK there is \"No fee up to EUR 800 per calendar month, 2.0% thereafter\". Until 30 September 2026 Jade/Indigo fall under \"Other Card Tiers: No fee\".",
           "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 3,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "WATCH THE TWO COLUMNS: 3.5% is the first column, 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' — a legacy first-year uplift for cards issued between 6 November 2024 and 1 September 2025. 3% is the second column, 'Spending Reward Rate After Year 1 1 Jan 2026 onwards', and is the ongoing rate; crypto.com/nl/cards independently shows 3% for Jade Green / Royal Indigo. CAP: 'Pro (previously Jade/Indigo) Prepaid Card: $2,500' monthly spend eligible for rewards; crypto.com/nl/cards gives the same cap as '$75' of monthly rewards. TIER GATE: Level Up Pro, priced on crypto.com/nl/cards at '€24.99/month or €249.90 yearly (16% off) or €4,500 12-month CRO staking'; unstaking or cancelling downgrades you to Basic. Paid in CRO to the Token Wallet, not euro.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1133,14 +1212,48 @@
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
       "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
       "kind": "prepaid",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-07-31",
+          "conditions": "THE VALUE IS WRITTEN IN WORDS: 'Other Card Tiers: No fee'. The numerals inside the quote (0.2%, 2.0%, 400, 800) belong to the OTHER tiers and must not be attached to this card — they are quoted precisely because the enumeration is what proves 'Other Card Tiers' means Icy White / Rose Gold / Obsidian. Value 0 is the reading of 'No fee'. WHY THIS TIER IS THE RESIDUAL: the article's own tier table names the tiers as 'Basic (previously Midnight)', 'Plus (previously Ruby)', 'Pro (previously Jade/Indigo)', 'Private (previously Icy/Rose/Obsidian)'. The Effective-1-October-2026 list enumerates Midnight, Ruby, and Jade/Indigo individually and sweeps the rest into 'Other Card Tiers: No fee' — so Private is the no-fee tier. BOTH REGIMES AGREE: the earlier block, 'Foreign Transaction Fee (Till 30 September 2026): Midnight: All non-EUR purchases and ATM transactions will be charged as follows / Other Card Tiers: No fee', also puts Private at no fee. So 0% holds before and after 1 October 2026. This POSITIVELY establishes there is no cap on FX for Private, because the same paragraph writes monthly FX allowances where they exist (EUR 400/month for Ruby, EUR 800/month for Jade/Indigo). SEPARATE CONDITIONS THAT DO BITE, from the same article: ATM is not free — 'ATM Withdrawal: 2% on amounts above the monthly free ATM limit', with the Free ATM limit (Monthly) at €800 for the Icy / Rose Card. Card Max Balance – All Card Tiers: €25,000. POS Purchase Limit – All Card Tiers: Daily €25,000 / Monthly €25,000 / Yearly €250,000. Inactivity €5 per month after 12 months (€6 from 1 October 2026). Document scope: 'Crypto.com Prepaid Visa Card Fees and Limits (Europe – for users with a residential address in Europe)'. Note the document's own caveat: 'This document is a translation of its English version. In case of conflict, the English version shall prevail.'",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 4,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "Second column is the ongoing rate: 5% is 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' (legacy), 4% is 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. crypto.com/nl/cards shows 4% for Icy White / Rose Gold. CAP: 'Private (previously Icy/Rose/Obsidian) Unlimited' monthly spend eligible for rewards. TIER GATE is severe: crypto.com/nl/cards prices Icy White / Rose Gold at '€45,000 12-month CRO staking' — there is no monthly-subscription route to this tier. Paid in CRO to the Token Wallet, not euro. Note also 'Starting 2 November 2025, non-staking card spending rewards of 1% for Icy/Rose Crypto.com cards and 2% for Obsidian prepaid cards issued before 6 November 2024 will no longer be available' — legacy holders who stopped staking now earn nothing.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-private-obsidian",
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
       "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
       "kind": "prepaid",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-07-31",
+          "conditions": "THE VALUE IS WRITTEN IN WORDS: 'Other Card Tiers: No fee'. The numerals in the quote belong to Midnight / Ruby / Jade / Indigo and must not be attached to Obsidian; they are quoted because the enumeration is what proves the residual. The article's tier table names 'Private (previously Icy/Rose/Obsidian)', and the fee list names Midnight, Ruby and Jade/Indigo individually, so Obsidian falls in 'Other Card Tiers'. BOTH REGIMES AGREE: the Till-30-September-2026 block also reads 'Midnight: All non-EUR purchases and ATM transactions will be charged as follows / Other Card Tiers: No fee'. No FX cap for this tier is positively established, because the same paragraph writes monthly FX allowances (EUR 400, EUR 800) where they exist. WHERE OBSIDIAN DIFFERS FROM ICY/ROSE: its Free ATM limit (Monthly) is €1,000 rather than €800 — above that, 'ATM Withdrawal: 2% on amounts above the monthly free ATM limit'. Shared limits: Card Max Balance – All Card Tiers €25,000; POS Purchase Limit – All Card Tiers daily €25,000 / monthly €25,000 / yearly €250,000; ATM withdrawal limit Daily €2,000, Monthly €10,000, Yearly €75,000. Scope: 'Crypto.com Prepaid Visa Card Fees and Limits (Europe – for users with a residential address in Europe)'; 'This document is a translation of its English version. In case of conflict, the English version shall prevail.'",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 5,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "Second column is the ongoing rate: 6.5% is the legacy 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025', 5% is 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. crypto.com/nl/cards shows 5% for Obsidian with rewards cap 'No limit'. TIER GATE: crypto.com/nl/cards prices Obsidian at '€450,000 12-month CRO staking'. Paid in CRO to the Token Wallet, not euro. The 'up to 5%' in the page title 'Crypto.com Visa Card: Earn Up to 5% back on your daily spending' is this tier and this tier only.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nexo-card",
@@ -1195,21 +1308,56 @@
       "product": "Bleap Card",
       "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
       "kind": "crypto",
-      "fields": {}
+      "fields": {
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
+          "checkedAt": "2026-04-20",
+          "conditions": "Default ongoing rate on all eligible purchases, with a fair-usage cap of €500 per transaction and €3,000 per month in transaction value. Everything above 1% is MERCHANT-SPECIFIC and belongs in a per-merchant table, not this field: 'Uber, Bolt 3%' and 'Just Eat, Deliveroo, Uber Eats, Glovo, Bolt Food 3%' (each €50 per transaction, €500/month), and 20% on named subscriptions with tight value caps — Netflix €20/month, YouTube Premium €20/month, Amazon Prime €10/month, ChatGPT €30/month, Gemini €20/month, Claude €250/year, Disney+ €200/year, Steam €80/year, PlayStation Plus €220/year, Xbox Game Pass €30/month, Nintendo Switch Online €80/year. EXPIRED PROMO: the row 'Restaurants & supermarkets (promo until 31 May 2026) 2%' has lapsed as of today — do not serve it. EXCLUSIONS are extensive: cash/quasi-cash, stored-value loads, financial institutions, securities, insurance, gambling, taxes and fines, government services, utilities, postal, gift shops, software and IT services (5734, 7372), professional services, charities, hospitals, art dealers, business services. Payments routed through Curve earn nothing even on a Bleap card.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "zeal-card-gnosis-pay-rails",
       "product": "Zeal Card (Gnosis Pay rails)",
       "issuer": "Monavate Limited (UK, FCA EMI, FRN 901097) with Gnosis Pay Co Ltd — Visa debit",
       "kind": "crypto",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+          "checkedAt": "2026-04-27",
+          "conditions": "SCOPE — READ BEFORE SERVING. This document is GNOSIS PAY'S, and it talks about 'your Gnosis Pay Card' throughout. It never mentions Zeal. Zeal runs on Gnosis Pay rails but publishes nothing of its own (zeal.app has no fee page), so this is evidence about the rails, not proof that Zeal passes them through unmarked. See askUserInstead. On the rails themselves: no added FX fee, Visa's rate applied at purchase, and the issuer's own advice is 'When travelling, always select the local currency at payment terminals for better rates.' Spending is 1:1 against stablecoin ('a €10 purchase = 10 EURe'). ATM is NOT free past a small allowance: 'You can make up to 5 free ATM withdrawals per month or withdraw up to 200 EURe/GBPe/USDCe—whichever comes first' then '2% fee per additional withdrawal'; daily ATM cap 500, single 250. Daily spend cap 8,000, single transaction 5,000. Card replacement 4.99. No gas fees on card transactions. WORDING CAVEAT — the 0 is written as 'No added fees'; no numeral appears.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+          "checkedAt": "2026-07-15",
+          "conditions": "Zeal runs no cashback programme of its own — it rides Gnosis Pay rails and inherits the Gnosis Pay tiers, so the figure and every condition are the Gnosis Pay ones. zeal.app footnote 3 states it explicitly: 'The cashback program is managed by Gnosis Pay. Rewards are paid in GNO, a digital currency, on the Gnosis Chain. To be eligible for cashback, you must hold GNO in your Gnosis Pay card Safe. The amount of cashback you earn is determined by the amount of GNO you hold. Cashback rates are subject to change and may vary by program.' TEMPORARY: the programme is 'active until 30 September 2026'. ENTRY TIER needs ≥0.1 GNO held in the Gnosis Pay Card Safe (nothing below that), capped at $250 eligible weekly spend, no rollover. Ladder: 1 GNO → 2%, 10 GNO → 3%, 100 GNO → 4%, plus 1% with the OG NFT. Paid weekly in GNO. zeal.app's own meta description advertises 'up to 4% cashback with Zeal' — that is the top base tier (100 GNO), not the entry rate, and must not be carried into this field.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "gnosis-pay-card-direct-consumer",
       "product": "Gnosis Pay Card (direct consumer)",
       "issuer": "Gnosis Pay Co Ltd / Monavate Limited",
       "kind": "crypto",
-      "fields": {}
+      "fields": {
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+          "checkedAt": "2026-07-15",
+          "conditions": "TEMPORARY PROGRAMME — this is the dominant caveat: 'This article details the Gnosis Pay interim cashback programme, starting on the 9 November 2025 and active until 30 September 2026 (previously it was the 31st January and 31st March).' After 30 September 2026 'new partner-led incentive programmes will be introduced'; the 1% is not guaranteed past that date, six weeks out. ENTRY TIER requires holding at least 0.1 GNO in the Gnosis Pay Card Safe — below 0.1 GNO there is no cashback at all — and at 0.1 GNO the maximum weekly spend eligible for cashback is $250, with 'No rollover: unused cap doesn't carry over.' The rest of the ladder: 1 GNO → 2% ($375/week), 10 GNO → 3% ($500/week), 100 GNO → 4% ($1250/week); the further +1% (to the advertised 'up to 5%') needs the OG NFT as well as ≥0.1 GNO. PAID WEEKLY IN GNO to the Safe, not euro; holdings are measured as 'Lowest GNO amount within the snapshot period', Sunday→Saturday, paid the following Thursday. INELIGIBLE: ATM withdrawals and cash advances, bank/wallet top-ups (Revolut, Wise, PayPal), investments, interest and insurance premiums, taxes/fines/government charges, postal services, donations, utilities, direct technology services and software, and any transaction routed through Curve.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bybit-card",
@@ -1239,7 +1387,16 @@
       "product": "Wirex Card (Wirex One)",
       "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
       "kind": "crypto",
-      "fields": {}
+      "fields": {
+        "cashbackPct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+          "checkedAt": "2024-01-11",
+          "conditions": "Standard plan, Entry tier — the free tier: 'The Standard plan is the most basic X-tras subscription plan, and it is available to all Wirex users for free.' The article's summary table confirms it across all eight tiers: 'WXT Lock 0 150,000 0 250,00 750,000 0 1.5m 7.5m' against 'Cryptoback™ 0.5% 1% 1% 2% 3% 4% 6% 8%'. PAID IN CRYPTO (Cryptoback™), not euro. Everything above 0.5% costs money or locked tokens: Standard Enhanced needs 150,000 WXT locked for 180 days → 1%; Premium is '€9.99, or €102 annually' → 1% entry, 2% with 250,000 WXT, 3% with 750,000 WXT; Elite is '€29.99 monthly or €306 annually' → 4% entry, 6% with 1,500,000 WXT, 8% with 7,500,000 WXT. No cap on the cashback is stated anywhere in this article — that is a gap in the source, not a confirmed absence of a cap. STALENESS WARNING: this is much the oldest figure in the lane; the article's own metadata gives updatedAt 2024-01-11, more than two and a half years ago, and Wirex has restructured its EEA card issuing since (the catalogue itself records the previous issuer UAB PayrNet as defunct with no current EEA issuer stated). Re-check before serving.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "binance-card",
@@ -1494,9 +1651,9 @@
           "value": 1.6,
           "route": "agent",
           "sourceUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
-          "checkedAt": "2026-08-19",
-          "conditions": "\"1,60% spaarrente\" is opgebouwd uit een \"Variabele basisrente van 1,20% + variabele bonusrente van 0,40%\". \"Basisrente wordt maandelijks bijgeschreven en de bonusrente één keer per kwartaal.\" De bonusrente geldt niet onvoorwaardelijk: \"Als je spaart met de Kwartaalspaarrekening ontvang je altijd een basisrente over je spaargeld. Over het geld dat een volledig kwartaal op je rekening staat, krijg je daarbovenop een bonusrente.\" Geld dat er geen volledig kwartaal staat, levert dus alleen de basisrente van 1,20% op. Beide rentes zijn variabel. \"Geen minimum inleg en geen kosten\". Depositogarantiestelsel tot € 100.000,-. Het document toont wel een sectie \"Kwartaalspaar- en bonusrente\" (mogelijk met rentestaffels/saldogrenzen), maar die tabel ontbreekt in de aangeleverde tekst, dus eventuele saldobanden en opnamevoorwaarden zijn niet vast te stellen. Opnamevoorwaarden niet vermeld.",
-          "conditionsKnown": false
+          "checkedAt": "2026-08-04",
+          "conditions": "1,60% IS A SUM AND ONLY THE 1,20% HALF IS UNCONDITIONAL. The rate is 'Variabele basisrente van 1,20% + variabele bonusrente van 0,40%'. The bonus is quarter-gated: 'De basisrente wordt maandelijks uitbetaald. De bonusrente ontvang je aan het einde van ieder kalenderkwartaal (1 januari, 1 april, 1 juli en 1 oktober). Om de bonusrente te ontvangen, moet je spaargeld vóór de eerste dag van het nieuwe kwartaal op je rekening staan.' Money deposited mid-quarter earns 1,20% for that quarter, not 1,60%. Both components are variable. No minimum deposit, no account fee, no tiering by balance ('Iedereen ontvangt bij ons dezelfde variabele basisrente en bonusrente, ongeacht de hoogte van het spaarbedrag. Het genoemde rentepercentage is nominaal op jaarbasis'). Dutch DGS. STALE-TITLE TRAP: this same page's HTML <title> still says 'Kwartaalspaarrekening | 1,50% rente' — a regex over the page title would report 1,50%. The body and the separate /sparen/spaarrentes table both say 1,60%, so the title is the stale one.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1585,7 +1742,16 @@
       "product": "ING Oranje Spaarrekening",
       "issuer": "ING Bank N.V. — Dutch DGS",
       "kind": "spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://assets.ing.com/m/164f8ec0df799d44/original/Historische-rentetarieven-particulier-2026.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "TIERED — 1,25% is the FIRST BAND ONLY and the rate FALLS above it. The single Oranje Spaarrekening row in this document, Ingangsdatum 1 januari 2026, reads across: Saldo t/m €10.000 → 1,25%; Saldo boven €10.000 t/m €100.000 → 1,00%; Saldo boven €100.000 t/m €250.000 → 1,00%; Saldo boven €250.000 t/m €1.000.000 → 1,00%; Saldo boven €1.000.000 → 0,00%. Serving 1,25% unqualified would overstate the rate for every balance above €10.000. PACKAGE UPSELL, which is the trap on this product: ING's live rates page (same API, pageUrl=/nl/particulier/sparen/renteberekening-op-je-spaarrekening) adds 'De extra rente geldt vanaf 10 juni 2026 voor klanten met een ING Extra of ING Max betaalpakket. Over het saldo t/m €10.000 op de Oranje Spaarrekening ontvangen deze klanten tot 1,75% rente (1,25% + 0,50%) met ING Extra en tot 2,25% rente (1,25% + 1,00%) met ING Max.' — the arithmetic independently confirms 1,25% is the base. A higher ING number in the wild is that paid-package boost, not the base rate, and it evaporates on package change: 'Bij wijziging of beëindiging van het betaalpakket vervalt deze extra rente'. MECHANICS: 'De rente op de Oranje Spaarrekening (inclusief eventuele extra rente) is variabel en op jaarbasis.' 'Op je Oranje Spaarrekening wordt de rente berekend door het saldo van de verschillende Spaardoelen bij elkaar op te tellen.' Interest is credited only ONCE A YEAR, on 1 January, per Spaardoel. Daily accrual: actuele rentepercentage / 365 (366 in a leap year) × saldo. DOCUMENT'S OWN CAVEAT: 'Aan dit overzicht kunnen geen rechten worden ontleend. De rentepercentages in dit historisch overzicht zijn op jaarbasis.' DO NOT CROSS-READ THE NEIGHBOURING TABLES: 1,60% on the same page belongs to Groei Groter Rekening (a children's account) and 3,00% to TWIN — both are separate products, not Oranje Spaarrekening bands.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "rabobank-rabo-spaarrekening",
@@ -1704,7 +1870,16 @@
       "product": "Revolut Dagelijkse Spaarrekening",
       "issuer": "Revolut Bank UAB (Lithuania) — Lithuanian DGS per geld.nl",
       "kind": "spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/",
+          "checkedAt": "2026-07-09",
+          "conditions": "TIERED AND PLAN-DEPENDENT — 2.00% is the headline band only. The Deposit Information Sheet's 'Interest rate, for EUR savings' row reads: 'Standard: 2.00% p.a (per annum) up to EUR 2,500 / 1.00% p.a. (per annum) for excess amounts over EUR 2,500'; 'Plus:' identical; 'Premium: 2.00% p.a (per annum) up to EUR 2,500 / 1.50% p.a. (per annum) for excess amounts over EUR 2,500'; 'Metal: 2.00% p.a. (per annum)' flat; 'Ultra: 2.50% p.a. (per annum) up to EUR 100.000 / 2,00% p.a. (per annum) for excess amounts over EUR 100.000'. So on the free Standard plan a balance over EUR 2,500 earns 1.00%, not 2.00%. Interest type is 'Variable'; Revolut may cut it with 15 calendar days' notice and raise it immediately. Calculated daily on the balance and paid daily. USD savings are a different table (Standard 1,50%). Deposit protection is Lithuanian (VšĮ 'Indėlių ir investicijų draudimas'), EUR 100,000 per depositor, and the sheet warns 'Deposits in excess of EUR 100,000 are not covered or protected'. Product cap EUR 5,000,000 across all Revolut savings in the same currency.",
+          "conditionsKnown": true
+        }
+      }
     }
   ]
 }
