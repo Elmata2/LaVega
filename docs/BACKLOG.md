@@ -456,3 +456,52 @@ Shape: find-or-create the workflow by name → create the Header Auth credential
 token → activate → read the production webhook URL back → store URL and token locally → pull the
 queue on open and on a timer. The workflow JSON ships inside the web bundle, so the repo stays the
 source of truth for what gets pushed.
+
+---
+
+## Idea 2026-08-19 — a browser extension that spends the points you already have
+
+His ask: when he is about to buy something in a browser, LaVega should already know which of his
+cards or points balances makes that purchase cheapest, and say so at the moment it matters rather
+than in a tab he has to remember to open.
+
+Why it belongs in LaVega rather than being a separate toy: the catalogue is the missing half of
+this. An extension that says "use card X" is guessing; an extension backed by 124 products with
+per-product FX surcharge, cashback and points value — each carrying its source and date — is
+answering. The Punten tab already holds his balances, `packages/core/src/returns.ts` already ranks
+accounts by what a spend actually returns, and travel.ts already prices a journey across transfer,
+convert, card fee and cashback. The extension is a new SURFACE on work that exists, not new logic.
+
+**The posture problem, and it is the whole design.** Everything LaVega has built rests on the user's
+financial data never leaving the device: the vault is encrypted locally, the LLM proxy redacts
+before it sends, and no logo is ever fetched at runtime because a logo request tells that server who
+the user banks with. A browser extension inverts the risk: it sees the pages he shops on. So the
+rules it has to satisfy before it ships:
+
+  - it reads the merchant and the amount from the page, and NOTHING else — no page contents, no
+    form fields, no cookies, no browsing history;
+  - it holds no balances of its own. It asks the LaVega tab (or a local port) and renders the
+    answer; the vault stays where it is;
+  - it never phones home. If a recommendation needs a figure the catalogue does not have, it says
+    "onbekend" rather than looking it up over the network mid-checkout;
+  - it is opt-in per site, and off by default — the same shape as every other agent here.
+
+**Why it needs the catalogue finished first, and how much.** A recommendation is only as good as the
+figure under it, and the honest state today is 20 of 124 covered. An extension that fires on every
+checkout with mostly-unknown terms would be worse than nothing: it would either stay silent (and
+feel broken) or fill gaps with defaults, which is the one thing this project refuses everywhere
+else. So this waits on coverage, and the first version should cover only what the user HOLDS —
+which is a handful of products, all of which can be covered properly.
+
+**Points are the harder half.** An FX surcharge is a percentage in a tariff document. The value of a
+point is not: it depends on what you redeem it for, and Amex Membership Rewards transferred to
+Flying Blue is worth a different amount per point than the same balance spent in the Amex shop.
+The Punten tab deliberately dropped the word "indicatief" and now tracks balances only, leaving
+valuation to chat and web search. An extension that prints "this costs 4.200 punten, worth EUR 42"
+re-introduces exactly the invented precision that was removed. So v1 shows the BALANCE and the
+transfer routes, not a euro figure, unless the redemption rate is itself sourced and dated.
+
+Shape, smallest first: a Manifest V3 extension, content script reading only merchant + total,
+messaging a local endpoint the running LaVega tab exposes, and a popup that ranks his own cards by
+(cashback − FX surcharge) for that merchant's currency, each row carrying its source date. No
+points euro-valuation, no autofill, no checkout interception.
