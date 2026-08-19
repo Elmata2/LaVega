@@ -1,4 +1,4 @@
-import type { Position, TradeSide, TradeWithoutId } from "@lavega/core";
+import { LOCAL_TENANT_ID, type Position, type TradeSide, type TradeWithoutId } from "@lavega/core";
 import type { BrokerAccessAdapter, BrokerResult } from "../BrokerAccessAdapter.js";
 
 export type Trading212Config = {
@@ -56,6 +56,7 @@ function mapOrder(order: Trading212Order, entity: string): TradeWithoutId {
   const amount = nullableNumber(value(order, "totalCost", "filledValue", "value", "amount"));
   const commission = nullableNumber(value(order, "fees", "commission"));
   return {
+    tenantId: LOCAL_TENANT_ID,
     entity,
     date: date(value(order, "dateExecuted", "executedAt", "fillDate", "dateCreated", "createdAt")),
     symbol,
@@ -83,6 +84,7 @@ function mapPosition(raw: Trading212Order, entity: string): Position {
   const symbol = String(get("ticker", "symbol") ?? "");
   if (!symbol) throw new Error("Trading 212 position symbol is missing");
   return {
+    tenantId: LOCAL_TENANT_ID,
     entity,
     symbol,
     ...(typeof get("isin") === "string" ? { isin: get("isin") as string } : {}),

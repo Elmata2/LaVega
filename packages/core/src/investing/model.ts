@@ -1,6 +1,7 @@
 /** A broker-reported holding at statement time. Monetary values use the
  * instrument currency and quantities use broker units. */
 export type Position = {
+  tenantId: string;
   entity: string;
   symbol: string;
   isin?: string;
@@ -15,6 +16,7 @@ export type Position = {
 
 /** Daily closing price used by investing-side portfolio calculations. */
 export type PriceBar = {
+  tenantId: string;
   symbol: string;
   date: string;
   close: number;
@@ -26,6 +28,7 @@ export type TradeSide = "buy" | "sell" | "other";
 /** A broker-reported execution. `amount` and `commission` use currency. */
 export type Trade = {
   id: string;
+  tenantId: string;
   entity: string;
   date: string;
   symbol: string;

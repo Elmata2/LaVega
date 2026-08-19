@@ -6,7 +6,7 @@ const DEFAULT_DB_NAME = "lavega-prices";
 const DB_VERSION = 1;
 const STORE_NAME = "prices";
 
-type StoredPriceBar = PriceBar & { tenantId: string };
+type StoredPriceBar = PriceBar;
 
 function openPriceDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -26,7 +26,7 @@ export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore 
       const index = db.transaction(STORE_NAME).store.index("tenant-symbol-date");
       const rows = await index.getAll(IDBKeyRange.bound([LOCAL_TENANT_ID, symbol, from], [LOCAL_TENANT_ID, symbol, to]));
       db.close();
-      return rows.map(({ tenantId: _tenantId, ...bar }) => bar);
+      return rows;
     },
     async lastDate(symbol) {
       const db = await openPriceDb(dbName);

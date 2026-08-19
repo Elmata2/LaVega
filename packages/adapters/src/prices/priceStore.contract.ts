@@ -3,10 +3,10 @@ import type { PriceBar } from "@lavega/core";
 import type { PriceStore } from "./PriceStore.js";
 
 const bars: PriceBar[] = [
-  { symbol: "AAA", date: "2026-01-01", close: 10, currency: "EUR" },
-  { symbol: "AAA", date: "2026-01-02", close: 11, currency: "EUR" },
-  { symbol: "AAA", date: "2026-01-03", close: 12, currency: "EUR" },
-  { symbol: "BBB", date: "2026-01-02", close: 20, currency: "USD" },
+  { tenantId: "local", symbol: "AAA", date: "2026-01-01", close: 10, currency: "EUR" },
+  { tenantId: "local", symbol: "AAA", date: "2026-01-02", close: 11, currency: "EUR" },
+  { tenantId: "local", symbol: "AAA", date: "2026-01-03", close: 12, currency: "EUR" },
+  { tenantId: "local", symbol: "BBB", date: "2026-01-02", close: 20, currency: "USD" },
 ];
 
 export function registerPriceStoreContract(name: string, createStore: () => PriceStore): void {

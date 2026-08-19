@@ -1,4 +1,4 @@
-import type { Position, TradeSide } from "@lavega/core";
+import { LOCAL_TENANT_ID, type Position, type TradeSide } from "@lavega/core";
 import type { TradeWithoutId } from "@lavega/core";
 
 type Attributes = Record<string, string>;
@@ -76,6 +76,7 @@ function parsePosition(attrs: Attributes, entity: string): Position {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
   return {
+    tenantId: LOCAL_TENANT_ID,
     entity,
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
@@ -94,6 +95,7 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
   if (!symbol) throw new Error("IBKR Flex Trade symbol is missing");
   const brokerTradeId = first(attrs, "transactionID", "tradeID", "tradeId");
   return {
+    tenantId: LOCAL_TENANT_ID,
     entity,
     date: date(first(attrs, "tradeDate", "dateTime", "date"), "trade date"),
     symbol,

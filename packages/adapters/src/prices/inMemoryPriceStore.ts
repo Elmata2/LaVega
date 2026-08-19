@@ -1,7 +1,7 @@
 import { LOCAL_TENANT_ID, type PriceBar } from "@lavega/core";
 import type { PriceStore } from "./PriceStore.js";
 
-type StoredPriceBar = PriceBar & { tenantId: string };
+type StoredPriceBar = PriceBar;
 
 /** Local fake for tests; mirrors local tenant stamping used by IndexedDB. */
 export function createInMemoryPriceStore(): PriceStore {
@@ -14,7 +14,7 @@ export function createInMemoryPriceStore(): PriceStore {
       return localRows(symbol)
         .filter((row) => row.date >= from && row.date <= to)
         .sort((a, b) => a.date.localeCompare(b.date))
-        .map(({ tenantId: _tenantId, ...bar }) => bar);
+        .map((bar) => bar);
     },
     async lastDate(symbol) {
       const dates = localRows(symbol).map((row) => row.date).sort();
