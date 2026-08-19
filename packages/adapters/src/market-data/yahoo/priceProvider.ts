@@ -1,16 +1,13 @@
 import { LOCAL_TENANT_ID, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
-import { createStorageYahooConsentStore, type YahooConsentStore } from "./disclosure.js";
 import { loadYahooPriceHistory } from "./history.js";
 import type { YahooHttpClient } from "./http.js";
 
 export type YahooPriceRequest = { ticker: string; exchange: string; symbol: string; currency: string; from?: string; to?: string; today?: string };
 export type PriceProviderResult = { bars: PriceBar[]; problems: string[] };
 
-export function createYahooPriceProvider(input: { consent?: YahooConsentStore; client?: YahooHttpClient; today?: () => string } = {}): Provider<YahooPriceRequest, PriceProviderResult> {
-  const consent = input.consent ?? createStorageYahooConsentStore();
+export function createYahooPriceProvider(input: { client?: YahooHttpClient; today?: () => string } = {}): Provider<YahooPriceRequest, PriceProviderResult> {
   return { sourceKey: "yahoo", priority: 10, async get(request) {
-    if (!consent.hasConsent()) return { bars: [], problems: ["Yahoo Finance disclosure must be accepted before prices can be fetched"] };
     try {
       const points = await loadYahooPriceHistory({ ticker: request.ticker, exchange: request.exchange, from: request.from, to: request.to ?? request.today ?? (input.today ?? currentDate)(), interval: "1d", client: input.client });
       return { bars: points.flatMap((point) => point.close == null ? [] : [{ tenantId: LOCAL_TENANT_ID, symbol: request.symbol, date: point.date, close: point.close, currency: request.currency }]), problems: [] };

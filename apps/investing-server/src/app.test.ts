@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
-import { createInMemoryPriceStore, createMemoryYahooConsentStore, createYahooPriceProvider } from "@lavega/adapters";
+import { createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
 
@@ -33,57 +33,21 @@ test("dashboard route reports read-model failures without inventing values", asy
   expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
 });
 
-test("price sync requires server-readable consent before outbound requests", async () => {
+test("price sync uses Yahoo Finance without a browser consent gate", async () => {
   const fetchJsonWithCrumb = vi.fn();
   const investingApp = createApp({
     store: createInMemoryPriceStore(),
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
   });
   const init = { method: "POST", body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }), headers: { "content-type": "application/json" } } as const;
-  const blocked = await investingApp.request("/api/prices/sync", init);
-  expect(blocked.status).toBe(412);
-  expect(fetchJsonWithCrumb).not.toHaveBeenCalled();
-  expect((await (await investingApp.request("/api/market-data/consent")).json()).accepted).toBe(false);
-  const consentResponse = await investingApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
-  expect(consentResponse.headers.get("set-cookie")).toBeNull();
-  expect((await (await investingApp.request("/api/market-data/consent")).json()).accepted).toBe(true);
-});
-
-test("persistent consent store keeps accepted installation across app instances", async () => {
-  const consentStore = createMemoryYahooConsentStore();
-  const firstApp = createApp({ consentStore });
-  await firstApp.request("/api/market-data/consent", { method: "POST", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
-
-  const secondApp = createApp({ consentStore });
-  const response = await secondApp.request("/api/market-data/consent");
+  const response = await investingApp.request("/api/prices/sync", init);
   expect(response.status).toBe(200);
-  expect((await response.json()).accepted).toBe(true);
-});
-
-test("fresh app does not trust consent cookie from an earlier installation", async () => {
-  const freshApp = createApp({ provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb: vi.fn() } as never }) });
-  const response = await freshApp.request("/api/prices/sync", {
-    method: "POST",
-    headers: { cookie: "lavega-yahoo-consent=accepted", "content-type": "application/json" },
-    body: JSON.stringify({ symbols: [] }),
-  });
-  expect(response.status).toBe(412);
-});
-
-test("fresh app accepts explicit browser consent header, not legacy cookie", async () => {
-  const freshApp = createApp({ provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb: vi.fn() } as never }) });
-  const response = await freshApp.request("/api/prices/sync", {
-    method: "POST",
-    headers: { "x-lavega-yahoo-consent": "accepted", "content-type": "application/json" },
-    body: JSON.stringify({ symbols: [] }),
-  });
-  expect(response.status).toBe(200);
+  expect(fetchJsonWithCrumb).toHaveBeenCalled();
 });
 
 test("router problems reach HTTP response unchanged", async () => {
-  const consentStore = createMemoryYahooConsentStore(true);
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: ["Yahoo Finance rate-limited price request"] }) };
-  const investingApp = createApp({ consentStore, provider: provider as never });
+  const investingApp = createApp({ provider: provider as never });
   const response = await investingApp.request("/api/prices/sync", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -128,7 +92,7 @@ test("market-data routes expose FX and identifier lanes", async () => {
 test("price sync resolves ISIN before asking price provider", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
   const identifierProvider = { sourceKey: "openfigi", priority: 10, get: vi.fn().mockResolvedValue({ match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" }, problems: [] }) };
-  const investingApp = createApp({ consentStore: createMemoryYahooConsentStore(true), provider: provider as never, identifierProvider: identifierProvider as never });
+  const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never });
   await investingApp.request("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: [{ isin: "NL0010273215", currency: "EUR" }] }) });
   expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
   expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
@@ -141,6 +105,13 @@ test("broker sync route forwards force and keeps problems in response", async ()
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ outcomes: [{ status: "synced" }], problems: ["ibkr: unavailable"] });
   expect(brokerSync).toHaveBeenCalledWith(true);
+});
+
+test("broker sync route converts unexpected failures into a useful response", async () => {
+  const investingApp = createApp({ brokerSync: vi.fn().mockRejectedValue(new Error("adapter failed")) });
+  const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ outcomes: [], problems: ["Broker synchronization failed"] });
 });
 
 test("broker sync logs every returned problem with context and redacts secrets", async () => {

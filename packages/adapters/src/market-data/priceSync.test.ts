@@ -1,6 +1,5 @@
 import { expect, test, vi } from "vitest";
 import { MarketDataRouter } from "./providerRouter.js";
-import { createMemoryYahooConsentStore } from "./yahoo/disclosure.js";
 import { blockedYahooFixture } from "./yahoo/__fixtures__/blocked.js";
 import { rateLimitedYahooFixture } from "./yahoo/__fixtures__/rate-limited.js";
 import { createYahooPriceProvider, type PriceProviderResult, type YahooPriceRequest } from "./yahoo/priceProvider.js";
@@ -14,13 +13,9 @@ function router(provider: ReturnType<typeof createYahooPriceProvider>) {
   return new MarketDataRouter<YahooPriceRequest, PriceProviderResult, never, never, never, never>({ price: [provider], fx: [], identifier: [] });
 }
 
-test("does not call Yahoo before consent, then keeps consent for later calls", async () => {
+test("calls Yahoo directly without a consent gate", async () => {
   const fetchJsonWithCrumb = vi.fn(async () => ({ chart: { result: [] } }));
-  const consent = createMemoryYahooConsentStore();
-  const provider = createYahooPriceProvider({ consent, client: { fetchJsonWithCrumb } as never });
-  await expect(provider.get(request)).resolves.toMatchObject({ problems: [expect.stringContaining("disclosure")] });
-  expect(fetchJsonWithCrumb).not.toHaveBeenCalled();
-  consent.recordConsent();
+  const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
   await provider.get(request);
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
 });
@@ -44,7 +39,7 @@ test.each([
     if (target.includes("getcrumb")) return new Response("crumb");
     return new Response(fixture.body, { status: fixture.status });
   }) as unknown as typeof fetch;
-  const provider = createYahooPriceProvider({ consent: createMemoryYahooConsentStore(true), client: new YahooHttpClient(fetchFn, 20_000, 0) });
+  const provider = createYahooPriceProvider({ client: new YahooHttpClient(fetchFn, 20_000, 0) });
   await expect(provider.get(request)).resolves.toMatchObject({ problems: [expect.stringContaining(expected)] });
 });
 
@@ -56,7 +51,7 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
     return { chart: { result: [{ timestamp: [start], indicators: { quote: [{ close: [100] }] } }] } };
   }) } as never;
   const store = createInMemoryPriceStore();
-  const provider = createYahooPriceProvider({ consent: createMemoryYahooConsentStore(true), client });
+  const provider = createYahooPriceProvider({ client });
   const r = router(provider);
   await expect(syncPrices({ store, router: r, request: { ...request, today: "2026-01-01" } })).resolves.toMatchObject({ problems: [], fetched: true });
   await expect(syncPrices({ store, router: r, request: { ...request, today: "2026-01-02" } })).resolves.toMatchObject({ problems: [], fetched: true });

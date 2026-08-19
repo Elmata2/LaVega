@@ -4,19 +4,12 @@ import type { InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 
-const YAHOO_FINANCE_CONSENT_HEADER = "x-lavega-yahoo-consent";
-const YAHOO_DISCLOSURE_STORAGE_KEY = "lavega.yahoo-finance-disclosure.v1";
-const YAHOO_CONSENT_EVENT = "lavega:yahoo-consent";
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
-const hasSeenYahooFinanceDisclosure = () => { try { return localStorage.getItem(YAHOO_DISCLOSURE_STORAGE_KEY) === "seen"; } catch { return false; } };
-const markYahooFinanceDisclosureSeen = () => { try { localStorage.setItem(YAHOO_DISCLOSURE_STORAGE_KEY, "seen"); } catch { /* unavailable storage is non-fatal */ } };
 
 type Health = { ok: boolean; service: string };
-type Consent = { accepted: boolean; disclosure: string };
 type DashboardState =
   | { status: "loading" }
   | { status: "ready"; data: InvestingDashboardData }
@@ -77,57 +70,33 @@ function PositionList({ positions }: { positions: InvestingDashboardData["positi
   return <div className="space-y-5"><ul aria-label="Posities" className="divide-y divide-border rounded-card border border-border"><li className="grid grid-cols-[1fr_auto] gap-4 bg-secondary/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Positie</span><span>Hoeveelheid</span></li>{positions.map((position) => <li key={`${position.symbol}-${position.entity}`} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4"><Link to={`/positions/${encodeURIComponent(position.symbol)}`} className="min-w-0 font-semibold text-primary hover:underline"><span className="block truncate">{position.description ?? position.symbol}</span><span className="block text-xs font-normal text-muted-foreground">{position.symbol} · {position.entity}</span></Link><span className="text-right text-sm tabular-nums">{position.quantity} {position.currency}</span></li>)}</ul></div>;
 }
 
-export function YahooDisclosure() {
-  const [consent, setConsent] = useState<Consent | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/market-data/consent", { headers: hasSeenYahooFinanceDisclosure() ? { [YAHOO_FINANCE_CONSENT_HEADER]: "accepted" } : undefined }).then(async (response) => { const status = await response.json() as Consent; return hasSeenYahooFinanceDisclosure() ? { ...status, accepted: true } : status; }).then(setConsent).catch(() => setProblem("Kan toestemmingsstatus niet laden.")); }, []);
-  async function accept() {
-    setBusy(true); setProblem(null);
-    try {
-      const response = await fetch("/api/market-data/consent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
-      if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
-      markYahooFinanceDisclosureSeen();
-      setConsent((current) => current ? { ...current, accepted: true } : current);
-      window.dispatchEvent(new Event(YAHOO_CONSENT_EVENT));
-    } catch (reason) { setProblem(reason instanceof Error ? reason.message : "Toestemming opslaan mislukt."); }
-    finally { setBusy(false); }
-  }
-  if (consent?.accepted) return null;
-  return <Card role="dialog" aria-labelledby="yahoo-disclosure-title" className="border-primary/20 bg-secondary/40"><CardHeader><p className="text-sm font-medium text-primary">Eerst even dit</p><CardTitle id="yahoo-disclosure-title">Prijsdata van Yahoo Finance</CardTitle></CardHeader><CardContent className="space-y-4"><p className="max-w-2xl text-sm leading-6 text-muted-foreground">{consent?.disclosure ?? "Yahoo Finance is niet officieel. De dienst kan zonder waarschuwing stoppen of verzoeken beperken. LaVega gebruikt Yahoo alleen voor lokaal of zelf gehost persoonlijk gebruik."}</p><p className="text-sm font-semibold">Accepteer deze melding voordat LaVega prijsdata opvraagt.</p>{problem && <p role="alert" className="text-sm text-negative">{problem}</p>}<Button type="button" onClick={accept} disabled={busy || !consent}>{busy ? "Opslaan…" : "Ik begrijp het en ga akkoord"}</Button></CardContent></Card>;
-}
-
 function AppOpenSync() {
   const [problems, setProblems] = useState<string[]>([]);
   useEffect(() => {
     let current = true;
-    const run = async (refreshPrices = false) => {
+    const run = async () => {
       try {
         const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
         const brokerResult = await brokerResponse.json() as { problems?: string[] };
         const nextProblems = [...(brokerResult.problems ?? [])];
-        if (refreshPrices || hasSeenYahooFinanceDisclosure()) {
-          const dashboard = await fetchDashboard();
+        const dashboard = await fetchDashboard();
           type PriceSyncSymbol = { symbol: string; currency: string; isin?: string; ticker?: string; exchange?: string; backfillFrom?: string };
           const symbols: PriceSyncSymbol[] = dashboard.positions
             .map((position) => position.isin
               ? { symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }
               : { symbol: position.symbol, ticker: position.symbol, exchange: "UNKNOWN", currency: position.currency, backfillFrom: position.asOf });
           symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
-          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json", ...(hasSeenYahooFinanceDisclosure() ? { [YAHOO_FINANCE_CONSENT_HEADER]: "accepted" } : {}) }, body: JSON.stringify({ symbols }) });
+          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
           if (priceResponse.ok) {
             const priceResult = await priceResponse.json() as { problems?: string[] };
             nextProblems.push(...(priceResult.problems ?? []));
             window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
           }
-        }
         if (current) setProblems(nextProblems);
       } catch { if (current) setProblems(["Brokersynchronisatie mislukt."]); }
     };
     void run();
-    const onConsent = () => { void run(true); };
-    window.addEventListener(YAHOO_CONSENT_EVENT, onConsent);
-    return () => { current = false; window.removeEventListener(YAHOO_CONSENT_EVENT, onConsent); };
+    return () => { current = false; };
   }, []);
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
@@ -159,7 +128,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><YahooDisclosure /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} broker={state.data.allocation.broker} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} broker={state.data.allocation.broker} /></div><PositionList positions={state.data.positions} /></>}</div>;
 }
 
 function Positions() {

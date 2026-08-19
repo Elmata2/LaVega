@@ -26,7 +26,6 @@ const emptyDashboard = emptyInvestingDashboard();
 function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true, disclosure: "Yahoo-melding" }));
   if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
   if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
   return new Response(JSON.stringify({}));
@@ -35,7 +34,6 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
 function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true, disclosure: "Yahoo-melding" }));
   if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
   if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
   return new Response(JSON.stringify({}));
@@ -169,20 +167,14 @@ test("dashboard shows read error when route fails", async () => {
   root.unmount();
 });
 
-test("shows Yahoo disclosure and starts price sync only after acceptance", async () => {
+test("does not show Yahoo disclosure and starts price sync on app open", async () => {
   const requests: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard)); return new Response(JSON.stringify(String(input) === "/api/market-data/consent" && init?.method === "POST" ? { accepted: true } : { accepted: false, disclosure: "Yahoo-melding" })); }));
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard)); return new Response(JSON.stringify({ problems: [] })); }));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => { root.render(<MemoryRouter><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
-  expect(container.textContent).toContain("Yahoo-melding");
-  expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("ga akkoord"))).toBe(true);
-  expect(requests).toContain("/health");
-  expect(requests).toContain("/api/market-data/consent");
-  expect(requests).not.toContain("/api/prices/sync");
-  await act(async () => { Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("ga akkoord"))!.click(); await Promise.resolve(); });
-  expect(requests).toContain("/api/market-data/consent");
-  expect(requests.filter((request) => request === "/api/market-data/consent")).toHaveLength(2);
+  expect(container.textContent).not.toContain("Yahoo Finance");
   expect(requests).toContain("/api/prices/sync");
+  expect(requests).not.toContain("/api/market-data/consent");
   root.unmount();
 });
 
@@ -191,7 +183,6 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), method: init?.method });
     if (String(input) === "/api/brokers/sync") return new Response(JSON.stringify({ problems: ["ibkr: niet beschikbaar"] }));
-    if (String(input) === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true, disclosure: "Yahoo-melding" }));
     if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
     return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
   }));
