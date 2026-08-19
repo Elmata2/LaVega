@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import { LocalKeySource, MarketDataRouter, createInMemoryPriceStore, createYahooPriceProvider, createMemoryYahooConsentStore, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, type YahooConsentStore, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult, hasYahooFinanceRequestConsent } from "@lavega/adapters";
 
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; problemReporter: ProblemReporter };
+export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const consent = dependencies.consentStore ?? createMemoryYahooConsentStore();
@@ -11,9 +13,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
   const problemReporter = dependencies.problemReporter ?? createProblemReporter();
+  const dashboardReader = dependencies.dashboardReader ?? (async () => emptyInvestingDashboard());
   const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
   const investingApp = new Hono();
   investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
+  investingApp.get("/api/investing/dashboard", async (c) => {
+    try {
+      return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));
+    } catch {
+      return c.json({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] }, 503);
+    }
+  });
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
   investingApp.post("/api/brokers/sync", async (c) => {
     const result = await brokerSync(c.req.query("force") === "true");

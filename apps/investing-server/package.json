@@ -14,6 +14,7 @@
   "dependencies": {
     "@hono/node-server": "^2.0.12",
     "@lavega/adapters": "workspace:*",
+    "@lavega/core": "workspace:*",
     "@sentry/node": "^10.70.0",
     "hono": "^4.12.32",
     "tsx": "^4.23.1"

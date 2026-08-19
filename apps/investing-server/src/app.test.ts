@@ -2,12 +2,35 @@ import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
 import { createInMemoryPriceStore, createMemoryYahooConsentStore, createYahooPriceProvider } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
+import { emptyInvestingDashboard } from "@lavega/core";
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+});
+
+test("dashboard route returns injected core-shaped read model and selected symbol", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({ symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, currency: "USD", asOf: "2026-08-18" });
+  const dashboardReader = vi.fn(async ({ symbol }: { symbol?: string }) => ({ ...dashboard, problems: symbol ? [`selected:${symbol}`] : [] }));
+  const investingApp = createApp({ dashboardReader });
+
+  const response = await investingApp.request("/api/investing/dashboard?symbol=aapl");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ...dashboard, problems: ["selected:aapl"] });
+  expect(dashboardReader).toHaveBeenCalledWith({ symbol: "aapl" });
+});
+
+test("dashboard route reports read-model failures without inventing values", async () => {
+  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")) });
+
+  const response = await investingApp.request("/api/investing/dashboard");
+
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
 });
 
 test("price sync requires server-readable consent before outbound requests", async () => {

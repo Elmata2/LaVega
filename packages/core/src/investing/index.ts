@@ -5,3 +5,4 @@ export * from "./portfolio.js";
 export * from "./allocation.js";
 export * from "./dividend.js";
 export * from "./markers.js";
+export * from "./dashboard.js";
