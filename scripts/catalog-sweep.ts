@@ -45,6 +45,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute } from "@lavega/core";
 import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
 import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
+import { sliceForExtraction } from "@lavega/core";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const STATE = "docs/catalog/state.json";
@@ -77,7 +78,7 @@ function numArg(flag: string, fallback: number): number {
  *  wrong — it is "decide which row belongs to this product and whether the page
  *  settles its conditions". That is the judgement the whole rung exists for, and
  *  a weekly offline sweep is where paying for it is cheapest. */
-const EXTRACT_MODEL = "claude-opus-5";
+const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || "claude-opus-5";
 /** Slowness is free here, hanging is not: one wedged request must not eat the
  *  Action's 45-minute budget. Generous, because the model is allowed to think. */
 const MODEL_TIMEOUT_MS = 180_000;
@@ -139,6 +140,7 @@ const spend = new Map<string, Spend>();
 const PRICE: Record<string, { in: number; out: number }> = {
   "claude-opus-5": { in: 5, out: 25 },
   "claude-sonnet-5": { in: 3, out: 15 },
+  "claude-haiku-4-5-20251001": { in: 1, out: 5 },
 };
 const SEARCH_PRICE_PER_1000 = 10;
 
@@ -407,7 +409,17 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   if (text.length > MAX_MODEL_CHARS) {
     throw new Error(`page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`);
   }
-  const req = { product, sourceUrl, text };
+  // Send the relevant regions, not the whole document. Measured: 39% of a tariff
+  // document sits near a currency term, and Amex's agreement is 12%. The slice
+  // deliberately also carries cap language from ANYWHERE in the document, because
+  // the exhaustive-document rule earns `conditions: null` only from a cap priced
+  // on some OTHER row — slicing that away would have quietly reverted every such
+  // figure to refused with no error to show for it.
+  const cut = sliceForExtraction(text);
+  if (!cut.whole) {
+    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+  }
+  const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildExtractPrompt(req);
   const client = new Anthropic({ apiKey: apiKey ?? undefined });
   const res = await createGuarded(client, 
