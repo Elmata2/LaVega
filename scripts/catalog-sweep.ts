@@ -741,7 +741,16 @@ for (const id of ids) {
         // first, but NOT trusted blindly — the loop below still falls through to
         // the next source whenever one fails to settle the conditions.
         const sources: { url: string; kind: "pdf" | "html" }[] = [];
-        if (p.docUrl) sources.push({ url: p.docUrl, kind: p.docKind === "html" ? "html" : "pdf" });
+        // PROVENANCE IS NOT TRANSPORT. revolut.com answers a plain fetch with 403
+        // but r.jina.ai renders it and hands back the real fee page. The SOURCE is
+        // still Revolut's own page — storing the proxy URL as sourceUrl would
+        // credit a reader service for a disclosure Revolut published, and would
+        // rot the moment the proxy changes. So docUrl stays the issuer's URL and
+        // docFetch records how to reach it.
+        if (p.docUrl) {
+          const via = p.docFetch === "jina" ? `https://r.jina.ai/${p.docUrl}` : p.docUrl;
+          sources.push({ url: via, kind: p.docFetch === "jina" ? "html" : p.docKind === "html" ? "html" : "pdf" });
+        }
         if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
         if (p.termsUrl && p.readable === "yes") sources.push({ url: p.termsUrl, kind: "html" });
         const seenSrc = new Set<string>();

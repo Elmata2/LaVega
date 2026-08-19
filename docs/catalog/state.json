@@ -726,7 +726,12 @@
       "lastChecked": "2026-08-18",
       "lastValue": 0.5,
       "lastRoute": "wayback",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Plus: wissellimiet van EUR 3.000 per maand; daarboven fair usage 0,5% per geldwissel. Replaces the 2025 archive snapshots."
     },
     "revolut-premium-betaalpas": {
       "product": "Revolut Premium betaalpas",
@@ -742,7 +747,12 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Premium: geen wissellimiet, geen fair usage-kosten. Replaces the 2025 archive snapshots."
     },
     "revolut-metal-betaalpas": {
       "product": "Revolut Metal betaalpas",
@@ -758,7 +768,12 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Metal: geen wissellimiet, geen fair usage-kosten. Replaces the 2025 archive snapshots."
     },
     "n26-standard-betaalpas": {
       "product": "N26 Standard betaalpas",
