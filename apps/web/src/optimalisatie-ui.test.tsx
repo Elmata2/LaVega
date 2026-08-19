@@ -45,15 +45,17 @@ test("the two halves sit in one grid of equal columns, subscriptions first", () 
 
 test("the interest advice is spelled out and ends in a euro figure per year", () => {
   const html = render([]);
-  // ABN AMRO's own standard rate is 1,25%; the best free-withdrawal benchmark
-  // is Bigbank at 3,1%. € 50.000 × 1,85% = € 925 per year.
+  // ABN AMRO's own standard rate is 1,25%. The comparison is now against what the
+  // winning account KEEPS rather than its headline: Bigbank's 3,1% is a six-month
+  // actierente that drops to 2,1%, so the best kept rate is Scalable Capital at
+  // 2,5%. € 50.000 × 1,25% = € 625 per year — less flattering than the € 925 this
+  // test used to assert, and the figure the saver will actually see in month seven.
   expect(html).toContain("Je houdt");
   expect(html).toContain("ABN AMRO");
   expect(html).toContain("1,25%");
-  expect(html).toContain("Bigbank");
-  expect(html).toContain("3,1%");
-  expect(html).toContain("1,85%");
-  expect(html).toContain("925,00");
+  expect(html).toContain("Scalable Capital");
+  expect(html).toContain("2,5%");
+  expect(html).toContain("625,00");
   expect(html).toContain("per jaar");
 });
 

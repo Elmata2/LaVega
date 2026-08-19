@@ -141,10 +141,23 @@ export const NL_SAVINGS_RATES: readonly RateBenchmark[] = [
 
 /** The best benchmark (highest ratePct); by default only free-withdrawal
  *  products. Returns null for an empty list. */
+/** THE RATE A SAVER ACTUALLY KEEPS, which is what a comparison should rank on.
+ *
+ *  `ratePct` is the headline — the actierente when one runs. Ranking on it puts a
+ *  six-month teaser above a permanently better account, and the saver who moves
+ *  their money is worse off in month seven. Where a benchmark knows its standard
+ *  rate, that is the number to compare. */
+export function keptRate(r: RateBenchmark): number {
+  return r.standardRatePct ?? r.ratePct;
+}
+
+/** The best benchmark for a saver to move to. Ranked on what they KEEP, not on
+ *  the headline — see keptRate. The returned benchmark still carries its promo, so
+ *  the UI can show "3,01% nu, 1,50% daarna" without having ranked on the 3,01%. */
 export function bestRate(rates: readonly RateBenchmark[], freeOnly = true): RateBenchmark | null {
   const pool = freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates;
   if (pool.length === 0) return null;
-  return pool.reduce((best, r) => (r.ratePct > best.ratePct ? r : best));
+  return pool.reduce((best, r) => (keptRate(r) > keptRate(best) ? r : best));
 }
 
 /** Whole days between two ISO dates via Date.UTC (locale/TZ-safe). */
@@ -254,7 +267,11 @@ export function analyzeInterest(
   if (best) {
     for (const ar of accountRates) {
       if (ar.ratePct === null || ar.balanceCents <= 0) continue;
-      const gap = best.ratePct - ar.ratePct;
+      // The gap is measured against what the saver KEEPS at the winning account,
+      // not its headline. Using the actierente would promise a yearly gain that
+      // stops in month seven — the figure most likely to be believed and the one
+      // most likely to be wrong.
+      const gap = keptRate(best) - ar.ratePct;
       if (gap <= marginPct) continue;
       suggestions.push({
         account: ar.account,

@@ -1,14 +1,26 @@
 import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { bestRate, detectInterestRate, resolveAccountRate, analyzeInterest, NL_SAVINGS_RATES, mergeRateSources, benchmarkFromCatalogue, type RateBenchmark } from "./interest.js";
+import { bestRate, keptRate, detectInterestRate, resolveAccountRate, analyzeInterest, NL_SAVINGS_RATES, mergeRateSources, benchmarkFromCatalogue, type RateBenchmark } from "./interest.js";
 
 const acc = (over: Partial<Account>): Account =>
   ({ key: "A1", iban: "A1", name: "x", bank: "ING", entity: "BV1", currency: "EUR", balance: 10000, ...over });
 const rente = (date: string, amount: number): Tx =>
   ({ id: date, accountKey: "A1", date, amount, currency: "EUR", counterparty: "Rente", description: "Rente spaarrekening", category: "", manual: false });
 
-test("bestRate picks the highest free-withdrawal benchmark", () => {
-  expect(bestRate(NL_SAVINGS_RATES)!.ratePct).toBe(3.1);
+test("bestRate ranks on what the saver KEEPS, not on the actierente", () => {
+  // Was 3,1% (Bigbank's six-month teaser). Ranking on a promo sends a saver to an
+  // account that pays 2,1% from month seven while a permanently better one exists.
+  const best = bestRate(NL_SAVINGS_RATES)!;
+  expect(keptRate(best)).toBe(2.5);
+  expect(best.bank).toBe("Scalable Capital");
+});
+
+test("the winner still carries its promo, so the UI can show both", () => {
+  const withPromo: RateBenchmark[] = [
+    { bank: "A", product: "P", ratePct: 9, standardRatePct: 1, promoNote: "6 mnd", freeWithdrawal: true },
+    { bank: "B", product: "P", ratePct: 2, freeWithdrawal: true },
+  ];
+  expect(bestRate(withPromo)!.bank).toBe("B");
 });
 
 test("detectInterestRate: implied % from trailing-year rente credits vs balance", () => {
@@ -28,10 +40,13 @@ test("resolveAccountRate: manual > detected > assumed(0 for betaal) > unknown", 
 test("analyzeInterest: idle cash on 0% betaalrekening quantifies yearly gain vs best", () => {
   const accounts = [acc({ key: "B", type: "Betaalrekening", balance: 20000 })];
   const r = analyzeInterest(accounts, [], NL_SAVINGS_RATES, "2026-08-01");
-  expect(r.best!.ratePct).toBe(3.1);
+  expect(r.best!.ratePct).toBe(2.5);
   expect(r.suggestions).toHaveLength(1);
-  expect(r.suggestions[0].extraPerYearCents).toBe(62000); // 20000 * 3.1% = €620
-  expect(r.totalExtraPerYearCents).toBe(62000);
+  // 20000 * 2,5% = €500, measured against what the winning account KEEPS. It used
+  // to read €620, computed from Bigbank's 3,1% actierente — a gain that stops in
+  // month seven, and the most believable wrong number the app could print.
+  expect(r.suggestions[0].extraPerYearCents).toBe(50000);
+  expect(r.totalExtraPerYearCents).toBe(50000);
 });
 
 test("resolveAccountRate: savings at a known bank estimates the current rate from that bank's standard tariff", () => {
@@ -45,7 +60,7 @@ test("analyzeInterest: an existing savings saldo is compared to its OWN bank rat
   const accounts = [acc({ key: "S", type: "Spaarrekening", bank: "ING", balance: 10000 })];
   const r = analyzeInterest(accounts, [], NL_SAVINGS_RATES, "2026-08-01");
   expect(r.suggestions[0].ratePct).toBe(1.25); // ING standard, not 0
-  expect(r.suggestions[0].extraPerYearCents).toBe(18500); // 10000 * (3.10-1.25)% = €185
+  expect(r.suggestions[0].extraPerYearCents).toBe(12500); // 10000 * (3.10-1.25)% = €185
 });
 
 test("detectInterestRate: implausible rate (tiny balance vs normal interest) is discarded -> benchmark", () => {
