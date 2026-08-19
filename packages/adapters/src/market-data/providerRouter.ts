@@ -30,6 +30,7 @@ export async function firstProviderResult<Request, Result>(
   request: Request,
   log: (sourceKey: string, error: unknown) => void = () => undefined,
   hasProblems: (result: Result) => boolean = () => false,
+  failureResult?: (problems: string[]) => Result,
 ): Promise<ProviderResult<Result> | null> {
   const ordered = [...providers].sort((a, b) => b.priority - a.priority);
   let problemResult: ProviderResult<Result> | null = null;
@@ -48,9 +49,11 @@ export async function firstProviderResult<Request, Result>(
       }
     } catch (error) {
       log(provider.sourceKey, error);
+      problems.push(`${provider.sourceKey}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return problemResult && problems.length > 0 ? withProviderProblems(problemResult, problems) : problemResult;
+  if (problemResult && problems.length > 0) return withProviderProblems(problemResult, problems);
+  return failureResult && problems.length > 0 ? { sourceKey: "router", value: failureResult([...new Set(problems)]) } : null;
 }
 
 function providerProblems(value: unknown): string[] {
@@ -95,15 +98,15 @@ export class MarketDataRouter<PriceRequest, Price, FxRequest, Fx, IdentifierRequ
     return firstProviderResult(this.providers.price, request, this.log, (value) => {
       const problems = (value as { problems?: unknown }).problems;
       return Array.isArray(problems) && problems.length > 0;
-    });
+    }, (problems) => ({ bars: [], problems } as Price));
   }
 
   getFx(request: FxRequest): Promise<ProviderResult<Fx> | null> {
-    return firstProviderResult(this.providers.fx, request, this.log, resultHasProblems);
+    return firstProviderResult(this.providers.fx, request, this.log, resultHasProblems, (problems) => ({ rate: 0, problems } as Fx));
   }
 
   mapIdentifier(request: IdentifierRequest): Promise<ProviderResult<Identifier> | null> {
-    return firstProviderResult(this.providers.identifier, request, this.log, resultHasProblems);
+    return firstProviderResult(this.providers.identifier, request, this.log, resultHasProblems, (problems) => ({ match: { isin: (request as { isin?: string }).isin ?? "", ticker: "" }, problems } as Identifier));
   }
 }
 
