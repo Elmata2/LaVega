@@ -114,6 +114,20 @@ test("broker sync route converts unexpected failures into a useful response", as
   expect(await response.json()).toEqual({ outcomes: [], problems: ["Broker synchronization failed"] });
 });
 
+test("broker credentials route stores validated IBKR credentials without returning secrets", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker });
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "ibkr", token: "flex-token", queryId: "123456", passphrase: "vault-passphrase" }),
+  });
+
+  expect(response.status).toBe(204);
+  expect(await response.text()).toBe("");
+  expect(configureBroker).toHaveBeenCalledWith({ broker: "ibkr", token: "flex-token", queryId: "123456", passphrase: "vault-passphrase" });
+});
+
 test("broker sync logs every returned problem with context and redacts secrets", async () => {
   const write = vi.fn();
   const brokerSync = vi.fn(async () => ({ outcomes: [], problems: ["ibkr: request failed", "token=super-secret"] }));

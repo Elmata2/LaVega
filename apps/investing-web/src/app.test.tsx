@@ -8,7 +8,7 @@ import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/co
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); globalThis.localStorage?.clear(); });
 
 const dashboard: InvestingDashboardData = {
   ...emptyInvestingDashboard(),
@@ -195,5 +195,71 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   const deleteButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("alles verwijderen"));
   await act(async () => { deleteButton?.click(); await Promise.resolve(); });
   expect(requests.some((request) => request.method === "DELETE" && request.url === "/api/prices/cache")).toBe(true);
+  root.unmount();
+});
+
+test("broker koppelen opens setup guide with IBKR instructions", async () => {
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); });
+  const connectLink = container.querySelector<HTMLAnchorElement>('a[href="/brokers/connect"]');
+  expect(connectLink).not.toBeNull();
+
+  await act(async () => { connectLink?.click(); });
+  expect(container.textContent).toContain("Broker koppelen");
+  expect(container.textContent).toContain("Interactive Brokers");
+  expect(container.textContent).toContain("Flex Web Service");
+  expect(container.textContent).toContain("Trading 212");
+  expect(container.textContent).toContain("Flex-token");
+  expect(container.querySelector('a[href="/"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("broker setup starts forced sync and shows returned problems", async () => {
+  const requests: Array<{ url: string; method?: string }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), method: init?.method });
+    if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [], problems: ["IBKR: credentials are not configured"] }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); });
+  const syncButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Synchronisatie starten"));
+  expect(syncButton).not.toBeUndefined();
+  await act(async () => { syncButton?.click(); await Promise.resolve(); });
+  expect(requests).toContainEqual({ url: "/api/brokers/sync?force=true", method: "POST" });
+  expect(container.textContent).toContain("IBKR: credentials are not configured");
+  root.unmount();
+});
+
+test("broker credential form stores IBKR credentials and starts sync", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
+    if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); });
+  const fields = {
+    token: container.querySelector<HTMLInputElement>('[name="token"]')!,
+    queryId: container.querySelector<HTMLInputElement>('[name="queryId"]')!,
+    passphrase: container.querySelector<HTMLInputElement>('[name="passphrase"]')!,
+  };
+  const setInput = (field: HTMLInputElement, value: string) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set; setter?.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); };
+  setInput(fields.token, "flex-token");
+  setInput(fields.queryId, "123456");
+  setInput(fields.passphrase, "vault-passphrase");
+  await act(async () => { container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click(); await Promise.resolve(); });
+
+  const credentialRequest = requests.find((request) => request.url === "/api/brokers/credentials");
+  expect(credentialRequest?.init?.body).toBe(JSON.stringify({ broker: "ibkr", token: "flex-token", queryId: "123456", passphrase: "vault-passphrase" }));
+  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
+  expect(container.textContent).toContain("Synchronisatie voltooid");
+  expect(container.textContent).not.toContain("flex-token");
   root.unmount();
 });

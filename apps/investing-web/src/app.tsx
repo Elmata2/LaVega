@@ -111,6 +111,144 @@ function ClearPriceCache() {
   return <div className="flex items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)} disabled={busy}>Prijsgegevens wissen</Button>{message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}</div>;
 }
 
+function BrokerSetupCard({
+  name,
+  eyebrow,
+  description,
+  fields,
+  steps,
+  warning,
+}: {
+  name: string;
+  eyebrow: string;
+  description: string;
+  fields: string[];
+  steps: string[];
+  warning?: string;
+}) {
+  return <article className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
+    <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{eyebrow}</p>
+    <h3 className="mt-2 font-display text-3xl font-semibold">{name}</h3>
+    <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+    <div className="mt-6 border-t border-border pt-5">
+      <p className="text-sm font-semibold">Gegevens die je nodig hebt</p>
+      <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{fields.map((field) => <li key={field} className="flex gap-2"><span className="text-primary">✓</span><span>{field}</span></li>)}</ul>
+    </div>
+    <div className="mt-6 border-t border-border pt-5">
+      <p className="text-sm font-semibold">Zo vind je ze</p>
+      <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">{steps.map((step) => <li key={step}>{step}</li>)}</ol>
+    </div>
+    {warning && <p role="note" className="mt-6 rounded-[14px] bg-warning/10 px-4 py-3 text-xs leading-5 text-foreground">{warning}</p>}
+  </article>;
+}
+
+function BrokerSyncAction() {
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [problems, setProblems] = useState<string[]>([]);
+
+  async function sync() {
+    setStatus("loading");
+    setProblems([]);
+    try {
+      const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
+      const result = await response.json() as { problems?: string[] };
+      if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      const nextProblems = result.problems ?? [];
+      setProblems(nextProblems);
+      setStatus(nextProblems.length > 0 ? "error" : "success");
+      if (nextProblems.length === 0) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    } catch (error) {
+      setProblems([error instanceof Error ? error.message : "Broker synchronisatie mislukt."]);
+      setStatus("error");
+    }
+  }
+
+  return <div className="rounded-card border border-border bg-secondary/40 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
+    <div>
+      <p className="text-sm font-semibold">Gegevens opgeslagen?</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">Start direct nieuwe broker-synchronisatie. Dit omzeilt dagelijkse sync-cache.</p>
+    </div>
+    <div className="mt-4 shrink-0 sm:mt-0">
+      <Button type="button" onClick={sync} disabled={status === "loading"}>{status === "loading" ? "Synchroniseren…" : "Synchronisatie starten"}</Button>
+    </div>
+    {status === "success" && <p role="status" className="mt-3 text-sm text-positive sm:mt-0">Synchronisatie voltooid.</p>}
+    {problems.length > 0 && <div role="alert" className="mt-4 basis-full rounded-[14px] border border-negative/20 bg-negative/5 px-4 py-3 text-sm"><p className="font-semibold">Synchronisatie niet voltooid</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>}
+  </div>;
+}
+
+function BrokerCredentialForm() {
+  const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
+  const [token, setToken] = useState("");
+  const [queryId, setQueryId] = useState("");
+  const [secret, setSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  function resetBroker(next: "ibkr" | "trading212") {
+    setBroker(next); setToken(""); setQueryId(""); setSecret(""); setMessage(null); setStatus("idle");
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("loading"); setMessage(null);
+    const payload = { broker, token, ...(broker === "ibkr" ? { queryId } : { secret }), passphrase };
+    try {
+      const saveResponse = await fetch("/api/brokers/credentials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
+      if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Credentials opslaan mislukt.");
+      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
+      const syncResult = await syncResponse.json() as { problems?: string[] };
+      if (!syncResponse.ok || (syncResult.problems?.length ?? 0) > 0) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      setStatus("success"); setMessage("Credentials opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
+      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    } catch (error) {
+      setStatus("error"); setMessage(error instanceof Error ? error.message : "Broker koppelen mislukt.");
+    }
+  }
+
+  return <form onSubmit={submit} className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Credentials opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">LaVega versleutelt deze gegevens in lokale vault. Daarna start sync automatisch.</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <label className="text-sm font-semibold">{broker === "ibkr" ? "Flex-token" : "API key"}<input required name="token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
+      {broker === "ibkr" ? <label className="text-sm font-semibold">Query ID<input required name="queryId" inputMode="numeric" value={queryId} onChange={(event) => setQueryId(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label> : <label className="text-sm font-semibold">API secret<input required name="secret" type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>}
+      <label className="text-sm font-semibold sm:col-span-2">Vault passphrase<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe vault? Deze passphrase wordt vault-sleutel. Bewaar hem veilig; LaVega kan hem niet herstellen.</span></label>
+    </div>
+    <div className="mt-6 flex flex-wrap items-center gap-4"><Button type="submit" disabled={status === "loading"}>{status === "loading" ? "Opslaan en synchroniseren…" : "Opslaan en synchroniseren"}</Button>{status === "success" && <span role="status" className="text-sm text-positive">{message}</span>}{status === "error" && <span role="alert" className="text-sm text-negative">{message}</span>}</div>
+  </form>;
+}
+
+function BrokerConnect() {
+  return <div className="mx-auto max-w-5xl space-y-8">
+    <div className="max-w-2xl">
+      <Link to="/" className="text-sm font-semibold text-primary hover:underline">← Terug naar overzicht</Link>
+      <p className="mb-2 mt-8 text-sm font-medium text-primary">Veilige lokale koppeling</p>
+      <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">Broker koppelen</h2>
+      <p className="mt-4 text-base leading-7 text-muted-foreground">Volg instructies voor jouw broker. LaVega gebruikt alleen read-only gegevens en bewaart credentials lokaal.</p>
+    </div>
+    <div className="grid gap-5 lg:grid-cols-2">
+      <BrokerSetupCard
+        name="Interactive Brokers"
+        eyebrow="IBKR"
+        description="Gebruik IBKR Flex Web Service. Dit werkt met dagelijks bijgewerkte rapporten, zonder lokale gateway of browser-login."
+        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions en Trades"]}
+        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions en Trades.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
+      />
+      <BrokerSetupCard
+        name="Trading 212"
+        eyebrow="Trading 212"
+        description="Gebruik de officiële Trading 212 API. LaVega leest posities en orders via jouw eigen API-credentials."
+        fields={["API key", "API secret"]}
+        steps={["Open de Trading 212-app.", "Ga naar Menu → Settings → API (of API management).", "Maak een API-key voor jouw Invest- of Stocks ISA-account.", "Kies read-only scope als Trading 212 die optie toont.", "Kopieer API key en API secret. Het secret kan daarna niet opnieuw zichtbaar zijn."]}
+        warning="Controleer scope vóór opslaan. Een key zonder read-only beperking kan mogelijk orders plaatsen."
+      />
+    </div>
+    <BrokerCredentialForm />
+    <BrokerSyncAction />
+    <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">Credentials blijven op jouw machine. Deel Flex-tokens, API keys of API secrets nooit in chat, screenshots, issues of git.</p>
+  </div>;
+}
+
 export function HealthStatus() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +261,8 @@ export function HealthStatus() {
 function Layout() {
   const location = useLocation();
   const detail = location.pathname.startsWith("/positions/");
-  return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Button variant="outline" size="sm">Broker koppelen</Button>}</div><Outlet /></main><footer className="border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span></footer></div></div>;
+  const connect = location.pathname === "/brokers/connect";
+  return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12">{!connect && <div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Link to="/brokers/connect" className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary">Broker koppelen</Link>}</div>}<Outlet /></main><footer className="border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span></footer></div></div>;
 }
 
 function Overview() {
@@ -145,4 +284,4 @@ function PositionDetail() {
   return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><PositionPriceChart symbol={state.data.position.symbol} currency={state.data.position.currency} points={state.data.position.points} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
 }
 
-export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /></Route></Routes>; }
+export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Routes>; }
