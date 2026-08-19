@@ -130,9 +130,10 @@ test("paces across windows instead of burning retries on rejected requests", asy
   const clock = withVirtualClock();
   // 400 orders is 8 pages, two order-history windows.
   const provider = fakeTrading212(400);
+  const diagnostics = vi.fn();
   vi.stubGlobal("fetch", provider.fetch);
   try {
-    const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com" }).sync({ entity: "BV" });
+    const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com", diagnostics }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.trades).toHaveLength(400);
@@ -141,24 +142,26 @@ test("paces across windows instead of burning retries on rejected requests", asy
     // up front rather than spending a request to be told it is spent.
     expect(provider.rejections).toBe(0);
     expect(clock.now() - START_MS).toBeGreaterThanOrEqual(ORDER_HISTORY_PERIOD_MS);
+    expect(diagnostics).toHaveBeenCalledWith(expect.objectContaining({ type: "wait", endpoint: "/api/v0/equity/history/orders", reason: "budget-exhausted" }));
+    expect(diagnostics).toHaveBeenCalledWith(expect.objectContaining({ type: "response", endpoint: "/api/v0/equity/history/orders", status: 200, remaining: 0 }));
   } finally {
     clock.restore();
   }
 });
 
-test("a sync too large for the wait budget reports retryAfter and keeps what it read", async () => {
+test("large order history continues across every required provider window", async () => {
   const clock = withVirtualClock();
-  // 3000 orders is 60 pages, ten windows: past the 5-minute wait budget.
+  // 3000 orders is 60 pages across ten provider windows. Initial sync must
+  // finish instead of restarting from page one forever after a local cutoff.
   const provider = fakeTrading212(3_000);
   vi.stubGlobal("fetch", provider.fetch);
   try {
     const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com" }).sync({ entity: "BV" });
 
-    expect(result.problems).toEqual(["Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown"]);
-    expect(result.trades.length).toBeGreaterThan(0);
-    expect(result.trades.length).toBeLessThan(3_000);
-    expect(Date.parse(result.retryAfter!)).toBeGreaterThan(clock.now());
-    // Holdings have their own budget, so they still come back.
+    expect(result.problems).toEqual([]);
+    expect(result.trades).toHaveLength(3_000);
+    expect(result.retryAfter).toBeUndefined();
+    expect(clock.now() - START_MS).toBeGreaterThan(5 * 60_000);
     expect(result.positions).toHaveLength(1);
   } finally {
     clock.restore();

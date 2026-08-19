@@ -1,7 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { createMemoryBrokerSyncStateStore } from "@lavega/adapters";
-import { createRuntimeBrokerCredentialSetup, createRuntimeBrokerSync } from "./index.js";
+import { createInMemoryPriceStore, createMemoryBrokerSyncStateStore } from "@lavega/adapters";
+import { createRuntimeApp, createRuntimeBrokerCredentialSetup, createRuntimeBrokerDataCache, createRuntimeBrokerSync } from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -75,4 +78,69 @@ test("runtime broker sync coalesces concurrent runs", async () => {
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
   expect(first.problems).toEqual(second.problems);
+});
+
+test("cached broker skip retains last successful positions", () => {
+  const cache = createRuntimeBrokerDataCache();
+  cache.apply({
+    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    problems: [],
+  });
+  cache.apply({
+    outcomes: [{ broker: "trading212", status: "skipped", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: null }],
+    problems: [],
+  });
+
+  expect(cache.read().positions).toHaveLength(1);
+  expect(cache.read().positions[0]?.symbol).toBe("AAPL");
+});
+
+test("runtime broker cache restores encrypted snapshot after restart", () => {
+  const first = createRuntimeBrokerDataCache();
+  first.apply({
+    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    problems: [],
+  });
+
+  const restarted = createRuntimeBrokerDataCache(first.snapshot());
+
+  expect(restarted.read().positions).toHaveLength(1);
+  expect(restarted.read().positions[0]?.symbol).toBe("AAPL");
+});
+
+test("problem result cannot overwrite last successful broker snapshot", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });
+  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: result("AAPL") }], problems: [] });
+  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { ...result("MSFT"), problems: ["partial sync"] } }], problems: ["trading212: partial sync"] });
+
+  expect(cache.read().positions[0]?.symbol).toBe("AAPL");
+});
+
+test("runtime unlocks persisted broker credentials after restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-vault-"));
+  const filePath = join(directory, "credentials.json");
+  try {
+    const first = createFileCredentialStore(filePath);
+    await first.setup("vault-passphrase");
+    await first.putCredentials({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+
+    const baseUrl = await serve((request, response) => {
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+      return json(response, []);
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", filePath);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
+    const result = await response.json() as { problems: string[] };
+    const progress = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string; pages: number; ordersRead: number; positionsRead: number };
+
+    expect(result.problems).not.toContain("trading212: credentials are not configured");
+    expect(progress).toMatchObject({ status: "completed", pages: 1, ordersRead: 0, positionsRead: 0 });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

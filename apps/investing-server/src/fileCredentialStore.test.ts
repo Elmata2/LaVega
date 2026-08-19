@@ -30,9 +30,34 @@ test("file credential store encrypts, persists, and unlocks broker credentials",
 
     const second = createFileCredentialStore(filePath);
     expect(await second.status()).toBe("locked");
+    await expect(second.getCredentials("local", "trading212")).rejects.toThrow("credential vault is locked");
     expect(await second.unlock("wrong-passphrase")).toBe(false);
     expect(await second.unlock("vault-passphrase")).toBe(true);
     expect(await second.getCredentials("local", "trading212")).toEqual({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("encrypted vault restores broker data after process restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-broker-data-"));
+  const filePath = join(directory, "credentials.json");
+  const brokerData = {
+    trading212: {
+      positions: [{ tenantId: "local", entity: "BV", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: 12, marketValue: 24, currency: "EUR", asOf: "2026-08-19" }],
+      trades: [],
+      dividends: [],
+    },
+  };
+  try {
+    const first = createFileCredentialStore(filePath);
+    await first.setup("vault-passphrase");
+    await first.putBrokerData(brokerData);
+    expect(await readFile(filePath, "utf8")).not.toContain("AAPL");
+
+    const second = createFileCredentialStore(filePath);
+    expect(await second.unlock("vault-passphrase")).toBe(true);
+    expect(await second.getBrokerData()).toEqual(brokerData);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

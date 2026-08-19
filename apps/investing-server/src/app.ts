@@ -5,7 +5,18 @@ import { LocalKeySource, MarketDataRouter, createInMemoryPriceStore, createYahoo
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase: string };
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; configureBroker: (input: BrokerCredentialInput) => Promise<void>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader };
+export type BrokerSyncProgress = {
+  status: "idle" | "running" | "waiting" | "completed" | "problem";
+  pages: number;
+  ordersRead: number;
+  positionsRead: number;
+  waitUntil: string | null;
+  remaining: number | null;
+  updatedAt: string | null;
+  message: string | null;
+};
+type BrokerVaultStatus = "empty" | "locked" | "unlocked";
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -26,6 +37,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
+  investingApp.get("/api/brokers/sync/status", (c) => {
+    if (!dependencies.brokerSyncStatus) return c.json({ problems: ["Broker synchronization status is not available"] }, 503);
+    return c.json(dependencies.brokerSyncStatus());
+  });
   investingApp.post("/api/brokers/sync", async (c) => {
     try {
       const result = await brokerSync(c.req.query("force") === "true");
@@ -50,6 +65,26 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return new Response(null, { status: 204 });
     } catch {
       return c.json({ problems: ["Broker credentials could not be stored"] }, 500);
+    }
+  });
+  investingApp.get("/api/brokers/credentials/status", async (c) => {
+    if (!dependencies.credentialStatus) return c.json({ problems: ["Broker credential vault is not available"] }, 503);
+    try {
+      return c.json({ status: await dependencies.credentialStatus() });
+    } catch {
+      return c.json({ problems: ["Broker credential vault status could not be read"] }, 500);
+    }
+  });
+  investingApp.post("/api/brokers/credentials/unlock", async (c) => {
+    if (!dependencies.unlockCredentials) return c.json({ problems: ["Broker credential vault is not available"] }, 503);
+    const body: { passphrase?: string } = await c.req.json<{ passphrase?: string }>().catch(() => ({}));
+    const passphrase = body.passphrase?.trim();
+    if (!passphrase) return c.json({ problems: ["passphrase is required"] }, 400);
+    try {
+      if (!(await dependencies.unlockCredentials(passphrase))) return c.json({ problems: ["Vault could not be unlocked"] }, 401);
+      return new Response(null, { status: 204 });
+    } catch {
+      return c.json({ problems: ["Vault could not be unlocked"] }, 500);
     }
   });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); return c.json({ deleted: true }); });

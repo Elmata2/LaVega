@@ -5,7 +5,14 @@ export type Trading212Config = {
   token: string;
   secret: string;
   baseUrl: string;
+  diagnostics?: (event: Trading212DiagnosticEvent) => void;
 };
+
+export type Trading212DiagnosticEvent =
+  | { type: "response"; endpoint: string; attempt: number; status: number; limit: number | null; remaining: number | null; resetAt: string | null }
+  | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
+  | { type: "history-page"; page: number; pageItems: number; ordersRead: number; hasNext: boolean }
+  | { type: "positions"; count: number };
 
 type Trading212Order = Record<string, unknown>;
 type Trading212Page = { items: Trading212Order[]; nextPagePath?: string };
@@ -19,8 +26,6 @@ const ORDER_HISTORY_PAGE_SIZE = 50;
 const MAX_RATE_LIMIT_RETRIES = 3;
 /** One order-history window is 60s; leave room for a reset timestamp plus clock skew. */
 const MAX_RATE_LIMIT_WAIT_MS = 120_000;
-/** Total time one sync may spend waiting out windows before it returns what it has. */
-const MAX_RATE_LIMIT_TOTAL_WAIT_MS = 300_000;
 const RATE_LIMIT_MARGIN_MS = 1_000;
 
 /** Signals that the provider window, not the request, ended the sync. Carries the cooldown. */
@@ -73,14 +78,11 @@ type RateLimiter = ReturnType<typeof createRateLimiter>;
  * response, so a sync waits out a spent window instead of spending a request to
  * discover it is spent.
  */
-function createRateLimiter() {
+function createRateLimiter(diagnostics: (event: Trading212DiagnosticEvent) => void) {
   const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
-  let totalWaitMs = 0;
 
   const sleep = async (milliseconds: number): Promise<void> => {
     if (milliseconds <= 0) return;
-    if (totalWaitMs + milliseconds > MAX_RATE_LIMIT_TOTAL_WAIT_MS) throw new Trading212RateLimitError(milliseconds);
-    totalWaitMs += milliseconds;
     await wait(milliseconds);
   };
 
@@ -89,7 +91,9 @@ function createRateLimiter() {
       const budget = budgets.get(path);
       if (!budget || budget.remaining > 0) return;
       budgets.delete(path);
-      await sleep(budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
+      const waitMs = Math.max(0, budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
+      diagnostics({ type: "wait", endpoint: path, reason: "budget-exhausted", waitMs });
+      await sleep(waitMs);
     },
     observe(path: string, response: Response): void {
       if (response.status === 429) return;
@@ -227,10 +231,22 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
     const response = await fetch(url, {
       headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
     });
+    const reset = resetAtMs(response);
+    config.diagnostics?.({
+      type: "response",
+      endpoint: path,
+      attempt: retry + 1,
+      status: response.status,
+      limit: headerNumber(response, "x-ratelimit-limit"),
+      remaining: headerNumber(response, "x-ratelimit-remaining"),
+      resetAt: reset === null ? null : new Date(reset).toISOString(),
+    });
     limiter.observe(path, response);
     if (response.status !== 429) return response;
     if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
-    await limiter.sleep(rateLimitWaitMs(response, retry));
+    const waitMs = rateLimitWaitMs(response, retry);
+    config.diagnostics?.({ type: "wait", endpoint: path, reason: "http-429", waitMs });
+    await limiter.sleep(waitMs);
   }
 }
 
@@ -269,7 +285,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
       const problems: string[] = [];
-      const limiter = createRateLimiter();
+      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined));
       let retryAfterMs: number | null = null;
       const noteRateLimit = (error: unknown) => {
         if (error instanceof Trading212RateLimitError) retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
@@ -277,9 +293,14 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
       historyUrl.searchParams.set("limit", String(ORDER_HISTORY_PAGE_SIZE));
       let nextUrl = historyUrl.toString();
+      let historyPages = 0;
+      let ordersRead = 0;
       try {
         while (nextUrl) {
           const current = await page(nextUrl, config, limiter);
+          historyPages += 1;
+          ordersRead += current.items.length;
+          config.diagnostics?.({ type: "history-page", page: historyPages, pageItems: current.items.length, ordersRead, hasNext: Boolean(current.nextPagePath) });
           for (const order of current.items) {
             try {
               const trade = mapOrder(order, entity);
@@ -302,7 +323,9 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         // connector contract; no order-capable endpoint is called here. It has
         // its own 1-per-second budget, so it still runs after a history cutoff.
         const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
-        for (const holding of await positions(holdingsUrl, config, limiter)) {
+        const holdings = await positions(holdingsUrl, config, limiter);
+        config.diagnostics?.({ type: "positions", count: holdings.length });
+        for (const holding of holdings) {
           try {
             positionsResult.push(mapPosition(holding, entity));
           } catch (error) {

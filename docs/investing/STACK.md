@@ -36,6 +36,8 @@ Brokers supply positions and trades, not price series — external price and FX 
 
 ## Storage seams
 
+Local broker positions, trades, and dividends use an encrypted runtime snapshot. See [ADR 0002](../adr/0002-encrypted-local-broker-snapshots.md).
+
 **`PriceStore`** is a separate seam, not an extension of `StorageAdapter` — `StorageAdapter` is CRUD/replace-all shaped (accounts/txs/rules/maps), price series need date-range queries, a different access pattern; this keeps the personal side's adapter untouched.
 
 - **Local:** IndexedDB. Volume is trivial (~41 series × 5yr daily ≈ 51,660 rows, ~300K numbers total, per the market-data research), so a hand-rolled range scan over a `(symbol, date)`-indexed store is enough — no SQLite-wasm or DuckDB-wasm needed as a second local-storage engine.

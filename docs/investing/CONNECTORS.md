@@ -135,11 +135,11 @@ Trading 212 does have an official public API (`https://docs.trading212.com/api`)
 | `GET /api/v0/equity/account/summary` | 1 req / 5s |
 | `GET /api/v0/equity/metadata/instruments` | 1 req / 50s |
 
-Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (Unix seconds) and `-used`. **Trading 212 does not send `Retry-After`**, so `x-ratelimit-reset` is the only header that says when a window reopens — an adapter that backs off exponentially instead gives up seconds into a 60-second window. The adapter paces itself off `-remaining`/`-reset`, waits out spent windows, and reports a `retryAfter` on `BrokerResult` when it runs out of wait budget so the scheduler can hold off rather than re-run rejected requests.
+Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (Unix seconds) and `-used`. **Trading 212 does not send `Retry-After`**, so `x-ratelimit-reset` is the only header that says when a window reopens — an adapter that backs off exponentially instead gives up seconds into a 60-second window. The adapter paces itself off `-remaining`/`-reset` and waits through every required window without a local total-time cutoff. Repeated real HTTP 429 responses still produce `retryAfter` so scheduler can stop rejected requests. Runtime exposes pages, orders read, positions read, and current provider wait through broker-sync status API for UI progress.
 
 **Paging:** `limit` defaults to 20 and maxes at 50. Always request 50 — the default costs 2.5x the requests for the same history against a 6-per-minute budget.
 
-**Sync model: scheduled, automatic, daily.** Deliberately coarse, and now also bounded by the confirmed limits above. Sync state (`lastSyncedAt` plus any rate-limit cooldown) is persisted, so a restart does not turn into a fresh full sync.
+**Sync model: scheduled, automatic, daily.** Deliberately coarse and paced by confirmed limits above. Sync state (`lastSyncedAt` plus any rate-limit cooldown) is persisted, so a restart does not turn into a fresh full sync.
 
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
 

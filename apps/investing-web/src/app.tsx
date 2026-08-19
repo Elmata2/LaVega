@@ -15,6 +15,7 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
 }
 
 type Health = { ok: boolean; service: string };
+type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
 type DashboardState =
   | { status: "loading" }
   | { status: "ready"; data: InvestingDashboardData }
@@ -181,6 +182,92 @@ function BrokerSyncAction() {
   </div>;
 }
 
+function BrokerSyncProgressCard() {
+  const [progress, setProgress] = useState<BrokerProgress | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/brokers/sync/status");
+        if (!response.ok) return;
+        const next = await response.json() as Partial<BrokerProgress>;
+        if (current && ["idle", "running", "waiting", "completed", "problem"].includes(next.status ?? "")) setProgress(next as BrokerProgress);
+      } catch { /* Existing sync result surfaces network errors. */ }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 1_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, []);
+
+  if (!progress || progress.status === "idle" || progress.status === "problem") return null;
+  const waiting = progress.status === "waiting";
+  const completed = progress.status === "completed";
+  const seconds = progress.waitUntil ? Math.max(0, Math.ceil((Date.parse(progress.waitUntil) - Date.now()) / 1_000)) : null;
+  return <section aria-live="polite" className={`rounded-card border p-5 ${completed ? "border-positive/30 bg-positive/5" : waiting ? "border-warning/30 bg-warning/10" : "border-primary/20 bg-secondary/40"}`}>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Brokersynchronisatie</p>
+        <h3 className="mt-2 font-display text-2xl font-semibold">{completed ? "Trading 212 gesynchroniseerd" : "Trading 212 synchroniseert"}</h3>
+        <p className="mt-2 text-sm text-muted-foreground">{progress.pages} pagina’s · {progress.ordersRead.toLocaleString("nl-NL")} orders gelezen · {progress.positionsRead} posities</p>
+      </div>
+      <span className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${completed ? "bg-positive/10 text-positive" : waiting ? "bg-warning/20 text-foreground" : "bg-primary/10 text-primary"}`}>{completed ? "Voltooid" : waiting ? "API-pauze" : "Bezig"}</span>
+    </div>
+    {waiting && <p className="mt-4 text-sm font-medium">Wacht op nieuwe API-capaciteit{seconds !== null ? ` · verder over ${seconds} sec.` : ""}</p>}
+    {!waiting && !completed && <p className="mt-4 text-sm text-muted-foreground">Volledige orderhistorie wordt geladen. Venster mag open blijven, maar hoeft niet.</p>}
+  </section>;
+}
+
+function BrokerVaultUnlock() {
+  const [vaultStatus, setVaultStatus] = useState<"checking" | "hidden" | "locked" | "unlocked">("checking");
+  const [passphrase, setPassphrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void fetch("/api/brokers/credentials/status")
+      .then(async (response) => response.ok ? await response.json() as { status?: string } : {})
+      .then((result) => { if (current) setVaultStatus(result.status === "locked" ? "locked" : "hidden"); })
+      .catch(() => { if (current) setVaultStatus("hidden"); });
+    return () => { current = false; };
+  }, []);
+
+  async function unlock(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setMessage(null);
+    try {
+      const unlockResponse = await fetch("/api/brokers/credentials/unlock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ passphrase }) });
+      const unlockResult = await unlockResponse.json().catch(() => ({})) as { problems?: string[] };
+      if (!unlockResponse.ok) throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
+      setPassphrase("");
+      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
+      const syncResult = await syncResponse.json() as { problems?: string[] };
+      if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      setVaultStatus("unlocked");
+      setMessage((syncResult.problems ?? []).length === 0 ? "Kluis ontgrendeld. Synchronisatie voltooid." : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`);
+      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Kluis ontgrendelen mislukt.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (vaultStatus === "checking" || vaultStatus === "hidden") return null;
+  if (vaultStatus === "unlocked") return <p role="status" className="rounded-card border border-positive/30 bg-positive/5 p-4 text-sm text-positive">{message}</p>;
+  return <form onSubmit={unlock} className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Bestaande kluis</p>
+      <h3 className="mt-2 font-display text-2xl font-semibold">Kluis ontgrendelen</h3>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">Inloggegevens staan versleuteld op schijf. Voer alleen kluiswachtwoord in; brokersleutels hoeven niet opnieuw.</p>
+      <label className="mt-4 block text-sm font-semibold">Kluiswachtwoord<input required name="unlockPassphrase" type="password" autoComplete="current-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
+      {message && <p role="alert" className="mt-3 text-sm text-negative">{message}</p>}
+    </div>
+    <Button data-action="unlock-vault" type="submit" disabled={busy} className="mt-4 shrink-0 sm:mt-0">{busy ? "Ontgrendelen…" : "Ontgrendelen en synchroniseren"}</Button>
+  </form>;
+}
+
 function BrokerCredentialForm() {
   const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
   const [token, setToken] = useState("");
@@ -201,12 +288,12 @@ function BrokerCredentialForm() {
     try {
       const saveResponse = await fetch("/api/brokers/credentials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
-      if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Credentials opslaan mislukt.");
+      if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await syncResponse.json() as { problems?: string[] };
       const blocking = (syncResult.problems ?? []).filter((problem) => !otherBrokerUnconfigured(problem, broker));
       if (!syncResponse.ok || blocking.length > 0) throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
-      setStatus("success"); setMessage("Credentials opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
+      setStatus("success"); setMessage("Inloggegevens opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {
       setStatus("error"); setMessage(error instanceof Error ? error.message : "Broker koppelen mislukt.");
@@ -214,11 +301,11 @@ function BrokerCredentialForm() {
   }
 
   return <form onSubmit={submit} className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Credentials opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">LaVega versleutelt deze gegevens in lokale vault. Daarna start sync automatisch.</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Inloggegevens opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">LaVega versleutelt deze gegevens in lokale kluis. Daarna start synchronisatie automatisch.</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <label className="text-sm font-semibold">{broker === "ibkr" ? "Flex-token" : "API key"}<input required name="token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
       {broker === "ibkr" ? <label className="text-sm font-semibold">Query ID<input required name="queryId" inputMode="numeric" value={queryId} onChange={(event) => setQueryId(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label> : <label className="text-sm font-semibold">API secret<input required name="secret" type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>}
-      <label className="text-sm font-semibold sm:col-span-2">Vault passphrase<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe vault? Deze passphrase wordt vault-sleutel. Bewaar hem veilig; LaVega kan hem niet herstellen.</span></label>
+      <label className="text-sm font-semibold sm:col-span-2">Kluiswachtwoord<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe kluis? Dit wachtwoord wordt kluissleutel. Bewaar het veilig; LaVega kan het niet herstellen.</span></label>
     </div>
     <div className="mt-6 flex flex-wrap items-center gap-4"><Button type="submit" disabled={status === "loading"}>{status === "loading" ? "Opslaan en synchroniseren…" : "Opslaan en synchroniseren"}</Button>{status === "success" && <span role="status" className="text-sm text-positive">{message}</span>}{status === "error" && <span role="alert" className="text-sm text-negative">{message}</span>}</div>
   </form>;
@@ -232,6 +319,8 @@ function BrokerConnect() {
       <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">Broker koppelen</h2>
       <p className="mt-4 text-base leading-7 text-muted-foreground">Volg instructies voor jouw broker. LaVega gebruikt alleen read-only gegevens en bewaart credentials lokaal.</p>
     </div>
+    <BrokerVaultUnlock />
+    <BrokerSyncProgressCard />
     <div className="grid gap-5 lg:grid-cols-2">
       <BrokerSetupCard
         name="Interactive Brokers"
@@ -273,7 +362,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} broker={state.data.allocation.broker} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><BrokerSyncProgressCard /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} broker={state.data.allocation.broker} /></div><PositionList positions={state.data.positions} /></>}</div>;
 }
 
 function Positions() {

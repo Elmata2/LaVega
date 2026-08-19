@@ -1,12 +1,18 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import type { BrokerCredentials, CredentialBroker, CredentialStore, Dividend, Position, Trade } from "@lavega/core";
 import { decryptJSON, deriveKey, encryptJSON, newSalt, PBKDF2_ITERATIONS, type CipherBlob } from "@lavega/adapters";
 
 export type ServerVaultStatus = "empty" | "locked" | "unlocked";
 
-type VaultData = { credentials: BrokerCredentials[] };
+export type RuntimeBrokerDataSnapshot = Partial<Record<"ibkr" | "trading212", {
+  positions: Position[];
+  trades: Trade[];
+  dividends: Dividend[];
+}>>;
+
+type VaultData = { credentials: BrokerCredentials[]; brokerData?: RuntimeBrokerDataSnapshot };
 
 export function runtimeCredentialFile(): string {
   const fromEnv = process.env.LAVEGA_VAULT_FILE?.trim();
@@ -20,6 +26,8 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
   lock(): void;
+  getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
+  putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
 } {
   let key: CryptoKey | null = null;
   let data: VaultData | null = null;
@@ -85,13 +93,25 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
       data = null;
     },
     async getCredentials<T extends CredentialBroker>(tenantId: string, broker: T) {
+      if (data == null && await readBlob() != null) throw new Error("credential vault is locked");
       const match = data?.credentials.find((item) => item.tenantId === tenantId && item.broker === broker);
       return (match ?? null) as Extract<BrokerCredentials, { broker: T }> | null;
     },
     putCredentials(credentials) {
       return queue(async () => {
         if (!key || !salt || !data) throw new Error("kluis vergrendeld");
-        data = { credentials: [...data.credentials.filter((item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker), credentials] };
+        data = { ...data, credentials: [...data.credentials.filter((item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker), credentials] };
+        await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
+      });
+    },
+    async getBrokerData() {
+      if (!data) throw new Error("credential vault is locked");
+      return structuredClone(data.brokerData ?? {});
+    },
+    putBrokerData(snapshot) {
+      return queue(async () => {
+        if (!key || !salt || !data) throw new Error("kluis vergrendeld");
+        data = { ...data, brokerData: structuredClone(snapshot) };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
       });
     },

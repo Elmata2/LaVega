@@ -264,6 +264,53 @@ test("broker credential form stores IBKR credentials and starts sync", async () 
   root.unmount();
 });
 
+test("locked broker vault can be unlocked without entering broker credentials again", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    if (String(input) === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "locked" }));
+    if (String(input) === "/api/brokers/credentials/unlock") return new Response(null, { status: 204 });
+    if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  const passphrase = container.querySelector<HTMLInputElement>('[name="unlockPassphrase"]')!;
+  expect(passphrase).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(passphrase, "vault-passphrase");
+    passphrase.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => { container.querySelector<HTMLButtonElement>('[data-action="unlock-vault"]')?.click(); await Promise.resolve(); });
+
+  const unlockRequest = requests.find((request) => request.url === "/api/brokers/credentials/unlock");
+  expect(unlockRequest?.init?.body).toBe(JSON.stringify({ passphrase: "vault-passphrase" }));
+  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
+  expect(container.textContent).toContain("Kluis ontgrendeld");
+  expect(container.textContent).not.toContain("vault-passphrase");
+  await act(async () => { root.unmount(); });
+});
+
+test("broker sync progress shows exact pages, orders, and provider wait", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === "/api/brokers/sync/status") return new Response(JSON.stringify({ status: "waiting", pages: 6, ordersRead: 300, positionsRead: 0, waitUntil: "2026-08-19T14:00:00.000Z", remaining: 0, updatedAt: "2026-08-19T13:59:00.000Z", message: null }));
+    if (String(input) === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "unlocked" }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Trading 212 synchroniseert");
+  expect(container.textContent).toContain("6 pagina’s");
+  expect(container.textContent).toContain("300 orders gelezen");
+  expect(container.textContent).toContain("0 posities");
+  expect(container.textContent).toContain("Wacht op nieuwe API-capaciteit");
+  await act(async () => { root.unmount(); });
+});
+
 test("broker credential form succeeds when the other broker is not configured", async () => {
   const requests: Array<{ url: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

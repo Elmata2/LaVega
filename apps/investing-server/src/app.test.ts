@@ -107,6 +107,14 @@ test("broker sync route forwards force and keeps problems in response", async ()
   expect(brokerSync).toHaveBeenCalledWith(true);
 });
 
+test("broker sync status route exposes safe progress counters", async () => {
+  const progress = { status: "waiting" as const, pages: 6, ordersRead: 300, positionsRead: 0, waitUntil: "2026-08-19T14:00:00.000Z", remaining: 0, updatedAt: "2026-08-19T13:59:00.000Z", message: null };
+  const investingApp = createApp({ brokerSyncStatus: () => progress });
+  const response = await investingApp.request("/api/brokers/sync/status");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(progress);
+});
+
 test("broker sync route converts unexpected failures into a useful response", async () => {
   const investingApp = createApp({ brokerSync: vi.fn().mockRejectedValue(new Error("adapter failed")) });
   const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
@@ -126,6 +134,35 @@ test("broker credentials route stores validated IBKR credentials without returni
   expect(response.status).toBe(204);
   expect(await response.text()).toBe("");
   expect(configureBroker).toHaveBeenCalledWith({ broker: "ibkr", token: "flex-token", queryId: "123456", passphrase: "vault-passphrase" });
+});
+
+test("broker vault routes report status and unlock without returning passphrase", async () => {
+  const credentialStatus = vi.fn(async () => "locked" as const);
+  const unlockCredentials = vi.fn(async () => true);
+  const investingApp = createApp({ credentialStatus, unlockCredentials });
+
+  const statusResponse = await investingApp.request("/api/brokers/credentials/status");
+  expect(await statusResponse.json()).toEqual({ status: "locked" });
+
+  const unlockResponse = await investingApp.request("/api/brokers/credentials/unlock", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ passphrase: "vault-passphrase" }),
+  });
+  expect(unlockResponse.status).toBe(204);
+  expect(await unlockResponse.text()).toBe("");
+  expect(unlockCredentials).toHaveBeenCalledWith("vault-passphrase");
+});
+
+test("broker vault unlock rejects wrong passphrase without leaking details", async () => {
+  const investingApp = createApp({ unlockCredentials: vi.fn(async () => false) });
+  const response = await investingApp.request("/api/brokers/credentials/unlock", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ passphrase: "wrong" }),
+  });
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ problems: ["Vault could not be unlocked"] });
 });
 
 test("broker sync logs every returned problem with context and redacts secrets", async () => {

@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "tsx watch src/docker.ts",
-    "start:docker": "tsx src/docker.ts",
+    "dev": "tsx --env-file-if-exists=.env watch src/docker.ts",
+    "start:docker": "tsx --env-file-if-exists=.env src/docker.ts",
     "build": "tsc -p .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
