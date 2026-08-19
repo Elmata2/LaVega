@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { serve } from "@hono/node-server";
 import { createRuntimeApp } from "./index.js";
-import { createFilePriceStore } from "./filePriceStore.js";
+import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 
 const port = Number(process.env.PORT) || 8788;
 const staticRoot = process.env.INVESTING_WEB_DIST ?? join(process.cwd(), "apps/investing-web", "dist");
@@ -49,7 +49,7 @@ export function createDockerFetch(applicationFetch: ApplicationFetch, root = sta
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const runtimeApp = await createRuntimeApp({ priceStore: createFilePriceStore(process.env.INVESTING_PRICE_STORE_FILE ?? "/data/prices.json") });
+  const runtimeApp = await createRuntimeApp({ priceStore: createFilePriceStore(runtimePriceStoreFile()) });
   serve({ fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" }, (info) => {
     console.log(`LaVega investing Docker server listening on 0.0.0.0:${info.port}`);
   });

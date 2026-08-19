@@ -2,10 +2,21 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { createFilePriceStore } from "./filePriceStore.js";
+import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
+
+test("runtime price store file prefers INVESTING_PRICE_STORE_FILE", () => {
+  const previous = process.env.INVESTING_PRICE_STORE_FILE;
+  process.env.INVESTING_PRICE_STORE_FILE = "/tmp/custom-prices.json";
+  try {
+    expect(runtimePriceStoreFile()).toBe("/tmp/custom-prices.json");
+  } finally {
+    if (previous === undefined) delete process.env.INVESTING_PRICE_STORE_FILE;
+    else process.env.INVESTING_PRICE_STORE_FILE = previous;
+  }
+});
 
 test("persists price bars across store instances and purges them", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-price-store-"));

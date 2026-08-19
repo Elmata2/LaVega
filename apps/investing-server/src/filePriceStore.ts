@@ -1,9 +1,16 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { PriceStore } from "@lavega/adapters";
 import type { PriceBar } from "@lavega/core";
 
 type StoredPriceBar = PriceBar;
+
+export function runtimePriceStoreFile(): string {
+  const fromEnv = process.env.INVESTING_PRICE_STORE_FILE?.trim();
+  if (fromEnv) return fromEnv;
+  return existsSync("/data") ? "/data/prices.json" : join(process.cwd(), ".lavega", "prices.json");
+}
 
 function isPriceBar(value: unknown): value is StoredPriceBar {
   if (!value || typeof value !== "object") return false;
