@@ -98,3 +98,83 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
   }
   return out;
 }
+
+/* ─────────────────────────────────────────── what the whole market offers
+
+ * The travel and cashback agents rank what the user HOLDS. That answers "which of
+ * my cards should I pay with", which is the right question at a checkout and the
+ * wrong one when deciding what to open. The catalogue knows 55 card surcharges and
+ * 16 savings rates, so it can answer the second question too — but only from
+ * figures that are COVERED, since recommending a switch on a rate whose conditions
+ * nobody established is exactly the advice this project refuses to give.
+ */
+
+export type MarketOption = {
+  productId: string;
+  product: string;
+  bank: string;
+  /** The figure, in percent. Lower is better for a fee, higher for a rate. */
+  value: number;
+  conditions: string | null;
+  sourceUrl: string;
+  /** The date the SOURCE states, so a saver can see a figure is a year old. */
+  asOf: string;
+};
+
+function toOption(e: CatalogueEntryLike, v: CatalogValue): MarketOption {
+  const bank = e.issuer ? issuerToBank(e.issuer) : "";
+  return {
+    productId: e.id,
+    product: e.product,
+    bank,
+    value: v.value,
+    conditions: v.conditions,
+    sourceUrl: v.sourceUrl,
+    asOf: v.checkedAt,
+  };
+}
+
+/** Every covered foreign-currency surcharge, cheapest first.
+ *
+ *  Ties keep catalogue order rather than being broken arbitrarily, so the list is
+ *  stable between renders and between deploys — a recommendation that reshuffles
+ *  on reload reads as noise. */
+export function marketFxOptions(entries: readonly CatalogueEntryLike[]): MarketOption[] {
+  const out: MarketOption[] = [];
+  for (const e of entries) {
+    const v = e.fields?.fxFeePct;
+    if (!isCovered(v) || !v) continue;
+    out.push(toOption(e, v));
+  }
+  return out.sort((a, b) => a.value - b.value);
+}
+
+/** Every covered savings rate, best first. */
+export function marketSavingsOptions(entries: readonly CatalogueEntryLike[]): MarketOption[] {
+  const out: MarketOption[] = [];
+  for (const e of entries) {
+    const v = e.fields?.interestPct;
+    if (!isCovered(v) || !v) continue;
+    out.push(toOption(e, v));
+  }
+  return out.sort((a, b) => b.value - a.value);
+}
+
+/** What the user is leaving on the table by not switching, for a given spend.
+ *
+ *  Returns null when the market's best is not actually better, so the UI shows
+ *  nothing rather than a zero-euro "saving" — and null when the user's own figure
+ *  is unknown, because a saving computed against an unknown is a guess dressed as
+ *  a number. */
+export function fxSwitchGain(
+  heldPct: number | null,
+  best: MarketOption | undefined,
+  spendCents: number,
+): { best: MarketOption; savingCents: number } | null {
+  if (heldPct === null || !best) return null;
+  const delta = heldPct - best.value;
+  if (delta <= 0) return null;
+  const savingCents = Math.round((spendCents * delta) / 100);
+  if (savingCents <= 0) return null;
+  return { best, savingCents };
+}

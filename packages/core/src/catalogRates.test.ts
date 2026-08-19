@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { issuerToBank, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import { fxSwitchGain, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
   value: 1.25, route: "agent" as const, sourceUrl: "https://abn/fid.pdf",
@@ -95,5 +95,58 @@ describe("names a saver would recognise", () => {
   });
   test("keeps a bank whose name really is two words", () => {
     expect(productWithoutBank("Trade Republic Cash", "Trade Republic")).toBe("Cash");
+  });
+});
+
+describe("what the whole market offers", () => {
+  const card = (id: string, product: string, issuer: string, value: number, known = true) => ({
+    id, product, issuer, kind: "creditcard",
+    fields: { fxFeePct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: "2026-01-01", conditions: "x", conditionsKnown: known } },
+  });
+
+  test("ranks covered surcharges cheapest first", () => {
+    const out = marketFxOptions([card("a", "A", "Bank A N.V.", 2), card("b", "B", "Bank B N.V.", 0.2)]);
+    expect(out.map((o) => o.product)).toEqual(["B", "A"]);
+    expect(out[0].bank).toBe("Bank B");
+  });
+
+  test("REFUSES a product whose conditions were never settled", () => {
+    // Recommending a switch on a rate nobody qualified is the advice this whole
+    // project exists to not give.
+    expect(marketFxOptions([card("a", "A", "Bank A", 0, false)])).toEqual([]);
+  });
+
+  test("savings ranks the other way — highest rate first", () => {
+    const sav = (id: string, v: number) => ({
+      id, product: id, issuer: "B N.V.", kind: "spaarrekening",
+      fields: { interestPct: { value: v, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-01-01", conditions: "x", conditionsKnown: true } },
+    });
+    expect(marketSavingsOptions([sav("low", 1), sav("high", 3)]).map((o) => o.product)).toEqual(["high", "low"]);
+  });
+
+  test("carries the source's own date, so an old figure can say so", () => {
+    expect(marketFxOptions([card("a", "A", "Bank A", 1)])[0].asOf).toBe("2026-01-01");
+  });
+});
+
+describe("fxSwitchGain", () => {
+  const best = { productId: "x", product: "X", bank: "X", value: 0, conditions: null, sourceUrl: "https://x", asOf: "2026-01-01" };
+
+  test("quantifies what not switching costs on a given spend", () => {
+    // € 1.000 abroad at 1,4% instead of 0% is € 14.
+    expect(fxSwitchGain(1.4, best, 100_000)!.savingCents).toBe(1400);
+  });
+
+  test("returns nothing when the user's own card is already as good", () => {
+    expect(fxSwitchGain(0, best, 100_000)).toBeNull();
+  });
+
+  test("returns nothing when the user's own rate is UNKNOWN", () => {
+    // A saving computed against an unknown is a guess wearing a number's clothes.
+    expect(fxSwitchGain(null, best, 100_000)).toBeNull();
+  });
+
+  test("returns nothing when the market has no covered option at all", () => {
+    expect(fxSwitchGain(1.4, undefined, 100_000)).toBeNull();
   });
 });
