@@ -25,5 +25,6 @@ test("credential setup rejects wrong passphrase before replacing stored credenti
   vault.unlock = vi.fn(async () => false);
 
   await expect(createRuntimeBrokerCredentialSetup(vault)({ broker: "trading212", token: "api-key", secret: "api-secret", passphrase: "wrong" })).rejects.toThrow("Vault passphrase is incorrect");
+  expect(vault.lock).not.toHaveBeenCalled();
   expect(vault.putCredentials).not.toHaveBeenCalled();
 });

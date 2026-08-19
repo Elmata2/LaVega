@@ -9,6 +9,11 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
+function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
+  const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
+  return other.test(problem) && /credentials are not configured/i.test(problem);
+}
+
 type Health = { ok: boolean; service: string };
 type DashboardState =
   | { status: "loading" }
@@ -199,7 +204,8 @@ function BrokerCredentialForm() {
       if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Credentials opslaan mislukt.");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await syncResponse.json() as { problems?: string[] };
-      if (!syncResponse.ok || (syncResult.problems?.length ?? 0) > 0) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      const blocking = (syncResult.problems ?? []).filter((problem) => !otherBrokerUnconfigured(problem, broker));
+      if (!syncResponse.ok || blocking.length > 0) throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setStatus("success"); setMessage("Credentials opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {

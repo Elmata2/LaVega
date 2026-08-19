@@ -263,3 +263,39 @@ test("broker credential form stores IBKR credentials and starts sync", async () 
   expect(container.textContent).not.toContain("flex-token");
   root.unmount();
 });
+
+test("broker credential form succeeds when the other broker is not configured", async () => {
+  const requests: Array<{ url: string }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input) });
+    if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
+    if (String(input) === "/api/brokers/sync?force=true") {
+      return new Response(JSON.stringify({
+        outcomes: [
+          { broker: "ibkr", status: "synced" },
+          { broker: "trading212", status: "problem" },
+        ],
+        problems: ["trading212: credentials are not configured"],
+      }));
+    }
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); });
+  const fields = {
+    token: container.querySelector<HTMLInputElement>('[name="token"]')!,
+    queryId: container.querySelector<HTMLInputElement>('[name="queryId"]')!,
+    passphrase: container.querySelector<HTMLInputElement>('[name="passphrase"]')!,
+  };
+  const setInput = (field: HTMLInputElement, value: string) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set; setter?.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); };
+  setInput(fields.token, "flex-token");
+  setInput(fields.queryId, "123456");
+  setInput(fields.passphrase, "vault-passphrase");
+  await act(async () => { container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click(); await Promise.resolve(); });
+
+  expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
+  expect(container.textContent).toContain("Synchronisatie voltooid");
+  expect(container.textContent).not.toContain("credentials are not configured");
+  root.unmount();
+});

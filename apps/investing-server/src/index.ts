@@ -26,10 +26,7 @@ export function createRuntimeBrokerCredentialSetup(credentials: ReturnType<typeo
   return async (input: BrokerCredentialInput): Promise<void> => {
     const status = await credentials.status();
     if (status === "empty") await credentials.setup(input.passphrase);
-    else {
-      credentials.lock();
-      if (!(await credentials.unlock(input.passphrase))) throw new Error("Vault passphrase is incorrect");
-    }
+    else if (!(await credentials.unlock(input.passphrase))) throw new Error("Vault passphrase is incorrect");
     if (input.broker === "ibkr") {
       await credentials.putCredentials({ broker: "ibkr", tenantId: LOCAL_TENANT_ID, token: input.token, queryId: input.queryId! });
     } else {
