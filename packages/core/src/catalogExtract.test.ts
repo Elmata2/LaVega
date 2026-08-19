@@ -624,3 +624,52 @@ describe("parseExtractReply", () => {
     });
   });
 });
+
+/* THE AMEX REGRESSION, 2026-08-19.
+ *
+ * Adding the exhaustive-document rule gave the model a prominent path to CLAIM
+ * unconditionality, and it started reaching for `conditions: null` on rows whose
+ * scope it had previously written out. A null claim must clear a much higher bar,
+ * so it failed it, and six Amex cards that were covered at 2,5% went to refused —
+ * the safe direction, but a real loss of coverage caused by a prompt change.
+ *
+ * The prompt now says describing the scope is almost always the better answer.
+ * These tests pin the PARSER behaviour either way, since the parser is what can
+ * be tested without spending on a model.
+ */
+describe("scope is a condition, not an absence of one", () => {
+  const AMEX = [
+    "OVEREENKOMST VOOR DE AMERICAN EXPRESS KAARTHOUDERS – PER MAART 2022",
+    "2.7 Transactie in vreemde valuta",
+    "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+    "6.14 Als een derde partij het bedrag al in euro's heeft omgezet, brengen wij geen wisselkoersopslag in rekening.",
+  ].join("\n");
+
+  it("a reply that WRITES THE SCOPE is covered, with no basis needed at all", () => {
+    const got = parseExtractReply({
+      fxFeePct: 2.5,
+      conditions: "Geldt voor transacties die niet in euro zijn uitgevoerd; als een derde partij al naar euro's heeft omgezet brengt Amex geen opslag in rekening.",
+      conditionsKnown: true,
+      quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+      section: "2.7 Transactie in vreemde valuta",
+      documentKind: "terms",
+      capsExpressedElsewhere: false,
+      unconditionalBasis: null,
+    }, { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX }, "2026-08-19");
+    expect(got).not.toBeNull();
+    expect(got!.conditionsKnown).toBe(true);
+    expect(got!.conditions).toContain("niet in euro");
+  });
+
+  it("the same reply claiming null instead is REFUSED — this is the regression, pinned", () => {
+    const got = parseExtractReply({
+      fxFeePct: 2.5, conditions: null, conditionsKnown: true,
+      quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+      section: "2.7 Transactie in vreemde valuta",
+      documentKind: "terms", capsExpressedElsewhere: false,
+      unconditionalBasis: "exhaustive-document",
+    }, { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX }, "2026-08-19");
+    // capsExpressedElsewhere is false, so exhaustiveness proves nothing here.
+    expect(got === null || got.conditionsKnown === false).toBe(true);
+  });
+});

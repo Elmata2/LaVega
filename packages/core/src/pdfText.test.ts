@@ -184,3 +184,72 @@ describe("readDocumentDate: month-year editions", () => {
     expect(readDocumentDate("VOORWAARDEN\nPER DECEMBER 2023\n" + "b".repeat(200))).toBe("2023-12-01");
   });
 });
+
+/* THE FID'S OWN DATE LABEL.
+ *
+ * The EU-prescribed "Informatiedocument betreffende de vergoedingen" dates itself
+ * as "Datum: 1 januari 2026" and nothing else. Neither existing pattern matched,
+ * so 32 of 43 covered figures were stamped with the day they were read — in the
+ * document genre that had just become the sweep's primary source, which is the
+ * worst possible place for that bug to hide.
+ */
+describe("readDocumentDate: the Fee Information Document label", () => {
+  test("reads ABN AMRO's FID header", () => {
+    expect(readDocumentDate([
+      "Informatiedocument betreffende de vergoedingen",
+      "Naam van de rekeningaanbieder: ABN AMRO Bank N.V.",
+      "Naam van de rekening: BasisPakket Betalen",
+      "Datum: 1 januari 2026",
+    ].join("\n"))).toBe("2026-01-01");
+  });
+
+  test("a bare Datum label is enough", () => {
+    expect(readDocumentDate("Datum: 15 juni 2026")).toBe("2026-06-15");
+  });
+
+  test("ingangsdatum counts too", () => {
+    expect(readDocumentDate("Ingangsdatum: 3 maart 2025")).toBe("2025-03-03");
+  });
+
+  test("the FID label wins over a month-year edition elsewhere in the file", () => {
+    // The document's own effective date beats a running header, which may name the
+    // template's vintage rather than this edition's.
+    expect(readDocumentDate("PER MAART 2022\nPER MAART 2022\nPER MAART 2022\nDatum: 1 januari 2026"))
+      .toBe("2026-01-01");
+  });
+
+  test("a date-shaped sentence that is not a label is still refused", () => {
+    expect(readDocumentDate("Wij hebben u op 4 mei 2024 geïnformeerd over de wijziging.")).toBeNull();
+  });
+});
+
+/* THE FOURTH DATE FORMAT IN ONE DAY, and the pattern is the lesson: each new
+ * document genre dates itself differently, and every miss stamps a figure with
+ * the day we fetched it rather than the day it took effect.
+ * de Volksbank heads its Tarievenwijzer "per 1 februari 2026" — a day-bearing
+ * "per" form that fell between the pattern demanding the word "geldig" and the
+ * one demanding no day at all.
+ */
+describe("readDocumentDate: a bare 'per <day> <month> <year>' heading", () => {
+  test("reads the SNS tarievenwijzer heading", () => {
+    expect(readDocumentDate("        Tarievenwijzer\n        Betalen & Sparen            per 1 februari 2026\n"))
+      .toBe("2026-02-01");
+  });
+
+  test("reads ASN's, which puts it on the title line itself", () => {
+    expect(readDocumentDate("          Tarievenwijzer                    per 1 juli 2026\n\nIn deze Tarievenwijzer vind je de kosten."))
+      .toBe("2026-07-01");
+  });
+
+  test("a rate change announced in body prose is NOT the document's date", () => {
+    expect(readDocumentDate("Wij verhogen per 1 januari 2025 de tarieven voor betalen.")).toBeNull();
+  });
+
+  test("only looks near the top, where a document heads itself", () => {
+    expect(readDocumentDate("x".repeat(2500) + "\nper 1 maart 2020\n")).toBeNull();
+  });
+
+  test("an explicit Datum label still wins over the heading form", () => {
+    expect(readDocumentDate("Tarievenwijzer per 1 juli 2026\nDatum: 1 januari 2026")).toBe("2026-01-01");
+  });
+});
