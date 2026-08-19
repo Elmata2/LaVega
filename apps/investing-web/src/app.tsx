@@ -11,6 +11,7 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 const YAHOO_FINANCE_CONSENT_HEADER = "x-lavega-yahoo-consent";
 const YAHOO_DISCLOSURE_STORAGE_KEY = "lavega.yahoo-finance-disclosure.v1";
 const YAHOO_CONSENT_EVENT = "lavega:yahoo-consent";
+const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 const hasSeenYahooFinanceDisclosure = () => { try { return localStorage.getItem(YAHOO_DISCLOSURE_STORAGE_KEY) === "seen"; } catch { return false; } };
 const markYahooFinanceDisclosureSeen = () => { try { localStorage.setItem(YAHOO_DISCLOSURE_STORAGE_KEY, "seen"); } catch { /* unavailable storage is non-fatal */ } };
 
@@ -45,11 +46,15 @@ function useDashboard(symbol?: string): DashboardState {
   const [state, setState] = useState<DashboardState>({ status: "loading" });
   useEffect(() => {
     let current = true;
-    setState({ status: "loading" });
-    void fetchDashboard(symbol)
-      .then((data) => { if (current) setState({ status: "ready", data }); })
-      .catch((reason: unknown) => { if (current) setState({ status: "error", message: reason instanceof Error ? reason.message : "Dashboard laden mislukt" }); });
-    return () => { current = false; };
+    const load = () => {
+      setState({ status: "loading" });
+      void fetchDashboard(symbol)
+        .then((data) => { if (current) setState({ status: "ready", data }); })
+        .catch((reason: unknown) => { if (current) setState({ status: "error", message: reason instanceof Error ? reason.message : "Dashboard laden mislukt" }); });
+    };
+    load();
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
+    return () => { current = false; window.removeEventListener(DASHBOARD_REFRESH_EVENT, load); };
   }, [symbol]);
   return state;
 }
@@ -105,13 +110,15 @@ function AppOpenSync() {
           const dashboard = await fetchDashboard();
           type PriceSyncSymbol = { symbol: string; currency: string; isin?: string; ticker?: string; exchange?: string; backfillFrom?: string };
           const symbols: PriceSyncSymbol[] = dashboard.positions
-            .filter((position) => Boolean(position.isin))
-            .map((position) => ({ symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }));
+            .map((position) => position.isin
+              ? { symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }
+              : { symbol: position.symbol, ticker: position.symbol, exchange: "UNKNOWN", currency: position.currency, backfillFrom: position.asOf });
           symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
           const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
           if (priceResponse.ok) {
             const priceResult = await priceResponse.json() as { problems?: string[] };
             nextProblems.push(...(priceResult.problems ?? []));
+            window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
           }
         }
         if (current) setProblems(nextProblems);

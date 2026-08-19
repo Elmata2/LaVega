@@ -2,9 +2,10 @@ import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { createApp } from "./app.js";
 import { createProblemReporter } from "./observability.js";
-import { FX_RATE_FALLBACK, buildInvestingDashboard, type Dividend, type Position, type Trade } from "@lavega/core";
+import { buildInvestingDashboard, type Dividend, type Position, type Trade } from "@lavega/core";
 import {
   createInMemoryPriceStore,
+  createFrankfurterFxProvider,
   createIbkrFlexAdapter,
   createLocalCredentialStore,
   createMemoryBrokerSyncStateStore,
@@ -66,6 +67,7 @@ export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResu
 export async function createRuntimeApp() {
   const dsn = process.env.SENTRY_DSN;
   const priceStore = createInMemoryPriceStore();
+  const fxProvider = createFrankfurterFxProvider();
   let positions: Position[] = [];
   let trades: Trade[] = [];
   let dividends: Dividend[] = [];
@@ -81,10 +83,11 @@ export async function createRuntimeApp() {
     const symbols = [...new Set(positions.map((position) => position.symbol))];
     const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(value, "0000-01-01", "9999-12-31")))).flat();
     const benchmarkBars = await priceStore.getRange("SP500", "0000-01-01", "9999-12-31");
-    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates: FX_RATE_FALLBACK, selectedSymbol: symbol, problems: syncProblems });
+    const fxRates = await fxProvider.getLatestRate();
+    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates, selectedSymbol: symbol, problems: syncProblems });
   };
-  if (!dsn) return createApp({ brokerSync, store: priceStore, dashboardReader });
+  if (!dsn) return createApp({ brokerSync, store: priceStore, fxProvider, dashboardReader });
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, store: priceStore, dashboardReader, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return createApp({ brokerSync, store: priceStore, fxProvider, dashboardReader, problemReporter: createProblemReporter({ dsn, sentry }) });
 }
