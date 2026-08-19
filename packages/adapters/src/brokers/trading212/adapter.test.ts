@@ -100,6 +100,28 @@ test("rejected credentials return empty arrays and Trading 212 problem", async (
   expect(result.problems[0]).toContain("Trading 212");
 });
 
+test("retries rate-limited order-history request using Retry-After", async () => {
+  let orderRequests = 0;
+  const baseUrl = await serve((request, response) => {
+    if (request.url === "/api/v0/equity/history/orders") {
+      orderRequests += 1;
+      if (orderRequests === 1) {
+        response.writeHead(429, { "retry-after": "0" });
+        response.end(JSON.stringify({ error: "too many requests" }));
+        return;
+      }
+      return json(response, 200, { items: [order(1, "AAPL")] });
+    }
+    return json(response, 200, [holding("AAPL")]);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(orderRequests).toBe(2);
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toHaveLength(1);
+});
+
 test("malformed order-history payload becomes a problem without throwing", async () => {
   const baseUrl = await serve((request, response) => {
     if (request.url === "/api/v0/equity/history/orders") json(response, 200, { orders: [] });

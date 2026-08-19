@@ -39,6 +39,7 @@ export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentia
 
 export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createFileCredentialStore()): (force: boolean) => Promise<ScheduledSyncResult> {
   const state = createMemoryBrokerSyncStateStore();
+  let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = [
     {
@@ -63,9 +64,18 @@ export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResu
     },
   ];
   return async (force) => {
-    const result = await syncScheduledBrokers({ adapters, credentials, state, tenantId: LOCAL_TENANT_ID, entity, force });
-    onCompleted?.(result);
-    return result;
+    if (inFlight) return inFlight;
+    const run = syncScheduledBrokers({ adapters, credentials, state, tenantId: LOCAL_TENANT_ID, entity, force })
+      .then((result) => {
+        onCompleted?.(result);
+        return result;
+      });
+    inFlight = run;
+    try {
+      return await run;
+    } finally {
+      if (inFlight === run) inFlight = null;
+    }
   };
 }
 

@@ -12,6 +12,23 @@ type Trading212Page = { items: Trading212Order[]; nextPagePath?: string };
 type Trading212Positions = Trading212Order[];
 
 const SOURCE = "trading-212";
+const MAX_RATE_LIMIT_RETRIES = 2;
+const MAX_RATE_LIMIT_WAIT_MS = 5_000;
+
+function rateLimitWaitMs(response: Response, retry: number): number {
+  const retryAfter = response.headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, MAX_RATE_LIMIT_WAIT_MS);
+    const timestamp = Date.parse(retryAfter);
+    if (Number.isFinite(timestamp)) return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
+  }
+  return Math.min(250 * (2 ** retry), MAX_RATE_LIMIT_WAIT_MS);
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function value(order: Trading212Order, ...keys: string[]): unknown {
   return keys.map((key) => order[key]).find((item) => item !== undefined && item !== null);
@@ -109,9 +126,7 @@ function result(positions: Position[], trades: TradeWithoutId[], problems: strin
 async function page(url: string, config: Trading212Config): Promise<Trading212Page> {
   // Trading 212 beta docs do not confirm per-endpoint numeric rate limits. Keep
   // sync bounded to one sequential request per cursor until provider confirms them.
-  const response = await fetch(url, {
-    headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
-  });
+  const response = await request(url, config);
   if (!response.ok) throw new Error(`Trading 212 request failed with HTTP ${response.status}`);
   const payload: unknown = await response.json();
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
@@ -127,10 +142,18 @@ async function page(url: string, config: Trading212Config): Promise<Trading212Pa
   };
 }
 
+async function request(url: string, config: Trading212Config): Promise<Response> {
+  for (let retry = 0; ; retry += 1) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
+    });
+    if (response.status !== 429 || retry >= MAX_RATE_LIMIT_RETRIES) return response;
+    await wait(rateLimitWaitMs(response, retry));
+  }
+}
+
 async function positions(url: string, config: Trading212Config): Promise<Trading212Positions> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
-  });
+  const response = await request(url, config);
   if (!response.ok) throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
   const payload: unknown = await response.json();
   // Trading 212 docs reference this endpoint but do not confirm whether beta
