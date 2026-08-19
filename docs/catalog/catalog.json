@@ -1,0 +1,904 @@
+{
+  "generatedAt": "2026-08-18",
+  "entries": [
+    {
+      "id": "ing-betaalpas",
+      "product": "ING betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "agent",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-creditcard",
+      "product": "ING creditcard",
+      "fields": {}
+    },
+    {
+      "id": "ing-platinumcard",
+      "product": "ING Platinumcard",
+      "fields": {}
+    },
+    {
+      "id": "abn-amro-betaalpas",
+      "product": "ABN AMRO betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.2,
+          "route": "agent",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html",
+          "checkedAt": "2026-08-18",
+          "conditions": "\"per keer\" bij betalen via betaalautomaat in het buitenland in buitenlands geld, met voetnoot * over de koersopslag ten opzichte van de ECB referentiekoers in Denemarken, Zweden, Hongarije, Polen, Roemenië, Tsjechië of Bulgarije; pakketafhankelijke afwijkingen (\"Bij een Studentenpakket betaal je alleen een valutakoersopslag\") noemt de pagina alleen bij online betalen, niet bij de betaalautomaat",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "abn-amro-creditcard",
+      "product": "ABN AMRO creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-amro-gold-card",
+      "product": "ABN AMRO Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "rabobank-betaalpas",
+      "product": "Rabobank betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260423003428id_/https://www.rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden",
+          "checkedAt": "2026-04-23",
+          "conditions": "Tarief staat per betaalpakket vermeld (hier onder \"Rabo Standaard € 3,45 per maand\", en identiek bij Rabo Comfort, Rabo RiantPakket, Rabo Free en Rabo JongerenRekening); de pagina noemt verder geen limiet, staffel of vrijstelling en verwijst voor details naar \"Tarieven en limieten particulier betalingsverkeer per dec 2025\".",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "rabobank-creditcard",
+      "product": "Rabobank creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
+          "checkedAt": "2026-04-12",
+          "conditions": "Niet vast te stellen op deze pagina: er worden geen staffels, plafonds of vrijstellingen genoemd, en voor de volledige tarieven wordt verwezen naar \"Tarieven en limieten particulier betalingsverkeer 2025\"",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "rabo-goldcard",
+      "product": "Rabo GoldCard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260411080707id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard",
+          "checkedAt": "2026-04-11",
+          "conditions": "Geldt bij betalen in een andere muntsoort (vreemde valuta); betalingen in euro's, ook in het buitenland, kosten niets. De pagina noemt geen limiet of staffel en verwijst voor het overige naar \"Tarieven en limieten particulier betalingsverkeer per dec 2025\".",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "sns-betaalpas",
+      "product": "SNS betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "agent",
+          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html",
+          "checkedAt": "2026-08-18",
+          "conditions": "De pagina vermeldt geen cap, staffel, pakket of actieperiode bij dit tarief en zegt evenmin dat het onvoorwaardelijk geldt; alleen dat betalen in euro's niets extra's kost en dat contant opnemen in vreemde valuta 1,4% + € 3,50 per keer kost.",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "sns-creditcard",
+      "product": "SNS creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "asn-betaalpas",
+      "product": "ASN betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "agent",
+          "sourceUrl": "https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html",
+          "checkedAt": "2026-08-18",
+          "conditions": "De pagina noemt alleen \"1,4% van het betaalde bedrag per betaling\" voor betalen in vreemde valuta; er wordt geen cap, staffel, pakket of actieperiode genoemd, en ook niet gezegd dat de opslag onvoorwaardelijk is (wel: \"Visa of Mastercard brengen soms ook kosten in rekening voor het verwerken van de transactie\").",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "asn-creditcard",
+      "product": "ASN Creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html",
+          "checkedAt": "2026-08-18",
+          "conditions": "Geldt voor \"Betalen binnen en buiten de EU met buitenlands geld\"; de pagina noemt verder geen cap, staffel of actieperiode (de voetnoot met 1%/4% en het maximum van € 1,50 hoort bij geld opnemen, niet bij betalen)",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "regiobank-betaalpas",
+      "product": "RegioBank betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "agent",
+          "sourceUrl": "https://www.regiobank.nl/service/betalen/buitenland.html",
+          "checkedAt": "2026-08-18",
+          "conditions": "De pagina noemt geen cap, staffel, pakket of actieperiode; er staat alleen \"Aan betalen en contant geld opnemen in een andere valuta zijn altijd extra kosten verbonden.\"",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "regiobank-creditcard",
+      "product": "RegioBank creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20241121084450id_/https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2024-11-21",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "knab-betaalpas",
+      "product": "Knab betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.4,
+          "route": "agent",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-08-18",
+          "conditions": "Geldt voor \"Betalen en opname van contant geld buiten eurolanden\": Mastercard wisselkoers + 1,4% koersopslag in euro; de pagina noemt geen limiet of staffel en verwijst voor meer informatie naar \"Op deze pagina vind je meer informatie over pinnen in het buitenland.\"",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "knab-creditcard",
+      "product": "Knab creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalpas",
+      "product": "Triodos betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-free-betaalpas",
+      "product": "bunq Free betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 3,
+          "route": "agent",
+          "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-free",
+          "checkedAt": "2026-08-18",
+          "conditions": "Geldt pas na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar; tot €1.000 per jaar krijg je met het gratis abonnement de standaard wisselkoers (ZeroFX)",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-core-betaalpas",
+      "product": "bunq Core betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-core",
+          "checkedAt": "2026-08-18",
+          "conditions": "Geldt voor betalingen met je pas in het buitenland op de Mastercard-koers \"wanneer de markten open zijn\"; voor bunq Core is ZeroFX onbeperkt (\"Core, Pro en Elite hebben onbeperkt ZeroFX\"), anders dan bunq Free dat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar bevat, waarboven standaard conversiekosten gelden.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-pro-betaalpas",
+      "product": "bunq Pro betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-elite-betaalpas",
+      "product": "bunq Elite betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-elite",
+          "checkedAt": "2026-08-18",
+          "conditions": "Geldt via ZeroFX (standaard aan) bij paspetalingen in het buitenland: een valutafluctuatie-aanpassing van 0,5% \"wanneer de markten open zijn\"; bunq Free heeft tot €1.000 ZeroFX-uitgaven per jaar, maar \"Core, Pro en Elite hebben onbeperkt ZeroFX\"",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-creditcard",
+      "product": "bunq creditcard",
+      "fields": {}
+    },
+    {
+      "id": "bunq-termijndeposito",
+      "product": "bunq Termijndeposito",
+      "fields": {}
+    },
+    {
+      "id": "bunq-beleggingsrekening",
+      "product": "bunq beleggingsrekening",
+      "fields": {}
+    },
+    {
+      "id": "bunq-crypto",
+      "product": "bunq crypto",
+      "fields": {}
+    },
+    {
+      "id": "bunq-free-business-betaalpas",
+      "product": "bunq Free Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-core-business-betaalpas",
+      "product": "bunq Core Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-pro-business-betaalpas",
+      "product": "bunq Pro Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "bunq-elite-business-betaalpas",
+      "product": "bunq Elite Business betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-standard-betaalpas",
+      "product": "Revolut Standard betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20250719221017id_/https://www.revolut.com/nl-NL/legal/standard-fees/",
+          "checkedAt": "2025-07-19",
+          "conditions": "Geldt boven de wissellimiet van het Standard-plan: \"Standard: wissellimiet van EUR 1.000 per maand. Daarna zijn er fair usage-kosten van 1% per geldwissel van toepassing.\" Binnen de planlimieten op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd) gelden geen kosten; in het weekend (tussen 17:00 uur op vrijdag en 18:00 uur op zondag, New York tijd) geldt er eveneens een kost van 1%.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-plus-betaalpas",
+      "product": "Revolut Plus betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20250808164730id_/https://www.revolut.com/nl-NL/legal/plus-fees/",
+          "checkedAt": "2025-08-08",
+          "conditions": "Geldt voor Plus alleen boven de wissellimiet van EUR 3.000 per maand (\"Plus: wissellimiet van EUR 3.000 per maand\"); binnen de limieten van je plan gelden op weekdagen (zondag 18:00 – vrijdag 17:00, New York tijd) geen kosten, en in het weekend geldt een kost van 1%. Kaartbetalingen in vreemde valuta worden in realtime gewisseld en tellen mee voor deze fair usage-limiet.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-premium-betaalpas",
+      "product": "Revolut Premium betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "revolut-metal-betaalpas",
+      "product": "Revolut Metal betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-standard-betaalpas",
+      "product": "N26 Standard betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-smart-betaalpas",
+      "product": "N26 Smart betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-go-betaalpas",
+      "product": "N26 Go betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-metal-betaalpas",
+      "product": "N26 Metal betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "n26-instant-savings",
+      "product": "N26 Instant Savings",
+      "fields": {}
+    },
+    {
+      "id": "n26-flexible-cash-fund",
+      "product": "N26 flexible cash fund",
+      "fields": {}
+    },
+    {
+      "id": "wise-betaalpas",
+      "product": "Wise betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "wise-rente",
+      "product": "Wise Rente",
+      "fields": {}
+    },
+    {
+      "id": "wise-aandelen",
+      "product": "Wise Aandelen",
+      "fields": {}
+    },
+    {
+      "id": "trade-republic-betaalpas",
+      "product": "Trade Republic betaalpas",
+      "fields": {}
+    },
+    {
+      "id": "trade-republic-spaarrekening-rente-op-kassaldo",
+      "product": "Trade Republic spaarrekening (rente op kassaldo)",
+      "fields": {}
+    },
+    {
+      "id": "212-card",
+      "product": "212 Card",
+      "fields": {}
+    },
+    {
+      "id": "trading-212-interest-on-cash",
+      "product": "Trading 212 interest on cash",
+      "fields": {}
+    },
+    {
+      "id": "trading-212-beleggingsrekening",
+      "product": "Trading 212 beleggingsrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-betaalpas-r42-betaalpas",
+      "product": "Openbank betaalpas (R42 Betaalpas)",
+      "fields": {}
+    },
+    {
+      "id": "american-express-blue-card",
+      "product": "American Express Blue Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-green-card",
+      "product": "American Express Green Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-gold-card",
+      "product": "American Express Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-platinum-card",
+      "product": "American Express Platinum Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-entry-card",
+      "product": "Flying Blue - American Express Entry Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-silver-card",
+      "product": "Flying Blue - American Express Silver Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-gold-card",
+      "product": "Flying Blue - American Express Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "flying-blue-american-express-platinum-card",
+      "product": "Flying Blue - American Express Platinum Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-entry-card",
+      "product": "American Express Business Entry Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-green-card",
+      "product": "American Express Business Green Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-business-gold-card",
+      "product": "American Express Business Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-corporate-card",
+      "product": "American Express Corporate Card",
+      "fields": {}
+    },
+    {
+      "id": "american-express-corporate-gold-card",
+      "product": "American Express Corporate Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "klm-american-express-corporate-card",
+      "product": "KLM American Express Corporate Card",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card",
+      "product": "ICS Visa World Card",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
+          "checkedAt": "2026-08-18",
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-visa-world-card-gold",
+      "product": "ICS Visa World Card Gold",
+      "fields": {}
+    },
+    {
+      "id": "ics-visa-world-card-platinum",
+      "product": "ICS Visa World Card Platinum",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
+          "checkedAt": "2026-08-18",
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-visa-world-card-panda",
+      "product": "ICS Visa World Card Panda",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
+          "checkedAt": "2026-08-18",
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-classic",
+      "product": "ICS Mastercard Classic",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
+          "checkedAt": "2026-08-18",
+          "conditions": "2% voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-gold",
+      "product": "ICS Mastercard Gold",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-gold",
+          "checkedAt": "2026-08-18",
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-black",
+      "product": "ICS Mastercard Black",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
+          "checkedAt": "2026-08-18",
+          "conditions": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ics-visa-world-card-business",
+      "product": "ICS Visa World Card Business",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-visa-world-card-business-gold",
+      "product": "ICS Visa World Card Business Gold",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": "Deze pagina noemt geen cap, staffel of voorwaarde bij de wisselkoersopslag; alleen het percentage staat in de vergelijkingstabel.",
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-business",
+      "product": "ICS Mastercard Business",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "ics-mastercard-corporate",
+      "product": "ICS Mastercard Corporate",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "anwb-visa-classic-card",
+      "product": "ANWB Visa Classic Card",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.anwb.nl/creditcard/informatie/kosten",
+          "checkedAt": "2026-08-18",
+          "conditions": null,
+          "conditionsKnown": false
+        }
+      }
+    },
+    {
+      "id": "anwb-visa-silver-card",
+      "product": "ANWB Visa Silver Card",
+      "fields": {}
+    },
+    {
+      "id": "anwb-visa-gold-card",
+      "product": "ANWB Visa Gold Card",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-basic-midnight-blue",
+      "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-plus-ruby-steel",
+      "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-pro-jade-green-royal-indigo",
+      "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-private-icy-white-rose-gold",
+      "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
+      "fields": {}
+    },
+    {
+      "id": "crypto-com-prepaid-card-private-obsidian",
+      "product": "Crypto.com Prepaid Card — Private (Obsidian)",
+      "fields": {}
+    },
+    {
+      "id": "nexo-card",
+      "product": "Nexo Card",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.2,
+          "route": "agent",
+          "sourceUrl": "https://nexo.com/crypto-card",
+          "checkedAt": "2026-08-18",
+          "conditions": "FX Fees on Weekdays, EEA/UK/CH",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "krak-card-kraken",
+      "product": "Krak Card (Kraken)",
+      "fields": {}
+    },
+    {
+      "id": "plutus-card",
+      "product": "Plutus Card",
+      "fields": {}
+    },
+    {
+      "id": "bleap-card",
+      "product": "Bleap Card",
+      "fields": {}
+    },
+    {
+      "id": "zeal-card-gnosis-pay-rails",
+      "product": "Zeal Card (Gnosis Pay rails)",
+      "fields": {}
+    },
+    {
+      "id": "gnosis-pay-card-direct-consumer",
+      "product": "Gnosis Pay Card (direct consumer)",
+      "fields": {}
+    },
+    {
+      "id": "bybit-card",
+      "product": "Bybit Card",
+      "fields": {}
+    },
+    {
+      "id": "coinbase-card",
+      "product": "Coinbase Card",
+      "fields": {}
+    },
+    {
+      "id": "wirex-card-wirex-one",
+      "product": "Wirex Card (Wirex One)",
+      "fields": {}
+    },
+    {
+      "id": "binance-card",
+      "product": "Binance Card",
+      "fields": {}
+    },
+    {
+      "id": "paysafecard-prepaid-code-paysafewallet",
+      "product": "paysafecard (prepaid code / PaysafeWallet)",
+      "fields": {}
+    },
+    {
+      "id": "tria-card",
+      "product": "Tria Card",
+      "fields": {}
+    },
+    {
+      "id": "bigbank-flexibel-sparen",
+      "product": "Bigbank Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "bunq-spaarrekening-massinterest",
+      "product": "bunq spaarrekening (MassInterest)",
+      "fields": {}
+    },
+    {
+      "id": "santander-consumer-bank-spaarrekening",
+      "product": "Santander Consumer Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "garanti-bbva-international-gouden-internet-rekening",
+      "product": "Garanti BBVA International Gouden Internet Rekening",
+      "fields": {}
+    },
+    {
+      "id": "dhb-bank-saveonlinerekening",
+      "product": "DHB Bank S@veOnlinerekening",
+      "fields": {}
+    },
+    {
+      "id": "anadolubank-alfa-slimmer-sparen",
+      "product": "Anadolubank Alfa Slimmer Sparen",
+      "fields": {}
+    },
+    {
+      "id": "scalable-capital-scalable-overnight",
+      "product": "Scalable Capital Scalable Overnight",
+      "fields": {}
+    },
+    {
+      "id": "raisin-spaarrekening-platform-19-partner-banks",
+      "product": "Raisin spaarrekening (platform, 19 partner banks)",
+      "fields": {}
+    },
+    {
+      "id": "klarna-flex-rekening",
+      "product": "Klarna Flex rekening",
+      "fields": {}
+    },
+    {
+      "id": "ayvens-bank-flexibel-sparen",
+      "product": "Ayvens Bank Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "argenta-internetspaarrekening",
+      "product": "Argenta Internetspaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-welkom-spaarrekening",
+      "product": "Openbank Welkom Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "openbank-open-spaarrekening",
+      "product": "Openbank Open Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "yapi-kredi-bank-euro-plus-spaarrekening",
+      "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nibc-spaarrekening",
+      "product": "NIBC Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nibc-kwartaalspaarrekening",
+      "product": "NIBC Kwartaalspaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "lloyds-bank-spaarrekening",
+      "product": "Lloyds Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nationale-nederlanden-internetsparen",
+      "product": "Nationale-Nederlanden Internetsparen",
+      "fields": {}
+    },
+    {
+      "id": "centraal-beheer-rentepl-s-rekening",
+      "product": "Centraal Beheer RentePlús Rekening",
+      "fields": {}
+    },
+    {
+      "id": "knab-flexibel-sparen",
+      "product": "Knab Flexibel Sparen",
+      "fields": {}
+    },
+    {
+      "id": "abn-amro-direct-sparen",
+      "product": "ABN AMRO Direct Sparen",
+      "fields": {}
+    },
+    {
+      "id": "ing-oranje-spaarrekening",
+      "product": "ING Oranje Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "rabobank-rabo-spaarrekening",
+      "product": "Rabobank Rabo SpaarRekening",
+      "fields": {}
+    },
+    {
+      "id": "asn-bank-asn-ideaalsparen",
+      "product": "ASN Bank ASN Ideaalsparen",
+      "fields": {}
+    },
+    {
+      "id": "sns-internet-sparen",
+      "product": "SNS Internet Sparen",
+      "fields": {}
+    },
+    {
+      "id": "regiobank-spaar-op-maat-vrij",
+      "product": "RegioBank Spaar-op-Maat Vrij",
+      "fields": {}
+    },
+    {
+      "id": "triodos-bank-internet-sparen",
+      "product": "Triodos Bank Internet Sparen",
+      "fields": {}
+    },
+    {
+      "id": "brand-new-day-de-spaarrekening",
+      "product": "Brand New Day De Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "nexent-bank-spaarrekening",
+      "product": "Nexent Bank Spaarrekening",
+      "fields": {}
+    },
+    {
+      "id": "revolut-dagelijkse-spaarrekening",
+      "product": "Revolut Dagelijkse Spaarrekening",
+      "fields": {}
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
+import { loadCatalogue } from "./catalogFile.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -17,6 +18,15 @@ export const PORT = Number(process.env.PORT) || 8787;
 const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
 export const app = new Hono();
+
+/* The committed catalogue, read once as this module loads — before any request
+ * can arrive. Every figure it holds is one the travel block answers from a file
+ * instead of waiting 40s-5min on a lookup; every figure it does NOT hold (no
+ * conditions established, older than what is already cached) is refused here
+ * rather than served wrong. Both counts are logged, because "accepted 0" and "a
+ * broken loader" look identical otherwise. A missing or malformed file logs and
+ * the server boots anyway. */
+loadCatalogue();
 
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;

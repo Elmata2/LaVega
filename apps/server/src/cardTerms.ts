@@ -1,4 +1,4 @@
-import { comparisonTermsFor, type BankNlTable } from "@lavega/core";
+import { comparisonTermsFor, isCovered, type BankNlTable, type CatalogEntry } from "@lavega/core";
 import { lookupProviderTerms, type ProviderTerms, type TravelInput } from "./agent/travel.js";
 
 /* Provider card terms — the SAME shape of thing as the savings benchmark in
@@ -305,6 +305,61 @@ export function ingestCardTerms(
     }
     if (write(keyOf(provider, homeCountry, currency), { ...row, provider }, source)) accepted++;
     else rejected.push(provider);
+  }
+  return { accepted, rejected };
+}
+
+/** Where a catalogue figure sits on the existing precision ladder. A provider's
+ *  own page or PDF is the most precise thing there is; the agent is the least.
+ *  Reusing the ladder means the catalogue cannot quietly outrank a correction. */
+const ROUTE_SOURCE: Record<string, TermsSource> = {
+  "provider-page": "provider",
+  "provider-pdf": "provider",
+  wayback: "provider",
+  comparison: "comparison",
+  agent: "agent",
+};
+
+/** Load the committed catalogue into the cache. Instant and free — it is a file —
+ *  so the block is answered before anything is looked up.
+ *
+ *  A figure whose CONDITIONS were never established is refused. That is not
+ *  fussiness: Revolut's 0% was true only inside a €1.000 monthly cap, and it
+ *  shipped as unconditional, ranked first, and told him the trip was free.
+ *
+ *  It goes through `write`, like every other source, so the catalogue is ranked
+ *  rather than privileged: a figure older than what is held is refused however
+ *  tidy its source, and the owner's own correction still wins one layer further
+ *  out in `upsertFacts` — everything served from here reaches him as an
+ *  agent-sourced fact, which that function refuses to let overwrite a user one. */
+export function ingestCatalogue(
+  entries: readonly CatalogEntry[],
+  homeCountry: string,
+  currency: string,
+): { accepted: number; rejected: string[] } {
+  const rejected: string[] = [];
+  let accepted = 0;
+  for (const entry of entries) {
+    const fx = entry.fields.fxFeePct;
+    if (!isCovered(fx)) {
+      rejected.push(entry.product);
+      continue;
+    }
+    const ok = write(
+      keyOf(entry.product, homeCountry, currency),
+      {
+        provider: entry.product,
+        fxFeePct: fx!.value,
+        checkedAt: fx!.checkedAt,
+        // The cap travels WITH the rate. "0% tot € 1.000 p/m, daarna 1%" shown
+        // as a flat 0% is the entire Revolut incident; dropping the clause on
+        // the way in would recreate it inside the app instead of outside it.
+        note: fx!.conditions ?? undefined,
+      },
+      ROUTE_SOURCE[fx!.route] ?? "agent",
+    );
+    if (ok) accepted++;
+    else rejected.push(entry.product);
   }
   return { accepted, rejected };
 }
