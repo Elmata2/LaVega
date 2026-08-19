@@ -306,7 +306,15 @@ function norm(s: string): string {
  *  mistaken for a rate. */
 const PCT_TOKEN = /(\d{1,3})(?:[.,](\d{1,2}))?\s*%/g;
 
-function percentagesIn(text: string): number[] {
+/** Shared with the savings extractor so there is ONE answer to "is this quote
+ *  really in that text". Exported under a distinct name because `norm` is already
+ *  taken by hash.ts, and two functions called norm in one barrel is how the wrong
+ *  one gets imported. */
+export function normalizeQuote(s: string): string {
+  return norm(s);
+}
+
+export function percentagesIn(text: string): number[] {
   const out: number[] = [];
   PCT_TOKEN.lastIndex = 0;
   for (let m = PCT_TOKEN.exec(text); m; m = PCT_TOKEN.exec(text)) {

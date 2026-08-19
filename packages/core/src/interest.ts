@@ -15,7 +15,97 @@ export type RateBenchmark = {
   freeWithdrawal: boolean;
   standardRatePct?: number; // the standard ("nominale") rate after the promo ends
   promoNote?: string; // e.g. "Actierente 6 mnd, daarna 2,10%"
+  /** WHERE THIS RATE CAME FROM, and WHEN IT WAS TRUE — per rate, not per table.
+   *
+   *  The bundled table below shares one RATES_AS_OF for all nineteen rows, which
+   *  was fine while every row came from the same scrape on the same day. It stops
+   *  being fine once rates arrive from the product catalogue, where each one is
+   *  read from its own bank's own document and carries that document's own date:
+   *  ABN's Direct Sparen ladder is stated "vanaf 1 mei 2025" and is fifteen months
+   *  old, while a Tarievenwijzer read the same morning may be a fortnight old. One
+   *  shared date would present both as equally fresh, and the older one is exactly
+   *  the figure a saver should be warned about.
+   *
+   *  Absent means "covered by the table's own asOf", so the bundled rows need no
+   *  change. */
+  sourceUrl?: string;
+  asOf?: string;
+  /** The bands and restrictions, in the document's words, when a rate is not flat. */
+  conditions?: string;
 };
+
+/** Where a rate came from, most trustworthy first. A bank stating its own rate in
+ *  its own document beats a comparison site reading it second-hand, which beats a
+ *  figure compiled into this repo months ago. */
+export type RateProvenance = "catalogue" | "comparison" | "bundled";
+
+const PROVENANCE_RANK: Record<RateProvenance, number> = { catalogue: 3, comparison: 2, bundled: 1 };
+
+/** Key a product across sources. Bank and product names are written differently by
+ *  every source ("ABN AMRO"/"ABN Amro", "Spaarrekening"/"Direct Sparen"), so this
+ *  is deliberately loose — and deliberately NOT loose enough to merge two products
+ *  of the same bank, since a bank's flexible and fixed accounts pay differently. */
+function rateKey(r: RateBenchmark): string {
+  const flat = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return `${flat(r.bank)}|${flat(r.product)}`;
+}
+
+/** MERGE RATE SOURCES BY PROVENANCE, keeping each rate's own date and source.
+ *
+ *  Not a concatenation and not a replacement: the catalogue covers a different set
+ *  of products than the comparison scrape, so replacing one with the other would
+ *  drop every bank the winner happens to miss. Each product takes its best-sourced
+ *  figure and the rest are left where they are.
+ *
+ *  Ties go to the EARLIER argument, so callers pass sources most-trusted-first and
+ *  a same-provenance duplicate does not flap between runs. */
+export function mergeRateSources(
+  ...sources: { rates: readonly RateBenchmark[]; provenance: RateProvenance }[]
+): RateBenchmark[] {
+  const best = new Map<string, { rate: RateBenchmark; rank: number }>();
+  for (const src of sources) {
+    const rank = PROVENANCE_RANK[src.provenance];
+    for (const rate of src.rates) {
+      const key = rateKey(rate);
+      const held = best.get(key);
+      if (!held || rank > held.rank) best.set(key, { rate, rank });
+    }
+  }
+  return [...best.values()].map((v) => v.rate);
+}
+
+/** Turn a covered catalogue savings figure into a benchmark the app already knows
+ *  how to rank. `ratePct` stays the HEADLINE the saver sees today — the promo when
+ *  one runs — while `standardRatePct` carries what they keep, which is the figure
+ *  the catalogue decided `interestPct` should hold. That way a six-month teaser is
+ *  visible without being what the ranking is built on. */
+export function benchmarkFromCatalogue(input: {
+  bank: string;
+  product: string;
+  standardPct: number;
+  promoPct?: number | null;
+  promoNote?: string | null;
+  freeWithdrawal?: boolean | null;
+  conditions?: string | null;
+  sourceUrl: string;
+  asOf: string;
+}): RateBenchmark {
+  const promo = typeof input.promoPct === "number" ? input.promoPct : null;
+  return {
+    bank: input.bank,
+    product: input.product,
+    ratePct: promo ?? input.standardPct,
+    ...(promo !== null ? { standardRatePct: input.standardPct } : {}),
+    ...(input.promoNote ? { promoNote: input.promoNote } : {}),
+    // Unknown is not free. A product whose document never says becomes
+    // withdrawal-restricted here, which keeps it out of bestRate's default pool
+    // rather than letting it win a comparison it may not qualify for.
+    freeWithdrawal: input.freeWithdrawal === true,
+    ...(input.conditions ? { conditions: input.conditions } : {}),
+    sourceUrl: input.sourceUrl,
+    asOf: input.asOf,
+  };
+}
 
 /** Peildatum of the bundled table below. Shown in the UI so a stale figure is
  *  never presented as live. The app can replace this table via a fetch. */

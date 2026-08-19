@@ -16,6 +16,7 @@ export * from "./pdfText.js";
 export * from "./catalogRoutes.js";
 export * from "./catalogExtract.js";
 export * from "./catalogSlice.js";
+export * from "./catalogInterest.js";
 export * from "./categorize.js";
 export * from "./scheduledFlows.js";
 export * from "./invoices.js";

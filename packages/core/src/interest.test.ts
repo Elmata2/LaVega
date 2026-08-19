@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { bestRate, detectInterestRate, resolveAccountRate, analyzeInterest, NL_SAVINGS_RATES } from "./interest.js";
+import { bestRate, detectInterestRate, resolveAccountRate, analyzeInterest, NL_SAVINGS_RATES, mergeRateSources, benchmarkFromCatalogue, type RateBenchmark } from "./interest.js";
 
 const acc = (over: Partial<Account>): Account =>
   ({ key: "A1", iban: "A1", name: "x", bank: "ING", entity: "BV1", currency: "EUR", balance: 10000, ...over });
@@ -52,4 +52,79 @@ test("detectInterestRate: implausible rate (tiny balance vs normal interest) is 
   const tiny = acc({ balance: 2, bank: "ING", type: "Spaarrekening" });
   expect(detectInterestRate(tiny, [rente("2026-06-01", 16.5)], "2026-08-01")).toBeNull(); // ~825% -> null
   expect(resolveAccountRate(tiny, [rente("2026-06-01", 16.5)], "2026-08-01", NL_SAVINGS_RATES)).toEqual({ ratePct: 1.25, source: "benchmark" });
+});
+
+/* RATES FROM THREE SOURCES, each rate keeping its own date and provenance.
+ *
+ * The bundled table shares one RATES_AS_OF across nineteen rows, which was fine
+ * while they all came from one scrape. Once a rate can come from a bank's own
+ * document — ABN's ladder is stated "vanaf 1 mei 2025", fifteen months old — one
+ * shared date presents a stale figure as freshly checked, and the stale one is
+ * exactly what a saver should be warned about.
+ */
+describe("mergeRateSources", () => {
+  const cat: RateBenchmark = { bank: "ABN AMRO", product: "Direct Sparen", ratePct: 1.25, freeWithdrawal: true, sourceUrl: "https://abn/fid.pdf", asOf: "2025-05-01" };
+  const cmp: RateBenchmark = { bank: "ABN AMRO", product: "Direct Sparen", ratePct: 1.3, freeWithdrawal: true };
+  const bun: RateBenchmark = { bank: "ABN AMRO", product: "Direct Sparen", ratePct: 1.25, freeWithdrawal: true };
+
+  test("the bank's own document beats the comparison site", () => {
+    const out = mergeRateSources({ rates: [cat], provenance: "catalogue" }, { rates: [cmp], provenance: "comparison" });
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceUrl).toBe("https://abn/fid.pdf");
+    expect(out[0].asOf).toBe("2025-05-01");
+  });
+
+  test("the comparison site beats the compiled-in fallback", () => {
+    const out = mergeRateSources({ rates: [cmp], provenance: "comparison" }, { rates: [bun], provenance: "bundled" });
+    expect(out[0].ratePct).toBe(1.3);
+  });
+
+  test("a product only one source knows is KEPT, not dropped", () => {
+    // This is why it merges instead of replacing: the catalogue and the scrape
+    // cover different ranges, so either replacing the other loses banks.
+    const only: RateBenchmark = { bank: "Klarna", product: "Flex rekening", ratePct: 1.95, freeWithdrawal: true };
+    const out = mergeRateSources({ rates: [cat], provenance: "catalogue" }, { rates: [cmp, only], provenance: "comparison" });
+    expect(out.map((r) => r.bank).sort()).toEqual(["ABN AMRO", "Klarna"]);
+  });
+
+  test("two products of the SAME bank are not merged into one", () => {
+    // A bank's flexible and fixed accounts pay differently; collapsing them would
+    // recommend a rate the saver cannot get on the account they hold.
+    const fixed: RateBenchmark = { bank: "ABN AMRO", product: "Depositosparen", ratePct: 2.4, freeWithdrawal: false };
+    const out = mergeRateSources({ rates: [cat, fixed], provenance: "catalogue" });
+    expect(out).toHaveLength(2);
+  });
+
+  test("differently-punctuated names of the same product still merge", () => {
+    const messy: RateBenchmark = { bank: "ABN-AMRO", product: "direct sparen", ratePct: 9, freeWithdrawal: true };
+    const out = mergeRateSources({ rates: [cat], provenance: "catalogue" }, { rates: [messy], provenance: "comparison" });
+    expect(out).toHaveLength(1);
+    expect(out[0].ratePct).toBe(1.25);
+  });
+});
+
+describe("benchmarkFromCatalogue", () => {
+  test("the promo is the headline, the standard rate is what ranking rests on", () => {
+    const b = benchmarkFromCatalogue({
+      bank: "bunq", product: "Spaarrekening", standardPct: 1.5, promoPct: 3.01,
+      promoNote: "Actierente t/m 01-01-2027, daarna 1,50%", freeWithdrawal: true,
+      sourceUrl: "https://bunq/tarieven", asOf: "2026-08-01",
+    });
+    expect(b.ratePct).toBe(3.01);
+    expect(b.standardRatePct).toBe(1.5);
+    expect(b.asOf).toBe("2026-08-01");
+  });
+
+  test("with no promo, the headline IS the standard rate and no promo fields appear", () => {
+    const b = benchmarkFromCatalogue({ bank: "Triodos", product: "Internet Sparen", standardPct: 1.15, freeWithdrawal: true, sourceUrl: "https://t/x", asOf: "2026-05-01" });
+    expect(b.ratePct).toBe(1.15);
+    expect(b.standardRatePct).toBeUndefined();
+    expect(b.promoNote).toBeUndefined();
+  });
+
+  test("UNKNOWN withdrawal is not free — it stays out of bestRate's default pool", () => {
+    const b = benchmarkFromCatalogue({ bank: "X", product: "Y", standardPct: 4, freeWithdrawal: null, sourceUrl: "https://x", asOf: "2026-08-01" });
+    expect(b.freeWithdrawal).toBe(false);
+    expect(bestRate([b])).toBeNull();
+  });
 });

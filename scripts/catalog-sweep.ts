@@ -42,9 +42,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
-import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute } from "@lavega/core";
+import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
 import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
 import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
+import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "@lavega/core";
 import { sliceForExtraction } from "@lavega/core";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -502,6 +503,73 @@ function toValue(
   };
 }
 
+/** A SAVINGS RATE AS A CATALOGUE FIGURE.
+ *
+ *  `value` is the STANDARD rate — what the saver keeps once a promotion ends — and
+ *  the promo is folded into `conditions` alongside the bands. Decided 2026-08-19:
+ *  ranking on the headline would put a six-month teaser above a permanently better
+ *  account, and the saver who followed it is worse off in month seven.
+ *
+ *  A promo that the reply reported but could not describe is downgraded here as
+ *  well as in the parser, because a rate that silently changes is exactly the
+ *  shape of the Revolut bug. */
+function rateToValue(
+  rate: ExtractedRate,
+  route: CatalogRoute,
+  sourceUrl: string,
+  text: string,
+  fallbackDate: string,
+): CatalogValue {
+  const promo =
+    rate.promoPct !== null
+      ? `Actierente ${String(rate.promoPct).replace(".", ",")}%${rate.promoUntil ? ` ${rate.promoUntil}` : ""}, daarna ${String(rate.standardPct).replace(".", ",")}%.`
+      : null;
+  const withdrawal =
+    rate.freeWithdrawal === false ? "Niet vrij opneembaar." : rate.freeWithdrawal === null ? "Opnamevoorwaarden niet vermeld." : null;
+  const parts = [rate.conditions, promo, withdrawal].filter(Boolean);
+  return {
+    value: rate.standardPct,
+    route,
+    sourceUrl,
+    checkedAt: readDocumentDate(text) ?? fallbackDate,
+    conditions: parts.length ? parts.join(" ") : null,
+    conditionsKnown: rate.conditionsKnown,
+  };
+}
+
+/** The savings question. Separate model call, separate tool, same discipline: the
+ *  quote is checked against the text we sent and a rate outside a plausible range
+ *  is refused. */
+async function askRateModel(product: string, sourceUrl: string, text: string): Promise<ExtractedRate | null> {
+  if (text.length > MAX_MODEL_CHARS) {
+    throw new Error(`document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`);
+  }
+  const cut = sliceForExtraction(text);
+  if (!cut.whole) {
+    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+  }
+  const req = { product, sourceUrl, text: cut.text };
+  const { system, user } = buildInterestPrompt(req);
+  const client = new Anthropic({ apiKey: apiKey ?? undefined });
+  const res = await createGuarded(
+    client,
+    {
+      model: EXTRACT_MODEL,
+      max_tokens: 8192,
+      system,
+      tools: [INTEREST_TOOL as unknown as Anthropic.Tool],
+      messages: [{ role: "user", content: user }],
+    },
+    { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 },
+  );
+  modelCalls++;
+  recordSpend(EXTRACT_MODEL, res.usage);
+  stopIfOverBudget();
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block) return null;
+  return parseInterestReply(block, req);
+}
+
 // ─────────────────────────────────────────────────────────────── the search rung
 
 /** What the search rung is asked for: a URL, not a number.
@@ -699,7 +767,15 @@ const ids: string[] = Object.keys(state.products).filter((id) => !only || matche
 const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).length;
 let attemptsMade = 0;
 
-const entries: { id: string; product: string; fields: { fxFeePct?: CatalogValue } }[] = [];
+const entries: { id: string; product: string; fields: Partial<Record<CatalogField, CatalogValue>> }[] = [];
+
+/** THE FIGURE A PRODUCT ANSWERS WITH, whichever question it was asked. Counting
+ *  fxFeePct alone made a savings sweep report "covered 0/3" while printing three
+ *  ticks — the extraction had worked and the counter had not caught up. A number
+ *  that disagrees with the lines above it is worse than no number. */
+function figureOf(e: { fields: Partial<Record<CatalogField, CatalogValue>> }): CatalogValue | undefined {
+  return e.fields.fxFeePct ?? e.fields.interestPct;
+}
 
 /** ONE merge, used by the normal --only exit AND by the fatal-key guard. Two
  *  implementations of "merge a subset into the artifact" would drift, and the one
@@ -724,8 +800,8 @@ function mergeSubset(rows: typeof entries): number {
   const kept: string[] = [];
   const winners = rows.filter((row) => {
     const before = byId.get(row.id);
-    const wasCovered = !!before?.fields?.fxFeePct && isCovered(before.fields.fxFeePct);
-    const nowCovered = !!row.fields.fxFeePct && isCovered(row.fields.fxFeePct);
+    const wasCovered = isCovered(before ? figureOf(before) : undefined);
+    const nowCovered = isCovered(figureOf(row));
     if (wasCovered && !nowCovered) { kept.push(row.id); return false; }
     return true;
   });
@@ -746,7 +822,7 @@ function mergeSubset(rows: typeof entries): number {
 onFatal = () => {
   if (!entries.length) { console.error("  (nothing had been read yet, so nothing to save)"); return; }
   const total = mergeSubset(entries);
-  const covered = entries.filter((e) => e.fields.fxFeePct && isCovered(e.fields.fxFeePct)).length;
+  const covered = entries.filter((e) => isCovered(figureOf(e))).length;
   console.error(`  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`);
 };
 const changes: string[] = [];
@@ -757,8 +833,38 @@ const discovered: string[] = [];
 for (const id of ids) {
   const p = state.products[id];
   const attempts: RouteAttempt[] = [];
+  // WHICH QUESTION THIS PRODUCT ANSWERS. A savings account has no foreign-currency
+  // surcharge, so asking for one produced 35 guaranteed blanks every sweep and
+  // made the coverage denominator dishonest. It has an interest rate instead, and
+  // that is a different question with a different tool.
+  const savings = p.kind === "spaarrekening" || p.kind === "beleggingsrekening";
 
-  if (p.pdfUrl) {
+  if (savings) {
+    // Only the agent rung: a rate ladder is a table, and the regex rungs were
+    // written for a percentage next to the word "koersopslag".
+    const src = p.docUrl ?? p.pdfUrl ?? (p.readable === "yes" ? p.termsUrl : null);
+    if (useAgent && src) {
+      const kind: "pdf" | "html" = p.docUrl
+        ? p.docFetch === "jina" || p.docKind === "html"
+          ? "html"
+          : "pdf"
+        : p.pdfUrl
+          ? "pdf"
+          : "html";
+      const url = p.docFetch === "jina" ? `https://r.jina.ai/${src}` : src;
+      attempts.push({
+        route: "agent",
+        run: async () => {
+          const text = await readPage(url, kind);
+          const rate = await askRateModel(p.product, src, text);
+          return rate ? rateToValue(rate, "agent", src, text, today) : null;
+        },
+      });
+    }
+  }
+
+
+  if (!savings && p.pdfUrl) {
     attempts.push({
       route: "provider-pdf",
       run: async () => {
@@ -785,7 +891,7 @@ for (const id of ids) {
       },
     });
   }
-  if (p.termsUrl && p.readable === "yes") {
+  if (!savings && p.termsUrl && p.readable === "yes") {
     attempts.push({
       route: "provider-page",
       run: async () => {
@@ -829,7 +935,7 @@ for (const id of ids) {
   // always, because provider-page cannot establish a condition and says so. The
   // provider's own PDF is preferred over its HTML when both exist: the tariff
   // sheet is where the caps and tiers actually are.
-  if (useAgent && (p.docUrl || p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
+  if (!savings && useAgent && (p.docUrl || p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -891,7 +997,10 @@ for (const id of ids) {
   // to state.json, and reading it back needs NO search, so discovery is paid for
   // once per product and every later sweep reads that document for free.
   const searchable = searchAll || !!only || (p.readable !== "yes" && !p.pdfUrl);
-  if (useAgent && (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))) {
+  // The search rung asks the FX question too, so a savings product must not reach
+  // it — it would spend a search finding a document and then ask it the wrong
+  // thing.
+  if (!savings && useAgent && (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -960,7 +1069,8 @@ for (const id of ids) {
   // would throw the reason away exactly when it explains why the product is still
   // uncovered.
   state.products[id].lastReason = reason;
-  entries.push({ id, product: p.product, fields: value ? { fxFeePct: value } : {} });
+  const field: "fxFeePct" | "interestPct" = savings ? "interestPct" : "fxFeePct";
+  entries.push({ id, product: p.product, fields: value ? { [field]: value } : {} });
   // The figure and its conditions are printed, not just a tick. --dry writes
   // nothing, so this console line is the ONLY artifact of a dry run, and
   // "✓ ING creditcard  provider-pdf" does not tell you WHICH number it believed —
@@ -976,12 +1086,22 @@ for (const id of ids) {
   );
 }
 
-const c = coverage(entries, "fxFeePct");
+// Coverage is per FIELD, and a sweep can now mix both kinds in one run, so the
+// two are counted separately and added rather than asked of one field.
+const cFx = coverage(entries, "fxFeePct");
+const cInt = coverage(entries, "interestPct");
+const c = {
+  covered: cFx.covered + cInt.covered,
+  total: entries.length,
+  byRoute: Object.fromEntries(
+    (Object.keys(cFx.byRoute) as (keyof typeof cFx.byRoute)[]).map((k) => [k, cFx.byRoute[k] + cInt.byRoute[k]]),
+  ) as typeof cFx.byRoute,
+};
 console.log(`\ncovered ${c.covered}/${c.total}  by route: ${JSON.stringify(c.byRoute)}`);
 if (changes.length) console.log(`\nCHANGED:\n  ${changes.join("\n  ")}`);
 if (discovered.length) console.log(`\nDISCOVERED SOURCES (cached in ${STATE}, free from now on):\n  ${discovered.join("\n  ")}`);
 
-const figuresFound = entries.filter((e) => e.fields.fxFeePct).length;
+const figuresFound = entries.filter((e) => figureOf(e)).length;
 // Two counts, not a ratio: one route can make several requests (the archive costs
 // a CDX lookup plus the snapshot itself), so responses/attempts was going above 1
 // and reading like a bug.
