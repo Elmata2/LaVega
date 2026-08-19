@@ -7,7 +7,7 @@ const bars: PriceBar[] = [
   { tenantId: "local", symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
   { tenantId: "local", symbol: "AAPL", date: "2026-01-07", close: 105, currency: "USD" },
 ];
-const trade = (date: string, side: "buy" | "sell"): Trade => ({ id: date, tenantId: "local", entity: "personal", date, symbol: "AAPL", side, quantity: 2, price: 100, amount: 200, currency: "USD", commission: 0 });
+const trade = (date: string, side: "buy" | "sell" | "other"): Trade => ({ id: date, tenantId: "local", entity: "personal", date, symbol: "AAPL", side, quantity: 2, price: 100, amount: 200, currency: "USD", commission: 0 });
 const dividend = (date: string, amount: number): Dividend => ({ id: date, tenantId: "local", entity: "personal", date, symbol: "AAPL", amount, currency: "USD" });
 
 describe("placePositionMarkers", () => {
