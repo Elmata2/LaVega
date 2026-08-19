@@ -116,6 +116,21 @@ test("overview exposes positions as navigation links", async () => {
   root.unmount();
 });
 
+test("position navigation moves from overview to detail and back", async () => {
+  vi.stubGlobal("fetch", vi.fn((input, init) => Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  const positionLink = container.querySelector<HTMLAnchorElement>('a[href="/positions/ASML"]');
+  await act(async () => { positionLink?.click(); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Koershistorie");
+
+  const backLink = container.querySelector<HTMLAnchorElement>('a[href="/positions"]');
+  await act(async () => { backLink?.click(); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Posities");
+  root.unmount();
+});
+
 test("position detail selects symbol from route and links back", async () => {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input, init) => { requests.push(String(input)); return Promise.resolve(responseFor(input, init)); }));
