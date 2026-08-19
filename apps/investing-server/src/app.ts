@@ -1,17 +1,19 @@
 import { Hono } from "hono";
 import { LocalKeySource, MarketDataRouter, createInMemoryPriceStore, createYahooPriceProvider, createMemoryYahooConsentStore, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, type YahooConsentStore, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult, hasYahooFinanceRequestConsent } from "@lavega/adapters";
 
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider> };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }> };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const consent = dependencies.consentStore ?? createMemoryYahooConsentStore();
   const provider = dependencies.provider ?? createYahooPriceProvider({ consent });
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
+  const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
   const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
   const investingApp = new Hono();
   investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
+  investingApp.post("/api/brokers/sync", async (c) => c.json(await brokerSync(c.req.query("force") === "true")));
   investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await router.getFx({ from, to }); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await router.mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.get("/api/market-data/consent", (c) => c.json({ accepted: consent.hasConsent(), disclosure: "Yahoo Finance is niet officieel. De dienst kan zonder waarschuwing stoppen of verzoeken beperken. De voorwaarden beperken geautomatiseerd en commercieel gebruik. LaVega gebruikt Yahoo alleen voor lokaal of zelf gehost persoonlijk gebruik." }));

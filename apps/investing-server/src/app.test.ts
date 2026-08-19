@@ -109,3 +109,12 @@ test("price sync resolves ISIN before asking price provider", async () => {
   expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
   expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
 });
+
+test("broker sync route forwards force and keeps problems in response", async () => {
+  const brokerSync = vi.fn(async (force: boolean) => ({ outcomes: [{ status: "synced" }], problems: force ? ["ibkr: unavailable"] : [] }));
+  const investingApp = createApp({ brokerSync });
+  const response = await investingApp.request("/api/brokers/sync?force=true", { method: "POST" });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ outcomes: [{ status: "synced" }], problems: ["ibkr: unavailable"] });
+  expect(brokerSync).toHaveBeenCalledWith(true);
+});
