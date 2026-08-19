@@ -106,6 +106,16 @@ test("positions view renders read-model positions as links", async () => {
   root.unmount();
 });
 
+test("overview exposes positions as navigation links", async () => {
+  vi.stubGlobal("fetch", vi.fn((input, init) => Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.querySelector('a[href="/positions/ASML"]')).not.toBeNull();
+  root.unmount();
+});
+
 test("position detail selects symbol from route and links back", async () => {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input, init) => { requests.push(String(input)); return Promise.resolve(responseFor(input, init)); }));
