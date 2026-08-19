@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-18",
+  "generatedAt": "2026-08-19",
   "entries": [
     {
       "id": "ing-betaalpas",
@@ -420,42 +420,114 @@
     {
       "id": "american-express-blue-card",
       "product": "American Express Blue Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta; volgens 6.15 wordt slechts eenmaal een wisselkoersopslag in rekening gebracht en geen wisselkoersopslag wanneer een derde partij de transactie al in euro's heeft omgezet. De pagina noemt geen limiet, staffel of kaarttype-afhankelijkheid voor dit percentage, maar zegt ook niet dat het onvoorwaardelijk is.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "american-express-green-card",
       "product": "American Express Green Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Geldt als wisselkoersopslag op transacties die niet in euro zijn uitgevoerd; bij omrekening via een derde partij (bijv. het kaartaccepterende bedrijf) brengt American Express geen wisselkoersopslag in rekening. De pagina noemt geen limiet, staffel of kaarttype-afhankelijkheid, maar sluit die ook niet uit en noemt de Green Card niet apart.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "american-express-gold-card",
       "product": "American Express Gold Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Wisselkoersopslag geldt voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars brengen wij slechts eenmaal een wisselkoersopslag in rekening; als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór verwerking in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-platinum-card",
       "product": "American Express Platinum Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; bij omzetting via twee valuta brengen wij slechts eenmaal een wisselkoersopslag in rekening, en wanneer een derde partij de transactie al in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "flying-blue-american-express-entry-card",
       "product": "Flying Blue - American Express Entry Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars brengen wij slechts eenmaal een wisselkoersopslag in rekening; laat u de transactie door een derde partij in euro's omzetten, dan brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "flying-blue-american-express-silver-card",
       "product": "Flying Blue - American Express Silver Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Wisselkoersopslag geldt voor \"transacties die niet in euro zijn uitgevoerd\"; bij omzetting via meerdere valuta \"brengen wij slechts eenmaal een wisselkoersopslag in rekening\", en als een derde partij de transactie vóór indiening in euro's omzet: \"zullen wij geen wisselkoersopslag in rekening brengen\" (contante opnames vallen onder een aparte vergoeding van 3,5%).",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "flying-blue-american-express-gold-card",
       "product": "Flying Blue - American Express Gold Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Geldt als \"wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; bij een omzetting via Amerikaanse dollars brengen wij \"slechts eenmaal een wisselkoersopslag in rekening\", en als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's omzet, \"zullen wij geen wisselkoersopslag in rekening brengen\".",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "flying-blue-american-express-platinum-card",
       "product": "Flying Blue - American Express Platinum Card",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+          "checkedAt": "2022-03-01",
+          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; bij dubbele omzetting (via Amerikaanse dollars) wordt \"slechts eenmaal een wisselkoersopslag in rekening\" gebracht, en wanneer een derde partij de transactie vóór verwerking al in euro's omzet, brengt American Express \"geen wisselkoersopslag in rekening\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-business-entry-card",
@@ -570,8 +642,8 @@
           "value": 2,
           "route": "agent",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
-          "checkedAt": "2026-08-18",
-          "conditions": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "checkedAt": "2026-08-19",
+          "conditions": "geldt voor EU landen zonder euro en voor landen buiten EU",
           "conditionsKnown": true
         }
       }

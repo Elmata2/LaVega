@@ -14,7 +14,8 @@
     "start": "pnpm --filter @lavega/server start",
     "typecheck": "turbo run typecheck",
     "sync:n8n": "node scripts/sync-n8n-code.mjs",
-    "catalog:sweep": "tsx --env-file-if-exists=apps/server/.env scripts/catalog-sweep.ts"
+    "catalog:sweep": "tsx --env-file-if-exists=apps/server/.env scripts/catalog-sweep.ts",
+    "catalog:find-pdfs": "tsx scripts/find-tariff-pdfs.ts"
   },
   "devDependencies": {
     "@lavega/core": "workspace:*",

@@ -137,10 +137,59 @@ const MONTHS_NL = [
  *  shipped twice. The document says it in machine-readable words on page 1. */
 export function readDocumentDate(text: string): string | null {
   const m = /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
-  if (!m) return null;
-  const month = MONTHS_NL.indexOf(m[2].toLowerCase());
-  if (month < 0) return null;
-  const day = Number(m[1]);
-  if (!(day >= 1 && day <= 31)) return null;
-  return `${m[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (m) {
+    const month = MONTHS_NL.indexOf(m[2].toLowerCase());
+    const day = Number(m[1]);
+    if (month >= 0 && day >= 1 && day <= 31) {
+      return `${m[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return readMonthYearEdition(text);
+}
+
+/** A DOCUMENT THAT DATES ITSELF BY MONTH, WITH NO DAY.
+ *
+ *  Amex's cardholder agreement carries "PER MAART 2022" in its running header and
+ *  nowhere states a day. The day-requiring pattern above found nothing, so eight
+ *  covered figures were stamped with the day they were READ — 2026-08-19 — which
+ *  presents a four-and-a-half-year-old document as today's. That is the precise
+ *  failure the date rule exists to stop, and it is worse than a missing date:
+ *  cardTerms' age-aware precedence would let that figure beat a genuinely newer
+ *  one, because it looks like the freshest thing in the cache.
+ *
+ *  Guarded against prose. "per januari 2025 gaan de tarieven omhoog" in a sentence
+ *  is not the document's own edition, so a bare month-year counts only where
+ *  documents actually date themselves: on the cover (the first 2.000 characters)
+ *  or in a running header, which repeats. The day is set to the 1st, the earliest
+ *  the edition can have been in force — the conservative direction, since it makes
+ *  the figure look older rather than fresher than it is. */
+function readMonthYearEdition(text: string): string | null {
+  const re = /\b(?:geldig\s+per|per|versie|uitgave|editie)\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})\b/gi;
+  const found: { at: number; iso: string }[] = [];
+  for (const m of text.matchAll(re)) {
+    const month = MONTHS_NL.indexOf(m[1].toLowerCase());
+    const year = Number(m[2]);
+    if (month < 0 || year < 1990 || year > 2100) continue;
+    found.push({ at: m.index ?? 0, iso: `${year}-${String(month + 1).padStart(2, "0")}-01` });
+  }
+  if (!found.length) return null;
+  const counts = new Map<string, number>();
+  for (const f of found) counts.set(f.iso, (counts.get(f.iso) ?? 0) + 1);
+  // A running header repeats; a cover states it once, up top. Anything else is
+  // prose and is refused rather than guessed at.
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  // A running header repeats — three or more is not prose.
+  if (best[1] >= 3) return best[0];
+  // Otherwise it must look like a LABEL rather than a sentence: on the cover, on
+  // its own short line, and not punctuated like running text. "Wij verhogen per
+  // januari 2025 de tarieven." is a sentence about a change and says nothing about
+  // when THIS document was issued, so it is refused.
+  const titleLike = found.some((f) => {
+    if (f.iso !== best[0] || f.at >= 2000) return false;
+    const start = text.lastIndexOf("\n", f.at) + 1;
+    const end = text.indexOf("\n", f.at);
+    const line = text.slice(start, end === -1 ? undefined : end).trim();
+    return line.length <= 80 && !/[.,;:]$/.test(line);
+  });
+  return titleLike ? best[0] : null;
 }
