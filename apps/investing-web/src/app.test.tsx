@@ -8,7 +8,7 @@ import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/co
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
 const dashboard: InvestingDashboardData = {
   ...emptyInvestingDashboard(),
@@ -169,7 +169,7 @@ test("dashboard shows read error when route fails", async () => {
   root.unmount();
 });
 
-test("shows Yahoo disclosure and sends no price sync before acceptance", async () => {
+test("shows Yahoo disclosure and starts price sync only after acceptance", async () => {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard)); return new Response(JSON.stringify(String(input) === "/api/market-data/consent" && init?.method === "POST" ? { accepted: true } : { accepted: false, disclosure: "Yahoo-melding" })); }));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
@@ -182,7 +182,7 @@ test("shows Yahoo disclosure and sends no price sync before acceptance", async (
   await act(async () => { Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("ga akkoord"))!.click(); await Promise.resolve(); });
   expect(requests).toContain("/api/market-data/consent");
   expect(requests.filter((request) => request === "/api/market-data/consent")).toHaveLength(2);
-  expect(requests).not.toContain("/api/prices/sync");
+  expect(requests).toContain("/api/prices/sync");
   root.unmount();
 });
 

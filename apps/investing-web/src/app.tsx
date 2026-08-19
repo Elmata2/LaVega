@@ -10,6 +10,7 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 
 const YAHOO_FINANCE_CONSENT_HEADER = "x-lavega-yahoo-consent";
 const YAHOO_DISCLOSURE_STORAGE_KEY = "lavega.yahoo-finance-disclosure.v1";
+const YAHOO_CONSENT_EVENT = "lavega:yahoo-consent";
 const hasSeenYahooFinanceDisclosure = () => { try { return localStorage.getItem(YAHOO_DISCLOSURE_STORAGE_KEY) === "seen"; } catch { return false; } };
 const markYahooFinanceDisclosureSeen = () => { try { localStorage.setItem(YAHOO_DISCLOSURE_STORAGE_KEY, "seen"); } catch { /* unavailable storage is non-fatal */ } };
 
@@ -83,6 +84,7 @@ export function YahooDisclosure() {
       if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
       markYahooFinanceDisclosureSeen();
       setConsent((current) => current ? { ...current, accepted: true } : current);
+      window.dispatchEvent(new Event(YAHOO_CONSENT_EVENT));
     } catch (reason) { setProblem(reason instanceof Error ? reason.message : "Toestemming opslaan mislukt."); }
     finally { setBusy(false); }
   }
@@ -92,7 +94,34 @@ export function YahooDisclosure() {
 
 function AppOpenSync() {
   const [problems, setProblems] = useState<string[]>([]);
-  useEffect(() => { void fetch("/api/brokers/sync", { method: "POST" }).then(async (response) => { const result = await response.json() as { problems?: string[] }; setProblems(result.problems ?? []); }).catch(() => setProblems(["Brokersynchronisatie mislukt."])); }, []);
+  useEffect(() => {
+    let current = true;
+    const run = async (refreshPrices = false) => {
+      try {
+        const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
+        const brokerResult = await brokerResponse.json() as { problems?: string[] };
+        const nextProblems = [...(brokerResult.problems ?? [])];
+        if (refreshPrices || hasSeenYahooFinanceDisclosure()) {
+          const dashboard = await fetchDashboard();
+          type PriceSyncSymbol = { symbol: string; currency: string; isin?: string; ticker?: string; exchange?: string; backfillFrom?: string };
+          const symbols: PriceSyncSymbol[] = dashboard.positions
+            .filter((position) => Boolean(position.isin))
+            .map((position) => ({ symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }));
+          symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
+          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
+          if (priceResponse.ok) {
+            const priceResult = await priceResponse.json() as { problems?: string[] };
+            nextProblems.push(...(priceResult.problems ?? []));
+          }
+        }
+        if (current) setProblems(nextProblems);
+      } catch { if (current) setProblems(["Brokersynchronisatie mislukt."]); }
+    };
+    void run();
+    const onConsent = () => { void run(true); };
+    window.addEventListener(YAHOO_CONSENT_EVENT, onConsent);
+    return () => { current = false; window.removeEventListener(YAHOO_CONSENT_EVENT, onConsent); };
+  }, []);
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
