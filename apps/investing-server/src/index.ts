@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { app } from "./app.js";
 import { createApp, type BrokerCredentialInput } from "./app.js";
 import { createProblemReporter } from "./observability.js";
@@ -24,11 +22,6 @@ function environment(name: string): string | undefined {
   return value || undefined;
 }
 
-function runtimeCredentialFile(): string {
-  return environment("LAVEGA_VAULT_FILE")
-    ?? (existsSync("/data") ? "/data/credentials.json" : join(process.cwd(), ".lavega", "credentials.json"));
-}
-
 type RuntimeCredentialStore = ReturnType<typeof createFileCredentialStore>;
 
 export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentialStore) {
@@ -44,7 +37,7 @@ export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentia
   };
 }
 
-export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createFileCredentialStore(runtimeCredentialFile())): (force: boolean) => Promise<ScheduledSyncResult> {
+export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void, credentials = createFileCredentialStore()): (force: boolean) => Promise<ScheduledSyncResult> {
   const state = createMemoryBrokerSyncStateStore();
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = [
@@ -86,7 +79,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   let trades: Trade[] = [];
   let dividends: Dividend[] = [];
   let syncProblems: string[] = [];
-  const credentials = createFileCredentialStore(runtimeCredentialFile());
+  const credentials = createFileCredentialStore();
   const brokerSync = createRuntimeBrokerSync((result) => {
     const outcomes = result.outcomes.filter((outcome) => outcome.result !== null);
     positions = outcomes.flatMap((outcome) => outcome.result?.positions ?? []);

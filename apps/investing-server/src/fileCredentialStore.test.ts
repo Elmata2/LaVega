@@ -2,7 +2,18 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createFileCredentialStore, runtimeCredentialFile } from "./fileCredentialStore.js";
+
+test("runtime credential file prefers LAVEGA_VAULT_FILE", () => {
+  const previous = process.env.LAVEGA_VAULT_FILE;
+  process.env.LAVEGA_VAULT_FILE = "/tmp/custom-vault.json";
+  try {
+    expect(runtimeCredentialFile()).toBe("/tmp/custom-vault.json");
+  } finally {
+    if (previous === undefined) delete process.env.LAVEGA_VAULT_FILE;
+    else process.env.LAVEGA_VAULT_FILE = previous;
+  }
+});
 
 test("file credential store encrypts, persists, and unlocks broker credentials", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-credentials-"));

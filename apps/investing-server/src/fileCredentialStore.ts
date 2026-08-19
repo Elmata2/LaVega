@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
 import { decryptJSON, deriveKey, encryptJSON, newSalt, PBKDF2_ITERATIONS, type CipherBlob } from "@lavega/adapters";
 
@@ -7,8 +8,14 @@ export type ServerVaultStatus = "empty" | "locked" | "unlocked";
 
 type VaultData = { credentials: BrokerCredentials[] };
 
+export function runtimeCredentialFile(): string {
+  const fromEnv = process.env.LAVEGA_VAULT_FILE?.trim();
+  if (fromEnv) return fromEnv;
+  return existsSync("/data") ? "/data/credentials.json" : join(process.cwd(), ".lavega", "credentials.json");
+}
+
 /** Encrypted credential store for the Node runtime. IndexedDB only exists in browsers. */
-export function createFileCredentialStore(filePath: string): CredentialStore & {
+export function createFileCredentialStore(filePath = runtimeCredentialFile()): CredentialStore & {
   status(): Promise<ServerVaultStatus>;
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
