@@ -114,7 +114,7 @@ function AppOpenSync() {
               ? { symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }
               : { symbol: position.symbol, ticker: position.symbol, exchange: "UNKNOWN", currency: position.currency, backfillFrom: position.asOf });
           symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
-          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
+          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json", ...(hasSeenYahooFinanceDisclosure() ? { [YAHOO_FINANCE_CONSENT_HEADER]: "accepted" } : {}) }, body: JSON.stringify({ symbols }) });
           if (priceResponse.ok) {
             const priceResult = await priceResponse.json() as { problems?: string[] };
             nextProblems.push(...(priceResult.problems ?? []));

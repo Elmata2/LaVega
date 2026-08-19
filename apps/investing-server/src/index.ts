@@ -83,8 +83,8 @@ export async function createRuntimeApp() {
     const symbols = [...new Set(positions.map((position) => position.symbol))];
     const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(value, "0000-01-01", "9999-12-31")))).flat();
     const benchmarkBars = await priceStore.getRange("SP500", "0000-01-01", "9999-12-31");
-    const fxRates = await fxProvider.getLatestRate();
-    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates, selectedSymbol: symbol, problems: syncProblems });
+    const fxResult = await fxProvider.getLatestRate();
+    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...syncProblems, ...fxResult.problems] });
   };
   if (!dsn) return createApp({ brokerSync, store: priceStore, fxProvider, dashboardReader });
   const sentry = await import("@sentry/node");
