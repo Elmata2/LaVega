@@ -67,7 +67,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)"
+      "lastReason": "no route wired (readable=bot-blocked, pdfUrl=none)",
+      "docUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on assets.ing.com (ING's own CDN), 179093 bytes, 4 pages, 'Datum: 1 januari 2026'. Quote verbatim at th"
     },
     "abn-amro-betaalpas": {
       "product": "ABN AMRO betaalpas",
@@ -107,7 +111,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+      "docKind": "pdf",
+      "docDate": "2026-08",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on substance. URL: 200 application/pdf on icscards.nl (the issuer's own domain), 314177 bytes; footer 'Diemen, augustus 2026'. Qu"
     },
     "abn-amro-gold-card": {
       "product": "ABN AMRO Gold Card",
@@ -125,7 +133,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+      "docKind": "pdf",
+      "docDate": "2026-08",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on substance. Same document, same verbatim art. 13.1 quote, same 200 application/pdf on icscards.nl, 'Diemen, augustus 2026'. Gol"
     },
     "rabobank-betaalpas": {
       "product": "Rabobank betaalpas",
@@ -141,7 +153,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "wayback",
-      "lastReason": "wayback: conditions not established"
+      "lastReason": "wayback: conditions not established",
+      "docUrl": "https://media.rabobank.com/asset/5f815909-c7d5-498a-a1d6-9f954441bd8b/Tarieven-en-limieten-particulier-betalingsverkeer-2026.pdf",
+      "docKind": "pdf",
+      "docDate": "Juli 2026",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. media.rabobank.com URL serves a real 14-page PDF (200, application/pdf), page footers read 'Juli 2026' as claimed. The quote is a COMPOSITE,"
     },
     "rabobank-creditcard": {
       "product": "Rabobank creditcard",
@@ -157,7 +173,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "wayback",
-      "lastReason": "wayback: conditions not established"
+      "lastReason": "wayback: conditions not established",
+      "docUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-07",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on media.rabobank.com (Rabobank's own CDN), 351481 bytes, 5 pages, 'Datum: 7 januari 2026' with running"
     },
     "rabo-goldcard": {
       "product": "Rabo GoldCard",
@@ -173,7 +193,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "wayback",
-      "lastReason": "wayback: conditions not established"
+      "lastReason": "wayback: conditions not established",
+      "docUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-07",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. Same Rabo Comfort FID (200 application/pdf, media.rabobank.com, 7 januari 2026), same verbatim row naming '[RaboCard, Rabo GoldC"
     },
     "sns-betaalpas": {
       "product": "SNS betaalpas",
@@ -192,7 +216,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.snsbank.nl/particulier/support/download-tonen-op-pagina/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200 application/pdf, 73,996 B / 4 pages, on snsbank.nl (issuer domain); no UA gating (identical byte"
     },
     "sns-creditcard": {
       "product": "SNS creditcard",
@@ -212,7 +240,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and the content-type warning is accurate. URL: snsbank.nl/downloads/tarievenwijzer-betalen.html returns 200 with Content-Type ap"
     },
     "asn-betaalpas": {
       "product": "ASN betaalpas",
@@ -230,7 +262,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-betalen-sparen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks, with one real pin hazard the report understated. (1) URL serves HTTP 200 application/pdf, 89,304 B / 9 pages, on asnbank"
     },
     "asn-creditcard": {
       "product": "ASN Creditcard",
@@ -250,7 +286,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.icscards.nl/webdocuments/626/Algemene%20Voorwaarden%20ASN%20Creditcard%20-%2040",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and attribution is stronger than the report claimed. URL: 200 application/pdf on icscards.nl, 302703 bytes; document is 'Algemen"
     },
     "regiobank-betaalpas": {
       "product": "RegioBank betaalpas",
@@ -268,7 +308,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200 application/pdf, 57,567 B / 4 pages, on regiobank.nl; no UA gating, node fetch works; Last-Modif"
     },
     "regiobank-creditcard": {
       "product": "RegioBank creditcard",
@@ -346,7 +390,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+      "docKind": "pdf",
+      "docDate": "mei 2026",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. URL serves a real 2-page PDF, the EU 'Informatiedocument betreffende de vergoedingen', 'Naam van de rekening: Triodos Internet Betaalrekenin"
     },
     "bunq-free-betaalpas": {
       "product": "bunq Free betaalpas",
@@ -367,7 +415,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 3,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Document, quote and column all verified — but the submitted rate of 0.5 is wrong for this field. URL returns HTTP 200, application/pdf, 8 pages, from "
     },
     "bunq-core-betaalpas": {
       "product": "bunq Core betaalpas",
@@ -388,7 +440,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 0.5,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 58 = the 'bunq Core' column, and the EUR 1.000 clause is absent from that column. On the no-cap condition I applied the"
     },
     "bunq-pro-betaalpas": {
       "product": "bunq Pro betaalpas",
@@ -408,7 +464,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, and the strongest genuine improvement in the batch. 0.5% sits at offset 39 = the 'bunq Pro' column, with no EUR 1.000 clause. I verified th"
     },
     "bunq-elite-betaalpas": {
       "product": "bunq Elite betaalpas",
@@ -429,7 +489,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 0.5,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 20 = the 'bunq Elite' column, no EUR 1.000 clause. Corroborated positively by the live Elite plan page, which I fetched"
     },
     "bunq-creditcard": {
       "product": "bunq creditcard",
@@ -522,7 +586,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, with the rate corrected for convention consistency. I verified this is genuinely the business column and not a consumer figure reused: the "
     },
     "bunq-core-business-betaalpas": {
       "product": "bunq Core Business betaalpas",
@@ -541,7 +609,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 136 = the seventh header column, 'bunq Core' + 'Business' on the second header line, so this is the business column as "
     },
     "bunq-pro-business-betaalpas": {
       "product": "bunq Pro Business betaalpas",
@@ -560,7 +632,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 117 = the sixth header column, 'bunq Pro' + 'Business'. No EUR 1.000 clause. Fills an empty field; the business plans p"
     },
     "bunq-elite-business-betaalpas": {
       "product": "bunq Elite Business betaalpas",
@@ -579,7 +655,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, verified independently because the finder's report was TRUNCATED mid-entry for this product — I did not take the claim on trust, I read the"
     },
     "revolut-standard-betaalpas": {
       "product": "Revolut Standard betaalpas",
@@ -595,7 +675,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1,
       "lastRoute": "wayback",
-      "lastReason": null
+      "lastReason": null,
+      "docUrl": "https://cdn.revolut.com/terms_and_conditions/pdf/particuliere_tarieven_standaard_ba464230_1.7.1_1778145666_nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-07-09",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200, Content-Type application/pdf, 100143 bytes, 10 pages, on the issuer's own CDN (cdn.revolut.com)"
     },
     "revolut-plus-betaalpas": {
       "product": "Revolut Plus betaalpas",
@@ -665,7 +749,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED on all four tests. (1) URL: docs.n26.com (issuer's own domain), HTTP 200, real PDF 1.4, 8 pages, 174,674 bytes, \"Version 4.0, Date: 26.06.202"
     },
     "n26-smart-betaalpas": {
       "product": "N26 Smart betaalpas",
@@ -687,7 +775,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. Same document, same 200/real-PDF check. Quote verbatim (lines 103-105). Product identity confirmed inside the document rather than assumed: "
     },
     "n26-go-betaalpas": {
       "product": "N26 Go betaalpas",
@@ -709,7 +801,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED, including the differentiator the finder claimed. Quote verbatim (lines 103-105). The Go-specific ATM row is verbatim too, down to the source"
     },
     "n26-metal-betaalpas": {
       "product": "N26 Metal betaalpas",
@@ -731,7 +827,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. Quote verbatim (lines 103-105); the Free FX-ATM row naming \"N26 Metal and N26 Business Metal users\" is verbatim (lines 157-158). Plan identi"
     },
     "n26-instant-savings": {
       "product": "N26 Instant Savings",
@@ -1513,7 +1613,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": "provider-page: no figure · agent: conditions not established"
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks, independently fetched. (1) URL: https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf returns HTTP 20"
     },
     "anwb-visa-silver-card": {
       "product": "ANWB Visa Silver Card",
@@ -1532,7 +1636,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED. Same PDF, same verbatim art. 13.1 quote (fetched and extracted myself), same issuer and mei-2026 date. Row attribution is the strongest of "
     },
     "anwb-visa-gold-card": {
       "product": "ANWB Visa Gold Card",
@@ -1551,7 +1659,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED, and the report's self-flagged weakness is real but does not sink it. Same PDF, same verbatim 13.1, same issuer/date, all re-verified from m"
     },
     "crypto-com-prepaid-card-basic-midnight-blue": {
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
@@ -1571,7 +1683,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL is HTTP 200 on the issuer's own domain (help.crypto.com), real HTML, region-scoped to 'users with a residential address in E"
     },
     "crypto-com-prepaid-card-plus-ruby-steel": {
       "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
@@ -1591,7 +1707,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with one timing reservation. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residential scope). Quote ver"
     },
     "crypto-com-prepaid-card-pro-jade-green-royal-indigo": {
       "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
@@ -1611,7 +1731,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with the same timing reservation as the Plus tier. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residen"
     },
     "crypto-com-prepaid-card-private-icy-white-rose-gold": {
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
@@ -1631,7 +1755,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and this is the strongest of the five because the exemption survives BOTH schedules. Same verified document (200, issuer domain,"
     },
     "crypto-com-prepaid-card-private-obsidian": {
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
@@ -1651,7 +1779,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on the same basis as Icy White / Rose Gold, and the exemption again survives both schedules. Same verified document (200, issuer "
     },
     "nexo-card": {
       "product": "Nexo Card",
@@ -1693,7 +1825,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://krak.app/pricing",
+      "docKind": "html",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED verbatim on the issuer's own pricing page: 'Foreign Exchange (FX) for EEA debit card customers | Cash FX Conversion | We don't charge FX fees"
     },
     "plutus-card": {
       "product": "Plutus Card",
@@ -1713,7 +1848,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://plutus.it/fees",
+      "docKind": "html",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED verbatim. '2.2 Point of Sale transaction (Non Domestic)*' shows 2.5% / 2.5% / 2.5% across the Starter, Everyday and Premium columns, and the "
     },
     "bleap-card": {
       "product": "Bleap Card",
