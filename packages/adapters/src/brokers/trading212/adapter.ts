@@ -12,8 +12,8 @@ type Trading212Page = { items: Trading212Order[]; nextPagePath?: string };
 type Trading212Positions = Trading212Order[];
 
 const SOURCE = "trading-212";
-const MAX_RATE_LIMIT_RETRIES = 2;
-const MAX_RATE_LIMIT_WAIT_MS = 5_000;
+const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RATE_LIMIT_WAIT_MS = 60_000;
 
 function rateLimitWaitMs(response: Response, retry: number): number {
   const retryAfter = response.headers.get("retry-after")?.trim();
@@ -23,7 +23,7 @@ function rateLimitWaitMs(response: Response, retry: number): number {
     const timestamp = Date.parse(retryAfter);
     if (Number.isFinite(timestamp)) return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
   }
-  return Math.min(250 * (2 ** retry), MAX_RATE_LIMIT_WAIT_MS);
+  return Math.min(1_000 * (2 ** retry), MAX_RATE_LIMIT_WAIT_MS);
 }
 
 function wait(milliseconds: number): Promise<void> {

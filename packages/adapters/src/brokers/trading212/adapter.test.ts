@@ -105,7 +105,7 @@ test("retries rate-limited order-history request using Retry-After", async () =>
   const baseUrl = await serve((request, response) => {
     if (request.url === "/api/v0/equity/history/orders") {
       orderRequests += 1;
-      if (orderRequests === 1) {
+      if (orderRequests <= 2) {
         response.writeHead(429, { "retry-after": "0" });
         response.end(JSON.stringify({ error: "too many requests" }));
         return;
@@ -117,7 +117,7 @@ test("retries rate-limited order-history request using Retry-After", async () =>
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
 
-  expect(orderRequests).toBe(2);
+  expect(orderRequests).toBe(3);
   expect(result.problems).toEqual([]);
   expect(result.trades).toHaveLength(1);
 });
