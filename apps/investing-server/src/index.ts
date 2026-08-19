@@ -2,7 +2,9 @@ import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { createApp } from "./app.js";
 import { createProblemReporter } from "./observability.js";
+import { FX_RATE_FALLBACK, buildInvestingDashboard, type Dividend, type Position, type Trade } from "@lavega/core";
 import {
+  createInMemoryPriceStore,
   createIbkrFlexAdapter,
   createLocalCredentialStore,
   createMemoryBrokerSyncStateStore,
@@ -28,7 +30,7 @@ function environment(name: string): string | undefined {
   return value || undefined;
 }
 
-export function createRuntimeBrokerSync(): (force: boolean) => Promise<ScheduledSyncResult> {
+export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResult) => void): (force: boolean) => Promise<ScheduledSyncResult> {
   const credentials = createLocalCredentialStore(environment("LAVEGA_VAULT_DB"));
   const state = createMemoryBrokerSyncStateStore();
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
@@ -54,14 +56,34 @@ export function createRuntimeBrokerSync(): (force: boolean) => Promise<Scheduled
       },
     },
   ];
-  return (force) => syncScheduledBrokers({ adapters, credentials, state, tenantId: LOCAL_TENANT_ID, entity, force });
+  return async (force) => {
+    const result = await syncScheduledBrokers({ adapters, credentials, state, tenantId: LOCAL_TENANT_ID, entity, force });
+    onCompleted?.(result);
+    return result;
+  };
 }
 
 export async function createRuntimeApp() {
   const dsn = process.env.SENTRY_DSN;
-  const brokerSync = createRuntimeBrokerSync();
-  if (!dsn) return createApp({ brokerSync });
+  const priceStore = createInMemoryPriceStore();
+  let positions: Position[] = [];
+  let trades: Trade[] = [];
+  let dividends: Dividend[] = [];
+  let syncProblems: string[] = [];
+  const brokerSync = createRuntimeBrokerSync((result) => {
+    const outcomes = result.outcomes.filter((outcome) => outcome.result !== null);
+    positions = outcomes.flatMap((outcome) => outcome.result?.positions ?? []);
+    trades = outcomes.flatMap((outcome) => (outcome.result?.trades ?? []).map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
+    dividends = outcomes.flatMap((outcome) => outcome.result?.dividends ?? []);
+    syncProblems = result.problems;
+  });
+  const dashboardReader = async ({ symbol }: { symbol?: string }) => {
+    const symbols = [...new Set(positions.map((position) => position.symbol))];
+    const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(value, "0000-01-01", "9999-12-31")))).flat();
+    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars: [], presentationCurrency: "EUR", fxRates: FX_RATE_FALLBACK, selectedSymbol: symbol, problems: syncProblems });
+  };
+  if (!dsn) return createApp({ brokerSync, store: priceStore, dashboardReader });
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return createApp({ brokerSync, store: priceStore, dashboardReader, problemReporter: createProblemReporter({ dsn, sentry }) });
 }
