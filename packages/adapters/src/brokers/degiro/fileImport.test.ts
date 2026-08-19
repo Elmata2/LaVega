@@ -23,5 +23,5 @@ test("DeGiro file import stamps caller entity on positions", async () => {
   expect(result.source).toBe("DeGiro");
   expect(result.problems).toEqual([]);
   expect(result.trades).toEqual([]);
-  expect(result.positions).toEqual([{ entity: "BV2", symbol: "VUAA", isin: "IE00TEST", quantity: 2, averagePrice: null, marketPrice: 10, marketValue: 20, currency: "EUR", asOf: "2026-08-18" }]);
+  expect(result.positions).toEqual([{ tenantId: "local", entity: "BV2", symbol: "VUAA", isin: "IE00TEST", quantity: 2, averagePrice: null, marketPrice: 10, marketValue: 20, currency: "EUR", asOf: "2026-08-18" }]);
 });

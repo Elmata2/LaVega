@@ -61,6 +61,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     source: "ibkr-flex",
     problems: [],
     positions: [{
+      tenantId: "local",
       entity: "personal",
       symbol: "AAPL",
       isin: "US0378331005",
@@ -73,6 +74,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
       asOf: "2026-08-18",
     }],
     trades: [{
+      tenantId: "local",
       entity: "personal",
       date: "2026-08-18",
       symbol: "AAPL",
