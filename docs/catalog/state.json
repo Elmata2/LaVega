@@ -411,9 +411,9 @@
       "lastValue": 1,
       "lastRoute": "agent",
       "lastReason": "wayback: no figure · agent: conditions not established",
-      "docUrl": "https://www.triodos.nl/internet-betaalrekening",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
       "docKind": "html",
-      "docDate": "2026-05 (the document's own date line reads 'Datum: mei 2026' — month only, no day. Storing 2026-05-01 is a normalization, not a quoted date; keep it only if the schema requires a full date, and never present the 1st as printed in the source.)",
+      "docDate": "2026-05-01",
       "docNote": "route-verified 2026-08-19; Verified: 200 application/pdf, 148,294 B / 2 pages from triodos.nl. Quote verbatim across the table cells: 'Betalen met een betaalpas / in v"
     },
     "bunq-free-betaalpas": {
@@ -969,7 +969,10 @@
       "lastChecked": "2026-08-19",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "agent: no figure"
+      "lastReason": "agent: no figure",
+      "docUrl": "https://wise.com/nl/interest/",
+      "docDate": "2026-05-08",
+      "docFetch": "jina"
     },
     "wise-aandelen": {
       "product": "Wise Aandelen",
@@ -2350,7 +2353,8 @@
       "lastReason": "agent: conditions not established",
       "docUrl": "https://www.klarna.com/nl/flex-rekening/",
       "docKind": "html",
-      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED as to value, quotes and conditions: the headline, both footnotes and the 3-account limit are verbatim on the page I fetched, and I re-extrac"
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED as to value, quotes and conditions: the headline, both footnotes and the 3-account limit are verbatim on the page I fetched, and I re-extrac",
+      "docDate": "2026-08-19"
     },
     "ayvens-bank-flexibel-sparen": {
       "product": "Ayvens Bank Flexibel Sparen",
@@ -2390,7 +2394,9 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.argenta.nl/sparen/spaarrente-overzicht",
+      "docDate": "2026-05-12"
     },
     "openbank-welkom-spaarrekening": {
       "product": "Openbank Welkom Spaarrekening",
@@ -2460,7 +2466,7 @@
       "lastReason": "agent: conditions not established",
       "docUrl": "https://www.yapikredi.nl/particulieren/renteoverzicht",
       "docKind": "html",
-      "docDate": "2025-07-07",
+      "docDate": "2026-06-26",
       "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on value and date, but ONE CONDITION IS WRONG and must be corrected before pinning. Fetched today, HTTP 200. The Renteoverzicht renders each"
     },
     "nibc-spaarrekening": {
@@ -2484,7 +2490,8 @@
       "lastReason": "agent: conditions not established",
       "docUrl": "https://www.nibc.nl/particulieren/sparen/spaarrentes",
       "docKind": "html",
-      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched today, HTTP 200. The rate table renders row by row: 'Spaarrekening | 1,55%' · 'Kwartaalspaarrekening | 1,60%*' · then the Termijnde"
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched today, HTTP 200. The rate table renders row by row: 'Spaarrekening | 1,55%' · 'Kwartaalspaarrekening | 1,60%*' · then the Termijnde",
+      "docDate": "2026-08-19"
     },
     "nibc-kwartaalspaarrekening": {
       "product": "NIBC Kwartaalspaarrekening",
@@ -2572,7 +2579,7 @@
       "lastValue": 1.5,
       "lastRoute": "agent",
       "lastReason": "agent: conditions not established",
-      "docUrl": "https://www.centraalbeheer.nl/sparen",
+      "docUrl": "https://www.centraalbeheer.nl/sparen/renteplus-rekening/rente",
       "docKind": "html",
       "docDate": "2025-07-10",
       "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on both pages, which I fetched separately. The dated sentence is verbatim on /sparen (so 2025-07-10 is Centraal Beheer's own date) and the €"
@@ -2595,7 +2602,9 @@
       "lastChecked": "2026-08-19",
       "lastValue": 1.25,
       "lastRoute": "agent",
-      "lastReason": "agent: conditions not established"
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.knab.nl/particulier/rente-tarieven",
+      "docDate": "2026-02-18"
     },
     "abn-amro-direct-sparen": {
       "product": "ABN AMRO Direct Sparen",
@@ -2670,7 +2679,9 @@
       "lastChecked": "2026-08-19",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "agent: no figure"
+      "lastReason": "agent: no figure",
+      "docUrl": "https://www.asnbank.nl/sparen/rente.html",
+      "docDate": "2025-11-18"
     },
     "sns-internet-sparen": {
       "product": "SNS Internet Sparen",
@@ -2747,7 +2758,7 @@
       "lastValue": 1.3,
       "lastRoute": "agent",
       "lastReason": "agent: conditions not established",
-      "docUrl": "https://new.brandnewday.nl/spaarrekening/",
+      "docUrl": "https://new.brandnewday.nl/rentestanden/",
       "docKind": "html",
       "docDate": "2025-05-07",
       "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Both the sentence form ('De variabele rente – die hoger of lager kan worden – is op dit moment 1,30%') and the table row are verbatim, and "
