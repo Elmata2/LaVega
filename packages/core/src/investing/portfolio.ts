@@ -3,6 +3,12 @@ import type { Position, PriceBar, Trade } from "./model.js";
 
 export type PortfolioValuePoint = { date: string; value: number; unpriced: string[] };
 export type BenchmarkPoint = { date: string; value: number };
+export type PortfolioBenchmarkPoint = {
+  date: string;
+  portfolioValue: number | null;
+  benchmarkValue: number | null;
+  unpriced: string[];
+};
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
 export type FxRates = FxRate | FxRate[];
 
@@ -81,4 +87,33 @@ export function filterPortfolioValueRange<T extends { date: string }>(points: T[
   const latest = [...points].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date;
   const start = range === "YTD" ? `${latest.slice(0, 4)}-01-01` : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
   return points.filter((point) => point.date >= start);
+}
+
+/** Join portfolio and benchmark values on date for a chart boundary. */
+export function buildPortfolioBenchmarkSeries(
+  portfolio: PortfolioValuePoint[],
+  benchmark: BenchmarkPoint[],
+  range: PortfolioRange,
+): PortfolioBenchmarkPoint[] {
+  const filteredPortfolio = filterPortfolioValueRange(portfolio, range);
+  if (filteredPortfolio.length === 0) return [];
+
+  const startDate = filteredPortfolio[0].date;
+  const dates = new Set([
+    ...filteredPortfolio.map((point) => point.date),
+    ...benchmark.filter((point) => point.date >= startDate).map((point) => point.date),
+  ]);
+  const portfolioByDate = new Map(portfolio.map((point) => [point.date, point]));
+  const benchmarkByDate = new Map(benchmark.map((point) => [point.date, point]));
+
+  return [...dates].sort().map((date) => {
+    const portfolioPoint = portfolioByDate.get(date);
+    const benchmarkPoint = benchmarkByDate.get(date);
+    return {
+      date,
+      portfolioValue: portfolioPoint?.value ?? null,
+      benchmarkValue: benchmarkPoint?.value ?? null,
+      unpriced: portfolioPoint?.unpriced ?? [],
+    };
+  });
 }

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   computePortfolioValueSeries,
+  buildPortfolioBenchmarkSeries,
   filterPortfolioValueRange,
   normalizeBenchmarkSeries,
   type PortfolioValuePoint,
@@ -58,4 +59,20 @@ test.each([
   expect(filterPortfolioValueRange(points, range).map((point) => point.date)).toEqual(
     points.filter((point) => point.date >= start).map((point) => point.date),
   );
+});
+
+test("joins portfolio and benchmark values at selected range", () => {
+  const portfolio: PortfolioValuePoint[] = [
+    { date: "2025-12-31", value: 90, unpriced: [] },
+    { date: "2026-01-02", value: 100, unpriced: [] },
+    { date: "2026-02-02", value: 110, unpriced: ["MSFT"] },
+  ];
+  expect(buildPortfolioBenchmarkSeries(portfolio, [
+    { date: "2026-01-02", value: 100 },
+    { date: "2026-01-15", value: 105 },
+  ], "1M")).toEqual([
+    { date: "2026-01-02", portfolioValue: 100, benchmarkValue: 100, unpriced: [] },
+    { date: "2026-01-15", portfolioValue: null, benchmarkValue: 105, unpriced: [] },
+    { date: "2026-02-02", portfolioValue: 110, benchmarkValue: null, unpriced: ["MSFT"] },
+  ]);
 });
