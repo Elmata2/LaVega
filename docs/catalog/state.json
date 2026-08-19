@@ -51,7 +51,11 @@
       "pdfNote": "ING_Kostenoverzicht 2026-06-15 does carry this rate (ING Creditcard More 2,00%; Creditcard Extra 0,00% tot EUR 1000 p/m, daarna 2,00%), but the package table puts the label 'Koersopslag non-euro' on the line BELOW the figures, so readIngTariffs - which only emits lines containing 'koersopslag' - cannot reach it, and figures[0] is the betaalpas row (1,40%). Left unrouted rather than covered with the debit card's number.",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "route-verified 2026-08-19; STRONGEST FIND IN THE BATCH — all five checks pass and it fills a product state.json deliberately left unrouted. (1) assets.ing.com serves H"
     },
     "ing-platinumcard": {
       "product": "ING Platinumcard",
@@ -91,7 +95,11 @@
       "lastValue": 1.2,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "figureNote": "THE RECORDED 2% IS ANOTHER PRODUCT'S ROW. Re-measured 2026-08-18 on the live page: the sweep's regex takes the FIRST koersopslag on the page, which is 'Opnemen van contant geld (biljetten) in het buitenland met een creditcard ... In buitenlands geld 4% + 2,00 % valutakoersopslag' - the credit card's ATM row. The betaalpas rate is further down: 'Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer'. It is refused today (conditionsKnown=false), and lastReason says only 'conditions not established', which reads as 'we have the number, we lack the cap'. We do not have the number. Do not promote this figure by establishing conditions for it; provider-page needs product-row attribution first."
+      "figureNote": "THE RECORDED 2% IS ANOTHER PRODUCT'S ROW. Re-measured 2026-08-18 on the live page: the sweep's regex takes the FIRST koersopslag on the page, which is 'Opnemen van contant geld (biljetten) in het buitenland met een creditcard ... In buitenlands geld 4% + 2,00 % valutakoersopslag' - the credit card's ATM row. The betaalpas rate is further down: 'Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer'. It is refused today (conditionsKnown=false), and lastReason says only 'conditions not established', which reads as 'we have the number, we lack the cap'. We do not have the number. Do not promote this figure by establishing conditions for it; provider-page needs product-row attribution first.",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-01",
+      "docNote": "route-verified 2026-08-19; Survives the exact trap the brief names. Verified 200 application/pdf, 234,203 B from assets.abnamro.com, 'Naam van de rekening: BasisPakket"
     },
     "abn-amro-creditcard": {
       "product": "ABN AMRO creditcard",
@@ -217,10 +225,10 @@
       "lastValue": 1.4,
       "lastRoute": "agent",
       "lastReason": "provider-page: no figure · agent: conditions not established",
-      "docUrl": "https://www.snsbank.nl/particulier/support/download-tonen-op-pagina/tarievenwijzer-betalen.html",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
       "docKind": "pdf",
       "docDate": "2026-02-01",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200 application/pdf, 73,996 B / 4 pages, on snsbank.nl (issuer domain); no UA gating (identical byte"
+      "docNote": "route-verified 2026-08-19; All five checks pass. URL served 200 application/pdf, 73,996 B / 4 pages from snsbank.nl with content-disposition filename '6.0006.41.2511 T"
     },
     "sns-creditcard": {
       "product": "SNS creditcard",
@@ -244,7 +252,7 @@
       "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
       "docKind": "pdf",
       "docDate": "2026-02-01",
-      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and the content-type warning is accurate. URL: snsbank.nl/downloads/tarievenwijzer-betalen.html returns 200 with Content-Type ap"
+      "docNote": "route-verified 2026-08-19; Quote verbatim in the same PDF: 'Betalen met een creditcard / in euro € 0,00 / in vreemde valuta 2% wisselkoersopslag'. Rate belongs to that"
     },
     "asn-betaalpas": {
       "product": "ASN betaalpas",
@@ -263,10 +271,10 @@
       "lastValue": 1.4,
       "lastRoute": "agent",
       "lastReason": "provider-page: no figure · agent: conditions not established",
-      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-betalen-sparen.html",
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
       "docKind": "pdf",
-      "docDate": "2026-02-01",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks, with one real pin hazard the report understated. (1) URL serves HTTP 200 application/pdf, 89,304 B / 9 pages, on asnbank"
+      "docDate": "2026-07-01",
+      "docNote": "route-verified 2026-08-19; Strongest find in the batch. URL served 200 application/pdf, 120,409 B / 4 pages from asnbank.nl, header 'per 1 juli 2026' — so the claimed "
     },
     "asn-creditcard": {
       "product": "ASN Creditcard",
@@ -312,7 +320,7 @@
       "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
       "docKind": "pdf",
       "docDate": "2026-02-01",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200 application/pdf, 57,567 B / 4 pages, on regiobank.nl; no UA gating, node fetch works; Last-Modif"
+      "docNote": "route-verified 2026-08-19; Verified: 200 application/pdf, 57,567 B / 4 pages from regiobank.nl, filename '2.00.70.37.2511_a_Tarievenwijzer_Betalen_per_01-02-2026.pdf',"
     },
     "regiobank-creditcard": {
       "product": "RegioBank creditcard",
@@ -331,7 +339,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2,
       "lastRoute": "wayback",
-      "lastReason": "wayback: conditions not established"
+      "lastReason": "wayback: conditions not established",
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "route-verified 2026-08-19; Quote verbatim: 'Betalen met de creditcard / • In euro in Nederland en andere Eurolanden € 0,00 / • In vreemde valuta 2% valutawisselkosten'"
     },
     "knab-betaalpas": {
       "product": "Knab betaalpas",
@@ -351,7 +363,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": 1.4,
       "lastRoute": "agent",
-      "lastReason": "provider-page: conditions not established · agent: conditions not established"
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "docUrl": "https://assets-eu-01.kc-usercontent.com/35355cb5-f8a5-0105-c237-9bab7d11ff84/3ec88fbd-4326-4bf3-be18-ed80334ade03/20251001%20Informatiedocument%20Knab%20Betaalrekening.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-10-01",
+      "docNote": "route-verified 2026-08-19; Rate and quote verify: 'Betalen met een betaalpas / In vreemde valuta 1,4% koersopslag over het opgenomen bedrag in euro' (the doc really do"
     },
     "knab-creditcard": {
       "product": "Knab creditcard",
@@ -391,10 +407,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "wayback: no figure",
-      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
-      "docKind": "pdf",
-      "docDate": "mei 2026",
-      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. URL serves a real 2-page PDF, the EU 'Informatiedocument betreffende de vergoedingen', 'Naam van de rekening: Triodos Internet Betaalrekenin"
+      "docUrl": "https://www.triodos.nl/internet-betaalrekening",
+      "docKind": "html",
+      "docDate": "2026-05 (the document's own date line reads 'Datum: mei 2026' — month only, no day. Storing 2026-05-01 is a normalization, not a quoted date; keep it only if the schema requires a full date, and never present the 1st as printed in the source.)",
+      "docNote": "route-verified 2026-08-19; Verified: 200 application/pdf, 148,294 B / 2 pages from triodos.nl. Quote verbatim across the table cells: 'Betalen met een betaalpas / in v"
     },
     "bunq-free-betaalpas": {
       "product": "bunq Free betaalpas",
@@ -512,7 +528,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/whats-zerofx-and-how-does-it-save-me-money",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED, and a genuine improvement — this product has no docUrl and no value today. (1) static.bunq.com serves HTTP 200, real PDF 1.4, 8 p"
     },
     "bunq-termijndeposito": {
       "product": "bunq Termijndeposito",
@@ -531,7 +551,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/lock-in-a-higher-interest-rate-with-term-deposits",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200 from help.bunq.com (page title is 'Lock in a guaranteed interest rate with Term Deposits'; the slug still says 'highe"
     },
     "bunq-beleggingsrekening": {
       "product": "bunq beleggingsrekening",
@@ -549,7 +572,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/how-are-trading-fees-calculated",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — genuine improvement, no docUrl on this product today. (1) Same verified static.bunq.com PDF (200, 8 pages). (2) Quote verbatim: "
     },
     "bunq-crypto": {
       "product": "bunq crypto",
@@ -567,7 +594,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/how-do-the-fees-and-spread-work-in-bunq-crypto",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — genuine improvement, no docUrl on this product today. (1) Same verified static.bunq.com PDF (200, 8 pages, /Title '20260803 bunq"
     },
     "bunq-free-business-betaalpas": {
       "product": "bunq Free Business betaalpas",
@@ -889,7 +920,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://wise.com/nl/pricing/",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; SUBSTANCE CONFIRMED, BUT THE QUOTE IS NOT VERBATIM AND MUST BE REPLACED BEFORE PINNING. (1) wise.com/nl/pricing/ serves HTTP 200 on Wise's o"
     },
     "wise-rente": {
       "product": "Wise Rente",
@@ -927,7 +961,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://wise.com/nl/pricing/",
+      "docKind": "html",
+      "docDate": "2026-06-30",
+      "docNote": "route-verified 2026-08-19; SUBSTANCE CONFIRMED, BUT THE QUOTE IS NOT VERBATIM AND MUST BE REPLACED BEFORE PINNING. (1) wise.com/nl/pricing/ serves HTTP 200 on Wise's o"
     },
     "trade-republic-betaalpas": {
       "product": "Trade Republic betaalpas",
@@ -948,7 +986,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      "docKind": "html",
+      "docDate": "2026-05-11",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200, application/json, 317KB from traderepublic.com itself. All four sentences are in the payload verbatim (Contentful st"
     },
     "trade-republic-spaarrekening-rente-op-kassaldo": {
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
@@ -967,7 +1009,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://traderepublic.com/nl-nl/rente/_payload.json",
+      "docKind": "html",
+      "docDate": "2026-07-14",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200, 259KB JSON from the issuer's own domain. Both quoted sentences are verbatim (the FAQ body of entry 3SUIOSDPEVMDz7r1o"
     },
     "212-card": {
       "product": "212 Card",
@@ -1870,7 +1916,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
+      "docKind": "html",
+      "docDate": "2026-05-25",
+      "docNote": "route-verified 2026-08-19; CONFIRMED as a card-fee/SEPA source, REFUSED as an FX rate - and the claim's own instruction to read it narrowly is correct, so I am upholdi"
     },
     "zeal-card-gnosis-pay-rails": {
       "product": "Zeal Card (Gnosis Pay rails)",
@@ -1907,7 +1957,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+      "docKind": "html",
+      "docDate": "2026-06-22",
+      "docNote": "route-verified 2026-08-19; CONFIRMED (help.gnosispay.com/hc/en-us/articles/40288567337876, 'Intermediary Cashback Programme', live via the same API, draft:false). Verb"
     },
     "bybit-card": {
       "product": "Bybit Card",
@@ -1923,7 +1977,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+      "docKind": "html",
+      "docDate": "2026-06-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED, and this is the strongest find in the batch. www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card serves HT"
     },
     "coinbase-card": {
       "product": "Coinbase Card",
@@ -1955,7 +2013,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; CONFIRMED as a refusal, and the refusal is the correct call - keep the rate null. help.wirexapp.com/article/wirex-fees-1379 serves HTTP 200 "
     },
     "binance-card": {
       "product": "Binance Card",
@@ -2006,7 +2067,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://help.tria.so/en/articles/13513481-what-are-tria-cards",
+      "docKind": "html",
+      "docDate": "2026-06-14",
+      "docNote": "route-verified 2026-08-19; CONFIRMED verbatim, but the 0 must not be published as an unconditional FX rate. help.tria.so/en/articles/13513481 'What are Tria Cards?' se"
     },
     "bigbank-flexibel-sparen": {
       "product": "Bigbank Flexibel Sparen",
@@ -2045,7 +2110,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me",
+      "docKind": "html",
+      "docDate": "2026-07-01",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — the only find in the batch whose quote greps clean, and the second-strongest. (1) help.bunq.com serves HTTP 200 real HTML on bun"
     },
     "santander-consumer-bank-spaarrekening": {
       "product": "Santander Consumer Bank Spaarrekening",
@@ -2437,7 +2506,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-rentes",
+      "docKind": "html",
+      "docDate": "2026-08-05",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — strongest find in the batch, all five checks pass. (1) https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-ren"
     },
     "asn-bank-asn-ideaalsparen": {
       "product": "ASN Bank ASN Ideaalsparen",
