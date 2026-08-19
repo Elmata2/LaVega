@@ -64,9 +64,11 @@ export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResu
   };
 }
 
-export async function createRuntimeApp() {
+export type RuntimeAppOptions = { priceStore?: ReturnType<typeof createInMemoryPriceStore> };
+
+export async function createRuntimeApp(options: RuntimeAppOptions = {}) {
   const dsn = process.env.SENTRY_DSN;
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = options.priceStore ?? createInMemoryPriceStore();
   const fxProvider = createFrankfurterFxProvider();
   let positions: Position[] = [];
   let trades: Trade[] = [];
