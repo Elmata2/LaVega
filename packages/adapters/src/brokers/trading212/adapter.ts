@@ -49,24 +49,28 @@ function nullableNumber(valueToParse: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mapOrder(order: Trading212Order, entity: string): TradeWithoutId {
-  const symbol = String(value(order, "ticker", "symbol") ?? "");
-  if (!symbol) throw new Error("Trading 212 order symbol is missing");
-  const brokerTradeId = value(order, "id", "orderId");
-  const amount = nullableNumber(value(order, "totalCost", "filledValue", "value", "amount"));
-  const commission = nullableNumber(value(order, "fees", "commission"));
+function mapOrder(order: Trading212Order, entity: string): TradeWithoutId | null {
+  const instrument = order.instrument && typeof order.instrument === "object" && !Array.isArray(order.instrument)
+    ? order.instrument as Trading212Order
+    : {};
+  const get = (...keys: string[]) => value(order, ...keys) ?? value(instrument, ...keys);
+  const symbol = String(get("ticker", "symbol") ?? "");
+  if (!symbol) return null;
+  const brokerTradeId = get("id", "orderId");
+  const amount = nullableNumber(get("totalCost", "filledValue", "value", "amount"));
+  const commission = nullableNumber(get("fees", "commission"));
   return {
     tenantId: LOCAL_TENANT_ID,
     entity,
-    date: date(value(order, "dateExecuted", "executedAt", "fillDate", "dateCreated", "createdAt")),
+    date: date(get("dateExecuted", "executedAt", "fillDate", "dateCreated", "createdAt")),
     symbol,
-    ...(typeof value(order, "isin") === "string" ? { isin: value(order, "isin") as string } : {}),
-    ...(typeof value(order, "name", "description") === "string" ? { description: value(order, "name", "description") as string } : {}),
-    side: side(value(order, "direction", "side")),
-    quantity: number(value(order, "filledQuantity", "quantity"), "quantity"),
-    price: nullableNumber(value(order, "fillPrice", "price")),
+    ...(typeof get("isin") === "string" ? { isin: get("isin") as string } : {}),
+    ...(typeof get("name", "description") === "string" ? { description: get("name", "description") as string } : {}),
+    side: side(get("direction", "side")),
+    quantity: number(get("filledQuantity", "quantity"), "quantity"),
+    price: nullableNumber(get("fillPrice", "price")),
     amount,
-    currency: String(value(order, "currency", "currencyCode") ?? ""),
+    currency: String(get("currency", "currencyCode") ?? ""),
     commission,
     ...(brokerTradeId !== undefined && brokerTradeId !== null ? { brokerTradeId: String(brokerTradeId) } : {}),
   };
@@ -167,9 +171,12 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           const current = await page(nextUrl, config);
           for (const order of current.items) {
             try {
-              trades.push(mapOrder(order, entity));
+              const trade = mapOrder(order, entity);
+              if (trade) trades.push(trade);
             } catch (error) {
-              problems.push(error instanceof Error ? error.message : "Trading 212 order is invalid");
+              if (error instanceof Error && error.message !== "Trading 212 order symbol is missing") {
+                problems.push(error.message);
+              }
             }
           }
           nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";

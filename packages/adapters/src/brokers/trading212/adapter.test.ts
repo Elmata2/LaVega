@@ -112,6 +112,24 @@ test("malformed order-history payload becomes a problem without throwing", async
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
+test("ignores non-security order rows and maps nested instruments", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (request.url === "/api/v0/equity/history/orders") {
+      json(response, 200, {
+        items: [
+          { id: 1, type: "CASH_ADJUSTMENT", dateCreated: "2026-08-18T10:15:00Z" },
+          { id: 2, instrument: { ticker: "AAPL", isin: "US0378331005" }, direction: "BUY", filledQuantity: 1, fillPrice: 10, currency: "USD", dateExecuted: "2026-08-18T10:15:00Z" },
+        ],
+      });
+    } else json(response, 200, [holding("AAPL")]);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
+});
+
 test("malformed holdings rows become problems without taking trades down", async () => {
   const baseUrl = await serve((request, response) => {
     if (request.url === "/api/v0/equity/history/orders") json(response, 200, { items: [order(1, "AAPL")] });
