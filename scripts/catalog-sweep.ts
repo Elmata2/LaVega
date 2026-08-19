@@ -39,7 +39,7 @@
  * also selects every *spaarrekening* (the word "rekening" ends in "ing"). Name the
  * id you actually mean.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
 import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute } from "@lavega/core";
@@ -55,7 +55,15 @@ const today = new Date().toISOString().slice(0, 10);
 const TIMEOUT_MS = 20_000;
 
 const args = process.argv.slice(2);
-const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : null;
+// A COMMA-SEPARATED LIST, not one substring. Targeting a scattered set is the
+// normal case once discovery pins documents to some products and not others:
+// `--only ics-` would drag back in the four ICS business cards whose consumer
+// document was deliberately unpinned, and pay Opus to re-read a marketing page
+// nobody wanted read. Any token matching as a substring is enough.
+const onlyList = (args.includes("--only") ? args[args.indexOf("--only") + 1] : "")
+  .split(",").map((t) => t.trim()).filter(Boolean);
+const only = onlyList.length ? onlyList.join(",") : null;
+const matchesOnly = (id: string) => onlyList.some((t) => id.includes(t));
 const dry = args.includes("--dry");
 function numArg(flag: string, fallback: number): number {
   const i = args.indexOf(flag);
@@ -605,7 +613,7 @@ async function findSource(
 }
 
 const state = JSON.parse(readFileSync(STATE, "utf8"));
-const ids: string[] = Object.keys(state.products).filter((id) => !only || id.includes(only));
+const ids: string[] = Object.keys(state.products).filter((id) => !only || matchesOnly(id));
 /** How many products the PREVIOUS run found any figure for — covered or not.
  *  Snapshotted before the loop overwrites it, because it is half of the guard at
  *  the bottom. */
@@ -697,10 +705,29 @@ for (const id of ids) {
     attempts.push({
       route: "agent",
       run: async () => {
-        const url: string = p.pdfUrl ?? p.termsUrl;
-        const text = await readPage(url, p.pdfUrl ? "pdf" : "html");
-        const figure = await askModel(p.product, url, text);
-        return figure ? toValue(figure, "agent", url, text, today) : null;
+        // THE PDF IS TRIED FIRST BUT IS NOT ASSUMED BETTER. Measured on ICS: its
+        // general terms say "de opslag is 2%" and then defer the per-card price to
+        // "de Documentatie", so the model correctly refuses — while the marketing
+        // page states the same 2% WITH its scope and settles. Preferring the PDF
+        // unconditionally therefore LOST six covered figures the moment discovery
+        // pinned that document.
+        //
+        // So: try the document, and when it does not settle the conditions, read
+        // the HTML page too and keep whichever one did. The second call is only
+        // paid for when the first came back unsettled, which is also the only time
+        // it can change the answer.
+        const sources: { url: string; kind: "pdf" | "html" }[] = [];
+        if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
+        if (p.termsUrl && p.readable === "yes") sources.push({ url: p.termsUrl, kind: "html" });
+        let best: CatalogValue | null = null;
+        for (const src of sources) {
+          const text = await readPage(src.url, src.kind);
+          const figure = await askModel(p.product, src.url, text);
+          const value = figure ? toValue(figure, "agent", src.url, text, today) : null;
+          if (value && isCovered(value)) return value;
+          best = best ?? value;
+        }
+        return best;
       },
     });
   }
@@ -868,8 +895,23 @@ if (figuresBefore > 0 && figuresFound === 0) {
 // by a debugging flag. The per-product state is still refreshed, since that is
 // keyed by id and only touches what was swept.
 if (only) {
+  // MERGE, do not refuse. Writing `entries` wholesale would delete every product
+  // the subset did not look at; refusing to write at all was the first fix and it
+  // turned out to be its own trap — eight Amex figures were paid for and then
+  // stranded in state.json, because the only way to reach the artifact was a $6
+  // full sweep. Replace what was swept, keep the rest untouched.
+  const prev: { generatedAt?: string; entries: typeof entries } = existsSync(CATALOG)
+    ? JSON.parse(readFileSync(CATALOG, "utf8"))
+    : { entries: [] };
+  const swept = new Set(entries.map((e) => e.id));
+  const merged = [...prev.entries.filter((e) => !swept.has(e.id)), ...entries];
+  // Keep the artifact in watchlist order rather than "everything else, then the
+  // subset" — a diff is only reviewable if the file does not reshuffle.
+  const order = Object.keys(state.products);
+  merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
   writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
-  console.log(`\nwrote ${STATE}. ${CATALOG} NOT written: --only swept ${entries.length} of ${Object.keys(state.products).length} products and would have dropped the rest.`);
+  console.log(`\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${merged.length} total).`);
   process.exit(0);
 }
 state.lastRun = today;

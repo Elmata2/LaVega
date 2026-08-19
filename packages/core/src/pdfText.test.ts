@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { readDocumentDate, readIngTariffs } from "./pdfText.js";
 
 const TEXT = readFileSync(new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url), "utf8");
@@ -146,4 +146,41 @@ test("the document's own validity date is read from it, not stamped by the fetch
   // delay fuse on it.
   expect(readDocumentDate(TEXT)).toBe("2026-06-15");
   expect(readDocumentDate("geen datum hier")).toBeNull();
+});
+
+/* A DOCUMENT THAT DATES ITSELF BY MONTH ONLY.
+ *
+ * Amex's cardholder agreement says "PER MAART 2022" in a running header and never
+ * gives a day. The day-requiring pattern found nothing, so eight covered figures
+ * were stamped 2026-08-19 — the day they were read — presenting a four-and-a-half
+ * year old document as current. Worse than a missing date, because cardTerms'
+ * age-aware precedence then lets it beat a genuinely newer figure.
+ */
+describe("readDocumentDate: month-year editions", () => {
+  test("a running header that repeats is the document's own date", () => {
+    const text = ["OVEREENKOMST — PER MAART 2022", "body", "OVEREENKOMST — PER MAART 2022", "body", "OVEREENKOMST — PER MAART 2022"].join("\n");
+    expect(readDocumentDate(text)).toBe("2022-03-01");
+  });
+
+  test("a cover label on its own short line counts", () => {
+    expect(readDocumentDate("TARIEVENOVERZICHT\nPER JANUARI 2026\n\n" + "body ".repeat(400))).toBe("2026-01-01");
+  });
+
+  test("a sentence about a future change is NOT the document's date", () => {
+    // This is the guard that matters: a rate change announced in prose says
+    // nothing about when this document was issued.
+    expect(readDocumentDate("Wij verhogen per januari 2025 de tarieven. Zie de website.")).toBeNull();
+  });
+
+  test("a month-year buried in body prose is refused rather than guessed", () => {
+    expect(readDocumentDate("x".repeat(500) + "\nDe rente wijzigt per maart 2024, aldus de bank.\n" + "y".repeat(500))).toBeNull();
+  });
+
+  test("the day-bearing form still wins where a document states one", () => {
+    expect(readDocumentDate("Deze brochure is geldig vanaf 15 juni 2026. Versie maart 2020.")).toBe("2026-06-15");
+  });
+
+  test("the 1st is chosen, which makes a figure look older rather than fresher", () => {
+    expect(readDocumentDate("VOORWAARDEN\nPER DECEMBER 2023\n" + "b".repeat(200))).toBe("2023-12-01");
+  });
 });

@@ -921,10 +921,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "provider-pdf: no figure · wayback: no figure · agent: no figure",
+      "pdfUrl": "https://www.trading212.com/legal-documentation/cy/common/Costs-and-Charges-Disclosure_EN.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "openbank-betaalpas-r42-betaalpas": {
       "product": "Openbank betaalpas (R42 Betaalpas)",
@@ -961,10 +963,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: conditions not established · agent: conditions not established",
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-green-card": {
       "product": "American Express Green Card",
@@ -982,10 +986,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: conditions not established · agent: conditions not established",
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-gold-card": {
       "product": "American Express Gold Card",
@@ -1003,10 +1009,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-platinum-card": {
       "product": "American Express Platinum Card",
@@ -1024,10 +1032,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-entry-card": {
       "product": "Flying Blue - American Express Entry Card",
@@ -1045,10 +1055,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-silver-card": {
       "product": "Flying Blue - American Express Silver Card",
@@ -1065,10 +1077,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-gold-card": {
       "product": "Flying Blue - American Express Gold Card",
@@ -1086,10 +1100,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-platinum-card": {
       "product": "Flying Blue - American Express Platinum Card",
@@ -1106,10 +1122,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-business-entry-card": {
       "product": "American Express Business Entry Card",
@@ -1129,7 +1147,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "american-express-business-green-card": {
       "product": "American Express Business Green Card",
@@ -1149,7 +1168,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "american-express-business-gold-card": {
       "product": "American Express Business Gold Card",
@@ -1169,7 +1189,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "american-express-corporate-card": {
       "product": "American Express Corporate Card",
@@ -1189,7 +1210,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "american-express-corporate-gold-card": {
       "product": "American Express Corporate Gold Card",
@@ -1209,7 +1231,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "klm-american-express-corporate-card": {
       "product": "KLM American Express Corporate Card",
@@ -1228,7 +1251,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "ics-visa-world-card": {
       "product": "ICS Visa World Card",
@@ -1246,10 +1270,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-gold": {
       "product": "ICS Visa World Card Gold",
@@ -1266,10 +1291,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-platinum": {
       "product": "ICS Visa World Card Platinum",
@@ -1287,10 +1313,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-panda": {
       "product": "ICS Visa World Card Panda",
@@ -1308,10 +1335,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-classic": {
       "product": "ICS Mastercard Classic",
@@ -1329,10 +1357,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-gold": {
       "product": "ICS Mastercard Gold",
@@ -1350,10 +1379,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
-      "lastValue": 2,
-      "lastRoute": "agent",
-      "lastReason": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: no figure",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-black": {
       "product": "ICS Mastercard Black",
@@ -1371,10 +1401,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-business": {
       "product": "ICS Visa World Card Business",
@@ -1392,10 +1423,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2.5,
       "lastRoute": "agent",
-      "lastReason": "provider-page: conditions not established · agent: conditions not established"
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "ics-visa-world-card-business-gold": {
       "product": "ICS Visa World Card Business Gold",
@@ -1413,10 +1445,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-18",
+      "lastChecked": "2026-08-19",
       "lastValue": 2.5,
       "lastRoute": "agent",
-      "lastReason": "provider-page: conditions not established · agent: conditions not established"
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "ics-mastercard-business": {
       "product": "ICS Mastercard Business",
@@ -1437,7 +1470,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
       "lastRoute": "agent",
-      "lastReason": "provider-page: conditions not established · agent: conditions not established"
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "ics-mastercard-corporate": {
       "product": "ICS Mastercard Corporate",
@@ -1458,7 +1492,8 @@
       "lastChecked": "2026-08-18",
       "lastValue": 2.5,
       "lastRoute": "agent",
-      "lastReason": "provider-page: conditions not established · agent: conditions not established"
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
     },
     "anwb-visa-classic-card": {
       "product": "ANWB Visa Classic Card",
