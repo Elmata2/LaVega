@@ -33,6 +33,7 @@ export async function firstProviderResult<Request, Result>(
 ): Promise<ProviderResult<Result> | null> {
   const ordered = [...providers].sort((a, b) => b.priority - a.priority);
   let problemResult: ProviderResult<Result> | null = null;
+  const problems: string[] = [];
   for (const provider of ordered) {
     try {
       const value = await provider.get(request);
@@ -40,15 +41,28 @@ export async function firstProviderResult<Request, Result>(
         const result = { sourceKey: provider.sourceKey, value };
         if (hasProblems(value)) {
           problemResult = result;
+          problems.push(...providerProblems(value));
           continue;
         }
-        return result;
+        return problems.length > 0 ? withProviderProblems(result, problems) : result;
       }
     } catch (error) {
       log(provider.sourceKey, error);
     }
   }
-  return problemResult;
+  return problemResult && problems.length > 0 ? withProviderProblems(problemResult, problems) : problemResult;
+}
+
+function providerProblems(value: unknown): string[] {
+  const problems = (value as { problems?: unknown }).problems;
+  return Array.isArray(problems) ? problems.filter((problem): problem is string => typeof problem === "string") : [];
+}
+
+function withProviderProblems<Result>(result: ProviderResult<Result>, problems: string[]): ProviderResult<Result> {
+  if (result.value === null || typeof result.value !== "object" || Array.isArray(result.value)) return result;
+  const value = result.value as { problems?: unknown } & Record<string, unknown>;
+  const ownProblems = Array.isArray(value.problems) ? value.problems.filter((problem): problem is string => typeof problem === "string") : [];
+  return { ...result, value: { ...value, problems: [...new Set([...problems, ...ownProblems])] } as Result };
 }
 
 /** Sort cached values without dropping expired values; callers may use them as a last resort. */

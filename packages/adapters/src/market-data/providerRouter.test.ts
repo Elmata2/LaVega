@@ -51,7 +51,7 @@ test("price lane falls through provider problems to a healthy fallback", async (
     price: [first, fallback], fx: [], identifier: [],
   });
 
-  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [{ close: 100 }], problems: [] } });
+  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [{ close: 100 }], problems: ["Yahoo blocked"] } });
 });
 
 test("price lane preserves provider problems when all providers fail", async () => {
@@ -62,7 +62,7 @@ test("price lane preserves provider problems when all providers fail", async () 
     ], fx: [], identifier: [],
   });
 
-  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [], problems: ["Fallback unavailable"] } });
+  await expect(router.getPrice({})).resolves.toEqual({ sourceKey: "fallback", value: { bars: [], problems: ["Yahoo blocked", "Fallback unavailable"] } });
 });
 
 test("router supports FX and identifier lanes", async () => {
@@ -92,8 +92,8 @@ test("FX and identifier lanes fall through provider problems independently", asy
     fx: [provider("broken-fx", 20, { rate: null, problems: ["blocked"] }), provider("fallback-fx", 10, { rate: 1, problems: [] })],
     identifier: [provider("broken-id", 20, { match: null, problems: ["blocked"] }), provider("fallback-id", 10, { match: { ticker: "ASML" }, problems: [] })],
   });
-  await expect(router.getFx({})).resolves.toEqual({ sourceKey: "fallback-fx", value: { rate: 1, problems: [] } });
-  await expect(router.mapIdentifier({})).resolves.toEqual({ sourceKey: "fallback-id", value: { match: { ticker: "ASML" }, problems: [] } });
+  await expect(router.getFx({})).resolves.toEqual({ sourceKey: "fallback-fx", value: { rate: 1, problems: ["blocked"] } });
+  await expect(router.mapIdentifier({})).resolves.toEqual({ sourceKey: "fallback-id", value: { match: { ticker: "ASML" }, problems: ["blocked"] } });
 });
 
 test("cached records sort by freshness, source priority, then fetch time", () => {

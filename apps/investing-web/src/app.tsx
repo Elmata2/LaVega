@@ -35,15 +35,19 @@ export function YahooDisclosure() {
 }
 
 function AppOpenSync() {
-  useEffect(() => { void fetch("/api/brokers/sync", { method: "POST" }); }, []);
-  return null;
+  const [problems, setProblems] = useState<string[]>([]);
+  useEffect(() => { void fetch("/api/brokers/sync", { method: "POST" }).then(async (response) => { const result = await response.json() as { problems?: string[] }; setProblems(result.problems ?? []); }).catch(() => setProblems(["Brokersynchronisatie mislukt."])); }, []);
+  if (problems.length === 0) return null;
+  return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
 
 function ClearPriceCache() {
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   async function clear() { setBusy(true); setMessage(null); try { const response = await fetch("/api/prices/cache", { method: "DELETE" }); if (!response.ok) throw new Error("Wissen mislukt"); setMessage("Prijsgegevens verwijderd"); } catch (error) { setMessage(error instanceof Error ? error.message : "Wissen mislukt"); } finally { setBusy(false); } }
-  return <div className="flex items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={clear} disabled={busy}>{busy ? "Wissen…" : "Prijsgegevens wissen"}</Button>{message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}</div>;
+  if (confirming) return <div className="flex flex-wrap items-center justify-end gap-3" role="alert"><span className="text-xs text-negative">Dit verwijdert alle lokaal opgeslagen prijsgegevens.</span><Button type="button" variant="outline" size="sm" onClick={() => setConfirming(false)} disabled={busy}>Annuleren</Button><Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>{busy ? "Wissen…" : "Ja, alles verwijderen"}</Button></div>;
+  return <div className="flex items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)} disabled={busy}>Prijsgegevens wissen</Button>{message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}</div>;
 }
 
 export function HealthStatus() {

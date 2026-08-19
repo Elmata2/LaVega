@@ -56,3 +56,23 @@ test("shows Yahoo disclosure and sends no price sync before acceptance", async (
   expect(requests).not.toContain("/api/prices/sync");
   root.unmount();
 });
+
+test("shows broker sync problems and asks before deleting cached prices", async () => {
+  const requests: Array<{ url: string; method?: string }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), method: init?.method });
+    if (String(input) === "/api/brokers/sync") return new Response(JSON.stringify({ problems: ["ibkr: niet beschikbaar"] }));
+    if (String(input) === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true, disclosure: "Yahoo-melding" }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Synchronisatieproblemen");
+  await act(async () => { Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Prijsgegevens wissen"))?.click(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Dit verwijdert alle lokaal opgeslagen prijsgegevens.");
+  expect(requests.some((request) => request.method === "DELETE")).toBe(false);
+  const deleteButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("alles verwijderen"));
+  await act(async () => { deleteButton?.click(); await Promise.resolve(); });
+  expect(requests.some((request) => request.method === "DELETE" && request.url === "/api/prices/cache")).toBe(true);
+  root.unmount();
+});
