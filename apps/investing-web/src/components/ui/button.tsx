@@ -8,6 +8,7 @@ const buttonVariants = cva("pressable inline-flex items-center justify-center wh
       default: "bg-primary px-4 py-2.5 text-primary-foreground shadow-soft hover:bg-primary/90",
       ghost: "px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground",
       outline: "border border-border bg-card px-4 py-2.5 hover:bg-secondary",
+      destructive: "bg-negative px-4 py-2.5 text-white shadow-soft hover:bg-negative/90",
     },
     size: { default: "", sm: "px-3 py-2 text-xs" },
   },

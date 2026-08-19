@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
+import type { Allocation, PortfolioBenchmarkPoint, PositionPricePoint } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
@@ -65,8 +66,11 @@ function Layout() {
   return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Button variant="outline" size="sm">Broker koppelen</Button>}</div><Outlet /></main><footer className="border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span></footer></div></div>;
 }
 
-function Overview() { const emptyAllocation = { buckets: [], unpriced: [] }; return <div className="space-y-5"><AppOpenSync /><YahooDisclosure /><div className="flex justify-end"><ClearPriceCache /></div><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={{}} /><AllocationDonut instrument={emptyAllocation} broker={emptyAllocation} /></div></div>; }
+const emptyAllocation: Allocation = { buckets: [], unpriced: [] };
+const emptyPortfolioData: Partial<Record<"1M" | "6M" | "1Y" | "YTD" | "All", PortfolioBenchmarkPoint[]>> = {};
+
+function Overview() { return <div className="space-y-5"><AppOpenSync /><YahooDisclosure /><div className="flex justify-end"><ClearPriceCache /></div><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={emptyPortfolioData} /><AllocationDonut instrument={emptyAllocation} broker={emptyAllocation} /></div></div>; }
 function Positions() { return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />; }
-function PositionDetail() { return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link><PositionPriceChart symbol="AAPL" currency="USD" points={[]} /></div>; }
+function PositionDetail() { const { symbol } = useParams<{ symbol: string }>(); const positionSymbol = symbol?.toUpperCase() ?? ""; const emptyPoints: PositionPricePoint[] = []; return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{positionSymbol ? <PositionPriceChart symbol={positionSymbol} currency="EUR" points={emptyPoints} /> : <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." />}</div>; }
 
 export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /></Route></Routes>; }
