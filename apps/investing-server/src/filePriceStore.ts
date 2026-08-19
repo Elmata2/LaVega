@@ -5,11 +5,22 @@ import type { PriceBar } from "@lavega/core";
 
 type StoredPriceBar = PriceBar;
 
+function isPriceBar(value: unknown): value is StoredPriceBar {
+  if (!value || typeof value !== "object") return false;
+  const bar = value as Partial<StoredPriceBar>;
+  return typeof bar.tenantId === "string"
+    && typeof bar.symbol === "string"
+    && typeof bar.date === "string"
+    && Number.isFinite(bar.close)
+    && typeof bar.currency === "string";
+}
+
 async function readRows(filePath: string): Promise<StoredPriceBar[]> {
   try {
     const contents = await readFile(filePath, "utf8");
     const parsed: unknown = JSON.parse(contents);
-    return Array.isArray(parsed) ? parsed as StoredPriceBar[] : [];
+    if (!Array.isArray(parsed) || !parsed.every(isPriceBar)) throw new Error(`Invalid price cache file: ${filePath}`);
+    return parsed;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
     throw error;

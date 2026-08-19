@@ -11,6 +11,7 @@ import {
   createMemoryBrokerSyncStateStore,
   createTrading212Adapter,
   syncScheduledBrokers,
+  type PriceStore,
   type ScheduledSyncResult,
 } from "@lavega/adapters";
 
@@ -64,7 +65,7 @@ export function createRuntimeBrokerSync(onCompleted?: (result: ScheduledSyncResu
   };
 }
 
-export type RuntimeAppOptions = { priceStore?: ReturnType<typeof createInMemoryPriceStore> };
+export type RuntimeAppOptions = { priceStore?: PriceStore };
 
 export async function createRuntimeApp(options: RuntimeAppOptions = {}) {
   const dsn = process.env.SENTRY_DSN;

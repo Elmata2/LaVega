@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -24,4 +24,13 @@ test("persists price bars across store instances and purges them", async () => {
   await second.purgeAll();
   await expect(second.getRange("AAPL", "0000-01-01", "9999-12-31")).resolves.toEqual([]);
   await expect(readFile(filePath, "utf8")).resolves.toBe("[]");
+});
+
+test("rejects malformed cache rows instead of serving invalid prices", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-price-store-invalid-"));
+  temporaryDirectories.push(directory);
+  const filePath = join(directory, "prices.json");
+  await writeFile(filePath, JSON.stringify([{ symbol: "AAPL", close: "not-a-number" }]));
+
+  await expect(createFilePriceStore(filePath).getRange("AAPL", "0000-01-01", "9999-12-31")).rejects.toThrow("Invalid price cache file");
 });
