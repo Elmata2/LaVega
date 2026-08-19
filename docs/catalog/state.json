@@ -121,9 +121,9 @@
       "lastRoute": "agent",
       "lastReason": null,
       "docUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
-      "docKind": "pdf",
+      "docKind": "html",
       "docDate": "2026-08",
-      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on substance. URL: 200 application/pdf on icscards.nl (the issuer's own domain), 314177 bytes; footer 'Diemen, augustus 2026'. Qu"
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ABN AMRO owner. The brief named ICS-157-NL-082026 as already found; I fetched it and can now report what"
     },
     "abn-amro-gold-card": {
       "product": "ABN AMRO Gold Card",
@@ -296,9 +296,9 @@
       "lastRoute": "agent",
       "lastReason": "provider-page: no figure · agent: conditions not established",
       "docUrl": "https://www.icscards.nl/webdocuments/626/Algemene%20Voorwaarden%20ASN%20Creditcard%20-%2040",
-      "docKind": "pdf",
+      "docKind": "html",
       "docDate": "2026-05",
-      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and attribution is stronger than the report claimed. URL: 200 application/pdf on icscards.nl, 302703 bytes; document is 'Algemen"
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED CARD LIST — flagging for the orchestrator to dedupe against whoever owns ASN, but it fell out of the same index page and I read th"
     },
     "regiobank-betaalpas": {
       "product": "RegioBank betaalpas",
@@ -388,7 +388,11 @@
       "lastValue": 2,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "figureNote": "THE RECORDED 1,4% IS THE DEBIT CARD'S ROW. Re-measured 2026-08-18 on knab.nl/tarieven: the first match is 'Betalen en opname van contant geld buiten eurolanden - Mastercard wisselkoers + 1,4% koersopslag', which is the betaalrekening. The credit card's own row, further down, reads 'Betalingen in vreemde valuta 2% koersopslag'. Both products share one termsUrl and the regex cannot tell the rows apart. Refused today; do not promote it."
+      "figureNote": "THE RECORDED 1,4% IS THE DEBIT CARD'S ROW. Re-measured 2026-08-18 on knab.nl/tarieven: the first match is 'Betalen en opname van contant geld buiten eurolanden - Mastercard wisselkoers + 1,4% koersopslag', which is the betaalrekening. The credit card's own row, further down, reads 'Betalingen in vreemde valuta 2% koersopslag'. Both products share one termsUrl and the regex cannot tell the rows apart. Refused today; do not promote it.",
+      "docUrl": "https://www.knab.nl/tarieven",
+      "docKind": "html",
+      "docDate": "2026-02-18",
+      "docNote": "skeptic-confirmed 2026-08-19; PER-PRODUCT ATTRIBUTION NOW SETTLED — this is the row the old regex got wrong. I extracted the page to text and kept line numbers: the heading 'Knab C"
     },
     "triodos-betaalpas": {
       "product": "Triodos betaalpas",
@@ -896,7 +900,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://n26.com/en-eu/savings-account",
+      "docKind": "html",
+      "docDate": "2025-06-11",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, including the on-site conflict, which I reproduced independently. Fetched today, HTTP 200. Footnote 1 verbatim: 'N26 Instant Savings accoun"
     },
     "n26-flexible-cash-fund": {
       "product": "N26 flexible cash fund",
@@ -915,7 +923,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://n26.com/en-eu/metal",
+      "docKind": "html",
+      "docDate": "2026-06-11",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with a freshness flag the submission missed. Fetched today, HTTP 200. Footnote 2 verbatim: 'The variable annual return rate shown (2.32%) i"
     },
     "wise-betaalpas": {
       "product": "Wise betaalpas",
@@ -1049,7 +1061,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://helpcentre.trading212.com/hc/en-us/articles/17749229128221-Can-I-use-the-card-if-I-travel-abroad",
+      "docKind": "html",
+      "docDate": "2026-07-28",
+      "docNote": "skeptic-confirmed 2026-08-19; The article the catalog already pointed at (19288398028317, 'What are the fees for using the 212 card') genuinely never states a currency-conversion r"
     },
     "trading-212-interest-on-cash": {
       "product": "Trading 212 interest on cash",
@@ -1106,7 +1122,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
+      "docKind": "html",
+      "docDate": "2024-07-01",
+      "docNote": "skeptic-confirmed 2026-08-19; Found by following the marketing page's own PDF references, not by guessing FID URLs. Two documents, and only one of them answers the question — worth"
     },
     "american-express-blue-card": {
       "product": "American Express Blue Card",
@@ -1309,7 +1329,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from a BUSINESS document, not the consumer agreement. Fetched myself this session with plain curl (200, application/pdf, %PDF- magic bytes conf"
     },
     "american-express-business-green-card": {
       "product": "American Express Business Green Card",
@@ -1330,7 +1353,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same business agreement and same verbatim 2,5% row as the Business Entry Card; see that entry for the full evidence and the family-level attribution c"
     },
     "american-express-business-gold-card": {
       "product": "American Express Business Gold Card",
@@ -1351,7 +1377,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same business agreement and same verbatim 2,5% row as the Business Entry Card; see that entry for the full evidence and the family-level attribution c"
     },
     "american-express-corporate-card": {
       "product": "American Express Corporate Card",
@@ -1372,7 +1401,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from the CORPORATE cardmember agreement, not the consumer one. Fetched myself this session with plain curl (200, application/pdf, %PDF- magic b"
     },
     "american-express-corporate-gold-card": {
       "product": "American Express Corporate Gold Card",
@@ -1393,7 +1425,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same corporate cardmember agreement as the Corporate Card, and this card is named in it directly. Art. 2j defines 'Kaart' as 'de aan u uitgegeven Amer"
     },
     "klm-american-express-corporate-card": {
       "product": "KLM American Express Corporate Card",
@@ -1413,7 +1448,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_KLM_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from this card's OWN programme document - a separate agreement from the proprietary Corporate one, which matters because Amex issues KLM Corpor"
     },
     "ics-visa-world-card": {
       "product": "ICS Visa World Card",
@@ -1456,7 +1494,10 @@
       "lastValue": 2,
       "lastRoute": "agent",
       "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
-      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
+      "docUrl": "https://www.icscards.nl/webdocuments/624/Algemene%20Voorwaarden%20ICS%20-%20121",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; This one had NOTHING — fields was literally {} — and it is the only ICS consumer card whose marketing page carries no fee block: /creditcard-aanvragen"
     },
     "ics-visa-world-card-platinum": {
       "product": "ICS Visa World Card Platinum",
@@ -1588,7 +1629,10 @@
       "lastValue": 2.5,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.icscards.nl/webdocuments/678/VISA-66-NL-072026%20AV%20Visa%20Worldcard%20Business",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business (pdf)\". PDF self-prints \"VISA-66-NL-07/2026\" and \"NNLDCVBICS\". Quote, art. 15 lid 4: \"De o"
     },
     "ics-visa-world-card-business-gold": {
       "product": "ICS Visa World Card Business Gold",
@@ -1610,7 +1654,10 @@
       "lastValue": 2.5,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business Gold (pdf)\". PDF self-prints \"VISA-27-NL-07/2026\". Quote, art. 15 lid 4: \"De opslagcompone"
     },
     "ics-mastercard-business": {
       "product": "ICS Mastercard Business",
@@ -1632,7 +1679,10 @@
       "lastValue": 2.5,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.icscards.nl/webdocuments/676/MC-108-NL-072026%20AV%20ICS%20Mastercard%20Business",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; FOUND IT — the per-card business terms PDF. Verbatim from art. 15 lid 4: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in"
     },
     "ics-mastercard-corporate": {
       "product": "ICS Mastercard Corporate",
@@ -1654,7 +1704,10 @@
       "lastValue": 2.5,
       "lastRoute": "agent",
       "lastReason": "provider-page: conditions not established · agent: conditions not established",
-      "pdfReason": "unpinned: the issuer's document is a CONSUMER agreement and this is a business/corporate product. ICS states 2% there while the business rate is 2,5%, so reading it would produce a covered-but-wrong figure — worse than the refusal it replaces."
+      "docUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Same document body, ICS's own per-card edition for Mastercard Corporate. Anchor text on icscards.nl/zakelijk/info/algemene-voorwaarden: \"Algemene Voor"
     },
     "anwb-visa-classic-card": {
       "product": "ANWB Visa Classic Card",
@@ -1675,10 +1728,10 @@
       "lastValue": 2,
       "lastRoute": "agent",
       "lastReason": "provider-page: no figure · agent: conditions not established",
-      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
-      "docKind": "pdf",
+      "docUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+      "docKind": "html",
       "docDate": "2026-05",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks, independently fetched. (1) URL: https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf returns HTTP 20"
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner. Currently 2 with conditionsKnown false, i.e. refused. ANWB's cards are ICS-issued and ICS pu"
     },
     "anwb-visa-silver-card": {
       "product": "ANWB Visa Silver Card",
@@ -1698,10 +1751,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
-      "docKind": "pdf",
+      "docUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
+      "docKind": "html",
       "docDate": "2026-05",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED. Same PDF, same verbatim art. 13.1 quote (fetched and extracted myself), same issuer and mei-2026 date. Row attribution is the strongest of "
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner, but this product currently has NO figure at all (fields empty) and two independent ICS sourc"
     },
     "anwb-visa-gold-card": {
       "product": "ANWB Visa Gold Card",
@@ -1721,10 +1774,10 @@
       "lastValue": null,
       "lastRoute": null,
       "lastReason": "provider-page: no figure · agent: no figure",
-      "docUrl": "https://assets.icscards.nl/media/documents/ICS-122-NL-052026_av_anwb.pdf",
-      "docKind": "pdf",
+      "docUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+      "docKind": "html",
       "docDate": "2026-05",
-      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED, and the report's self-flagged weakness is real but does not sink it. Same PDF, same verbatim 13.1, same issuer/date, all re-verified from m"
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner. Currently empty. Like ICS Visa World Card Gold, this is the one ANWB card whose page prints "
     },
     "crypto-com-prepaid-card-basic-midnight-blue": {
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
@@ -1956,7 +2009,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+      "docKind": "html",
+      "docDate": "2026-04-27",
+      "docNote": "skeptic-confirmed 2026-08-19; Per-product attribution is clean here because the fee document belongs to the card's operator (Gnosis Pay) and Zeal's own page independently states it"
     },
     "gnosis-pay-card-direct-consumer": {
       "product": "Gnosis Pay Card (direct consumer)",
@@ -2012,7 +2069,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.coinbase.com/nl/card",
+      "docKind": "html",
+      "docDate": "2026-02-26",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, all four quoted passages verbatim in the snapshot I fetched (eligibility answer, rewards footnote ¹, issuer statement, and fee footnote ⁴)."
     },
     "wirex-card-wirex-one": {
       "product": "Wirex Card (Wirex One)",
@@ -2047,7 +2108,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381",
+      "docKind": "html",
+      "docDate": "2023-10-20",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED verbatim. The snapshot serves Binance's own support page with the headline 'Frequently Asked Questions on Binance Card EEA Program Closure',"
     },
     "paysafecard-prepaid-code-paysafewallet": {
       "product": "paysafecard (prepaid code / PaysafeWallet)",
@@ -2066,7 +2131,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.paysafecard.com/nl-nl/alg-vw/",
+      "docKind": "html",
+      "docDate": "2026-05-26",
+      "docNote": "skeptic-confirmed 2026-08-19; Two independent issuer sources agree on 3%, which is why I am comfortable pinning a prepaid product. (1) The dated NL terms quoted above. (2) paysafec"
     },
     "tria-card": {
       "product": "Tria Card",
@@ -2106,7 +2175,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.bigbank.nl/flexibel-sparen/",
+      "docKind": "html",
+      "docDate": "2026-08-07",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, every quoted sentence verbatim on the page I fetched. The date is the bank's own change notice (7 August 2026 was a Friday, consistent with"
     },
     "bunq-spaarrekening-massinterest": {
       "product": "bunq spaarrekening (MassInterest)",
@@ -2148,7 +2221,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.santanderconsumerbank.nl/nl/sparen/spaarrekening",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED including the self-contradiction, with one attribution fix. Fetched both pages today, HTTP 200. Product page verbatim: 'Spaarrekening tot 3,"
     },
     "garanti-bbva-international-gouden-internet-rekening": {
       "product": "Garanti BBVA International Gouden Internet Rekening",
@@ -2184,7 +2260,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.dhbbank.nl/rentetarieven",
+      "docKind": "html",
+      "docDate": "2026-07-14",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and this is the cleanest find in the batch: the quoted table (product | saldoklasse | rente | geldig vanaf) matches row for row, the date i"
     },
     "anadolubank-alfa-slimmer-sparen": {
       "product": "Anadolubank Alfa Slimmer Sparen",
@@ -2203,7 +2283,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.anadolubank.nl/klantenservice/rentetarieven/",
+      "docKind": "html",
+      "docDate": "2026-06-08",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on both halves. The rate page reads 'Anadolubank Alfa Slimmer Sparen (Geldig vanaf 8 juni 2026) 1.90 % Rente variabel (effectief op jaarbasi"
     },
     "scalable-capital-scalable-overnight": {
       "product": "Scalable Capital Scalable Overnight",
@@ -2222,7 +2306,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://nl.scalable.capital/overnight",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with one condition the submission missed. Fetched today, HTTP 200. The comparison table renders exactly as claimed — 'Zonder PRIME+ | 2.50%"
     },
     "raisin-spaarrekening-platform-19-partner-banks": {
       "product": "Raisin spaarrekening (platform, 19 partner banks)",
@@ -2260,7 +2347,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.klarna.com/nl/flex-rekening/",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED as to value, quotes and conditions: the headline, both footnotes and the 3-account limit are verbatim on the page I fetched, and I re-extrac"
     },
     "ayvens-bank-flexibel-sparen": {
       "product": "Ayvens Bank Flexibel Sparen",
@@ -2278,7 +2368,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.ayvensbank.nl/actuele-rentestanden",
+      "docKind": "html",
+      "docDate": "2026-07-17",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I fixed the missing date, which was the one leg that kept this find out of COVERED. Live page reads 'Actuele rentetarieven bij Ayvens B"
     },
     "argenta-internetspaarrekening": {
       "product": "Argenta Internetspaarrekening",
@@ -2316,7 +2410,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.openbank.nl/page-data/spaarrekening/page-data.json",
+      "docKind": "html",
+      "docDate": "2026-08-04",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, date included. Fetched myself: HTTP 200, application/json, 31.543 bytes. Verbatim: 'De eerste zes maanden krijg je 2,80%* rente over je sal"
     },
     "openbank-open-spaarrekening": {
       "product": "Openbank Open Spaarrekening",
@@ -2336,7 +2434,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.openbank.nl/page-data/gratis-spaarrekening/page-data.json",
+      "docKind": "html",
+      "docDate": "2026-07-22",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, date included. Fetched the endpoint myself: HTTP 200, application/json, 30.093 bytes. Verbatim in the payload: 'Met de Open Spaarrekening o"
     },
     "yapi-kredi-bank-euro-plus-spaarrekening": {
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
@@ -2355,7 +2457,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.yapikredi.nl/particulieren/renteoverzicht",
+      "docKind": "html",
+      "docDate": "2025-07-07",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on value and date, but ONE CONDITION IS WRONG and must be corrected before pinning. Fetched today, HTTP 200. The Renteoverzicht renders each"
     },
     "nibc-spaarrekening": {
       "product": "NIBC Spaarrekening",
@@ -2375,7 +2481,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.nibc.nl/particulieren/sparen/spaarrentes",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched today, HTTP 200. The rate table renders row by row: 'Spaarrekening | 1,55%' · 'Kwartaalspaarrekening | 1,60%*' · then the Termijnde"
     },
     "nibc-kwartaalspaarrekening": {
       "product": "NIBC Kwartaalspaarrekening",
@@ -2395,7 +2504,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I reproduced the 1,50%/1,60% hazard the submission flagged. Fetched today, HTTP 200. Body verbatim: 'Kwartaal­spaarrekening 1,60% spaar"
     },
     "lloyds-bank-spaarrekening": {
       "product": "Lloyds Bank Spaarrekening",
@@ -2415,7 +2527,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.lloydsbank.nl/sparen/actuele-rentes-sparen",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED with one attribution correction. Fetched today, HTTP 200. Verbatim: 'De actuele spaarrente is 1,50%. Dit is de rente op jaarbasis. Een varia"
     },
     "nationale-nederlanden-internetsparen": {
       "product": "Nationale-Nederlanden Internetsparen",
@@ -2434,7 +2549,10 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.nn.nl/Particulier/Sparen/Actuele-spaarrentes.htm",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with one condition strengthened. Fetched today, HTTP 200. The Internetsparen table renders exactly as submitted: '€ 0,- tot en met € 25.000"
     },
     "centraal-beheer-rentepl-s-rekening": {
       "product": "Centraal Beheer RentePlús Rekening",
@@ -2453,7 +2571,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.centraalbeheer.nl/sparen",
+      "docKind": "html",
+      "docDate": "2025-07-10",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on both pages, which I fetched separately. The dated sentence is verbatim on /sparen (so 2025-07-10 is Centraal Beheer's own date) and the €"
     },
     "knab-flexibel-sparen": {
       "product": "Knab Flexibel Sparen",
@@ -2489,7 +2611,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.abnamro.nl/nl/prive/rente/actuele-rente.html",
+      "docKind": "html",
+      "docDate": "2025-05-01",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched the page myself today: the Direct Sparen row reads exactly € 0 t/m € 500.000 = 1,25% / € 500.000–1.000.000 = 1,45% / vanaf € 1.000."
     },
     "ing-oranje-spaarrekening": {
       "product": "ING Oranje Spaarrekening",
@@ -2620,7 +2746,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://new.brandnewday.nl/spaarrekening/",
+      "docKind": "html",
+      "docDate": "2025-05-07",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Both the sentence form ('De variabele rente – die hoger of lager kan worden – is op dit moment 1,30%') and the table row are verbatim, and "
     },
     "nexent-bank-spaarrekening": {
       "product": "Nexent Bank Spaarrekening",
@@ -2639,7 +2769,11 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "provider-page: no figure · agent: no figure"
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.nexentbank.nl/onze-producten/nexent-bank-spaarrekening/",
+      "docKind": "html",
+      "docDate": "2025-08-29",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED in full — the strongest of my seventeen. Fetched today, HTTP 200. Verbatim: 'De voorwaarden zijn van toepassing vanaf 29-08-2025 tot nader o"
     },
     "revolut-dagelijkse-spaarrekening": {
       "product": "Revolut Dagelijkse Spaarrekening",
@@ -2655,7 +2789,12 @@
       "lastChecked": "2026-08-18",
       "lastValue": null,
       "lastRoute": null,
-      "lastReason": "wayback: no figure"
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-25",
+      "docNote": "skeptic-confirmed 2026-08-19; REFUTED AS SUBMITTED AND CORRECTED — do NOT pin the submitted row. Two failures. (1) The submitted claim that 'the exact per-plan rate is not publishe"
     }
   }
 }
