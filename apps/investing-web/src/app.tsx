@@ -38,6 +38,13 @@ function AppOpenSync() {
   return null;
 }
 
+function ClearPriceCache() {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  async function clear() { setBusy(true); setMessage(null); try { const response = await fetch("/api/prices/cache", { method: "DELETE" }); if (!response.ok) throw new Error("Wissen mislukt"); setMessage("Prijsgegevens verwijderd"); } catch (error) { setMessage(error instanceof Error ? error.message : "Wissen mislukt"); } finally { setBusy(false); } }
+  return <div className="flex items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={clear} disabled={busy}>{busy ? "Wissen…" : "Prijsgegevens wissen"}</Button>{message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}</div>;
+}
+
 export function HealthStatus() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +60,7 @@ function Layout() {
   return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Button variant="outline" size="sm">Broker koppelen</Button>}</div><Outlet /></main><footer className="border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span></footer></div></div>;
 }
 
-function Overview() { const emptyAllocation = { buckets: [], unpriced: [] }; return <div className="space-y-5"><AppOpenSync /><YahooDisclosure /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><Card><CardHeader><p className="text-sm font-medium text-muted-foreground">Portefeuillewaarde</p><CardTitle>Nog geen gegevens</CardTitle></CardHeader><CardContent><EmptyState title="Jouw portefeuille wacht" description="Koppel een broker om hier portefeuillewaarde, rendement en benchmarkgegevens te zien." /></CardContent></Card><AllocationDonut instrument={emptyAllocation} broker={emptyAllocation} /></div></div>; }
+function Overview() { const emptyAllocation = { buckets: [], unpriced: [] }; return <div className="space-y-5"><AppOpenSync /><YahooDisclosure /><div className="flex justify-end"><ClearPriceCache /></div><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><Card><CardHeader><p className="text-sm font-medium text-muted-foreground">Portefeuillewaarde</p><CardTitle>Nog geen gegevens</CardTitle></CardHeader><CardContent><EmptyState title="Jouw portefeuille wacht" description="Koppel een broker om hier portefeuillewaarde, rendement en benchmarkgegevens te zien." /></CardContent></Card><AllocationDonut instrument={emptyAllocation} broker={emptyAllocation} /></div></div>; }
 function Positions() { return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />; }
 function PositionDetail() { return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link><PositionPriceChart symbol="AAPL" currency="USD" points={[]} /></div>; }
 
