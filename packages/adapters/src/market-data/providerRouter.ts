@@ -85,10 +85,15 @@ export class MarketDataRouter<PriceRequest, Price, FxRequest, Fx, IdentifierRequ
   }
 
   getFx(request: FxRequest): Promise<ProviderResult<Fx> | null> {
-    return firstProviderResult(this.providers.fx, request, this.log);
+    return firstProviderResult(this.providers.fx, request, this.log, resultHasProblems);
   }
 
   mapIdentifier(request: IdentifierRequest): Promise<ProviderResult<Identifier> | null> {
-    return firstProviderResult(this.providers.identifier, request, this.log);
+    return firstProviderResult(this.providers.identifier, request, this.log, resultHasProblems);
   }
+}
+
+function resultHasProblems(value: unknown): boolean {
+  const problems = (value as { problems?: unknown }).problems;
+  return Array.isArray(problems) && problems.length > 0;
 }

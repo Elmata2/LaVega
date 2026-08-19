@@ -76,6 +76,26 @@ test("router supports FX and identifier lanes", async () => {
   await expect(router.mapIdentifier({ isin: "NL0010273215" })).resolves.toEqual({ sourceKey: "openfigi", value: { ticker: "ASML" } });
 });
 
+test("FX failure does not prevent identifier lane", async () => {
+  const router = new MarketDataRouter({
+    price: [],
+    fx: [provider("frankfurter", 10, { rate: 0, problems: ["offline"] })],
+    identifier: [provider("openfigi", 10, { symbol: "ASML", problems: [] })],
+  });
+  await expect(router.getFx({})).resolves.toMatchObject({ sourceKey: "frankfurter" });
+  await expect(router.mapIdentifier({ isin: "NL0010273215" })).resolves.toMatchObject({ sourceKey: "openfigi" });
+});
+
+test("FX and identifier lanes fall through provider problems independently", async () => {
+  const router = new MarketDataRouter<unknown, never, unknown, { rate: number | null; problems: string[] }, unknown, { match: { ticker: string; isin?: string } | null; problems: string[] }>({
+    price: [],
+    fx: [provider("broken-fx", 20, { rate: null, problems: ["blocked"] }), provider("fallback-fx", 10, { rate: 1, problems: [] })],
+    identifier: [provider("broken-id", 20, { match: null, problems: ["blocked"] }), provider("fallback-id", 10, { match: { ticker: "ASML" }, problems: [] })],
+  });
+  await expect(router.getFx({})).resolves.toEqual({ sourceKey: "fallback-fx", value: { rate: 1, problems: [] } });
+  await expect(router.mapIdentifier({})).resolves.toEqual({ sourceKey: "fallback-id", value: { match: { ticker: "ASML" }, problems: [] } });
+});
+
 test("cached records sort by freshness, source priority, then fetch time", () => {
   const records: CachedRecord<string>[] = [
     { key: "x", sourceKey: "low", value: "stale-new", fetchedAt: 900, staleAt: 500, expiresAt: 2_000 },

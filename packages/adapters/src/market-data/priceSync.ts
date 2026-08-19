@@ -5,7 +5,7 @@ import type { PriceProviderResult, YahooPriceRequest } from "./yahoo/priceProvid
 export type PriceSyncInput = Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string };
 export type PriceSyncResult = { bars: Awaited<ReturnType<PriceStore["getRange"]>>; problems: string[]; fetched: boolean };
 
-export async function syncPrices(input: { store: PriceStore; router: MarketDataRouter<YahooPriceRequest, PriceProviderResult, never, never, never, never>; request: PriceSyncInput }): Promise<PriceSyncResult> {
+export async function syncPrices(input: { store: PriceStore; router: MarketDataRouter<YahooPriceRequest, PriceProviderResult, unknown, unknown, unknown, unknown>; request: PriceSyncInput }): Promise<PriceSyncResult> {
   const today = input.request.today ?? new Date().toISOString().slice(0, 10);
   const lastDate = await input.store.lastDate(input.request.symbol);
   const from = lastDate ? nextDate(lastDate) : input.request.backfillFrom;

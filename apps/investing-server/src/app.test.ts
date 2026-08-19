@@ -91,3 +91,21 @@ test("GET /api/config/status reports missing keys without returning key values",
     else process.env.MARKET_DATA_API_KEY = marketDataKey;
   }
 });
+
+test("market-data routes expose FX and identifier lanes", async () => {
+  const response = await app.request("/api/market-data/fx?from=EUR&to=USD");
+  expect(response.status).toBe(200);
+  expect((await response.json()).source).toBe("frankfurter");
+
+  const invalid = await app.request("/api/market-data/identifier");
+  expect(invalid.status).toBe(400);
+});
+
+test("price sync resolves ISIN before asking price provider", async () => {
+  const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
+  const identifierProvider = { sourceKey: "openfigi", priority: 10, get: vi.fn().mockResolvedValue({ match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" }, problems: [] }) };
+  const investingApp = createApp({ consentStore: createMemoryYahooConsentStore(true), provider: provider as never, identifierProvider: identifierProvider as never });
+  await investingApp.request("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: [{ isin: "NL0010273215", currency: "EUR" }] }) });
+  expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
+  expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
+});
