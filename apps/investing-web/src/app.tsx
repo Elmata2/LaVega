@@ -4,6 +4,7 @@ import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { PositionPriceChart } from "./components/PositionPriceChart";
 
 const YAHOO_FINANCE_CONSENT_HEADER = "x-lavega-yahoo-consent";
 const YAHOO_DISCLOSURE_STORAGE_KEY = "lavega.yahoo-finance-disclosure.v1";
@@ -49,6 +50,6 @@ function Layout() {
 
 function Overview() { const emptyAllocation = { buckets: [], unpriced: [] }; return <div className="space-y-5"><YahooDisclosure /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><Card><CardHeader><p className="text-sm font-medium text-muted-foreground">Portefeuillewaarde</p><CardTitle>Nog geen gegevens</CardTitle></CardHeader><CardContent><EmptyState title="Jouw portefeuille wacht" description="Koppel een broker om hier portefeuillewaarde, rendement en benchmarkgegevens te zien." /></CardContent></Card><AllocationDonut instrument={emptyAllocation} broker={emptyAllocation} /></div></div>; }
 function Positions() { return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />; }
-function PositionDetail() { return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link><EmptyState title="Geen positie geselecteerd" description="Positiehistorie en transactiemarkeringen verschijnen zodra posities beschikbaar zijn." /></div>; }
+function PositionDetail() { return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link><PositionPriceChart symbol="AAPL" currency="USD" points={[]} /></div>; }
 
 export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /></Route></Routes>; }
