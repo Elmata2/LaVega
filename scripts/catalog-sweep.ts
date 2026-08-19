@@ -45,6 +45,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute } from "@lavega/core";
 import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
 import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
+import { sliceForExtraction } from "@lavega/core";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const STATE = "docs/catalog/state.json";
@@ -77,7 +78,7 @@ function numArg(flag: string, fallback: number): number {
  *  wrong — it is "decide which row belongs to this product and whether the page
  *  settles its conditions". That is the judgement the whole rung exists for, and
  *  a weekly offline sweep is where paying for it is cheapest. */
-const EXTRACT_MODEL = "claude-opus-5";
+const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || "claude-opus-5";
 /** Slowness is free here, hanging is not: one wedged request must not eat the
  *  Action's 45-minute budget. Generous, because the model is allowed to think. */
 const MODEL_TIMEOUT_MS = 180_000;
@@ -139,6 +140,7 @@ const spend = new Map<string, Spend>();
 const PRICE: Record<string, { in: number; out: number }> = {
   "claude-opus-5": { in: 5, out: 25 },
   "claude-sonnet-5": { in: 3, out: 15 },
+  "claude-haiku-4-5-20251001": { in: 1, out: 5 },
 };
 const SEARCH_PRICE_PER_1000 = 10;
 
@@ -357,6 +359,10 @@ async function readArchived(url: string): Promise<{ text: string; url: string; d
  *  credit balance is too low" landed in lastReason indistinguishable from a bank's
  *  403, and the run carried on fetching for twenty minutes. Die on the FIRST one
  *  instead, before a single byte is written. */
+/** Set by the main loop so the fatal guard can flush what has been read so far.
+ *  A function rather than a direct call because the guard lives above `entries`. */
+let onFatal: (() => void) | null = null;
+
 function abortIfKeyUnusable(e: unknown): void {
   const status = (e as { status?: number } | null)?.status;
   if (status !== 400 && status !== 401 && status !== 403) return;
@@ -368,8 +374,19 @@ function abortIfKeyUnusable(e: unknown): void {
   const fatal = ["credit balance", "billing", "quota", "authentication", "invalid x-api-key", "permission", "disabled"];
   if (!fatal.some((f) => msg.includes(f))) return;
   console.error(`\nFATAL - the Anthropic key cannot be used: ${raw}`);
-  console.error("Nothing was written. A sweep whose model rungs all fail still produces figures from");
-  console.error("the free rungs, and committing that artifact would claim a reading nobody did.");
+  // SAVE WHAT WAS ALREADY READ, then die. The first version of this guard wrote
+  // NOTHING, and on 2026-08-19 that discarded 40 covered figures from 66 products
+  // the model had genuinely read before the balance ran out — work already paid
+  // for, thrown away to avoid a problem it did not have. The thing worth refusing
+  // is an artifact whose figures came only from the free rungs; a product the
+  // model actually read is a real result whether or not the run finished.
+  //
+  // Products still unswept keep their previous entry, because this merges rather
+  // than replaces. The run still exits RED so nobody mistakes it for complete.
+  if (onFatal) {
+    try { onFatal(); } catch (e) { console.error(`  (could not save partial results: ${(e as Error).message})`); }
+  }
+  console.error("Exiting red. Top up and re-run; products already read are kept, the rest are untouched.");
   process.exit(1);
 }
 
@@ -392,7 +409,17 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   if (text.length > MAX_MODEL_CHARS) {
     throw new Error(`page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`);
   }
-  const req = { product, sourceUrl, text };
+  // Send the relevant regions, not the whole document. Measured: 39% of a tariff
+  // document sits near a currency term, and Amex's agreement is 12%. The slice
+  // deliberately also carries cap language from ANYWHERE in the document, because
+  // the exhaustive-document rule earns `conditions: null` only from a cap priced
+  // on some OTHER row — slicing that away would have quietly reverted every such
+  // figure to refused with no error to show for it.
+  const cut = sliceForExtraction(text);
+  if (!cut.whole) {
+    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+  }
+  const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildExtractPrompt(req);
   const client = new Anthropic({ apiKey: apiKey ?? undefined });
   const res = await createGuarded(client, 
@@ -640,6 +667,30 @@ const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).l
 let attemptsMade = 0;
 
 const entries: { id: string; product: string; fields: { fxFeePct?: CatalogValue } }[] = [];
+
+/** ONE merge, used by the normal --only exit AND by the fatal-key guard. Two
+ *  implementations of "merge a subset into the artifact" would drift, and the one
+ *  that drifted would be the error path nobody exercises. */
+function mergeSubset(rows: typeof entries): number {
+  const prev: { entries: typeof entries } = existsSync(CATALOG)
+    ? JSON.parse(readFileSync(CATALOG, "utf8"))
+    : { entries: [] };
+  const swept = new Set(rows.map((e) => e.id));
+  const merged = [...prev.entries.filter((e) => !swept.has(e.id)), ...rows];
+  const order = Object.keys(state.products);
+  merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
+  writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
+  return merged.length;
+}
+
+// From here on a billing failure keeps what has been read rather than discarding it.
+onFatal = () => {
+  if (!entries.length) { console.error("  (nothing had been read yet, so nothing to save)"); return; }
+  const total = mergeSubset(entries);
+  const covered = entries.filter((e) => e.fields.fxFeePct && isCovered(e.fields.fxFeePct)).length;
+  console.error(`  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`);
+};
 const changes: string[] = [];
 /** Sources the search rung found this run. Worth their own block in the output:
  *  a new primary source is a permanent gain, unlike a figure, and it is the thing
@@ -741,7 +792,16 @@ for (const id of ids) {
         // first, but NOT trusted blindly — the loop below still falls through to
         // the next source whenever one fails to settle the conditions.
         const sources: { url: string; kind: "pdf" | "html" }[] = [];
-        if (p.docUrl) sources.push({ url: p.docUrl, kind: p.docKind === "html" ? "html" : "pdf" });
+        // PROVENANCE IS NOT TRANSPORT. revolut.com answers a plain fetch with 403
+        // but r.jina.ai renders it and hands back the real fee page. The SOURCE is
+        // still Revolut's own page — storing the proxy URL as sourceUrl would
+        // credit a reader service for a disclosure Revolut published, and would
+        // rot the moment the proxy changes. So docUrl stays the issuer's URL and
+        // docFetch records how to reach it.
+        if (p.docUrl) {
+          const via = p.docFetch === "jina" ? `https://r.jina.ai/${p.docUrl}` : p.docUrl;
+          sources.push({ url: via, kind: p.docFetch === "jina" ? "html" : p.docKind === "html" ? "html" : "pdf" });
+        }
         if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
         if (p.termsUrl && p.readable === "yes") sources.push({ url: p.termsUrl, kind: "html" });
         const seenSrc = new Set<string>();
@@ -924,22 +984,11 @@ if (figuresBefore > 0 && figuresFound === 0) {
 // keyed by id and only touches what was swept.
 if (only) {
   // MERGE, do not refuse. Writing `entries` wholesale would delete every product
-  // the subset did not look at; refusing to write at all was the first fix and it
-  // turned out to be its own trap — eight Amex figures were paid for and then
-  // stranded in state.json, because the only way to reach the artifact was a $6
-  // full sweep. Replace what was swept, keep the rest untouched.
-  const prev: { generatedAt?: string; entries: typeof entries } = existsSync(CATALOG)
-    ? JSON.parse(readFileSync(CATALOG, "utf8"))
-    : { entries: [] };
-  const swept = new Set(entries.map((e) => e.id));
-  const merged = [...prev.entries.filter((e) => !swept.has(e.id)), ...entries];
-  // Keep the artifact in watchlist order rather than "everything else, then the
-  // subset" — a diff is only reviewable if the file does not reshuffle.
-  const order = Object.keys(state.products);
-  merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-  writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
-  writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
-  console.log(`\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${merged.length} total).`);
+  // the subset did not look at; refusing to write at all was the first fix and
+  // became its own trap — figures were paid for and stranded in state.json,
+  // reachable only by a full sweep.
+  const total = mergeSubset(entries);
+  console.log(`\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${total} total).`);
   process.exit(0);
 }
 state.lastRun = today;
