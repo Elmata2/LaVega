@@ -99,9 +99,10 @@ export function buildPortfolioBenchmarkSeries(
   if (filteredPortfolio.length === 0) return [];
 
   const startDate = filteredPortfolio[0].date;
+  const endDate = filteredPortfolio.at(-1)!.date;
   const dates = new Set([
     ...filteredPortfolio.map((point) => point.date),
-    ...benchmark.filter((point) => point.date >= startDate).map((point) => point.date),
+    ...benchmark.filter((point) => point.date >= startDate && point.date <= endDate).map((point) => point.date),
   ]);
   const portfolioByDate = new Map(portfolio.map((point) => [point.date, point]));
   const benchmarkByDate = new Map(benchmark.map((point) => [point.date, point]));

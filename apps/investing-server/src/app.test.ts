@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
 import { createInMemoryPriceStore, createMemoryYahooConsentStore, createYahooPriceProvider } from "@lavega/adapters";
+import { createProblemReporter } from "./observability.js";
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
@@ -117,6 +118,30 @@ test("broker sync route forwards force and keeps problems in response", async ()
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ outcomes: [{ status: "synced" }], problems: ["ibkr: unavailable"] });
   expect(brokerSync).toHaveBeenCalledWith(true);
+});
+
+test("broker sync logs every returned problem with context and redacts secrets", async () => {
+  const write = vi.fn();
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: ["ibkr: request failed", "token=super-secret"] }));
+  const investingApp = createApp({ brokerSync, problemReporter: createProblemReporter({ write }) });
+
+  await investingApp.request("/api/brokers/sync", { method: "POST" });
+
+  expect(write).toHaveBeenCalledOnce();
+  expect(write.mock.calls[0]?.[0]).toContain('"source":"broker-sync"');
+  expect(write.mock.calls[0]?.[0]).toContain("ibkr: request failed");
+  expect(write.mock.calls[0]?.[0]).not.toContain("super-secret");
+});
+
+test("reporting stays disabled when SENTRY_DSN is absent", () => {
+  const write = vi.fn();
+  const sentry = { captureException: vi.fn() };
+  const reporter = createProblemReporter({ write, sentry });
+
+  reporter({ source: "broker-sync", problems: ["ibkr: unavailable"] });
+
+  expect(write).toHaveBeenCalledOnce();
+  expect(sentry.captureException).not.toHaveBeenCalled();
 });
 
 test("price cache delete purges store and returns success", async () => {

@@ -1,7 +1,8 @@
 import { Hono } from "hono";
+import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import { LocalKeySource, MarketDataRouter, createInMemoryPriceStore, createYahooPriceProvider, createMemoryYahooConsentStore, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, type YahooConsentStore, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult, hasYahooFinanceRequestConsent } from "@lavega/adapters";
 
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }> };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; consentStore: YahooConsentStore; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; problemReporter: ProblemReporter };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const consent = dependencies.consentStore ?? createMemoryYahooConsentStore();
@@ -9,11 +10,16 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
+  const problemReporter = dependencies.problemReporter ?? createProblemReporter();
   const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
   const investingApp = new Hono();
   investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
-  investingApp.post("/api/brokers/sync", async (c) => c.json(await brokerSync(c.req.query("force") === "true")));
+  investingApp.post("/api/brokers/sync", async (c) => {
+    const result = await brokerSync(c.req.query("force") === "true");
+    problemReporter({ source: "broker-sync", problems: result.problems });
+    return c.json(result);
+  });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); return c.json({ deleted: true }); });
   investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await router.getFx({ from, to }); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await router.mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
