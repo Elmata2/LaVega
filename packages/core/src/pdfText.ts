@@ -172,6 +172,19 @@ export function readDocumentDate(text: string): string | null {
       return `${bare[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     }
   }
+  // "GELDEN VANAF" / "GELDT VANAF", the fifth format in one day. ABN's rate page
+  // ends its ladder with "De rentes gelden vanaf 1 mei 2025" and the pattern below
+  // wanted the adjective "geldig", not the verb — so a fifteen-month-old rate was
+  // stamped with the day it was fetched and would have looked like the freshest
+  // figure in the table.
+  const verb = /\b(?:gelden|geldt)\s+vanaf\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  if (verb) {
+    const month = MONTHS_NL.indexOf(verb[2].toLowerCase());
+    const day = Number(verb[1]);
+    if (month >= 0 && day >= 1 && day <= 31) {
+      return `${verb[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
   const m = /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
   if (m) {
     const month = MONTHS_NL.indexOf(m[2].toLowerCase());

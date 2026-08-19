@@ -253,3 +253,24 @@ describe("readDocumentDate: a bare 'per <day> <month> <year>' heading", () => {
     expect(readDocumentDate("Tarievenwijzer per 1 juli 2026\nDatum: 1 januari 2026")).toBe("2026-01-01");
   });
 });
+
+/* THE FIFTH DATE FORMAT, and the count is the point: geldig vanaf, PER MAART 2022,
+ * Datum:, per 1 februari 2026, and now the plain verb. ABN's rate page closes its
+ * ladder with "De rentes gelden vanaf 1 mei 2025" — the pattern wanted the
+ * adjective "geldig", not the verb, so a fifteen-month-old rate was stamped today
+ * and would have outranked genuinely current figures in the cache.
+ */
+describe("readDocumentDate: 'gelden/geldt vanaf'", () => {
+  test("reads ABN's rate-page footer", () => {
+    expect(readDocumentDate("De rentes gelden vanaf 1 mei 2025. Alle genoemde rentes zijn op jaarbasis."))
+      .toBe("2025-05-01");
+  });
+
+  test("singular works too", () => {
+    expect(readDocumentDate("Deze rente geldt vanaf 1 februari 2026.")).toBe("2026-02-01");
+  });
+
+  test("a future-tense announcement is not the document's date", () => {
+    expect(readDocumentDate("Vanaf volgend jaar wijzigen de tarieven.")).toBeNull();
+  });
+});

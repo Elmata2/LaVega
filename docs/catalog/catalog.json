@@ -446,12 +446,30 @@
     {
       "id": "n26-instant-savings",
       "product": "N26 Instant Savings",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 0.3,
+          "route": "agent",
+          "sourceUrl": "https://n26.com/en-eu/savings-account",
+          "checkedAt": "2026-08-19",
+          "conditions": "Rate depends on the customer's main N26 plan, not on balance: from 11/06/2025 onwards, 0.30% p.a. for Standard and Smart, 0.50% p.a. for N26 Go, and 1.50% p.a. for Metal (before taxes) — the headline \"1.5 % interest p.a.\" requires opening an N26 Metal (paid) plan. \"Please note that rates per plan can be changed by N26 over time.\" Interest is calculated daily and paid out monthly, and is only earned on funds held in the Instant Savings account. No deposit limits; deposit and withdraw any amount, whenever you want, with no need to lock money away. Available at no extra cost in the N26 app in Estonia, Finland, Greece, Ireland, Latvia, Lithuania, Luxembourg, the Netherlands, Portugal, Slovakia, and Slovenia. Withholding taxes may apply for customers resident in Germany. Balances protected up to €100,000 by the German Deposit Guarantee Scheme. (The 2.32% p.a. figure elsewhere on the page is a flexible cash fund investment, not this savings account.)",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-flexible-cash-fund",
       "product": "N26 flexible cash fund",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 2.32,
+          "route": "agent",
+          "sourceUrl": "https://n26.com/en-eu/metal",
+          "checkedAt": "2026-08-19",
+          "conditions": "Stated only as \"up to 2.32 % p.a.\"; the document does not give bands or say what determines the actual rate a saver receives. It adds: \"A flexible cash fund is not a deposit, it is an investment that carries a risk of capital loss. The variable rate shown reflects information provided by the fund manager as of 15/07/2026, and is subject to daily changes. Your investment can go up and down. Past performance is not a reliable indicator of future results.\" \"Capital at risk.\" The rate is advertised on the N26 Metal page as part of \"our best savings rates\", so it may depend on holding a Metal plan. No notice period, withdrawal terms or fees are stated for the fund. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "wise-betaalpas",
@@ -1050,17 +1068,44 @@
     {
       "id": "bigbank-flexibel-sparen",
       "product": "Bigbank Flexibel Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.bigbank.nl/flexibel-sparen/",
+          "checkedAt": "2026-08-19",
+          "conditions": "Bonus voor nieuwe klanten: \"Nieuwe klanten ontvangen gegarandeerd 2,75% voor de eerste 6 maanden. (Klanten die vóór 10.08.2026 een registratie hebben ingediend, hebben het recht op het voorgaande rentepercentage)\". Daarna geldt de flexibele rente van - op dit moment - 2,00%; dit percentage is variabel. Geen bandenstructuur, maar: \"Geen minimum inleg. Rente over een maximaal bedrag van 250.000 euro.\" — boven 250.000 euro wordt geen rente vergoed (\"Als u bijvoorbeeld een bedrag van 260.000 euro op uw Flexibel Sparen rekening heeft staan, zult u over 10.000 euro van dit bedrag geen rente verdienen.\"). \"Storten en opnemen is volledig vrij.\" Opnemen en storten alleen via een eigen Nederlandse tegenrekening; rekening staat persoonlijk op naam (geen en/of-rekening); woonplaats in Nederland vereist. Rentebetaling jaarlijks op 31 december. \"Opgenomen bedragen worden uiterlijk na 3 bankdagen uitbetaald\" (verwerkingsperiode, met rente over het gereserveerde bedrag). \"Bigbank brengt u geen kosten in rekening.\" Saldo gegarandeerd tot 100.000,- euro inclusief opgebouwde rente. Actierente 2,75% de eerste 6 maanden, daarna 2%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-spaarrekening-massinterest",
       "product": "bunq spaarrekening (MassInterest)",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.51,
+          "route": "agent",
+          "sourceUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me",
+          "checkedAt": "2026-08-19",
+          "conditions": "Personal Accounts, EUR Savings Accounts: \"When you first start saving with bunq, you'll earn the bonus interest rate (3.01%) on all your Savings until your first threshold calculation.\" Thereafter: \"The current base interest rate of 1.51%* on your savings up to the determined threshold amount\" and \"The current bonus interest rate of 3.01%* on any savings above the determined threshold amount.\" \"Your threshold is the highest balance held in your Savings Account during the previous 6 months. The threshold is calculated twice a year on: January 1 (00:00 UTC): based on your highest balance between July 1 (00:00 UTC) to December 31 (23:59 UTC); July 1 (00:00 UTC): based on your highest balance between January 1 (00:00 UTC) to June 30 (23:59 UTC).\" \"The base rate and the bonus rate are variable and are subject to change.\" Bonus rate was increased \"from 2.01% to 3.01% on July 1, 2026\"; separate rates apply to Business Accounts (0.75%) and foreign-currency savings accounts. The document says nothing about withdrawal terms or notice periods. Actierente 3,01% until your first threshold calculation, daarna 1,51%. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "santander-consumer-bank-spaarrekening",
       "product": "Santander Consumer Bank Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 2.1,
+          "route": "agent",
+          "sourceUrl": "https://www.santanderconsumerbank.nl/nl/sparen/spaarrekening",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"*Promotionele rente voor nieuwe klanten gedurende 6 maanden op de eerste € 250.000. Boven dat bedrag en daarna op het hele bedrag basisrente, momenteel 2,10 %\". Verder: \"Dagelijks opneembaar\", \"Maandelijkse rentebetaling\", \"Variabele rente\", \"Tot € 1.000.000 per rekening\", \"Geen kosten\". En: \"er wordt rente uitgekeerd op bedragen tot en met € 1.000.000 per rekening. Op het bedrag boven deze limiet wordt geen rente uitgekeerd.\" Actierente 3,01% gedurende 6 maanden, daarna 2,1%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "garanti-bbva-international-gouden-internet-rekening",
@@ -1070,17 +1115,44 @@
     {
       "id": "dhb-bank-saveonlinerekening",
       "product": "DHB Bank S@veOnlinerekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.85,
+          "route": "agent",
+          "sourceUrl": "https://www.dhbbank.nl/rentetarieven",
+          "checkedAt": "2026-08-19",
+          "conditions": "Standaardrente 1,85% over saldoklasse > €0, geldig vanaf 14.07.2026. Welkomstactie alleen voor nieuwe klanten, 6 maanden lang: 3,00% geldig t/m €50.000; > €50.000 1,85% (beide geldig vanaf 14.07.2026). DHB Bank behoudt zich het recht voor om over saldi boven de € 500.000 een afwijkende rente te vergoeden. Actierente 3% 6 maanden lang, daarna 1,85%. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "anadolubank-alfa-slimmer-sparen",
       "product": "Anadolubank Alfa Slimmer Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.9,
+          "route": "agent",
+          "sourceUrl": "https://www.anadolubank.nl/klantenservice/rentetarieven/",
+          "checkedAt": "2026-06-08",
+          "conditions": "\"Geldig vanaf 8 juni 2026\" — 1.90 % Rente variabel (effectief op jaarbasis). Het document noemt geen saldostaffels, geen actierente en geen opname- of opzegvoorwaarden voor dit product. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "scalable-capital-scalable-overnight",
       "product": "Scalable Capital Scalable Overnight",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://nl.scalable.capital/overnight",
+          "checkedAt": "2026-08-19",
+          "conditions": "2,50% p.j. op onbeperkt cash in alle prijsmodellen — \"Geen minimum, geen maximum\", geen bandenstructuur en geen minimale inleg. Rente wordt dagelijks berekend en maandelijks uitbetaald; elke cent wordt onmiddellijk herbelegd (samengestelde rente). Zelfde tarief zonder en met PRIME+. Beschikbaarheid: \"Dagelijks\". Depositogarantie: zonder PRIME+ wettelijke depositogarantie tot € 100.000 per klant bij Scalable en partnerbanken, of geldmarktfondsen onder UCITS-beleggersbescherming; met PRIME+ tot 5 x € 100.000 door verdeling over Scalable en vier partnerbanken, plus aanvullende vrijwillige depositogarantie. Let op: \"Variabele rente en variabele distributie zijn onder andere afhankelijk van de marktrente, capaciteiten en voorwaarden.\" Per kind kan één Kinder Overnight account worden geopend.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "raisin-spaarrekening-platform-19-partner-banks",
@@ -1090,12 +1162,30 @@
     {
       "id": "klarna-flex-rekening",
       "product": "Klarna Flex rekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.95,
+          "route": "agent",
+          "sourceUrl": "https://www.klarna.com/nl/flex-rekening/",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"Jaarlijkse rente, variabel. Tarief is juist per datum van deze advertentie en kan op elk moment wijzigen. Zie de Klarna-app voor je huidige tarief.\" Geen beheerkosten, geen minimumbedrag (\"Nee, er is geen minimumbedrag om te storten wanneer je een flex rekening opent of om rente te gaan verdienen\"), geen maandelijkse kosten of aanmeldkosten. Je hebt eerst een Klarna-saldo nodig; maximaal 3 flex rekeningen tegelijk. Rente wordt dagelijks berekend en maandelijks uitbetaald (samengestelde rente). Opnemen kan altijd \"zonder opnamekosten\". Extra rente mogelijk via een betaald lidmaatschap: \"Meld je aan voor een lidmaatschap ³ via de app en verdien extra rente op je spaargeld, bovenop onze aantrekkelijke tarieven\" — het document noemt dat extra percentage niet. Er worden geen saldostaffels/bandbreedtes genoemd. Rekening gedekt door het Zweedse depositogarantiestelsel (max. SEK 1.150.000).",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "ayvens-bank-flexibel-sparen",
       "product": "Ayvens Bank Flexibel Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.85,
+          "route": "agent",
+          "sourceUrl": "https://www.ayvensbank.nl/actuele-rentestanden",
+          "checkedAt": "2026-08-19",
+          "conditions": "Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "argenta-internetspaarrekening",
@@ -1105,52 +1195,142 @@
     {
       "id": "openbank-welkom-spaarrekening",
       "product": "Openbank Welkom Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.openbank.nl/page-data/spaarrekening/page-data.json",
+          "checkedAt": "2026-08-19",
+          "conditions": "Exclusief voor nieuwe klanten die zich aanmelden met de code WELKOM; bij het openen krijg je ook een Open Betaalrekening en Я42 Betaalpas. \"De eerste zes maanden krijg je 2,80%* rente over je saldo tot en met € 1.000.000. Voor saldi boven € 1.000.000 is de rente 0,00%.\" Het rendement wordt elke maand uitgekeerd. \"Vanaf de zevende maand wordt je Welkom Spaarrekening automatisch een Open Spaarrekening\" — \"Over de volgende zes maanden ontvang je 1,80% rente over je spaarsaldo t/m € 300.000. Voor saldi boven € 300.000 geldt een rente van 0,00%.\" De FAQ vermeldt elders dat je dan \"de jaarlijkse spaarrente die van toepassing is op de Open Spaarrekening op dat moment\" ontvangt, dus 1,80% is de rente die op dit moment na de actie geldt. Geen kosten voor openen, aanhouden of opzeggen; geld en rente zijn op elk moment opneembaar. Actierente 2,8% de eerste zes maanden, daarna 1,8%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "openbank-open-spaarrekening",
       "product": "Openbank Open Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.openbank.nl/page-data/gratis-spaarrekening/page-data.json",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"Met de Open Spaarrekening ontvang je vanaf dag één 1,80% rente. De rente is van toepassing op het saldo t/m € 300.000. Voor saldi boven € 300.000 is de rente 0,00%.\" Iedere maand ontvang je de rente op je Open Spaarrekening. \"Het openen, aanhouden en opzeggen van je Openbank Spaarrekening is gratis. Je kunt op ieder gewenst moment en zonder kosten opzeggen en je geld en rendement opnemen.\" Rendement vanaf € 1. Let op: de in dit document genoemde 2,80% (eerste zes maanden, saldo t/m € 1.000.000) hoort bij de Welkom Spaarrekening, een ander product, dat na zes maanden automatisch wordt omgezet naar een Open Spaarrekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "yapi-kredi-bank-euro-plus-spaarrekening",
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.yapikredi.nl/particulieren/renteoverzicht",
+          "checkedAt": "2026-06-26",
+          "conditions": "Genoteerd als \"Euro-Plus Spaarrekening 1,80% effectief op jaarbasis (voor bestaande klanten)\", geldig per 7 juli 2025. Geen rentestaffels/bedragbanden vermeld. Algemene voorwaarde bovenaan het overzicht: \"Minimale inleg is €2.000,- of tegenwaarde €2.000,- in US Dollar, Turkse Lira en Britse Pond.\" Rentetarieven zijn \"onder voorbehoud van wijzigingen\". In dezelfde Spaarrekening-rubriek staat los vermeld: \"Jubileumsrente Actie 3,30% effectief op jaarbasis ( Klik hier voor actievoorwaarden )\" (geldig per 26 juni 2026), maar het document koppelt deze actierente niet expliciet aan de Euro-Plus Spaarrekening en de actievoorwaarden (inclusief einddatum) staan niet in deze tekst; daarom niet als promo van dit product vastgelegd. Over opnames/opzegtermijn zegt het document niets. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "nibc-spaarrekening",
       "product": "NIBC Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.55,
+          "route": "agent",
+          "sourceUrl": "https://www.nibc.nl/particulieren/sparen/spaarrentes",
+          "checkedAt": "2026-08-19",
+          "conditions": "Variabele rente: \"Wij vergoeden over jouw saldo op de NIBC Spaarrekening een variabele rente.\" De rekening wordt aangeduid als \"Spaarrekening (vrij opneembaar)\". Rente wordt per jaar berekend, uitgaande van het werkelijk aantal dagen per maand en 365 dagen per jaar (366 in een schrikkeljaar). Of er saldostaffels/voorwaarden gelden is niet vast te stellen: de zin \"De spaarrente van de NIBC spaar- e[…]el spaarrente je ontvangt.\" is in het aangeleverde document afgebroken. De bonusrenteconstructie (basisrente 1,20% + bonusrente 0,40%) hoort bij de Kwartaalspaarrekening, niet bij dit product.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "nibc-kwartaalspaarrekening",
       "product": "NIBC Kwartaalspaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.6,
+          "route": "agent",
+          "sourceUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"1,60% spaarrente\" is opgebouwd uit een \"Variabele basisrente van 1,20% + variabele bonusrente van 0,40%\". \"Basisrente wordt maandelijks bijgeschreven en de bonusrente één keer per kwartaal.\" De bonusrente geldt niet onvoorwaardelijk: \"Als je spaart met de Kwartaalspaarrekening ontvang je altijd een basisrente over je spaargeld. Over het geld dat een volledig kwartaal op je rekening staat, krijg je daarbovenop een bonusrente.\" Geld dat er geen volledig kwartaal staat, levert dus alleen de basisrente van 1,20% op. Beide rentes zijn variabel. \"Geen minimum inleg en geen kosten\". Depositogarantiestelsel tot € 100.000,-. Het document toont wel een sectie \"Kwartaalspaar- en bonusrente\" (mogelijk met rentestaffels/saldogrenzen), maar die tabel ontbreekt in de aangeleverde tekst, dus eventuele saldobanden en opnamevoorwaarden zijn niet vast te stellen. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "lloyds-bank-spaarrekening",
       "product": "Lloyds Bank Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.lloydsbank.nl/sparen/actuele-rentes-sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "Eén tarief, geen staffels of drempelbedragen genoemd. \"Dit is de rente op jaarbasis. Een variabele rente kan op ieder moment veranderen. Wijzigt de rente? Dan ontvangt u een e-mail van ons en een bericht in de beveiligde mailbox bij uw Internet Spaarrekening.\" Verder: \"Geen minimuminleg en geen kosten\", \"Uw spaargeld is altijd vrij opneembaar\", \"Spaar zo veel u wilt\". Disclaimer: \"Het weergegeven rentepercentage is onder voorbehoud van wijzigingen en tikfouten. Aan dit tarief kunnen geen rechten worden ontleend.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nationale-nederlanden-internetsparen",
       "product": "Nationale-Nederlanden Internetsparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.nn.nl/Particulier/Sparen/Actuele-spaarrentes.htm",
+          "checkedAt": "2026-08-19",
+          "conditions": "Variabele rente op jaarbasis, per saldoklasse: € 0,- tot en met € 25.000,- 1,30%; Boven € 25.000,- tot en met € 100.000,- 1,20%; Boven € 100.000,- 1,10%. \"Bij Internetsparen is de rente variabel. Dit betekent dat de rente kan wijzigen tijdens de looptijd. Elk deel van het saldo op je internetspaarrekening heeft een eigen rentepercentage. Deze delen noemen we 'saldoklassen'.\" De saldoklassen en rentes gelden per internetspaarrekening en niet per persoon; je kunt maximaal twee internetspaarrekeningen hebben (één voor jezelf en één en/of rekening) en de saldo's worden niet bij elkaar opgeteld. Rentewijzigingen voorbehouden. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "centraal-beheer-rentepl-s-rekening",
       "product": "Centraal Beheer RentePlús Rekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.centraalbeheer.nl/sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"Sparen met een variabele rente. Actuele rente per 10-07-2025: maximaal 1,50%.\" Het gaat om een variabele rente (\"De rente is variabel\"), zonder minimumbedrag (\"Geen minimumbedrag\") en zonder maximum inleg (\"Bij Centraal Beheer is er geen maximum bedrag dat je op je spaarrekening mag zetten\"). Je kunt altijd bij je geld. Maximaal 2 RentePlús Rekeningen per klant. Het woord \"maximaal\" wijst op een staffel, maar dit document noemt de saldostaffels en de bijbehorende lagere rentes niet; die staan achter de link \"Alle spaarrentes\". Rente wordt maandelijks uitbetaald.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "knab-flexibel-sparen",
       "product": "Knab Flexibel Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.knab.nl/sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "Basisrente is de variabele rente van 1,25%: \"Vrij sparen met variabele rente / Kosteloos inleggen en opnemen / Geen minimum inleg\". Daarbovenop loopt een tijdelijke bonusactie: \"Let op: alleen voor klanten die op 30 april 2026 een Knab particuliere betaal- en of flexibele spaarrekening hadden. De totale rente over je spaargeld bestaat uit: Bonusrente 0,75% Variabele rente 1,25%\" — samen 2,00%. Het document (dat halverwege een zin begint) noemt géén einddatum of looptijd van de bonusrente en geen saldostaffels. \"Goed om te weten: de variabele rente kan op elk moment wijzigen. De genoemde rentepercentages zijn op jaarbasis.\" Actierente 2%, daarna 1,25%.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "abn-amro-direct-sparen",
       "product": "ABN AMRO Direct Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/rente/actuele-rente.html",
+          "checkedAt": "2025-05-01",
+          "conditions": "Saldoklassen (basisrente = maximale rente, geen bonusrente): € 0 tot en met € 500.000 → 1,25% (basisrente 1,25%, bonusrente n.v.t.); € 500.000 tot en met € 1.000.000 → 1,45% (basisrente 1,45%, bonusrente n.v.t.); Vanaf € 1.000.000 → 0,00% (basisrente 0,00%, bonusrente 0,00%). \"De rentes gelden vanaf 1 mei 2025. Alle genoemde rentes zijn op jaarbasis.\" Het document noemt geen opnamebeperkingen of opzegtermijn voor Direct Sparen. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ing-oranje-spaarrekening",
@@ -1160,7 +1340,16 @@
     {
       "id": "rabobank-rabo-spaarrekening",
       "product": "Rabobank Rabo SpaarRekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-rentes",
+          "checkedAt": "2026-08-05",
+          "conditions": "Staffelrente per schijf: € 0 t/m € 10.000 1,50%; Boven € 10.000 t/m € 20.000 1,40%; Boven € 20.000 t/m € 100.000 1,30%; Boven € 100.000 t/m € 5 miljoen 1,20%; Boven € 5 miljoen 0,00%. \"Deze schijven en rentes gelden vanaf 5 augustus 2026 en kunnen veranderen.\" Het document zegt niets over opzegtermijnen of opnamekosten. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "asn-bank-asn-ideaalsparen",
@@ -1170,27 +1359,72 @@
     {
       "id": "sns-internet-sparen",
       "product": "SNS Internet Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html",
+          "checkedAt": "2026-08-19",
+          "conditions": "Variabele rente, saldoklassen: 0 - € 25.000: 1,30%; € 25.000 - € 100.000: 1,20%; Saldo boven € 100.000: 1,00%. \"Rente % vanaf 18 november 2025\". \"Voor alle rentes hierboven geldt: variabele rente over je positieve saldo op jaarbasis vanaf 23 oktober 2025. Rentewijzigingen voorbehouden.\" Met het rentepercentage van een saldoklasse berekenen we de rente over het saldo in die saldoklasse; rente wordt maandelijks verrekend (in de 1e week van de maand bijgeschreven over de maand ervoor). Het document noemt geen opnamebeperkingen of opzegtermijn voor SNS Internet Sparen. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "regiobank-spaar-op-maat-vrij",
       "product": "RegioBank Spaar-op-Maat Vrij",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.regiobank.nl/sparen/actuele-rentes.html",
+          "checkedAt": "2026-08-19",
+          "conditions": "Staffelrente per 18 november 2025: € 0 tot € 25.000 → 1,30%; € 25.000 tot € 100.000 → 1,20%; € 100.000 en hoger → 1,00%. \"Voor alle rentes hierboven geldt: variabele rente op jaarbasis. Rentewijzigingen voorbehouden.\" Het document noemt geen opnamebeperkingen, opzegtermijn of boete voor dit product. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "triodos-bank-internet-sparen",
       "product": "Triodos Bank Internet Sparen",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.15,
+          "route": "agent",
+          "sourceUrl": "https://www.triodos.nl/sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "Staffelrente (sinds 01-02-2026, wijzigingen voorbehouden): 1,15% bij een saldo tot en met € 10.000; vanaf € 10.000 tot en met € 25.000 ontvang je 0,90%; vanaf € 25.000 tot en met € 100.000 ontvang je 0,90%; op het saldo daarboven 0,80%. Je kunt zo vaak als je wilt geld storten en opnemen. Het openen en aanhouden van Internet Sparen is gratis. Groeit je vermogen boven de € 500.000? Neem dan contact op met Triodos Bank Private Banking.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "brand-new-day-de-spaarrekening",
       "product": "Brand New Day De Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://new.brandnewday.nl/spaarrekening/",
+          "checkedAt": "2026-08-19",
+          "conditions": "Rate listed as \"Variabele rente – 1,30% per jaar\"; the document notes \"Variabele rente: huidige rente per 07-05-2025\", i.e. a variable rate that can change. The other figures on the page are fixed-term deposito's, not this account (1 jaar vast 1,30%, 2 jaar vast 1,30%, 3 jaar vast 1,50%, 4 jaar vast 1,75%, 5 jaar vast 1,90% per jaar; \"Deposito's: huidige rente per 30-04-2025\"). The document states no balance bands, no notice period and no withdrawal terms for the variable savings account; it only says \"Geen verplichtingen – We verplichten u niets.\" Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "nexent-bank-spaarrekening",
       "product": "Nexent Bank Spaarrekening",
-      "fields": {}
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.nexentbank.nl/onze-producten/nexent-bank-spaarrekening/",
+          "checkedAt": "2026-08-19",
+          "conditions": "Saldoband: \"1 tot 1.000.000 EUR\" tegen 1,25 % p.j. Minimumbedrag: € 1. Maximumbedrag: € 1.000.000. Dagelijks opvraagbaar. De voorwaarden zijn van toepassing vanaf 29-08-2025 tot nader order. De actierente van 2,75% p.j. gedurende 3 maanden (92 dagen) vanaf het openen geldt volgens de tabel voor de Welkom Spaarrekening, niet voor de Nexent Bank Spaarrekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "revolut-dagelijkse-spaarrekening",
