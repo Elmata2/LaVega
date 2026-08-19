@@ -219,10 +219,29 @@ function readPage(url: string, kind: "html" | "pdf"): Promise<string> {
   const key = `${kind}:${url}`;
   let hit = pageCache.get(key);
   if (!hit) {
-    hit = kind === "pdf" ? getPdfText(url) : getText(url).then(strip);
+    hit = kind === "pdf" ? getPdfText(url) : getHtmlOrPdfText(url);
     pageCache.set(key, hit);
   }
   return hit;
+}
+
+/** A URL'S EXTENSION IS NOT ITS CONTENT TYPE. de Volksbank publishes its
+ *  tarievenwijzer at paths ending in `.html` that return application/pdf —
+ *  measured: 200 application/pdf, 73.996 bytes, for
+ *  snsbank.nl/downloads/tarievenwijzer-betalen.html. Stripping tags off a PDF
+ *  yields binary noise, and the model would then be asked to find a tariff in it
+ *  and would correctly find nothing. So sniff the body: %PDF- decides, whatever
+ *  the path says. */
+async function getHtmlOrPdfText(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, "Accept-Language": "nl-NL,nl;q=0.9" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  httpResponses++;
+  if (!res.ok) throw new Error(`${res.status}`);
+  const bytes = await res.arrayBuffer();
+  if (Buffer.from(bytes.slice(0, 5)).toString() === "%PDF-") return pdfToText(bytes);
+  return strip(new TextDecoder("utf-8").decode(bytes));
 }
 
 // ────────────────────────────────────────────────────────────── the wayback rung
@@ -701,7 +720,7 @@ for (const id of ids) {
   // always, because provider-page cannot establish a condition and says so. The
   // provider's own PDF is preferred over its HTML when both exist: the tariff
   // sheet is where the caps and tiers actually are.
-  if (useAgent && (p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
+  if (useAgent && (p.docUrl || p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -716,11 +735,20 @@ for (const id of ids) {
         // the HTML page too and keep whichever one did. The second call is only
         // paid for when the first came back unsettled, which is also the only time
         // it can change the answer.
+        // docUrl is the per-issuer document found by the hunt and confirmed by an
+        // independent skeptic. It is tried first, then any pinned PDF, then the
+        // marketing page the product started with. Ordering is best-evidenced
+        // first, but NOT trusted blindly — the loop below still falls through to
+        // the next source whenever one fails to settle the conditions.
         const sources: { url: string; kind: "pdf" | "html" }[] = [];
+        if (p.docUrl) sources.push({ url: p.docUrl, kind: p.docKind === "html" ? "html" : "pdf" });
         if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
         if (p.termsUrl && p.readable === "yes") sources.push({ url: p.termsUrl, kind: "html" });
+        const seenSrc = new Set<string>();
         let best: CatalogValue | null = null;
         for (const src of sources) {
+          if (seenSrc.has(src.url)) continue;
+          seenSrc.add(src.url);
           const text = await readPage(src.url, src.kind);
           const figure = await askModel(p.product, src.url, text);
           const value = figure ? toValue(figure, "agent", src.url, text, today) : null;
