@@ -22,12 +22,21 @@ import "../styles/views.css";
  *   - It never sums across programmes. Avios plus Bonvoy is not a number.
  */
 
-/** Replace the balance with the same id, or append it. */
+/** Write a balance over the row with the same id, or append it.
+ *
+ *  A new figure replaces the FIGURE, not the row. Everything the owner set
+ *  himself on that row — the reminder interval, his note — is carried over,
+ *  because `makeRewardsBalance` only ever produces programme/points/date and a
+ *  plain replace therefore silently reset his interval to the 90-day default.
+ *  A user-entered fact outranks a default. The one field deliberately dropped
+ *  is `snoozedUntil`: "vraag me later" is a question, and a fresh figure has
+ *  just answered it (same reasoning as `applyRewardsReply` in core). */
 export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): RewardsBalance[] {
   const i = list.findIndex((x) => x.id === b.id);
   if (i === -1) return [...list, b];
   const next = [...list];
-  next[i] = b;
+  const { snoozedUntil: _answered, ...kept } = list[i];
+  next[i] = { ...kept, ...b };
   return next;
 }
 
@@ -117,28 +126,60 @@ export default function Punten({
   const [addError, setAddError] = useState("");
   // The one row whose "wat staat er nu?" box is open.
   const [ask, setAsk] = useState<{ id: string; text: string; error: string } | null>(null);
+  /* The row "Verwijder" just took away, kept so it can come back. These figures
+   * exist nowhere else — nothing fetches them, he typed them — so a single
+   * mis-click next to the reminder dropdown must not be the end of one. An undo
+   * rather than a confirm dialog: the click keeps working, and the way back is
+   * one click too. Dropped the moment he writes a figure himself, so the undo can
+   * never put an old number back over a newer one. */
+  const [removed, setRemoved] = useState<RewardsBalance | null>(null);
 
   const rows = puntenRows(balances, asOf);
   const attention = rows.filter((r) => r.status.state === "due" || r.status.state === "overdue").length;
   const addUnit = programUnit(program);
+  /* The row this form is currently aimed at, if it already exists. The id IS the
+   * normalised programme name, so saving would write straight over that row —
+   * and the field is pre-filled (with the first reference programme on a fresh
+   * mount). A number typed into a form he did not re-aim used to replace a
+   * balance he entered weeks ago without a word: the loss reported on 20-08.
+   * So the form says which figure it is about to replace, and the button stops
+   * calling it "Opslaan". */
+  const existing = balances.find((b) => b.id === norm(program));
 
   function add() {
     const pts = parseBalanceReply(points);
-    if (!program.trim() || !updatedAt) {
-      setAddError("Vul een programma en een datum in.");
-      return;
-    }
     if (pts === null || pts < 0) {
       setAddError("Ik kon hier geen getal in vinden — vul alleen het saldo in, bijvoorbeeld 245000 of 245k.");
       return;
     }
+    if (!program.trim()) {
+      setAddError("Bij welk programma hoort dit saldo? Kies of typ een programma — anders weet ik niet waar dit getal thuishoort.");
+      return;
+    }
+    if (!updatedAt) {
+      setAddError("Vul de datum in waarop je dit saldo zag.");
+      return;
+    }
     setAddError("");
+    setRemoved(null);
     onSave(upsertBalance(balances, makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt })));
     setPoints("");
+    // Leave the form aimed at nothing. Keeping the programme he just saved here
+    // is what turned the next number he typed into an overwrite of it.
+    setProgram("");
   }
 
   function remove(id: string) {
+    setRemoved(balances.find((b) => b.id === id) ?? null);
     onSave(balances.filter((b) => b.id !== id));
+  }
+
+  /** Put the removed row back exactly as it was — interval, note and all. */
+  function undoRemove() {
+    if (removed === null) return;
+    const back = removed;
+    setRemoved(null);
+    onSave(upsertBalance(balances, back));
   }
 
   function submitAsk(id: string) {
@@ -148,6 +189,7 @@ export default function Punten({
       return;
     }
     setAsk(null);
+    setRemoved(null);
     onSave(next);
   }
 
@@ -286,6 +328,19 @@ export default function Punten({
         </div>
       )}
 
+      {removed ? (
+        <p className="field-note punt-undo" role="status">
+          <strong>{removed.program}</strong> is verwijderd —{" "}
+          {programUnit(removed.program) === "eur"
+            ? `${formatEuro(removed.points)} cashback`
+            : `${removed.points.toLocaleString("nl-NL")} punten`}{" "}
+          van {dateNL(removed.updatedAt)}. Dat getal stond alleen hier.{" "}
+          <button type="button" className="card-link" disabled={busy} onClick={undoRemove}>
+            Zet terug
+          </button>
+        </p>
+      ) : null}
+
       <div className="view-head">
         <h3>Saldo toevoegen</h3>
         <span className="eyebrow">of een bestaand programma overschrijven</span>
@@ -295,6 +350,7 @@ export default function Punten({
           <label>
             Programma
             <input list="reward-programs" value={program} disabled={busy} aria-label="Programma"
+              placeholder="bijv. Marriott Bonvoy"
               onChange={(e) => setProgram(e.target.value)} />
             <datalist id="reward-programs">
               {REWARD_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
@@ -313,8 +369,21 @@ export default function Punten({
               onChange={(e) => setUpdatedAt(e.target.value)} />
           </label>
         </div>
+        {existing ? (
+          <p className="field-note punt-overwrite">
+            <strong>{existing.program}</strong> staat al in de lijst:{" "}
+            {programUnit(existing.program) === "eur"
+              ? `${formatEuro(existing.points)} cashback`
+              : `${existing.points.toLocaleString("nl-NL")} punten`}{" "}
+            van {dateNL(existing.updatedAt)}. Overschrijven zet jouw nieuwe getal daarvoor in de plaats —
+            dat oude saldo is er dan niet meer. Je herinnering blijft wel staan. Wil je een ander
+            programma toevoegen, verander dan eerst het veld hierboven.
+          </p>
+        ) : null}
         <div className="stack-form-actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>Opslaan</button>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
+            {existing ? "Overschrijven" : "Opslaan"}
+          </button>
         </div>
         {addError ? <p className="punt-error">{addError}</p> : null}
       </div>
