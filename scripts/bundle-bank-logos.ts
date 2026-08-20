@@ -82,6 +82,21 @@ type Brand = {
 };
 
 const BRANDS: Brand[] = [
+  {
+    /* RegioBank staat hier en SNS/ASN niet, en dat verschil is gemeten: het CMS van
+     * de Volksbank serveert voor alle drie hetzelfde beeld (en regiobank.nl geeft
+     * zelfs 200 met 0 bytes), maar Wikimedia Commons heeft RegioBank apart als merk
+     * terwijl er voor SNS en ASN geen logo te vinden was — alleen foto's en PDF's.
+     *
+     * LET OP DE LICENTIE: CC BY-SA 4.0, dus naamsvermelding is een VERPLICHTING en
+     * geen nettigheid. Die staat in TRADEMARKS.md. Ophalen gebeurt tijdens de
+     * sweep, dus in de browser wordt nog steeds niets opgehaald. */
+    slug: "regiobank",
+    label: "RegioBank",
+    domain: "regiobank.nl",
+    aliases: ["regiobank"],
+    probe: ["https://upload.wikimedia.org/wikipedia/commons/0/0d/Regiobank-logo-2023.svg"],
+  },
   { slug: "ing", label: "ING", domain: "ing.com", aliases: ["ing"] },
   { slug: "abnamro", label: "ABN AMRO", domain: "abnamro.nl", aliases: ["abnamro"] },
   {
@@ -95,7 +110,20 @@ const BRANDS: Brand[] = [
   { slug: "bunq", label: "bunq", domain: "bunq.com", aliases: ["bunq"] },
   { slug: "triodos", label: "Triodos", domain: "triodos.nl", aliases: ["triodos"] },
   { slug: "nn", label: "NN", domain: "nn.nl", aliases: ["nn", "nationalenederlanden"] },
-  { slug: "revolut", label: "Revolut", domain: "revolut.com", aliases: ["revolut"] },
+  {
+    slug: "revolut",
+    label: "Revolut",
+    domain: "revolut.com",
+    aliases: ["revolut"],
+    /* revolut.com geeft 403 op ELK eigen pad — pagina, favicon, subdomeinen — dus
+     * de bron van de merkhouder is dicht. Wikimedia Commons draagt hetzelfde merk
+     * met een vermelde licentie (File:Revolut.svg, publiek domein), en ophalen bij
+     * een derde is hier verdedigbaar omdat het tijdens de SWEEP gebeurt: in de
+     * browser wordt nog steeds niets opgehaald. De licentie staat in TRADEMARKS.md,
+     * want een logo bundelen zonder de herkomst te noemen is de fout die dit hele
+     * bestand probeert te vermijden. */
+    probe: ["https://upload.wikimedia.org/wikipedia/commons/d/d6/Revolut.svg"],
+  },
   {
     slug: "americanexpress",
     label: "American Express",
@@ -134,11 +162,6 @@ const NO_LOGO: { domain: string; label: string; reason: string }[] = [
     domain: "asnbank.nl",
     label: "ASN",
     reason: "zelfde de Volksbank-icoon als SNS en RegioBank — identificeert het merk niet",
-  },
-  {
-    domain: "regiobank.nl",
-    label: "RegioBank",
-    reason: "zelfde de Volksbank-icoon als SNS en ASN — identificeert het merk niet",
   },
 ];
 
@@ -295,7 +318,18 @@ async function fetchLogo(brand: Brand, today: string): Promise<Logo | { skipped:
     ...(page
       ? candidatesFrom(page.body.toString("utf8"), page.res.url || home)
       : [{ url: `https://www.${brand.domain}/favicon.ico`, why: "favicon.ico" }]),
-    ...(brand.probe ?? []).map((url) => ({ url, why: "favicon (ander eigen host)" })),
+    /* Een probe-URL was oorspronkelijk altijd een ander pad op het domein van de
+     * merkhouder zelf, en het label zei dat ook. Sinds Revolut zijn eigen host op
+     * elk pad met 403 dichtgooit staat er ook een Wikimedia-URL in, en dan is
+     * "ander eigen host" onwaar — in een document dat juist de HERKOMST van een
+     * merk moet vastleggen. Dus wordt het label uit de URL afgeleid in plaats van
+     * aangenomen. */
+    ...(brand.probe ?? []).map((url) => ({
+      url,
+      why: new URL(url).hostname.endsWith("wikimedia.org")
+        ? "Wikimedia Commons — zie de licentietabel onderaan"
+        : "favicon (ander pad op het eigen domein)",
+    })),
   ];
 
   const tried: string[] = [];

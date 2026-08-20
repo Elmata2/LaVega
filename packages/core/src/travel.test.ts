@@ -924,3 +924,37 @@ test("his own card still wins the cash advice when nothing proven beats it", () 
   expect(a.savingOnReference).toBeNull();
   expect(withdrawalHeadline(own, "USD", market)).toContain("in één keer meer");
 });
+
+/* GELIJKSPEL: DE KAART DIE HIJ AL HEEFT WINT — zijn beslissing van 20 augustus.
+ *
+ * Op de echte catalogus staan Trade Republic, 212 Card, N26 Standard en ING
+ * Platinum allemaal op 0%. Iemand naar een nieuwe kaart sturen voor exact hetzelfde
+ * tarief is advies dat niets oplevert en werk kost.
+ */
+describe("gelijkspel in de aanbevelingen", () => {
+  const offer = (id: string, pct: number, held: boolean, conditional = false) => ({
+    productId: id, product: id, bank: id, netCostPct: pct, conditional, held,
+  });
+
+  test("bij dezelfde prijs staat zijn eigen kaart bovenaan", () => {
+    const sorted = [offer("nieuw", 0, false), offer("zijne", 0, true)].sort(
+      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
+    );
+    expect(sorted[0].productId).toBe("zijne");
+  });
+
+  test("maar een echt goedkopere kaart wint nog steeds van de zijne", () => {
+    // Anders zou de aanbeveling nooit meer iets nieuws kunnen voorstellen.
+    const sorted = [offer("zijne", 1.4, true), offer("nieuw", 0, false)].sort(
+      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
+    );
+    expect(sorted[0].productId).toBe("nieuw");
+  });
+
+  test("en een onvoorwaardelijke 0% wint van zijn eigen 0% met een plafond", () => {
+    const sorted = [offer("zijne-met-plafond", 0, true, true), offer("nieuw-vrij", 0, false, false)].sort(
+      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
+    );
+    expect(sorted[0].productId).toBe("nieuw-vrij");
+  });
+});

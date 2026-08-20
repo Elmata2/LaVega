@@ -89,6 +89,7 @@ export type MovedCategory = {
 export const MOVED_CATEGORIES: readonly MovedCategory[] = [
   { category: "Eigen overboeking", why: "een overboeking tussen je eigen rekeningen" },
   { category: "Sparen & beleggen", why: "geld naar je eigen spaar- of beleggingsrekening" },
+  { category: "Creditcard afbetaald", why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening" },
   /* GELDOPNAME STAAT HIER BEWUST NIET IN, op zijn beslissing van 20 augustus.
    *
    * Strikt genomen is contant opnemen ook "dezelfde euro op een andere plek": het

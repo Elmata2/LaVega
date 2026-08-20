@@ -676,7 +676,7 @@ export default function TravelBlock({
   const headline = (terms && termsHeadline(terms)) ?? plan?.headline ?? "";
 
   return (
-    <Module title="Ik ga op reis" span={3} height="tall">
+    <Module title="Travel Agent" span={3} height="tall">
       <div className="travel-controls">
         <label>
           <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>

@@ -63,6 +63,10 @@ export type CategoryRule = {
   weak?: true;
 };
 
+/** Een afbetaling aan je eigen creditcard. Eigen categorie omdat de statistieklaag
+ *  hem moet kunnen uitsluiten zonder elke andere overboeking mee te nemen. */
+export const CREDIT_CARD_PAYMENT_CATEGORY = "Creditcard afbetaald";
+
 export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   /* BETAALVERZOEK — a Dutch payment request, and always a transfer between people
    * rather than a purchase. Every bank prints the phrase in the counterparty
@@ -553,7 +557,14 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "geld toegevoegd", category: "Overboekingen" },
   { match: "geld toevoegen", category: "Overboekingen" },
   { match: "tikkie", category: "Overboekingen" },
-  { match: "naar creditcard", category: "Overboekingen" },
+  /* EEN AFBETALING AAN JE EIGEN CREDITCARD IS GEEN UITGAVE, maar een verplaatsing.
+   * Zijn beslissing van 20 augustus. De echte uitgaven staan al in de app, op de
+   * creditcardrekening zelf, dus de afbetaling meetellen is dubbel tellen. Daarom
+   * een eigen categorie in plaats van "Overboekingen": alleen zo kan de
+   * statistieklaag hem uitsluiten zonder elke andere overboeking mee te nemen. */
+  { match: "naar creditcard", category: CREDIT_CARD_PAYMENT_CATEGORY },
+  { match: "aflossing creditcard", category: CREDIT_CARD_PAYMENT_CATEGORY },
+  { match: "incasso creditcard", category: CREDIT_CARD_PAYMENT_CATEGORY },
 
   // --- Inkomen. Nothing above this line can ever produce "Inkomen", so before
   //     these entries EVERY incoming transaction fell through to "onbekend" —
@@ -659,6 +670,7 @@ export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: 
  *  was explicit that money moving between two people is its own thing, and
  *  "Overboekingen" is where a bank's own product wording ends up. */
 export const PERSON_CATEGORY = "Tussen personen";
+
 
 /** A SEPA direct debit whose merchant no rule knows. Not "the kind of spending"
  *  — the mechanism, which is the only thing the row proves. */

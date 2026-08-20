@@ -1110,11 +1110,21 @@ export function marketCardOffers(
       held: held.has(e.id),
     });
   }
-  // Cheapest first; at the same price the figure with no strings attached wins,
-  // and ties beyond that keep catalogue order so the list does not reshuffle
-  // between renders.
+  // Cheapest first. Dan, bij dezelfde prijs, in deze orde:
+  //
+  //  1. HET GOEDKOOPSTE ZONDER VOORWAARDEN. Een 0% die op € 1.000 per maand
+  //     afloopt is geen 0% voor wie meer besteedt.
+  //  2. EEN KAART DIE HIJ AL HEEFT. Zijn beslissing van 20 augustus, en het is de
+  //     juiste: op de echte catalogus staan Trade Republic, 212 Card, N26 Standard
+  //     en ING Platinum allemaal op 0%, en dan iemand naar een nieuwe kaart sturen
+  //     voor exact hetzelfde tarief is advies dat niets oplevert en werk kost.
+  //     Alleen als een ANDERE kaart echt goedkoper is, is overstappen het waard.
+  //  3. Daarna de catalogusvolgorde, zodat de lijst niet herschikt tussen renders.
   return offers.sort(
-    (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional),
+    (a, b) =>
+      a.netCostPct - b.netCostPct ||
+      Number(a.conditional) - Number(b.conditional) ||
+      Number(b.held) - Number(a.held),
   );
 }
 
