@@ -1,4 +1,9 @@
-import { useId, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useId,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { areaPath, bandPath, makeYScale, nearestIndex, niceDomain, smoothPath, type Pt } from "../chart.js";
 
 /* TrendChart — the clean, sleek trend line Alexander asked for (the register of
@@ -21,7 +26,13 @@ import { areaPath, bandPath, makeYScale, nearestIndex, niceDomain, smoothPath, t
  * below the lowest value it was given, or it would show a shortfall the
  * forecast did not predict.
  *
- * Colours come from tokens only; the component takes a CSS variable string. */
+ * Colours come from tokens only; the component takes a CSS variable string.
+ *
+ * ON THE READING (review 2, item 12). The readout already named the point the
+ * pointer was on; what it could not do was be reached without a pointer. The
+ * hit surface is now a focusable read-only slider: arrow keys walk the series a
+ * point at a time, Home and End jump to its ends, and aria-valuetext carries
+ * "week 3: € 950" so the announcement names the slice as well as the number. */
 
 export type TrendPoint = {
   /** What the readout calls this point, e.g. "week 4" or "aug 2026". */
@@ -99,6 +110,13 @@ export default function TrendChart({
     setHover(nearestIndex(points.length, (e.clientX - box.left) / box.width));
   }
 
+  function scrub(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const next = keyToIndex(points.length, activeIndex, e.key);
+    if (next === null) return; // not ours — leave tabbing and scrolling alone
+    e.preventDefault();
+    setHover(next);
+  }
+
   return (
     <div className={`lv-chart${showAxis ? " lv-chart-withaxis" : ""}`}>
       <div className="lv-chart-readout">
@@ -111,7 +129,9 @@ export default function TrendChart({
         </span>
       </div>
 
-      <div className="lv-chart-plot" style={{ height }} role="img" aria-label={ariaLabel}>
+      {/* role="group", not role="img": an image's contents are presentational,
+          which would hide the scrubber inside it from a screen reader. */}
+      <div className="lv-chart-plot" style={{ height }} role="group" aria-label={ariaLabel}>
         {showAxis &&
           domain.ticks.map((t) => (
             <span key={`l${t}`} className="lv-chart-tick" style={{ top: `${y(t)}%` }} aria-hidden="true">
@@ -191,13 +211,28 @@ export default function TrendChart({
             aria-hidden="true"
           />
 
-          {/* Pointer surface. onPointerDown makes a tap work on a phone; the page
-              still scrolls normally because nothing is prevented here. */}
+          {/* Pointer surface, and the keyboard's way in. onPointerDown makes a
+              tap work on a phone; the page still scrolls normally because
+              nothing is prevented except the arrow keys we handle.
+
+              role="slider" + aria-valuetext is what makes the reading audible:
+              a screen reader announces "week 3: € 950" as the cursor moves.
+              aria-readonly says out loud that this moves a cursor, not data. */}
           <div
             className="lv-chart-hit"
+            tabIndex={0}
+            role="slider"
+            aria-label={ariaLabel}
+            aria-readonly="true"
+            aria-valuemin={0}
+            aria-valuemax={points.length - 1}
+            aria-valuenow={activeIndex}
+            aria-valuetext={`${active.label}: ${format(active.value)}`}
+            onKeyDown={scrub}
             onPointerMove={pick}
             onPointerDown={pick}
             onPointerLeave={() => setHover(null)}
+            onBlur={() => setHover(null)}
           />
         </div>
       </div>
@@ -211,6 +246,29 @@ export default function TrendChart({
       </div>
     </div>
   );
+}
+
+/** Which point a key press moves to, or null when the key is not ours (so Tab
+ *  still tabs and PageDown still scrolls). Clamped rather than wrapped: a
+ *  cursor that jumps from the last week back to today would read as a jump in
+ *  the data. Pure, so the keyboard behaviour is testable without a browser. */
+export function keyToIndex(count: number, current: number, key: string): number | null {
+  if (count <= 0) return null;
+  const clamp = (i: number) => Math.min(count - 1, Math.max(0, i));
+  switch (key) {
+    case "ArrowLeft":
+    case "ArrowDown":
+      return clamp(current - 1);
+    case "ArrowRight":
+    case "ArrowUp":
+      return clamp(current + 1);
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return null;
+  }
 }
 
 /** Which x labels to print. All of them while they still fit; otherwise the

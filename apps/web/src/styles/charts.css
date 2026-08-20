@@ -142,11 +142,19 @@
   pointer-events: none;
 }
 
-/* The pointer surface sits on top of everything and captures nothing else. */
+/* The pointer surface sits on top of everything and captures nothing else. It
+ * is also the keyboard's way into the chart (role="slider", arrow keys), so it
+ * has to show where the focus is: the cursor line moves, but someone who cannot
+ * see that needs the surface itself to say "you are in here". */
 .lv-chart-hit {
   position: absolute;
   inset: 0;
   cursor: crosshair;
+}
+.lv-chart-hit:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 
 /* ---------- X axis (HTML, so it never scales with the drawing) ---------- */
@@ -215,7 +223,19 @@
   min-width: 0;
   height: 100%;
 }
+/* A bar is a <button> — see "The reading" below — so it has UA chrome to shed
+ * before it can be a bar again. */
 .lv-bar {
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  /* Nothing is navigated to, so no pointing hand: the chip is the whole reward,
+   * and it also appears on plain hover. */
+  cursor: default;
   flex: 1;
   min-width: 0;
   /* Wide enough to read with twelve months in the window, capped so a
@@ -225,6 +245,80 @@
   /* A zero-height bar would vanish; a hairline says "measured, and it's ~0". */
   min-height: 2px;
   transition: height 0.18s ease;
+}
+.lv-bar:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------- The reading: hover · tap · keyboard ----------
+ *
+ * Review 2, item 12: "I want to be able to hover over every statistic and see
+ * the number specifically in the month or whatever time frame." A `title`
+ * attribute answers only the first third of that — a phone has no hover and a
+ * keyboard never fires one — so the number lives in a chip that is revealed
+ * three ways: :hover (mouse), :focus / :focus-visible (keyboard, and the phones
+ * that focus a button on tap) and [data-tip="on"] (the phones that do not, set
+ * from the click handler).
+ *
+ * The chip prints its slice above its number, because "€ 412" alone does not
+ * say whether it is the month, the window or the average.
+ *
+ * It is `visibility: hidden` when idle rather than merely transparent: an
+ * invisible-but-present chip would still swallow the pointer aimed at the bar
+ * behind it. */
+.lv-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 1px;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--on-ink);
+  text-align: center;
+  white-space: nowrap;
+  /* width: max-content is load-bearing, not tidying. An absolutely positioned
+   * box shrink-to-fits against its CONTAINING BLOCK — here a 26px bar — so
+   * without it the chip collapsed to one word per line (measured in Chrome:
+   * four lines for "Kleding & winkelen · Deze periode", covering the bars it
+   * was describing). max-content takes the label's natural width, and the cap
+   * keeps a chip on an edge bar from hanging far off the card. */
+  width: max-content;
+  max-width: 14rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+/* A bar that nearly fills the plot has nothing above it but the legend, so its
+ * chip reads inside the bar instead of over the label it would cover. */
+.lv-tip-inside {
+  bottom: auto;
+  top: 4px;
+}
+.lv-tip-when {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  white-space: normal;
+  opacity: 0.72;
+}
+.lv-tip-value {
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.lv-bar:hover > .lv-tip,
+.lv-bar:focus > .lv-tip,
+.lv-bar:focus-visible > .lv-tip,
+.lv-bar[data-tip="on"] > .lv-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .lv-bars-xaxis {
@@ -264,6 +358,12 @@
   }
   .lv-bar {
     max-width: 18px;
+  }
+  /* A one-column card is ~330px wide: a 14rem chip centred on the leftmost bar
+   * would hang off it. Narrower here, and the label wraps to two lines instead
+   * of leaving the card. */
+  .lv-tip {
+    max-width: 10rem;
   }
 }
 
@@ -336,6 +436,31 @@
   opacity: 0.6;
 }
 
+/* The share has to live inside a 108px hole (86px on a phone), between the
+ * slice's name and its amount — so it is a size down from the idle caption and
+ * short enough to stay on ONE line. Measured in Chrome: "31% van de uitgaven"
+ * wrapped and pushed the name onto the ring. */
+.spend-pie-share-of {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  max-width: 92%;
+  white-space: nowrap;
+}
+
+/* The name of the slice being read, above its amount. Small and quiet: the
+ * number is the answer, the name only says which question it answers. */
+.spend-pie-slice {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .spend-pie-legend {
   flex: 1 1 14rem;
   margin: 0;
@@ -363,13 +488,25 @@
   text-align: left;
 }
 
-button.spend-pie-item {
+/* Every row is a button now — that is how a keyboard reaches the numbers — but
+ * only the rows that jump into Transacties point. A pointing hand on a row that
+ * merely lights up its arc would promise a page that never arrives. */
+.spend-pie-item[data-filter="yes"] {
   cursor: pointer;
 }
 
-button.spend-pie-item:hover,
-button.spend-pie-item:focus-visible {
+.spend-pie-item:hover,
+.spend-pie-item:focus-visible,
+.spend-pie-item[data-active="on"] {
   background: var(--hover, rgba(0, 0, 0, 0.04));
+}
+.spend-pie-item:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+/* The ring answers the pointer, so it is a live surface rather than a picture. */
+.spend-pie-ring {
+  cursor: default;
 }
 
 .spend-pie-swatch {
