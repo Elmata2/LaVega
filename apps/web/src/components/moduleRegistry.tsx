@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { View } from "../App";
 
@@ -300,4 +301,181 @@ export function toggleModule(enabled: ModuleId[], id: ModuleId, on: boolean): Mo
 export function navModules(enabled: ModuleId[]): ModuleDef[] {
   const set = new Set<ModuleId>(enabled);
   return MODULES.filter((m) => set.has(m.id));
+}
+
+/* ====================================================================== *
+ * OVERZICHT-WIDGETS
+ *
+ * A module is a place you go; a widget is a card on the homescreen. Aandacht
+ * and Positie per bedrijf were neither registered nor switchable — they were
+ * written straight into the Overzicht view, which is exactly why the profile
+ * had nothing to offer for them. They are declared here now, next to the
+ * modules, for the same reason the modules are: one list, no second catalogue.
+ *
+ * They are deliberately NOT ModuleIds. A ModuleId is a route (`Extract<View>`),
+ * and neither of these is a route — folding them into MODULES would put a card
+ * in the top navigation and break that type's promise.
+ * ====================================================================== */
+
+/** A widget id is not a route, so it is its own union — see above. */
+export type WidgetId = "aandacht" | "positie";
+
+export type WidgetDef = {
+  id: WidgetId;
+  /** Dutch label. The SAME text as the card's own title, so the switch and the
+   *  thing it switches are recognisably one object. */
+  label: string;
+  /** One line: what this card tells you. */
+  what: string;
+  /** Static thumbnail built from the design system (no screenshots). */
+  preview: ReactNode;
+};
+
+/** In the order they appear on the homescreen, top down. */
+export const WIDGETS: WidgetDef[] = [
+  {
+    id: "aandacht",
+    label: "Aandacht",
+    what: "Een brede balk bovenaan met wat er misgaat: tekorten, gemiste betalingen, deadlines.",
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <circle cx="16" cy="20" r="2.5" fill="var(--neg)" />
+        <Line x={23} y={19} w={40} strong />
+        <circle cx="16" cy="31" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={30} w={52} />
+        <circle cx="16" cy="42" r="2.5" fill="var(--warn)" opacity="0.5" />
+        <Line x={23} y={41} w={34} />
+      </Thumb>
+    ),
+  },
+  {
+    id: "positie",
+    label: "Positie per bedrijf",
+    what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
+    preview: (
+      <Thumb>
+        <Tile x={20} y={10} w={56} h={40} />
+        <rect x="26" y="18" width="26" height="4" rx="2" fill="var(--accent)" opacity="0.7" />
+        <rect x="52" y="18" width="18" height="4" rx="2" fill="var(--pos)" opacity="0.7" />
+        <circle cx="28" cy="31" r="2.5" fill="var(--accent)" />
+        <Line x={34} y={30} w={16} />
+        <Line x={60} y={30} w={10} strong />
+        <circle cx="28" cy="41" r="2.5" fill="var(--pos)" />
+        <Line x={34} y={40} w={12} />
+        <Line x={60} y={40} w={10} strong />
+      </Thumb>
+    ),
+  },
+];
+
+/** NOTHING, and that asymmetry with DEFAULT_MODULES is deliberate.
+ *
+ *  An unset NAV preference means "everything", because emptying the navigation
+ *  of an install someone already uses reads as the app having lost its tabs.
+ *  An unset WIDGET preference means neither of these cards: he asked for a
+ *  widget he can click on "instead of it always being default there", so a
+ *  fresh install must not show them.
+ *
+ *  The same answer covers the install that predates this commit. Its stored
+ *  list cannot contain an id that did not exist yet, and ABSENT IS OFF — the
+ *  one reading that never puts a card on his homescreen that he did not ask
+ *  for. The cost is honest and small: the two cards he had are gone until he
+ *  switches them on in Profiel, which is the control he asked for. */
+export const DEFAULT_WIDGETS: WidgetId[] = [];
+
+const KNOWN_WIDGETS = new Set<string>(WIDGETS.map((w) => w.id));
+
+/** Resolve the STORED widget preference into the cards the homescreen shows.
+ *
+ *  Unlike `enabledModules`, `null` and `[]` mean the same thing here — off —
+ *  because there is no widget the homescreen breaks without. Unknown ids are
+ *  dropped and the result is always in registry order, so the page never
+ *  reshuffles because of the order things were toggled in. */
+export function enabledWidgets(stored: string[] | null): WidgetId[] {
+  const chosen = stored === null ? DEFAULT_WIDGETS : stored.filter((id): id is WidgetId => KNOWN_WIDGETS.has(id));
+  const set = new Set<WidgetId>(chosen);
+  return WIDGETS.filter((w) => set.has(w.id)).map((w) => w.id);
+}
+
+/** Switch one widget on or off. No widget is locked: a homescreen with neither
+ *  of these on it is still a homescreen. */
+export function toggleWidget(enabled: WidgetId[], id: WidgetId, on: boolean): WidgetId[] {
+  const set = new Set<WidgetId>(enabled);
+  if (on) set.add(id);
+  else set.delete(id);
+  return enabledWidgets([...set]);
+}
+
+/* ---------------------------------------------------------------------- *
+ * The preference itself, and a store to hang it on.
+ *
+ * Its own key. Sharing `lavega.navModules` would let an old nav choice decide
+ * a widget's default, and an emptied nav list would silently mean "no widgets
+ * either" — two different questions must not answer each other.
+ *
+ * It is a store rather than App state because the switch (Profiel) and the
+ * cards (Overzicht) sit in different branches of the tree; a store lets each
+ * side read the same preference without a prop threaded through everything in
+ * between. Same class of preference as the buffer and the home country: this
+ * browser only, never in the vault, never in a back-up.
+ * ---------------------------------------------------------------------- */
+
+const WIDGETS_KEY = "lavega.overviewWidgets";
+
+/** The raw stored list, or `null` for "never chosen". Garbage counts as never
+ *  chosen — which for widgets lands on the same place as an empty list, off. */
+export function getEnabledWidgets(): string[] | null {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(WIDGETS_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
+}
+
+const widgetListeners = new Set<() => void>();
+let widgetCache: WidgetId[] | null = null;
+
+/** Read-through, so a preference cleared from outside (a test, another tab, a
+ *  restored back-up) is never served stale. The cached array is returned
+ *  unchanged when the content is identical, because useSyncExternalStore needs
+ *  a stable identity to stop re-rendering. */
+function widgetSnapshot(): WidgetId[] {
+  const next = enabledWidgets(getEnabledWidgets());
+  const same = widgetCache !== null && widgetCache.length === next.length && widgetCache.every((id, i) => id === next[i]);
+  if (!same) widgetCache = next;
+  return widgetCache as WidgetId[];
+}
+
+function subscribeWidgets(onChange: () => void): () => void {
+  widgetListeners.add(onChange);
+  return () => widgetListeners.delete(onChange);
+}
+
+/** Persist the choice and tell every card and switch about it. */
+export function setEnabledWidgets(ids: WidgetId[]): void {
+  const next = enabledWidgets(ids);
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(WIDGETS_KEY, JSON.stringify(next));
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+  widgetCache = next;
+  for (const listener of [...widgetListeners]) listener();
+}
+
+/** The widgets that are on, plus the setter. Re-renders when either side
+ *  changes it. */
+export function useOverviewWidgets(): [WidgetId[], (next: WidgetId[]) => void] {
+  const enabled = useSyncExternalStore(subscribeWidgets, widgetSnapshot, widgetSnapshot);
+  return [enabled, setEnabledWidgets];
+}
+
+/** Is this one card on the homescreen? What a widget wrapper asks. */
+export function useWidgetEnabled(id: WidgetId): boolean {
+  return useSyncExternalStore(subscribeWidgets, widgetSnapshot, widgetSnapshot).includes(id);
 }

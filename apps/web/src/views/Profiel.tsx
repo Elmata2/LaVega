@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef } from "react";
 import type { EntityScope, EntitySummary, Rule } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
-import ModulePicker from "../components/ModulePicker";
-import type { ModuleId } from "../components/moduleRegistry";
+import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
+import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
 import { countryList, countryName, regionLabel, regionsFor } from "../countries.js";
 import { ownerDisplayName, type OwnerName } from "../settings.js";
 import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
@@ -91,6 +91,10 @@ export default function Profiel({
   onRestored,
 }: ProfielProps) {
   const modulesRef = useRef<HTMLElement>(null);
+  // The widget preference is read here rather than passed in: the switch lives
+  // on this page and the cards live on the homescreen, two branches of the tree
+  // that share nothing above them but App itself. See moduleRegistry.
+  const [widgets, setWidgets] = useOverviewWidgets();
   // 249 countries; built once rather than on every keystroke elsewhere on the page.
   const countries = useMemo(() => countryList(), []);
   const regions = regionsFor(homeCountry);
@@ -159,6 +163,25 @@ export default function Profiel({
           daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
         </p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
+      </section>
+
+      {/* The homescreen cards that are a choice rather than a fixture. Same
+          switch as the modules above, one screen lower, because "welke tab" and
+          "welke kaart" are the same question asked about a different surface.
+          Both start off: he asked for a widget he can click on "instead of it
+          always being default there". */}
+      <section className="card" aria-label="Widgets">
+        <div className="card-header">
+          <h2>Widgets op je overzicht</h2>
+          <span className="eyebrow">
+            {widgets.length} van {WIDGETS.length} aan
+          </span>
+        </div>
+        <p className="cell-sub">
+          Deze twee kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op je
+          startpagina — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
+        </p>
+        <WidgetPicker enabled={widgets} onChange={setWidgets} />
       </section>
 
       <section className="card" aria-label="Persoonlijk of zakelijk">

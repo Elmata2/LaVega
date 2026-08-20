@@ -3,6 +3,7 @@ import type { Account } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
+import { useWidgetEnabled } from "../moduleRegistry";
 
 /* Positie over je bedrijven — which BV holds the money.
  *
@@ -106,4 +107,16 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
       )}
     </Module>
   );
+}
+
+/** The same card as the homescreen should place it: itself when the widget is
+ *  switched on in Profiel, and NOTHING at all when it is off — not an empty
+ *  card, and not a placeholder telling him where the switch is. He asked for a
+ *  widget he can click on and off; off means gone.
+ *
+ *  The gate sits here rather than in the view so the switch travels with the
+ *  card. The block itself stays a pure props-in component, which is what keeps
+ *  it testable and reusable somewhere the preference does not apply. */
+export function PositieWidget(props: PositieBlockProps) {
+  return useWidgetEnabled("positie") ? <PositieBlock {...props} /> : null;
 }

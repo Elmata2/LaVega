@@ -235,3 +235,42 @@ test("Vergrendelen moved here from the app bar and still locks", () => {
   });
   expect(onLock).toHaveBeenCalledTimes(1);
 });
+
+/* The two homescreen widgets he wants to be able to switch: "Positie per
+ * onderneming […] I just want it to be a widget we can click on and off, so in
+ * the profile I should be able to click it on and off instead of it always
+ * being default there. Same applies to Aandacht." */
+
+test("the two overview widgets are switched here, and both start off", () => {
+  render();
+  const widgets = section("Widgets");
+  expect(widgets.querySelectorAll(".mp-item").length).toBe(2);
+  expect(widgets.textContent).toContain("Aandacht");
+  expect(widgets.textContent).toContain("Positie per bedrijf");
+
+  for (const label of ["Aandacht", "Positie per bedrijf"]) {
+    const toggle = widgets.querySelector(`[aria-label="${label} op je overzicht"]`) as HTMLButtonElement;
+    expect(toggle, `no switch for ${label}`).not.toBeNull();
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.disabled).toBe(false); // neither is locked on, unlike Overzicht in the nav
+  }
+});
+
+test("switching a widget on is remembered, and does not touch the nav preference", () => {
+  render();
+  const toggle = section("Widgets").querySelector('[aria-label="Aandacht op je overzicht"]') as HTMLButtonElement;
+  act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual(["aandacht"]);
+  expect(localStorage.getItem("lavega.navModules")).toBeNull();
+});
+
+/* "Keep the manual linkage rules and their explanation." Nailed down, because
+ * this round removes several blocks and this one must survive the cull. */
+test("the manual rules keep their explanation of how a match is decided", () => {
+  render();
+  const regels = section("Regels");
+  expect(regels.textContent).toContain("Je eigen regels hieronder gaan vóór die automatische categorieën");
+  expect(regels.textContent).toContain("eerste");
+  expect(regels.querySelector("input")).not.toBeNull(); // and you can still add one
+});
