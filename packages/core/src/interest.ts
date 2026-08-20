@@ -42,6 +42,15 @@ export type RateBenchmark = {
   asOf?: string;
   /** The bands and restrictions, in the document's words, when a rate is not flat. */
   conditions?: string;
+  /** NOT A DEPOSIT. A money-market fund quoted as a "rate": Wise Rente and N26's
+   *  flexible cash fund are investments that can lose capital, quoted net of a
+   *  management fee and settling in up to two days. They were skipped entirely; he
+   *  asked for them SHOWN, "but with an asterisk", which is the better answer — a
+   *  2,32% fund is a real option someone may want, and hiding it is its own kind of
+   *  dishonesty. What it must never be is the automatic recommendation: moving cash
+   *  out of a guaranteed account into one that can lose it is different advice, and
+   *  it must not be reached by ranking on the word "rate". */
+  capitalAtRisk?: boolean;
 };
 
 /** Where a rate came from, most trustworthy first. A bank stating its own rate in
@@ -173,7 +182,11 @@ export function keptRate(r: RateBenchmark): number | null {
  *  A teaser with no known standing rate is not ranked at all: there is no honest
  *  number to rank it by. `bestPromoRate` is how it still reaches the screen. */
 export function bestRate(rates: readonly RateBenchmark[], freeOnly = true): RateBenchmark | null {
-  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates).filter((r) => keptRate(r) !== null);
+  // capitalAtRisk is filtered ALWAYS, not only when freeOnly: a caller asking for
+  // the best rate is asking where to move cash, and a fund that can lose it is not
+  // an answer to that question however high its number.
+  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates)
+    .filter((r) => keptRate(r) !== null && !r.capitalAtRisk);
   if (pool.length === 0) return null;
   return pool.reduce((best, r) => (keptRate(r)! > keptRate(best)! ? r : best));
 }
@@ -192,7 +205,9 @@ export function bestRate(rates: readonly RateBenchmark[], freeOnly = true): Rate
  *  be had today and a promo line would be noise. Ties keep the earlier row, so
  *  the same list always names the same bank. */
 export function bestPromoRate(rates: readonly RateBenchmark[], freeOnly = true): RateBenchmark | null {
-  const pool = freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates;
+  // Same exclusion as bestRate: a promo on a capital-at-risk fund is still a
+  // recommendation to move cash somewhere it can be lost.
+  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates).filter((r) => !r.capitalAtRisk);
   const keep = bestRate(rates, freeOnly);
   const floor = keep === null ? -Infinity : keptRate(keep)!;
   let top: RateBenchmark | null = null;

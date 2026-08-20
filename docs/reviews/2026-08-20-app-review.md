@@ -114,3 +114,26 @@ Accounts (*"works well"*), transactions (*"this is fine"*), cash flow (*"interes
 how this works"*), forecast (*"just want to see how this goes"*), and the rent/travel improvement
 (*"this is quite an improvement"*). Amex being unknown is explicitly fine — *"I can give you the
 information one time"*, which is the `source: "user"` path working as designed.
+
+
+---
+
+## Answers he gave, 20 August
+
+**Which Amex?** *"Business gold."* → `american-express-business-gold-card`, FX **2,5%**, from
+`NL-Overeenkomst-voor-de-American-Express-Business-Card` dated 15 March 2023.
+
+Worth recording why this turned out not to be a blocker: **all thirteen Amex products in the
+catalogue charge 2,5%** — consumer agreement, Business Card agreement and Corporate terms alike. So
+the travel agent never needed the answer to price a payment, and `issuerConsensus` now answers
+without asking. Where the products genuinely differ — cashback, points, the annual fee — the question
+is still the right one, and it will be asked then.
+
+His account is imported as "American Express / activity", so the specific product still has to be
+chosen in the app for anything product-specific. That is user data and cannot be set from the repo.
+
+**N26 flexible cash fund and Wise Rente:** *"show them but with an asterisk."* Done — they were being
+dropped entirely, which was over-cautious. They now appear with a marker and a footnote saying what
+they are (geldmarktfonds, capital at risk, net of fees, up to two days to settle, outside the
+depositogarantiestelsel), and they are excluded from `bestRate` and `bestPromoRate` so they can never
+become the recommendation. Showing an option is not the same as advising it.

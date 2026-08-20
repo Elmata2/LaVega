@@ -605,7 +605,18 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                   {rates.rates.map((r) => (
                     <tr key={`${r.bank}-${r.product}`}>
                       <td data-label="Bank">
-                        <div style={{ fontWeight: 600 }}>{r.bank}</div>
+                        <div style={{ fontWeight: 600 }}>
+                          {r.bank}
+                          {/* THE ASTERISK. Wise Rente and N26's flexible cash fund
+                              are money-market funds, not deposits: they can lose
+                              capital, the rate is net of a management fee, and the
+                              money takes up to two days to arrive. They are shown
+                              because they are real options, and marked because a
+                              saver comparing them to a guaranteed account is not
+                              comparing like with like. They are also kept out of
+                              the ranking entirely — see bestRate. */}
+                          {r.capitalAtRisk ? <span title="Geen spaarrekening: dit is een geldmarktfonds. Je kunt geld verliezen, het rendement is na kosten en opnemen duurt tot twee werkdagen. Niet gedekt door het depositogarantiestelsel." style={{ color: "var(--warn, #b26a00)" }}> *</span> : null}
+                        </div>
                         <div className="cell-sub">{r.product}</div>
                       </td>
                       <td className="num text-pos" data-label="Rente nu">{pct(r.ratePct)}</td>
@@ -622,6 +633,13 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                   ))}
                 </tbody>
               </table>
+              {rates.rates.some((r) => r.capitalAtRisk) ? (
+                <p className="cell-sub" style={{ marginTop: ".5rem" }}>
+                  * Geen spaarrekening maar een geldmarktfonds — je kunt geld verliezen, het rendement
+                  is na kosten en opnemen duurt tot twee werkdagen. Niet gedekt door het
+                  depositogarantiestelsel, en daarom nooit onze aanbeveling.
+                </p>
+              ) : null}
             </div>
             <p className="eyebrow">
               "Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "wat je houdt" is het tarief

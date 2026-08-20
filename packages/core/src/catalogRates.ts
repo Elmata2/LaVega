@@ -119,7 +119,11 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
     const bank = issuerToBank(e.issuer);
     if (!bank) continue;
     const c = v.conditions ?? "";
-    if (NOT_A_SAVINGS_RATE.test(c)) continue;
+    // SHOWN, FLAGGED, NEVER RANKED. These were skipped outright; he asked for them
+    // to appear "but with an asterisk", which is the better answer — a 2,32% money
+    // market fund is a real option a saver may want, and hiding it is its own kind
+    // of dishonesty. What it must never be is the automatic recommendation.
+    const capitalAtRisk = NOT_A_SAVINGS_RATE.test(c);
     const restricted = /niet vrij opneembaar|opnamevoorwaarden niet vermeld|opzegtermijn/i.test(c);
 
     // Three shapes, in order of how much the source settled.
@@ -142,6 +146,7 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
       ...(splits || teaser ? { promo: true } : {}),
       ...(promoNote ? { promoNote } : {}),
       ...(v.conditions ? { conditions: v.conditions } : {}),
+      ...(capitalAtRisk ? { capitalAtRisk: true } : {}),
       sourceUrl: v.sourceUrl,
       asOf: v.checkedAt,
     });
@@ -227,4 +232,43 @@ export function fxSwitchGain(
   const savingCents = Math.round((spendCents * delta) / 100);
   if (savingCents <= 0) return null;
   return { best, savingCents };
+}
+
+/** AN AMBIGUOUS PRODUCT IS NOT AN UNKNOWN WHEN EVERY CANDIDATE AGREES.
+ *
+ *  An import names his Amex account "American Express / activity", and the
+ *  catalogue holds thirteen Amex products. The travel agent therefore asked which
+ *  card he has — a fair question, and it turned out not to matter: all thirteen
+ *  charge 2,5% on a foreign-currency payment, from the consumer agreement, the
+ *  Business Card agreement and the Corporate terms alike. Asking a question whose
+ *  answer cannot change the number is a worse experience than answering it.
+ *
+ *  It stays strict about WHEN it may answer: every covered candidate must agree
+ *  exactly, and there must be at least two of them (one product is not a
+ *  consensus, it is just that product). Where they differ — as they will for
+ *  cashback, where an Amex Gold and a Business Entry are nothing alike — this
+ *  returns null and the question is the right thing to ask.
+ */
+export function issuerConsensus(
+  entries: readonly CatalogueEntryLike[],
+  issuerSubstring: string,
+  field: "fxFeePct" | "interestPct" | "cashbackPct" | "pointsPerEuro",
+): { value: number; from: number; asOf: string; sourceUrl: string } | null {
+  const needle = issuerSubstring.trim().toLowerCase();
+  if (!needle) return null;
+  const hits: CatalogValue[] = [];
+  for (const e of entries) {
+    const hay = `${e.issuer ?? ""} ${e.product}`.toLowerCase();
+    if (!hay.includes(needle)) continue;
+    const v = e.fields?.[field];
+    if (isCovered(v) && v) hits.push(v);
+  }
+  if (hits.length < 2) return null;
+  const first = hits[0].value;
+  if (!hits.every((h) => Math.abs(h.value - first) < 1e-9)) return null;
+  // Report the OLDEST date among the agreeing figures. They agree on the number;
+  // they do not agree on how recently anyone checked, and the weakest link is what
+  // the reader should be told.
+  const oldest = hits.reduce((a, b) => (a.checkedAt <= b.checkedAt ? a : b));
+  return { value: first, from: hits.length, asOf: oldest.checkedAt, sourceUrl: oldest.sourceUrl };
 }
