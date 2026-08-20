@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fxSwitchGain, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import { cashbackSwitchGain, fxSwitchGain, issuerConsensus, marketCashbackOptions, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
 import { bestRate, keptRate } from "./interest.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
@@ -134,16 +134,32 @@ describe("savingsBenchmarks", () => {
     expect(bestRate([b])).toBeNull(); // so it cannot win a comparison
   });
 
-  test("REFUSES a figure the source says is not a savings rate at all", () => {
+  test("FLAGS a figure the source says is not a savings rate, rather than dropping it", () => {
     // Wise Rente and N26's cash fund are money-market funds with capital risk,
-    // flagged as such by the extractor. Ranked as savings they would advise
-    // moving a saver's cash into an investment on the strength of a "rate".
-    expect(savingsBenchmarks([entry({
+    // flagged as such by the extractor. This test used to assert they were dropped
+    // entirely. He asked for them shown "but with an asterisk", and that is the
+    // better contract: a 2,32% fund is a real option someone may want, and hiding
+    // it is its own kind of dishonesty. The original INTENT — that such a figure
+    // must never be ranked as savings — is still asserted, now through bestRate
+    // refusing it rather than through the row being absent.
+    const wise = savingsBenchmarks([entry({
       fields: { interestPct: covered({ value: 2.02, conditions: "NOT A SAVINGS RATE — it is 7-day fund performance, net of fee, on a money-market fund." }) },
-    })])).toEqual([]);
-    expect(savingsBenchmarks([entry({
+    })]);
+    expect(wise).toHaveLength(1);
+    expect(wise[0].capitalAtRisk).toBe(true);
+    expect(bestRate(wise)).toBeNull();
+
+    const n26 = savingsBenchmarks([entry({
       fields: { interestPct: covered({ value: 2.32, conditions: "NOT A SAVINGS RATE AND NOT A DEPOSIT — an investment that carries a risk of capital loss." }) },
-    })])).toEqual([]);
+    })]);
+    expect(n26).toHaveLength(1);
+    expect(n26[0].capitalAtRisk).toBe(true);
+    expect(bestRate(n26)).toBeNull();
+  });
+
+  test("a plain savings row is NOT flagged, so the asterisk means something", () => {
+    const plain = savingsBenchmarks([entry({ fields: { interestPct: covered({ value: 1.25 }) } })]);
+    expect(plain[0].capitalAtRisk).toBeUndefined();
   });
 
   test("ignores card products entirely", () => {
@@ -215,5 +231,81 @@ describe("fxSwitchGain", () => {
 
   test("returns nothing when the market has no covered option at all", () => {
     expect(fxSwitchGain(1.4, undefined, 100_000)).toBeNull();
+  });
+});
+
+describe("issuerConsensus", () => {
+  const card = (id: string, issuer: string, value: number, date = "2026-01-01", known = true) => ({
+    id, product: id, issuer, kind: "creditcard",
+    fields: { fxFeePct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: date, conditions: "x", conditionsKnown: known } },
+  });
+
+  test("answers when every candidate agrees — the real Amex case", () => {
+    // Thirteen Amex products, all 2,5%, from three different agreements. Asking
+    // which card he holds cannot change the number, so asking is worse than
+    // answering.
+    const got = issuerConsensus([card("a", "American Express", 2.5), card("b", "American Express", 2.5), card("c", "American Express", 2.5)], "american express", "fxFeePct");
+    expect(got!.value).toBe(2.5);
+    expect(got!.from).toBe(3);
+  });
+
+  test("REFUSES when they differ, because then the question is the right thing to ask", () => {
+    expect(issuerConsensus([card("a", "ICS", 2), card("b", "ICS", 2.5)], "ics", "fxFeePct")).toBeNull();
+  });
+
+  test("REFUSES a single product — one figure is not a consensus", () => {
+    expect(issuerConsensus([card("a", "American Express", 2.5)], "american express", "fxFeePct")).toBeNull();
+  });
+
+  test("ignores uncovered candidates rather than counting them as agreement", () => {
+    expect(issuerConsensus([card("a", "Amex", 2.5), card("b", "Amex", 2.5, "2026-01-01", false)], "amex", "fxFeePct")).toBeNull();
+  });
+
+  test("reports the OLDEST date among the agreeing figures", () => {
+    // They agree on the number, not on how recently anyone looked. The weakest
+    // link is what the reader needs.
+    const got = issuerConsensus([card("a", "Amex", 2.5, "2026-08-01"), card("b", "Amex", 2.5, "2023-03-15")], "amex", "fxFeePct");
+    expect(got!.asOf).toBe("2023-03-15");
+  });
+});
+
+describe("marketCashbackOptions", () => {
+  const cb = (id: string, issuer: string, value: number, known = true) => ({
+    id, product: id, issuer, kind: "creditcard",
+    fields: { cashbackPct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: "2026-08-19", conditions: "1% tot € 100 per maand", conditionsKnown: known } },
+  });
+
+  test("ranks the payers, best first", () => {
+    expect(marketCashbackOptions([cb("a", "A Bank", 0.5), cb("b", "B Bank", 1.5)]).map((o) => o.product)).toEqual(["b", "a"]);
+  });
+
+  test("a card that pays NOTHING is not an offer, though the fact is kept elsewhere", () => {
+    expect(marketCashbackOptions([cb("zero", "Z Bank", 0)])).toEqual([]);
+  });
+
+  test("an unproven cashback is absent, never assumed to be zero", () => {
+    // Assuming zero would rank a good card last, which is the expensive direction.
+    expect(marketCashbackOptions([cb("a", "A", 2, false)])).toEqual([]);
+  });
+
+  test("carries the conditions, because 1% up to € 100 a month is not 1%", () => {
+    expect(marketCashbackOptions([cb("a", "A", 1)])[0].conditions).toContain("€ 100");
+  });
+});
+
+describe("cashbackSwitchGain", () => {
+  const best = { productId: "x", product: "X", bank: "X", cashbackPct: 1.5, conditions: null, sourceUrl: "https://x", asOf: "2026-08-19" };
+
+  test("quantifies a year of not switching", () => {
+    // € 20.000 a year at 1,5% instead of 0% is € 300.
+    expect(cashbackSwitchGain(0, best, 2_000_000)!.extraPerYearCents).toBe(30000);
+  });
+
+  test("says nothing when his own card already pays as much", () => {
+    expect(cashbackSwitchGain(1.5, best, 2_000_000)).toBeNull();
+  });
+
+  test("says nothing when his own rate is UNKNOWN", () => {
+    expect(cashbackSwitchGain(null, best, 2_000_000)).toBeNull();
   });
 });

@@ -265,3 +265,43 @@ describe("promos are shown as well as ranked past", () => {
     expect(r.promoExtraPerMonthCents).toBe(0);
   });
 });
+
+/* SHOWN, FLAGGED, NEVER RANKED.
+ *
+ * Wise Rente and N26's flexible cash fund are money-market funds quoted as
+ * "rates": investments that can lose capital, net of a management fee, settling in
+ * up to two days. They were skipped entirely. He asked for them shown "but with an
+ * asterisk" — which is better, because a 2,32% fund is a real option and hiding it
+ * is its own dishonesty. What it must never be is the automatic recommendation.
+ */
+describe("capitalAtRisk", () => {
+  const fund: RateBenchmark = { bank: "N26", product: "flexible cash fund", ratePct: 2.32, freeWithdrawal: true, capitalAtRisk: true };
+  const deposit: RateBenchmark = { bank: "Scalable Capital", product: "Overnight", ratePct: 2.5, freeWithdrawal: true };
+
+  test("a fund never wins bestRate, even paying more than every deposit", () => {
+    const rich: RateBenchmark = { ...fund, ratePct: 9 };
+    expect(bestRate([rich, deposit])!.bank).toBe("Scalable Capital");
+  });
+
+  test("a fund never wins the promo line either", () => {
+    // A promo on a capital-at-risk fund is still "move your cash somewhere it can
+    // be lost", which is not what the promo line is for.
+    const promoFund: RateBenchmark = { ...fund, ratePct: 9, standardRatePct: 1, promoNote: "6 mnd" };
+    // bestPromoRate takes (rates, freeOnly) and compares against the best KEPT
+    // rate itself; with the fund excluded, the only promo left is none.
+    expect(bestPromoRate([promoFund, deposit])).toBeNull();
+  });
+
+  test("but it is still in the list, so the UI can show it with its asterisk", () => {
+    const rows = mergeRateSources({ rates: [fund, deposit], provenance: "catalogue" });
+    expect(rows.map((r) => r.bank).sort()).toEqual(["N26", "Scalable Capital"]);
+    expect(rows.find((r) => r.bank === "N26")!.capitalAtRisk).toBe(true);
+  });
+
+  test("analyzeInterest does not quantify a gain against a fund", () => {
+    const accounts = [acc({ key: "B", type: "Betaalrekening", balance: 20000 })];
+    const r = analyzeInterest(accounts, [], [{ ...fund, ratePct: 9 }], "2026-08-01");
+    expect(r.best).toBeNull();
+    expect(r.suggestions).toHaveLength(0);
+  });
+});

@@ -119,7 +119,11 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
     const bank = issuerToBank(e.issuer);
     if (!bank) continue;
     const c = v.conditions ?? "";
-    if (NOT_A_SAVINGS_RATE.test(c)) continue;
+    // SHOWN, FLAGGED, NEVER RANKED. These were skipped outright; he asked for them
+    // to appear "but with an asterisk", which is the better answer — a 2,32% money
+    // market fund is a real option a saver may want, and hiding it is its own kind
+    // of dishonesty. What it must never be is the automatic recommendation.
+    const capitalAtRisk = NOT_A_SAVINGS_RATE.test(c);
     const restricted = /niet vrij opneembaar|opnamevoorwaarden niet vermeld|opzegtermijn/i.test(c);
 
     // Three shapes, in order of how much the source settled.
@@ -142,6 +146,7 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
       ...(splits || teaser ? { promo: true } : {}),
       ...(promoNote ? { promoNote } : {}),
       ...(v.conditions ? { conditions: v.conditions } : {}),
+      ...(capitalAtRisk ? { capitalAtRisk: true } : {}),
       sourceUrl: v.sourceUrl,
       asOf: v.checkedAt,
     });
@@ -227,4 +232,107 @@ export function fxSwitchGain(
   const savingCents = Math.round((spendCents * delta) / 100);
   if (savingCents <= 0) return null;
   return { best, savingCents };
+}
+
+/** AN AMBIGUOUS PRODUCT IS NOT AN UNKNOWN WHEN EVERY CANDIDATE AGREES.
+ *
+ *  An import names his Amex account "American Express / activity", and the
+ *  catalogue holds thirteen Amex products. The travel agent therefore asked which
+ *  card he has — a fair question, and it turned out not to matter: all thirteen
+ *  charge 2,5% on a foreign-currency payment, from the consumer agreement, the
+ *  Business Card agreement and the Corporate terms alike. Asking a question whose
+ *  answer cannot change the number is a worse experience than answering it.
+ *
+ *  It stays strict about WHEN it may answer: every covered candidate must agree
+ *  exactly, and there must be at least two of them (one product is not a
+ *  consensus, it is just that product). Where they differ — as they will for
+ *  cashback, where an Amex Gold and a Business Entry are nothing alike — this
+ *  returns null and the question is the right thing to ask.
+ */
+export function issuerConsensus(
+  entries: readonly CatalogueEntryLike[],
+  issuerSubstring: string,
+  field: "fxFeePct" | "interestPct" | "cashbackPct" | "pointsPerEuro",
+): { value: number; from: number; asOf: string; sourceUrl: string } | null {
+  const needle = issuerSubstring.trim().toLowerCase();
+  if (!needle) return null;
+  const hits: CatalogValue[] = [];
+  for (const e of entries) {
+    const hay = `${e.issuer ?? ""} ${e.product}`.toLowerCase();
+    if (!hay.includes(needle)) continue;
+    const v = e.fields?.[field];
+    if (isCovered(v) && v) hits.push(v);
+  }
+  if (hits.length < 2) return null;
+  const first = hits[0].value;
+  if (!hits.every((h) => Math.abs(h.value - first) < 1e-9)) return null;
+  // Report the OLDEST date among the agreeing figures. They agree on the number;
+  // they do not agree on how recently anyone checked, and the weakest link is what
+  // the reader should be told.
+  const oldest = hits.reduce((a, b) => (a.checkedAt <= b.checkedAt ? a : b));
+  return { value: first, from: hits.length, asOf: oldest.checkedAt, sourceUrl: oldest.sourceUrl };
+}
+
+/** THE BEST CARD YOU COULD OPEN, for spending rather than for a trip.
+ *
+ *  Valuta already ranks every bank rather than only his, and the travel agent
+ *  already offers what he could switch to. Optimalisatie was the one left asking
+ *  only "which of your accounts is best" — a fair question, and not the one that
+ *  finds the four percent he was looking for when he said a Trading 212 at 1,5%
+ *  cashback and 3,5% savings beats an ING at 0% and 1,5%.
+ *
+ *  Ranked on what the card RETURNS on a domestic purchase: cashback earned minus
+ *  nothing, because a domestic payment carries no FX surcharge. Cards whose
+ *  cashback we cannot prove are absent rather than assumed to pay nothing —
+ *  "unknown is never zero" applies hardest here, where a zero would rank a good
+ *  card last.
+ */
+export type SpendOffer = {
+  productId: string;
+  product: string;
+  bank: string;
+  cashbackPct: number;
+  conditions: string | null;
+  sourceUrl: string;
+  asOf: string;
+};
+
+export function marketCashbackOptions(entries: readonly CatalogueEntryLike[]): SpendOffer[] {
+  const out: SpendOffer[] = [];
+  for (const e of entries) {
+    const v = e.fields?.cashbackPct;
+    if (!isCovered(v) || !v) continue;
+    // A card that pays nothing is a fact worth keeping — it is what lets the app
+    // say "your pas earns nothing here" with a source — but it is not an OFFER,
+    // and listing it under "what you could open" would be noise.
+    if (v.value <= 0) continue;
+    const bank = e.issuer ? issuerToBank(e.issuer) : "";
+    out.push({
+      productId: e.id,
+      product: e.product,
+      bank,
+      cashbackPct: v.value,
+      conditions: v.conditions,
+      sourceUrl: v.sourceUrl,
+      asOf: v.checkedAt,
+    });
+  }
+  return out.sort((a, b) => b.cashbackPct - a.cashbackPct);
+}
+
+/** What a year of this spend would earn on the best card he does NOT have, over
+ *  what he earns today. Returns null when his own rate is unknown — a saving
+ *  measured against an unknown is a guess wearing a number's clothes — and null
+ *  when nothing beats what he already earns. */
+export function cashbackSwitchGain(
+  heldPct: number | null,
+  best: SpendOffer | undefined,
+  yearlySpendCents: number,
+): { best: SpendOffer; extraPerYearCents: number } | null {
+  if (heldPct === null || !best) return null;
+  const delta = best.cashbackPct - heldPct;
+  if (delta <= 0) return null;
+  const extraPerYearCents = Math.round((yearlySpendCents * delta) / 100);
+  if (extraPerYearCents <= 0) return null;
+  return { best, extraPerYearCents };
 }

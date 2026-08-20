@@ -114,3 +114,44 @@ Accounts (*"works well"*), transactions (*"this is fine"*), cash flow (*"interes
 how this works"*), forecast (*"just want to see how this goes"*), and the rent/travel improvement
 (*"this is quite an improvement"*). Amex being unknown is explicitly fine — *"I can give you the
 information one time"*, which is the `source: "user"` path working as designed.
+
+
+---
+
+## Answers he gave, 20 August
+
+**Which Amex?** *"Business gold."* → `american-express-business-gold-card`, FX **2,5%**, from
+`NL-Overeenkomst-voor-de-American-Express-Business-Card` dated 15 March 2023.
+
+Worth recording why this turned out not to be a blocker: **all thirteen Amex products in the
+catalogue charge 2,5%** — consumer agreement, Business Card agreement and Corporate terms alike. So
+the travel agent never needed the answer to price a payment, and `issuerConsensus` now answers
+without asking. Where the products genuinely differ — cashback, points, the annual fee — the question
+is still the right one, and it will be asked then.
+
+His account is imported as "American Express / activity", so the specific product still has to be
+chosen in the app for anything product-specific. That is user data and cannot be set from the repo.
+
+**N26 flexible cash fund and Wise Rente:** *"show them but with an asterisk."* Done — they were being
+dropped entirely, which was over-cautious. They now appear with a marker and a footnote saying what
+they are (geldmarktfonds, capital at risk, net of fees, up to two days to settle, outside the
+depositogarantiestelsel), and they are excluded from `bestRate` and `bestPromoRate` so they can never
+become the recommendation. Showing an option is not the same as advising it.
+
+**Valuta and his own corrections:** *"no need for own corrections with valuta."* So `App.tsx` keeps
+rendering `<Valuta accounts={scopedAccounts} />` without a `facts` prop, deliberately. Recorded here
+because it looks like an omission and is not one: conversion is priced from the catalogue, and a
+per-product correction he made for a card payment does not transfer to a transfer.
+
+**English CSV exports:** *"include English language translation to the exports."* ING's English
+export now has its own profile. It was falling through to the generic one, which reads neither the
+Debit/credit column nor the per-row Account — so the sign came out wrong and the transactions were
+orphaned from their account. This was his main history file, and it is a better explanation for a
+large share of the onbekend category than anything in the categoriser.
+
+**Dead code:** *"fix the dead code."* `scrubSensitive`/`buildCategorizeItems` are deleted from
+`apps/web/src/categorize-ui.ts`, and the four tests that pinned the buggy behaviour are gone with
+them. `toDecisions` and `MAX_CATEGORIZE_BATCH` stay — `Transacties.tsx` imports both, so the file was
+never fully dead. A comment in its place points at the working implementation and says not to
+re-add one, because a second redaction function carrying the old bug is exactly what someone reaches
+for next.
