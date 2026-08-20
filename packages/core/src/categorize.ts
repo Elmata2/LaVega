@@ -1,7 +1,7 @@
 import type { Tx, Rule } from "./model.js";
 import { categorize, type OwnAccounts } from "./views.js";
 import { hash, norm } from "./hash.js";
-import { FOREIGN_COUNTRY_CODES } from "./categories.js";
+import { foreignCodeIn } from "./categories.js";
 
 /** The categories the AI may assign + the review dropdown offers — LaVega's
  *  existing taxonomy so results stay consistent with the rules engine. */
@@ -141,15 +141,6 @@ export function aiCategorizeItems(txs: Tx[]): AiCategorizeItem[] {
  *  FOREIGN_COUNTRY_CODES in categories.ts for why the set is curated. Pure. */
 export function foreignCode(tx: Tx): string | null {
   return foreignCodeIn(`${tx.counterparty} ${tx.description}`);
-}
-
-function foreignCodeIn(text: string): string | null {
-  for (const w of text.split(/[^A-Za-z]+/)) {
-    if (w.length !== 3) continue;
-    if (w !== w.toUpperCase()) continue; // exports print the code in caps
-    if (FOREIGN_COUNTRY_CODES.has(w)) return w;
-  }
-  return null;
 }
 
 /** Why a row could not be placed. "onbekend" on its own is a dead end: the owner

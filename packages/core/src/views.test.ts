@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, foreignTerminalCategory, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
@@ -381,4 +381,64 @@ test("a re-import keeps a bank/name the owner typed, but may fix a stale parser 
   expect(merged[1]).toMatchObject({ bank: "ING", name: "Oranje Spaarrekening" });
   // Entity/type/balance preservation is unchanged.
   expect(merged[0]).toMatchObject({ entity: "Prive", type: "Spaarrekening", balance: 100 });
+});
+
+/* HIS ONBEKEND ROWS, verbatim from the 20 August review.
+ *
+ * Three Barcelona card payments were reaching "onbekend" while the app had
+ * already worked out they were foreign — the detection produced a LABEL and not a
+ * category, so a July he could account for perfectly well sat in a bucket he
+ * could not. And a Rabo Betaalverzoek had no rule at all.
+ */
+describe("onbekend: the rows he showed us", () => {
+  const row = (counterparty: string, description: string, amount: number): Tx => ({
+    id: "t", accountKey: "NL88INGB0793113504", date: "2026-07-19",
+    amount, currency: "EUR", counterparty, description, category: "", manual: false,
+  });
+
+  test("a metro ride in Barcelona is Transport, not onbekend", () => {
+    const t = row("METRO BARCELONA", "METRO BARCELONA BARCELONA ESP Kaartnr: 5238 53** **** 1748 Datum: 18-07-2026 Tijd: 18:43 Transactie: I13241 Term: 86324463 Apple Pay", -7.8);
+    expect(categorize(t, [])).toBe("Transport");
+  });
+
+  test("a campsite abroad is Reizen", () => {
+    const t = row("CAMPER PARK BARCELONA", "CAMPER PARK BARCELONA TEIA ESP Kaartnr: 5238 53** **** 1748 Tijd: 11:36 Term: KJOLH2QT Apple Pay", -30);
+    expect(categorize(t, [])).toBe("Reizen");
+  });
+
+  test("gelato is Café", () => {
+    const t = row("MUST GELATO", "MUST GELATO BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 21:41 Term: 02013791 Apple Pay", -4.2);
+    expect(categorize(t, [])).toBe("Café");
+  });
+
+  test("an unrecognised merchant at a terminal abroad still lands somewhere honest", () => {
+    const t = row("XURRERIA TREBOL", "XURRERIA TREBOL BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 09:12 Term: 11223344", -3.5);
+    expect(categorize(t, [])).toBe("Reizen");
+  });
+
+  test("a Rabo Betaalverzoek is a transfer between people", () => {
+    const t = row("T.J. van Wijngaarden via Rabo Betaalverzoek", "Naam: T.J. van Wijngaarden via Rabo Betaalverzoek Omschrijving: Vacance IBAN: NL42RABO0114668043", -52.8);
+    expect(categorize(t, [])).toBe("Overboekingen");
+  });
+
+  test("a FOREIGN ONLINE purchase is NOT called travel — no terminal, no claim", () => {
+    // The discriminator earning its place: calling an order from a foreign webshop
+    // "Reizen" would silently distort the travel total. Asserted on the rule
+    // itself, because an existing rule already places AliExpress under Online
+    // shopping — which is the right answer and not the one under test here.
+    const t = row("ALIEXPRESS", "ALIEXPRESS CHN Kaartnr: 5238 53** **** 1748", -18.4);
+    expect(foreignTerminalCategory(t)).toBeNull();
+    expect(categorize(t, [])).not.toBe("Reizen");
+  });
+
+  test("a foreign card row with NO merchant rule and no terminal stays unknown", () => {
+    const t = row("QUIOSC 4412", "QUIOSC 4412 ESP Kaartnr: 5238 53** **** 1748", -2.1);
+    expect(foreignTerminalCategory(t)).toBeNull();
+    expect(categorize(t, [])).toBe("onbekend");
+  });
+
+  test("a DOMESTIC terminal payment is untouched by the abroad rule", () => {
+    const t = row("ALBERT HEIJN 1234", "ALBERT HEIJN 1234 AMSTERDAM Kaartnr: 5238 53** **** 1748 Term: 8899 Tijd: 12:03", -42.15);
+    expect(categorize(t, [])).toBe("Boodschappen");
+  });
 });

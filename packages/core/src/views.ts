@@ -1,6 +1,6 @@
 import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
-import { NL_CATEGORY_RULES_NORMALIZED, matchNorm } from "./categories.js";
+import { NL_CATEGORY_RULES_NORMALIZED, matchNorm, foreignCodeIn} from "./categories.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
  * take the already-loaded accounts/txs and return view-ready data, so the
@@ -140,7 +140,62 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
     if (r.sign && r.sign !== sign) continue;
     if (hay.includes(r.m)) return r.category;
   }
+  // LAST, AND ONLY WHERE NOTHING ELSE SPOKE: a card payment made at a terminal
+  // abroad. His three Barcelona rows were reaching "onbekend" while the app had
+  // already worked out they were foreign — the detection existed and produced a
+  // label, not a category, so €4.000 of a July he could account for perfectly well
+  // sat in a bucket he could not.
+  //
+  // The discriminator is a PHYSICAL terminal, not merely a foreign country: a row
+  // carrying both a card number and a terminal or a time was made in person, which
+  // is what makes "spending while travelling" the honest reading. A foreign ONLINE
+  // purchase has no terminal, and calling that travel would be a guess — it stays
+  // unknown, which is the right answer for it.
+  const abroad = foreignTerminalCategory(tx);
+  if (abroad) return abroad;
   return "onbekend";
+}
+
+/** Words that place a foreign in-person payment more precisely than "travel".
+ *  Deliberately short: each entry is a word whose meaning does not shift between
+ *  the languages these exports are printed in, and a wrong category here is worse
+ *  than the general one, because it silently distorts a real total. */
+const ABROAD_WORDS: ReadonlyArray<{ m: string; category: string }> = [
+  { m: "metro", category: "Transport" },
+  { m: "taxi", category: "Transport" },
+  { m: "renfe", category: "Transport" },
+  { m: "sncf", category: "Transport" },
+  { m: "aeroport", category: "Transport" },
+  { m: "airport", category: "Transport" },
+  { m: "parking", category: "Transport" },
+  { m: "camping", category: "Reizen" },
+  { m: "camper park", category: "Reizen" },
+  { m: "hotel", category: "Reizen" },
+  { m: "hostal", category: "Reizen" },
+  { m: "hostel", category: "Reizen" },
+  { m: "gelato", category: "Café" },
+  { m: "heladeria", category: "Café" },
+  { m: "cafe", category: "Café" },
+  { m: "bar ", category: "Café" },
+  { m: "restaurant", category: "Café" },
+  { m: "supermercat", category: "Boodschappen" },
+  { m: "supermercado", category: "Boodschappen" },
+  { m: "mercadona", category: "Boodschappen" },
+  { m: "carrefour", category: "Boodschappen" },
+];
+
+/** The category for a card payment made at a terminal abroad, or null when this
+ *  row is not one. Exported for the tests that pin the discriminator. */
+export function foreignTerminalCategory(tx: Tx): string | null {
+  const raw = `${tx.counterparty} ${tx.description}`;
+  if (!foreignCodeIn(raw)) return null;
+  // "Kaartnr" alone is not enough — an online card payment carries one too. A
+  // terminal id or a time of day is what says someone stood there.
+  const inPerson = /kaartnr/i.test(raw) && /\bterm\b|\bterm:|\btijd:/i.test(raw);
+  if (!inPerson) return null;
+  const hay = matchNorm(raw);
+  for (const w of ABROAD_WORDS) if (hay.includes(w.m)) return w.category;
+  return "Reizen";
 }
 
 /** In/out totals grouped by derived category (via categorize). Pass `own` to

@@ -54,6 +54,13 @@ export const matchNorm = (s: unknown): string =>
 export type CategoryRule = { match: string; category: string; sign?: "in" | "out" };
 
 export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
+  /* BETAALVERZOEK — a Dutch payment request, and always a transfer between people
+   * rather than a purchase. Every bank prints the phrase in the counterparty
+   * ("T.J. van Wijngaarden via Rabo Betaalverzoek", "via ING Betaalverzoek"), so
+   * the phrase itself is the rule and the person's name is irrelevant to it. Both
+   * directions: he pays some and is paid others. */
+  { match: "betaalverzoek", category: "Overboekingen" },
+  { match: "tikkie", category: "Overboekingen" },
   // --- overlap priority: specific product before its broader merchant ---
   { match: "amazon prime", category: "Entertainment" },
   { match: "prime video", category: "Entertainment" },
@@ -587,6 +594,22 @@ export const FOREIGN_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "JPN", "KOR", "CHN", "TWN", "HKG", "SGP", "THA", "IDN", "VNM", "PHL", "MYS",
   "LKA", "NPL", "AUS", "NZL", "FJI",
 ]);
+
+/** The ISO-3166 alpha-3 country code a card export printed on this row, or null.
+ *  Only a STANDALONE, UPPERCASE token counts, and NLD never does.
+ *
+ *  It lives HERE, beside the curated set, because both categorize.ts and views.ts
+ *  need it and views.ts cannot import from categorize.ts — categorize.ts already
+ *  imports from views.ts. Two copies of a curated matcher is how the curation
+ *  drifts out of one of them. */
+export function foreignCodeIn(text: string): string | null {
+  for (const w of text.split(/[^A-Za-z]+/)) {
+    if (w.length !== 3) continue;
+    if (w !== w.toUpperCase()) continue; // exports print the code in caps
+    if (FOREIGN_COUNTRY_CODES.has(w)) return w;
+  }
+  return null;
+}
 
 /* Pre-normalized once at module load so categorize() does a plain substring test
  * per entry (no per-transaction matchNorm of the match strings). `sign` is
