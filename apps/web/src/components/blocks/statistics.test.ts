@@ -318,3 +318,24 @@ test("a weekday average is not made expensive by a savings deposit landing on it
   const thursday = w.rows[3];
   expect(thursday.total).toBe(0);
 });
+
+/* GELDOPNAME IS EEN UITGAVE — zijn beslissing van 20 augustus.
+ *
+ * Contant opnemen is strikt genomen ook geld dat van plaats verandert, maar LaVega
+ * ziet het daarna nooit meer: er komt geen transactie die zegt waar het heen ging.
+ * Zou opnemen buiten de uitgaven vallen, dan verdween dat geld uit elke telling.
+ */
+test("een geldopname telt mee als uitgave, een storting op de eigen spaarrekening niet", () => {
+  const txs: Tx[] = [
+    { id: "a", accountKey: "A", date: "2026-08-05", amount: -200, currency: "EUR",
+      counterparty: "GELDMAAT AMSTERDAM", description: "Opname", category: "Geldopname", manual: true },
+    { id: "b", accountKey: "A", date: "2026-08-06", amount: -15000, currency: "EUR",
+      counterparty: "Eigen beleggingsrekening", description: "Storting", category: "Sparen & beleggen", manual: true },
+  ];
+  const share = categoryShare(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  expect(share.slices.map((s) => s.category)).toEqual(["Geldopname"]);
+  expect(share.totalCents).toBe(20000);
+  const moved = movedTotals(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen"]);
+  expect(moved[0].outCents).toBe(1500000);
+});
