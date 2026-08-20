@@ -179,6 +179,8 @@ export default function Facturen({
   // input, but the Invoice keeps vatAmount for the (later) tax agent, so we
   // carry it through the confirm rather than silently dropping it.
   const [pendingVat, setPendingVat] = useState<number | null>(null);
+  /** Het btw-veld op het formulier, als tekst — leeg is een echte staat en niet 0. */
+  const [vatInput, setVatInput] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
@@ -490,7 +492,11 @@ export default function Facturen({
       status: "expected",
       sourceType: pendingSource,
       confidence: pendingSource === "llm" ? (pendingConfidence ?? undefined) : undefined,
-      vatAmount: pendingSource === "llm" ? (pendingVat ?? undefined) : undefined,
+      // Wat in het veld staat wint van wat het concept meebracht: hij kan een
+      // AI-bedrag corrigeren, en dan is zijn correctie het feit.
+      vatAmount: vatInput.trim() !== "" && Number.isFinite(Number(vatInput.replace(",", ".")))
+        ? Number(vatInput.replace(",", "."))
+        : (pendingSource === "llm" ? (pendingVat ?? undefined) : undefined),
     });
     // Whether the draft is added or turns out to be a duplicate, it has now been
     // dealt with — clear the AI-draft tags so the NEXT manual entry can't inherit
@@ -505,6 +511,7 @@ export default function Facturen({
     setCounterparty("");
     setInvoiceNumber("");
     setAmount("");
+    setVatInput("");
     setImportNote(null);
     clearDraftTags();
   }
@@ -542,6 +549,7 @@ export default function Facturen({
     setIssueDate("");
     setDueDate("");
     setAmount("");
+    setVatInput("");
     setCurrency("EUR");
   }
 
@@ -641,6 +649,7 @@ export default function Facturen({
       setPendingSource("llm");
       setPendingConfidence(confidence);
       const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
+      setVatInput(vat === null ? "" : String(vat));
       setPendingVat(vat);
       // Only show a percentage the model actually reported; otherwise just ask
       // the owner to check every field (no fabricated confidence number).
@@ -802,6 +811,22 @@ export default function Facturen({
                 {pendingSource === "llm" && <span className="badge">AI-concept</span>}
                 <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
                   disabled={busy} aria-label="Bedrag" onChange={(e) => setAmount(e.target.value)} />
+              </label>
+              <label>
+                {/* BTW BIJ DE HAND, want de facturenbasis leest juist dit veld.
+                    Het stond er niet: vatAmount kwam alleen mee met een AI-concept,
+                    dus een handmatig ingevoerde factuur maakte het kwartaal
+                    onvolledig en de Belasting-tab viel terug op de zwakkere
+                    marge-benadering — precies de betere bron die hij net kan kiezen.
+                    Leeg blijft ONBEKEND en wordt nooit 0: een factuur zonder btw en
+                    een factuur waarvan de btw niet is ingevuld zijn niet hetzelfde,
+                    en de dekkingsmeter moet dat verschil kunnen zien. Wil hij nul
+                    zeggen (btw verlegd, ICP, 0%-export), dan typt hij 0. */}
+                Btw <span className="cell-sub">(leeg = onbekend)</span>
+                {pendingSource === "llm" && pendingVat !== null && <span className="badge">AI-concept</span>}
+                <input className="saldo-input" type="number" step={0.01} min={0}
+                  value={vatInput} placeholder="onbekend" disabled={busy} aria-label="Btw"
+                  onChange={(e) => setVatInput(e.target.value)} />
               </label>
               <label>
                 Valuta
