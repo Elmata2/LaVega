@@ -1376,13 +1376,6 @@
       }
     },
     {
-      "id": "coinbase-card",
-      "product": "Coinbase Card",
-      "issuer": "Coinbase (EEA); issuing EMI not obtainable",
-      "kind": "betaalpas",
-      "fields": {}
-    },
-    {
       "id": "wirex-card-wirex-one",
       "product": "Wirex Card (Wirex One)",
       "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
@@ -1397,13 +1390,6 @@
           "conditionsKnown": true
         }
       }
-    },
-    {
-      "id": "binance-card",
-      "product": "Binance Card",
-      "issuer": "Binance (EEA programme, formerly Visa)",
-      "kind": "crypto",
-      "fields": {}
     },
     {
       "id": "paysafecard-prepaid-code-paysafewallet",

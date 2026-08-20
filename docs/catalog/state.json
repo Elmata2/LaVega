@@ -2060,26 +2060,6 @@
       "docDate": "2026-06-03",
       "docNote": "route-verified 2026-08-19; CONFIRMED, and this is the strongest find in the batch. www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card serves HT"
     },
-    "coinbase-card": {
-      "product": "Coinbase Card",
-      "issuer": "Coinbase (EEA); issuing EMI not obtainable",
-      "kind": "betaalpas",
-      "termsUrl": "https://www.coinbase.com/nl/card",
-      "availableToNL": true,
-      "httpStatus": "403 (Cloudflare)",
-      "readable": "bot-blocked",
-      "route": "agent",
-      "fieldsOnPage": [],
-      "conditionalHeadlineRate": true,
-      "lastChecked": "2026-08-19",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "wayback: no figure · agent: 403",
-      "docUrl": "https://www.coinbase.com/nl/card",
-      "docKind": "html",
-      "docDate": "2026-02-26",
-      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, all four quoted passages verbatim in the snapshot I fetched (eligibility answer, rewards footnote ¹, issuer statement, and fee footnote ⁴)."
-    },
     "wirex-card-wirex-one": {
       "product": "Wirex Card (Wirex One)",
       "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
@@ -2099,26 +2079,6 @@
       "docKind": "html",
       "docNote": "route-verified 2026-08-19; CONFIRMED as a refusal, and the refusal is the correct call - keep the rate null. help.wirexapp.com/article/wirex-fees-1379 serves HTTP 200 ",
       "docDate": "2024-01-11"
-    },
-    "binance-card": {
-      "product": "Binance Card",
-      "issuer": "Binance (EEA programme, formerly Visa)",
-      "kind": "crypto",
-      "termsUrl": "https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381",
-      "availableToNL": false,
-      "httpStatus": "202 with a ZERO-BYTE body",
-      "readable": "unfetchable",
-      "route": "agent",
-      "fieldsOnPage": [],
-      "conditionalHeadlineRate": false,
-      "lastChecked": "2026-08-19",
-      "lastValue": null,
-      "lastRoute": null,
-      "lastReason": "wayback: no figure · agent: no figure",
-      "docUrl": "https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381",
-      "docKind": "html",
-      "docDate": "2023-10-20",
-      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED verbatim. The snapshot serves Binance's own support page with the headline 'Frequently Asked Questions on Binance Card EEA Program Closure',"
     },
     "paysafecard-prepaid-code-paysafewallet": {
       "product": "paysafecard (prepaid code / PaysafeWallet)",
