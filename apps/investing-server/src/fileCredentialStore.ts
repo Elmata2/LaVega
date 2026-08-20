@@ -1,16 +1,16 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { BrokerCredentials, CredentialBroker, CredentialStore, Dividend, Position, Trade } from "@lavega/core";
+import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 import { decryptJSON, deriveKey, encryptJSON, newSalt, PBKDF2_ITERATIONS, type CipherBlob } from "@lavega/adapters";
 
 export type ServerVaultStatus = "empty" | "locked" | "unlocked";
 
-export type RuntimeBrokerDataSnapshot = Partial<Record<"ibkr" | "trading212", {
-  positions: Position[];
-  trades: Trade[];
-  dividends: Dividend[];
-}>>;
+// Re-exported so existing importers are untouched; defined in
+// runtimeBrokerData.ts so a type-only importer does not have to reach through
+// this file's fs imports. See that file for why.
+export type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
 type VaultData = { credentials: BrokerCredentials[]; brokerData?: RuntimeBrokerDataSnapshot };
 

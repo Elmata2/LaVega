@@ -1,6 +1,6 @@
 import { crossRate, type Dividend, type FxRate, type Position, type PriceBar, type Trade } from "@lavega/core";
 import type { FxProviderResult, FxRequest } from "@lavega/adapters";
-import type { RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
+import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
 /** Canned local-dev data: a small portfolio plus matching price history, so the
  * dashboard renders instantly without a real broker sync or price fetch. Enabled
