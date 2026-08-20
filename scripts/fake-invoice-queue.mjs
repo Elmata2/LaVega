@@ -82,6 +82,32 @@ const rows = [
     counterparty: "Simyo",
     direction: "expense",
   },
+  {
+    /* RIJ 4 — het plafond. Alles aan deze rij is in orde: geverifieerde
+     * afzender, volledige extractie, btw erbij. Het enige bezwaar is de HOOGTE,
+     * en dat is precies het bezwaar dat hij zelf koos: EUR 12.500 boven een
+     * grens van EUR 10.000. Zonder deze rij is die grens niet te zien, want
+     * elke andere rij valt al eerder af om een andere reden. */
+    messageId: "fake-4",
+    subject: "Factuur 2026-0211 — verbouwing kantoor",
+    from: "administratie@aannemer-terlouw.nl",
+    deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+    queueKey: "alexander-7f3a",
+    senderCheck: "passed",
+    senderChecks: { spf: "pass", dkim: "pass", dmarc: "pass" },
+    invoiceNumber: "2026-0211",
+    issueDate: today,
+    // WEL een vervaldatum, en dat is het punt van deze rij: valt hij op een
+    // ontbrekend veld, dan komt het plafond niet eens aan de beurt en is het
+    // niet te zien. Gemeten: met dueDate null las de rij "vul een vervaldatum
+    // in", niet "bedrag te hoog".
+    dueDate: today,
+    amountCents: 1_250_000,
+    vatCents: 216_942,
+    currency: "EUR",
+    counterparty: "Aannemersbedrijf Terlouw B.V.",
+    direction: "expense",
+  },
 ];
 
 createServer((req, res) => {
