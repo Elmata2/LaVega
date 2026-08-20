@@ -34,7 +34,8 @@
       "pdfCheckedAt": "2026-06-15",
       "lastValue": 1.4,
       "lastRoute": "agent",
-      "lastReason": null
+      "lastReason": null,
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "ing-creditcard": {
       "product": "ING creditcard",
@@ -55,7 +56,8 @@
       "docUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
       "docKind": "pdf",
       "docDate": "2026-06-15",
-      "docNote": "route-verified 2026-08-19; STRONGEST FIND IN THE BATCH — all five checks pass and it fills a product state.json deliberately left unrouted. (1) assets.ing.com serves H"
+      "docNote": "route-verified 2026-08-19; STRONGEST FIND IN THE BATCH — all five checks pass and it fills a product state.json deliberately left unrouted. (1) assets.ing.com serves H",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "ing-platinumcard": {
       "product": "ING Platinumcard",
@@ -75,7 +77,8 @@
       "docUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
       "docKind": "pdf",
       "docDate": "2026-01-01",
-      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on assets.ing.com (ING's own CDN), 179093 bytes, 4 pages, 'Datum: 1 januari 2026'. Quote verbatim at th"
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on assets.ing.com (ING's own CDN), 179093 bytes, 4 pages, 'Datum: 1 januari 2026'. Quote verbatim at th",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "abn-amro-betaalpas": {
       "product": "ABN AMRO betaalpas",
@@ -367,7 +370,8 @@
       "docUrl": "https://assets-eu-01.kc-usercontent.com/35355cb5-f8a5-0105-c237-9bab7d11ff84/3ec88fbd-4326-4bf3-be18-ed80334ade03/20251001%20Informatiedocument%20Knab%20Betaalrekening.pdf",
       "docKind": "pdf",
       "docDate": "2025-10-01",
-      "docNote": "route-verified 2026-08-19; Rate and quote verify: 'Betalen met een betaalpas / In vreemde valuta 1,4% koersopslag over het opgenomen bedrag in euro' (the doc really do"
+      "docNote": "route-verified 2026-08-19; Rate and quote verify: 'Betalen met een betaalpas / In vreemde valuta 1,4% koersopslag over het opgenomen bedrag in euro' (the doc really do",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "knab-creditcard": {
       "product": "Knab creditcard",
@@ -1635,7 +1639,8 @@
       "docUrl": "https://www.icscards.nl/webdocuments/678/VISA-66-NL-072026%20AV%20Visa%20Worldcard%20Business",
       "docKind": "html",
       "docDate": "2026-07",
-      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business (pdf)\". PDF self-prints \"VISA-66-NL-07/2026\" and \"NNLDCVBICS\". Quote, art. 15 lid 4: \"De o"
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business (pdf)\". PDF self-prints \"VISA-66-NL-07/2026\" and \"NNLDCVBICS\". Quote, art. 15 lid 4: \"De o",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-visa-world-card-business-gold": {
       "product": "ICS Visa World Card Business Gold",
@@ -1660,7 +1665,8 @@
       "docUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
       "docKind": "html",
       "docDate": "2026-07",
-      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business Gold (pdf)\". PDF self-prints \"VISA-27-NL-07/2026\". Quote, art. 15 lid 4: \"De opslagcompone"
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business Gold (pdf)\". PDF self-prints \"VISA-27-NL-07/2026\". Quote, art. 15 lid 4: \"De opslagcompone",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-mastercard-business": {
       "product": "ICS Mastercard Business",
@@ -1685,7 +1691,8 @@
       "docUrl": "https://www.icscards.nl/webdocuments/676/MC-108-NL-072026%20AV%20ICS%20Mastercard%20Business",
       "docKind": "html",
       "docDate": "2026-07",
-      "docNote": "skeptic-confirmed 2026-08-19; FOUND IT — the per-card business terms PDF. Verbatim from art. 15 lid 4: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in"
+      "docNote": "skeptic-confirmed 2026-08-19; FOUND IT — the per-card business terms PDF. Verbatim from art. 15 lid 4: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-mastercard-corporate": {
       "product": "ICS Mastercard Corporate",
@@ -1710,7 +1717,8 @@
       "docUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
       "docKind": "html",
       "docDate": "2026-07",
-      "docNote": "skeptic-confirmed 2026-08-19; Same document body, ICS's own per-card edition for Mastercard Corporate. Anchor text on icscards.nl/zakelijk/info/algemene-voorwaarden: \"Algemene Voor"
+      "docNote": "skeptic-confirmed 2026-08-19; Same document body, ICS's own per-card edition for Mastercard Corporate. Anchor text on icscards.nl/zakelijk/info/algemene-voorwaarden: \"Algemene Voor",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "anwb-visa-classic-card": {
       "product": "ANWB Visa Classic Card",
@@ -2607,7 +2615,8 @@
       "lastReason": "wayback: no figure",
       "docUrl": "https://assets.ing.com/m/164f8ec0df799d44/original/Historische-rentetarieven-particulier-2026.pdf",
       "docDate": "2026-01-01",
-      "docFetch": "jina"
+      "docFetch": "jina",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "rabobank-rabo-spaarrekening": {
       "product": "Rabobank Rabo SpaarRekening",
