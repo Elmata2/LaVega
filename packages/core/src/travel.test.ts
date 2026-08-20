@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { Account } from "./model.js";
 import {
   countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT,
@@ -707,4 +707,45 @@ test("in euroland the cash advice is withdrawn, not repeated — those tariffs a
   expect(es.withdraw).toEqual([]);
   expect(es.withdrawHeadline).toContain("euro");
   expect(es.withdrawHeadline).not.toContain("€ 6,30"); // ING's foreign-currency price does not apply here
+});
+
+/* EEN GRATIS OPNAME IS EEN BEKENDE PRIJS, GEEN ONTBREKENDE.
+ *
+ * N26 Go en Metal zeggen in woorden dat opnemen in vreemde valuta gratis is, en de
+ * parser zocht een cijfer — dus vielen ze door naar "de bron noemt opnemen wel,
+ * maar zonder tarief" en uit een ranking die ze met 0% winnen. Dezelfde fout als
+ * een cashback van "No fee" als onbekend lezen: een percentagetest is het
+ * verkeerde instrument voor een uitgesproken nul.
+ */
+describe("parseWithdrawalFee: gratis", () => {
+  test("een uitgesproken gratis opname kost 0 en is bekend", () => {
+    const f = parseWithdrawalFee("Go krijgt geldopnames in vreemde valuta gratis.", 0);
+    expect(f.known).toBe(true);
+    expect(withdrawalCost(f, 100)).toBe(0);
+    expect(withdrawalEffectivePct(f, 100)).toBe(0);
+  });
+
+  test("Engels net zo goed — de catalogus bevat beide talen", () => {
+    expect(parseWithdrawalFee("Foreign-currency ATM withdrawals are free for these plans.", 0).known).toBe(true);
+  });
+
+  test("GRATIS MET EEN VRIJE RUIMTE IS NIET GRATIS en blijft onbekend", () => {
+    // Zeal: vijf opnames of € 200 per maand vrij, daarna betalen. De prijs hangt af
+    // van hoeveel hij opneemt, dus een 0 zou een bedrag beloven dat niet klopt.
+    for (const row of [
+      "You can make up to 5 free ATM withdrawals per month or withdraw up to 200 EUR free.",
+      "ATM Withdrawal Fee 2% (after the first 100 EUR monthly).",
+      "Free ATM limit (Monthly) is € 800 — above that, ATM Withdrawal 2%.",
+    ]) {
+      expect(parseWithdrawalFee(row, 0).known).toBe(false);
+    }
+  });
+
+  test("een geprijsde regel wint nog steeds van het woord gratis in dezelfde tekst", () => {
+    // "Betalen gratis, opnemen € 3,50 + 1,4%" mag geen 0 worden omdat het woord
+    // gratis erin staat.
+    const f = parseWithdrawalFee("Betalen is gratis; bij geldopname in vreemde valuta geldt € 3,50 + 1,40%.", 1.4);
+    expect(f.known).toBe(true);
+    expect(withdrawalEffectivePct(f, 100)).toBe(4.9);
+  });
 });

@@ -538,6 +538,16 @@ const WITHDRAWAL_CONDITIONAL =
 /** The document points at a rule it does not quote — "artikel 13.3", "een
  *  aparte regel met eigen tariefklassen". There is a price; we simply do not
  *  have it, and saying so is the only honest answer. */
+/** A withdrawal priced at nothing, said in words. Dutch and English, because the
+ *  catalogue holds both. */
+const WITHDRAWAL_FREE = /\b(?:gratis|kosteloos|geen kosten|zonder kosten|free of charge|free|no fee|fee-free)\b/i;
+
+/** ...and the allowance that makes "free" conditional. Five withdrawals a month,
+ *  EUR 200 a month, the first EUR 100 — every one of these means the price
+ *  depends on how much he takes out, so the row cannot be read as simply free. */
+const WITHDRAWAL_ALLOWANCE =
+  /\b(?:tot|boven|daarna|thereafter|after the first|up to|per maand|per month|per kalenderjaar|per calendar|first \d|\d+\s*(?:free\s*)?(?:withdrawals?|opnames?))\b/i;
+
 const WITHDRAWAL_CROSSREF = /artikel\s*\d|aparte regel|aparte post|aparte kosten in rekening/i;
 
 const PCT_RE = /(\d+(?:[.,]\d+)?)\s*%/g;
@@ -614,6 +624,23 @@ export function parseWithdrawalFee(conditions: string | null | undefined): Withd
     };
   }
 
+  // A STATED FREE WITHDRAWAL IS A KNOWN PRICE, NOT A MISSING ONE. N26 Go and
+  // Metal say foreign-currency ATM withdrawals are free, in words, and the search
+  // above looks for a numeral — so both fell through to "the source mentions
+  // withdrawing but names no rate" and dropped out of a ranking they would have
+  // won. Same mistake as reading a cashback of "No fee" as unknown: a percentage
+  // test is the wrong instrument for a stated absence.
+  //
+  // GUARDED, because free-with-a-cap is the common shape and is NOT free: Zeal
+  // allows five withdrawals or EUR 200 a month and charges after, Crypto.com has a
+  // monthly free limit, Bybit's first EUR 100 is free. If the same row carries an
+  // allowance, the price depends on how much he takes out and this stays unknown
+  // rather than becoming a zero he would rely on.
+  const freeRow = rows.find((r) => WITHDRAWAL_FREE.test(r) && !WITHDRAWAL_ALLOWANCE.test(r));
+  if (freeRow) {
+    return { components: [], known: true, quoted: freeRow, why: null, caveat: null };
+  }
+
   // Cash IS mentioned, but never with a price on it.
   const named = rows.find((r) => WITHDRAWAL_CROSSREF.test(r));
   return named
@@ -670,7 +697,13 @@ function componentsOf(row: string): WithdrawalComponent[] {
 /** Euros for one withdrawal of `amount`. Null is UNKNOWN and must never be
  *  rendered as free. */
 export function withdrawalCost(fee: WithdrawalFee, amount: number): number | null {
-  if (!fee.known || fee.components.length === 0) return null;
+  if (!fee.known) return null;
+  // KNOWN WITH NO COMPONENTS IS FREE, not unknown. `known` used to imply at least
+  // one priced component, so the two conditions were interchangeable; since a
+  // stated "gratis"/"free" now sets known with nothing to add up, they are not.
+  // Reading it as unknown kept N26 Go and Metal out of a withdrawal ranking they
+  // win outright.
+  if (fee.components.length === 0) return 0;
   let total = 0;
   for (const c of fee.components) {
     total += c.kind === "fixed" ? c.eur : Math.max((c.pct * amount) / 100, c.minEur ?? 0);
