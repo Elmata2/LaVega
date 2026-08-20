@@ -51,16 +51,32 @@ export const matchNorm = (s: unknown): string =>
  * (The accented duplicates — "cafe"/"café" — are now redundant because matchNorm
  * strips diacritics. They are harmless and left in place.) */
 
-export type CategoryRule = { match: string; category: string; sign?: "in" | "out" };
+export type CategoryRule = {
+  match: string;
+  category: string;
+  sign?: "in" | "out";
+  /** A rule that names a payment MECHANISM rather than a merchant. It is held
+   *  back until every reading of WHO the counterparty is has been tried, so a
+   *  betaalverzoek from a person is booked between people (his instruction) and
+   *  only a betaalverzoek from something that is not a person falls back on the
+   *  mechanism. */
+  weak?: true;
+};
 
 export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   /* BETAALVERZOEK — a Dutch payment request, and always a transfer between people
    * rather than a purchase. Every bank prints the phrase in the counterparty
    * ("T.J. van Wijngaarden via Rabo Betaalverzoek", "via ING Betaalverzoek"), so
-   * the phrase itself is the rule and the person's name is irrelevant to it. Both
-   * directions: he pays some and is paid others. */
-  { match: "betaalverzoek", category: "Overboekingen" },
-  { match: "tikkie", category: "Overboekingen" },
+   * the phrase itself is the rule.
+   *
+   * Both entries are `weak` since the 20-08-2026 review: he was explicit that a
+   * booking from one person to another is NOT "Overboekingen", and the person in
+   * "T.J. van Wijngaarden via Rabo Betaalverzoek" is right there in the
+   * counterparty. So the name is read first, and "Overboekingen" is what is left
+   * when the requester is not a person — a club collecting a contribution, say.
+   * Both directions: he pays some and is paid others. */
+  { match: "betaalverzoek", category: "Overboekingen", weak: true },
+  { match: "tikkie", category: "Overboekingen", weak: true },
   // --- overlap priority: specific product before its broader merchant ---
   { match: "amazon prime", category: "Entertainment" },
   { match: "prime video", category: "Entertainment" },
@@ -614,7 +630,404 @@ export function foreignCodeIn(text: string): string | null {
 /* Pre-normalized once at module load so categorize() does a plain substring test
  * per entry (no per-transaction matchNorm of the match strings). `sign` is
  * carried through so categorize() can skip a direction-specific entry. */
-export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: string; sign?: "in" | "out" }> =
-  NL_CATEGORY_RULES.map((r) => (r.sign
-    ? { m: matchNorm(r.match), category: r.category, sign: r.sign }
-    : { m: matchNorm(r.match), category: r.category }));
+export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: string; sign?: "in" | "out"; weak?: true }> =
+  NL_CATEGORY_RULES.map((r) => ({
+    m: matchNorm(r.match),
+    category: r.category,
+    ...(r.sign ? { sign: r.sign } : {}),
+    ...(r.weak ? { weak: r.weak } : {}),
+  }));
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * WHO THE COUNTERPARTY IS — a person, a collection, or the owner himself.
+ *
+ * App review 20-08-2026, item 6. Three readings he described precisely, and all
+ * three are LAST-RESORT readings: they only speak where a manual label, an
+ * own-account match, a user rule and every built-in merchant default have all
+ * stayed silent. That order is the entire safety argument, because "Albert
+ * Heijn" is two Titlecase words and would pass the person-name shape test — the
+ * person rule may never be allowed to see a row a merchant rule can place.
+ *
+ * The asymmetry that shapes every choice below: a SHOP called a person sends
+ * real spending into a person-to-person bucket, which silently distorts a total
+ * he reads; a PERSON left unrecognised only stays "onbekend", which is honest
+ * and which he can fix with one rule. So every doubt is resolved against
+ * "person" — the vetoes are generous on purpose.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/** A booking from one person to another. Deliberately NOT "Overboekingen": he
+ *  was explicit that money moving between two people is its own thing, and
+ *  "Overboekingen" is where a bank's own product wording ends up. */
+export const PERSON_CATEGORY = "Tussen personen";
+
+/** A SEPA direct debit whose merchant no rule knows. Not "the kind of spending"
+ *  — the mechanism, which is the only thing the row proves. */
+export const DIRECT_DEBIT_CATEGORY = "Automatische incasso";
+
+/** Just enough of a transaction to read its text. A structural type, so this
+ *  lexicon module stays free of the model (and of any import cycle). */
+export type TxText = { counterparty: string; description: string };
+
+const deaccent = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/* Titles Dutch, French and English exports print in front of a name. They are
+ * dropped before the shape is read, and their PRESENCE is itself evidence — a
+ * row that says "Hr" is about a person. */
+const HONORIFICS: ReadonlySet<string> = new Set([
+  "hr", "dhr", "mr", "mw", "mevr", "mev", "mej", "fam", "familie",
+  "mme", "mlle", "mle", "miss", "mrs", "ms", "sr", "sra", "srta",
+  "dr", "prof", "ir", "ing", "drs", "mgr",
+]);
+
+/* Tussenvoegsels — the unstressed particles inside a Dutch/European surname,
+ * including the abbreviations ING prints ("Hr J v d Fliert"). Two jobs: they
+ * must not be counted as name words, and a part that STARTS with one is refused
+ * outright ("De Smitse", "Le Chocolat" are businesses, and a surname-first
+ * export beginning with a particle is rare enough to give up rather than risk). */
+const TUSSENVOEGSELS: ReadonlySet<string> = new Set([
+  "van", "von", "de", "den", "der", "des", "del", "della", "di", "da", "das",
+  "dos", "do", "du", "la", "le", "les", "el", "al", "ten", "ter", "te", "tot",
+  "op", "in", "uit", "bin", "ibn", "bint", "abu", "'t", "’t", "t", "v", "d",
+  "vd", "vander", "y", "e", "af", "av", "zu",
+]);
+
+/* Words that appear in the name of a business, an institution or a bank's own
+ * product, and never in a person's name. Membership is tested on a whole token
+ * (dots and commas stripped), so "bar" cannot fire inside "Barbara".
+ *
+ * The list is long because a veto is CHEAP — it only ever costs a person row a
+ * category it would otherwise have got — while a missing veto is what puts a
+ * shop in the person bucket. Two-letter legal forms that double as initials
+ * ("SA", "AS", "AB", "AG", "CV") are deliberately absent: "AS Terjesen" is a
+ * person, and those forms are rare in a Dutch export. */
+const COMPANY_WORDS: ReadonlySet<string> = new Set([
+  // legal forms
+  "bv", "nv", "vof", "gmbh", "ug", "ltd", "limited", "llp", "llc", "inc", "plc",
+  "srl", "sarl", "sprl", "sl", "spa", "oyj", "kft", "zoo", "ev",
+  // organisation shapes
+  "stichting", "stg", "foundation", "fonds", "fund", "charity", "vereniging",
+  "cooperatie", "cooperatief", "maatschap", "holding", "groep", "group",
+  "partners", "associates", "ventures", "capital", "invest", "investments",
+  "beheer", "vastgoed", "makelaardij", "makelaars", "notariaat", "notaris",
+  "advocaten", "advocatenkantoor", "adviseurs", "advies", "accountants",
+  "administratie", "consultancy", "consulting", "agency", "bureau", "kantoor",
+  "dienst", "diensten", "services", "service", "solutions", "systems",
+  "technology", "technologies", "software", "digital", "media", "labs", "studio",
+  "works", "verhuur", "transport", "logistiek", "techniek", "installatie",
+  "schoonmaak", "catering", "horeca", "bakkerij", "slagerij", "apotheek",
+  "kliniek", "praktijk", "fysio", "tandarts", "huisarts", "verzekeringen",
+  "verzekering", "belastingdienst", "gemeente", "provincie", "waterschap",
+  "ministerie", "politie", "rechtbank", "cjib", "school", "college", "academie",
+  "universiteit", "university", "hogeschool", "students", "student",
+  "education", "development", "entrepreneurship", "international", "nederland",
+  "netherlands", "europe", "europa", "holland", "abroad",
+  "centre", "center", "institute", "instituut", "association", "society",
+  "union", "council", "trust", "network", "platform", "community",
+  "collective", "committee", "federation", "academy", "campus", "faculty",
+  // places money is spent, where a two-word Titlecase name is common
+  "museum", "theater", "bioscoop", "hotel", "hostel", "camping", "restaurant",
+  "cafe", "bar", "lounge", "brasserie", "eetcafe", "pizzeria", "snackbar",
+  "supermarkt", "markt", "winkel", "shop", "store", "boutique", "salon",
+  "kapper", "sport", "sports", "fitness", "gym", "club", "team", "business",
+  "life", "air", "airlines", "airways", "aviation", "travel", "tours",
+  "resort", "rental", "express", "tankstation", "garage",
+  // a bank's own wording for its products and its bookkeeping
+  "rekening", "spaarrekening", "betaalrekening", "creditcard", "incasso",
+  "machtiging", "aflossing", "rente", "kaartbijdrage", "betaling",
+  "betalingsverkeer", "betaalverzoek", "tikkie", "kosten", "zakelijk",
+  "verzamelbetaling", "opname",
+  "transactie", "reference", "factuur", "abonnement", "contributie",
+  "payments", "payment", "checkout", "invoice",
+  "toeslag", "uitkering", "salaris", "bank", "bankgiro", "giro",
+]);
+
+/* Endings that make a compound a business or a product even when the compound
+ * itself is not listed: "Debiteurenadministratie", "Bedrijfsrekening",
+ * "Incassobureau", "Bankkosten", "Belastingadviseurs". Required to be a strict
+ * suffix (longer than the ending) so the whole-word list keeps doing that job. */
+const COMPANY_SUFFIXES: readonly string[] = [
+  "rekening", "administratie", "kantoor", "bureau", "dienst", "diensten",
+  "kosten", "adviseurs", "advocaten", "accountants", "verzekeringen",
+  "bedrijf", "winkel", "markt", "bank", "groep", "verhuur", "beheer",
+];
+
+/* What a bank writes IN FRONT of a name, in either language: Revolut's "To A
+ * Steunenberg" / "Overschrijving van ELISA …", ING's "Betaling …". They are
+ * dropped like a title is — and so is one following connector ("van", "naar",
+ * "from"), because "van" at the start of what is left would otherwise be read
+ * as a tussenvoegsel and refuse the whole name. */
+const LEAD_PREFIXES: ReadonlySet<string> = new Set([
+  "to", "from", "payment", "transfer", "sent", "received",
+  "naar", "aan", "voor", "betaling", "overboeking", "overschrijving", "storting",
+]);
+const LEAD_CONNECTORS: ReadonlySet<string> = new Set(["van", "naar", "to", "from", "aan", "door", "by"]);
+
+const isCompanyWord = (token: string): boolean => {
+  const w = deaccent(token).toLowerCase().replace(/[.,]/g, "");
+  if (!w) return false;
+  if (COMPANY_WORDS.has(w)) return true;
+  return COMPANY_SUFFIXES.some((s) => w.length > s.length && w.endsWith(s));
+};
+
+/** Split a glued "A.Steunenberg" into its initials and its word, and leave
+ *  everything else alone. Some exports drop the space after an initial. */
+function splitGlued(token: string): string[] {
+  const m = /^((?:[A-Za-z]\.)+)([A-Za-z]{2,})$/.exec(token);
+  return m ? [m[1], m[2]] : [token];
+}
+
+/** "NXCHANGE B V" and "Jansen B.V." are the same legal form spelled two ways,
+ *  and the spaced one tokenizes into two innocent-looking initials. Collapsed
+ *  before anything else looks at it. The cost is a person whose initials happen
+ *  to be B V — a name we then leave alone, which is the safe direction. */
+const collapseLegalForm = (part: string): string =>
+  part.replace(/(^|\s)([bn])\.?\s*([vw])\.?(?=\s|$)/gi, (_m, lead, a, b) => `${lead}${a}${b}`);
+
+const tokensOf = (part: string): string[] =>
+  collapseLegalForm(part).trim().split(/\s+/).filter(Boolean).flatMap(splitGlued);
+
+type TokenKind = "honorific" | "tussenvoegsel" | "initials" | "word" | "junk";
+
+/** What a single token can be inside a person's name.
+ *
+ *  Case is load-bearing, and it is the rule that keeps Dutch prose out: a name
+ *  word must START WITH A CAPITAL, so "Betaling aan leverancier" is refused on
+ *  "aan" and "leverancier" without needing a dictionary of Dutch words.
+ *
+ *  A short ALL-CAPS token is ambiguous — "JAJ" is initials, "CHEN" is a surname
+ *  — and it is resolved by vowels: a 2-4 letter caps token with no vowel is
+ *  read as initials, otherwise as a name word. Either reading leads to the same
+ *  verdict for every shape we have seen; the distinction only matters for the
+ *  "one name word needs supporting evidence" test below. */
+function kindOf(token: string): TokenKind {
+  const t = deaccent(token);
+  const bare = t.replace(/[.,]/g, "").toLowerCase();
+  if (!bare) return "junk";
+  if (HONORIFICS.has(bare)) return "honorific";
+  // A single letter is a tussenvoegsel abbreviation only in lower case ("v d"),
+  // otherwise it is an initial ("V Ciumac").
+  if (TUSSENVOEGSELS.has(bare) && (bare.length > 1 || t === t.toLowerCase())) return "tussenvoegsel";
+  if (/^(?:[A-Za-z]\.)+$/.test(t) || /^[A-Za-z]$/.test(t)) return "initials";
+  if (/^[A-Z]{2,4}$/.test(t) && !/[AEIOUY]/.test(t)) return "initials";
+  if (/^[A-Z][A-Za-z'’-]*$/.test(t) && t.length >= 2) return "word";
+  return "junk";
+}
+
+/* A name can arrive with two people in it ("A,B", "A en/of B", "A und B") or
+ * with the mechanism glued on ("X via Rabo Betaalverzoek"). Each part is judged
+ * on its own and ONE person is enough — the vetoes are applied per part, which
+ * is what lets "via Rabo Betaalverzoek" be refused while the name is accepted. */
+const splitNameParts = (raw: string): string[] => raw.split(/,|&|\s+en\/of\s+|\s+e\/o\s+|\s+und\s+|\s+via\s+/i);
+
+function partIsPerson(part: string): boolean {
+  const tokens = tokensOf(part);
+  if (!tokens.length) return false;
+  if (tokens.some(isCompanyWord)) return false;
+  let i = 0;
+  let stripped = false;
+  let hadHonorific = false;
+  while (i < tokens.length) {
+    const bare = deaccent(tokens[i]).replace(/[.,]/g, "").toLowerCase();
+    if (HONORIFICS.has(bare)) { i++; stripped = true; hadHonorific = true; continue; }
+    if (LEAD_PREFIXES.has(bare)) { i++; stripped = true; continue; }
+    if (stripped && LEAD_CONNECTORS.has(bare) && i + 1 < tokens.length) { i++; continue; }
+    break;
+  }
+  const rest = tokens.slice(i);
+  if (!rest.length) return false;
+  if (kindOf(rest[0]) === "tussenvoegsel") return false;
+  let words = 0;
+  let initials = 0;
+  for (const t of rest) {
+    const k = kindOf(t);
+    if (k === "word") words++;
+    else if (k === "initials") initials++;
+    else if (k === "tussenvoegsel") continue;
+    else return false; // junk, or a second honorific mid-name: not a name we can read
+  }
+  // One name word on its own is a shop ("Coolblue", "Vitam"). It becomes a
+  // person only with supporting evidence: an initial or a title in front of it.
+  if (words === 0 || words > 5) return false;
+  if (words === 1 && initials === 0 && !hadHonorific) return false;
+  return true;
+}
+
+/** Whether a counterparty string is another person's NAME.
+ *
+ *  Reads the counterparty only — the description of a person's transfer is free
+ *  text ("Expense reimbursement", "monthly volunteer fee") and adding it would
+ *  only add ways to be wrong.
+ *
+ *  Known limitation, measured on his own exports: a firm named after the people
+ *  who founded it ("Witlox van den Boomen", an accountancy) is indistinguishable
+ *  from a person and lands here. A user rule fixes it, and a rule outranks this
+ *  reading. */
+export function isPersonName(counterparty: string): boolean {
+  const raw = (counterparty ?? "").trim();
+  if (!raw || raw.length > 70) return false;
+  // A digit anywhere means a shop number, a card number or a reference — never
+  // a name. This one veto removes most card and iDEAL rows on its own.
+  if (/\d/.test(raw)) return false;
+  if (/[@]|www\.|https?:/i.test(raw)) return false;
+  if (/[:;=<>|#*+()[\]{}%$€]/.test(raw)) return false;
+  // A country token means a card descriptor ("MERCADONA ... VALENCIA ESP"), and
+  // NLD counts here even though it is never a "foreign" signal elsewhere.
+  if (foreignCodeIn(raw) || /\bNLD\b/.test(raw)) return false;
+  return splitNameParts(raw).some(partIsPerson);
+}
+
+/** True when the row was paid at a physical terminal or cash machine. Reads the
+ *  whole row, not just the name. */
+export function isCardPayment(text: string): boolean {
+  return /kaartnr|kaartnummer|pasvolgnr|\bterm\b|\bterm:|betaalautomaat|geldautomaat|\bbea\b|\bgea\b|apple\s*pay|google\s*pay|contactloos/i.test(text);
+}
+
+/** True when the ROW carries the marks of a card payment at a MERCHANT: a card
+ *  or terminal number, or the country token a card descriptor ends with
+ *  ("TIENDA J LOPEZ" + "VALENCIA ESP"). Such a row is a purchase, whatever the
+ *  shop happens to be called — so it can never be a booking between two people.
+ *
+ *  This has to read the whole row and not just the name: the country lives in
+ *  the memo, and a Spanish shop called "TIENDA J LOPEZ" passes the person-name
+ *  shape test on its own. NLD counts here, unlike everywhere else — at this one
+ *  spot a domestic card descriptor is exactly as disqualifying as a foreign one. */
+export function isMerchantRow(text: string): boolean {
+  return isCardPayment(text) || foreignCodeIn(text) !== null || /\bNLD\b/.test(text);
+}
+
+/* ── An incasso, read off the row's own code ─────────────────────────────── */
+
+export type DirectDebit = {
+  /** The mandate the collection ran on ("Machtiging ID", Rabo's
+   *  "Machtigingskenmerk"), or null when the row only says it is a collection. */
+  machtigingId: string | null;
+  /** The creditor's SEPA identifier ("Incassant ID"), or null. */
+  incassantId: string | null;
+};
+
+/* ING prints "Machtiging ID: … Incassant ID: … Doorlopende incasso" on an
+ * incasso row; Rabobank has "Machtigingskenmerk" and "Incassant ID" columns;
+ * ABN's MT940 descriptor reads "SEPA Incasso algemeen doorlopend … Incassant:".
+ * The bare WORD "incasso" is deliberately NOT enough: "Centraal Justitieel
+ * Incasso Bureau" is a debt collector and ING's own "Incasso ING creditcard" is
+ * a credit-card settlement. A code, or the SEPA phrase — nothing looser. */
+const MACHTIGING_RE = /machtiging(?:s?kenmerk)?(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
+const INCASSANT_RE = /incassant(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
+const SEPA_INCASSO_RE = /\b(?:doorlopend|doorlopende|eenmalig|eenmalige)\s+(?:sepa\s+)?incasso\b|\bsepa\s+incasso\b|\bsepa\s+direct\s*debit\b/i;
+
+/** The mandate and creditor identifiers of a SEPA direct debit, or null when
+ *  this row is not one. Evidence, not a guess: every branch is a code or a
+ *  phrase the bank itself printed. */
+export function directDebit(tx: TxText): DirectDebit | null {
+  const raw = `${tx.counterparty} ${tx.description}`;
+  const m = MACHTIGING_RE.exec(raw);
+  const i = INCASSANT_RE.exec(raw);
+  if (!m && !i && !SEPA_INCASSO_RE.test(raw)) return null;
+  return { machtigingId: m ? m[1] : null, incassantId: i ? i[1] : null };
+}
+
+/* ── His own name ───────────────────────────────────────────────────────────
+ *
+ * USER DATA. The app does not know the owner's name, and it must never guess
+ * one: everything here takes a name that was GIVEN to it (see parseOwnName) and
+ * refuses to match when none was. The UI supplies it; core only decides whether
+ * a counterparty is that name. */
+
+export type OwnName = {
+  /** Lower-cased surname including its tussenvoegsels ("van der meer"). */
+  surname: string;
+  /** Lower-cased given names in order, as far as they were supplied. */
+  given: string[];
+};
+
+/** Read a name the owner typed into a surname + given names. Returns null for
+ *  anything unusable (empty, one letter, punctuation) — no name, no matching. */
+export function parseOwnName(fullName: string): OwnName | null {
+  const tokens = tokensOf(deaccent(fullName ?? "").toLowerCase())
+    .map((t) => t.replace(/[.,]/g, ""))
+    .filter((t) => /^[a-z'’-]+$/.test(t) && !HONORIFICS.has(t));
+  if (tokens.length === 0) return null;
+  // The surname starts at the first tussenvoegsel that still has a word behind
+  // it ("jan van der meer" -> "van der meer"); otherwise it is the last token.
+  let start = tokens.length - 1;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (TUSSENVOEGSELS.has(tokens[i])) { start = i; break; }
+  }
+  const surnameParts = tokens.slice(start);
+  const last = surnameParts[surnameParts.length - 1];
+  if (!last || last.length < 2) return null;
+  return { surname: surnameParts.join(" "), given: tokens.slice(0, start) };
+}
+
+/** Whether a counterparty is one of the owner's OWN names — surname alone,
+ *  initial(s) plus surname, or the full name, in either order and with or
+ *  without a title. Anything that contradicts what he told us is somebody else:
+ *  "B Steunenberg" and "Nadia Lina Steunenberg" are relatives, not him.
+ *
+ *  Initials are compared position by position over their common length, so an
+ *  export that prints MORE initials than he gave us ("AB Steunenberg" when we
+ *  know "Alexander") still matches, while a different first initial never does. */
+export function isOwnName(counterparty: string, names?: readonly OwnName[]): boolean {
+  if (!names || names.length === 0) return false;
+  const raw = (counterparty ?? "").trim();
+  if (!raw || /\d/.test(raw)) return false;
+  for (const part of splitNameParts(raw)) {
+    const tokens = tokensOf(part);
+    if (!tokens.length || tokens.some(isCompanyWord)) continue;
+    const plain = tokens
+      .map((t) => deaccent(t).replace(/[.,]/g, ""))
+      .filter((t) => /^[A-Za-z'’-]+$/.test(t));
+    if (plain.length !== tokens.length) continue; // junk in the part: not a name
+    const lower = plain.map((t) => t.toLowerCase());
+    for (const name of names) {
+      const surname = name.surname.split(" ");
+      const at = indexOfSequence(lower, surname);
+      if (at < 0) continue;
+      const rest = [...plain.slice(0, at), ...plain.slice(at + surname.length)]
+        .filter((t) => {
+          const b = t.toLowerCase();
+          return !HONORIFICS.has(b) && !LEAD_PREFIXES.has(b) && !LEAD_CONNECTORS.has(b);
+        });
+      if (rest.length === 0) return true; // the bare surname, which he named himself
+      if (restMatchesGiven(rest, name.given)) return true;
+    }
+  }
+  return false;
+}
+
+const indexOfSequence = (hay: string[], needle: string[]): number => {
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    let ok = true;
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) { ok = false; break; }
+    if (ok) return i;
+  }
+  return -1;
+};
+
+/** Do the tokens around the surname agree with the given names we were told?
+ *
+ *  A token that IS one of his given names agrees. A token of five letters or
+ *  more that is not one of them is somebody else's first name, and disagrees.
+ *  Everything shorter is read as initials and compared letter by letter over
+ *  the length the two sides share, so "A" and "AB" both agree with "Alexander"
+ *  while "B" and "NL" never do.
+ *
+ *  With no given name on file there is nothing to compare an initial against,
+ *  and "A Steunenberg" is then refused rather than guessed — which is why the
+ *  UI has to ask for a FULL name and not only a surname. */
+function restMatchesGiven(rest: string[], given: readonly string[]): boolean {
+  const known = given.map((g) => g[0]);
+  const initials: string[] = [];
+  for (const t of rest) {
+    const w = t.toLowerCase();
+    if (given.includes(w)) continue; // a given name, written out
+    if (w.length >= 5) return false; // someone else's first name
+    initials.push(...w.replace(/[^a-z]/g, "").split(""));
+  }
+  if (initials.length === 0) return true;
+  if (known.length === 0) return false; // an initial we cannot check is not a match
+  for (let i = 0; i < Math.min(initials.length, known.length); i++) {
+    if (initials[i] !== known[i]) return false;
+  }
+  return true;
+}

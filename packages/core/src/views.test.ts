@@ -90,7 +90,11 @@ test("categorize: a whitespace-only rule match does NOT match everything (guards
   // Use a tx that matches no user rule AND no built-in NL default, so this
   // isolates the whitespace guard (txsForMonths[1] is "Albert Heijn", which now
   // hits a built-in default — that's covered in categories.test.ts).
-  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Jan Jansen", description: "particuliere betaling", category: "", manual: false };
+  // The counterparty must match no user rule, no built-in default AND no
+  // last-resort reading of who it is: "Jan Jansen" used to serve here and is now
+  // read as a person (review 20-08-2026, item 6), so this uses a kiosk number
+  // instead — a digit rules the person reading out.
+  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Quiosc 4412", description: "particuliere betaling", category: "", manual: false };
   expect(categorize(unmatched, bad)).toBe("onbekend");
 });
 
@@ -416,9 +420,14 @@ describe("onbekend: the rows he showed us", () => {
     expect(categorize(t, [])).toBe("Reizen");
   });
 
-  test("a Rabo Betaalverzoek is a transfer between people", () => {
+  test("a Rabo Betaalverzoek is a booking between two people, not an Overboeking", () => {
+    // CHANGED by the 20-08-2026 review, item 6, and deliberately: he is explicit
+    // that money moving from one person to another is its own thing and NOT
+    // "Overboekingen". The person is right there in the counterparty; "via Rabo
+    // Betaalverzoek" is only the mechanism, and the mechanism is what is left
+    // when the requester is not a person (asserted in categories.test.ts).
     const t = row("T.J. van Wijngaarden via Rabo Betaalverzoek", "Naam: T.J. van Wijngaarden via Rabo Betaalverzoek Omschrijving: Vacance IBAN: NL42RABO0114668043", -52.8);
-    expect(categorize(t, [])).toBe("Overboekingen");
+    expect(categorize(t, [])).toBe("Tussen personen");
   });
 
   test("a FOREIGN ONLINE purchase is NOT called travel — no terminal, no claim", () => {
