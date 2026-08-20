@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, CatalogueEntryLike, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
 import {
   accountLabel,
   accountReturns,
@@ -10,7 +10,6 @@ import {
   subscriptionPriceIncreases,
   subscriptionOverlaps,
   subscriptionCoverage,
-  resolveHousingCost,
   analyzeInterest,
   keptRate,
   MARGIN_PCT,
@@ -21,10 +20,11 @@ import {
   RATES_AS_OF,
   cashbackSwitchGain,
   marketCashbackOptions,
+  categorize,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
-import { formatEuro } from "../format";
+import { formatEuro, monthLabelNL } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import "../styles/views.css";
@@ -42,7 +42,19 @@ import "../styles/views.css";
  * The thin/empty subscriptions state is INFORMATIVE, not seeded: it counts what
  * LaVega actually saw in his own transactions and explains the pattern it looks
  * for. The worked example is behind a disclosure and labelled as an example; it
- * is never written to the vault. */
+ * is never written to the vault.
+ *
+ * APP REVIEW 2 (20 August) — three removals and one reshape, all his call:
+ *   - woonlasten is GONE. The derivation was right; the tile was not acted on,
+ *     and this screen is about subscriptions and rates.
+ *   - the prijsstijging and dubbele-functie tiles render only when they have a
+ *     number to report. "Don't render an empty one." The check is still stated,
+ *     in one clause in the Abonnementen footer, so an absent tile cannot read as
+ *     an absent check.
+ *   - Cashback now has the Rente module's three beats: what your own best card
+ *     would return, what the best card we can PROVE returns, and the difference
+ *     in euros on a base he recognises. See `monthlyBaseCents` for why the base
+ *     is the monthly average and not last month. */
 
 // Where to fetch the public rate benchmark. Set VITE_RATES_URL to your rates
 // service; in dev it defaults to the local Hono server (run `pnpm dev:server`).
@@ -59,9 +71,10 @@ const RATES_SOURCE_LABEL: Record<RatesResult["source"], string> = {
 type OptimalisatieProps = {
   txs: Tx[];
   accounts: Account[];
-  /** Categorisation inputs — the housing cost is READ from the transactions
-   *  (core's `resolveHousingCost`), and that needs the same rules and own-account
-   *  set every other categorised view uses. */
+  /** Categorisation inputs. The cashback base counts SPENDING, so it has to
+   *  exclude his own transfers — a sweep to savings is not consumption — and
+   *  that needs the same rules and own-account set every other categorised view
+   *  uses. Core's `accountReturns` takes them for the same reason. */
   rules: Rule[];
   own: OwnAccounts;
   asOf: string;
@@ -69,6 +82,11 @@ type OptimalisatieProps = {
   /** What the agents have learned, for the cashback figures. Keyed by
    *  productOf(), the same key the travel agent uses. */
   facts: readonly LearnedFact[];
+  /** The product catalogue, for the market-wide cashback ranking. Injectable so
+   *  a test can state its own market instead of asserting against whatever the
+   *  catalogue happened to hold that morning; the bundled one is the default and
+   *  App.tsx passes nothing. */
+  entries?: readonly CatalogueEntryLike[];
   onRateCommit: (key: string, value: string) => void;
 };
 
@@ -100,6 +118,74 @@ const EXAMPLE_SUBS = [
   { name: "Adobe Creative Cloud", fn: "Software", monthly: 6899, last: 6899, change: 0 },
   { name: "Odido", fn: "Telecom", monthly: 3500, last: 3500, change: -0.05 },
 ] as const;
+
+/** Money moved between his own accounts is not spending. Same string core's
+ *  `annualSpendCents` excludes, and for the same reason: a €50k sweep to savings
+ *  is not €50k of consumption, so it must not sit in a cashback base either. */
+const OWN_TRANSFER = "Eigen overboeking";
+
+/** Calendar arithmetic on the ISO string, so nothing here reads a clock or a
+ *  timezone. `shiftMonth("2025-01", 2) === "2024-11"`. */
+function shiftMonth(ym: string, back: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const t = y * 12 + (m - 1) - back;
+  return `${String(Math.floor(t / 12)).padStart(4, "0")}-${String((t % 12) + 1).padStart(2, "0")}`;
+}
+
+function lastDayOf(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const len = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  return `${ym}-${String(len).padStart(2, "0")}`;
+}
+
+/** WHAT HE SPENT IN THE LAST MONTH THE IMPORT COVERS END TO END.
+ *
+ *  Not "the last month with data": a statement export made on the 15th holds
+ *  half a month, and half a month printed as "last month" understates what he
+ *  spends while looking precise doing it. So walk back until a month is covered
+ *  from its first day to its last, and stop at the month the import starts in —
+ *  everything before that is only worse.
+ *
+ *  Returns null when no month is covered in full, which is a legitimate answer
+ *  and prints as nothing at all rather than as a zero. */
+function lastFullMonthSpend(
+  keys: readonly string[],
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts,
+  asOf: string,
+): { ym: string; cents: number } | null {
+  const set = new Set(keys);
+  const mine = txs.filter((t) => set.has(t.accountKey) && t.date <= asOf);
+  if (mine.length === 0) return null;
+  const dates = mine.map((t) => t.date).sort();
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+
+  for (let back = 0; back < 24; back++) {
+    const ym = shiftMonth(last.slice(0, 7), back);
+    const start = `${ym}-01`;
+    const end = lastDayOf(ym);
+    if (first > start) break; // the import begins inside this month
+    if (last < end || end > asOf) continue; // the month is not finished yet
+    let cents = 0;
+    for (const t of mine) {
+      if (t.amount >= 0) continue;
+      if (t.date < start || t.date > end) continue;
+      if (categorize(t, rules, own) === OWN_TRANSFER) continue;
+      cents += Math.round(-t.amount * 100);
+    }
+    return { ym, cents };
+  }
+  return null;
+}
+
+/** What a product IS, not only what it pays. Every covered cashback figure in
+ *  the catalogue today belongs to a prepaid or a crypto card, so a ranking that
+ *  printed a bank's name and a percentage would quietly pass one off as an
+ *  ordinary bank card. Valuta labels the same two kinds for the same reason. */
+const ALT_KIND_LABEL: Record<string, string> = { prepaid: "prepaidkaart", crypto: "cryptokaart" };
 
 /** Editable rente-% cell. Holds a free-form draft while typing (so "1," etc.
  *  don't fight a number input) and commits on blur; blank clears the override
@@ -143,7 +229,7 @@ function outflowFacts(txs: Tx[]) {
   return { outflows, merchants: byMerchant.size, repeated, first, last };
 }
 
-export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, facts, onRateCommit }: OptimalisatieProps) {
+export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, facts, entries = CATALOGUE_ENTRIES, onRateCommit }: OptimalisatieProps) {
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
@@ -158,11 +244,11 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   const coverage = useMemo(() => subscriptionCoverage(txs), [txs]);
   const cadenceName = (days: number) => CADENCE_LABEL_NL[days] ?? `elke ${days} dagen`;
 
-  // Woonlasten read from the data instead of typed in. Core owns the whole
-  // derivation (`resolveHousingCost`); the manual figure is `null` because there
-  // is nowhere to type one — which is the point. `monthlyCents: null` means
-  // LaVega does not know, and is printed as "onbekend", never as €0.
-  const housing = useMemo(() => resolveHousingCost(null, txs, rules, own), [txs, rules, own]);
+  // WOONLASTEN REMOVED 20 Aug (app review 2). The derivation was right — core's
+  // `resolveHousingCost` read the rent off his own transactions — and it still
+  // belongs somewhere; it does not belong on the screen about subscriptions and
+  // interest, where it was a fifth tile he never acted on. `resolveHousingCost`
+  // stays in core, unused here on purpose.
 
   // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
   // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
@@ -232,7 +318,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
      "which of YOUR accounts is best", which is a fair question and not the one
      that finds the four percent he described — Trading 212 at 1,5% cashback and
      3,5% savings against an ING at 0% and 1,5%. */
-  const cashbackOffers = useMemo(() => marketCashbackOptions(CATALOGUE_ENTRIES), []);
+  const cashbackOffers = useMemo(() => marketCashbackOptions(entries), [entries]);
   const bestHeldCashback = useMemo(() => {
     const known = rankable.map((r) => r.cashbackPct).filter((p): p is number => p !== null);
     return known.length ? Math.max(...known) : null;
@@ -241,11 +327,55 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
     () => rankable.reduce((sum, r) => sum + (r.spend?.perYearCents ?? 0), 0),
     [rankable],
   );
-  const cashbackUpgrade = useMemo(
-    () => cashbackSwitchGain(bestHeldCashback, cashbackOffers[0], yearlySpendCents),
-    [bestHeldCashback, cashbackOffers, yearlySpendCents],
-  );
   const measured = rankable.filter((r) => r.spend.perYearCents !== null);
+
+  /* THE SPEND BASE — the one decision in this module, and he left it open:
+     "use average expenditure per month, or average expenditures of last month".
+     IT IS THE MONTHLY AVERAGE, for three reasons and one of them is decisive.
+       1. Core already guards it: `annualSpendCents` refuses a window under
+          MIN_SPEND_DAYS, refuses an account silent for more than 90 days, and
+          flags a window under half a year as extrapolated. A single month
+          carries none of those guards.
+       2. A card is a year-long decision. One month is one sample, and the month
+          with a holiday in it would recommend a card the other eleven don't.
+       3. Decisive: the last month in an import is almost always PARTIAL, because
+          the export was made mid-month. A half month priced as a full one
+          understates the gain and looks precise doing it.
+     Last month is still shown — he asked for it and it is the number he can
+     check against his own memory — but as the last month the import covers in
+     FULL, next to the average, never as the base of the claim. */
+  const monthlyBaseCents = measured.length > 0 && yearlySpendCents > 0 ? Math.round(yearlySpendCents / 12) : null;
+  const baseObservedDays = measured.length > 0 ? Math.max(...measured.map((r) => r.spend.observedDays)) : 0;
+  const baseIsUpperBound = measured.some((r) => r.spend.kind === "upper-bound");
+  const lastFull = useMemo(
+    () => lastFullMonthSpend(measured.map((r) => r.account.key), txs, rules, own, asOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [measured.map((r) => r.account.key).join("|"), txs, rules, own, asOf],
+  );
+
+  const bestOffer = cashbackOffers[0];
+  const bestOfferKind = useMemo(() => {
+    if (!bestOffer) return "";
+    return entries.find((e) => e.id === bestOffer.productId)?.kind ?? "";
+  }, [bestOffer, entries]);
+  /* Every proven cashback figure belongs to a prepaid or crypto card, which is a
+     fact about the CATALOGUE and has to be said out loud — otherwise the module
+     reads as "here is the best bank card", which is not what it found. */
+  const allOffersAlt = useMemo(
+    () =>
+      cashbackOffers.length > 0 &&
+      cashbackOffers.every((o) => ALT_KIND_LABEL[entries.find((e) => e.id === o.productId)?.kind ?? ""] !== undefined),
+    [cashbackOffers, entries],
+  );
+  /* NEVER A EURO FIGURE WITH A HALF MISSING. `cashbackSwitchGain` already
+     refuses when his own rate is unknown; the base is the other half, and it is
+     checked here so the message below can name WHICH half is missing. */
+  const cashbackUpgrade = useMemo(
+    () => (monthlyBaseCents === null ? null : cashbackSwitchGain(bestHeldCashback, bestOffer, yearlySpendCents)),
+    [bestHeldCashback, bestOffer, yearlySpendCents, monthlyBaseCents],
+  );
+  /** The field minus the card the comparison already named. */
+  const otherOffers = cashbackUpgrade ? cashbackOffers.slice(1, 5) : cashbackOffers.slice(0, 5);
   // How the base was measured, so the figure can be checked against the same
   // afschrift it was read from rather than taken on trust.
   const spendOf = useMemo(() => new Map(returns.map((r) => [r.account.key, r.spend])), [returns]);
@@ -263,25 +393,25 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           <div className="kpi-value">{subs.length}</div>
           <div className="eyebrow">{euro(totalMonthlyCents)}/mnd</div>
         </div>
-        <div className="kpi">
-          <div className="kpi-label">Prijsstijgingen</div>
-          <div className={`kpi-value ${increases.length > 0 ? "text-warn" : ""}`}>{increases.length}</div>
-          <div className="eyebrow">herkend</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Dubbele functies</div>
-          <div className={`kpi-value ${overlaps.length > 0 ? "text-warn" : ""}`}>{overlaps.length}</div>
-          <div className="eyebrow">overlap</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Woonlasten</div>
-          <div className="kpi-value">{housing.monthlyCents === null ? "onbekend" : euro(housing.monthlyCents)}</div>
-          <div className="eyebrow">
-            {housing.monthlyCents === null
-              ? "niet in de data gezien"
-              : `${housing.proposal?.kind ?? "wonen"} · uit je transacties`}
+        {/* Only when there is something to report. A tile reading 0 is a module
+            telling you it has nothing to say, and it costs a column to say it —
+            "don't render an empty one". The CHECK is still reported, in one
+            clause in the Abonnementen footer, so an absent tile cannot read as
+            an absent check. */}
+        {increases.length > 0 && (
+          <div className="kpi">
+            <div className="kpi-label">Prijsstijgingen</div>
+            <div className="kpi-value text-warn">{increases.length}</div>
+            <div className="eyebrow">herkend</div>
           </div>
-        </div>
+        )}
+        {overlaps.length > 0 && (
+          <div className="kpi">
+            <div className="kpi-label">Dubbele functies</div>
+            <div className="kpi-value text-warn">{overlaps.length}</div>
+            <div className="eyebrow">overlap</div>
+          </div>
+        )}
         <div className="kpi">
           <div className="kpi-label">Rente laten liggen</div>
           <div className={`kpi-value ${interest.totalExtraPerYearCents > 0 ? "text-warn" : "text-pos"}`}>
@@ -301,6 +431,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               <span>
                 {subs.length} {subs.length === 1 ? "abonnement" : "abonnementen"} · samen {euro(totalMonthlyCents)} per
                 maand, {euro(totalMonthlyCents * 12)} per jaar.
+                {increases.length === 0 && overlaps.length === 0 && " Geen prijsstijging en geen dubbele dienst gezien."}
               </span>
             ) : (
               <span>Herkend uit je eigen transacties — er wordt niets bijverzonnen.</span>
@@ -333,19 +464,6 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </>
             )}
           </p>
-
-          {/* The biggest recurring fixed cost there is, and he should not have
-              to type it: core reads it off the same transactions. Never a
-              number without the row it came from. */}
-          {housing.source === "detected" && housing.proposal && housing.monthlyCents !== null && (
-            <p className="reason">
-              Je grootste vaste last is <strong>{housing.proposal.kind}</strong> aan{" "}
-              <strong>{housing.proposal.counterparty}</strong>:{" "}
-              <span className="reason-figure">{euro(housing.monthlyCents)}</span> per maand, gezien in{" "}
-              {housing.proposal.occurrences} betalingen, laatst op {housing.proposal.lastDate}. Zelf invullen
-              hoeft niet — dit komt uit je eigen afschriften.
-            </p>
-          )}
 
           {subs.length === 0 ? (
             <div className="empty-guide">
@@ -692,21 +810,19 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           </details>
         </Module>
 
-        {/* ── Cashback: dezelfde vraag, maar op wat je uitgeeft ──────────── */}
+        {/* ── Cashback: de rentemodule's vorm, op wat je uitgeeft ─────────── *
+            Three beats, the same three the Rente module has: what you get now,
+            what the best one we can PROVE gives, and the difference in euros on
+            a base he recognises. His ask: "this could be cashback that you do
+            not have ... what you would basically get back if you had used that
+            card. Give the user a bit more fuel." */}
         <Module
           span={2}
           title="Cashback"
           footer={<span>Percentages gelden op wat je uitgeeft, niet op je saldo.</span>}
         >
-          {routing.length === 0 && cashbackGaps.length === 0 && (
-            <p className="block-empty">
-              {spendable.length === 0
-                ? "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken."
-                : rankable.length >= 2 && measured.length === 0
-                  ? `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${MIN_SPEND_DAYS} dagen). Zonder die basis is er een percentage, maar geen bedrag.`
-                  : "Je betaalt al met de kaart die het meeste teruggeeft."}
-            </p>
-          )}
+          {/* First, the cards he ALREADY holds — a switch he can make today
+              beats one that needs an application. */}
           {routing.map((a) => {
             const base = spendOf.get(a.from.key);
             return (
@@ -735,39 +851,116 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </div>
             );
           })}
-          {cashbackOffers.length > 0 && (
+
+          {cashbackUpgrade && monthlyBaseCents !== null && bestHeldCashback !== null ? (
+            <div className="reason-list" style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}>
+              {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
+                  NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
+                  spending sits on the 0% pas, so the first row is what that card
+                  WOULD return on this base — a rate comparison, not a statement
+                  about what lands on his account. Labelling it as income he
+                  already gets would be a number he can check and find wrong. */}
+              <div className="position-row" data-testid="cashback-nu">
+                <span>
+                  <strong>Op je beste eigen kaart</strong> — {pct(bestHeldCashback)}
+                </span>
+                <span>{euro(Math.round((monthlyBaseCents * bestHeldCashback) / 100))} per maand</span>
+              </div>
+              <div className="position-row" data-testid="cashback-beste">
+                <span>
+                  <strong>Op de beste kaart die we kunnen aantonen</strong> —{" "}
+                  {pct(cashbackUpgrade.best.cashbackPct)} bij {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}{" "}
+                  <span className="cell-sub">({cashbackUpgrade.best.product}, peildatum {cashbackUpgrade.best.asOf})</span>
+                  {ALT_KIND_LABEL[bestOfferKind] ? <> <span className="badge">{ALT_KIND_LABEL[bestOfferKind]}</span></> : null}
+                </span>
+                <span>{euro(Math.round((monthlyBaseCents * cashbackUpgrade.best.cashbackPct) / 100))} per maand</span>
+              </div>
+              <div className="position-row" data-testid="cashback-verschil">
+                <span>
+                  <strong>Verschil</strong> — wat dezelfde uitgaven daar extra opleveren
+                </span>
+                <span className="text-pos">
+                  {euro(Math.round(cashbackUpgrade.extraPerYearCents / 12))} per maand ·{" "}
+                  {euro(cashbackUpgrade.extraPerYearCents)} per jaar
+                </span>
+              </div>
+              {/* The base, and how it was measured, so the figure can be redone
+                  against the same afschrift instead of taken on trust. Two
+                  paragraphs: the number first, then what it does and does not
+                  claim — one block held all of it and read as fine print. */}
+              <p className="cell-sub" data-testid="cashback-basis">
+                Gerekend over {baseIsUpperBound ? "maximaal " : ""}
+                {euro(monthlyBaseCents)} aan kaartuitgaven <strong>gemiddeld per maand</strong>, gemeten over{" "}
+                {baseObservedDays} dagen afschrift.
+                {lastFull ? ` Vorige volle maand (${monthLabelNL(lastFull.ym)}) was dat ${euro(lastFull.cents)}.` : ""}
+              </p>
+              <p className="cell-sub">
+                Beide regels hierboven zijn dezelfde uitgaven op een andere kaart — een vergelijking van tarieven, niet
+                wat er vandaag op je rekening komt. Het verschil is daarom minstens dit: wat nu op een kaart met minder
+                cashback staat, levert nog meer op.
+                {baseIsUpperBound &&
+                  " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was, dus huur en incasso's zitten nog in die basis — vandaar \"maximaal\"."}
+              </p>
+              {/* THE GATE, IF THERE IS ONE, IN FULL. A 5% card behind a staking
+                  tier is not a 5% card for him, so the euro figure above cannot
+                  stand without its conditions. It was truncated at first, and
+                  that was worse than not showing it: the Obsidian text names its
+                  tier gate near the END, so the clamp cut off the only part that
+                  mattered. Full text, collapsed — nothing hidden, nothing
+                  shouted. */}
+              {cashbackUpgrade.best.conditions && (
+                <details className="cell-sub">
+                  <summary>Aan dit tarief hangen voorwaarden — lees ze voordat je hierop rekent.</summary>
+                  <p style={{ margin: ".35rem 0 0" }}>{cashbackUpgrade.best.conditions}</p>
+                  <p style={{ margin: ".35rem 0 0" }}>Bron: {cashbackUpgrade.best.sourceUrl}</p>
+                </details>
+              )}
+              {allOffersAlt && (
+                <p className="cell-sub">
+                  <strong>Geen gewone bankkaart</strong> in de catalogus heeft een aantoonbaar cashbackpercentage —
+                  alle {cashbackOffers.length} die we kunnen onderbouwen zijn prepaid- of cryptokaarten. Dat is wat de
+                  bronnen zeggen, niet een keuze van LaVega.
+                </p>
+              )}
+            </div>
+          ) : (
+            /* WHY THERE IS NO FIGURE, in the order the reasons actually apply.
+               Each names the half that is missing; none of them concludes that
+               he is already in the best place, because an absence of a
+               comparison is not a comparison. */
+            <p className="block-empty" style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}>
+              {spendable.length === 0
+                ? "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken."
+                : bestHeldCashback === null
+                  ? "Wat dit jou zou opleveren weet LaVega nog niet: de cashback van je eigen kaarten is onbekend, en zonder die helft is er geen verschil te berekenen."
+                  : monthlyBaseCents === null
+                    ? `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${MIN_SPEND_DAYS} dagen). Zonder die basis is er een percentage, maar geen bedrag.`
+                    : cashbackOffers.length === 0
+                      ? "Geen enkele kaart in de catalogus heeft een aantoonbaar cashbackpercentage — er is dus niets om je eigen kaart tegen af te zetten."
+                      : "Je beste kaart nu doet het even goed of beter — er is niets te winnen."}
+            </p>
+          )}
+
+          {/* The rest of the field, without repeating the card named above — four
+              Crypto.com tiers under a Crypto.com headline was the module talking
+              to itself. */}
+          {otherOffers.length > 0 && (
             <div className="opt-row" style={{ marginTop: ".75rem" }}>
               <p style={{ margin: 0 }}>
-                <strong>Wat je zou kunnen openen</strong>{" "}
-                <span className="cell-sub">— alle kaarten die we kunnen aantonen, niet alleen de jouwe</span>
+                <strong>{cashbackUpgrade ? "Andere kaarten" : "Kaarten"} die we kunnen aantonen</strong>{" "}
+                <span className="cell-sub">— niet alleen de jouwe</span>
               </p>
               <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
-                {cashbackOffers.slice(0, 5).map((o) => (
+                {otherOffers.map((o) => (
                   <li key={o.productId}>
-                    <strong>{pct(o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}{o.product}
-                    {o.conditions ? <> — {o.conditions}</> : null}{" "}
+                    <strong>{pct(o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}{o.product}{" "}
                     <span style={{ opacity: 0.7 }}>(peildatum {o.asOf})</span>
                   </li>
                 ))}
               </ul>
-              {/* The euro figure appears ONLY when both halves are known: what he
-                  earns today and what he spends. Either one missing and this is a
-                  guess with a currency symbol in front of it. */}
-              {cashbackUpgrade ? (
-                <p style={{ margin: ".4rem 0 0" }}>
-                  Op {euro(yearlySpendCents)} aan uitgaven per jaar is dat{" "}
-                  <strong>{euro(cashbackUpgrade.extraPerYearCents)} extra</strong> tegenover je beste
-                  kaart nu ({pct(bestHeldCashback ?? 0)}).
-                </p>
-              ) : (
-                <p className="cell-sub" style={{ margin: ".4rem 0 0" }}>
-                  {bestHeldCashback === null
-                    ? "Wat dit jou zou opleveren weet LaVega nog niet: de cashback van je eigen kaarten is onbekend."
-                    : "Je beste kaart nu doet het even goed of beter — er is niets te winnen."}
-                </p>
-              )}
             </div>
           )}
+
           {cashbackGaps.length > 0 && (
             <p className="cell-sub">
               {/* Name a way to close the gap that EXISTS. There is no cashback

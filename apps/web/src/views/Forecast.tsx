@@ -4,7 +4,6 @@ import { formatEuro } from "../format";
 import {
   bannerState,
   confidenceLabel,
-  coverageNotes,
   hasBand,
   isThinData,
   splitDrivers,
@@ -137,9 +136,11 @@ function ForecastBanner({
  *  The band is drawn only when the engine could MEASURE one. It used to be
  *  filled in from a fallback constant whenever the opening balance was known,
  *  which drew a narrow, confident-looking ribbon around scopes we knew almost
- *  nothing about. No band now means no band on screen, and the coverage list
- *  underneath says why. It is one standard deviation of measured variation —
- *  not a percentile, despite what this comment used to call it. */
+ *  nothing about. No band now means no band on screen — and since the coverage
+ *  notes were removed on 20 August, the ABSENCE of the band is the whole signal,
+ *  so it must never be drawn from a constant again. It is one standard deviation
+ *  of measured variation — not a percentile, despite what this comment used to
+ *  call it. */
 function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: LowestPoint | null; bufferCents: number }) {
   if (f.openingCents === null) {
     return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
@@ -222,7 +223,6 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
   const state = bannerState(f);
   const thin = isThinData(f);
   const lowest = findLowestPoint(f);
-  const notes = coverageNotes(f);
   const { inkomsten, uitgaven } = splitDrivers(f.drivers);
   const ended = f.basis?.endedStreams ?? [];
 
@@ -296,28 +296,14 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
         </section>
       </div>
 
-      {/* Waarop de prognose rust. This block is the answer to "prove you
-          forecast more accurately than my spreadsheet": a spreadsheet is
-          trusted because its owner can see every cell, so the forecast has to
-          show its own inputs and, above all, where they run out. */}
-      {notes.length > 0 && (
-        <section className="card" aria-label="Waar deze prognose op rust">
-          <h3 className="drivers-heading">Waar deze prognose op rust</h3>
-          <div className="drivers-list">
-            {notes.map((n) => (
-              <p className="drivers-empty" key={n.id}>
-                {n.text}
-              </p>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <p className="card forecast-footnote">
-        Deterministische 13-weeks forecast: herkende terugkerende betalingen op hun eigen kalenderdatum, ingeplande posten en — bij genoeg
-        historie — een uitgavenpatroon. De bandbreedte is één standaardafwijking van gemeten variatie, geen betrouwbaarheidsinterval. Geen
-        ML; elk cijfer is met de hand na te rekenen.
-      </p>
+      {/* REMOVED 20 Aug (app review 2): the "Waar deze prognose op rust" notes
+          and the deterministic-forecast footnote. Both were true, and he has
+          read them; on every later visit they were two blocks of prose above a
+          chart, explaining rather than showing. `coverageNotes` stays in
+          forecast-view.ts — the derivation is right and it is the obvious input
+          for a hover later — only the rendering is gone. Do not re-add a
+          paragraph here: if the basis needs saying again, say it on the number
+          it belongs to. */}
     </>
   );
 }

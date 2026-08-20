@@ -134,24 +134,53 @@ test("a year of history moves the quarterly window from 'cannot see' to 'can see
   expect(html).toContain("Nog niet: jaarlijks (vanaf 365 dagen)");
 });
 
-test("the housing cost is READ from the transactions, never typed and never zero", () => {
-  const txs: Tx[] = [];
+/* --- App review 2, 20 Aug: remove what earns nothing --------------------- *
+ *
+ * Three removals, all his call and all "this earns nothing here" rather than
+ * "this is wrong". The housing figure was READ from the transactions and was
+ * correct; it just does not belong on the screen about subscriptions and
+ * interest. The tests that pinned it are gone with it — see the report.
+ */
+
+test("woonlasten is gone from Optimalisatie, detected or not", () => {
+  const withRent: Tx[] = [];
   for (let m = 1; m <= 6; m++) {
-    const month = String(m).padStart(2, "0");
-    txs.push(tx(`h${m}`, `2026-${month}-01`, -1450, "Woningstichting Rochdale"));
+    withRent.push(tx(`h${m}`, `2026-${String(m).padStart(2, "0")}-01`, -1450, "Woningstichting Rochdale"));
   }
-  const html = render(txs);
-  expect(html).toContain("Woonlasten");
-  expect(html).toContain("Woningstichting Rochdale");
-  expect(html).toContain("1.450,00");
-  expect(html).toContain("Zelf invullen"); // the point: he does not have to
+  for (const html of [render(withRent), render([tx("x1", "2026-08-01", -12.5, "Albert Heijn")])]) {
+    expect(html).not.toContain("Woonlasten");
+    expect(html).not.toContain("Woningstichting Rochdale");
+    expect(html).not.toContain("niet in de data gezien");
+    expect(html).not.toContain("Zelf invullen");
+  }
 });
 
-test("no housing stream in the data prints 'onbekend', not € 0,00", () => {
-  const html = render([tx("x1", "2026-08-01", -12.5, "Albert Heijn")]);
-  expect(html).toContain("Woonlasten");
-  expect(html).toContain("niet in de data gezien");
-  expect(html).not.toContain("Zelf invullen");
+test("the prijsstijging and dubbele-functie tiles are absent when there is nothing to report", () => {
+  // "Don't render an empty one." A tile reading 0 is a module telling you it has
+  // nothing to say, and it costs a row of the screen to say it.
+  const html = render([
+    tx("n1", "2026-05-08", -15.99, "Netflix"),
+    tx("n2", "2026-06-08", -15.99, "Netflix"),
+    tx("n3", "2026-07-08", -15.99, "Netflix"),
+  ]);
+  expect(html).toContain("Netflix"); // there IS a subscription, so we looked
+  expect(html).not.toContain("Prijsstijgingen");
+  expect(html).not.toContain("Dubbele functies");
+  // The check still ran, and one clause says so — an absent tile must not read
+  // as an absent check.
+  expect(html).toContain("Geen prijsstijging en geen dubbele dienst gezien");
+});
+
+test("the prijsstijging tile comes back the moment there is a rise to report", () => {
+  const html = render([
+    tx("n1", "2026-05-08", -15.99, "Netflix"),
+    tx("n2", "2026-06-08", -15.99, "Netflix"),
+    tx("n3", "2026-07-08", -17.99, "Netflix"),
+    tx("n4", "2026-08-08", -17.99, "Netflix"),
+  ]);
+  expect(html).toContain("Prijsstijgingen");
+  expect(html).not.toContain("Dubbele functies");
+  expect(html).not.toContain("Geen prijsstijging en geen dubbele dienst gezien");
 });
 
 /* --- App review, 20 Aug: items 1 and 9 on screen ------------------------- *
