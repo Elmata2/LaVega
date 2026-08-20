@@ -68,12 +68,48 @@ export function productWithoutBank(product: string, bank: string): string {
   return p;
 }
 
+/** A figure whose own conditions say it is not a savings rate at all. The
+ *  extractor writes this in so many words for Wise Rente and N26's flexible cash
+ *  fund: both are money-market funds, "an investment that carries a risk of
+ *  capital loss", quoted net of a management fee and settling in up to two days.
+ *  Ranked beside deposits they would advise moving cash out of a guaranteed
+ *  account into one that can lose it, on the strength of the word "rate". */
+const NOT_A_SAVINGS_RATE = /not a savings rate|not a deposit|geen spaarrente/i;
+
+/** The figure ITSELF is a teaser and the standing rate was not established. The
+ *  extractor says so in the imperative when it means it ("NOT THE STANDING RATE —
+ *  do not serve 3% bare"), which is a far safer signal than the mere presence of
+ *  the words "nieuwe klanten": half the rows mention a promo while holding the
+ *  standard rate, and Santander's conditions do both in one sentence. */
+const NOT_THE_STANDING_RATE = /not the standing rate|do not serve [^ ]+ bare/i;
+
+/** The extractor's own normalised promo sentence: "Actierente 3,01% gedurende 6
+ *  maanden, daarna 1,51%." Five savings rows carry it and in all five the figure
+ *  after "daarna" is the figure in the field, which is what makes the split safe
+ *  to do mechanically — the sentence and the value agree about which is which.
+ *
+ *  Deliberately anchored on that whole shape rather than on the word "actierente"
+ *  alone. Nexent's conditions contain "De actierente van 2,75% ... geldt volgens
+ *  de tabel voor de Welkom Spaarrekening, NIET voor de Nexent Bank Spaarrekening"
+ *  — a sentence about a different product, which the old note regex printed as
+ *  this product's promo. */
+const PROMO_SENTENCE = /Actierente\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*?\bdaarna\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*\./i;
+
+const asPct = (s: string): number => Number(s.replace(",", "."));
+
 /** Covered savings rates from the catalogue, as benchmarks the app can rank.
  *
  *  `freeWithdrawal` is true only when the conditions do NOT say otherwise: the
  *  extractor records "Niet vrij opneembaar" or "Opnamevoorwaarden niet vermeld"
  *  when it knows or cannot tell, and an unknown must not win a comparison the
- *  saver may not qualify for. */
+ *  saver may not qualify for.
+ *
+ *  PROMOS ARE CARRIED, NOT HIDDEN (app review, 20 Aug, item 9). A promo is real
+ *  money for the months it runs and a trap after them, so a row says both things
+ *  at once: `ratePct` is what you could get today, `standardRatePct` what you
+ *  keep, and `promo` marks which of the two the headline is. Where the source
+ *  flags its own figure as a teaser without settling the standing rate, the kept
+ *  rate stays UNKNOWN — the row can be shown but not ranked. */
 export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateBenchmark[] {
   const out: RateBenchmark[] = [];
   for (const e of entries) {
@@ -83,14 +119,28 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
     const bank = issuerToBank(e.issuer);
     if (!bank) continue;
     const c = v.conditions ?? "";
+    if (NOT_A_SAVINGS_RATE.test(c)) continue;
     const restricted = /niet vrij opneembaar|opnamevoorwaarden niet vermeld|opzegtermijn/i.test(c);
-    const promo = /actierente/i.test(c) ? c.match(/Actierente[^.]*\./i)?.[0] : undefined;
+
+    // Three shapes, in order of how much the source settled.
+    const sentence = c.match(PROMO_SENTENCE);
+    const splits = sentence !== null && Math.abs(asPct(sentence[2]) - v.value) < 0.005;
+    const teaser = NOT_THE_STANDING_RATE.test(c);
+    const rate = splits ? asPct(sentence![1]) : v.value;
+    const promoNote = splits
+      ? sentence![0].trim()
+      : teaser
+        ? "Actietarief voor nieuwe klanten; de standaardrente staat niet in de bron."
+        : undefined;
+
     out.push({
       bank,
       product: productWithoutBank(e.product, bank),
-      ratePct: v.value,
+      ratePct: rate,
       freeWithdrawal: !restricted,
-      ...(promo ? { promoNote: promo } : {}),
+      ...(splits ? { standardRatePct: v.value } : {}),
+      ...(splits || teaser ? { promo: true } : {}),
+      ...(promoNote ? { promoNote } : {}),
       ...(v.conditions ? { conditions: v.conditions } : {}),
       sourceUrl: v.sourceUrl,
       asOf: v.checkedAt,

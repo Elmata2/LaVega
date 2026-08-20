@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { fxSwitchGain, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import { bestRate, keptRate } from "./interest.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
   value: 1.25, route: "agent" as const, sourceUrl: "https://abn/fid.pdf",
@@ -71,12 +72,78 @@ describe("savingsBenchmarks", () => {
     expect(b.freeWithdrawal).toBe(false);
   });
 
-  test("a promo becomes a note without becoming the rate", () => {
+  /* WHAT CHANGED HERE, AND WHY IT IS NOT A REVERT (app review, 20 Aug, item 9).
+   *
+   * This test used to assert `ratePct === 1.5`: the promo was kept out of the rate
+   * entirely. That hid it — "for a user who doesn't have bunq, if they can use the
+   * promo for a month it's still a month of 3,01% over the 2,5% of Scalable
+   * Capital", and a row that never carries 3,01 cannot say so.
+   *
+   * It also contradicted the field's own contract: RateBenchmark documents
+   * `ratePct` as "the headline rate shown to the saver — the action rate when
+   * there is a promo" and `standardRatePct` as what is left afterwards, which is
+   * exactly what `benchmarkFromCatalogue` produces. So the split below is the
+   * shape the rest of the module already expects; the ranking is unaffected
+   * because it ranks `keptRate`, which is still 1,50%.
+   */
+  test("a promo the source states is SPLIT: headline now, standard kept", () => {
     const [b] = savingsBenchmarks([entry({
       fields: { interestPct: covered({ value: 1.5, conditions: "Vrij opneembaar. Actierente 3,01% t/m 01-01-2027, daarna 1,50%." }) },
     })]);
-    expect(b.ratePct).toBe(1.5);
+    expect(b.ratePct).toBe(3.01); // what you could get now
+    expect(b.standardRatePct).toBe(1.5); // what you keep
+    expect(keptRate(b)).toBe(1.5); // …and therefore what the ranking rests on
+    expect(b.promo).toBe(true);
     expect(b.promoNote).toContain("3,01");
+  });
+
+  test("the split only happens when 'daarna' agrees with the figure we hold", () => {
+    // If the sentence's standing rate is not the value in the field, the two
+    // disagree about the same product and nobody has resolved which is right.
+    // Splitting on a guess would move the ranking; leaving it alone does not.
+    const [b] = savingsBenchmarks([entry({
+      fields: { interestPct: covered({ value: 1.5, conditions: "Actierente 3,01% t/m 01-01-2027, daarna 2,20%." }) },
+    })]);
+    expect(b.ratePct).toBe(1.5);
+    expect(b.standardRatePct).toBeUndefined();
+    expect(b.promo).toBeUndefined();
+  });
+
+  test("an actierente sentence that says it belongs to ANOTHER product is not a promo here", () => {
+    // Nexent's own words. The old note regex printed this sentence as this
+    // product's promo, which is a promo the saver cannot have on this account.
+    const [b] = savingsBenchmarks([entry({
+      fields: { interestPct: covered({ value: 1.25, conditions: "Saldoband 1 tot 1.000.000 EUR tegen 1,25 % p.j. De actierente van 2,75% p.j. gedurende 3 maanden geldt volgens de tabel voor de Welkom Spaarrekening, niet voor de Nexent Bank Spaarrekening." }) },
+    })]);
+    expect(b.ratePct).toBe(1.25);
+    expect(b.promoNote).toBeUndefined();
+  });
+
+  test("a figure the source itself calls 'not the standing rate' is a teaser with an UNKNOWN standard", () => {
+    // Trade Republic, in the catalogue's own words: "THIS IS A NEW-CUSTOMER
+    // PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare". Served bare
+    // is exactly what happened: it ranked first of all 48 rows and priced the
+    // yearly gain at 3%.
+    const [b] = savingsBenchmarks([entry({
+      fields: { interestPct: covered({ value: 3, conditions: "THIS IS A NEW-CUSTOMER PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare. Dagelijks opneembaar." }) },
+    })]);
+    expect(b.ratePct).toBe(3);
+    expect(b.promo).toBe(true);
+    expect(b.standardRatePct).toBeUndefined();
+    expect(keptRate(b)).toBeNull(); // unknown — never 3, never 0
+    expect(bestRate([b])).toBeNull(); // so it cannot win a comparison
+  });
+
+  test("REFUSES a figure the source says is not a savings rate at all", () => {
+    // Wise Rente and N26's cash fund are money-market funds with capital risk,
+    // flagged as such by the extractor. Ranked as savings they would advise
+    // moving a saver's cash into an investment on the strength of a "rate".
+    expect(savingsBenchmarks([entry({
+      fields: { interestPct: covered({ value: 2.02, conditions: "NOT A SAVINGS RATE — it is 7-day fund performance, net of fee, on a money-market fund." }) },
+    })])).toEqual([]);
+    expect(savingsBenchmarks([entry({
+      fields: { interestPct: covered({ value: 2.32, conditions: "NOT A SAVINGS RATE AND NOT A DEPOSIT — an investment that carries a risk of capital loss." }) },
+    })])).toEqual([]);
   });
 
   test("ignores card products entirely", () => {
