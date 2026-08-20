@@ -4,6 +4,7 @@ import { accountType } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
+import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
 
 /* Je kaarten — the card-art strip from `Modules for homescreen 5/7.png`.
@@ -31,7 +32,18 @@ import Module from "../Module.js";
  * into `assets/bank-logos.generated.ts` as a data-URI. The browser therefore
  * fetches nothing — a logo request would tell that server which bank he banks
  * with. A bank whose logo we could not read keeps the name and the colours; it
- * never borrows another bank's mark. Trademarks: see assets/TRADEMARKS.md. */
+ * never borrows another bank's mark. Trademarks: see assets/TRADEMARKS.md.
+ *
+ * DE KLEUR KOMT UIT DAT LOGO. Zijn vraag was: de echte kaart nadoen, of een
+ * gradient in de kleur van het logo. Dit is de tweede — een ING-kaart is oranje
+ * omdat het ING-logo oranje IS, uitgelezen uit de gebundelde data-URI en nergens
+ * opgehaald (brandColors.ts). De artwork van een kaart natekenen is een ontwerp
+ * overnemen, en dat is een ander verhaal dan een logo gebruiken om te zeggen
+ * welk product je bedoelt.
+ *
+ * Een logo zonder kleur — zwart-wit, of een logo dat we niet konden lezen —
+ * houdt het tokenvlak uit FACES. Dat is geen tijdelijke staat maar het antwoord
+ * voor die kaart: er is geen huisstijlkleur om te tonen. */
 
 /** Cards first — that is what the block is called and what he wants to see. */
 const TYPE_ORDER = ["Creditcard", "Betaalrekening", "Spaarrekening", "Beleggingsrekening", "Overig"];
@@ -91,6 +103,7 @@ type KaartenBlockProps = {
 };
 
 export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps) {
+  const ramps = useBrandRamps();
   const cards = useMemo(
     () =>
       accounts
@@ -121,11 +134,13 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
           {cards.map(({ account, type }, i) => {
             const tail = ibanTail(account.iban);
             const logo = bankLogo(account.bank);
+            // De eigen huisstijl waar die bestaat, anders het tokenvlak.
+            const face = (logo ? ramps[logo.slug]?.gradient : undefined) ?? FACES[i % FACES.length];
             return (
               <article
                 className="bank-card"
                 key={account.key}
-                style={{ background: FACES[i % FACES.length] }}
+                style={{ background: face }}
                 aria-label={`${account.bank || "Onbekende bank"} · ${type}`}
               >
                 <header className="bank-card-top">
