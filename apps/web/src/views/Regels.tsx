@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { Rule } from "@lavega/core";
 import { CATEGORY_OPTIONS } from "@lavega/core";
 
@@ -25,6 +26,26 @@ export default function Regels({
   const typed = ruleCategory.trim();
   const isNewCategory =
     typed !== "" && !CATEGORY_OPTIONS.some((c) => c.toLowerCase() === typed.toLowerCase());
+
+  /* ALPHABETICAL FOR READING, ORIGINAL ORDER FOR MATCHING.
+   *
+   * categorize() walks the rules in stored order and returns the FIRST match, so
+   * the order is semantic: a specific rule has to sit ahead of a general one.
+   * Sorting the array itself would therefore change which rule wins without
+   * anything on screen saying so. This sorts a COPY, and the delete button still
+   * filters the original, so nothing here can reorder what matches.
+   *
+   * localeCompare with "nl" so accented merchant names land where a Dutch reader
+   * expects, and numeric so "Regel 2" precedes "Regel 10". */
+  const sortedRules = useMemo(
+    () =>
+      [...rules].sort(
+        (a, b) =>
+          a.match.localeCompare(b.match, "nl", { sensitivity: "base", numeric: true }) ||
+          a.category.localeCompare(b.category, "nl", { sensitivity: "base" }),
+      ),
+    [rules],
+  );
 
   return (
     <section className="card" aria-label="Regels">
@@ -104,7 +125,7 @@ export default function Regels({
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule) => (
+              {sortedRules.map((rule) => (
                 <tr key={rule.id}>
                   <td>{rule.match}</td>
                   <td>{rule.category}</td>
@@ -122,6 +143,12 @@ export default function Regels({
               ))}
             </tbody>
           </table>
+          {rules.length > 1 && (
+            <p className="cell-sub" style={{ marginTop: ".5rem" }}>
+              Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint de
+              regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.
+            </p>
+          )}
         </div>
       )}
     </section>

@@ -6,7 +6,10 @@ import Module, { ModulePeriod } from "../Module.js";
 import WeekdayBars from "./WeekdayBars.js";
 import { dayLabelYearNL, rangeLabelNL } from "./dates.js";
 import { monthLabelNL } from "../../format.js";
+import SpendPie from "../SpendPie.js";
 import {
+  categoryGrowth,
+  categoryShare,
   categoryPerWindow,
   MIN_WEEKDAY_DAYS,
   newestTxDate,
@@ -59,10 +62,16 @@ export const STAT_PERIODS: { value: StatPeriod; label: string }[] = [
   { value: "aangepast", label: "Aangepast" },
 ];
 
-export type StatView = "categorie" | "weekdag";
+export type StatView = "categorie" | "verdeling" | "gegroeid" | "weekdag";
 
 export const STAT_VIEWS: { value: StatView; label: string }[] = [
   { value: "categorie", label: "Categorieën" },
+  /* Two views added 20 August. "Categorieën" shows levels per bucket, which lets a
+   * careful reader infer a trend by eye; these two state it outright — what the
+   * spending is made OF, and what is climbing. All three consume the same window
+   * and the same category split, so they cannot disagree about a period. */
+  { value: "verdeling", label: "Verdeling" },
+  { value: "gegroeid", label: "Gegroeid" },
   { value: "weekdag", label: "Weekdagen" },
 ];
 
@@ -149,6 +158,37 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   const weekdays = useMemo(
     () => (range === null ? null : weekdaySpend(txs, rules, own, range)),
     [txs, rules, own, range],
+  );
+  const share = useMemo(
+    () => (range === null ? { slices: [], totalCents: 0, covered: null } : categoryShare(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+  const growth = useMemo(
+    () => (range === null ? { rows: [], before: { start: "", end: "" } } : categoryGrowth(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+  const windowDays = useMemo(
+    () =>
+      range === null
+        ? 0
+        : Math.round((Date.parse(range.end) - Date.parse(range.start)) / 86_400_000) + 1,
+    [range],
+  );
+  /* Only the movers, and both directions. A category that did not budge says
+     nothing and would crowd out the ones that did; a FALL is as worth seeing as a
+     rise, which is why this is not filtered to increases only. The threshold is a
+     euro, not a percentage: a 300% rise on € 2 is noise. */
+  const growthGroups = useMemo(
+    () =>
+      growth.rows
+        .filter((r) => Math.abs(r.deltaCents) >= 500)
+        .slice(0, TOP_CATEGORIES)
+        .map((r) => ({
+          label: r.category,
+          values: [r.deltaCents / 100],
+          title: `${r.category}: ${r.beforeCents / 100} → ${r.nowCents / 100}`,
+        })),
+    [growth],
   );
   const totals = useMemo(
     () => (range === null ? null : windowTotals(txs, rules, own, range)),
@@ -314,6 +354,43 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     {capped.map((h) => h.category).join(", ")}.
                   </p>
                 )}
+              </>
+            )
+          ) : view === "verdeling" ? (
+            share.slices.length === 0 ? (
+              <p className="block-empty">Geen uitgaven in deze periode — kies een langere periode.</p>
+            ) : (
+              <SpendPie slices={share.slices} totalCents={share.totalCents} euro={formatEuro} />
+            )
+          ) : view === "gegroeid" ? (
+            growth.rows.length === 0 ? (
+              <p className="block-empty">Nog niets om te vergelijken — kies een langere periode.</p>
+            ) : (
+              <>
+                <p className="stat-insight">
+                  {/* The sentence carries the finding; the bars are the evidence.
+                      Naming the comparison window matters: "gestegen" is
+                      meaningless without saying against what. */}
+                  {growth.rows[0].deltaCents > 0 ? (
+                    <>
+                      <strong>{growth.rows[0].category}</strong> steeg het hardst:{" "}
+                      {formatEuro(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen ervoor
+                      {growth.rows[0].deltaPct !== null ? <> ({Math.round(growth.rows[0].deltaPct * 100)}%)</> : <> (nieuw)</>}.
+                    </>
+                  ) : (
+                    <>Niets is gestegen tegenover de {windowDays} dagen ervoor.</>
+                  )}
+                </p>
+                <CategoryBars
+                  series={[{ label: "Verschil", color: "var(--neg)" }]}
+                  groups={growthGroups}
+                  format={formatEuro}
+                  ariaLabel={`Verschil per categorie tegenover de ${windowDays} dagen ervoor`}
+                />
+                <p className="cell-sub">
+                  Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
+                  dezelfde lengte als de gekozen periode. Alleen uitgaven; eigen overboekingen tellen niet mee.
+                </p>
               </>
             )
           ) : !enoughWeekdayHistory ? (

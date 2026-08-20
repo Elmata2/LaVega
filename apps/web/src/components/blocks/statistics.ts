@@ -441,3 +441,104 @@ export function weekdaySpend(
 
   return { rows: out, spanDays, dayAverage, peak };
 }
+
+/* ─────────────────────────────────── share of spend, and what grew
+
+ * Two questions the block could not answer, both asked on 20 August: what the
+ * spending in a period is made OF, and which categories are climbing.
+ *
+ * "Categorieën" already shows levels per bucket, which lets a careful reader
+ * infer a trend by eye. These state it outright — and they reuse the same window
+ * and the same category split, so the three views cannot disagree about what a
+ * period contains.
+ */
+
+export type CategorySlice = { category: string; cents: number; share: number };
+
+/** Spend per category over the window, biggest first, with each one's share of
+ *  the total. Outflows only: mixing income in would make the shares meaningless,
+ *  and "Eigen overboeking" is excluded for the same reason — moving money between
+ *  your own accounts is not spending, and at his volumes it would dwarf every
+ *  real category. */
+export function categoryShare(
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts | undefined,
+  window: StatWindow,
+): { slices: CategorySlice[]; totalCents: number; covered: StatWindow | null } {
+  const inWindow = txs.filter((t) => t.date && t.date >= window.start && t.date <= window.end);
+  if (inWindow.length === 0) return { slices: [], totalCents: 0, covered: null };
+  const byCat = new Map<string, number>();
+  let total = 0;
+  for (const t of inWindow) {
+    if (t.amount >= 0) continue;
+    const cat = categorize(t, rules, own);
+    if (cat === "Eigen overboeking") continue;
+    const cents = Math.round(Math.abs(t.amount) * 100);
+    byCat.set(cat, (byCat.get(cat) ?? 0) + cents);
+    total += cents;
+  }
+  if (total === 0) return { slices: [], totalCents: 0, covered: null };
+  const slices = [...byCat.entries()]
+    .map(([category, cents]) => ({ category, cents, share: cents / total }))
+    .sort((a, b) => b.cents - a.cents);
+  const dates = inWindow.map((t) => t.date).sort();
+  return { slices, totalCents: total, covered: { start: dates[0], end: dates[dates.length - 1] } };
+}
+
+export type CategoryDelta = {
+  category: string;
+  nowCents: number;
+  beforeCents: number;
+  deltaCents: number;
+  /** null when the category did not exist before — growth from nothing has no
+   *  percentage, and printing one (or an ∞) would be worse than saying "nieuw". */
+  deltaPct: number | null;
+};
+
+/** What each category did against the SAME LENGTH of time immediately before the
+ *  window. Sorted by biggest increase first, since that is the question.
+ *
+ *  The preceding window is derived rather than asked for, so the comparison is
+ *  always like-for-like: comparing one week against the month before it would
+ *  make everything look like it collapsed. A category present in neither window
+ *  is absent; one present in only the earlier window shows as a fall, because
+ *  stopping is a real change worth seeing. */
+export function categoryGrowth(
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts | undefined,
+  window: StatWindow,
+): { rows: CategoryDelta[]; before: StatWindow } {
+  const days = Math.max(1, Math.round((Date.parse(window.end) - Date.parse(window.start)) / 86_400_000) + 1);
+  const beforeEnd = new Date(Date.parse(window.start) - 86_400_000).toISOString().slice(0, 10);
+  const beforeStart = new Date(Date.parse(beforeEnd) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const before: StatWindow = { start: beforeStart, end: beforeEnd };
+
+  const spendIn = (w: StatWindow) => {
+    const m = new Map<string, number>();
+    for (const t of txs) {
+      if (!t.date || t.date < w.start || t.date > w.end || t.amount >= 0) continue;
+      const cat = categorize(t, rules, own);
+      if (cat === "Eigen overboeking") continue;
+      m.set(cat, (m.get(cat) ?? 0) + Math.round(Math.abs(t.amount) * 100));
+    }
+    return m;
+  };
+  const now = spendIn(window);
+  const then = spendIn(before);
+  const rows: CategoryDelta[] = [];
+  for (const category of new Set([...now.keys(), ...then.keys()])) {
+    const nowCents = now.get(category) ?? 0;
+    const beforeCents = then.get(category) ?? 0;
+    rows.push({
+      category,
+      nowCents,
+      beforeCents,
+      deltaCents: nowCents - beforeCents,
+      deltaPct: beforeCents > 0 ? (nowCents - beforeCents) / beforeCents : null,
+    });
+  }
+  rows.sort((a, b) => b.deltaCents - a.deltaCents);
+  return { rows, before };
+}
