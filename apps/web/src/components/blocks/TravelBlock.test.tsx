@@ -565,9 +565,9 @@ test("for a euro destination the cash line does not quote a foreign-currency tar
       <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} catalogue={CATALOGUE} />,
     );
   });
-  act(() => setNativeValue(container.querySelector("select")!, "ES"));
+  act(() => setNativeValue(container!.querySelector("select")!, "ES"));
 
-  const winner = container.querySelector(".travel-winner")!;
+  const winner = container!.querySelector(".travel-winner")!;
   expect(winner.textContent).toContain("Pinnen:");
   expect(winner.textContent).not.toContain("€ 6,30");
   click(byText("button", "Waarom?"));
