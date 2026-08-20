@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { ScheduledFlow, Tx } from "@lavega/core";
-import { detectRecurringStreams } from "@lavega/core";
+import { detectScheduleStreams } from "@lavega/core";
 import { formatEuro, monthShortNL } from "../../format.js";
 import Module from "../Module.js";
 import { daysBetween, shiftDate } from "./dates.js";
@@ -12,12 +12,22 @@ import { daysBetween, shiftDate } from "./dates.js";
  *
  *  - PLANNED flows the app already keeps (BTW reservations, expected invoices,
  *    manual items). These are dates someone committed to.
- *  - RECURRING payments core detected in the transaction history
- *    (detectRecurringStreams: a counterparty paid at a steady cadence with a
- *    steady amount). Their next date is the last occurrence rolled forward by
- *    the detected cadence. That is a PREDICTION, not a commitment, so it is
+ *  - RECURRING flows core detected in the transaction history
+ *    (detectScheduleStreams: a party paid — or paying — at a steady cadence with
+ *    a repeating amount). Their next date is the last occurrence rolled forward
+ *    by the detected cadence. That is a PREDICTION, not a commitment, so it is
  *    labelled as one and carries the cadence that produced it — never mixed in
  *    silently with the confirmed rows.
+ *
+ * The detector is `detectScheduleStreams`, NOT the forecast's
+ * `detectRecurringStreams` this block used until 20 Aug 2026. Measured, on the
+ * shapes a Dutch export actually produces (app review 2, item 5): the forecast's
+ * detector groups on the verbatim counterparty, so one Simyo incasso written
+ * three ways became three streams of one and never appeared; and it rejects a
+ * stream that skipped a cycle, so a failed incasso in June deleted the whole
+ * subscription. It also never merged "DUO", "DUO Groningen" and "Dienst
+ * Uitvoering Onderwijs". An INCOMING recurring stream belongs on this agenda
+ * exactly as much as an outgoing one — DUO paying him is a date he can count on.
  *
  * LaVega never pays anything, so there is no action here — only the date, the
  * amount, where the row came from and whether it is late. */
@@ -36,12 +46,16 @@ const STATUS_LABEL: Record<ScheduledFlow["status"], string> = {
   cancelled: "vervallen",
 };
 
-/** How a detected cadence reads in Dutch. */
+/** How a detected cadence reads in Dutch. Covers every cadence
+ *  `detectScheduleStreams` can return, plus the two short ones an older stream
+ *  may still carry. */
 export function cadenceLabel(days: number): string {
   if (days === 7) return "wekelijks";
   if (days === 14) return "elke 2 weken";
   if (days === 30) return "maandelijks";
+  if (days === 61) return "tweemaandelijks";
   if (days === 91) return "elk kwartaal";
+  if (days === 182) return "halfjaarlijks";
   if (days === 365) return "jaarlijks";
   return `elke ${days} dagen`;
 }
@@ -81,13 +95,13 @@ export function agendaRows(scheduledFlows: ScheduledFlow[], txs: Tx[], asOf: str
     }));
 
   const horizon = shiftDate(asOf, HORIZON_DAYS);
-  const recurring: AgendaRow[] = detectRecurringStreams(txs)
+  const recurring: AgendaRow[] = detectScheduleStreams(txs, { asOf })
     .map((s) => ({ s, date: nextOccurrence(s.lastDate, s.cadenceDays, asOf) }))
     .filter(({ date }) => date <= horizon)
     .map(({ s, date }) => ({
       id: `stream:${s.key}`,
       date,
-      label: s.counterparty,
+      label: s.label,
       amount: (s.sign * s.amountCents) / 100,
       note: `${cadenceLabel(s.cadenceDays)} · ${s.occurrences}× gezien`,
       predicted: true,

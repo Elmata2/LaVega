@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Tx } from "./model.js";
-import { detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL } from "./subscriptions.js";
+import { detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams } from "./subscriptions.js";
 
 let n = 0;
 const tx = (cp: string, date: string, amount: number): Tx =>
@@ -283,4 +283,77 @@ test("a company written with initials is not a person — an insurance premium s
 test("a monthly payment to the Belastingdienst is not an abonnement", () => {
   const tax = ["2026-05-27", "2026-06-27", "2026-07-27", "2026-08-27"].map((d) => tx("Belastingdienst Apeldoorn", d, -350));
   expect(detectSubscriptions(tax)).toHaveLength(0);
+});
+
+/* ------------------------------------------------------------------------- *
+ * detectScheduleStreams — what the Betaalagenda is allowed to expect next.
+ * App review 2, item 5: Simyo, gemeentebelasting and DUO were all missing.
+ * Measured cause: the agenda ran on the forecast's detectRecurringStreams,
+ * which groups on the VERBATIM counterparty and rejects any stream with a
+ * skipped cycle. Three real streams shattered into groups of one.
+ * ------------------------------------------------------------------------- */
+
+let m = 0;
+const flow = (cp: string, date: string, amount: number, description = ""): Tx =>
+  ({ id: `f${m++}`, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description, category: "", manual: false });
+
+test("de betaalagenda ziet Simyo, ook als de tenaamstelling schuift en juni mist", () => {
+  const simyo = [
+    flow("SIMYO B.V.", "2026-03-04", -11.89, "SEPA Incasso algemeen doorlopend Machtiging: M0012938"),
+    flow("Simyo B.V. 4839201", "2026-04-04", -11.89, "SEPA Incasso algemeen doorlopend"),
+    flow("SIMYO", "2026-05-04", -11.89, "Incasso 100238471"),
+    // juni: incasso mislukt — één cyclus overgeslagen, geen ander abonnement.
+    flow("SIMYO B.V.", "2026-07-04", -11.89, "SEPA Incasso algemeen doorlopend"),
+    flow("Simyo B.V.", "2026-08-04", -11.89, "SEPA Incasso algemeen doorlopend"),
+  ];
+  const streams = detectScheduleStreams(simyo, { asOf: "2026-08-16" });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    sign: -1, cadenceDays: 30, amountCents: 1189, occurrences: 5, lastDate: "2026-08-04", skippedCycles: 1,
+  });
+});
+
+test("gemeentebelasting: de omschrijving maakt de gemeente-afschrijving één stroom", () => {
+  const gemeente = [
+    flow("Gemeente Amsterdam", "2026-04-28", -47.25, "Gemeentebelastingen aanslag 2026 termijn 3"),
+    flow("GEMEENTE AMSTERDAM BELASTINGEN", "2026-05-28", -47.25, "Gemeentebelastingen termijn 4"),
+    flow("Gem. Amsterdam Belastingen", "2026-06-29", -47.25, "Gemeentebelastingen termijn 5"),
+    flow("Gemeente Amsterdam", "2026-07-28", -47.25, "Gemeentebelastingen termijn 6"),
+  ];
+  const streams = detectScheduleStreams(gemeente, { asOf: "2026-08-16" });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({ label: "Gemeentebelasting", cadenceDays: 30, amountCents: 4725, sign: -1 });
+});
+
+test("DUO is een INKOMENDE maandstroom en hoort net zo goed in het betaalschema", () => {
+  const duo = [
+    flow("DUO Groningen", "2026-04-24", 487.35, "Studiefinanciering april 2026"),
+    flow("DUO", "2026-05-25", 487.35, "Studiefinanciering mei 2026"),
+    flow("Dienst Uitvoering Onderwijs", "2026-06-24", 512.1, "Studiefinanciering juni 2026"),
+    flow("DUO", "2026-07-24", 512.1, "Studiefinanciering juli 2026"),
+    flow("DUO Groningen", "2026-08-24", 512.1, "Studiefinanciering augustus 2026"),
+  ];
+  const streams = detectScheduleStreams(duo, { asOf: "2026-08-26" });
+  expect(streams).toHaveLength(1);
+  // Het bedrag is de figuur die de stroom NU herhaalt, niet het oude bedrag.
+  expect(streams[0]).toMatchObject({ label: "DUO", sign: 1, cadenceDays: 30, amountCents: 51210, occurrences: 5 });
+});
+
+test("een gestopte stroom staat niet meer in het schema", () => {
+  const oud = ["2026-01-04", "2026-02-04", "2026-03-04"].map((d) => flow("SIMYO B.V.", d, -11.89));
+  expect(detectScheduleStreams(oud, { asOf: "2026-08-16" })).toEqual([]);
+});
+
+test("losse aankopen bij dezelfde winkel zijn geen schema-regel", () => {
+  const winkel = [
+    flow("Albert Heijn 1234", "2026-06-02", -32.15),
+    flow("Albert Heijn 1234", "2026-07-04", -18.9),
+    flow("Albert Heijn 1234", "2026-08-01", -71.4),
+  ];
+  expect(detectScheduleStreams(winkel, { asOf: "2026-08-16" })).toEqual([]);
+});
+
+test("een regel zonder naam wordt geweigerd, niet als naamloze stroom getoond", () => {
+  const naamloos = ["2026-06-04", "2026-07-04", "2026-08-04"].map((d) => flow("", d, -25));
+  expect(detectScheduleStreams(naamloos, { asOf: "2026-08-16" })).toEqual([]);
 });

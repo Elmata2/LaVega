@@ -462,3 +462,240 @@ export function subscriptionOverlaps(subs: Subscription[]): SubscriptionOverlap[
   }
   return out.sort((a, b) => b.monthlyCents - a.monthlyCents);
 }
+
+/* ===========================================================================
+ * The Betaalagenda's schedule detector.
+ *
+ * WHY THIS IS NOT `detectRecurringStreams` (forecast.ts) and not
+ * `detectSubscriptions` above. The agenda used the forecast's detector, and the
+ * three streams he named — Simyo, gemeentebelasting, DUO — were all missing.
+ * Measured, not reasoned (app review 2, item 5); the causes were:
+ *
+ *  1. it groups on the VERBATIM normalized counterparty. A Dutch export does not
+ *     repeat the name: one Simyo incasso arrives as "SIMYO B.V.",
+ *     "Simyo B.V. 4839201" and "SIMYO", and the gemeente as "Gemeente
+ *     Amsterdam", "GEMEENTE AMSTERDAM BELASTINGEN" and "Gem. Amsterdam
+ *     Belastingen". Each stream shattered into groups of one, and a group of one
+ *     is never recurring. `merchantKey` (above) already solved this for
+ *     Optimalisatie — the agenda never got it.
+ *  2. one skipped cycle kills it. A failed incasso in June turns the gaps into
+ *     [31, 30, 61, 31], whose coefficient of variation is 0.41 — over the
+ *     forecast's 0.35 limit, and only barely under the 0.4 here. Named as a
+ *     known limit last round; measured as a live cause this round, so it is
+ *     fixed rather than noted again: gaps are read in CYCLES (a 61-day gap is
+ *     one skipped month), not as one flat distribution.
+ *  3. DUO, "the government giving me money", is an INFLOW. The detector the
+ *     agenda used does read inflows, but the merchant grouping it lacked is what
+ *     split "DUO", "DUO Groningen" and "Dienst Uitvoering Onderwijs" apart.
+ *
+ * A schedule stream is also a different claim from a subscription: nothing here
+ * is "cancellable", so the housing and person filters above do NOT apply — rent
+ * to a private landlord is exactly a date on a payment agenda. What is filtered
+ * is money moving inside his own house (savings sweeps, card settlements): those
+ * are not payments due.
+ *
+ * Pure: integer cents, ISO-date arithmetic, `asOf` passed in.
+ * ========================================================================= */
+
+/** One recurring money movement the agenda may expect again, either direction. */
+export type ScheduleStream = {
+  /** Stable identity: payer/payee key + "|in" / "|out". */
+  key: string;
+  /** What to put on the row — the institution's name when we know it. */
+  label: string;
+  sign: 1 | -1;
+  cadenceDays: number;
+  /** Positive magnitude in cents: the figure the stream currently repeats. */
+  amountCents: number;
+  occurrences: number;
+  lastDate: string;
+  /** Cycles that were expected and never arrived inside the observed history.
+   *  Kept because it is the difference between "monthly, seen 5×" and a stream
+   *  the detector had to bend to accept. */
+  skippedCycles: number;
+};
+
+/* Dutch institutions whose name is written a different way every month, and
+ * whose payment is a fixed date on the agenda rather than a subscription. Each
+ * row collapses every spelling onto one canonical identity and gives the row a
+ * label a person would recognise.
+ *
+ * `any` is matched on a TOKEN boundary against the counterparty AND the
+ * description (his item 6 in the same review: read the description, it is often
+ * where the useful word is — "Gemeente Amsterdam" alone says nothing, but the
+ * description says "Gemeentebelastingen termijn 4"). `needs`, when present, is a
+ * plain substring that must also appear: the gemeente charges tax AND sells
+ * parking, and only the first is a monthly agenda item. */
+const INSTITUTIONS: ReadonlyArray<{ id: string; label: string; any: string[]; needs?: string[] }> = [
+  { id: "duo", label: "DUO", any: ["duo", "dienst uitvoering onderwijs", "studiefinanciering"] },
+  {
+    id: "gemeentebelasting", label: "Gemeentebelasting", any: ["gemeente", "gem"],
+    needs: ["belasting", "aanslag", "woz", "afvalstoffen", "rioolheffing", "hondenbelasting", "ozb"],
+  },
+  { id: "waterschapsbelasting", label: "Waterschapsbelasting", any: ["waterschap", "hoogheemraadschap"] },
+  { id: "belastingdienst", label: "Belastingdienst", any: ["belastingdienst"] },
+  { id: "cjib", label: "CJIB", any: ["cjib", "centraal justitieel"] },
+  { id: "uwv", label: "UWV", any: ["uwv"] },
+  { id: "svb", label: "SVB", any: ["sociale verzekeringsbank"] },
+];
+
+const INSTITUTION_MATCHERS = INSTITUTIONS.map((i) => ({
+  ...i,
+  res: i.any.map((a) => new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`)),
+}));
+
+/* Counterparties that are the owner's own money moving between his own places.
+ * Matched on the COUNTERPARTY only: a rent payment often carries
+ * "overschrijving" in its description while the counterparty is the landlord. */
+const OWN_MONEY_HINTS = [
+  "spaarrekening", "geld toegevoegd", "geld toevoegen", "eigen rekening",
+  "overschrijving", "overboeking", "naar creditcard", "incasso ing creditcard",
+];
+
+/** The identity of the party on the other side of a recurring flow, and the name
+ *  to show for it. Institution first (it collapses the most spellings), then the
+ *  merchant key the subscription detector already uses. `key` is "" when the row
+ *  carries no name at all — those are refused rather than shown nameless. */
+export function scheduleParty(counterparty: string, description = ""): { key: string; label: string } {
+  const cp = norm(counterparty);
+  const ctx = `${cp} ${norm(description)}`;
+  for (const inst of INSTITUTION_MATCHERS) {
+    if (!inst.res.some((re) => re.test(ctx))) continue;
+    if (inst.needs && !inst.needs.some((n) => ctx.includes(n))) continue;
+    return { key: inst.id, label: inst.label };
+  }
+  return { key: merchantKey(cp), label: counterparty };
+}
+
+/** Day-of-month drift plus a weekend shift: a monthly incasso on the 4th lands
+ *  anywhere from the 1st to the 6th, and February is three days short. */
+const SCHEDULE_TOLERANCE_DAYS = 4;
+/** How many cycles a stream may skip and still be the same stream. Three misses
+ *  in a row is a stopped stream, not a bumpy one. */
+const MAX_SKIPPED_CYCLES = 2;
+
+type CycleFit = { onCycle: number; skippedCycles: number; residual: number };
+
+/** Read the gaps of a stream as whole CYCLES of `cadence`: every gap must be a
+ *  near-exact multiple, at most `MAX_SKIPPED_CYCLES + 1` of them, and the
+ *  majority must be single cycles. That last rule is what stops a monthly
+ *  stream being called weekly (30 ≈ 4 × 7 fits the arithmetic; nothing about it
+ *  is weekly), and it is why this replaces a coefficient of variation: a CV
+ *  cannot tell a skipped month from an irregular one. */
+function fitCycles(gaps: number[], cadence: number): CycleFit | null {
+  const tol = Math.max(SCHEDULE_TOLERANCE_DAYS, Math.round(cadence * 0.12));
+  let onCycle = 0;
+  let skippedCycles = 0;
+  let residual = 0;
+  for (const g of gaps) {
+    const k = Math.round(g / cadence);
+    if (k < 1 || k > MAX_SKIPPED_CYCLES + 1) return null;
+    const r = Math.abs(g - k * cadence);
+    if (r > tol) return null;
+    if (k === 1) onCycle++;
+    else skippedCycles += k - 1;
+    residual += r;
+  }
+  if (onCycle < Math.ceil(gaps.length / 2)) return null;
+  return { onCycle, skippedCycles, residual };
+}
+
+export type DetectScheduleOptions = {
+  /** The day the answer is "as of" — decides which streams are still running.
+   *  Defaults per account to the last date that account's data reaches, so the
+   *  module stays pure and an older export is read on its own terms. */
+  asOf?: string;
+};
+
+/** Recurring money movements the Betaalagenda may expect again — outgoing AND
+ *  incoming, grouped per party (see `scheduleParty`), tolerant of a skipped
+ *  cycle, and refused unless the amount is one the stream actually repeats.
+ *
+ *  Sorted by amount, descending, so the order is deterministic; the agenda
+ *  re-sorts by date. */
+export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {}): ScheduleStream[] {
+  const accountEnd = new Map<string, string>();
+  for (const t of txs) {
+    if (!t.date) continue;
+    const cur = accountEnd.get(t.accountKey);
+    if (cur === undefined || t.date > cur) accountEnd.set(t.accountKey, t.date);
+  }
+
+  const groups = new Map<string, { txs: Tx[]; label: string }>();
+  for (const t of txs) {
+    if (t.amount === 0 || !t.date) continue;
+    const party = scheduleParty(t.counterparty, t.description);
+    if (party.key === "") continue;
+    if (OWN_MONEY_HINTS.some((w) => norm(t.counterparty).includes(w))) continue;
+    const key = `${party.key}|${t.amount >= 0 ? "in" : "out"}`;
+    const g = groups.get(key);
+    if (g) g.txs.push(t);
+    else groups.set(key, { txs: [t], label: party.label });
+  }
+
+  const out: ScheduleStream[] = [];
+  for (const [key, group] of groups) {
+    const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (sorted.length < 2) continue;
+
+    const gaps: number[] = [];
+    for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
+
+    let best: { band: (typeof CADENCE_BANDS)[number]; fit: CycleFit } | null = null;
+    for (const band of CADENCE_BANDS) {
+      if (sorted.length < band.minOcc) continue;
+      const fit = fitCycles(gaps, band.cadenceDays);
+      if (fit === null) continue;
+      if (
+        best === null ||
+        fit.onCycle > best.fit.onCycle ||
+        (fit.onCycle === best.fit.onCycle && fit.residual < best.fit.residual)
+      ) best = { band, fit };
+    }
+    if (best === null) continue;
+
+    // Still running? A stopped stream keeps its cadence forever, and rolling it
+    // forward would put a payment on the agenda that nobody is going to make.
+    const lastDate = sorted[sorted.length - 1].date;
+    let asOf = opts.asOf ?? "";
+    if (asOf === "") for (const t of sorted) {
+      const end = accountEnd.get(t.accountKey) ?? "";
+      if (end > asOf) asOf = end;
+    }
+    if (asOf !== "" && daysBetween(lastDate, asOf) > best.band.cadenceDays * 2 + 5) continue;
+
+    /* The amount. An agenda that prints a figure nobody was ever charged is
+     * worse than an agenda with one row fewer, so a stream must either repeat a
+     * figure or be tight enough that its last charge IS the figure (a yearly
+     * index-linked premium). Both are then reported as what it last actually
+     * charged, never as an average. */
+    const amountsCents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const amtMean = mean(amountsCents);
+    if (amtMean <= 0) continue;
+    const amtCv = std(amountsCents) / amtMean;
+    if (amtCv > 0.35) continue;
+    const timesCharged = new Map<number, number>();
+    for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+    const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
+    if (Math.max(...timesCharged.values()) < 2 && amtCv > 0.1) continue;
+    let amountCents = amountsCents[amountsCents.length - 1];
+    if (!repeats(amountCents)) {
+      for (let i = amountsCents.length - 1; i >= 0; i--) {
+        if (repeats(amountsCents[i])) { amountCents = amountsCents[i]; break; }
+      }
+    }
+
+    out.push({
+      key,
+      label: group.label,
+      sign: sorted[0].amount >= 0 ? 1 : -1,
+      cadenceDays: best.band.cadenceDays,
+      amountCents,
+      occurrences: sorted.length,
+      lastDate,
+      skippedCycles: best.fit.skippedCycles,
+    });
+  }
+
+  return out.sort((a, b) => b.amountCents - a.amountCents || a.key.localeCompare(b.key));
+}

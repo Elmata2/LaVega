@@ -82,3 +82,58 @@ test("agendaRows keeps a prediction distinguishable from a committed date", () =
   // Sorted by date, oldest first.
   expect([...rows].map((r) => r.date)).toEqual([...rows].map((r) => r.date).sort());
 });
+
+/* App review 2, item 5. Three streams he named were missing from the agenda:
+ * his phone (Simyo), the gemeentebelasting, and DUO — "the government giving me
+ * money, it's also a monthly one". Measured cause: the agenda ran on the
+ * forecast's stream detector, which groups on the verbatim counterparty (a Dutch
+ * export renames the same incasso every month) and rejects a stream that skipped
+ * a cycle. All three rows below come straight from a real export's shapes. */
+const simyo: Tx[] = [
+  ["2026-03-04", "SIMYO B.V.", "SEPA Incasso algemeen doorlopend Machtiging: M0012938"],
+  ["2026-04-04", "Simyo B.V. 4839201", "SEPA Incasso algemeen doorlopend"],
+  ["2026-05-04", "SIMYO", "Incasso 100238471"],
+  // juni: de incasso mislukte. Eén overgeslagen maand is geen ander abonnement.
+  ["2026-07-04", "SIMYO B.V.", "SEPA Incasso algemeen doorlopend"],
+  ["2026-08-04", "Simyo B.V.", "SEPA Incasso algemeen doorlopend"],
+].map(([date, counterparty, description], i) => ({
+  id: `sim${i}`, accountKey: "A1", date, amount: -11.89, currency: "EUR",
+  counterparty, description, category: "", manual: false,
+}));
+
+const duo: Tx[] = [
+  ["2026-05-25", "DUO"],
+  ["2026-06-24", "Dienst Uitvoering Onderwijs"],
+  ["2026-07-24", "DUO"],
+  ["2026-08-24", "DUO Groningen"],
+].map(([date, counterparty], i) => ({
+  id: `duo${i}`, accountKey: "A1", date, amount: 512.1, currency: "EUR",
+  counterparty, description: "Studiefinanciering", category: "", manual: false,
+}));
+
+test("de agenda ziet Simyo, ook met een schuivende tenaamstelling en een gemiste maand", () => {
+  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={simyo} asOf={ASOF} />);
+  expect(html).toContain("SIMYO B.V.");
+  expect(html).toContain("maandelijks · 5× gezien");
+  expect(html).toContain(formatEuro(-11.89));
+  expect(html).toContain("voorspeld");
+});
+
+test("een inkomende maandstroom (DUO) staat net zo goed in de agenda", () => {
+  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />);
+  expect(html).toContain("DUO");
+  expect(html).toContain(formatEuro(512.1));
+  expect(html).toContain("text-pos");
+});
+
+test("een gestopte stroom wordt niet meer vooruit geschoven", () => {
+  // Laatste afschrijving maart, asOf half augustus: dit betaalt niemand meer.
+  const gestopt: Tx[] = simyo.slice(0, 3);
+  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={gestopt} asOf={ASOF} />);
+  expect(html).toContain("Niets ingepland");
+});
+
+test("cadenceLabel noemt ook de twee cadences die core erbij kreeg", () => {
+  expect(cadenceLabel(61)).toBe("tweemaandelijks");
+  expect(cadenceLabel(182)).toBe("halfjaarlijks");
+});
