@@ -16,6 +16,7 @@ import {
 } from "../settings";
 import {
   autoBookDecision,
+  bookingEntity,
   fetchQueue,
   forgetAutoBooked,
   getAutoBookedInvoices,
@@ -62,8 +63,16 @@ import "../styles/views.css";
  * Booking is the dangerous half — a forwarded mail comes from outside, and
  * whoever knows the forwarding address can try to get something into his books.
  * So a row still has to earn it, and `autoBookDecision` (see n8n.ts) is the
- * whole rule: a verified sender, one unambiguous entity, and a complete
- * invoice. Everything else stays a proposal AND carries the reason it waits.
+ * whole rule: a verified sender, no open question about the entity, and a
+ * complete invoice. Everything else stays a proposal AND carries the reason it
+ * waits.
+ *
+ * "No open question" is two cases, not one — and that cost him an evening. The
+ * gate demanded EXACTLY ONE entity, so the freelancer who never entered any
+ * entities was held at a choice that does not exist. Zero entities is the
+ * answer, not a missing one: everything is his, it books on the app's default,
+ * and the word "entiteit" never appears on this screen. Two or more IS a real
+ * question, and it is still asked exactly once.
  * What does book itself is visible as automatic (the "automatisch" badge, from
  * the auto-booked log) and reversible in one click ("Terugdraaien" → cancelled,
  * which drops it out of the forecast without deleting the record). Something
@@ -313,17 +322,19 @@ export default function Facturen({
       let alreadyStored = 0;
       const proposals: PendingInvoice[] = [];
       const seenIds = new Set(invoices.map((i) => i.id));
-      const fallbackEntity = entity || defaultEntity;
+      const entityCtx = { entityChoices, defaultEntity: selectedEntity };
       for (const row of fresh) {
-        const draft = toPending(row, fallbackEntity);
-        const decision = autoBookDecision(row, { entityChoices, defaultEntity: fallbackEntity });
+        const draft = toPending(row, bookingEntity(entityCtx));
+        const decision = autoBookDecision(row, entityCtx);
         if (!decision.book) {
           proposals.push({ ...draft, waitReason: decision.reason });
           continue;
         }
-        // The gate guarantees exactly one entity, so THAT is the one to book on
-        // — never the app-wide default, which may be a different BV.
-        const result = pendingToInvoice({ ...draft, entity: entityChoices[0] });
+        // De poort laat alleen door wat GEEN keuze meer is: één onderneming of
+        // geen enkele. `bookingEntity` zegt welke dat dan is — dezelfde functie
+        // die de poort gebruikte, zodat er niet op een andere BV geboekt kan
+        // worden dan waarop hij goedkeurde.
+        const result = pendingToInvoice({ ...draft, entity: bookingEntity(entityCtx) });
         if (!result.ok) {
           // Unreachable while the gate checks the same thing, but a row must
           // land in the review list rather than vanish if the two ever diverge.
@@ -451,9 +462,34 @@ export default function Facturen({
     [flows],
   );
 
-  // Entity options: fall back to the app's default entity when no accounts are
-  // imported yet, so a first invoice still attaches to a BV (and thus scopes).
-  const entityChoices = entities.length > 0 ? entities : [defaultEntity];
+  /* ── Wel of geen ondernemingen ───────────────────────────────────────────
+   *
+   * Zijn regel: heeft de gebruiker ondernemingen opgegeven, dan per
+   * onderneming; heeft hij ze niet, dan is het één zelfstandige die alles op
+   * dezelfde rekening doet en staat het gewoon in het overzicht.
+   *
+   * Dus GEEN keuzelijst met één verzonnen optie erin. Die stond er wel — de
+   * standaard van de app werd als "keuze" opgevoerd — en dat is een vraag
+   * stellen waarop maar één antwoord bestaat. Erger: de poort in n8n.ts kreeg
+   * daardoor altijd precies één optie te zien, dus dacht hij dat er een
+   * onderneming gekozen wás. Nu ziet de poort de échte lijst, en zegt
+   * `bookingEntity` één keer waarop er geboekt wordt.
+   *
+   * `entiteit` als woord komt hieronder alleen op het scherm als hij er zelf
+   * ondernemingen heeft. */
+  const hasEntities = entities.length > 0;
+  const entityChoices = entities;
+  // De keuzelijst mag nooit iets anders tonen dan waarop geboekt wordt: stond
+  // in de state een entiteit die niet in de lijst staat (de app-standaard hoeft
+  // niet tussen zijn BV's te zitten), dan toonde het scherm de eerste BV en
+  // boekte "Toevoegen" op die standaard. Een factuur op de verkeerde BV staat
+  // scheef in de btw — precies wat de poort moest voorkomen.
+  const selectedEntity = hasEntities
+    ? (entityChoices.includes(entity) ? entity : entityChoices[0])
+    : defaultEntity;
+  // "Per onderneming" heeft alleen zin als er meer dan één is: bij één staat op
+  // elke regel dezelfde naam.
+  const showEntityColumn = entities.length > 1;
 
   // Which invoices got here without him clicking. Read from the log on EVERY
   // render, deliberately un-memoised: the log is written by this view (booking,
@@ -481,7 +517,7 @@ export default function Facturen({
     if (!/^[A-Z]{3}$/.test(ccy)) return setManualError("Vul de valuta in (3 letters) — LaVega gokt geen euro's.");
     setManualError(null);
     const inv = makeInvoice({
-      entity: entity || defaultEntity,
+      entity: selectedEntity,
       direction,
       counterparty: cp,
       invoiceNumber: invoiceNumber.trim() || undefined,
@@ -560,7 +596,7 @@ export default function Facturen({
         setImportNote("Geen facturen herkend in dit bestand.");
         return;
       }
-      const parsed = rows.map((row) => makeInvoice({ ...row, entity: entity || defaultEntity }));
+      const parsed = rows.map((row) => makeInvoice({ ...row, entity: selectedEntity }));
       // Dedup by content-hashed id so re-importing the same file (or an
       // overlapping export) doesn't duplicate rows already on file.
       const seen = new Set(invoices.map((i) => i.id));
@@ -679,12 +715,20 @@ export default function Facturen({
             elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. De knop
             hieronder is voor een directe hercontrole.
           </p>
+          {/* De voorwaarden die hier staan moeten de voorwaarden zijn die
+              gelden. Bij één onderneming is dat een afgevinkte voorwaarde; bij
+              meer is het juist de reden dat er niets automatisch gaat, en dan
+              hoort er geen belofte te staan; bij geen enkele bestaat de
+              voorwaarde niet en hoeft het woord niet te vallen. */}
           <p className="cell-sub">
             Een factuur boekt zichzelf alleen als er niets meer te beslissen valt: de mail
-            kwam via je doorstuuradres binnen én door de SPF/DKIM-controle, je hebt één
-            onderneming, en de factuur is compleet. Die krijgt het label “automatisch” en is
-            met één klik terug te draaien. Al het andere wacht op jou, met de reden erbij —
-            een niet-geverifieerde afzender boekt hier niets.
+            kwam via je doorstuuradres binnen én door de SPF/DKIM-controle
+            {entities.length === 1 ? ", je hebt één onderneming" : ""}, en de factuur is
+            compleet. Die krijgt het label “automatisch” en is met één klik terug te
+            draaien. Al het andere wacht op jou, met de reden erbij — een
+            niet-geverifieerde afzender boekt hier niets.
+            {entities.length > 1 &&
+              " Je hebt meer dan één onderneming, dus kiest LaVega de BV nooit voor je: die keuze vraagt hij één keer, en tot die tijd boekt er hier niets automatisch."}
           </p>
           <div className="stack-form-actions">
             <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
@@ -766,14 +810,17 @@ export default function Facturen({
         >
           <div className="stack-form">
             <div className="stack-form-row">
-              <label>
-                Entiteit
-                <select value={entity} disabled={busy} aria-label="Entiteit" onChange={(e) => setEntity(e.target.value)}>
-                  {entityChoices.map((e) => (
-                    <option key={e} value={e}>{e}</option>
-                  ))}
-                </select>
-              </label>
+              {/* Geen ondernemingen = geen keuze = geen keuzelijst. */}
+              {hasEntities && (
+                <label>
+                  Entiteit
+                  <select value={selectedEntity} disabled={busy} aria-label="Entiteit" onChange={(e) => setEntity(e.target.value)}>
+                    {entityChoices.map((e) => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
                 Richting
                 <select value={direction} disabled={busy} aria-label="Richting"
@@ -874,15 +921,19 @@ export default function Facturen({
                     enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
                 {p.waitReason && <p className="cell-sub text-warn">Wacht op jou: {p.waitReason}</p>}
                 <div className="facturen-form">
-                  <label>
-                    Entiteit{" "}
-                    <select value={p.entity} aria-label="Entiteit (n8n)"
-                      onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
-                      {entityChoices.map((e) => (
-                        <option key={e} value={e}>{e}</option>
-                      ))}
-                    </select>
-                  </label>{" "}
+                  {hasEntities && (
+                    <>
+                      <label>
+                        Entiteit{" "}
+                        <select value={p.entity} aria-label="Entiteit (n8n)"
+                          onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
+                          {entityChoices.map((e) => (
+                            <option key={e} value={e}>{e}</option>
+                          ))}
+                        </select>
+                      </label>{" "}
+                    </>
+                  )}
                   <label>
                     Richting{" "}
                     <select value={p.direction} aria-label="Richting (n8n)"
@@ -1015,6 +1066,11 @@ export default function Facturen({
               <thead>
                 <tr>
                   <th>Relatie</th>
+                  {/* De onderneming staat er alleen als er meer dan één is. Bij
+                      één (of geen) zou de kolom op elke regel hetzelfde zeggen,
+                      en dan is het geen informatie maar ruis — en voor de
+                      zelfstandige zonder entiteiten is het bovendien jargon. */}
+                  {showEntityColumn && <th>Onderneming</th>}
                   <th>Richting</th>
                   <th className="num">Bedrag</th>
                   <th>Vervaldatum</th>
@@ -1031,6 +1087,7 @@ export default function Facturen({
                         {inv.counterparty}
                         {inv.invoiceNumber ? <span className="cell-sub"> · {inv.invoiceNumber}</span> : null}
                       </td>
+                      {showEntityColumn && <td data-label="Onderneming">{inv.entity}</td>}
                       <td data-label="Richting">
                         <span className="badge">{inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}</span>
                         {autoBookedIds.has(inv.id) && (

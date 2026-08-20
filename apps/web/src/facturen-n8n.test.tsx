@@ -544,6 +544,19 @@ test("bij meer dan één onderneming boekt niets zichzelf — de BV is een echte
   expect(c.textContent).toContain("meer dan één onderneming");
 });
 
+test("zonder ondernemingen boekt hij wél — nul keuzes is geen openstaande vraag", async () => {
+  // De zzp'er met één rekening. De poort eiste "precies één entiteit" en hield
+  // hem hier tegen op een keuze die niet bestaat. Er valt niets te gokken, dus
+  // boekt de factuur op de standaard van de app — en het scherm legt de
+  // automatische boeking uit zonder het woord "onderneming" te gebruiken.
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), [], [], []);
+  expect(saved).toHaveLength(1);
+  expect(saved[0][0].entity).toBe("BV1");
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+  expect(c.textContent).toContain("automatisch geboekt");
+  expect(c.textContent).not.toContain("onderneming");
+});
+
 test("een geverifieerde maar incomplete factuur wacht, en noemt wat er mist", async () => {
   const c = await fetchOnce(serving([{ invoices: [{ ...FORWARDED, dueDate: null }] }]));
   expect(saved).toHaveLength(0);

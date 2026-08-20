@@ -346,6 +346,12 @@ export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoic
  *   b. DE ONDERNEMING IS GEEN KEUZE. Bij meer dan één BV is "welke entiteit"
  *      een echte vraag, en een verkeerd toegewezen factuur zit scheef in de
  *      btw. Eén optie = niets te kiezen; meer = één keer vragen.
+ *      GEEN ondernemingen is óók niets te kiezen, en dat was hier fout: de eis
+ *      luidde "precies één", dus knikkerde een zelfstandige zonder entiteiten
+ *      op nul opties eruit — hij wachtte op een keuze die niet bestaat. Nul is
+ *      geen openstaande vraag, het is het antwoord: alles staat op hem. Zie
+ *      `bookingEntity`, die het antwoord één keer geeft zodat de poort en de
+ *      boeking niet elk hun eigen versie kunnen kiezen.
  *   c. DE FACTUUR IS COMPLEET. Precies de eis die `pendingToInvoice` al stelt:
  *      relatie, factuurdatum, vervaldatum, een geldig bedrag en een echte
  *      valuta. Er wordt niets bijverzonnen om de grens te halen.
@@ -358,9 +364,25 @@ export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoic
 
 export type AutoBookDecision = { book: true } | { book: false; reason: string };
 
+export type EntityContext = { entityChoices: string[]; defaultEntity: string };
+
+/** Op welke onderneming een factuur terechtkomt als er niets te kiezen valt.
+ *
+ *  Eén opgegeven onderneming: die. Geen enkele: de standaard van de app — de
+ *  zelfstandige die alles op één rekening doet, en die het woord "entiteit"
+ *  nergens hoort te zien. Bij meer dan één beslist deze functie niets; dan
+ *  houdt `autoBookDecision` de factuur tegen en kiest hij zelf.
+ *
+ *  Eén functie, gebruikt door zowel de poort als de boeking: liepen die twee
+ *  uit elkaar, dan zou een factuur op een andere BV geboekt worden dan de poort
+ *  goedkeurde — precies de fout die de poort moest voorkomen. */
+export function bookingEntity(ctx: EntityContext): string {
+  return ctx.entityChoices.length === 1 ? ctx.entityChoices[0] : ctx.defaultEntity;
+}
+
 export function autoBookDecision(
   row: N8nInvoiceRow,
-  ctx: { entityChoices: string[]; defaultEntity: string },
+  ctx: EntityContext,
 ): AutoBookDecision {
   if (row.senderCheck === "failed") {
     const c = row.senderChecks;
@@ -376,13 +398,13 @@ export function autoBookDecision(
       reason: "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
     };
   }
-  if (ctx.entityChoices.length !== 1) {
+  if (ctx.entityChoices.length > 1) {
     return {
       book: false,
       reason: "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
     };
   }
-  const check = pendingToInvoice(toPending(row, ctx.entityChoices[0] || ctx.defaultEntity));
+  const check = pendingToInvoice(toPending(row, bookingEntity(ctx)));
   if (!check.ok) return { book: false, reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.` };
   return { book: true };
 }

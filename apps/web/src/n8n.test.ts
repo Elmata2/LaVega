@@ -2,6 +2,7 @@
 import { beforeEach, expect, test } from "vitest";
 import {
   autoBookDecision,
+  bookingEntity,
   fetchQueue,
   forgetAutoBooked,
   getAutoBookedInvoices,
@@ -283,6 +284,21 @@ test("autoBookDecision: een afzender die de controle niet haalt of niet had, boe
   const d2 = autoBookDecision(unchecked, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d2.book).toBe(false);
   expect(d2.book === false && d2.reason).toContain("geen afzendercontrole");
+});
+
+test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt de poort niet", () => {
+  // Een zzp'er met één rekening heeft geen entiteiten opgegeven. Nul keuzes is
+  // GEEN openstaande vraag — het is het antwoord: alles staat op hem. De eis
+  // "precies één" hield hem hier tegen op een keuze die niet bestond.
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({ book: true });
+});
+
+test("bookingEntity: de poort en de boeking gebruiken dezelfde regel", () => {
+  // Als deze twee ooit uit elkaar lopen komt een factuur op de verkeerde BV
+  // terecht, en dat is precies wat de poort moest voorkomen. Eén functie dus.
+  expect(bookingEntity({ entityChoices: ["BV1"], defaultEntity: "Persoonlijk" })).toBe("BV1");
+  expect(bookingEntity({ entityChoices: [], defaultEntity: "Persoonlijk" })).toBe("Persoonlijk");
 });
 
 test("autoBookDecision: bij meer dan één onderneming wordt er niet gegokt welke BV", () => {
