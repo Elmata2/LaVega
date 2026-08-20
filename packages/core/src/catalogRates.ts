@@ -272,3 +272,67 @@ export function issuerConsensus(
   const oldest = hits.reduce((a, b) => (a.checkedAt <= b.checkedAt ? a : b));
   return { value: first, from: hits.length, asOf: oldest.checkedAt, sourceUrl: oldest.sourceUrl };
 }
+
+/** THE BEST CARD YOU COULD OPEN, for spending rather than for a trip.
+ *
+ *  Valuta already ranks every bank rather than only his, and the travel agent
+ *  already offers what he could switch to. Optimalisatie was the one left asking
+ *  only "which of your accounts is best" — a fair question, and not the one that
+ *  finds the four percent he was looking for when he said a Trading 212 at 1,5%
+ *  cashback and 3,5% savings beats an ING at 0% and 1,5%.
+ *
+ *  Ranked on what the card RETURNS on a domestic purchase: cashback earned minus
+ *  nothing, because a domestic payment carries no FX surcharge. Cards whose
+ *  cashback we cannot prove are absent rather than assumed to pay nothing —
+ *  "unknown is never zero" applies hardest here, where a zero would rank a good
+ *  card last.
+ */
+export type SpendOffer = {
+  productId: string;
+  product: string;
+  bank: string;
+  cashbackPct: number;
+  conditions: string | null;
+  sourceUrl: string;
+  asOf: string;
+};
+
+export function marketCashbackOptions(entries: readonly CatalogueEntryLike[]): SpendOffer[] {
+  const out: SpendOffer[] = [];
+  for (const e of entries) {
+    const v = e.fields?.cashbackPct;
+    if (!isCovered(v) || !v) continue;
+    // A card that pays nothing is a fact worth keeping — it is what lets the app
+    // say "your pas earns nothing here" with a source — but it is not an OFFER,
+    // and listing it under "what you could open" would be noise.
+    if (v.value <= 0) continue;
+    const bank = e.issuer ? issuerToBank(e.issuer) : "";
+    out.push({
+      productId: e.id,
+      product: e.product,
+      bank,
+      cashbackPct: v.value,
+      conditions: v.conditions,
+      sourceUrl: v.sourceUrl,
+      asOf: v.checkedAt,
+    });
+  }
+  return out.sort((a, b) => b.cashbackPct - a.cashbackPct);
+}
+
+/** What a year of this spend would earn on the best card he does NOT have, over
+ *  what he earns today. Returns null when his own rate is unknown — a saving
+ *  measured against an unknown is a guess wearing a number's clothes — and null
+ *  when nothing beats what he already earns. */
+export function cashbackSwitchGain(
+  heldPct: number | null,
+  best: SpendOffer | undefined,
+  yearlySpendCents: number,
+): { best: SpendOffer; extraPerYearCents: number } | null {
+  if (heldPct === null || !best) return null;
+  const delta = best.cashbackPct - heldPct;
+  if (delta <= 0) return null;
+  const extraPerYearCents = Math.round((yearlySpendCents * delta) / 100);
+  if (extraPerYearCents <= 0) return null;
+  return { best, extraPerYearCents };
+}

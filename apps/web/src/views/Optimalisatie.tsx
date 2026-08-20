@@ -18,9 +18,11 @@ import {
   CADENCE_LABEL_NL,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
+  cashbackSwitchGain,
+  marketCashbackOptions,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
-import { CATALOGUE_RATES } from "../catalogue-rates";
+import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { formatEuro } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -224,6 +226,24 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   // be true in the state it appears in.
   const spendable = returns.filter((r) => isSpendable(r.account));
   const rankable = spendable.filter((r) => r.cashbackPct !== null);
+  /* WHAT HE COULD OPEN, not only what he holds. Valuta ranks every bank and the
+     travel agent already offers alternatives; this module was the last one asking
+     "which of YOUR accounts is best", which is a fair question and not the one
+     that finds the four percent he described — Trading 212 at 1,5% cashback and
+     3,5% savings against an ING at 0% and 1,5%. */
+  const cashbackOffers = useMemo(() => marketCashbackOptions(CATALOGUE_ENTRIES), []);
+  const bestHeldCashback = useMemo(() => {
+    const known = rankable.map((r) => r.cashbackPct).filter((p): p is number => p !== null);
+    return known.length ? Math.max(...known) : null;
+  }, [rankable]);
+  const yearlySpendCents = useMemo(
+    () => rankable.reduce((sum, r) => sum + (r.spend?.perYearCents ?? 0), 0),
+    [rankable],
+  );
+  const cashbackUpgrade = useMemo(
+    () => cashbackSwitchGain(bestHeldCashback, cashbackOffers[0], yearlySpendCents),
+    [bestHeldCashback, cashbackOffers, yearlySpendCents],
+  );
   const measured = rankable.filter((r) => r.spend.perYearCents !== null);
   // How the base was measured, so the figure can be checked against the same
   // afschrift it was read from rather than taken on trust.
@@ -697,6 +717,39 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </div>
             );
           })}
+          {cashbackOffers.length > 0 && (
+            <div className="opt-row" style={{ marginTop: ".75rem" }}>
+              <p style={{ margin: 0 }}>
+                <strong>Wat je zou kunnen openen</strong>{" "}
+                <span className="cell-sub">— alle kaarten die we kunnen aantonen, niet alleen de jouwe</span>
+              </p>
+              <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                {cashbackOffers.slice(0, 5).map((o) => (
+                  <li key={o.productId}>
+                    <strong>{pct(o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}{o.product}
+                    {o.conditions ? <> — {o.conditions}</> : null}{" "}
+                    <span style={{ opacity: 0.7 }}>(peildatum {o.asOf})</span>
+                  </li>
+                ))}
+              </ul>
+              {/* The euro figure appears ONLY when both halves are known: what he
+                  earns today and what he spends. Either one missing and this is a
+                  guess with a currency symbol in front of it. */}
+              {cashbackUpgrade ? (
+                <p style={{ margin: ".4rem 0 0" }}>
+                  Op {euro(yearlySpendCents)} aan uitgaven per jaar is dat{" "}
+                  <strong>{euro(cashbackUpgrade.extraPerYearCents)} extra</strong> tegenover je beste
+                  kaart nu ({pct(bestHeldCashback ?? 0)}).
+                </p>
+              ) : (
+                <p className="cell-sub" style={{ margin: ".4rem 0 0" }}>
+                  {bestHeldCashback === null
+                    ? "Wat dit jou zou opleveren weet LaVega nog niet: de cashback van je eigen kaarten is onbekend."
+                    : "Je beste kaart nu doet het even goed of beter — er is niets te winnen."}
+                </p>
+              )}
+            </div>
+          )}
           {cashbackGaps.length > 0 && (
             <p className="cell-sub">
               {/* Name a way to close the gap that EXISTS. There is no cashback

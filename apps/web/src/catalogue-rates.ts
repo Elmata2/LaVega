@@ -20,3 +20,7 @@ const entries = (catalogue as { entries: CatalogueEntryLike[] }).entries ?? [];
 /** Frozen at module load: the artifact never changes at runtime, and recomputing
  *  it per render would be work with no possible different answer. */
 export const CATALOGUE_RATES = savingsBenchmarks(entries);
+
+/** The raw entries, for the market-wide rankings (cashback, FX) that need more
+ *  than the savings view of the same file. */
+export const CATALOGUE_ENTRIES = entries;

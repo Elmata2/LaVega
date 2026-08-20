@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fxSwitchGain, issuerConsensus, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import { cashbackSwitchGain, fxSwitchGain, issuerConsensus, marketCashbackOptions, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
 import { bestRate, keptRate } from "./interest.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
@@ -266,5 +266,46 @@ describe("issuerConsensus", () => {
     // link is what the reader needs.
     const got = issuerConsensus([card("a", "Amex", 2.5, "2026-08-01"), card("b", "Amex", 2.5, "2023-03-15")], "amex", "fxFeePct");
     expect(got!.asOf).toBe("2023-03-15");
+  });
+});
+
+describe("marketCashbackOptions", () => {
+  const cb = (id: string, issuer: string, value: number, known = true) => ({
+    id, product: id, issuer, kind: "creditcard",
+    fields: { cashbackPct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: "2026-08-19", conditions: "1% tot € 100 per maand", conditionsKnown: known } },
+  });
+
+  test("ranks the payers, best first", () => {
+    expect(marketCashbackOptions([cb("a", "A Bank", 0.5), cb("b", "B Bank", 1.5)]).map((o) => o.product)).toEqual(["b", "a"]);
+  });
+
+  test("a card that pays NOTHING is not an offer, though the fact is kept elsewhere", () => {
+    expect(marketCashbackOptions([cb("zero", "Z Bank", 0)])).toEqual([]);
+  });
+
+  test("an unproven cashback is absent, never assumed to be zero", () => {
+    // Assuming zero would rank a good card last, which is the expensive direction.
+    expect(marketCashbackOptions([cb("a", "A", 2, false)])).toEqual([]);
+  });
+
+  test("carries the conditions, because 1% up to € 100 a month is not 1%", () => {
+    expect(marketCashbackOptions([cb("a", "A", 1)])[0].conditions).toContain("€ 100");
+  });
+});
+
+describe("cashbackSwitchGain", () => {
+  const best = { productId: "x", product: "X", bank: "X", cashbackPct: 1.5, conditions: null, sourceUrl: "https://x", asOf: "2026-08-19" };
+
+  test("quantifies a year of not switching", () => {
+    // € 20.000 a year at 1,5% instead of 0% is € 300.
+    expect(cashbackSwitchGain(0, best, 2_000_000)!.extraPerYearCents).toBe(30000);
+  });
+
+  test("says nothing when his own card already pays as much", () => {
+    expect(cashbackSwitchGain(1.5, best, 2_000_000)).toBeNull();
+  });
+
+  test("says nothing when his own rate is UNKNOWN", () => {
+    expect(cashbackSwitchGain(null, best, 2_000_000)).toBeNull();
   });
 });
