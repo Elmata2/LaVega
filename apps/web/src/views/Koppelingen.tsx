@@ -4,7 +4,10 @@ import {
   getN8nInvoiceUrl,
   setN8nInvoiceToken,
   setN8nInvoiceUrl,
-} from "../settings";
+  getInvoiceForwardAddress,
+  ensureInvoiceForwardAddress,
+
+  setInvoiceForwardAddress,} from "../settings";
 
 /* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
  *
@@ -61,6 +64,9 @@ function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
 }
 
 export default function Koppelingen() {
+  const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
+  const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
+  const [forwardError, setForwardError] = useState(false);
   const [url, setUrl] = useState<string>(() => getN8nInvoiceUrl());
   const [token, setToken] = useState<string>(() => getN8nInvoiceToken());
   const [showToken, setShowToken] = useState(false);
@@ -92,6 +98,70 @@ export default function Koppelingen() {
 
   return (
     <section className="card" aria-label="Koppelingen">
+      {/* HET DOORSTUURADRES, TERUG ALS ÉÉN REGEL.
+       *
+       * Hij vroeg deze kaart weg en dat is gebeurd — de opzethulp, de uitleg en de
+       * knoppen zijn er niet meer. Maar dit was de ENIGE plek waar het adres
+       * aangemaakt én gelezen werd, en hij test vanavond juist de mailketen. Had hij
+       * nog geen adres, dan kon hij er geen meer maken; een opschoning die zijn
+       * eigen test onmogelijk maakt is niet wat hij vroeg.
+       *
+       * Dus: één regel, het adres en een knop die er één maakt als hij er nog geen
+       * heeft. Het adres verandert nooit meer nadat het bestaat — een doorstuuradres
+       * dat wisselt is een adres waar post naartoe blijft gaan die niemand leest. */}
+      <div className="card-header">
+        <h2>Doorstuuradres voor facturen</h2>
+        <span className="eyebrow">stuur een factuur hiernaartoe en hij komt in de wachtrij</span>
+      </div>
+      {/* INTYPEN GAAT VOOR GENEREREN. Het adres dat Cloudflare routeert is
+          invoices@lavega.dev, niet het lavega-<random>@invoices.lavega.dev dat
+          LaVega verzon — ander lokaal deel, ander domein. Een adres dat wij
+          bedenken en dat niets routeert is erger dan geen adres: de post komt
+          nergens aan terwijl het scherm zegt van wel. Dus typt hij het in, en de
+          generator staat ernaast voor wie nog niets heeft. */}
+      <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
+        Adres
+        <input
+          className="saldo-input"
+          value={forwardDraft}
+          placeholder="invoices@lavega.dev"
+          aria-label="Doorstuuradres"
+          onChange={(e) => {
+            setForwardDraft(e.target.value);
+            setForwardError(false);
+          }}
+          onBlur={() => {
+            if (setInvoiceForwardAddress(forwardDraft)) {
+              setForwardAddress(getInvoiceForwardAddress());
+              setForwardDraft(getInvoiceForwardAddress());
+            } else {
+              setForwardError(true);
+            }
+          }}
+        />
+      </label>
+      {forwardError && (
+        <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
+          Dat is geen e-mailadres. Niets opgeslagen — het vorige adres staat er nog.
+        </p>
+      )}
+      {!forwardAddress && !forwardError && (
+        <p style={{ margin: "0 0 var(--sp-3)" }} className="cell-sub">
+          Nog geen adres. Typ het adres dat je in Cloudflare hebt aangemaakt, of{" "}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              const made = ensureInvoiceForwardAddress();
+              setForwardAddress(made);
+              setForwardDraft(made);
+            }}
+          >
+            laat LaVega er een maken
+          </button>
+          .
+        </p>
+      )}
       <div className="card-header">
         <h2>Koppeling met n8n</h2>
         <span className="eyebrow">

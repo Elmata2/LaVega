@@ -66,6 +66,25 @@ function click(el: Element) {
   });
 }
 
+/** React luistert op zijn eigen onChange, dus de waarde moet via de native setter
+ *  zodat React de wijziging ook ziet — anders typt de test in een veld dat niets
+ *  merkt en slaagt de assertie om de verkeerde reden. */
+function setValue(el: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** React hangt onBlur aan focusout, niet aan blur: blur bubbelt van zichzelf niet,
+ *  dus een los blur-event bereikt de delegatie nooit en de handler loopt niet. */
+function blur(el: HTMLInputElement) {
+  act(() => {
+    el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+}
+
 /* ── De webhook-URL en het token ────────────────────────────────────────── */
 
 test("the webhook URL and token are saved as LOCAL preferences", () => {
@@ -137,24 +156,35 @@ test("wissen clears both, so nothing can be fetched by accident", () => {
  * webhook-URL en het token in onder Koppelingen". Dat weghalen zou de keten die
  * hij vandaag test onmogelijk maken, en daarom pinnen we het hier vast. */
 
-test("het opzetblok en het doorstuuradres zijn weg uit Koppelingen", () => {
+test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", () => {
+  /* DEZE VERWACHTING IS BEWUST GEWIJZIGD, niet afgezwakt.
+   *
+   * Hij vroeg de kaart weg en dat is gebeurd: de opzethulp, de uitleg en de
+   * knoppen eromheen bestaan niet meer. Maar deze kaart was de ENIGE plek waar het
+   * doorstuuradres aangemaakt én gelezen werd, en hij test vanavond juist de
+   * mailketen. Zonder adres kon hij er geen maken — een opschoning die zijn eigen
+   * test onmogelijk maakt is niet wat hij vroeg. Dus staat er één regel terug: het
+   * adres, en een knop die er één maakt als hij er nog geen heeft.
+   *
+   * Wat de oorspronkelijke test bedoelde te beschermen — geen provisioning, geen
+   * uitleglawaai, geen testknop die echte facturen opgebruikt — wordt hieronder
+   * nog even hard beweerd. */
   const c = render();
-  // Blok 1: LaVega richtte n8n zelf in via de n8n-API. Die hulp is weg.
+  // De n8n-provisioning is en blijft weg.
   expect(c.querySelector('[aria-label="n8n basis-URL"]')).toBeNull();
   expect(c.querySelector('[aria-label="n8n API-sleutel"]')).toBeNull();
   expect([...c.querySelectorAll("button")].some((b) => (b.textContent ?? "").includes("Verbind met n8n"))).toBe(false);
-  // Blok 2: het doorstuuradres.
-  expect(c.querySelector('[data-testid="forward-address"]')).toBeNull();
-  expect([...c.querySelectorAll("button")].some((b) => (b.textContent ?? "").includes("doorstuuradres"))).toBe(false);
-  // En er blijven precies twee knoppen over: opslaan en wissen. Nog steeds geen
-  // testknop, want een test zou echte facturen opgebruiken.
-  expect([...c.querySelectorAll("button")].map((b) => b.textContent ?? "").filter(Boolean)).toEqual([
-    "Opslaan",
-    "Wissen",
-  ]);
-  // Het scherm maakt ook geen adres meer aan door open te gaan — het maakte er
-  // nooit een zonder klik, en nu bestaat die klik niet meer.
+  // Het adres is er nog niet, dus er staat een knop om er een te maken — en
+  // het scherm maakt er nog steeds NIET zelf een aan door open te gaan.
   expect(getInvoiceForwardAddress()).toBe("");
+  const maak = [...c.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("laat LaVega er een maken"));
+  expect(maak).not.toBeUndefined();
+  click(maak as HTMLButtonElement);
+  const made = getInvoiceForwardAddress();
+  expect(made).toMatch(/^lavega-[a-z0-9]{4,32}@invoices\.lavega\.dev$/);
+  expect((c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement).value).toBe(made);
+  // Nog steeds geen testknop: een test zou echte facturen opgebruiken.
+  expect([...c.querySelectorAll("button")].some((b) => /test/i.test(b.textContent ?? ""))).toBe(false);
 });
 
 test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vindt", () => {
@@ -174,4 +204,27 @@ test("het opzetblok verdwijnt, de reden waarom er geen testknop is niet", () => 
   // En de weg die de gegevens aflegen staat er nog bij: de LaVega-server zit er
   // niet tussen.
   expect(c.textContent).toContain("jouw browser");
+});
+
+test("hij kan het adres intypen dat Cloudflare werkelijk routeert", () => {
+  /* Het adres komt van buiten: zijn cofounder heeft in Cloudflare
+   * invoices@lavega.dev aangemaakt, niet het lavega-<random>@invoices.lavega.dev
+   * dat LaVega verzon. Een adres dat wij bedenken en dat niets routeert is erger
+   * dan geen adres — de post komt nergens aan terwijl het scherm zegt van wel. */
+  const c = render();
+  const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
+  setValue(input, "invoices@lavega.dev");
+  blur(input);
+  expect(getInvoiceForwardAddress()).toBe("invoices@lavega.dev");
+});
+
+test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", () => {
+  const c = render();
+  const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
+  setValue(input, "invoices@lavega.dev");
+  blur(input);
+  setValue(input, "invoices@lavega");
+  blur(input);
+  expect(getInvoiceForwardAddress()).toBe("invoices@lavega.dev");
+  expect(c.textContent).toContain("Dat is geen e-mailadres");
 });
