@@ -378,6 +378,12 @@ export function resolveAccountRate(
   return { ratePct: null, source: "unknown" };
 }
 
+/** Below this many percentage points a difference is not worth naming. Exported
+ *  so the screen can say "or the difference is smaller than 0,1% per jaar"
+ *  instead of asserting that nothing can be gained — an absence of suggestions
+ *  has two causes and only one of them is "you are already there". */
+export const MARGIN_PCT = 0.1;
+
 /** Compare each account's rate to the best available benchmark and quantify the
  *  yearly interest left on the table. `marginPct` avoids nagging over trivial
  *  gaps. Suggestions are sorted by biggest yearly gain first. */
@@ -386,7 +392,7 @@ export function analyzeInterest(
   txs: Tx[],
   rates: readonly RateBenchmark[],
   asOf: string,
-  marginPct = 0.1,
+  marginPct = MARGIN_PCT,
 ): InterestAnalysis {
   const best = bestRate(rates);
   const bestPromo = bestPromoRate(rates);

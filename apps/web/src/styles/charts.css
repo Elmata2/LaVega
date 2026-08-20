@@ -282,3 +282,131 @@
     visibility: hidden;
   }
 }
+
+/* ── SpendPie ─────────────────────────────────────────────────────────────
+ *
+ * Shipped without these rules, which is why it read as "zoomed out and like a
+ * million": an unsized conic-gradient div fills its container, and the legend was
+ * a bare <ul> of unstyled spans. The chart was correct and unwearable.
+ *
+ * The ring has a FIXED pixel size rather than a percentage. A conic-gradient has
+ * no intrinsic aspect ratio, so a width-only rule makes an ellipse as the card
+ * changes width; pinning both dimensions is what keeps it a circle at every
+ * breakpoint.
+ */
+.spend-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.spend-pie-ring {
+  flex: 0 0 auto;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  /* The hole is a smaller circle in the card's own colour rather than a
+   * transparent mask: the block sits on more than one background and a
+   * transparent centre would show whatever is behind the card. */
+}
+
+.spend-pie-hole {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: var(--card, #fff);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.spend-pie-total {
+  font-weight: 650;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.spend-pie-caption {
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.spend-pie-legend {
+  flex: 1 1 14rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* The row is the hit target, laid out as a grid so the amounts line up in a
+ * column instead of trailing after names of different lengths. */
+.spend-pie-item {
+  display: grid;
+  grid-template-columns: 0.75rem 1fr auto 2.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.2rem 0.25rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+button.spend-pie-item {
+  cursor: pointer;
+}
+
+button.spend-pie-item:hover,
+button.spend-pie-item:focus-visible {
+  background: var(--hover, rgba(0, 0, 0, 0.04));
+}
+
+.spend-pie-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+}
+
+.spend-pie-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.spend-pie-value,
+.spend-pie-share {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.spend-pie-share {
+  opacity: 0.6;
+}
+
+/* On a phone the ring and the legend stack, and the ring shrinks — 168px beside
+ * a full-width legend leaves the names about six characters. */
+@media (max-width: 560px) {
+  .spend-pie {
+    gap: 1rem;
+  }
+  .spend-pie-ring {
+    width: 132px;
+    height: 132px;
+  }
+  .spend-pie-hole {
+    width: 86px;
+    height: 86px;
+  }
+}

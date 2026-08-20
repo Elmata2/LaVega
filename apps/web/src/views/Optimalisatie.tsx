@@ -13,6 +13,7 @@ import {
   resolveHousingCost,
   analyzeInterest,
   keptRate,
+  MARGIN_PCT,
   matchBankBenchmark,
   accountType,
   CADENCE_LABEL_NL,
@@ -504,7 +505,24 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               <ul>
                 {noSaldo > 0 && <li>{noSaldo} rekening{noSaldo > 1 ? "en" : ""} zonder saldo — vul dat in bij Rekeningen.</li>}
                 {unknownRate > 0 && <li>{unknownRate} rekening{unknownRate > 1 ? "en" : ""} zonder rente — zet de Rente % hieronder.</li>}
-                {noSaldo === 0 && unknownRate === 0 && <li>Je saldi staan al op de beste plek die LaVega kent.</li>}
+                {/* "Al op de beste plek" was a CONCLUSION drawn from an absence
+                    of suggestions, and an absence has two causes: nothing to gain,
+                    or nothing computed. He hit the second and was told the first.
+                    So say which, with the numbers, and never claim a comparison
+                    that was not made. */}
+                {noSaldo === 0 && unknownRate === 0 &&
+                  (interest.best && keptBest !== null ? (
+                    <li>
+                      Beste rente die LaVega kan aantonen: {pct(keptBest)} bij {interest.best.bank}. Elke
+                      rekening hier haalt dat al, of het verschil is kleiner dan{" "}
+                      {pct(MARGIN_PCT)} per jaar.
+                    </li>
+                  ) : (
+                    <li>
+                      LaVega kent nog geen spaarrente om tegen te vergelijken — zonder die andere kant
+                      is er geen bedrag, alleen een percentage.
+                    </li>
+                  ))}
               </ul>
             </div>
           )}
