@@ -35,6 +35,27 @@ function cpOverlap(a: string, b: string): boolean {
   return x.length > 0 && y.length > 0 && (x.includes(y) || y.includes(x));
 }
 
+/** Shortest invoice number allowed to identify a payment on its own. Below this
+ *  a "number" is a digit that turns up in half of all descriptions, and using
+ *  it would settle invoices against unrelated transactions. */
+const MIN_IDENTIFYING_NUMBER = 5;
+
+/** Does this transaction carry the invoice's own number in its text?
+ *
+ *  The counterparty on a bank statement is frequently NOT the name on the
+ *  invoice: a direct debit shows the collecting party, a payment provider shows
+ *  itself, and a phone bill can arrive under the parent company's name. The
+ *  invoice number, though, is an identifier the invoice chose for itself and
+ *  Dutch payments carry it as the betalingskenmerk. So it may stand in for the
+ *  name check — and only for that. Amount, sign and the date window still have
+ *  to hold. */
+function carriesInvoiceNumber(t: Tx, invoiceNumber: string | undefined): boolean {
+  const n = norm(invoiceNumber).replace(/[^a-z0-9]/g, "");
+  if (n.length < MIN_IDENTIFYING_NUMBER) return false;
+  const hay = (norm(t.description) + " " + norm(t.counterparty)).replace(/[^a-z0-9]/g, "");
+  return hay.includes(n);
+}
+
 export function reconcileInvoices(invoices: Invoice[], txs: Tx[]): Invoice[] {
   const used = new Set<string>();
   return invoices.map((inv) => {
@@ -47,7 +68,7 @@ export function reconcileInvoices(invoices: Invoice[], txs: Tx[]): Invoice[] {
       if (Math.abs(Math.abs(t.amount) - inv.amount) > tol) return false;
       const d = dayDiff(inv.dueDate, t.date); // t.date - dueDate
       if (d < -60 || d > 30) return false;
-      return cpOverlap(t.counterparty, inv.counterparty);
+      return cpOverlap(t.counterparty, inv.counterparty) || carriesInvoiceNumber(t, inv.invoiceNumber);
     });
     if (matches.length !== 1) return inv; // ambiguous or none -> leave for manual review
     used.add(matches[0].id);

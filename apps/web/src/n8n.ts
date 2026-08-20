@@ -13,10 +13,34 @@
 import type { Invoice } from "@lavega/core";
 import { makeInvoice } from "@lavega/core";
 
+/** Where a row came in, and whether the sending domain survived the mail
+ *  authentication checks Cloudflare ran on it.
+ *
+ *  A row from the FORWARDING address carries all of this; a row pulled from
+ *  Gmail carries none of it, because there was no forwarding address and no SPF
+ *  verdict — absent is the honest shape of "not applicable", and `senderCheck`
+ *  then reads `unknown`.
+ *
+ *  `senderCheck: "passed"` means the mail really came from that domain. It is
+ *  NOT an approval of the invoice: a real mail from a real supplier can still
+ *  carry a fake invoice. Nothing here is ever called `verified`. */
+export type SenderCheck = "passed" | "failed" | "unknown";
+export type SenderChecks = { spf: string; dkim: string; dmarc: string };
+
 /** One invoice as the n8n workflow's "Naar LaVega-vorm" node emits it. */
 export type N8nInvoiceRow = {
   messageId: string;
   subject?: string;
+  /** Who sent it — NOT verified. On a forwarded mail this is him, not the
+   *  supplier; the supplier comes out of the invoice as `counterparty`. */
+  from?: string;
+  /** The full address the mail arrived on. Absent for a Gmail row. */
+  deliveredTo?: string;
+  queueKey?: string;
+  /** Never "passed" by default: an absent verdict is `unknown`. */
+  senderCheck: SenderCheck;
+  /** The literal SPF/DKIM/DMARC verdicts, or undefined when there were none. */
+  senderChecks?: SenderChecks;
   invoiceNumber?: string;
   /** ISO or null — Claude reports null when the invoice showed no such date. */
   issueDate: string | null;
@@ -83,6 +107,23 @@ function cents(v: unknown): number | null {
  */
 const NOTICE_KINDS: N8nNotice["kind"][] = ["notification", "reminder", "no-amount", "unreadable"];
 
+/** The sender verdict, read the same way `normalizeInboundMail` writes it:
+ *  anything that is not literally "passed" or "failed" is `unknown`. A missing
+ *  field, a typo and a hostile value all land there — never on "passed". */
+function senderCheckOf(v: unknown): SenderCheck {
+  return v === "passed" || v === "failed" ? v : "unknown";
+}
+
+/** The three literal verdicts, only when there were any. Undefined stays
+ *  undefined: three fabricated "unknown"s would claim a check happened. */
+function senderChecksOf(v: unknown): SenderChecks | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const spf = str(o.spf), dkim = str(o.dkim), dmarc = str(o.dmarc);
+  if (!spf && !dkim && !dmarc) return undefined;
+  return { spf: spf ?? "unknown", dkim: dkim ?? "unknown", dmarc: dmarc ?? "unknown" };
+}
+
 /** What the owner reads above each notice. Kept here, next to the type, so a
  *  new kind cannot reach the screen without a label. */
 export const NOTICE_LABELS: Record<N8nNotice["kind"], string> = {
@@ -145,6 +186,11 @@ export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; notices: N8n
     rows.push({
       messageId,
       subject: str(r.subject) ?? undefined,
+      from: str(r.from) ?? undefined,
+      deliveredTo: str(r.deliveredTo) ?? undefined,
+      queueKey: str(r.queueKey) ?? undefined,
+      senderCheck: senderCheckOf(r.senderCheck),
+      senderChecks: senderChecksOf(r.senderChecks),
       invoiceNumber: str(r.invoiceNumber) ?? undefined,
       issueDate: isoDate(r.issueDate),
       dueDate: isoDate(r.dueDate),
@@ -213,6 +259,11 @@ export type PendingInvoice = {
   /** Empty = the VAT is unknown, which is not the same as zero. */
   vat: string;
   currency: string;
+  /** Why THIS row did not book itself. Travels with the row (rather than living
+   *  in the view's state) so navigating away and back keeps the explanation
+   *  attached to the row it belongs to. Absent on a row that was never a
+   *  candidate for booking itself. */
+  waitReason?: string;
 };
 
 /** n8n row -> review row. `entity` is a LaVega concept the mailbox knows
@@ -266,4 +317,124 @@ export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoic
       vatAmount: vat,
     }),
   };
+}
+
+/* ── Wat mag zichzelf boeken, en waarom ────────────────────────────────────
+ *
+ * Hij vroeg: "I don't want the user to click on any of them or link it
+ * themselves — I want it automatically linked for them." Dat zijn TWEE
+ * handelingen, en ze verdienen niet hetzelfde vertrouwen:
+ *
+ *   1. BOEKEN — van een mail een financieel record maken. Dat komt in de
+ *      administratie en in de btw-cijfers terecht.
+ *   2. KOPPELEN — een geboekte factuur aan een banktransactie hangen.
+ *      `reconcileInvoices` doet dat al: op bedrag binnen 1%, teken, een
+ *      datumvenster en de naam óf het factuurnummer. Omkeerbaar, en er hoeft
+ *      niemand op te klikken.
+ *
+ * (2) was al automatisch. (1) was het niet, en met goede reden: een
+ * doorgestuurde mail komt van buiten, en wie het doorstuuradres kent kan iets
+ * in zijn boeken proberen te krijgen. Dus blijft (1) een voorstel — TENZIJ de
+ * drie dingen hieronder alle drie kloppen. Dan is er niets meer over om te
+ * beslissen, en een klik vragen is dan alleen maar werk.
+ *
+ *   a. DE AFZENDER IS ECHT. `senderCheck === "passed"`: de mail kwam
+ *      aantoonbaar van het domein dat hij noemt. "failed" is een gemarkeerd
+ *      voorstel — nooit weggegooid, want een echte factuur van een domein met
+ *      een slordig SPF-record mag niet stil verdwijnen. "unknown" is óók een
+ *      voorstel: er is geen controle geweest, en dat is geen goedkeuring.
+ *   b. DE ONDERNEMING IS GEEN KEUZE. Bij meer dan één BV is "welke entiteit"
+ *      een echte vraag, en een verkeerd toegewezen factuur zit scheef in de
+ *      btw. Eén optie = niets te kiezen; meer = één keer vragen.
+ *   c. DE FACTUUR IS COMPLEET. Precies de eis die `pendingToInvoice` al stelt:
+ *      relatie, factuurdatum, vervaldatum, een geldig bedrag en een echte
+ *      valuta. Er wordt niets bijverzonnen om de grens te halen.
+ *
+ * En wat wél automatisch gaat is OMKEERBAAR en ZICHTBAAR: het staat in de lijst
+ * hieronder, de UI zegt dat het zichzelf boekte, en één klik zet hem op
+ * geannuleerd — waarmee hij uit de prognose valt zonder dat het record
+ * verdwijnt. Iets stils dat zijn boeken verandert is erger dan een klik.
+ */
+
+export type AutoBookDecision = { book: true } | { book: false; reason: string };
+
+export function autoBookDecision(
+  row: N8nInvoiceRow,
+  ctx: { entityChoices: string[]; defaultEntity: string },
+): AutoBookDecision {
+  if (row.senderCheck === "failed") {
+    const c = row.senderChecks;
+    const detail = c ? ` (SPF ${c.spf}, DKIM ${c.dkim}, DMARC ${c.dmarc})` : "";
+    return {
+      book: false,
+      reason: `De afzender kwam niet door de SPF/DKIM-controle${detail}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
+    };
+  }
+  if (row.senderCheck !== "passed") {
+    return {
+      book: false,
+      reason: "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
+    };
+  }
+  if (ctx.entityChoices.length !== 1) {
+    return {
+      book: false,
+      reason: "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
+    };
+  }
+  const check = pendingToInvoice(toPending(row, ctx.entityChoices[0] || ctx.defaultEntity));
+  if (!check.ok) return { book: false, reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.` };
+  return { book: true };
+}
+
+/* ── De lijst van wat zichzelf geboekt heeft ───────────────────────────────
+ *
+ * Dit hoort eigenlijk als veld op `Invoice` in packages/core/src/model.ts —
+ * dan reist het mee in de kluis en in een back-up. Dat bestand is van een
+ * andere lane, dus staat het hier: een aparte localStorage-sleutel naast de
+ * kluis, met alleen een id, het messageId en het onderwerp. Zonder deze lijst
+ * is een automatisch geboekte factuur na één herlaad niet te onderscheiden van
+ * een die hij zelf bevestigde, en dan is "zichtbaar automatisch gebeurd" een
+ * belofte die maar één sessie meegaat.
+ */
+
+const AUTO_BOOKED_KEY = "lavega.n8n.autoBooked.v1";
+
+export type AutoBookedInvoice = { invoiceId: string; messageId: string; subject?: string };
+
+export function getAutoBookedInvoices(): AutoBookedInvoice[] {
+  try {
+    const raw = localStorage.getItem(AUTO_BOOKED_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((e): AutoBookedInvoice[] => {
+      if (!e || typeof e !== "object") return [];
+      const o = e as Record<string, unknown>;
+      const invoiceId = str(o.invoiceId), messageId = str(o.messageId);
+      if (!invoiceId || !messageId) return [];
+      return [{ invoiceId, messageId, subject: str(o.subject) ?? undefined }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Idempotent: the same invoice logged twice stays one entry, so a re-render or
+ *  a repeated fetch cannot inflate the list. */
+export function rememberAutoBooked(entry: AutoBookedInvoice): void {
+  const kept = getAutoBookedInvoices().filter((a) => a.invoiceId !== entry.invoiceId);
+  try {
+    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify([...kept, entry]));
+  } catch {
+    /* a full or blocked localStorage must not break the booking itself */
+  }
+}
+
+export function forgetAutoBooked(invoiceId: string): void {
+  try {
+    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify(getAutoBookedInvoices().filter((a) => a.invoiceId !== invoiceId)));
+  } catch {
+    /* ignored, same reason */
+  }
 }

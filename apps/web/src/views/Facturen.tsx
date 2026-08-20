@@ -14,7 +14,18 @@ import {
   getN8nInvoiceUrl,
   setAiExtractionEnabled,
 } from "../settings";
-import { fetchQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nNotice, type PendingInvoice } from "../n8n";
+import {
+  autoBookDecision,
+  fetchQueue,
+  forgetAutoBooked,
+  getAutoBookedInvoices,
+  pendingToInvoice,
+  rememberAutoBooked,
+  toPending,
+  NOTICE_LABELS,
+  type N8nNotice,
+  type PendingInvoice,
+} from "../n8n";
 import "../styles/views.css";
 
 /* Facturen — reduced to EXACTLY three ways in (UI review, 2026-08-16):
@@ -25,11 +36,38 @@ import "../styles/views.css";
  *
  * Only the SURFACE was simplified. Every safety rule the feature had is still
  * here and still enforced in the same place:
- *   - nothing books itself: an n8n row is a proposal until "Bevestigen";
  *   - a row without a valid amount is refused (pendingToInvoice / handleAdd);
  *   - an unreadable currency blocks the row instead of silently becoming EUR —
  *     for the n8n queue AND for manual entry;
  *   - the AI PDF read stays opt-in, per document, and only pre-fills a draft.
+ *
+ * WHAT CHANGED (20 August 2026), and why the old "nothing books itself" is now
+ * "almost nothing books itself":
+ *
+ * He asked for a forwarded invoice to end up linked without him clicking. That
+ * is TWO acts, and they never deserved the same treatment:
+ *
+ *   BOOKING  — turning a mail into a financial record. It lands in his
+ *              administration and in his BTW figures.
+ *   LINKING  — hanging a booked invoice on a bank transaction. reconcileInvoices
+ *              has always done this by itself, and it is reversible.
+ *
+ * MEASURED before changing anything: linking was already automatic, but only on
+ * a bank sync or a file import (App.tsx) — so an invoice confirmed today whose
+ * payment already went out last week sat at "expected" until the next import.
+ * That is fixed here: every path that BOOKS an invoice now reconciles the whole
+ * list against the transactions on hand, immediately. Both the auto path and
+ * "Bevestigen".
+ *
+ * Booking is the dangerous half — a forwarded mail comes from outside, and
+ * whoever knows the forwarding address can try to get something into his books.
+ * So a row still has to earn it, and `autoBookDecision` (see n8n.ts) is the
+ * whole rule: a verified sender, one unambiguous entity, and a complete
+ * invoice. Everything else stays a proposal AND carries the reason it waits.
+ * What does book itself is visible as automatic (the "automatisch" badge, from
+ * the auto-booked log) and reversible in one click ("Terugdraaien" → cancelled,
+ * which drops it out of the forecast without deleting the record). Something
+ * silent that changes his books is worse than a click.
  */
 
 /** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
@@ -263,9 +301,51 @@ export default function Facturen({
       const already = new Set(currentPending.map((p) => p.messageId));
       const fresh = outcome.rows.filter((r) => !handled.has(r.messageId) && !already.has(r.messageId));
       const duplicates = outcome.rows.length - fresh.length;
-      if (fresh.length > 0) {
-        onPendingChange([...currentPending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
+
+      // The gate. Rows that clear it become invoices right here; the rest go to
+      // the review list WITH the reason they are waiting, so the queue never
+      // shows a row without saying why it needs him.
+      const booked: Invoice[] = [];
+      const bookedFrom: { invoiceId: string; messageId: string; subject?: string }[] = [];
+      const decidedIds: string[] = [];
+      let alreadyStored = 0;
+      const proposals: PendingInvoice[] = [];
+      const seenIds = new Set(invoices.map((i) => i.id));
+      const fallbackEntity = entity || defaultEntity;
+      for (const row of fresh) {
+        const draft = toPending(row, fallbackEntity);
+        const decision = autoBookDecision(row, { entityChoices, defaultEntity: fallbackEntity });
+        if (!decision.book) {
+          proposals.push({ ...draft, waitReason: decision.reason });
+          continue;
+        }
+        // The gate guarantees exactly one entity, so THAT is the one to book on
+        // — never the app-wide default, which may be a different BV.
+        const result = pendingToInvoice({ ...draft, entity: entityChoices[0] });
+        if (!result.ok) {
+          // Unreachable while the gate checks the same thing, but a row must
+          // land in the review list rather than vanish if the two ever diverge.
+          proposals.push({ ...draft, waitReason: result.error });
+          continue;
+        }
+        if (seenIds.has(result.invoice.id)) {
+          alreadyStored++;
+        } else {
+          seenIds.add(result.invoice.id);
+          booked.push(result.invoice);
+          bookedFrom.push({ invoiceId: result.invoice.id, messageId: row.messageId, subject: row.subject });
+        }
+        // Decided either way, so n8n's next hourly pass will not re-offer it.
+        decidedIds.push(row.messageId);
       }
+      if (decidedIds.length > 0) addHandledInvoiceMessageIds(decidedIds);
+      if (booked.length > 0) {
+        // ONE save with everything, and reconciled in the same breath: a payment
+        // that already came in links now instead of at the next import.
+        onSaveInvoices(reconcileInvoices([...invoices, ...booked], txs));
+        for (const b of bookedFrom) rememberAutoBooked(b);
+      }
+      if (proposals.length > 0) onPendingChange([...currentPending, ...proposals]);
       // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
       const knownNotices = new Set(currentNotices.map((n) => n.messageId));
       const freshNotices = outcome.notices.filter(
@@ -278,7 +358,22 @@ export default function Facturen({
       } else if (fresh.length === 0) {
         parts.push("Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.");
       } else {
-        parts.push(`${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd — bevestig of verwerp elke regel.`);
+        parts.push(`${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd.`);
+      }
+      if (booked.length > 0) {
+        parts.push(
+          `${booked.length} daarvan ${booked.length === 1 ? "is" : "zijn"} automatisch geboekt: de afzender kwam door de SPF/DKIM-controle en er stond alles in wat nodig is. Ze staan hieronder met “automatisch” erbij en zijn met één klik terug te draaien.`,
+        );
+      }
+      if (alreadyStored > 0) {
+        parts.push(
+          alreadyStored === 1
+            ? "Eén ervan stond al in LaVega en is niet dubbel geboekt."
+            : `${alreadyStored} ervan stonden al in LaVega en zijn niet dubbel geboekt.`,
+        );
+      }
+      if (proposals.length > 0) {
+        parts.push(`${proposals.length} ${proposals.length === 1 ? "regel wacht" : "regels wachten"} op jou — bij elke regel staat waarom.`);
       }
       if (duplicates > 0) parts.push(`${duplicates} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`);
       if (outcome.dropped > 0) parts.push(`${outcome.dropped} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`);
@@ -312,7 +407,10 @@ export default function Facturen({
       return;
     }
     const duplicate = invoices.some((i) => i.id === result.invoice.id);
-    if (!duplicate) onSaveInvoices([...invoices, result.invoice]);
+    // Reconciled on the spot, exactly like the auto path and like a file import:
+    // if the payment already went out, this invoice is linked before he leaves
+    // the screen instead of at the next bank sync.
+    if (!duplicate) onSaveInvoices(reconcileInvoices([...invoices, result.invoice], txs));
     addHandledInvoiceMessageIds([p.messageId]);
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
@@ -350,6 +448,12 @@ export default function Facturen({
   // Entity options: fall back to the app's default entity when no accounts are
   // imported yet, so a first invoice still attaches to a BV (and thus scopes).
   const entityChoices = entities.length > 0 ? entities : [defaultEntity];
+
+  // Which invoices got here without him clicking. Read from the log on EVERY
+  // render, deliberately un-memoised: the log is written by this view (booking,
+  // undoing) and by a previous session, so any cache key would be a guess about
+  // when it changed. It is one localStorage read of a handful of ids.
+  const autoBookedIds = new Set(getAutoBookedInvoices().map((a) => a.invoiceId));
 
   function handleAdd() {
     const cp = counterparty.trim();
@@ -397,6 +501,16 @@ export default function Facturen({
 
   function setStatus(id: string, status: Invoice["status"]) {
     onSaveInvoices(invoices.map((i) => (i.id === id ? { ...i, status } : i)));
+  }
+
+  // Undo an automatic booking. It CANCELS rather than deletes: cancelled drops
+  // straight out of scheduledInvoiceFlows (so it stops moving the forecast) but
+  // the record and its trail stay, which is what "reversible" has to mean for
+  // something that entered his books on its own.
+  function undoAutoBooked(id: string) {
+    setStatus(id, "cancelled");
+    forgetAutoBooked(id);
+    setN8nNote("Automatische boeking teruggedraaid: de factuur staat op geannuleerd en telt niet meer mee in de prognose.");
   }
 
   // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
@@ -535,7 +649,7 @@ export default function Facturen({
     <>
       <div className="view-head">
         <h2>Drie manieren om een factuur binnen te krijgen</h2>
-        <span className="eyebrow">niets wordt automatisch geboekt</span>
+        <span className="eyebrow">alleen een geverifieerde afzender boekt zichzelf</span>
       </div>
 
       <ModuleGrid label="Facturen invoeren">
@@ -543,9 +657,15 @@ export default function Facturen({
         <Module title="1 · Automatisch (n8n)" height="tall">
           <p className="cell-sub">
             LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna
-            elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. Er wordt
-            niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf. De knop
+            elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. De knop
             hieronder is voor een directe hercontrole.
+          </p>
+          <p className="cell-sub">
+            Een factuur boekt zichzelf alleen als er niets meer te beslissen valt: de mail
+            kwam via je doorstuuradres binnen én door de SPF/DKIM-controle, je hebt één
+            onderneming, en de factuur is compleet. Die krijgt het label “automatisch” en is
+            met één klik terug te draaien. Al het andere wacht op jou, met de reden erbij —
+            een niet-geverifieerde afzender boekt hier niets.
           </p>
           <div className="stack-form-actions">
             <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
@@ -714,6 +834,10 @@ export default function Facturen({
                   Uit de mail: {p.subject ?? "(geen onderwerp)"}
                   {p.note ? ` · ${p.note}` : ""}
                 </p>
+                {/* Waarom juist DEZE regel wacht. Zonder deze zin is "bevestig
+                    hem zelf" een opdracht zonder reden — en de reden is het
+                    enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
+                {p.waitReason && <p className="cell-sub text-warn">Wacht op jou: {p.waitReason}</p>}
                 <div className="facturen-form">
                   <label>
                     Entiteit{" "}
@@ -874,6 +998,14 @@ export default function Facturen({
                       </td>
                       <td data-label="Richting">
                         <span className="badge">{inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}</span>
+                        {autoBookedIds.has(inv.id) && (
+                          <>
+                            {" "}
+                            <span className="badge" title="Deze factuur is zonder klik geboekt: de afzender kwam door de SPF/DKIM-controle en de factuur was compleet.">
+                              automatisch
+                            </span>
+                          </>
+                        )}
                       </td>
                       <td className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`} data-label="Bedrag">{formatEuro(signed)}</td>
                       <td data-label="Vervaldatum">{inv.dueDate}</td>
@@ -883,6 +1015,14 @@ export default function Facturen({
                       <td>
                         {inv.status === "expected" ? (
                           <>
+                            {autoBookedIds.has(inv.id) && (
+                              <>
+                                <button type="button" className="btn" disabled={busy}
+                                  onClick={() => undoAutoBooked(inv.id)}>
+                                  Terugdraaien
+                                </button>{" "}
+                              </>
+                            )}
                             <button type="button" className="btn" disabled={busy}
                               onClick={() => setStatus(inv.id, "paid")}>
                               markeer betaald

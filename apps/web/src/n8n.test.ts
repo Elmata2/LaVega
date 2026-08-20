@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
-import { fetchQueue, parseQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nInvoiceRow } from "./n8n.js";
+import {
+  autoBookDecision,
+  fetchQueue,
+  forgetAutoBooked,
+  getAutoBookedInvoices,
+  parseQueue,
+  pendingToInvoice,
+  rememberAutoBooked,
+  toPending,
+  NOTICE_LABELS,
+  type N8nInvoiceRow,
+} from "./n8n.js";
 import {
   addHandledInvoiceMessageIds,
   getHandledInvoiceMessageIds,
@@ -215,4 +226,93 @@ test("fetchQueue hands the notices through", async () => {
   const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
   const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
   expect(out.kind === "ok" && out.notices).toHaveLength(1);
+});
+
+/* ── Herkomst en de grens van wat zichzelf mag boeken ──────────────────────
+ *
+ * Twee handelingen die niet hetzelfde zijn:
+ *   BOEKEN   — van een mail een financieel record maken. Dat komt in zijn
+ *              administratie en in zijn btw-cijfers.
+ *   KOPPELEN — een geboekte factuur aan een banktransactie hangen. Dat doet
+ *              reconcileInvoices al, omkeerbaar, zonder klik.
+ *
+ * Alleen het eerste is gevaarlijk: wie het doorstuuradres kent, kan iets in zijn
+ * boeken proberen te krijgen. `senderCheck` is precies het signaal dat die
+ * poging moet doorstaan. */
+
+const FORWARDED = {
+  ...ROW,
+  source: "forward",
+  from: "facturen@acme.nl",
+  deliveredTo: "facturen@lavega.dev",
+  queueKey: "facturen",
+  senderCheck: "passed",
+  senderChecks: { spf: "pass", dkim: "pass", dmarc: "none" },
+};
+
+test("parseQueue neemt de herkomst over in plaats van hem te laten vallen", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(row.from).toBe("facturen@acme.nl");
+  expect(row.deliveredTo).toBe("facturen@lavega.dev");
+  expect(row.senderCheck).toBe("passed");
+  expect(row.senderChecks).toEqual({ spf: "pass", dkim: "pass", dmarc: "none" });
+});
+
+test("een regel zonder afzendercontrole krijgt 'unknown', nooit 'passed'", () => {
+  // Gmail-regels dragen deze velden met opzet niet: er wás geen doorstuuradres.
+  // Afwezig mag nooit als goedgekeurd binnenkomen.
+  const row = parseQueue({ invoices: [ROW] })!.rows[0];
+  expect(row.senderCheck).toBe("unknown");
+  expect(row.deliveredTo).toBeUndefined();
+  // En een verzonnen waarde ook niet.
+  expect(parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck).toBe("unknown");
+});
+
+test("autoBookDecision: geverifieerde afzender + complete factuur + één onderneming = boekt zichzelf", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({ book: true });
+});
+
+test("autoBookDecision: een afzender die de controle niet haalt of niet had, boekt niets", () => {
+  const failed = parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] })!.rows[0];
+  const d1 = autoBookDecision(failed, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d1.book).toBe(false);
+  expect(d1.book === false && d1.reason).toContain("SPF");
+
+  const unchecked = parseQueue({ invoices: [ROW] })!.rows[0];
+  const d2 = autoBookDecision(unchecked, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d2.book).toBe(false);
+  expect(d2.book === false && d2.reason).toContain("geen afzendercontrole");
+});
+
+test("autoBookDecision: bij meer dan één onderneming wordt er niet gegokt welke BV", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  const d = autoBookDecision(row, { entityChoices: ["BV1", "BV2"], defaultEntity: "BV1" });
+  expect(d.book).toBe(false);
+  expect(d.book === false && d.reason).toContain("onderneming");
+});
+
+test("autoBookDecision: een incomplete factuur boekt niet, en noemt precies wat er mist", () => {
+  const noDue = parseQueue({ invoices: [{ ...FORWARDED, dueDate: null }] })!.rows[0];
+  const d1 = autoBookDecision(noDue, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d1.book === false && d1.reason).toContain("vervaldatum");
+
+  const noCcy = parseQueue({ invoices: [{ ...FORWARDED, currency: "euro's" }] })!.rows[0];
+  const d2 = autoBookDecision(noCcy, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d2.book === false && d2.reason).toContain("valuta");
+
+  const noCp = parseQueue({ invoices: [{ ...FORWARDED, counterparty: null }] })!.rows[0];
+  const d3 = autoBookDecision(noCp, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d3.book === false && d3.reason).toContain("relatie");
+});
+
+test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", () => {
+  expect(getAutoBookedInvoices()).toEqual([]);
+  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" });
+  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" }); // idempotent
+  rememberAutoBooked({ invoiceId: "inv-2", messageId: "msg-2" });
+  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
+  expect(getAutoBookedInvoices()[0].subject).toBe("Factuur juli");
+  forgetAutoBooked("inv-1");
+  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-2"]);
 });

@@ -47,3 +47,38 @@ test("reconcileInvoices: one tx cannot settle two invoices", () => {
   const out = reconcileInvoices(invoices, [tx("t1", "2026-08-30", -100, "X")]);
   expect(out.filter((i) => i.status === "paid")).toHaveLength(1);
 });
+
+/* Automatic linking, part two: WHICH transaction settles this invoice.
+ *
+ * The counterparty on a bank statement is often not the name on the invoice —
+ * a direct debit shows the collecting party, a payment provider shows itself.
+ * But the invoice NUMBER is an identifier the invoice itself chose, and Dutch
+ * payments carry it in the description ("betalingskenmerk"). So a description
+ * that literally contains the invoice number is a STRONGER identification than
+ * a name that happens to overlap, and it may stand in for the name check.
+ * Amount, sign and the date window are untouched — this widens who is
+ * recognised, never what counts as a match. */
+const txd = (id: string, date: string, amount: number, cp: string, desc: string): Tx =>
+  ({ id, accountKey: "A", date, amount, currency: "EUR", counterparty: cp, description: desc, category: "", manual: false });
+
+test("reconcileInvoices: the invoice number in the description settles it even when the name does not overlap", () => {
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "2026-0042", amount: 1210, dueDate: "2026-09-01" })];
+  const out = reconcileInvoices(invoices, [txd("t1", "2026-08-28", -1210, "KPN B.V.", "Factuurnr 2026-0042 termijn augustus")]);
+  expect(out[0]).toMatchObject({ status: "paid", matchedTxId: "t1" });
+});
+
+test("reconcileInvoices: a short invoice number is not an identifier and cannot stand in for the name", () => {
+  // "7" appears in half of all descriptions. Only a number long enough to be
+  // its own identifier is allowed to replace the counterparty check.
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "7", amount: 1210, dueDate: "2026-09-01" })];
+  const out = reconcileInvoices(invoices, [txd("t1", "2026-08-28", -1210, "KPN B.V.", "termijn 7 augustus")]);
+  expect(out[0].status).toBe("expected");
+});
+
+test("reconcileInvoices: the invoice number does not override amount, sign or the date window", () => {
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "2026-0042", amount: 1210, dueDate: "2026-09-01" })];
+  const number = "Factuurnr 2026-0042";
+  expect(reconcileInvoices(invoices, [txd("t1", "2026-08-28", -900, "KPN", number)])[0].status).toBe("expected");   // wrong amount
+  expect(reconcileInvoices(invoices, [txd("t2", "2026-08-28", 1210, "KPN", number)])[0].status).toBe("expected");   // wrong sign
+  expect(reconcileInvoices(invoices, [txd("t3", "2026-05-01", -1210, "KPN", number)])[0].status).toBe("expected");  // outside the window
+});
