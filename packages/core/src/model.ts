@@ -87,6 +87,14 @@ export type VatSettings = {
   /** The amount the tax office actually assessed for one prepayment period, in
    *  cents. Set this and nothing is estimated — an assessment beats a guess. */
   profitTaxManualCents?: number;
+  /** Which stelsel this entity files under — a fact only the owner can supply.
+   *
+   *  It decides whether the BTW on an invoice is due in the period of the
+   *  INVOICE (factuurstelsel) or of the PAYMENT (kasstelsel), which is the
+   *  difference between an unpaid invoice already owing BTW and owing nothing
+   *  yet. Absent means unanswered: the invoice basis is then not used at all
+   *  rather than guessed (see `vatPosition`). */
+  vatBasis?: "factuurstelsel" | "kasstelsel";
 };
 
 /** What `VatSettings` has grown into. Same type, honest name — use this one in

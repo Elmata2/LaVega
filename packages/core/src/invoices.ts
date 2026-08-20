@@ -75,3 +75,67 @@ export function reconcileInvoices(invoices: Invoice[], txs: Tx[]): Invoice[] {
     return { ...inv, status: "paid" as const, matchedTxId: matches[0].id };
   });
 }
+
+/* ── WHAT THE INVOICES KNOW ABOUT BTW ──────────────────────────────────────
+ *
+ * `Invoice.vatAmount` was stored from the day invoices landed and read by
+ * nothing — `Facturen.tsx` said so in a comment. This is the reader.
+ *
+ * It matters because of the stelsel: under the factuurstelsel the BTW on an
+ * outgoing invoice is due in the period of the INVOICE, so an invoice that has
+ * not been paid yet already creates a debt. A figure built from bank movements
+ * cannot see that at all.
+ *
+ * Two rules carry the honesty of it:
+ *
+ *  - `null` means "no invoice in this window states this side", never 0. An
+ *    invoice list with only sales invoices does NOT mean the voorbelasting was
+ *    zero; it means LaVega does not know it.
+ *  - an explicit `vatAmount: 0` is a KNOWN zero and counts as covered.
+ *    Btw-verlegd, ICP and 0 %-export invoices carry 0 correctly, and calling
+ *    those a gap would make a complete quarter look incomplete. */
+
+/** The BTW in one entity's invoices over one window, with the coverage that
+ *  says how much of the window's invoices actually stated a BTW amount. */
+export type InvoiceVatWindow = {
+  /** BTW charged on outgoing (AR, `direction: "in"`) invoices — af te dragen. */
+  chargedCents: number | null;
+  /** BTW on incoming (AP, `direction: "out"`) invoices — voorbelasting. */
+  paidCents: number | null;
+  /** How many invoices in the window state a BTW amount, out of how many there
+   *  are. `withVat < total` is the honest reason a figure may not be used. */
+  coverage: { withVat: number; total: number };
+};
+
+/**
+ * `[from, to]` is inclusive and matched on the ISSUE date, because that is the
+ * date the factuurstelsel makes the BTW due on.
+ *
+ * `paid` invoices count exactly like `expected` ones — the BTW was due whether
+ * or not the money has arrived. `cancelled` invoices count for nothing: there is
+ * no BTW consequence and including them in the coverage meter would report a gap
+ * that cannot be filled.
+ */
+export function invoiceVatInWindow(
+  invoices: readonly Invoice[],
+  entity: string,
+  from: string,
+  to: string,
+): InvoiceVatWindow {
+  let charged: number | null = null;
+  let paid: number | null = null;
+  let withVat = 0;
+  let total = 0;
+  for (const i of invoices) {
+    if (i.entity !== entity) continue;
+    if (i.status === "cancelled") continue;
+    if (i.issueDate < from || i.issueDate > to) continue;
+    total++;
+    if (typeof i.vatAmount !== "number" || !Number.isFinite(i.vatAmount)) continue;
+    withVat++;
+    const cents = Math.round(Math.abs(i.vatAmount) * 100);
+    if (i.direction === "in") charged = (charged ?? 0) + cents;
+    else paid = (paid ?? 0) + cents;
+  }
+  return { chargedCents: charged, paidCents: paid, coverage: { withVat, total } };
+}

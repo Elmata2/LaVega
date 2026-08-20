@@ -1,4 +1,5 @@
-import type { ScheduledFlow, Tx, VatSettings } from "./model.js";
+import type { Invoice, ScheduledFlow, Tx, VatSettings } from "./model.js";
+import { invoiceVatInWindow, type InvoiceVatWindow } from "./invoices.js";
 import { makeScheduledFlow } from "./scheduledFlows.js";
 import { taxPack } from "./taxpacks/index.js";
 import type { DeadlineRule, TaxPeriod, TaxPack, VatFrequency } from "./taxpacks/types.js";
@@ -118,60 +119,226 @@ function marginCents(txs: readonly Tx[], from: string, to: string): number {
   return sum;
 }
 
-/**
- * Estimate the VAT to set aside for the current filing period, as a confirmed
- * outflow `ScheduledFlow` due on that country's deadline.
+/* ── THE BTW POSITION ───────────────────────────────────────────────────────
  *
- * In order of trust:
- *   1. `settings.manualCents` — the owner said so;
- *   2. the owner's own spreadsheet, when it has both VAT columns for this
- *      period (`vatCharged − vatPaid`): real bookkeeping, and the one thing
- *      that also answers a mixed-rate entity;
- *   3. `mixedRates` ⇒ no estimate at all;
- *   4. the margin proxy at the entity's default rate.
+ * One figure per entity that is honest about WHICH period it describes, WHAT it
+ * was built from, and WHICH WAY the money goes. It exists because the old
+ * single-number answer got all three of those wrong at once:
+ *
+ *   - halfway through a quarter it summed a two-thirds-finished window and
+ *     emitted it as `confirmed` — a label the data cannot carry;
+ *   - a quarter with more voorbelasting than afdracht came back as `null`, so a
+ *     refund was rendered as an absence;
+ *   - the owner's own bookkeeping and his own invoices could not reach it.
+ *
+ * `computeVatSetAside` is now a thin wrapper over this, so the forecast, the
+ * available-balance netting and the DE path keep working unchanged.
+ */
+
+/** Where the figure came from. Never blended — see `vatPosition`. */
+export type VatBasis = "manual" | "sheet" | "invoices" | "proxy";
+
+/** Is the filing window over? Decides the wording AND the flow's status. */
+export type VatStage = "loopt" | "afgesloten";
+
+export type VatDirection = "betalen" | "terugvragen" | "onbekend";
+
+/**
+ * Why the ladder stopped where it did, when a better basis existed but could
+ * not be used. The UI turns this into one sentence naming the real cause; it is
+ * a code rather than a sentence so the engine stays language-free and the
+ * reason cannot drift from the arithmetic.
+ *
+ * `null` = the best basis available was used, and there is nothing to report.
+ */
+export type VatNote =
+  | "gemengde-tarieven"
+  | "stelsel-onbekend"
+  | "kasstelsel"
+  | "btw-onbekend-op-facturen"
+  | "omzetfacturen-onbekend"
+  | "voorbelasting-onbekend"
+  | "boekhouding-andere-periode"
+  | "geen-banktransacties";
+
+/**
+ * The BTW position of one entity for the period it must file next.
+ *
+ * `basis`, `coverage` and `rulesAsOf` are NOT optional: a figure that cannot say
+ * where it came from cannot be rendered, because the type cannot express one.
+ * Amounts are integer cents; `null` means unknown and never 0. `netCents > 0`
+ * is money owed to the tax office, `< 0` money to be reclaimed.
+ */
+export type VatPosition = {
+  period: TaxPeriod;
+  stage: VatStage;
+  basis: VatBasis;
+  /** BTW over the turnover of the period (af te dragen). */
+  chargedCents: number | null;
+  /** BTW over the costs of the period (voorbelasting). */
+  paidCents: number | null;
+  netCents: number | null;
+  direction: VatDirection;
+  /** Invoices in the window that state a BTW amount, out of how many there are. */
+  coverage: { withVat: number; total: number };
+  note: VatNote | null;
+  /** The date the rule pack itself states — provenance, not the day we looked. */
+  rulesAsOf: string;
+  /** What this country calls the tax: "BTW", "USt". */
+  vatLabel: string;
+};
+
+export type VatPositionInput = {
+  txs: readonly Tx[];
+  settings: VatSettings;
+  asOf: string;
+  /** The owner's own spreadsheet figures, when he connected one. */
+  figures?: TaxFigures;
+  /** All invoices; the position filters to this entity and this window itself. */
+  invoices?: readonly Invoice[];
+};
+
+/**
+ * The basis ladder, in order of trust — and the bases are NEVER summed.
+ *
+ *   1. `manual`   — the owner said so, and a fact from him outranks every
+ *                   calculation;
+ *   2. `sheet`    — his own bookkeeping, when it covers exactly this window and
+ *                   states both sides;
+ *   3. `invoices` — his own invoices, but only under the factuurstelsel and only
+ *                   when every invoice in the window states its BTW and both
+ *                   sides are present;
+ *   4. `proxy`    — the margin over bank movements at the entity's rate.
+ *
+ * Adding invoice BTW to proxy BTW would double-count the same euros: a
+ * reconciled invoice IS a bank movement. That is why the ladder picks one basis
+ * whole, and why there is a test that fails if anyone ever sums them.
+ */
+export function vatPosition({ txs, settings, asOf, figures, invoices }: VatPositionInput): VatPosition {
+  const pack = taxPack(settings.country);
+  const period = nextVatPeriod(settings.frequency, asOf, settings.country);
+  const { periodStart, periodEnd } = period;
+  // The last day of the period is still IN it — that day is not over yet.
+  const stage: VatStage = asOf <= periodEnd ? "loopt" : "afgesloten";
+
+  const fromInvoices = invoiceVatInWindow(invoices ?? [], settings.entity, periodStart, periodEnd);
+  const coverage = fromInvoices.coverage;
+
+  const base = { period, stage, coverage, rulesAsOf: pack.rulesAsOf, vatLabel: pack.vat.label };
+  const finish = (
+    basis: VatBasis,
+    chargedCents: number | null,
+    paidCents: number | null,
+    netCents: number | null,
+    note: VatNote | null,
+  ): VatPosition => ({
+    ...base, basis, chargedCents, paidCents, netCents, note,
+    direction: netCents === null ? "onbekend" : netCents < 0 ? "terugvragen" : "betalen",
+  });
+
+  // 1. His own amount. Not clamped at 0: if he says it is money back, it is.
+  if (typeof settings.manualCents === "number") {
+    return finish("manual", null, null, Math.round(settings.manualCents), null);
+  }
+
+  // 2. His own bookkeeping.
+  const sheet = vatFromSheet(figures, periodStart, periodEnd);
+  if (sheet !== null) {
+    return finish("sheet", sheet.chargedCents, sheet.paidCents, sheet.chargedCents - sheet.paidCents, null);
+  }
+
+  // 3. His own invoices — the only basis that sees an unpaid invoice's debt.
+  const invoiceNote = invoiceBasisRefusal(settings, fromInvoices);
+  if (invoiceNote === null && fromInvoices.chargedCents !== null && fromInvoices.paidCents !== null) {
+    const charged = fromInvoices.chargedCents;
+    const paid = fromInvoices.paidCents;
+    return finish("invoices", charged, paid, charged - paid, null);
+  }
+
+  // 4. The margin proxy, or nothing at all when the rates are mixed.
+  const sheetNote: VatNote | null = figures && figures.rowCount > 0 ? "boekhouding-andere-periode" : null;
+  if (settings.mixedRates) {
+    return finish("proxy", null, null, null, "gemengde-tarieven");
+  }
+  // An empty window sums to 0, and "niets te betalen" drawn from no movements at
+  // all is a conclusion an absence cannot carry. So it stays unknown.
+  const inWindow = txs.filter((t) => t.date >= periodStart && t.date <= periodEnd).length;
+  if (inWindow === 0) return finish("proxy", null, null, null, "geen-banktransacties");
+
+  const margin = marginCents(txs, periodStart, periodEnd);
+  const r = settings.defaultRatePct;
+  // Symmetric on purpose: a quarter whose bank movements are net negative is the
+  // proxy's way of saying "money back", and refusing only that direction would
+  // bias every estimate towards "you owe" and hide the refunds.
+  const net = Math.round((margin * r) / (100 + r));
+  return finish("proxy", null, null, net, invoiceNote ?? sheetNote);
+}
+
+/** Why his invoices may NOT be used as the basis, or `null` when they may.
+ *
+ *  Every branch here is a thing the owner can act on, which is the point: the
+ *  screen says the real cause instead of silently showing a weaker number. */
+function invoiceBasisRefusal(settings: VatSettings, w: InvoiceVatWindow): VatNote | null {
+  if (w.coverage.total === 0) return null; // no invoices at all: nothing to report
+  if (settings.vatBasis === undefined) return "stelsel-onbekend";
+  if (settings.vatBasis === "kasstelsel") return "kasstelsel";
+  if (w.coverage.withVat < w.coverage.total) return "btw-onbekend-op-facturen";
+  // Both sides have to be present. An invoice list with only sales invoices does
+  // not mean there was no voorbelasting — it means LaVega cannot see it, and
+  // treating that absence as 0 would state a debt as a certainty.
+  if (w.chargedCents === null) return "omzetfacturen-onbekend";
+  if (w.paidCents === null) return "voorbelasting-onbekend";
+  return null;
+}
+
+/**
+ * The VAT to set aside for the current filing period, as an outflow
+ * `ScheduledFlow` due on that country's deadline — a thin wrapper over
+ * `vatPosition`.
+ *
+ * Two things it deliberately does NOT do:
+ *
+ *  - a refund does not become a flow. LaVega does not know when the tax office
+ *    pays, and an inflow on an invented date is worse than no inflow; the refund
+ *    is shown on the Belasting screen instead.
+ *  - an in-progress period is `expected`, never `confirmed`. Only a closed
+ *    window — or the owner's own amount, which is his word — is confirmed.
  */
 export function computeVatSetAside(
   txs: Tx[],
   settings: VatSettings,
   asOf: string,
   figures?: TaxFigures,
+  invoices?: readonly Invoice[],
 ): ScheduledFlow | null {
-  const pack = taxPack(settings.country);
-  const { periodLabel, periodStart, periodEnd, deadline } = nextVatPeriod(settings.frequency, asOf, settings.country);
-
-  const sheetVat = vatFromSheet(figures, periodStart, periodEnd);
-  let amountCents: number;
-  if (typeof settings.manualCents === "number") {
-    amountCents = Math.max(0, Math.round(settings.manualCents));
-  } else if (sheetVat !== null) {
-    amountCents = sheetVat;
-  } else if (settings.mixedRates) {
-    return null; // can't safely auto-estimate mixed rates
-  } else {
-    const margin = marginCents(txs, periodStart, periodEnd);
-    const r = settings.defaultRatePct;
-    amountCents = margin > 0 ? Math.round((margin * r) / (100 + r)) : 0;
-  }
-  if (amountCents <= 0) return null;
+  const p = vatPosition({ txs, settings, asOf, figures, invoices });
+  if (p.netCents === null || p.netCents <= 0) return null;
   return makeScheduledFlow({
     entity: settings.entity,
-    label: `${pack.vat.label} ${periodLabel}`,
+    label: `${p.vatLabel} ${p.period.periodLabel}`,
     sign: -1,
-    amountCents,
-    dueDate: deadline,
+    amountCents: p.netCents,
+    dueDate: p.period.deadline,
     source: "vat",
-    status: "confirmed",
+    status: p.basis === "manual" || p.stage === "afgesloten" ? "confirmed" : "expected",
   });
 }
 
-/** Net VAT from the owner's sheet, but only when the sheet actually covers this
- *  filing period and states both sides. Anything less falls through to the
- *  proxy rather than half-using his numbers. */
-function vatFromSheet(figures: TaxFigures | undefined, periodStart: string, periodEnd: string): number | null {
+/** Both BTW sides from the owner's sheet, but only when the sheet actually
+ *  covers this filing period and states both of them. Anything less falls
+ *  through rather than half-using his numbers.
+ *
+ *  The net is NOT clamped at zero any more: a quarter with more voorbelasting
+ *  than afdracht is money back, and clamping it turned a refund into a nothing. */
+function vatFromSheet(
+  figures: TaxFigures | undefined,
+  periodStart: string,
+  periodEnd: string,
+): { chargedCents: number; paidCents: number } | null {
   if (!figures || figures.rowCount === 0) return null;
   if (figures.from !== periodStart || figures.to !== periodEnd) return null;
   if (figures.vatChargedCents === null || figures.vatPaidCents === null) return null;
-  return Math.max(0, figures.vatChargedCents - figures.vatPaidCents);
+  return { chargedCents: figures.vatChargedCents, paidCents: figures.vatPaidCents };
 }
 
 /**
@@ -268,12 +435,15 @@ export type TaxReservationInput = {
   asOf: string;
   /** The owner's own spreadsheet figures for the period, when he connected one. */
   figures?: TaxFigures;
+  /** All invoices. The BTW figure uses them under the factuurstelsel; see
+   *  `vatPosition`. Absent = the invoice basis simply isn't available. */
+  invoices?: readonly Invoice[];
 };
 
 /** Everything one entity must set aside under its country's rules: the VAT
  *  set-aside plus any profit-tax prepayments. One call per entity, so a view
  *  never has to know which countries prepay. */
-export function computeTaxReservations({ txs, settings, asOf, figures }: TaxReservationInput): ScheduledFlow[] {
-  const vat = computeVatSetAside(txs, settings, asOf, figures);
+export function computeTaxReservations({ txs, settings, asOf, figures, invoices }: TaxReservationInput): ScheduledFlow[] {
+  const vat = computeVatSetAside(txs, settings, asOf, figures, invoices);
   return [...(vat ? [vat] : []), ...computeProfitTaxPrepayments(txs, settings, asOf, figures)];
 }

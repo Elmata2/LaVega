@@ -1043,6 +1043,7 @@ export default function App() {
               asOf={asOf}
               vatSettings={vatSettings}
               scheduledFlows={scopedScheduledFlows}
+              invoices={invoices}
               busy={busy}
               onSaveVatSettings={saveVatSettings}
               onSaveScheduledFlows={saveScheduledFlows}
