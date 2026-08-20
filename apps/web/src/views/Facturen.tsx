@@ -332,7 +332,11 @@ export default function Facturen({
           alreadyStored++;
         } else {
           seenIds.add(result.invoice.id);
-          booked.push(result.invoice);
+          // ON THE RECORD, not beside it. `autoBooked` travels with the invoice
+          // into the encrypted vault and the back-up, so "this one arrived without
+          // you" survives a reload, a restore and a new device. The localStorage
+          // log stays as well, for invoices booked before the field existed.
+          booked.push({ ...result.invoice, autoBooked: true });
           bookedFrom.push({ invoiceId: result.invoice.id, messageId: row.messageId, subject: row.subject });
         }
         // Decided either way, so n8n's next hourly pass will not re-offer it.
@@ -453,7 +457,13 @@ export default function Facturen({
   // render, deliberately un-memoised: the log is written by this view (booking,
   // undoing) and by a previous session, so any cache key would be a guess about
   // when it changed. It is one localStorage read of a handful of ids.
-  const autoBookedIds = new Set(getAutoBookedInvoices().map((a) => a.invoiceId));
+  // The FIELD is the truth; the log is the fallback for invoices booked before
+  // the field existed. An invoice with autoBooked absent was confirmed by hand —
+  // the safe reading, since that is what every older row actually was.
+  const autoBookedIds = new Set([
+    ...invoices.filter((i) => i.autoBooked).map((i) => i.id),
+    ...getAutoBookedInvoices().map((a) => a.invoiceId),
+  ]);
 
   function handleAdd() {
     const cp = counterparty.trim();

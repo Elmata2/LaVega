@@ -53,6 +53,18 @@ export type Invoice = {
    *  (0..1), when it gave one — never a fabricated placeholder. Does not affect
    *  invoice identity (see makeInvoice's id-hash). */
   confidence?: number;
+  /** BOOKED WITHOUT HIM, and it has to say so on the record itself.
+   *
+   *  A verified sender with a complete extraction and one candidate entity books
+   *  itself. That is a thing that changed his books while he was not looking, so
+   *  it must be distinguishable from one he confirmed — for as long as the invoice
+   *  exists, not for as long as the tab is open. It lived in localStorage first,
+   *  which made "visible as automatic" a promise lasting one reload and left it
+   *  out of the encrypted back-up entirely.
+   *
+   *  Absent means he confirmed it, which is the safe reading: an older invoice
+   *  written before this field existed was necessarily confirmed by hand. */
+  autoBooked?: boolean;
 };
 
 /** Per-entity (per-BV) tax config. Named `VatSettings` because that is all it

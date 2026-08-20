@@ -14,6 +14,14 @@
           "checkedAt": "2026-06-15",
           "conditions": "Geldt bij betalen met de Betaalpas in het buitenland bij winkels, tankstations, restaurants, etc. in vreemde valuta (betalingen in euro's € 0,00); volgens noot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag. Hetzelfde percentage (1,40% koersopslag niet-euro Betaalpas) staat vermeld bij ING Go, ING More, ING Extra en ING Max; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
         }
       }
     },
@@ -29,6 +37,14 @@
           "sourceUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
           "checkedAt": "2022-10-01",
           "conditions": "Geldt bij betalen met een creditcard bij winkels, tankstations, restaurants, etc. \"In vreemde valuta\" (betalen \"In euro's\" is € 0,00); volgens voetnoot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag, met de wisselkoersen van MasterCard International voor haar creditcards. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
         }
       }
@@ -46,6 +62,14 @@
           "checkedAt": "2026-01-01",
           "conditions": "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -61,6 +85,14 @@
           "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
           "checkedAt": "2026-01-01",
           "conditions": "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop (de koersopslag bij geldopname in vreemde valuta is een aparte regel met eigen tariefklassen)",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
           "conditionsKnown": true
         }
       }
@@ -78,6 +110,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta, die door Mastercard naar euro's worden omgerekend op basis van de Wisselkoers (de door Mastercard vastgestelde wisselkoers vermeerderd met een opslag); de omrekening gebeurt op de datum van de betaling of geldopname. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -93,6 +133,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
           "checkedAt": "2026-08-19",
           "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta: deze worden door Mastercard omgerekend naar euro's op basis van de Wisselkoers (de door Mastercard vastgestelde koers vermeerderd met een opslag); de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
         }
       }
@@ -110,6 +158,14 @@
           "checkedAt": "2026-04-23",
           "conditions": "Geldt bij betalen met je betaalpas in vreemde valuta (in euro's geen extra kosten); dezelfde 1,4% koersopslag staat vermeld bij alle betaalpakketten (Rabo Standaard, Rabo Comfort, Rabo RiantPakket, Rabo Free, Rabo JongerenRekening). Contant geld opnemen in vreemde valuta is een aparte post (bijv. € 3,50 + 1,4% koersopslag).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
         }
       }
     },
@@ -125,6 +181,14 @@
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-04-12",
           "conditions": "Geldt voor de RaboCard: \"Betaal je met een andere munt (vreemde valuta) dan de euro, dan betaal je daar iets extra over\" — bij betalen in euro's, ook in het buitenland, zijn er geen extra kosten. Bij opname van contant geld bij een geldautomaat of aan de balie geldt € 4,50 per opname + 2% koersopslag. \"(Online) dienstverleners, banken of winkeliers vragen soms een toeslag bij betalingen of geldopnames met jouw creditcard.\"",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
         }
       }
@@ -142,6 +206,14 @@
           "checkedAt": "2026-04-11",
           "conditions": "Geldt alleen als je betaalt \"in een andere muntsoort, dus een vreemde valuta\"; betalingen in euro's, ook in het buitenland, kennen geen extra kosten (\"kosten euro's geen extra kosten\"). Bij geld opnemen in vreemde valuta geldt daarnaast € 4,50 per opname + 2% koersopslag. (Online) dienstverleners, banken of winkeliers kunnen bovendien zelf een toeslag vragen.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "wayback",
+          "sourceUrl": "https://web.archive.org/web/20260420213121id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard/visa-merchant-offer-program",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -157,6 +229,14 @@
           "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
           "checkedAt": "2026-02-01",
           "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (in euro is het € 0,00); bij betalen in een andere geldsoort dan de euro worden de wisselkoersen van Mastercard of Visa gebruikt. Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
           "conditionsKnown": true
         }
       }
@@ -174,6 +254,14 @@
           "checkedAt": "2026-02-01",
           "conditions": "Geldt voor de SNS Creditcard, een Visa-card uitgegeven door International Card Services: \"De SNS Creditcard is een product van International Card Services (ICS). SNS heeft de dienstverlening van de creditcard bij ICS ondergebracht.\" De opslag hangt aan de VALUTA, niet aan het land: de Tarievenwijzer zet \"Betalen met een creditcard / in euro € 0,00\" direct boven \"in vreemde valuta 2% wisselkoersopslag\", en de SNS-productpagina schrijft het uit als \"Betalen in het buitenland in euro's € 0\" tegenover \"Betalen met buitenlands geld 2% wisselkoersopslag\". Bij geldopname stapelt hij: \"Opname van contant geld met een creditcard in vreemde valuta 4% van opgenomen bedrag + 2% wisselkoersopslag\". De 2% komt bovenop de Visa-wisselkoers. Geen maximum, staffel, vrijstelling of pakketvoorwaarde bij deze regel; het document schrijft maxima wél uit waar ze bestaan — \"Dan betaal je 1% (in plaats van 4%) van het bedrag dat je opneemt, maar nooit meer dan € 1,50\" — dus de kale regel is informatief, niet slechts stilzwijgend. Scope: particuliere Tarievenwijzer; de SNS Creditcard bij Studentenrekening (€ 27,50/jaar i.p.v. € 37,50) valt onder dezelfde 2%-regel, zakelijke ICS-cards niet (die staan op 2,5%, zie blocker-veld van knab-creditcard).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -189,6 +277,14 @@
           "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
           "checkedAt": "2026-07-01",
           "conditions": "Geldt bij betalen met een betaalpas in het buitenland in vreemde valuta (1,4% van het betaalde bedrag); betalen in euro € 0. Voor de omrekening worden de wisselkoersen van Mastercard of Visa gebruikt. Geldt voor ASN Bankrekening, ASN Basisbankrekening, ASN Studentenrekening en ASN Jongerenpakket. Contant geld opnemen in vreemde valuta is een aparte tarief (1,4% + € 3,50 per opname).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
           "conditionsKnown": true
         }
       }
@@ -206,6 +302,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Geldt bij betalingen en geldopnames in vreemde valuta, die door Visa (Visa Cards) of Mastercard (Mastercards) worden omgerekend naar euro's op basis van de Wisselkoers; de opslag komt bovenop die Wisselkoers. Voor geldopnames worden daarnaast aparte kosten in rekening gebracht (artikel 12.3).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -221,6 +325,14 @@
           "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
           "checkedAt": "2026-02-01",
           "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (een andere geldsoort dan de euro); betalen in euro is € 0,00. Plus eventuele lokale kosten bij een betaling. Voor opname van contant geld in vreemde valuta geldt een ander tarief (1,4% + € 3,50 per opname). Omrekening gebeurt met de wisselkoersen van Mastercard (Maestro, Debit Mastercard) of Visa (VPay, Visa Debit).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
           "conditionsKnown": true
         }
       }
@@ -238,6 +350,14 @@
           "checkedAt": "2024-07-01",
           "conditions": "Geldt bij betalen met de RegioBank Creditcard in vreemde valuta; betalen in euro in Nederland en andere Eurolanden is € 0,00. Voor opname van contant geld in vreemde valuta geldt een ander tarief (4% van het opgenomen bedrag + 2% valutawisselkosten).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -254,6 +374,14 @@
           "checkedAt": "2025-10-01",
           "conditions": "SCOPE IS DE VOORWAARDE: het Informatiedocument is gekopt \"Naam van de rekening: Knab Betaalrekening\" — het particuliere pakket (Privérekening € 6 p/m, één rekeninghouder; Gezamenlijke rekening € 7 p/m, twee rekeninghouders). Zakelijke Knab-rekeningen hebben een eigen tarievenpagina en vallen hier niet onder. Dezelfde 1,4% staat op knab.nl/tarieven (\"Tarieven per 18-02-2026\") met de geografische inkadering erbij: \"Betalen en opname van contant geld in eurolanden Gratis*\" tegenover \"Betalen en opname van contant geld buiten eurolanden Mastercard wisselkoers + 1,4% koersopslag in euro*\", met voetnoot \"* Let op: buitenlandse banken kunnen kosten rekenen voor het gebruik van een geldautomaat.\" De 1,4% komt dus bovenop de Mastercard-wisselkoers. Geen plafond, staffel, vrij bedrag of promo bij deze regel; het document schrijft samengestelde voorwaarden wél uit waar ze bestaan (\"Overboeking in andere valuta buiten SEPA € 15 + koersopslag van 0,1%\", en de pakketsplitsing Privé € 72 / Gezamenlijk € 84 totale jaarlijkse vergoeding), dus de onvoorwaardelijke 1,4%-regel is informatief. Dezelfde 1,4% geldt in het FID ook voor \"Opname van contant geld met een betaalpas in vreemde valuta\".",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets-eu-01.kc-usercontent.com/35355cb5-f8a5-0105-c237-9bab7d11ff84/3ec88fbd-4326-4bf3-be18-ed80334ade03/20251001%20Informatiedocument%20Knab%20Betaalrekening.pdf",
+          "checkedAt": "2025-10-01",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
         }
       }
     },
@@ -269,6 +397,14 @@
           "sourceUrl": "https://www.knab.nl/tarieven",
           "checkedAt": "2026-02-18",
           "conditions": "SCOPE IS DE VOORWAARDE: de pagina is gekopt \"Rente & tarieven — Particulier / Op deze pagina vind je de rentes en tarieven van de producten binnen het particuliere aanbod van Knab\", met aparte links naar \"Zakelijke Knab-producten\" en \"Voormalige Aegon Bank-producten\". De Knab Creditcard is een ICS-product: het Knab FID zet er een voetnoot bij — \"De Knab Creditcard is een product van International Card Services (ICS)... alle kosten met betrekking tot je creditcard betaal je aan hen\" — en de bijbehorende ICS-voorwaarden (Algemene Card Voorwaarden Banken, ICS-50-NL-05/2026, \"Diemen, mei 2026\", https://www.icscards.nl/webdocuments/628) bevestigen het per-card: art. 12.1 \"Betalingen en geldopnames in vreemde valuta worden door Visa voor Visa Cards en door Mastercard voor Mastercards omgerekend naar euro's op basis van de Wisselkoers. De opslag is 2%.\" De 2% komt dus bovenop de Visa/Mastercard-koers. Niet verwarren met art. 12.4 van diezelfde voorwaarden: \"Voor het overboeken van geld van uw Card naar een (bank)rekening... U moet 2,5% van het overgeboekte of opgewaardeerde bedrag betalen\" — dat is een geldovermakingstarief, geen valutaopslag. Los daarvan: \"Contant geld opnemen 4% van het opgenomen bedrag\". Geen plafond of vrij bedrag; de pagina schrijft plafonds en staffels wél uit waar ze bestaan (\"€ 15 + een koersopslag van 0,1% (indien overgeboekt naar landen buiten EER)\", \"Minimum inlegbedrag € 1.000\", \"Je krijgt rente tot € 500.000\").",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.knab.nl/particulier/betalen/creditcard",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
         }
       }
@@ -302,6 +438,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Geldt alleen boven de gratis ZeroFX-allowance: \"Als je het gratis abonnement hebt, kun je tot €1.000 per jaar tegen deze koers uitgeven. Na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar, geldt een tarief van 3% van elk volgend transactiebedrag.\"",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
+          "conditionsKnown": true
         }
       }
     },
@@ -317,6 +461,14 @@
           "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-core",
           "checkedAt": "2026-08-19",
           "conditions": "Geldt via ZeroFX bij paspbetalingen in het buitenland \"wanneer de markten open zijn\"; voor Core geldt \"ZeroFX tot je abonnementslimiet\" en \"Core, Pro en Elite hebben onbeperkt ZeroFX\" (de €1.000-limiet per jaar geldt alleen voor bunq Free, daarboven standaard conversiekosten)",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
           "conditionsKnown": true
         }
       }
@@ -334,6 +486,14 @@
           "checkedAt": "2026-08-03",
           "conditions": "SCOPE IS THE CONDITION AND THE COLUMN IS THE SCOPE. The sheet is an 8-column plan table (bunq Elite | bunq Pro | bunq Core | bunq Free | bunq Elite Business | bunq Pro Business | bunq Core Business | bunq Free Business) and this quote is the bunq Pro cell of the row labelled 'Kaartbetaling (vreemde valuta)', inside the section headed 'Passen'. NO CAP, NO TIER, NO ALLOWANCE for bunq Pro — and the row itself positively establishes that, because the SAME row does price a cap in two other columns: the bunq Free and bunq Free Business cells carry 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' and the Pro cell does not. A silent Pro cell in a row that demonstrably writes caps where they exist is informative, not merely silent. NOTE ON THE WORDING: 'valutaschommelin gen preventie' is how pdftotext returns the hyphenated cell — the document means 'valutaschommelingen preventie', quoted unfixed per instruction. The 0.5% is a spread added to the Mastercard rate, not a separate line-item fee; the running text on p.18 confirms 'Voor transacties die worden uitgevoerd in andere valuta dan euro, wordt het bedrag van de transactie omgezet naar euro via de Mastercard wisselkoers' and 'Wij kunnen ook valutaschommelingen preventie in rekening brengen voor uw transactie.' Footnote 7 prices the same 0,5% on cash withdrawals needing conversion. bunq issues one card type (Mastercard); there is no separate debit/credit FX row.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
+          "conditionsKnown": true
         }
       }
     },
@@ -350,6 +510,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "\"toeslag van 0,5% wanneer de markten open zijn\" (buiten de openingstijden van de markten geldt dus een andere situatie); volgens de FAQ: \"bunq Free bevat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar; daarboven gelden standaard conversiekosten. Core, Pro en Elite hebben onbeperkt ZeroFX.\"",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
+          "conditionsKnown": true
         }
       }
     },
@@ -365,6 +533,14 @@
           "sourceUrl": "https://help.bunq.com/articles/whats-zerofx-and-how-does-it-save-me-money",
           "checkedAt": "2026-08-19",
           "conditions": "bunq Free users can make up to €1,000 ZeroFX payments per year in foreign currencies. All payments beyond the €1,000 are subject to regular 3% currency conversion fees.&nbsp; bunq Core, Pro, and Elite users can make unlimited ZeroFX payments per year.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
           "conditionsKnown": true
         }
       }
@@ -403,6 +579,14 @@
           "checkedAt": "2026-08-03",
           "conditions": "THIS IS THE CAPPED PLAN AND THE CAP IS THE WHOLE STORY. Column 8 (bunq Free Business) of the row 'Kaartbetaling (vreemde valuta)'. 0.5% applies only to the first € 1000 of foreign-currency card spend per year; above that the fee is 1.5% of the transaction amount — three times higher. Serving 0.5% here without the cap would be the same failure mode as the Revolut 0% miss. The identical cap text sits in the bunq Free (personal) column; the six paid plans (Elite/Pro/Core personal and business) carry the 0.5% cell with NO cap text. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it, and the ZERO-WIDTH SPACE between 'gen preventie' and 'Dit geldt voor' is in the PDF, not added by me.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
+          "conditionsKnown": true
         }
       }
     },
@@ -418,6 +602,14 @@
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
           "checkedAt": "2026-08-03",
           "conditions": "SCOPE IS THE CONDITION: column 7 (bunq Core Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, positively established: the same row carries 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate, not a separate fee line.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
           "conditionsKnown": true
         }
       }
@@ -435,6 +627,14 @@
           "checkedAt": "2026-08-03",
           "conditions": "SCOPE IS THE CONDITION: column 6 (bunq Pro Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, and that is positively established rather than assumed: the identical row prices 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns, so the document does write the cap where one exists. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it. The 0.5% is a spread inside the Mastercard exchange rate.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
+          "conditionsKnown": true
         }
       }
     },
@@ -450,6 +650,14 @@
           "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
           "checkedAt": "2026-08-03",
           "conditions": "SCOPE IS THE CONDITION: column 5 (bunq Elite Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. This row previously had NO figure at all in the catalog; the figure is 0.5% and it is the same in every one of the eight columns. NO CAP for this plan, positively established: the same row carries the €1000-per-year cap text in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.bunq.com/articles/bunq-points",
+          "checkedAt": "2026-08-20",
+          "conditions": "Uitgesproken afwezigheid, geen aanname: bunq zegt zelf dat je op betalingen géén punten meer ontvangt. Sparen stopte definitief op 13 april 2026 (voor wie na 12 februari 2026 klant werd: direct geen punten). Reeds gespaarde punten blijven inwisselbaar tot 13 april 2027: “Got a stash of bunq Points which you’re ready to use? Awesome! You’ll have a full year to cash in all the points you’ve earned. You can redeem them at your own time — just be sure to use your Points before April 13, 2027 !” Historische koers t/m 13-04-2026: “Here’s how many points you can earn, depending on your subscription plan: bunq Core: 1 point per €1 spent with your card bunq Pro: 1 point per €1 spent with your card bunq Elite: 2 points per €1 spent with your card” met plafond “You can earn up to 10,000 bunq Points per month.” Wat er nu in de plaats staat is een loterij, geen puntenkoers: “We’ve combined the best of bunq Points, Cashback and Winning back Groceries to bring you daily rewards, simply for using your bunq Card! Every time you make a payment with your bunq Card, you earn a spin on the Wheel of Fortune. You can spin the wheel for a chance to win up to 10x the value of your payment back.”",
           "conditionsKnown": true
         }
       }
@@ -513,6 +721,14 @@
           "checkedAt": "2026-06-26",
           "conditions": "WORDING CAVEAT — the document expresses the 0 as words, not a numeral: the row reads 'Free' + 'Conversion to real exchange rate without foreign currency surcharge'. No '0' appears in the row, so a literal value-in-quote check will fail on this and the other zero-FX findings; the value-in-DOCUMENT and quote-in-document checks both pass. SCOPE: the price list's cover names the countries it governs and the Netherlands is on that list ('Price List applicable to users who register with an address in Belgium, Denmark, Estonia, Finland, Greece, Iceland, Ireland, Latvia, Liechtenstein, Lithuania, Luxembourg, Netherlands, Norway, Poland, Portugal, Slovakia, Slovenia, Sweden, Switzerland'). The 0% is CARD PAYMENTS only. Cash withdrawal in a foreign currency is NOT free on this plan: the separate row 'Mastercard withdrawals at ATMs in other currencies:' gives 'For Business, Current Account, N26 Smart, N26 Business Smart                 1.7% of amount drawn' — the standard N26 account is the 'Current Account' line, so 1.7% applies to Standard. EUR-ATM fair-use is separate again (2 free withdrawals/calendar month, EUR 2.00 each thereafter).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Geen puntenprogramma bij de particuliere N26-plannen. Wel cashback, maar alleen op N26 Business (0,1%) en N26 Business Metal (0,5%) — producten die niet in deze catalogus staan.",
+          "conditionsKnown": true
         }
       }
     },
@@ -528,6 +744,14 @@
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
           "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL is named on the price list's country cover. The FX row is not plan-differentiated — one row covers all N26 plans. 0% is CARD PAYMENTS only; foreign-currency ATM withdrawals cost 1.7% on Smart: 'For Business, Current Account, N26 Smart, N26                 1.7% of amount drawn'. EUR-ATM fair use on Smart is 3 free withdrawals per calendar month, EUR 2.00 each thereafter. Smart costs '4.90 € per month (membership fee)'.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Geen puntenprogramma bij de particuliere N26-plannen. Wel cashback, maar alleen op N26 Business (0,1%) en N26 Business Metal (0,5%) — producten die niet in deze catalogus staan.",
           "conditionsKnown": true
         }
       }
@@ -545,6 +769,14 @@
           "checkedAt": "2026-06-26",
           "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Geen puntenprogramma bij de particuliere N26-plannen. Wel cashback, maar alleen op N26 Business (0,1%) en N26 Business Metal (0,5%) — producten die niet in deze catalogus staan.",
+          "conditionsKnown": true
         }
       }
     },
@@ -560,6 +792,14 @@
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
           "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Metal also gets foreign-currency ATM withdrawals free ('For, N26 Go, N26 Business Go, N26 Metal and N26               Free'). EUR-ATM fair use on Metal is 8 free withdrawals per calendar month, EUR 2.00 each thereafter. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Geen puntenprogramma bij de particuliere N26-plannen. Wel cashback, maar alleen op N26 Business (0,1%) en N26 Business Metal (0,5%) — producten die niet in deze catalogus staan.",
           "conditionsKnown": true
         }
       }
@@ -701,6 +941,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Geldt in de kolom \"Travel + uitgeschakeld\" voor \"Aankopen in buitenlandse valuta (niet €)\"; met \"Travel+ ingeschakeld\" (€ 4,99/maand abonnementskosten) is dit € 0",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
+          "checkedAt": "2024-07-01",
+          "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
         }
       }
     },
@@ -716,6 +964,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
           "conditions": "Geldt voor een \"Transactie in vreemde valuta\": wisselkoersopslag op het omgewisselde bedrag in euro, d.w.z. \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; bij een transactie die eerst in USD en dan in euro's wordt omgezet brengen wij \"slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\". Deze overeenkomst geldt voor American Express Consumenten Kaarthouders (per maart 2022).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/blue-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         }
       }
@@ -733,6 +989,14 @@
           "checkedAt": "2022-03-01",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; volgens 6.15 geldt de opslag voor 'transacties die niet in euro zijn uitgevoerd', wordt bij omzetting via de VS-dollar slechts eenmaal een wisselkoersopslag in rekening gebracht, en brengen wij geen wisselkoersopslag in rekening wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's heeft omgezet.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -748,6 +1012,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro, voor transacties (en terugbetalingen) die niet in euro zijn uitgevoerd; bij omrekening via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie vóór verwerking in euro's om te zetten, brengen wij geen wisselkoersopslag in rekening. Geldt volgens de Overeenkomst voor de American Express Consumenten Kaarthouders (per maart 2022).",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         }
       }
@@ -765,6 +1037,14 @@
           "checkedAt": "2022-03-01",
           "conditions": "Geldt onder de \"Overeenkomst voor de American Express Consumenten Kaarthouders\" (per maart 2022) voor transacties in vreemde valuta: de wisselkoersopslag geldt \"voor transacties die niet in euro zijn uitgevoerd\" en wordt berekend op het omgewisselde bedrag in euro; bij een transactie in een andere vreemde valuta dan Amerikaanse dollars wordt eerst naar dollars en dan naar euro's omgezet, maar \"brengen wij slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\".",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -780,6 +1060,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, d.w.z. de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht, en als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 0,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
         }
       }
@@ -797,6 +1085,14 @@
           "checkedAt": "2022-03-01",
           "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta (\"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"); bij transacties in andere valuta dan de Amerikaanse dollar wordt via USD omgerekend maar wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzet voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht. Voorwaarden gelden voor de American Express Consumenten Kaarthouders (overeenkomst per maart 2022).",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.8,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
         }
       }
     },
@@ -812,6 +1108,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta; geldt volgens 6.15 voor 'transacties die niet in euro zijn uitgevoerd' en wordt slechts eenmaal in rekening gebracht (ook als eerst naar Amerikaanse dollars en dan naar euro's wordt omgezet). Wanneer u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, brengen wij geen wisselkoersopslag in rekening. Dit is de algemene overeenkomst voor American Express Consumenten Kaarthouders; er wordt geen apart tarief voor de Flying Blue Gold Card genoemd.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
         }
       }
@@ -829,6 +1133,14 @@
           "checkedAt": "2022-03-01",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, ofwel \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; geldt onder deze Overeenkomst voor de American Express Consumenten Kaarthouders (niet productspecifiek geprijsd per kaart). Laat u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten voordat deze aan American Express wordt voorgelegd, dan \"zullen wij geen wisselkoersopslag in rekening brengen\".",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.5,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 2 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
         }
       }
     },
@@ -844,6 +1156,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
           "checkedAt": "2023-03-15",
           "conditions": "Geldt als \"wisselkoersopslag op het omgewisselde bedrag in euro\" bij een \"Transactie in vreemde valuta\", d.w.z. \"de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd\"; bij een transactie in andere valuta dan USD wordt eerst naar dollars en dan naar euro's omgezet, maar \"wij brengen slechts eenmaal een wisselkoersopslag in rekening\"; laat de kaarthouder een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten, dan \"zullen wij geen wisselkoersopslag in rekening brengen\". Document is de Overeenkomst voor de American Express Business Card per 15 maart 2023.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/en-nl/business/cards/business-entry-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         }
       }
@@ -861,6 +1181,14 @@
           "checkedAt": "2023-03-15",
           "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een 'Transactie in vreemde valuta', d.w.z. de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd; geldt onder de Overeenkomst voor de American Express Business Card (per 15 maart 2023). Als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór indiening in euro's omzet, geldt: 'zullen wij geen wisselkoersopslag in rekening brengen'.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/green/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -877,6 +1205,14 @@
           "checkedAt": "2023-03-15",
           "conditions": "Geldt volgens deze overeenkomst voor de American Express Business Card: wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd; bij niet-dollartransacties wordt eerst naar Amerikaanse dollars en dan naar euro's omgezet maar slechts eenmaal een wisselkoersopslag in rekening gebracht; als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/gold/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
         }
       }
     },
@@ -885,7 +1221,16 @@
       "product": "American Express Corporate Card",
       "issuer": "American Express (self-issued in NL; NOT ICS)",
       "kind": "creditcard",
-      "fields": {}
+      "fields": {
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Alleen als de werkgever het toestaat en na aparte inschrijving, tegen een eigen jaarbijdrage: ‘If the company allows it, you can participate in the Membership Rewards Programme for an annual fee of €25.’ en ‘It is required to register for the Membership Rewards Programme.’ Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-corporate-gold-card",
@@ -899,6 +1244,14 @@
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-gold-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "Alleen als de werkgever het toestaat en na aparte inschrijving tegen €25 per jaar: ‘If the company allows it, you can participate in the Membership Rewards Programme for an annual fee of €25.’ Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         }
       }
@@ -916,6 +1269,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Verschuldigd wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro; de opslag komt bovenop de American Express-wisselkoers. Wordt de Transactie door een derde (bijvoorbeeld het Kaartaccepterend Bedrijf) vóór indiening omgerekend in Euro's, dan brengen wij geen wisselkoersopslag in rekening. Geldt voor de KLM American Express Corporate Card; contante opnames kennen daarnaast een aparte vergoeding van 3,8%.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 1.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-klm-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "1 Mile per euro op overige aankopen, 1,5 Miles per euro bij boekingen bij KLM, Air France, Transavia en Hertz. Voorwaarde: de werkgever moet het goedkeuren (‘If your company approves this’). Deelname zit inbegrepen, dus geen €25 zoals bij de gewone Corporate Card.",
+          "conditionsKnown": true
         }
       }
     },
@@ -931,6 +1292,14 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
           "checkedAt": "2026-08-18",
           "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
         }
       }
@@ -948,6 +1317,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
         }
       }
     },
@@ -963,6 +1340,14 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
           "checkedAt": "2026-08-18",
           "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
         }
       }
@@ -980,6 +1365,14 @@
           "checkedAt": "2026-08-18",
           "conditions": "voor EU landen zonder euro en voor landen buiten EU",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
         }
       }
     },
@@ -995,6 +1388,14 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
           "checkedAt": "2026-08-18",
           "conditions": "2% voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
         }
       }
@@ -1012,6 +1413,14 @@
           "checkedAt": "2026-08-18",
           "conditions": "voor EU landen zonder euro en voor landen buiten EU",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-gold",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
         }
       }
     },
@@ -1027,6 +1436,14 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
           "checkedAt": "2026-08-19",
           "conditions": "geldt voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
         }
       }
@@ -1044,6 +1461,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/678/VISA-66-NL-072026%20AV%20Visa%20Worldcard%20Business",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen loyaliteits- of puntenprogramma in de voorwaarden van deze zakelijke ICS-kaarten.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1059,6 +1484,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen loyaliteits- of puntenprogramma in de voorwaarden van deze zakelijke ICS-kaarten.",
           "conditionsKnown": true
         }
       }
@@ -1076,6 +1509,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/676/MC-108-NL-072026%20AV%20ICS%20Mastercard%20Business",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen loyaliteits- of puntenprogramma in de voorwaarden van deze zakelijke ICS-kaarten.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1091,6 +1532,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
+          "checkedAt": "2026-08-20",
+          "conditions": "Geen loyaliteits- of puntenprogramma in de voorwaarden van deze zakelijke ICS-kaarten.",
           "conditionsKnown": true
         }
       }
@@ -1108,6 +1557,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
+          "checkedAt": "2026-08-20",
+          "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1124,6 +1581,14 @@
           "checkedAt": "2026-08-19",
           "conditions": "Koersopslag geldt \"voor EU landen zonder euro en voor landen buiten EU\"; de pagina noemt geen bedragslimiet of vrijstelling",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
+          "checkedAt": "2026-08-20",
+          "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1139,6 +1604,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
+          "checkedAt": "2026-08-20",
+          "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
           "conditionsKnown": true
         }
       }
