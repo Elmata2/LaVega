@@ -51,8 +51,88 @@ import { monthLabelNL, monthShortNL } from "../../format.js";
  * Nothing here reads Date.now(); nothing here invents a figure it did not
  * measure. A weekday the window never contained has `average: null`, not 0. */
 
-/** Transfers between the owner's own accounts are not spending. */
-const TRANSFER_CATEGORY = "Eigen overboeking";
+/* ─────────── what counts as an expense, and what is only money moving
+ *
+ * MEASURED, 20 August. Two deposits into his own broker and savings accounts put
+ * "Sparen & beleggen" at 98% of the distribution ring and turned € 335 of real
+ * spending into € 20.335 of "uitgaven". His words: "it says I had 2 million in
+ * investing and saving, which I would love to have."
+ *
+ * Why "Eigen overboeking" alone could never catch it: that category is only
+ * assigned when the counterparty names one of his own IBANs, and `ownAccounts`
+ * knows the IBANs of IMPORTED accounts only. A savings or investment account he
+ * never imported is invisible as an account — the only trace it leaves is the
+ * category the rules engine gives the row.
+ *
+ * So the rule, stated once here and applied to every figure in the block:
+ * an expense is money that LEFT his hands. Money that only changed place —
+ * between his own accounts, or into his own savings or investments — is not an
+ * expense and not income either; it is the same euro somewhere else. Whether a
+ * deposit was wise is a question about return, not about spending, and the
+ * Optimalisatie and Positie blocks are where that is asked.
+ *
+ * The price of the rule, paid knowingly: a genuine COST charged by one of these
+ * counterparties (a DeGiro transaction fee, a custody charge) is excluded with
+ * the deposits, because a statement line cannot tell them apart. That is a few
+ * euros hidden. The alternative was two million shown.
+ *
+ * Nothing is dropped silently: `movedTotals` hands the block what fell outside,
+ * per category and per direction, and the block prints it under the chart. He has
+ * to be able to see that something is outside the diagram, and why. */
+
+export type MovedCategory = {
+  category: string;
+  /** Why it is outside the diagram, in the sentence the block prints. */
+  why: string;
+};
+
+export const MOVED_CATEGORIES: readonly MovedCategory[] = [
+  { category: "Eigen overboeking", why: "een overboeking tussen je eigen rekeningen" },
+  { category: "Sparen & beleggen", why: "geld naar je eigen spaar- of beleggingsrekening" },
+];
+
+const MOVED_BY_CATEGORY = new Map(MOVED_CATEGORIES.map((m) => [m.category, m.why]));
+
+/** Whether a category is money moving rather than money spent. */
+export function isMovedCategory(category: string): boolean {
+  return MOVED_BY_CATEGORY.has(category);
+}
+
+export type MovedTotal = MovedCategory & {
+  /** Positive euro cents that left the account in this window. */
+  outCents: number;
+  /** Positive euro cents that came back in it. */
+  inCents: number;
+};
+
+/** What the charts left out of `window`, biggest outflow first, and only the
+ *  categories that actually occur in it — a zero row would be a claim about a
+ *  category the window never contained.
+ *
+ *  Both directions are reported because both were excluded: leaving a € 2.000
+ *  withdrawal out of "inkomsten" without saying so would be the same silence as
+ *  the € 20.000 deposit was. */
+export function movedTotals(
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts | undefined,
+  window: StatWindow,
+): MovedTotal[] {
+  const byCat = new Map<string, { outCents: number; inCents: number }>();
+  for (const t of txs) {
+    if (!t.date || t.date < window.start || t.date > window.end) continue;
+    const category = categorize(t, rules, own);
+    if (!isMovedCategory(category)) continue;
+    const bucket = byCat.get(category) ?? { outCents: 0, inCents: 0 };
+    const cents = Math.round(Math.abs(t.amount) * 100);
+    if (t.amount < 0) bucket.outCents += cents;
+    else bucket.inCents += cents;
+    byCat.set(category, bucket);
+  }
+  return [...byCat.entries()]
+    .map(([category, b]) => ({ category, why: MOVED_BY_CATEGORY.get(category) ?? "", ...b }))
+    .sort((a, b) => b.outCents - a.outCents || b.inCents - a.inCents);
+}
 
 /** A weekday pattern needs at least this much history to mean anything: with
  *  one week of data every "average" is a single observation. */
@@ -114,14 +194,14 @@ export function bucketUnit(window: StatWindow): StatBucketUnit {
 
 const monthOf = (date: string): string => date.slice(0, 7);
 
-/** Spend transactions only, own-transfers removed, already categorised. */
+/** Spend transactions only, moved money removed, already categorised. */
 function spendRows(txs: Tx[], rules: Rule[], own: OwnAccounts | undefined) {
   const rows: { date: string; category: string; spend: number }[] = [];
   for (const t of txs) {
     if (t.amount >= 0) continue;
     if (!t.date) continue;
     const category = categorize(t, rules, own);
-    if (category === TRANSFER_CATEGORY) continue;
+    if (isMovedCategory(category)) continue;
     rows.push({ date: t.date, category, spend: -t.amount });
   }
   return rows;
@@ -319,8 +399,8 @@ export function categoryPerWindow(
 }
 
 export type WindowTotals = {
-  /** Money in and money out over the window, positive euros. Own transfers are
-   *  left out of both: moving money between your own accounts is neither. */
+  /** Money in and money out over the window, positive euros. Moved money is left
+   *  out of both — see MOVED_CATEGORIES; `movedTotals` says what that was. */
   inTotal: number;
   outTotal: number;
   /** The part of the window the data covers — null when nothing does. */
@@ -345,7 +425,7 @@ export function windowTotals(
   let outTotal = 0;
   for (const t of dated) {
     if (t.date < window.start || t.date > window.end) continue;
-    if (categorize(t, rules, own) === TRANSFER_CATEGORY) continue;
+    if (isMovedCategory(categorize(t, rules, own))) continue;
     if (t.amount >= 0) inTotal += t.amount;
     else outTotal += -t.amount;
   }
@@ -457,9 +537,10 @@ export type CategorySlice = { category: string; cents: number; share: number };
 
 /** Spend per category over the window, biggest first, with each one's share of
  *  the total. Outflows only: mixing income in would make the shares meaningless,
- *  and "Eigen overboeking" is excluded for the same reason — moving money between
- *  your own accounts is not spending, and at his volumes it would dwarf every
- *  real category. */
+ *  and the MOVED_CATEGORIES are excluded for the same reason — money that only
+ *  changed place is not spending, and at his volumes it dwarfed every real
+ *  category (it was 98% of the ring). What was excluded is not silent: the block
+ *  prints `movedTotals` under the chart. */
 export function categoryShare(
   txs: Tx[],
   rules: Rule[],
@@ -473,7 +554,7 @@ export function categoryShare(
   for (const t of inWindow) {
     if (t.amount >= 0) continue;
     const cat = categorize(t, rules, own);
-    if (cat === "Eigen overboeking") continue;
+    if (isMovedCategory(cat)) continue;
     const cents = Math.round(Math.abs(t.amount) * 100);
     byCat.set(cat, (byCat.get(cat) ?? 0) + cents);
     total += cents;
@@ -520,7 +601,7 @@ export function categoryGrowth(
     for (const t of txs) {
       if (!t.date || t.date < w.start || t.date > w.end || t.amount >= 0) continue;
       const cat = categorize(t, rules, own);
-      if (cat === "Eigen overboeking") continue;
+      if (isMovedCategory(cat)) continue;
       m.set(cat, (m.get(cat) ?? 0) + Math.round(Math.abs(t.amount) * 100));
     }
     return m;

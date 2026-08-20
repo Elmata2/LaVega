@@ -1,4 +1,4 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { CategorySlice } from "./blocks/statistics.js";
 
 /* SpendPie — what a period's spending is made of.
@@ -27,6 +27,13 @@ import type { CategorySlice } from "./blocks/statistics.js";
  * period, and the other arcs step back so the number in the middle is visibly
  * about one arc. Pointing at the hole is not pointing at an arc, so the total
  * stays put there.
+ *
+ * ON GOING SOMEWHERE (review 3, item 6). An arc opens its category's
+ * transactions, the same jump its legend row already made — the arc and the row
+ * are one slice, and a slice you can point at but not follow is half a control.
+ * The hole is not an arc and goes nowhere, and "Overig" is several categories at
+ * once, so neither promises a page: the cursor only points where the click
+ * arrives somewhere (charts.css, [data-open]).
  */
 
 /** Eight tokens, then grey. Chosen to stay distinguishable in both themes and to
@@ -125,17 +132,38 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
     return `${colour} ${Math.round(from * 100) / 100}% ${to}%`;
   });
 
-  function pickArc(e: ReactPointerEvent<HTMLDivElement>) {
+  /** Which arc a pointer event landed on, or null for the hole and the corners. */
+  function arcAt(e: { currentTarget: HTMLDivElement; clientX: number; clientY: number }): number | null {
     const rect = e.currentTarget.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-    setActive(
-      sliceAtPoint(
-        shown.map((s) => s.share),
-        (e.clientX - rect.left) / rect.width,
-        (e.clientY - rect.top) / rect.height,
-      ),
+    if (rect.width === 0 || rect.height === 0) return null;
+    return sliceAtPoint(
+      shown.map((s) => s.share),
+      (e.clientX - rect.left) / rect.width,
+      (e.clientY - rect.top) / rect.height,
     );
   }
+
+  function pickArc(e: ReactPointerEvent<HTMLDivElement>) {
+    setActive(arcAt(e));
+  }
+
+  /* Item 6: "doorklikken van een segment naar die categorie." An arc now opens
+   * its category's transactions, exactly as its legend row already did — the
+   * arc and the row are the same slice, so they cannot be two different
+   * conversations. The hole is not an arc and jumps nowhere; "Overig" is several
+   * categories and has nothing to jump to. */
+  function openArc(e: ReactMouseEvent<HTMLDivElement>) {
+    if (onSelect === undefined) return;
+    const i = arcAt(e);
+    if (i === null) return;
+    const slice = shown[i];
+    if (slice === undefined || slice.category === "Overig") return;
+    onSelect(slice.category);
+  }
+
+  /** Whether the arc under the pointer can be opened — the cursor has to promise
+   *  only what the click delivers. */
+  const canOpen = onSelect !== undefined && reading !== null && reading.category !== "Overig";
 
   return (
     <div className="spend-pie">
@@ -145,9 +173,11 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
         role="img"
         aria-label={shown.map((s) => `${s.category} ${Math.round(s.share * 100)}%`).join(", ")}
         data-active={active === null ? "none" : String(active)}
+        data-open={canOpen ? "yes" : "no"}
         onPointerMove={pickArc}
         onPointerDown={pickArc}
         onPointerLeave={() => setActive(null)}
+        onClick={openArc}
       >
         {/* The middle says either what the whole period cost, or — when an arc
             or a row is being read — what THAT slice cost and how much of the

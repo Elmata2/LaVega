@@ -12,6 +12,7 @@ import {
   categoryShare,
   categoryPerWindow,
   MIN_WEEKDAY_DAYS,
+  movedTotals,
   newestTxDate,
   presetWindow,
   weekdaySpend,
@@ -49,7 +50,15 @@ import {
  *
  * Every number is derived from the transactions; the block holds only the
  * chosen view and period. Nothing is defaulted — an unmeasured weekday shows no
- * bar, and a period the data does not reach into says so. */
+ * bar, and a period the data does not reach into says so.
+ *
+ * WHAT AN EXPENSE IS, decided once (review 3, item 1). Money that only changed
+ * place — between his own accounts, or into his own savings and investments — is
+ * not spending, and every view here leaves it out; the rule and its price are
+ * written down at MOVED_CATEGORIES in statistics.ts. It is left out VISIBLY: one
+ * line under the chart names the amount, the category and the reason, in every
+ * view, because a diagram that quietly drops € 20.000 is worse than one that
+ * mis-sorts it. */
 
 export type StatPeriod = StatPreset | "aangepast";
 
@@ -82,6 +91,13 @@ const TOP_CATEGORIES = 4;
 
 /** One token per category slot. Cycled, never invented. */
 const CATEGORY_COLORS = ["var(--accent)", "var(--chart-teal)", "var(--chart-purple)", "var(--warn)"];
+
+/** Everything that comes out of statistics.ts as a SHARE or a DELTA is in
+ *  CENTS; `formatEuro` takes euros. Feeding one to the other is what printed
+ *  € 2.033.540 over € 20.335 — a hundredfold, on the very figure he read first.
+ *  One named function, used everywhere a cents figure is shown, so the two units
+ *  cannot meet again by accident. */
+const euroFromCents = (cents: number): string => formatEuro(cents / 100);
 
 /** Whole euros on the axis; the exact number is in each bar's tooltip. */
 const wholeEuro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -186,12 +202,21 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
         .map((r) => ({
           label: r.category,
           values: [r.deltaCents / 100],
-          title: `${r.category}: ${r.beforeCents / 100} → ${r.nowCents / 100}`,
+          title: `${r.category}: ${euroFromCents(r.beforeCents)} → ${euroFromCents(r.nowCents)}`,
         })),
     [growth],
   );
   const totals = useMemo(
     () => (range === null ? null : windowTotals(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+  /* What every figure in this block deliberately leaves out. Money moving
+     between his own accounts — or into his own savings and investments — is not
+     spending, but it IS his money leaving a bank account, so it has to be named
+     rather than silently dropped: he has to be able to see that something is
+     outside the diagram, and why. See MOVED_CATEGORIES in statistics.ts. */
+  const moved = useMemo(
+    () => (range === null ? [] : movedTotals(txs, rules, own, range)),
     [txs, rules, own, range],
   );
 
@@ -360,7 +385,12 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
             share.slices.length === 0 ? (
               <p className="block-empty">Geen uitgaven in deze periode — kies een langere periode.</p>
             ) : (
-              <SpendPie slices={share.slices} totalCents={share.totalCents} euro={formatEuro} />
+              <SpendPie
+                slices={share.slices}
+                totalCents={share.totalCents}
+                euro={euroFromCents}
+                onSelect={onSelectCategory}
+              />
             )
           ) : view === "gegroeid" ? (
             growth.rows.length === 0 ? (
@@ -374,7 +404,7 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   {growth.rows[0].deltaCents > 0 ? (
                     <>
                       <strong>{growth.rows[0].category}</strong> steeg het hardst:{" "}
-                      {formatEuro(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen ervoor
+                      {euroFromCents(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen ervoor
                       {growth.rows[0].deltaPct !== null ? <> ({Math.round(growth.rows[0].deltaPct * 100)}%)</> : <> (nieuw)</>}.
                     </>
                   ) : (
@@ -389,7 +419,7 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                 />
                 <p className="cell-sub">
                   Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
-                  dezelfde lengte als de gekozen periode. Alleen uitgaven; eigen overboekingen tellen niet mee.
+                  dezelfde lengte als de gekozen periode. Alleen uitgaven.
                 </p>
               </>
             )
@@ -444,10 +474,32 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
             </>
           )}
 
+          {/* WHAT IS NOT IN ANY OF THE ABOVE. One line for the whole block, in
+              every view, because the exclusion is the same in every view: the
+              ring, the bars, the weekdays and the two totals all treat moved
+              money as neither spending nor income. Amount first — it is the
+              number he was looking for — then the reason. */}
+          {moved.length > 0 && (
+            <p className="cell-sub stat-moved">
+              <strong>Buiten deze cijfers gehouden:</strong>{" "}
+              {moved.map((m, i) => (
+                <span key={m.category}>
+                  {i > 0 && " · "}
+                  {euroFromCents(m.outCents)} aan {m.category} — {m.why}
+                  {m.inCents > 0 && <> (waarvan {euroFromCents(m.inCents)} weer terugkwam)</>}
+                </span>
+              ))}
+              . Dat is geen uitgave: het is dezelfde euro op een andere plek.
+            </p>
+          )}
+
           {/* Totals over the window, not a monthly average: with a one-week
-              window a "per maand" figure would be an extrapolation. */}
+              window a "per maand" figure would be an extrapolation. No title
+              attribute on them any more either: what they leave out is said out
+              loud in the line above, and a mouse-only tooltip repeating half of
+              it was the version he could not see. */}
           {totals && (
-            <div className="stat-figures" title="Overboekingen tussen je eigen rekeningen tellen niet mee.">
+            <div className="stat-figures">
               <div className="stat-figure">
                 <div className="eyebrow">Inkomsten in deze periode</div>
                 <div className="module-figure">

@@ -182,3 +182,56 @@ test("charts.css dresses the state the reading depends on", () => {
   expect(flat).toContain('.spend-pie-item[data-filter="yes"] { cursor: pointer; }');
   expect(flat).toContain(".spend-pie-hole");
 });
+
+/* Item 5: the number in the middle was centred while a slice was being read and
+ * sitting high in the total view. The cause was the grid, not the state — with
+ * `align-content` left at its default the auto rows stretch, so two rows put the
+ * amount in the top half and three rows put it in the middle by accident. Packing
+ * the rows centres the group at any number of lines. */
+test("the hole centres its contents whether it holds two lines or three", () => {
+  const flat = css.replace(/\s+/g, " ");
+  const hole = flat.match(/\.spend-pie-hole \{[^}]*\}/)?.[0] ?? "";
+  expect(hole).toContain("align-content: center");
+});
+
+/* Item 6: an arc opens its category, so it has to point — and only where a click
+ * actually goes somewhere. */
+test("the ring points only where an arc can be opened", () => {
+  const flat = css.replace(/\s+/g, " ");
+  expect(flat).toContain('.spend-pie-ring[data-open="yes"] { cursor: pointer; }');
+});
+
+/* Item 8: "V…" names nothing. The row being read un-clips its name, and it is
+ * reachable by hover, by tap (data-active) and by keyboard (focus-visible) — a
+ * `title` alone would have answered only the mouse. */
+test("a clipped legend name un-clips while it is being read, by any of the three ways", () => {
+  const flat = css.replace(/\s+/g, " ");
+  for (const selector of [
+    ".spend-pie-item:hover .spend-pie-name",
+    ".spend-pie-item:focus-visible .spend-pie-name",
+    '.spend-pie-item[data-active="on"] .spend-pie-name',
+  ]) {
+    expect(flat).toContain(selector);
+  }
+  const revealed = flat.match(/\.spend-pie-item:hover \.spend-pie-name,[^{]*\{[^}]*\}/)?.[0] ?? "";
+  expect(revealed).toContain("white-space: normal");
+  // And the name in the hole wraps rather than ellipsising into nothing.
+  const slice = flat.match(/\.spend-pie-slice \{[^}]*\}/)?.[0] ?? "";
+  expect(slice).not.toContain("text-overflow: ellipsis");
+});
+
+/* Item 8 for the bar charts: the axis cell keeps its slot (the row stays aligned
+ * with the bars), and the full name — which the cell already carries in `title` —
+ * grows out of it to the right on hover, the way he suggested. */
+test("a clipped axis label reveals its full name to the right", () => {
+  const flat = css.replace(/\s+/g, " ");
+  const chip = flat.match(/\.lv-bars-xaxis span\[title\]::after \{[^}]*\}/)?.[0] ?? "";
+  expect(chip).toContain("content: attr(title)");
+  expect(chip).toContain("left: 0");
+  expect(flat).toContain(".lv-bars-xaxis span:hover[title]::after");
+  // The rightmost label grows the other way, so it does not hang off the card.
+  expect(flat).toContain(".lv-bars-xaxis span:last-child[title]::after");
+  // And nothing pops up over the weekday axis, whose labels are never clipped:
+  // a chip repeating "vr" would be noise on a chart he called fine.
+  expect(flat).toContain(".weekday-bars .lv-bars-xaxis span[title]::after { content: none; }");
+});

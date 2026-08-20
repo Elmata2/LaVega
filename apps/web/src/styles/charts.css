@@ -340,6 +340,63 @@
   white-space: nowrap;
 }
 
+/* ITEM 8, the bar charts' own labels: "afgekapte namen zijn onleesbaar — hij
+ * stelt voor naar rechts te kunnen hoveren."
+ *
+ * The cell cannot simply stop clipping: every label keeps its slot so the row
+ * stays aligned with the bars above it, and an unclipped "Kleding & winkelen"
+ * would shove its neighbours out of line. So the full name — which the cell
+ * already carries in `title` — is drawn as a chip that grows RIGHTWARDS out of
+ * the cell's left edge, in the same ink as the bar readings so the two do not
+ * look like two different tooltips. `content: attr(title)` means no markup
+ * changed and nothing can drift out of sync with the label.
+ *
+ * The rightmost cell grows the other way, so the last month or category does not
+ * hang off the card.
+ *
+ * This is the mouse half of item 8. The tap-and-keyboard half already exists in
+ * the same chart and is not duplicated here: every bar is a button carrying
+ * `.lv-tip`, whose first line is that group's FULL name. */
+.lv-bars-xaxis span {
+  position: relative;
+}
+.lv-bars-xaxis span[title]::after {
+  content: attr(title);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 5px);
+  z-index: 5;
+  width: max-content;
+  max-width: 12rem;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+.lv-bars-xaxis span:last-child[title]::after {
+  left: auto;
+  right: 0;
+  text-align: right;
+}
+.lv-bars-xaxis span:hover[title]::after {
+  opacity: 1;
+  visibility: visible;
+}
+/* Not on the weekday chart: "ma" … "zo" are never clipped, so a chip there would
+ * repeat the label it covers. A tooltip that says what you can already read is
+ * noise, and this chart was called fine as it is. */
+.weekday-bars .lv-bars-xaxis span[title]::after {
+  content: none;
+}
+
 /* ---------- Phone ---------- */
 
 @media (max-width: 900px) {
@@ -414,6 +471,16 @@
    * transparent centre would show whatever is behind the card. */
 }
 
+/* ITEM 5: "het totaal staat gecentreerd zodra hij een categorie kiest, maar niet
+ * in de totaalweergave." Both states were laid out the same way, so the cause was
+ * not the states but the grid: `place-items` centres each item INSIDE ITS OWN
+ * ROW, and auto rows stretch to fill the circle. Reading a slice puts three rows
+ * in the hole, and the amount — the middle one — lands dead centre by luck; the
+ * total view has two rows, so the amount sits centred in the TOP HALF. That is
+ * exactly what he saw.
+ *
+ * `align-content: center` packs the rows as one block and centres THAT, so the
+ * group is centred whether it holds two lines or three. */
 .spend-pie-hole {
   width: 108px;
   height: 108px;
@@ -421,6 +488,8 @@
   background: var(--card, #fff);
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 1px;
   text-align: center;
   line-height: 1.15;
 }
@@ -448,7 +517,12 @@
 }
 
 /* The name of the slice being read, above its amount. Small and quiet: the
- * number is the answer, the name only says which question it answers. */
+ * number is the answer, the name only says which question it answers.
+ *
+ * It WRAPS rather than ellipsises (item 8). "Kleding & winkelen" clipped to
+ * "Kleding &…" in a 108px hole names nothing; two short lines name it, and with
+ * the rows now packed and centred the second line pushes the group up rather
+ * than off. */
 .spend-pie-slice {
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -456,9 +530,8 @@
   text-transform: uppercase;
   color: var(--muted);
   max-width: 92%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .spend-pie-legend {
@@ -504,9 +577,15 @@
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
-/* The ring answers the pointer, so it is a live surface rather than a picture. */
+/* The ring answers the pointer, so it is a live surface rather than a picture —
+ * and where an arc opens its category (item 6) it points, exactly as its legend
+ * row does. Over the hole, or over an "Overig" arc that is several categories,
+ * there is nothing to open and nothing is promised. */
 .spend-pie-ring {
   cursor: default;
+}
+.spend-pie-ring[data-open="yes"] {
+  cursor: pointer;
 }
 
 .spend-pie-swatch {
@@ -515,11 +594,26 @@
   border-radius: 3px;
 }
 
+/* ITEM 8: 'Ik zie "V…" en kan niet zien welke categorie dat is.' A long name is
+ * still clipped at rest — the amounts have to stay in one column, and a legend
+ * of wrapped names is unreadable as a list. But the row being READ un-clips and
+ * wraps, so the full name is reachable three ways, not just by mouse: :hover,
+ * [data-active="on"] (set on tap) and :focus-visible (keyboard). The `title`
+ * stays for the desktop reader who waits, but it was never enough on its own —
+ * a phone has no hover. */
 .spend-pie-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+.spend-pie-item:hover .spend-pie-name,
+.spend-pie-item:focus-visible .spend-pie-name,
+.spend-pie-item[data-active="on"] .spend-pie-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .spend-pie-value,
