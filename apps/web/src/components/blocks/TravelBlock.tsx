@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey, CatalogueEntryLike,
-  WithdrawOption, CardOffer,
+  WithdrawOption, CardOffer, WithdrawAdvice,
 } from "@lavega/core";
 import {
   planTravel, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
@@ -136,6 +136,18 @@ function FactCorrection({ provider, factKey, label, value, busy, onCorrect }: {
 
 function pct(n: number | null): string {
   return n === null ? "onbekend" : `${n}%`;
+}
+
+/** THE ONE MARK THAT KEEPS THE TWO QUESTIONS APART.
+ *
+ *  Since the recommendation may now be a card from the catalogue rather than one
+ *  of his (review 3, item 2), every place a product is named has to say which of
+ *  the two it is — otherwise the block advises a payment he cannot make until he
+ *  has opened an account, which is the exact mistake this review is about. A
+ *  word alone is not enough: it has to be visibly different, so it is the app's
+ *  existing `.badge` chip and not another sentence. */
+function NotYours() {
+  return <span className="badge">nog niet van jou</span>;
 }
 
 /** A leg's price on the reference spend. `null` is UNKNOWN and must never read
@@ -462,7 +474,15 @@ export function TermsNotice({
  * appear however cheap. That is why Revolut looked like the best shot for the
  * US while the 212 Card sat in the catalogue at a provable 0%. Both questions
  * are on screen now, and they are kept apart by construction: `plan.offers`
- * contains only cards he does NOT hold, and every place it renders says so. */
+ * contains only cards he does NOT hold, and every place it renders says so.
+ *
+ * REVIEW 3, ITEM 2 went one step further: the cheaper card is now the HEADLINE,
+ * not a footnote under it. "I don't want 'pay today you're paying with what you
+ * have'. Say pay with Revolut, which would save you € 14 on a thousand compared
+ * to ING." So `plan.pay` may name a card he does not carry — and the moment it
+ * does, `NotYours` marks it and a "Vandaag" line keeps what he CAN pay with on
+ * screen. Without both, the block would be recommending a payment he cannot
+ * make until he has opened an account. */
 
 function pctNL(n: number): string {
   return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
@@ -478,7 +498,14 @@ function cashCost(euros: number | null): string {
  *  printed with the row: "the document points at article 13.3" and "we do not
  *  know which ING creditcard you have" need different things from him, and one
  *  of them he can fix in a click. */
-export function CashSection({ options, asOf }: { options: readonly WithdrawOption[]; asOf: string }) {
+export function CashSection({ options, asOf, advice = null }: {
+  options: readonly WithdrawOption[];
+  asOf: string;
+  /** The cheapest PROVEN withdrawal across the catalogue, when it is not one of
+   *  his. Named here too, because the list below is his cards only and the
+   *  cheapest one of those is not the answer to "which card should I use". */
+  advice?: WithdrawAdvice | null;
+}) {
   return (
     <div className="travel-step travel-cash">
       <h3 className="travel-step-title">Geld pinnen</h3>
@@ -486,6 +513,13 @@ export function CashSection({ options, asOf }: { options: readonly WithdrawOptio
         Pinnen is een aparte prijs, en bijna altijd hoger dan betalen. Bedragen gelden op één opname van{" "}
         {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}.
       </p>
+      {advice && !advice.held && (
+        <p className="cell-sub travel-note">
+          <NotYours /> Het goedkoopste opnametarief dat we kunnen aantonen is {advice.product}:{" "}
+          {cashCost(advice.costOnReference)} per {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}
+          {advice.asOf && <> · {figureAge(advice.asOf, asOf)}</>}.
+        </p>
+      )}
       {options.length === 0 ? (
         <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
       ) : (
@@ -551,6 +585,7 @@ export function OffersSection({ offers, asOf, shown = 6 }: { offers: readonly Ca
           <li key={o.productId} className="travel-journey">
             <div className="travel-journey-head">
               <span className="travel-journey-name">{o.product}</span>
+              <NotYours />
               <span className="travel-journey-cost">
                 {formatEuro(costOnReferenceSpend(o.netCostPct) ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}
               </span>
@@ -641,7 +676,7 @@ export default function TravelBlock({
   const headline = (terms && termsHeadline(terms)) ?? plan?.headline ?? "";
 
   return (
-    <Module title="Op reis" span={3} height="tall">
+    <Module title="Ik ga op reis" span={3} height="tall">
       <div className="travel-controls">
         <label>
           <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>
@@ -673,24 +708,40 @@ export default function TravelBlock({
                 <strong>Let op:</strong> {bestJourney.note}
               </p>
             )}
+            {/* The recommendation is allowed to be a card he does not carry —
+                that is the point of review item 2 — so the moment it is, the
+                block says so and shows the figure's provenance. */}
+            {plan.pay && !plan.pay.held && (
+              <p className="cell-sub travel-winner-switch">
+                <NotYours /> {plan.pay.product} staat in de catalogus, niet bij je rekeningen
+                {plan.pay.asOf && <> · tarief {figureAge(plan.pay.asOf, asOf)}</>}.
+              </p>
+            )}
+            {/* ...and what he can pay with TODAY stays on screen. He still has to
+                be able to pay for lunch tomorrow; it is simply no longer the
+                headline, which is what he asked for in so many words. */}
+            {plan.pay && !plan.pay.held && plan.pay.ownProduct && (
+              <p className="cell-sub travel-winner-today">
+                <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met {plan.pay.ownProduct} —{" "}
+                {formatEuro(plan.pay.ownCostOnReference ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}.
+              </p>
+            )}
+            {/* The recommendation's own caveat, when it is a catalogue card: a
+                capped 0% shown bare is the Revolut mistake all over again. */}
+            {plan.pay && !plan.pay.held && plan.pay.note && (
+              <p className="cell-sub travel-winner-caveat">
+                <strong>Let op:</strong> {plan.pay.note}
+              </p>
+            )}
             {/* CASH. He asked for it in so many words — "also include taking
                 money, physical cash. Which card can you take out money?" — and
                 it is a different, worse price than paying, so it gets its own
                 sentence rather than a footnote under the card advice. */}
             <p className="cell-sub travel-winner-cash">
-              <strong>Pinnen:</strong> {plan.withdrawHeadline}
+              <strong>Pinnen:</strong>{" "}
+              {plan.withdrawAdvice && !plan.withdrawAdvice.held && <><NotYours /> </>}
+              {plan.withdrawHeadline}
             </p>
-            {/* And the other question: what is cheaper out there. Marked as not
-                his, in the same breath as the number, because the one thing
-                this must never become is advice to pay with a card he does not
-                carry. */}
-            {plan.switchGain && (
-              <p className="cell-sub travel-winner-switch">
-                <strong>Nog niet van jou:</strong> {plan.switchGain.best.product} rekent{" "}
-                {pctNL(plan.switchGain.best.fxFeePct)} en zou je {formatEuro(plan.switchGain.savingCents / 100)} schelen
-                op {formatEuro(TRAVEL_REFERENCE_SPEND)}. Die moet je eerst openen — vandaag betaal je met wat je hebt.
-              </p>
-            )}
             {bestJourney && (
               <div className="cell-sub">
                 Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst
@@ -837,7 +888,7 @@ export default function TravelBlock({
 
               {/* Full width, outside the three-column grid: both are lists, and
                   a list of thirteen tariffs does not belong in a 240px column. */}
-              <CashSection options={plan.withdraw} asOf={asOf} />
+              <CashSection options={plan.withdraw} asOf={asOf} advice={plan.withdrawAdvice} />
 
               <OffersSection offers={plan.offers} asOf={asOf} />
 

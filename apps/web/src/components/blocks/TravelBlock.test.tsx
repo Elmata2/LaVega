@@ -29,7 +29,10 @@ const props: TravelBlockProps = {
 test("TravelBlock renders as a module and asks for a destination first", () => {
   const html = renderToStaticMarkup(<TravelBlock {...props} />);
   expect(html).toContain('class="module module-span-3 module-tall"');
-  expect(html).toContain("Op reis");
+  // Named after the question he asks, not after the software that answers it
+  // (review 3, item 4). The Module puts the title in its aria-label too.
+  expect(html).toContain("Ik ga op reis");
+  expect(html).not.toContain("reisagent");
   expect(html).toContain("Ik reis vanuit NL naar");
   expect(html).toContain("Kies een land");
   // No destination picked, so there is no plan and no terms notice yet.
@@ -481,6 +484,17 @@ const CATALOGUE: CatalogueEntryLike[] = [
     },
   },
   {
+    // The one shape that proves a FREE foreign-currency withdrawal, in words.
+    id: "n26-go-betaalpas", product: "N26 Go betaalpas", issuer: "N26 Bank AG (Germany)", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 0, route: "agent", sourceUrl: "https://docs.n26.com/pricelist.pdf", checkedAt: "2026-06-26",
+        conditionsKnown: true,
+        conditions: "The 0 is written as 'Free'. Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal Free'.",
+      },
+    },
+  },
+  {
     id: "wirex-card-wirex-one", product: "Wirex Card (Wirex One)", issuer: "Wirex", kind: "betaalpas",
     fields: {
       fxFeePct: {
@@ -526,16 +540,63 @@ test("cards he does not hold sit in their own section and are never offered to p
   const offers = el.querySelector(".travel-offers")!;
   expect(offers.textContent).toContain("212 Card");
   expect(offers.textContent).toContain("geen kaarten van jou");
+  // Marked per row, not only in the section's intro sentence.
+  expect(offers.querySelectorAll(".badge").length).toBeGreaterThan(0);
   // And it is NOT inside the list of things to pay with.
   const spend = [...el.querySelectorAll(".travel-step")].find((s) => s.textContent?.startsWith("Betalen"));
   expect(spend?.textContent).not.toContain("212 Card");
 });
 
-test("a cheaper card he does not hold is named beside the answer, marked as not his", () => {
-  const el = renderWithCatalogue();
+/* The default facts give him a € 0 route (move to Revolut via iDEAL, convert at
+ * 0%), which no catalogue card can beat — and a tie must NEVER crown a card he
+ * has to open first. So the scenario this test is about only exists when his own
+ * best really is dearer: 1% direct at Revolut, nothing free to move it to. */
+const DEARER_OWN: LearnedFact[] = [
+  fact("ING betaalpas", "fxFeePct", "1.4"),
+  fact("Revolut betaalpas", "fxFeePct", "1"),
+];
+
+test("a cheaper card he does not hold LEADS the answer, and is marked as not his", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
   const winner = el.querySelector(".travel-winner")!;
-  expect(winner.textContent).toContain("212 Card");
-  expect(winner.textContent).toMatch(/nog niet van jou|heb je niet/i);
+  // The headline itself, not a footnote under it (review 3, item 2).
+  expect(el.querySelector(".travel-winner-name")!.textContent).toContain("212 Card");
+  expect(winner.textContent).toContain("€ 10,00"); // 1% of € 1.000 saved
+  expect(winner.textContent).toMatch(/nog niet van jou|heb je nog niet/i);
+  // A card he cannot tap tomorrow morning must LOOK different from one he can.
+  expect(winner.querySelector(".badge")).not.toBeNull();
+});
+
+test("what he can pay with today stays on screen, just no longer as the headline", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const winner = el.querySelector(".travel-winner")!;
+  expect(winner.textContent).toContain("Revolut betaalpas"); // his own cheapest
+  expect(winner.textContent).toMatch(/vandaag/i);
+  expect(winner.textContent).toContain("€ 10,00");
+});
+
+test("a tie never crowns a card he has to open first", () => {
+  // The default facts: his own route already costs nothing.
+  const el = renderWithCatalogue();
+  const name = el.querySelector(".travel-winner-name")!.textContent ?? "";
+  expect(name).toContain("Revolut betaalpas");
+  expect(name).not.toContain("212 Card");
+  // No "you have to open this first" line for the PAYMENT advice. (The cash
+  // advice is a separate ranking and may well still point at a card he lacks.)
+  expect(el.querySelector(".travel-winner-switch")).toBeNull();
+  expect(el.querySelector(".travel-winner-today")).toBeNull();
+});
+
+test("the cash line recommends the proven cheapest and names the card it cannot price", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const cash = el.querySelector(".travel-winner-cash")!.textContent ?? "";
+  // Not ING — he is right about that — and not Revolut either, because no source
+  // prices a Revolut withdrawal. N26 Go's price list does, at zero.
+  expect(cash).toContain("N26 Go betaalpas");
+  expect(cash).toContain("ING betaalpas"); // his own cheapest proven, for comparison
+  expect(cash).toContain("Revolut betaalpas"); // the gap, named
+  expect(cash).not.toMatch(/gratis|kost je niets/i);
+  expect(el.querySelector(".travel-winner-cash .badge")).not.toBeNull();
 });
 
 test("catalogue cashback is shown with its gate, never subtracted from the price", () => {

@@ -4,6 +4,7 @@ import {
   countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT,
   parseWithdrawalFee, withdrawalCost, withdrawalEffectivePct, rankWithdrawOptions, marketCardOffers,
   withdrawalHeadline, catalogueCandidates, cheapestPerIssuer,
+  bestPayAdvice, payHeadline, marketWithdrawOptions, bestWithdrawAdvice,
 } from "./travel.js";
 import type { CatalogueEntryLike } from "./catalogRates.js";
 import { makeFact, upsertFacts } from "./facts.js";
@@ -406,6 +407,23 @@ const CAT_212: CatalogueEntryLike = {
   },
 };
 
+/** N26 Go, verbatim. The only shape in the catalogue that proves a FREE
+ *  foreign-currency withdrawal in words rather than in a numeral — which is
+ *  exactly the row the withdrawal advice has to be able to win on. */
+const CAT_N26_GO: CatalogueEntryLike = {
+  id: "n26-go-betaalpas",
+  product: "N26 Go betaalpas",
+  issuer: "N26 Bank AG (Germany); Mastercard Debit",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "agent", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      conditionsKnown: true,
+      conditions: "WORDING CAVEAT \u2014 the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
+    },
+  },
+};
+
 const CAT_REVOLUT: CatalogueEntryLike = {
   id: "revolut-standard-betaalpas",
   product: "Revolut Standard betaalpas",
@@ -456,7 +474,7 @@ const CAT_UNCOVERED: CatalogueEntryLike = {
 
 const CATALOGUE = [
   CAT_ING_BETAALPAS, CAT_ING_CREDITCARD, CAT_ING_PLATINUM, CAT_ABN_CREDITCARD,
-  CAT_ABN_GOLD, CAT_212, CAT_REVOLUT, CAT_CRYPTO_OBSIDIAN, CAT_UNCOVERED,
+  CAT_ABN_GOLD, CAT_212, CAT_N26_GO, CAT_REVOLUT, CAT_CRYPTO_OBSIDIAN, CAT_UNCOVERED,
 ];
 
 test("a withdrawal priced as a percentage PLUS a fixed fee is read in either order", () => {
@@ -592,11 +610,12 @@ test("planTravel answers 'what could I switch to' beside 'what should I pay with
     accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
   });
 
-  // What he holds still decides the answer he can act on today.
+  // What he holds still decides what he can pay with TODAY.
   expect(plan.spend[0].provider).toBe("Revolut betaalpas");
   // And the catalogue answers the other question, kept separate.
-  expect(plan.switchGain?.best.productId).toBe("212-card");
-  expect(plan.switchGain?.savingCents).toBe(1000); // 1% of € 1.000
+  expect(plan.pay?.product).toBe("212 Card");
+  expect(plan.pay?.held).toBe(false);
+  expect(plan.pay?.savingOnReference).toBe(10); // 1% of € 1.000
   expect(plan.offers.some((o) => o.productId === "212-card")).toBe(true);
   expect(plan.offers.some((o) => o.held)).toBe(false);
   expect(plan.withdraw.length).toBe(2);
@@ -607,8 +626,15 @@ test("without a catalogue nothing is invented — no offers, no switch, no cash 
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
   const plan = planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20" });
   expect(plan.offers).toEqual([]);
-  expect(plan.switchGain).toBeNull();
+  // Nothing to switch to, so the advice is his own card and claims no saving.
+  expect(plan.pay?.held).toBe(true);
+  expect(plan.pay?.savingOnReference).toBeNull();
   expect(plan.withdraw[0].fee.known).toBe(false);
+  // Nothing proven anywhere, so there is no advice — but the card is still NAMED
+  // as a gap. Dropping it silently is what reads as "opnemen kost hier niets".
+  expect(plan.withdrawAdvice).toBeNull();
+  expect(plan.withdrawHeadline).toContain("ING betaalpas");
+  expect(plan.withdrawHeadline).not.toMatch(/gratis|kost je niets/i);
 });
 
 test("a figure whose document prices withdrawal differently elsewhere carries that caveat", () => {
@@ -748,4 +774,153 @@ describe("parseWithdrawalFee: gratis", () => {
     expect(f.known).toBe(true);
     expect(withdrawalEffectivePct(f, 100)).toBe(4.9);
   });
+});
+
+/* ═══════════════════════════════════ THE ADVICE IS THE BEST OPTION THERE IS
+ *
+ * App review 3, items 2 and 3. Both rankings answered "which of YOUR cards" and
+ * led with it. His words: "I don't want 'pay today you're paying with what you
+ * have'. Say pay with Revolut, which would save you € 14 on a thousand compared
+ * to ING." So the headline is the cheapest option the catalogue can PROVE, with
+ * the difference in euros against what he would otherwise use — and a product he
+ * does not hold has to be recognisable as such, or the app recommends a payment
+ * he cannot make today.
+ */
+
+test("the recommendation is the cheapest proven card, even one he does not hold, priced against his own", () => {
+  const accounts = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+  const plan = planTravel({
+    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+  });
+
+  expect(plan.pay?.product).toBe("212 Card");
+  expect(plan.pay?.held).toBe(false);
+  expect(plan.pay?.costOnReference).toBe(0);
+  // What he can pay with TODAY is still computed and still named.
+  expect(plan.pay?.ownProduct).toBe("ING betaalpas");
+  expect(plan.pay?.ownCostOnReference).toBe(14);
+  expect(plan.pay?.savingOnReference).toBe(14); // his own 1,4% on € 1.000
+  expect(plan.pay?.sourceUrl).toContain("trading212");
+
+  // ...and the headline leads with it, in euros, the way he dictated it.
+  expect(plan.headline).toContain("212 Card");
+  expect(plan.headline).toContain("€ 14,00");
+  expect(plan.headline).toContain("ING betaalpas");
+  expect(plan.headline).toMatch(/heb je nog niet/i);
+});
+
+test("a card he does not hold never wins a tie — opening an account for nothing is not advice", () => {
+  // His own route already costs nothing (move to Revolut via iDEAL, convert at
+  // 0%). The catalogue's best is also 0%. Recommending that he open it would be
+  // a step with no gain at the end of it.
+  const accounts = [
+    acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+    acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
+  ];
+  const facts = upsertFacts([], [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "0"),
+    fact("Revolut betaalpas", "convertFeePct", "0"),
+    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+  ]);
+  const plan = planTravel({
+    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+  });
+
+  expect(plan.pay?.held).toBe(true);
+  expect(plan.pay?.savingOnReference).toBeNull();
+  expect(plan.headline).not.toContain("212 Card");
+  expect(plan.headline).toContain("Revolut betaalpas");
+});
+
+test("the baseline is the cheapest thing he can ALREADY do, route included — not only a card tap", () => {
+  // Paying directly with Revolut costs 0,5%; moving the money there first and
+  // converting at 0,2% costs 0,2%. Measuring a switch against the 0,5% tap would
+  // overstate the gain by more than half, and could crown a card he does not need.
+  const accounts = [
+    acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+    acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
+  ];
+  const facts = upsertFacts([], [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "0.5"),
+    fact("Revolut betaalpas", "convertFeePct", "0.2"),
+    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+  ]);
+  const plan = planTravel({
+    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+  });
+
+  expect(plan.pay?.product).toBe("212 Card");
+  expect(plan.pay?.ownCostOnReference).toBe(2); // the ROUTE, not the 0,5% tap
+  expect(plan.pay?.savingOnReference).toBe(2);
+});
+
+test("bestPayAdvice returns nothing when neither side can be priced", () => {
+  expect(bestPayAdvice([], [])).toBeNull();
+  expect(payHeadline(null, [], "EUR")).toContain("euro");
+});
+
+/* ---------- cash: the winner is a proven zero, and a missing figure is named ---------- */
+
+test("marketWithdrawOptions ranks the catalogue on CASH, and only where the price is proven", () => {
+  const market = marketWithdrawOptions(CATALOGUE, []);
+  // N26 Go's price list states a free foreign-currency withdrawal in words.
+  expect(market[0].productId).toBe("n26-go-betaalpas");
+  expect(market[0].costOnReference).toBe(0);
+  // ING's own document prices it: € 3,50 + 1,40% on € 200.
+  expect(market.find((o) => o.productId === "ing-betaalpas")?.costOnReference).toBe(6.3);
+  // Revolut and the 212 Card say nothing about cash, so they are not offers.
+  expect(market.some((o) => o.productId === "revolut-standard-betaalpas")).toBe(false);
+  expect(market.some((o) => o.productId === "212-card")).toBe(false);
+  // A card he holds is marked, so it can never be offered as something to open.
+  const held = marketWithdrawOptions(CATALOGUE, [{ provider: "ING betaalpas", fxFeePct: 1.4 }]);
+  expect(held.find((o) => o.productId === "ing-betaalpas")?.held).toBe(true);
+});
+
+test("the cash advice is the proven cheapest, and it names the cards whose price we do NOT have", () => {
+  // His real situation: an ING betaalpas at € 3,50 + 1,40%, a Revolut with no
+  // withdrawal row anywhere in its fee page, and the market's proven zero.
+  const accounts = [
+    acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+    acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
+  ];
+  const facts = upsertFacts([], [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "1"),
+  ]);
+  const plan = planTravel({
+    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+  });
+
+  const a = plan.withdrawAdvice!;
+  expect(a.product).toBe("N26 Go betaalpas");
+  expect(a.held).toBe(false);
+  expect(a.costOnReference).toBe(0);
+  expect(a.ownProduct).toBe("ING betaalpas");
+  expect(a.ownCostOnReference).toBe(6.3);
+  expect(a.savingOnReference).toBe(6.3);
+  // He believes Revolut is the winner. We cannot prove it either way, and a
+  // figure nobody mentions reads as "there is no charge" — so it is named.
+  expect(a.unpricedOwn).toEqual(["Revolut betaalpas"]);
+
+  expect(plan.withdrawHeadline).toContain("N26 Go betaalpas");
+  expect(plan.withdrawHeadline).toContain("ING betaalpas");
+  expect(plan.withdrawHeadline).toContain("Revolut betaalpas");
+  expect(plan.withdrawHeadline).not.toMatch(/gratis|kost je niets/i);
+});
+
+test("his own card still wins the cash advice when nothing proven beats it", () => {
+  const accounts = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+  const own = rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE);
+  // A market of one, and it is his.
+  const market = marketWithdrawOptions([CAT_ING_BETAALPAS], [{ provider: "ING betaalpas", fxFeePct: 1.4 }]);
+
+  const a = bestWithdrawAdvice(own, market)!;
+  expect(a.held).toBe(true);
+  expect(a.product).toBe("ING betaalpas");
+  expect(a.savingOnReference).toBeNull();
+  expect(withdrawalHeadline(own, "USD", market)).toContain("in één keer meer");
 });

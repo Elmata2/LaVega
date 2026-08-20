@@ -101,10 +101,126 @@ export type TravelPlan = {
    *  Answers "what could I switch to" — never "what can I pay with today".
    *  Empty when no catalogue was passed in; nothing is invented. */
   offers: CardOffer[];
-  /** What the market's cheapest card he does NOT hold would have saved on the
-   *  reference spend. Null when there is nothing honest to claim. */
-  switchGain: { best: CardOffer; savingCents: number } | null;
+  /** THE recommendation: the cheapest way to pay that we can prove, whether or
+   *  not he holds it, with what it saves over the best he can already do. Null
+   *  when neither side can be priced. */
+  pay: PayAdvice | null;
+  /** The same for cash: the cheapest PROVEN withdrawal, his own best beside it,
+   *  and the cards whose withdrawal price no source states. */
+  withdrawAdvice: WithdrawAdvice | null;
 };
+
+/** THE ANSWER TO "WHAT SHOULD I PAY WITH", and it is allowed to be a card he
+ *  does not own yet.
+ *
+ *  App review 3, item 2, in his words: "I don't want 'pay today you're paying
+ *  with what you have'. Say pay with Revolut, which would save you € 14 on a
+ *  thousand compared to ING." So the recommendation is the cheapest thing the
+ *  catalogue can PROVE — and because a card he does not carry cannot be tapped
+ *  tomorrow morning, `held` and `ownProduct` both travel with it so the screen
+ *  can show the difference instead of quietly advising an impossible payment. */
+export type PayAdvice = {
+  /** The product to pay with — a card of his, or one from the catalogue. */
+  product: string;
+  /** False means he has to open it first. The UI MUST mark this visibly. */
+  held: boolean;
+  costOnReference: number | null;
+  /** The cheapest thing he can already do, and what that costs. Stays on screen
+   *  because he still has to be able to pay for lunch today. */
+  ownProduct: string | null;
+  ownCostOnReference: number | null;
+  /** Euros saved on the reference spend by switching. Null when there is nothing
+   *  honest to claim — his own figure unknown, or no real gain. */
+  savingOnReference: number | null;
+  /** The recommendation's own caveat (a cap, a monthly free limit). */
+  note: string | null;
+  /** Where a catalogue recommendation was read, and when. Null for his own card,
+   *  whose date the `spend` list already carries. */
+  sourceUrl: string | null;
+  asOf: string | null;
+};
+
+/** The cheapest way to pay, comparing HIS COMPLETE ROUTES against the market's
+ *  cheapest card surcharge.
+ *
+ *  Two deliberate asymmetries, both leaning the same way — towards what he
+ *  already has:
+ *
+ *  · his side is priced end to end (move it to Revolut, convert, pay), the
+ *    market's side only at the card leg, because for a card he does not hold we
+ *    have no idea what funding it would cost. So a market card has to be
+ *    cheaper than his best FULL route to win, which is the conservative test.
+ *  · a tie goes to the card he already carries. "Open this account to save
+ *    nothing" is not advice, and a 0% card cannot beat a 0% route. */
+export function bestPayAdvice(
+  journeys: readonly Journey[],
+  offers: readonly CardOffer[],
+): PayAdvice | null {
+  // `journeys` is already sorted cheapest-first with unknowns last, so the first
+  // known one is the best he can do today.
+  const own = journeys.find((j) => j.known && j.costOnReference !== null) ?? null;
+  const market = offers.find((o) => !o.held) ?? null;
+  const marketCost = market ? costOnReferenceSpend(market.netCostPct) : null;
+
+  if (own && (marketCost === null || own.costOnReference! <= marketCost)) {
+    return {
+      product: own.provider,
+      held: true,
+      costOnReference: own.costOnReference,
+      ownProduct: own.provider,
+      ownCostOnReference: own.costOnReference,
+      // Nothing to switch to, so nothing to claim. The runner-up comparison for
+      // his OWN options is journeyHeadline's job and it already does it.
+      savingOnReference: null,
+      note: own.note,
+      sourceUrl: null,
+      asOf: null,
+    };
+  }
+  if (!market) return null;
+  // Measured against the best he can ALREADY do, route included — not against
+  // the card he happens to tap. Pricing a switch against the dearer of his own
+  // options inflates the gain and can crown a card he does not need.
+  const gain = offerSwitchGain(own?.totalCostPct ?? null, offers);
+  return {
+    product: market.product,
+    held: false,
+    costOnReference: marketCost,
+    ownProduct: own?.provider ?? null,
+    ownCostOnReference: own?.costOnReference ?? null,
+    savingOnReference: gain ? gain.savingCents / 100 : null,
+    note: market.capNote,
+    sourceUrl: market.sourceUrl,
+    asOf: market.asOf,
+  };
+}
+
+/** The one sentence the block leads with.
+ *
+ *  When the winner is one of his, this is `journeyHeadline` unchanged — that
+ *  sentence already names the route and what it beats. When the winner is a card
+ *  from the catalogue, the sentence says so in the same breath as the euros,
+ *  because a recommendation he cannot act on today has to announce that. */
+export function payHeadline(
+  advice: PayAdvice | null,
+  journeys: readonly Journey[],
+  currency: string | null,
+): string {
+  if (currency === "EUR") return "Daar betaal je in euro's — omwisselen is niet nodig.";
+  if (!advice || advice.held) return journeyHeadline(journeys, currency);
+
+  const cost =
+    advice.costOnReference === null
+      ? ""
+      : advice.costOnReference === 0
+        ? " dat kost je niets op € 1.000"
+        : ` ${euro(advice.costOnReference)} op € 1.000`;
+  const versus =
+    advice.savingOnReference !== null && advice.ownProduct
+      ? `, ${euro(advice.savingOnReference)} minder dan met je eigen ${advice.ownProduct}`
+      : "";
+  return `Betaal met ${advice.product}:${cost}${versus}. Die heb je nog niet — die moet je eerst openen.`;
+}
 
 /** The product a card's terms belong to: the BANK, and only the bank.
  *
@@ -442,6 +558,11 @@ export function planTravel(input: {
   // Cash, and the rest of the market. Both read the catalogue that was passed
   // in; with none, both come back empty rather than guessed.
   const withdraw = currency === "EUR" ? [] : rankWithdrawOptions(spend, catalogue);
+  // The whole market, priced for cash. His ING betaalpas is 4,9% on € 100 and he
+  // is right that it is not the answer; the answer is a proven zero he does not
+  // hold yet, and the cards we have NO withdrawal figure for get named rather
+  // than dropped (review 3, item 3).
+  const cashOffers = currency === "EUR" ? [] : marketWithdrawOptions(catalogue, spend);
   // Only cards he does NOT hold. `marketCardOffers` marks the held ones so this
   // filter is possible at all; dropping them here means the block physically
   // cannot present a card he already carries as something to go and open, nor
@@ -450,7 +571,7 @@ export function planTravel(input: {
     currency === "EUR"
       ? []
       : cheapestPerIssuer(marketCardOffers(catalogue, spend).filter((o) => !o.held));
-  const switchGain = offerSwitchGain(bestSpend?.netCostPct ?? null, offers);
+  const pay = currency === "EUR" ? null : bestPayAdvice(journeys, offers);
 
   return {
     destination,
@@ -458,15 +579,16 @@ export function planTravel(input: {
     store,
     convert,
     journeys,
-    headline: journeyHeadline(journeys, currency),
+    headline: payHeadline(pay, journeys, currency),
     spend,
     spendNote,
     unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],
     unidentifiedCount,
     withdraw,
-    withdrawHeadline: withdrawalHeadline(withdraw, currency),
+    withdrawHeadline: withdrawalHeadline(withdraw, currency, cashOffers),
     offers,
-    switchGain,
+    pay,
+    withdrawAdvice: currency === "EUR" ? null : bestWithdrawAdvice(withdraw, cashOffers),
   };
 }
 
@@ -793,8 +915,9 @@ export function catalogueProductFor(
  *  the catalogue; printing all thirteen inside a sentence is a wall, not an
  *  answer, and the sentence is asking him a question. */
 function nameSome(names: readonly string[], limit = 3): string {
-  if (names.length <= limit) return names.join(", ");
-  return `${names.slice(0, limit).join(", ")} en ${names.length - limit} andere`;
+  if (names.length > limit) return `${names.slice(0, limit).join(", ")} en ${names.length - limit} andere`;
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} en ${names[names.length - 1]}`;
 }
 
 /** One of HIS cards, priced for cash. */
@@ -928,14 +1051,18 @@ const SPENDABLE_KINDS = new Set(["betaalpas", "creditcard", "prepaid", "crypto"]
  *  blind to everything else: `rankSpendOptions` iterates his accounts, so a
  *  card he does not hold could not appear however cheap. Both questions matter
  *  and they are not the same question, so both are answered — separately. */
-export function marketCardOffers(
+/** His products, WITH the surcharge we already know for each. The fee is what
+ *  tells his ING creditcard from an ING PlatinumCard: without it every ING
+ *  credit card counts as possibly-his and the PlatinumCard's 0% — a real
+ *  recommendation for an ING customer — is hidden by caution. */
+export type HeldProduct = { provider: string; fxFeePct: number | null };
+
+/** Catalogue rows that might be one of his. Shared by every market ranking, so
+ *  "what could I open" means the same thing for a payment and for cash. */
+function heldCatalogueIds(
   entries: readonly CatalogueEntryLike[],
-  /** His own products, WITH the surcharge we already know for each. The fee is
-   *  what tells his ING creditcard from an ING PlatinumCard: without it every
-   *  ING credit card counts as possibly-his and the PlatinumCard's 0% — a real
-   *  recommendation for an ING customer — is hidden by caution. */
-  heldProducts: readonly { provider: string; fxFeePct: number | null }[],
-): CardOffer[] {
+  heldProducts: readonly HeldProduct[],
+): Set<string> {
   const held = new Set<string>();
   for (const p of heldProducts) {
     const { entry, ambiguous } = catalogueProductFor(entries, p.provider, p.fxFeePct);
@@ -948,6 +1075,14 @@ export function marketCardOffers(
     // carry as something to go and open.
     for (const e of ambiguous) held.add(e.id);
   }
+  return held;
+}
+
+export function marketCardOffers(
+  entries: readonly CatalogueEntryLike[],
+  heldProducts: readonly HeldProduct[],
+): CardOffer[] {
+  const held = heldCatalogueIds(entries, heldProducts);
 
   const offers: CardOffer[] = [];
   for (const e of entries) {
@@ -1015,25 +1150,195 @@ export function offerSwitchGain(
   return savingCents > 0 ? { best, savingCents } : null;
 }
 
+/* ---------- cash, across the whole market ---------- */
+
+/** One catalogue product priced for CASH, whether or not he holds it.
+ *
+ *  Only rows whose withdrawal price the source actually STATES get in. An
+ *  unproven price is not an offer — and the ones left out are reported by name
+ *  through `WithdrawAdvice.unpricedOwn`, because a figure nobody mentions reads
+ *  as "there is no charge". */
+export type CashOffer = {
+  productId: string;
+  product: string;
+  bank: string;
+  fee: WithdrawalFee;
+  costOnReference: number | null;
+  effectivePct: number | null;
+  sourceUrl: string;
+  asOf: string;
+  held: boolean;
+};
+
+/** Rank the catalogue on what one € 200 withdrawal costs, cheapest first.
+ *
+ *  This is review 3 item 3, and he is half right in a way worth keeping on
+ *  screen: his ING betaalpas costs 4,9% on € 100 (€ 3,50 flat is most of it), so
+ *  ING is indeed not the answer — but the answer we can PROVE is N26 Go or N26
+ *  Metal at 0%, not Revolut, whose fee page prices no withdrawal at all. */
+export function marketWithdrawOptions(
+  entries: readonly CatalogueEntryLike[],
+  heldProducts: readonly HeldProduct[],
+): CashOffer[] {
+  const held = heldCatalogueIds(entries, heldProducts);
+  const out: CashOffer[] = [];
+  for (const e of entries) {
+    if (!SPENDABLE_KINDS.has(String(e.kind ?? ""))) continue;
+    // The withdrawal price lives inside the surcharge row's conditions, so an
+    // uncovered surcharge means an unread document — same gate as the payment
+    // ranking, for the same reason.
+    const fx = coveredField(e, "fxFeePct");
+    if (!fx) continue;
+    const fee = parseWithdrawalFee(fx.conditions);
+    const costOnReference = withdrawalCost(fee, TRAVEL_REFERENCE_WITHDRAWAL);
+    if (!fee.known || costOnReference === null) continue;
+    out.push({
+      productId: e.id,
+      product: e.product,
+      bank: e.issuer ? issuerToBank(e.issuer) : "",
+      fee,
+      costOnReference,
+      effectivePct: withdrawalEffectivePct(fee, TRAVEL_REFERENCE_WITHDRAWAL),
+      sourceUrl: fx.sourceUrl,
+      asOf: fx.checkedAt,
+      held: held.has(e.id),
+    });
+  }
+  // Cheapest first; at the same price the row with no second, conditional
+  // withdrawal clause wins, and ties beyond that keep catalogue order.
+  return out.sort(
+    (a, b) => a.costOnReference! - b.costOnReference! || Number(a.fee.caveat !== null) - Number(b.fee.caveat !== null),
+  );
+}
+
+/** THE ANSWER TO "WHICH CARD DO I PULL CASH OUT WITH". Same shape and the same
+ *  rules as `PayAdvice`: a tie goes to the card he already carries, and the
+ *  cards we cannot price are named rather than left out. */
+export type WithdrawAdvice = {
+  product: string;
+  held: boolean;
+  costOnReference: number | null;
+  effectivePct: number | null;
+  /** His own cheapest PROVEN card, for the comparison. */
+  ownProduct: string | null;
+  ownCostOnReference: number | null;
+  savingOnReference: number | null;
+  /** HIS cards whose withdrawal price no source states. He believes Revolut wins
+   *  here; we cannot prove it either way, and silence would read as agreement. */
+  unpricedOwn: string[];
+  caveat: string | null;
+  sourceUrl: string | null;
+  asOf: string | null;
+};
+
+export function bestWithdrawAdvice(
+  own: readonly WithdrawOption[],
+  market: readonly CashOffer[],
+): WithdrawAdvice | null {
+  const ownBest = own.find((o) => o.fee.known && o.costOnReference !== null) ?? null;
+  const marketBest = market.find((o) => !o.held) ?? null;
+  const unpricedOwn = own.filter((o) => !o.fee.known).map((o) => o.provider);
+  if (!ownBest && !marketBest) return null;
+
+  if (ownBest && (!marketBest || ownBest.costOnReference! <= marketBest.costOnReference!)) {
+    return {
+      product: ownBest.provider,
+      held: true,
+      costOnReference: ownBest.costOnReference,
+      effectivePct: ownBest.effectivePct,
+      ownProduct: ownBest.provider,
+      ownCostOnReference: ownBest.costOnReference,
+      savingOnReference: null,
+      unpricedOwn,
+      caveat: ownBest.fee.caveat,
+      sourceUrl: ownBest.sourceUrl,
+      asOf: ownBest.asOf,
+    };
+  }
+  const best = marketBest!;
+  const saving =
+    ownBest && ownBest.costOnReference! > best.costOnReference!
+      ? Math.round((ownBest.costOnReference! - best.costOnReference!) * 100) / 100
+      : null;
+  return {
+    product: best.product,
+    held: false,
+    costOnReference: best.costOnReference,
+    effectivePct: best.effectivePct,
+    ownProduct: ownBest?.provider ?? null,
+    ownCostOnReference: ownBest?.costOnReference ?? null,
+    savingOnReference: saving,
+    unpricedOwn,
+    caveat: best.fee.caveat,
+    sourceUrl: best.sourceUrl,
+    asOf: best.asOf,
+  };
+}
+
 /** The one sentence about cash. Leads with the card and the euros, and names
  *  the small-withdrawal penalty when there is one — that penalty IS the advice:
  *  a flat € 3,50 is 1,75% on € 200 and 7% on € 50, so "pin minder vaak, meer
  *  per keer" is worth more than any card choice on this screen. */
-export function withdrawalHeadline(options: readonly WithdrawOption[], currency: string | null): string {
+export function withdrawalHeadline(
+  options: readonly WithdrawOption[],
+  currency: string | null,
+  /** The rest of the market, priced for cash. With none, this is the same
+   *  sentence about his own cards it always was. */
+  market: readonly CashOffer[] = [],
+): string {
   // Every figure these tariffs state is a FOREIGN-currency withdrawal charge.
   // In euroland they simply do not apply, and quoting € 6,30 for a € 200
   // withdrawal in Spain would be advice that cannot be right where it appears.
   if (currency === "EUR") {
     return "Daar pin je in euro's, dus de opslagen voor vreemde valuta gelden niet. Wat je eigen bank in euroland voor een opname rekent, staat niet in onze bronnen.";
   }
-  if (options.length === 0) return "Nog geen kaart of betaalrekening om mee te pinnen.";
-  const best = options.find((o) => o.fee.known && o.costOnReference !== null);
-  if (!best) {
-    return "Van geen enkele kaart weten we wat geld pinnen in het buitenland kost — dat is een aparte prijs, meestal hoger dan betalen.";
+  if (options.length === 0 && market.length === 0) return "Nog geen kaart of betaalrekening om mee te pinnen.";
+
+  const advice = bestWithdrawAdvice(options, market);
+  if (!advice) {
+    return `Van geen enkele kaart weten we wat geld pinnen in het buitenland kost — dat is een aparte prijs, meestal hoger dan betalen.${missingCashNote(options)}`;
   }
-  const head = `Pinnen doe je het voordeligst met ${best.provider}: ${euro(best.costOnReference!)} voor ${euro(TRAVEL_REFERENCE_WITHDRAWAL)}${best.effectivePct === null ? "" : ` (${pctNL(best.effectivePct)})`}.`;
-  if (!best.penalisesSmall || best.smallEffectivePct === null) return head;
-  return `${head} Er zit een vast bedrag per opname bij, dus ${euro(TRAVEL_SMALL_WITHDRAWAL)} pinnen kost je ${pctNL(best.smallEffectivePct)} — neem in één keer meer op.`;
+
+  // "€ 0,00 voor € 200,00 (0%)" says the same thing twice; the percentage only
+  // earns its place where it reveals something the euros hide.
+  const price = `${euro(advice.costOnReference!)} voor ${euro(TRAVEL_REFERENCE_WITHDRAWAL)}${advice.effectivePct === null || advice.effectivePct === 0 ? "" : ` (${pctNL(advice.effectivePct)})`}`;
+
+  // The flat-fee warning is about HIS card and stays on screen whoever wins the
+  // ranking: "pin less often, more per time" is worth more than any card choice
+  // here, and it would be lost if it only ever hung off the winner.
+  const ownBest = options.find((o) => o.fee.known && o.costOnReference !== null) ?? null;
+  const small =
+    ownBest && ownBest.penalisesSmall && ownBest.smallEffectivePct !== null
+      ? ` Er zit bij ${ownBest.provider} een vast bedrag per opname bij, dus ${euro(TRAVEL_SMALL_WITHDRAWAL)} pinnen kost je ${pctNL(ownBest.smallEffectivePct)} — neem in één keer meer op.`
+      : "";
+
+  if (advice.held) {
+    return `Het voordeligst pin je met ${advice.product}: ${price}.${small}${missingCashNote(options)}`;
+  }
+  // The cheapest PROVEN withdrawal is a card he does not carry. Say that in the
+  // same breath as the euros, and keep what he CAN pin with on screen — the
+  // point of the sentence is the difference between the two.
+  const own =
+    advice.ownProduct === null
+      ? " Van je eigen kaarten kennen we geen opnametarief."
+      // The "X duurder" clause only earns its place when it is a DIFFERENT number
+      // from the one just quoted; against a proven zero it repeats itself.
+      : ` Van jouw kaarten is ${advice.ownProduct} de goedkoopste die we kunnen aantonen: ${euro(advice.ownCostOnReference!)}${advice.savingOnReference === null || advice.costOnReference === 0 ? "" : `, dus ${euro(advice.savingOnReference)} duurder`}.`;
+  return `Het voordeligst pin je met ${advice.product}: ${price}. Die heb je nog niet.${own}${small}${missingCashNote(options)}`;
+}
+
+/** The cards whose withdrawal price no source states, named.
+ *
+ *  He thinks Revolut is the cheapest way to pin abroad. Revolut's fee page
+ *  prices no withdrawal at all, and neither does Amex's — so we can neither
+ *  confirm nor deny it. Leaving them out of the ranking without a word would
+ *  read as "they charge nothing", which is the one reading that is certainly
+ *  wrong. Deliberately avoids the word "gratis": nothing here is free. */
+function missingCashNote(options: readonly WithdrawOption[]): string {
+  const missing = options.filter((o) => !o.fee.known).map((o) => o.provider);
+  if (missing.length === 0) return "";
+  const says = missing.length === 1 ? "zegt onze bron" : "zeggen onze bronnen";
+  return ` Van ${nameSome(missing)} ${says} niets over opnemen — dat is geen nul, dat is een gat.`;
 }
 
 /** A percentage the Dutch way, with the comma and without a trailing zero it
