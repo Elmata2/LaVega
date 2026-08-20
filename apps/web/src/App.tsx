@@ -852,12 +852,16 @@ export default function App() {
       // while the real work was happening, which is exactly what made him guess
       // whether anything was working. So poll the cheap cached endpoint until
       // the pending list drains, and stop rather than spin forever.
+      // A LOOKUP IN PROGRESS IS NOT A PROBLEM. This used to push the pending list
+      // into setProblems, which is the page-wide warning channel — so a yellow
+      // banner about the reisblok followed him onto Rekeningen and Valuta, where
+      // it meant nothing. He called it ugly and he is right: the banner is for
+      // things that need him, and waiting does not.
+      //
+      // The reisblok carries its own searching state (a spinner, and a sentence
+      // when a lookup comes back empty), which is where progress belongs — next
+      // to the thing being looked up.
       if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
-      if (pending.length > 0) {
-        setProblems([
-          `LaVega zoekt de voorwaarden van ${pending.join(", ")} nu op — dat duurt een minuut of twee. Klik daarna nog eens op "Zoek voorwaarden", of vul ze zelf in met "aanpassen".`,
-        ]);
-      }
     } catch (err) {
       setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {

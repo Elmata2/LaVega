@@ -206,7 +206,11 @@ test("unknownBreakdown totals the onbekend rows per reason, with the countries f
     // precisely because the Zuid-Europese block now places it as Boodschappen.
     abroad("t1", "TIENDA J LOPEZ", "VALENCIA ESP"),
     abroad("t2", "LOJA DO SR SILVA", "LISBOA PRT"),
-    abroad("t3", "Jan Jansen", "priveopname"),
+    // NOT a person's name any more: "Jan Jansen" used to stand here as an
+    // unplaceable counterparty, and the person rule now places it as "Tussen
+    // personen" — correctly. A row that is genuinely unplaceable is one with no
+    // rule, no country and no name shape: a bare terminal code.
+    abroad("t3", "QUIOSC 4412", "priveopname"),
     abroad("t4", "Albert Heijn", "Rotterdam"), // categorized -> excluded
   ];
   const b = unknownBreakdown(txs, []);

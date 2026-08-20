@@ -52,7 +52,7 @@ test("the onbekend pile is quantified on screen, per named reason", () => {
       {...props([
         tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP", -30),
         tx("t2", "LOJA DO SR SILVA", "LISBOA PRT", -12),
-        tx("t3", "Jan Jansen", "priveopname", -8),
+        tx("t3", "QUIOSC 4412", "priveopname", -8),
         tx("t4", "Albert Heijn", "Rotterdam", -25), // placed, so not in the pile
       ])}
     />,
@@ -69,7 +69,7 @@ test("the onbekend pile is quantified on screen, per named reason", () => {
 
 test("the AI button reports what it will actually send, not the batch cap", () => {
   const html = renderToStaticMarkup(
-    <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"), tx("t2", "Jan Jansen", "priveopname")])} />,
+    <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"), tx("t2", "QUIOSC 4412", "priveopname")])} />,
   );
   expect(html).toContain("Laat de AI ze lezen");
   expect(html).toContain("(2)"); // both fit in one run, so no "x van y" theatre

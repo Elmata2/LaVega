@@ -3,10 +3,11 @@ import type { Account, OwnAccounts, Rule, Tx, ScheduledFlow } from "@lavega/core
 import { forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
 import ModuleGrid from "../components/ModuleGrid";
-import AandachtBlock from "../components/blocks/AandachtBlock";
+import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
 import StatistiekBlock from "../components/blocks/StatistiekBlock";
-import PositieBlock from "../components/blocks/PositieBlock";
+import { PositieWidget } from "../components/blocks/PositieBlock";
+import { useWidgetEnabled } from "../components/moduleRegistry";
 import CashflowBlock from "../components/blocks/CashflowBlock";
 import RecenteTransactiesBlock from "../components/blocks/RecenteTransactiesBlock";
 import BetaalschemaBlock from "../components/blocks/BetaalschemaBlock";
@@ -84,18 +85,25 @@ export default function Overzicht({
     [accounts, forecast, asOf, bufferCents, scheduledFlows],
   );
 
+  const positieOn = useWidgetEnabled("positie");
+
   return (
     <ModuleGrid label="Overzicht">
-      <AandachtBlock alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
+      <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
+      {/* Saldo is span-2 with Positie beside it and span-3 without: an absent
+          widget should leave a wider card, not a gap. Only this view knows what
+          else is on the page, which is why the span is decided here rather than
+          inside either block. */}
       <SaldoBlock
+        span={positieOn ? 2 : 3}
         accounts={accounts}
         txs={txs}
         scheduledFlows={scheduledFlows}
         asOf={asOf}
         onNavigate={onNavigate}
       />
-      <PositieBlock accounts={accounts} onNavigate={onNavigate} />
+      <PositieWidget accounts={accounts} onNavigate={onNavigate} />
 
       <StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
 

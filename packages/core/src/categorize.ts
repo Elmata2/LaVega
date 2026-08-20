@@ -1,7 +1,7 @@
 import type { Tx, Rule } from "./model.js";
 import { categorize, type OwnAccounts } from "./views.js";
 import { hash, norm } from "./hash.js";
-import { foreignCodeIn } from "./categories.js";
+import { DIRECT_DEBIT_CATEGORY, foreignCodeIn, PERSON_CATEGORY } from "./categories.js";
 
 /** The categories the AI may assign + the review dropdown offers — LaVega's
  *  existing taxonomy so results stay consistent with the rules engine. */
@@ -26,6 +26,12 @@ export const CATEGORY_OPTIONS: readonly string[] = [
   "Geldopname",
   "Sparen & beleggen",
   "Overboekingen",
+  /* The two the person/collection rules place. They belong in this list for a
+   * concrete reason, not for tidiness: VALID gates what the AI pass is allowed to
+   * return AND what the category picker offers, so a category the categoriser can
+   * assign but the picker cannot offer is one he can see and never correct. */
+  PERSON_CATEGORY,
+  DIRECT_DEBIT_CATEGORY,
   "Eigen overboeking",
   "Inkomen",
 ];

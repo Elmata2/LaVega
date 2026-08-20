@@ -162,6 +162,9 @@ function Comparison({
 }
 
 type SaldoBlockProps = {
+  /** Widened to 3 when the Positie widget is off, so that row has no hole. The
+   *  caller decides, because only Overzicht knows what else is on the page. */
+  span?: 1 | 2 | 3;
   accounts: Account[];
   txs: Tx[];
   scheduledFlows: ScheduledFlow[];
@@ -169,7 +172,9 @@ type SaldoBlockProps = {
   onNavigate: (view: View) => void;
 };
 
-export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavigate }: SaldoBlockProps) {
+export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavigate,
+  span = 2,
+}: SaldoBlockProps) {
   const series = useMemo(() => positionSeries(accounts, txs, asOf), [accounts, txs, asOf]);
 
   const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
@@ -194,7 +199,7 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
   return (
     <Module
       title={`Totale positie${unknownCount > 0 ? " (deels)" : ""}`}
-      span={2}
+      span={span}
       height="tall"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
