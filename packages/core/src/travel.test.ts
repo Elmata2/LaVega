@@ -719,14 +719,14 @@ test("in euroland the cash advice is withdrawn, not repeated — those tariffs a
  */
 describe("parseWithdrawalFee: gratis", () => {
   test("een uitgesproken gratis opname kost 0 en is bekend", () => {
-    const f = parseWithdrawalFee("Go krijgt geldopnames in vreemde valuta gratis.", 0);
+    const f = parseWithdrawalFee("Go krijgt geldopnames in vreemde valuta gratis.");
     expect(f.known).toBe(true);
     expect(withdrawalCost(f, 100)).toBe(0);
     expect(withdrawalEffectivePct(f, 100)).toBe(0);
   });
 
   test("Engels net zo goed — de catalogus bevat beide talen", () => {
-    expect(parseWithdrawalFee("Foreign-currency ATM withdrawals are free for these plans.", 0).known).toBe(true);
+    expect(parseWithdrawalFee("Foreign-currency ATM withdrawals are free for these plans.").known).toBe(true);
   });
 
   test("GRATIS MET EEN VRIJE RUIMTE IS NIET GRATIS en blijft onbekend", () => {
@@ -737,14 +737,14 @@ describe("parseWithdrawalFee: gratis", () => {
       "ATM Withdrawal Fee 2% (after the first 100 EUR monthly).",
       "Free ATM limit (Monthly) is € 800 — above that, ATM Withdrawal 2%.",
     ]) {
-      expect(parseWithdrawalFee(row, 0).known).toBe(false);
+      expect(parseWithdrawalFee(row).known).toBe(false);
     }
   });
 
   test("een geprijsde regel wint nog steeds van het woord gratis in dezelfde tekst", () => {
     // "Betalen gratis, opnemen € 3,50 + 1,4%" mag geen 0 worden omdat het woord
     // gratis erin staat.
-    const f = parseWithdrawalFee("Betalen is gratis; bij geldopname in vreemde valuta geldt € 3,50 + 1,40%.", 1.4);
+    const f = parseWithdrawalFee("Betalen is gratis; bij geldopname in vreemde valuta geldt € 3,50 + 1,40%.");
     expect(f.known).toBe(true);
     expect(withdrawalEffectivePct(f, 100)).toBe(4.9);
   });
