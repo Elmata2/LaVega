@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import KaartenBlock, { ibanTail } from "./KaartenBlock";
+import KaartenBlock, { bankLogo, ibanTail } from "./KaartenBlock";
+import { BANK_LOGOS } from "../../assets/bank-logos.generated";
 import { accounts } from "./fixtures";
 
 const amex: Account = {
@@ -64,4 +65,48 @@ test("ibanTail returns the real last four, or null", () => {
   expect(ibanTail("NL91 ABNA 0417 1643 00")).toBe("4300");
   expect(ibanTail("")).toBeNull();
   expect(ibanTail("NL9")).toBeNull();
+});
+
+/* --- Het banklogo (review 3, item 12) ------------------------------------ */
+
+test("het logo op de kaart komt uit de bundel — er wordt niets opgehaald", () => {
+  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
+  // Wél een plaatje...
+  expect(html).toContain('src="data:image/');
+  // ...maar geen enkel verzoek naar buiten. Een logo-request zou die server
+  // vertellen bij welke bank hij bankiert; dat is precies wat hier niet mag.
+  expect(html).not.toMatch(/src="(https?:)?\/\//);
+});
+
+test("een bank zonder eigen logo krijgt er geen van een andere bank", () => {
+  const vreemd: Account = { ...amex, bank: "Bank Van Nergens", key: "X1" };
+  const html = renderToStaticMarkup(<KaartenBlock accounts={[vreemd]} onNavigate={() => {}} />);
+  expect(html).not.toContain("<img");
+  // De naam blijft staan — dat is de terugval, geen placeholder.
+  expect(html).toContain("Bank Van Nergens");
+});
+
+test("bankLogo matcht de bank, en weigert te gokken", () => {
+  expect(bankLogo("ING")?.slug).toBe("ing");
+  // Zoals Enable Banking en de parsers hem kunnen aanleveren.
+  expect(bankLogo("ING Bank N.V.")?.slug).toBe("ing");
+  expect(bankLogo("Coöperatieve Rabobank U.A.")?.slug).toBe("rabobank");
+  expect(bankLogo("american express")?.slug).toBe("americanexpress");
+  // Onbekend is onbekend: geen half-gelijkende naam, geen default.
+  expect(bankLogo("Rabo")).toBeNull();
+  expect(bankLogo("Bank Van Nergens")).toBeNull();
+  expect(bankLogo("")).toBeNull();
+});
+
+test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
+  expect(BANK_LOGOS.length).toBeGreaterThan(5);
+  for (const logo of BANK_LOGOS) {
+    expect(logo.dataUri.startsWith("data:image/")).toBe(true);
+    expect(logo.sourceUrl).toMatch(/^https:\/\//);
+    expect(logo.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Een favicon per uitgever, geen og:image-poster: houd het per stuk klein.
+    expect(logo.bytes).toBeLessThanOrEqual(24_000);
+  }
+  const totaal = BANK_LOGOS.reduce((n, l) => n + l.dataUri.length, 0);
+  expect(totaal).toBeLessThan(250_000);
 });
