@@ -8,13 +8,13 @@ import { norm } from "./hash.js";
  * Pure + deterministic: integer cents, ISO-date day math via Date.UTC. */
 
 export type Subscription = {
-  key: string;              // norm(counterparty) + "|out"
+  key: string;              // merchantKey(counterparty) + "|out"
   name: string;             // raw counterparty of the first occurrence
   function: string;         // "Videostreaming" | "Muziekstreaming" | ... | "Overig"
   cadenceDays: number;      // 30 | 61 | 91 | 182 | 365
   monthlyCents: number;     // current price normalized to per-month (positive)
-  firstAmountCents: number; // magnitude of the earliest occurrence
-  lastAmountCents: number;  // magnitude of the latest occurrence (current price)
+  firstAmountCents: number; // earliest REPEATING charge (the old price)
+  lastAmountCents: number;  // latest REPEATING charge (the current price)
   changePct: number;        // (last - first) / first, rounded to 0.001
   occurrences: number;
   lastDate: string;
@@ -85,11 +85,62 @@ const SUBSCRIPTION_FUNCTIONS: ReadonlyArray<{ match: string; fn: string }> = [
   { match: "hollandsnieuwe", fn: "Mobiel abonnement" },
 ];
 
+/* The merchant dictionary above is matched on a TOKEN boundary, not a bare
+ * substring: "nrc" must not fire inside another word, and "SIMYO B.V. 4839201"
+ * must still hit "simyo". Compiled once. */
+const MERCHANT_MATCHERS: ReadonlyArray<{ match: string; fn: string; re: RegExp }> =
+  SUBSCRIPTION_FUNCTIONS.map((f) => ({
+    ...f,
+    re: new RegExp(`(^|[^a-z0-9])${f.match.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`),
+  }));
+
+function knownMerchant(normalized: string): { match: string; fn: string } | null {
+  for (const m of MERCHANT_MATCHERS) if (m.re.test(normalized)) return m;
+  return null;
+}
+
 /** The "function" of a subscription by merchant name, or "Overig" if unknown. */
 export function subscriptionFunction(name: string): string {
-  const h = norm(name);
-  for (const f of SUBSCRIPTION_FUNCTIONS) if (h.includes(f.match)) return f.fn;
-  return "Overig";
+  return knownMerchant(norm(name))?.fn ?? "Overig";
+}
+
+/* Tokens a Dutch bank export adds around the merchant's actual name: the legal
+ * form and the payment-scheme boilerplate. Dropped when building the merchant
+ * key, so "Incasso Simyo B.V." and "SIMYO" are one merchant. */
+const NAME_NOISE_TOKENS = new Set([
+  "bv", "nv", "vof", "cv", "bvba", "ltd", "llc", "inc", "gmbh", "ag", "sa", "sarl", "plc", "kg",
+  "sepa", "incasso", "machtiging", "doorlopend", "doorlopende", "eenmalig", "eenmalige",
+  "ideal", "bea", "gea", "betaling", "betaalautomaat",
+]);
+
+/** The identity of the MERCHANT behind a counterparty string — the group key of
+ *  the detector. This is the fix for the review's Simyo: a bank does not repeat
+ *  the counterparty verbatim every month. One incasso stream arrives as
+ *  "SIMYO B.V. 4839201", "Simyo B.V." and "SIMYO", and keying on the literal
+ *  string split it into three streams of one — invisible when each lands once,
+ *  and worse when the spellings alternate: two "tweemaandelijks" halves at half
+ *  the real price, counted twice in the total.
+ *
+ *  Two steps, cheapest first:
+ *   1. a merchant we already know (the dictionary above) collapses to its own
+ *      token — data this module already held and did not use for grouping;
+ *   2. anything else keeps only its name-like tokens: reference numbers, dates
+ *      and legal forms are dropped.
+ *  Returns "" for a counterparty with no name in it at all (a blank field, a
+ *  bare reference) — the detector refuses those rather than inventing a name. */
+export function merchantKey(counterparty: string): string {
+  const h = norm(counterparty);
+  const known = knownMerchant(h);
+  if (known) return known.match;
+  const kept: string[] = [];
+  for (const t of h.replace(/[^a-z0-9]+/g, " ").split(" ")) {
+    if (t.length < 2) continue;                     // initials, "b" + "v" of b.v.
+    if (/^\d+$/.test(t)) continue;                  // invoice / customer number
+    if (/\d/.test(t) && t.length >= 4) continue;     // "m0123456", "20260115"
+    if (NAME_NOISE_TOKENS.has(t)) continue;
+    kept.push(t);
+  }
+  return kept.join(" ");
 }
 
 /* Phrases (and IBAN shape) that mark a counterparty as a transfer/settlement,
@@ -98,11 +149,56 @@ export function subscriptionFunction(name: string): string {
 const TRANSFER_HINTS = [
   "overschrijving", "overboeking", "spaarrekening", "tikkie", "geld toegevoegd",
   "geld toevoegen", "kosten zakelijk", "american express", "incasso ing creditcard", "naar creditcard",
+  // A payment arrangement with the tax office is a fixed monthly outflow with a
+  // stable counterparty — a textbook match for this detector, and the one thing
+  // in the list nobody can cancel. The tax modules own it (VAT set-aside, BTW
+  // deadlines); an "abonnement" it is not.
+  "belastingdienst",
 ];
+/* A private person, not a merchant: Dutch bank exports write people as initials
+ * plus an optional tussenvoegsel plus a surname ("J.C. de Vries", "A. Jansen").
+ * A fixed monthly amount to a person is an arrangement between people —
+ * alimony, rent to a private landlord, money to a child — and listing it as an
+ * "abonnement he could cancel" is exactly the kind of entry that costs trust.
+ * Anchored at both ends and deliberately narrow: a wrong hit here COSTS a real
+ * subscription, so anything with extra words in it is left alone. */
+const PERSON_NAME = /^[a-z]\.\s?(?:[a-z]\.\s?)*(?:(?:van|van der|van den|van de|de|den|der|ten|ter|te|op|in|het) )?([a-z]{2,})$/;
+/* Dutch companies are written with initials too — "A.S.R. Verzekeringen",
+ * "D.A.S. Rechtsbijstand" — and an insurance premium IS a subscription. Stems,
+ * because the plural and the compound both occur. */
+const COMPANY_WORD_STEMS = [
+  "verzeker", "assurant", "hypothe", "bank", "telecom", "mobile", "energie", "pensioen",
+  "zorg", "groep", "group", "holding", "beheer", "vastgoed", "service", "system", "media",
+  "fonds", "uitgever", "rechtsbijstand", "advocat", "notaris", "accountant",
+];
+function looksLikePerson(normalized: string): boolean {
+  const m = PERSON_NAME.exec(normalized);
+  if (!m) return false;
+  return !COMPANY_WORD_STEMS.some((w) => m[1].startsWith(w));
+}
+
 function looksLikeTransfer(counterparty: string): boolean {
   const h = norm(counterparty);
   if (/^[a-z]{2}\d{2}[a-z0-9]{10,}$/.test(h.replace(/\s+/g, ""))) return true; // IBAN counterparty
+  if (looksLikePerson(h)) return true;
   return TRANSFER_HINTS.some((w) => h.includes(w));
+}
+
+/* The roof, and only the roof. Rent, mortgage and the VvE/service charge are
+ * recurring monthly outflows that this detector would happily list as the
+ * biggest "subscriptions" he has — while the same screen already shows them as
+ * Woonlasten (see housing.ts), so they would be counted twice and would swamp
+ * the € 10-a-month streams the module exists to find. Energy and water are
+ * deliberately NOT here: nothing else surfaces them.
+ * Matched on a word start so "schuur" is not "huur" and "vve" is not "vveel". */
+const HOUSING_HINTS = [
+  "huur", "verhuur", "hypothe", "vve", "vereniging van eigenaren",
+  "woningstichting", "woningcorporatie", "woonstichting", "servicekosten",
+];
+const HOUSING_RES = HOUSING_HINTS.map((w) => new RegExp(`(^|[^a-z0-9])${w}`));
+function looksLikeHousing(counterparty: string): boolean {
+  const h = norm(counterparty);
+  return HOUSING_RES.some((re) => re.test(h));
 }
 
 /** Whole days between two ISO dates via Date.UTC (locale/TZ-safe). */
@@ -203,20 +299,62 @@ export function subscriptionCoverage(txs: Tx[]): SubscriptionCoverage {
   return { firstDate, lastDate, historyDays, visibleCadences, hiddenCadences };
 }
 
-export type DetectSubscriptionOptions = { maxIntervalCv?: number; maxAmountCv?: number };
+export type DetectSubscriptionOptions = {
+  maxIntervalCv?: number;
+  maxAmountCv?: number;
+  /** The day the answer is "as of", used to tell a running subscription from a
+   *  cancelled one. Defaults per account to the last date that account's data
+   *  reaches, so the module stays pure (no clock) AND an older export is read on
+   *  its own terms instead of having its subscriptions declared dead. */
+  asOf?: string;
+};
 
 /** Detect subscriptions = regular OUTflows on a monthly/quarterly/yearly
- *  cadence. Amount is allowed to drift (that's the point — price changes), but
- *  a loose amount-CV guard keeps out wildly variable payments. Returns a list
- *  sorted by monthly cost, descending. */
+ *  cadence, grouped per MERCHANT (see `merchantKey`). Amount is allowed to
+ *  drift (that's the point — price changes) as long as the stream still bills a
+ *  repeating figure. Returns a list sorted by monthly cost, descending.
+ *
+ *  Which way this errs, deliberately (app review, 20 Aug 2026): toward
+ *  PRECISION. A missed subscription costs an insight; a phantom one costs trust
+ *  in the whole tab, and he named the phantom before he named the miss. So a
+ *  stream is refused unless it has a merchant name, an amount that actually
+ *  repeats, and a charge recent enough to still be running. */
 export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions = {}): Subscription[] {
   const maxIntervalCv = opts.maxIntervalCv ?? 0.4;
-  const maxAmountCv = opts.maxAmountCv ?? 0.6;
+  // 0.6 let three ordinary dinners at one restaurant (€ 42,50 / € 18,90 / € 71)
+  // through as a € 71-a-month subscription. A real price change is far tamer:
+  // Netflix 13,99 -> 15,99 over five charges is a CV of 0.07.
+  const maxAmountCv = opts.maxAmountCv ?? 0.35;
+
+  /* "Still running?" is measured against the end of the statement the stream is
+   * charged on, not against the newest date anywhere in the vault. With file
+   * imports the accounts have different end dates — an Amex CSV to August next
+   * to an ING CSV to June — and one global asOf would declare every
+   * subscription on the older statement cancelled. */
+  const accountEnd = new Map<string, string>();
+  for (const t of txs) {
+    if (!t.date) continue;
+    const cur = accountEnd.get(t.accountKey);
+    if (cur === undefined || t.date > cur) accountEnd.set(t.accountKey, t.date);
+  }
 
   const groups = new Map<string, Tx[]>();
   for (const t of txs) {
     if (t.amount >= 0) continue; // outflows only
-    const key = norm(t.counterparty) + "|out";
+    const h = norm(t.counterparty);
+    // A merchant the dictionary knows sells subscriptions is a merchant, full
+    // stop — it is never re-read as a person ("T.Mobile") or a housing cost.
+    if (knownMerchant(h) === null) {
+      // Not subscription material at all: a transfer to himself or to a person,
+      // a card settlement, or a housing cost the Woonlasten block already owns.
+      if (looksLikeTransfer(h) || looksLikeHousing(h)) continue;
+    }
+    const merchant = merchantKey(h);
+    // No name, no subscription. Blank counterparties (MT940 rows, ABN
+    // fallbacks) all shared the key "|out" and were emitted as ONE phantom
+    // subscription with an empty name and a total no merchant ever charged.
+    if (merchant === "") continue;
+    const key = merchant + "|out";
     const g = groups.get(key);
     if (g) g.push(t);
     else groups.set(key, [t]);
@@ -225,8 +363,6 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
   const subs: Subscription[] = [];
   for (const [key, group] of groups) {
     if (group.length < 2) continue;
-    // A merchant subscription, not a peer transfer / card settlement.
-    if (looksLikeTransfer(group[0].counterparty)) continue;
     const sorted = [...group].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     const gaps: number[] = [];
@@ -237,18 +373,47 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
     if (sorted.length < band.minOcc) continue;
     if (gaps.length >= 2 && std(gaps) / mean(gaps) > maxIntervalCv) continue;
 
+    // Still being paid? A cancelled stream keeps its cadence and its history
+    // forever, so without this the tab lists what he USED to pay as what he
+    // pays. Two missed cycles (plus a few days' slack for a weekend shift) is
+    // the line: one skipped charge is a billing hiccup, two is a cancellation.
+    const lastDate = sorted[sorted.length - 1].date;
+    let asOf = opts.asOf ?? "";
+    if (asOf === "") for (const t of sorted) {
+      const end = accountEnd.get(t.accountKey) ?? "";
+      if (end > asOf) asOf = end;
+    }
+    if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
+
     const amountsCents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
     const amtMean = mean(amountsCents);
     if (amtMean <= 0) continue;
     if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv) continue;
+    // A subscription bills the SAME figure more than once — that is what makes
+    // it a price and not a series of purchases. Replaces the old ±25% guard on
+    // 2-occurrence streams, and closes the same hole for 3+ occurrences, where
+    // repeated visits to one shop used to pass on cadence alone. A price change
+    // survives it (13,99 x3 then 15,99 x2 still repeats 13,99); a usage-based
+    // bill that is never twice the same does not, and is refused rather than
+    // reported at a "monthly price" that was never charged.
+    const timesCharged = new Map<number, number>();
+    for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+    if (Math.max(...timesCharged.values()) < 2) continue;
 
-    const firstAmountCents = amountsCents[0];
-    const lastAmountCents = amountsCents[amountsCents.length - 1];
+    /* The price is the figure the stream REPEATS, not simply its first and last
+     * row. Now that one merchant's charges are grouped together, a one-off from
+     * the same merchant (a Simyo extra bundle, an app purchase at Apple) can sit
+     * at either end of the group — and taken literally it would be printed as
+     * "what you pay per month" and as a price change that never happened. */
+    const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
+    const firstAmountCents = amountsCents.find(repeats) ?? amountsCents[0];
+    let lastAmountCents = amountsCents[amountsCents.length - 1];
+    if (!repeats(lastAmountCents)) {
+      for (let i = amountsCents.length - 1; i >= 0; i--) {
+        if (repeats(amountsCents[i])) { lastAmountCents = amountsCents[i]; break; }
+      }
+    }
     const changePct = firstAmountCents > 0 ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000 : 0;
-    // With only the 2-occurrence minimum (quarterly/yearly), demand a stable
-    // amount: a real subscription's price barely moves, whereas a variable
-    // outflow (a fluctuating transfer) swings a lot. Skips e.g. a -41% pair.
-    if (sorted.length < 3 && Math.abs(changePct) > 0.25) continue;
     const monthlyCents = Math.round((lastAmountCents * 30) / band.cadenceDays);
 
     subs.push({
@@ -261,7 +426,7 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
       lastAmountCents,
       changePct,
       occurrences: sorted.length,
-      lastDate: sorted[sorted.length - 1].date,
+      lastDate,
     });
   }
 

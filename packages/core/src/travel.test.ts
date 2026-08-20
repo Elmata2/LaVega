@@ -1,6 +1,11 @@
 import { expect, test } from "vitest";
 import type { Account } from "./model.js";
-import { countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT } from "./travel.js";
+import {
+  countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT,
+  parseWithdrawalFee, withdrawalCost, withdrawalEffectivePct, rankWithdrawOptions, marketCardOffers,
+  withdrawalHeadline, catalogueCandidates, cheapestPerIssuer,
+} from "./travel.js";
+import type { CatalogueEntryLike } from "./catalogRates.js";
 import { makeFact, upsertFacts } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
@@ -306,4 +311,400 @@ test("the winning journey carries the provider's caveat, so a capped rate cannot
 
   expect(winner?.provider).toBe("Revolut betaalpas");
   expect(winner?.note).toContain("tot € 1.000 per maand");
+});
+
+/* ─────────────────────────────────────────── CASH, not just cards
+ *
+ * App review, 20 August, item 6: "Also include taking money, physical cash.
+ * Which card can you take out money?" Every tariff document we hold prices a
+ * withdrawal as its own row and almost always worse than a payment, and those
+ * rows are already sitting in the catalogue's `conditions` text. The fixtures
+ * below are VERBATIM excerpts from docs/catalog/catalog.json — a parser tested
+ * against invented Dutch would prove nothing about the file it has to read. */
+
+const CAT_ING_BETAALPAS: CatalogueEntryLike = {
+  id: "ing-betaalpas",
+  product: "ING betaalpas",
+  issuer: "ING Bank N.V.",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 1.4, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+      conditionsKnown: true,
+      conditions: "Geldt bij betalen met de Betaalpas in het buitenland in vreemde valuta (betalingen in euro's € 0,00); bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
+    },
+  },
+};
+
+const CAT_ING_CREDITCARD: CatalogueEntryLike = {
+  id: "ing-creditcard",
+  product: "ING creditcard",
+  issuer: "ING Bank N.V.",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 2, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+      conditionsKnown: true,
+      conditions: "Geldt bij betalen met een creditcard in vreemde valuta. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+    },
+  },
+};
+
+const CAT_ING_PLATINUM: CatalogueEntryLike = {
+  id: "ing-platinumcard",
+  product: "ING PlatinumCard",
+  issuer: "ING Bank N.V.",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "agent", sourceUrl: "https://www.ing.nl/platinum", checkedAt: "2026-06-15",
+      conditionsKnown: true,
+      conditions: "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
+    },
+  },
+};
+
+const CAT_ABN_CREDITCARD: CatalogueEntryLike = {
+  id: "abn-amro-creditcard",
+  product: "ABN AMRO creditcard",
+  issuer: "ABN AMRO Bank N.V.",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 2, route: "provider-pdf", sourceUrl: "https://abnamro.nl/voorwaarden.pdf", checkedAt: "2026-05-01",
+      conditionsKnown: true,
+      conditions: "Geldt voor betalingen en geldopnames in vreemde valuta, omgerekend door Mastercard. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
+    },
+  },
+};
+
+const CAT_ABN_GOLD: CatalogueEntryLike = {
+  id: "abn-amro-gold-card",
+  product: "ABN AMRO Gold Card",
+  issuer: "ABN AMRO Bank N.V.",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 2, route: "provider-pdf", sourceUrl: "https://abnamro.nl/gold.pdf", checkedAt: "2026-05-01",
+      conditionsKnown: true,
+      conditions: "de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
+    },
+  },
+};
+
+const CAT_212: CatalogueEntryLike = {
+  id: "212-card",
+  product: "212 Card",
+  issuer: "Paynetics (card issuer); NL customers under Trading 212 Markets Ltd",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "provider-page", sourceUrl: "https://trading212.com/card", checkedAt: "2026-08-01",
+      conditionsKnown: true,
+      conditions: "Geen wisselkoersopslag op kaartbetalingen in vreemde valuta.",
+    },
+  },
+};
+
+const CAT_REVOLUT: CatalogueEntryLike = {
+  id: "revolut-standard-betaalpas",
+  product: "Revolut Standard betaalpas",
+  issuer: "Revolut Bank UAB (Lithuania), in NL via passport/branch",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 1, route: "provider-page", sourceUrl: "https://revolut.com/fees", checkedAt: "2026-08-01",
+      conditionsKnown: true,
+      conditions: "1% opslag buiten de maandelijkse vrije ruimte op het Standard-plan.",
+    },
+  },
+};
+
+const CAT_CRYPTO_OBSIDIAN: CatalogueEntryLike = {
+  id: "crypto-com-prepaid-card-private-obsidian",
+  product: "Crypto.com Prepaid Card — Private (Obsidian)",
+  issuer: "Crypto.com (EEA entity; prepaid Visa)",
+  kind: "prepaid",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "provider-page", sourceUrl: "https://crypto.com/cards", checkedAt: "2026-08-01",
+      conditionsKnown: true,
+      conditions: "No fee on non-EUR purchases. ATM Withdrawal: 2% on amounts above the monthly free ATM limit.",
+    },
+    cashbackPct: {
+      value: 5, route: "provider-page", sourceUrl: "https://crypto.com/cards", checkedAt: "2026-08-01",
+      conditionsKnown: true,
+      conditions: "TIER GATE: crypto.com/nl/cards prices Obsidian at '€450,000 12-month CRO staking'. Paid in CRO to the Token Wallet, not euro.",
+    },
+  },
+};
+
+/** A figure the catalogue recorded but could not qualify. It must never reach a
+ *  comparison — that is the whole reason `isCovered` exists. */
+const CAT_UNCOVERED: CatalogueEntryLike = {
+  id: "mystery-card",
+  product: "Mystery Card",
+  issuer: "Mystery Bank N.V.",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "agent", sourceUrl: "https://example.org/mystery", checkedAt: "2026-08-01",
+      conditionsKnown: false, conditions: null,
+    },
+  },
+};
+
+const CATALOGUE = [
+  CAT_ING_BETAALPAS, CAT_ING_CREDITCARD, CAT_ING_PLATINUM, CAT_ABN_CREDITCARD,
+  CAT_ABN_GOLD, CAT_212, CAT_REVOLUT, CAT_CRYPTO_OBSIDIAN, CAT_UNCOVERED,
+];
+
+test("a withdrawal priced as a percentage PLUS a fixed fee is read in either order", () => {
+  const ing = parseWithdrawalFee("bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%)");
+  expect(ing.known).toBe(true);
+  expect(ing.components).toEqual([{ kind: "fixed", eur: 3.5 }, { kind: "pct", pct: 1.4, minEur: null }]);
+
+  // SNS writes the same two components the other way round.
+  const sns = parseWithdrawalFee("Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname)");
+  expect(sns.known).toBe(true);
+  expect(sns.components).toEqual([{ kind: "pct", pct: 1.4, minEur: null }, { kind: "fixed", eur: 3.5 }]);
+});
+
+test("a minimum attaches to the percentage it qualifies, and two percentages stack", () => {
+  const fee = parseWithdrawalFee(CAT_ING_CREDITCARD.fields!.fxFeePct!.conditions);
+  expect(fee.components).toEqual([
+    { kind: "pct", pct: 4, minEur: 4.5 },
+    { kind: "pct", pct: 2, minEur: null },
+  ]);
+  // € 200: 4% is € 8, above the € 4,50 floor, plus 2% = € 12 — 6%.
+  expect(withdrawalCost(fee, 200)).toBe(12);
+  // € 50: 4% is € 2, so the floor bites — € 4,50 + € 1 = € 5,50, which is 11%.
+  expect(withdrawalCost(fee, 50)).toBe(5.5);
+  expect(withdrawalEffectivePct(fee, 50)).toBe(11);
+});
+
+test("a fixed fee per withdrawal makes a small withdrawal far worse, and the numbers say so", () => {
+  const fee = parseWithdrawalFee("geldopname: € 3,50 + 1,40%");
+  expect(withdrawalCost(fee, 50)).toBe(4.2);
+  expect(withdrawalEffectivePct(fee, 50)).toBe(8.4); // a € 3,50 flat fee on € 50 is brutal
+  expect(withdrawalEffectivePct(fee, 500)).toBe(2.1);
+});
+
+test("a tiered or capped withdrawal row is refused, and the refusal names the real cause", () => {
+  const abn = parseWithdrawalFee(CAT_ABN_CREDITCARD.fields!.fxFeePct!.conditions);
+  expect(abn.known).toBe(false);
+  expect(abn.components).toEqual([]);
+  expect(abn.why).toMatch(/staffel|vrijstelling|voorwaarde/i);
+  // The sentence we refused is kept, so he can read it himself and correct us.
+  expect(abn.quoted).toContain("aparte transactiekosten");
+});
+
+test("a cross-reference with no figure in it is unknown, not free", () => {
+  const gold = parseWithdrawalFee(CAT_ABN_GOLD.fields!.fxFeePct!.conditions);
+  expect(gold.known).toBe(false);
+  expect(gold.why).toMatch(/artikel|aparte/i);
+  expect(withdrawalCost(gold, 200)).toBeNull();
+});
+
+test("a source that says nothing about cash is unknown, and says that much", () => {
+  const t212 = parseWithdrawalFee(CAT_212.fields!.fxFeePct!.conditions);
+  expect(t212.known).toBe(false);
+  expect(t212.quoted).toBeNull();
+  expect(t212.why).toMatch(/niets|geen/i);
+  expect(parseWithdrawalFee(null).known).toBe(false);
+});
+
+test("rankWithdrawOptions prices his own cards for cash, cheapest first, unknown last", () => {
+  const accounts = [
+    acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+    acc({ key: "ingc", bank: "ING", type: "Creditcard" }),
+    acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening" }),
+  ];
+  const facts = upsertFacts([], [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("ING creditcard", "fxFeePct", "2"), // narrows ING's two creditcards to the plain one
+    fact("Trading 212 betaalpas", "fxFeePct", "0"),
+  ]);
+  const ranked = rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE);
+
+  expect(ranked.map((o) => o.provider)).toEqual(["ING betaalpas", "ING creditcard", "Trading 212 betaalpas"]);
+  expect(ranked[0].costOnReference).toBe(6.3); // € 3,50 + 1,4% of € 200
+  expect(ranked[1].costOnReference).toBe(12);
+  expect(ranked[2].fee.known).toBe(false); // Trading 212's page prices no withdrawal
+  expect(ranked[2].costOnReference).toBeNull();
+  // A card the catalogue does not name at all cannot be priced either.
+  expect(ranked[0].sourceUrl).toContain("ing.com");
+});
+
+test("two catalogue products for one card are only separated by a fee we already hold", () => {
+  const accounts = [acc({ key: "ingc", bank: "ING", type: "Creditcard" })];
+  // Without a known surcharge, ING's creditcard and PlatinumCard are both
+  // candidates and they disagree — so the answer is "which one do you have",
+  // not the cheaper of the two.
+  const blind = rankWithdrawOptions(rankSpendOptions(accounts, []), CATALOGUE);
+  expect(blind[0].fee.known).toBe(false);
+  expect(blind[0].fee.why).toMatch(/meer dan één|welke/i);
+});
+
+test("marketCardOffers ranks the whole catalogue and never includes an uncovered figure", () => {
+  const offers = marketCardOffers(CATALOGUE, []);
+  expect(offers.some((o) => o.productId === "mystery-card")).toBe(false);
+  expect(offers.every((o) => !o.held)).toBe(true);
+
+  // ING's PlatinumCard is also 0%, but only up to € 1.000 a month and 2% after
+  // that. A conditional zero must not outrank an unconditional one — that is
+  // the Revolut mistake, and this is the rule that prevents it.
+  expect(offers[0].productId).toBe("212-card");
+  expect(offers[0].conditional).toBe(false);
+  const platinum = offers.find((o) => o.productId === "ing-platinumcard");
+  expect(platinum?.conditional).toBe(true);
+  expect(platinum?.capNote).toContain("€ 1.000");
+});
+
+test("a card he already holds is marked as held, so it is never offered as a switch", () => {
+  const offers = marketCardOffers(CATALOGUE, [{ provider: "Revolut betaalpas", fxFeePct: 1 }]);
+  const rev = offers.find((o) => o.productId === "revolut-standard-betaalpas");
+  expect(rev?.held).toBe(true);
+  expect(offers.find((o) => o.productId === "212-card")?.held).toBe(false);
+});
+
+test("cashback is carried but never priced into the ranking, and names its gate", () => {
+  const offers = marketCardOffers(CATALOGUE, []);
+  const obsidian = offers.find((o) => o.productId === "crypto-com-prepaid-card-private-obsidian");
+  expect(obsidian?.cashbackPct).toBe(5);
+  // 5% cashback minus a 0% surcharge would crown it; it is paid in CRO behind a
+  // €450.000 stake, so the ranking stays on the surcharge alone.
+  expect(obsidian?.netCostPct).toBe(0);
+  expect(obsidian?.cashbackNote).toMatch(/crypto/i);
+  expect(obsidian?.cashbackNote).toMatch(/stak|inleg|vastge/i);
+});
+
+test("planTravel answers 'what could I switch to' beside 'what should I pay with today'", () => {
+  const accounts = [
+    acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 500 }),
+    acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
+  ];
+  const facts = upsertFacts([], [
+    fact("Revolut betaalpas", "fxFeePct", "1"),
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+  ]);
+  const plan = planTravel({
+    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+  });
+
+  // What he holds still decides the answer he can act on today.
+  expect(plan.spend[0].provider).toBe("Revolut betaalpas");
+  // And the catalogue answers the other question, kept separate.
+  expect(plan.switchGain?.best.productId).toBe("212-card");
+  expect(plan.switchGain?.savingCents).toBe(1000); // 1% of € 1.000
+  expect(plan.offers.some((o) => o.productId === "212-card")).toBe(true);
+  expect(plan.offers.some((o) => o.held)).toBe(false);
+  expect(plan.withdraw.length).toBe(2);
+});
+
+test("without a catalogue nothing is invented — no offers, no switch, no cash price", () => {
+  const accounts = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+  const plan = planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20" });
+  expect(plan.offers).toEqual([]);
+  expect(plan.switchGain).toBeNull();
+  expect(plan.withdraw[0].fee.known).toBe(false);
+});
+
+test("a figure whose document prices withdrawal differently elsewhere carries that caveat", () => {
+  // Crypto.com's real conditions, verbatim: the ATM row is 0,2% inside the EU
+  // and the clause that tiers it never says "ATM" again — so a cash-only scan
+  // would have shown 0,2% bare to someone flying outside the EU.
+  const fee = parseWithdrawalFee(
+    'Effective 1 October 2026, Ruby tier: non-EUR purchases and ATM transactions within the EU & UK 0.2%; outside the EU & UK no fee up to EUR 400 per calendar month, 2.0% thereafter',
+  );
+  expect(fee.known).toBe(true);
+  expect(fee.components).toEqual([{ kind: "pct", pct: 0.2, minEur: null }]);
+  expect(fee.caveat).toMatch(/limiet|regio|vrije ruimte/i);
+});
+
+test("a decimal point is not a thousands separator — 1.7% is not 17%", () => {
+  // N26 prices a foreign-currency ATM withdrawal at "1.7% of amount drawn".
+  // Read as 17% it priced a € 200 withdrawal at € 68.
+  const fee = parseWithdrawalFee(
+    "Cash withdrawal in a foreign currency is NOT free on this plan: 'Mastercard withdrawals at ATMs in other currencies: 1.7% of amount drawn'",
+  );
+  expect(fee.components).toEqual([{ kind: "pct", pct: 1.7, minEur: null }]);
+  expect(withdrawalCost(fee, 200)).toBe(3.4);
+});
+
+test("the same figure quoted twice in one row is one charge, not two", () => {
+  const fee = parseWithdrawalFee(
+    "foreign-currency ATM withdrawals cost 1.7% on Smart: 'For Business, Current Account, N26 Smart 1.7% of amount drawn'",
+  );
+  expect(fee.components).toEqual([{ kind: "pct", pct: 1.7, minEur: null }]);
+  // Genuinely stacked charges differ from each other, so they still both count.
+  const stacked = parseWithdrawalFee("Opname van contant geld in vreemde valuta 4% van opgenomen bedrag + 2% wisselkoersopslag");
+  expect(stacked.components).toHaveLength(2);
+});
+
+test("withdrawalHeadline leads with the euros and warns about small withdrawals", () => {
+  const accounts = [acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+  const line = withdrawalHeadline(rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE), "USD");
+
+  expect(line).toContain("ING betaalpas");
+  expect(line).toContain("€ 6,30");
+  expect(line).toContain("8,4%"); // what € 50 costs, because of the € 3,50 flat fee
+  expect(line).toContain("in één keer meer");
+});
+
+test("with no cash price anywhere the headline says that, and never says free", () => {
+  const accounts = [acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening" })];
+  const facts = upsertFacts([], [fact("Trading 212 betaalpas", "fxFeePct", "0")]);
+  const line = withdrawalHeadline(rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE), "USD");
+  expect(line).toMatch(/weten we .*niet|weten we wat|onbekend/i);
+  expect(line).not.toMatch(/gratis|kost je niets/i);
+});
+
+test("a card is matched by its product name too, because the issuer is often a different company", () => {
+  // ING's own creditcard is issued by International Card Services. Matching on
+  // the issuer alone found ING's debit card and missed both of its credit
+  // cards — the same mismatch the review reports for the savings table.
+  const ics: CatalogueEntryLike = {
+    id: "ing-creditcard", product: "ING creditcard", issuer: "International Card Services (ICS)", kind: "creditcard",
+    fields: {
+      fxFeePct: {
+        value: 2, route: "provider-pdf", sourceUrl: "https://ing.nl/tarieven.pdf", checkedAt: "2026-06-15",
+        conditionsKnown: true,
+        conditions: "Bij geldopnemen met de creditcard in vreemde valuta: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+      },
+    },
+  };
+  expect(catalogueCandidates([ics], "ING creditcard").map((e) => e.id)).toEqual(["ing-creditcard"]);
+
+  const accounts = [acc({ key: "c", bank: "ING", type: "Creditcard" })];
+  const facts = upsertFacts([], [fact("ING creditcard", "fxFeePct", "2")]);
+  const ranked = rankWithdrawOptions(rankSpendOptions(accounts, facts), [ics]);
+  expect(ranked[0].costOnReference).toBe(12);
+});
+
+test("one row per issuer, so four N26 plans are not four near-identical answers", () => {
+  const plan = (id: string, value: number): CatalogueEntryLike => ({
+    id, product: `N26 ${id} betaalpas`, issuer: "N26 Bank AG (Germany); Mastercard Debit", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value, route: "provider-pdf", sourceUrl: "https://n26.com/prices", checkedAt: "2026-08-01",
+        conditionsKnown: true, conditions: "0% op kaartbetalingen.",
+      },
+    },
+  });
+  const collapsed = cheapestPerIssuer(marketCardOffers([plan("go", 0), plan("metal", 0), plan("smart", 0.5)], []));
+  expect(collapsed).toHaveLength(1);
+  expect(collapsed[0].productId).toBe("go"); // the cheapest, and stable between renders
+});
+
+test("in euroland the cash advice is withdrawn, not repeated — those tariffs are for foreign currency", () => {
+  const accounts = [acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+  const es = planTravel({ accounts, txs: [], rates: [], facts, destination: "ES", asOf: "2026-08-20", catalogue: CATALOGUE });
+
+  expect(es.withdraw).toEqual([]);
+  expect(es.withdrawHeadline).toContain("euro");
+  expect(es.withdrawHeadline).not.toContain("€ 6,30"); // ING's foreign-currency price does not apply here
 });

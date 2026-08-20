@@ -277,13 +277,6 @@ unanswerable for two days.
 - **Conditions** — Not obtainable from any Bybit page that could be read. Review sites claim tiered 2%–10% cashback; NONE of that is verifiable on Bybit's own domain, so treat every Bybit percentage as unsourced until an agent renders the page.
 - **Trap** — Both www.bybit.com/en/cards/ and www.bybit.eu/en/cards return 200 with ~90KB of HTML that strips to a single line — the exchange's generic <title>. The help-centre article strips to 'This article is currently not supported on this site.' and the wiki cashback article returns 'Article not found'. ONE Bybit page IS readable and it is the useful one: /en/wiki/article/bybit-card-countries-availability-2026/ (200, server-rendered) lists 'Netherlands | Europe (EEA) | Yes | Yes | Full availability'. NL availability verified on their own domain; the rates are not.
 
-#### Coinbase Card
-- **Issuer** — Coinbase (EEA); issuing EMI not obtainable
-- **Terms** — <https://www.coinbase.com/nl/card>
-- **Measured** — `403 (Cloudflare)` · readable: **bot-blocked** · fields on page: none
-- **Conditions** — Unknown. Review sites say 'up to 4%' in BTC/XLM with boosts for Coinbase One subscribers (~$29,99/mo) — none of that could be checked against Coinbase, so it must not be recorded as fact.
-- **Trap** — Cloudflare interstitial on every path tried: /nl/card, /en-nl/card and help.coinbase.com all 403 with a 'Just a moment…' page and a challenges.cloudflare.com CSP. A browser User-Agent does NOT get past it — same failure mode as Revolut and Trading 212. availableToNL is marked true on the strength of the Coinbase blog announcing EEA availability, but the NL product page could not be opened to confirm it is still open to new Dutch customers. Verify before relying on it.
-
 ### Creditcards (40)
 
 #### ING creditcard
@@ -928,14 +921,6 @@ unanswerable for two days.
 - **Measured** — `200` · readable: **marketing-only** · fields on page: none
 - **Conditions** — No rate, cap or staking figure appears on any readable Wirex page. The old Cryptoback 'up to 8%' required WXT staking plus a plan of up to €29,99/month — and that programme is GONE in the EEA. Wirex One's rates are not published anywhere fetchable.
 - **Trap** — Two traps. (1) DOMAIN: wirex.com does not connect at all; the live host is www.wirexapp.com. (2) PRODUCT SPLIT: Wirex's own blog (200, readable) confirms EEA Classic users are being pushed to 'Wirex One', with posts dated 9 and 30 June 2026, and that the Classic app's crypto features and Cryptoback rewards ENDED in the EEA on 30 June 2026, leaving a fiat card. So a Dutch person today signs up to Wirex One, NOT the 8%-Cryptoback product every review still describes. The homepage (4,9MB) strips to pure navigation; help.wirexapp.com is 200 but strips to 1.043 chars (JS shell); /eu/fees and /en/fees are 404.
-
-#### Binance Card
-- **Issuer** — Binance (EEA programme, formerly Visa)
-- **Terms** — <https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381>
-- **Measured** — `202 with a ZERO-BYTE body` · readable: **unfetchable** · fields on page: none
-- **Openable by a Dutch resident** — **no**
-- **Conditions** — none readable on any page reached.
-- **Trap** — DEAD PRODUCT, and the confirmation page is itself unfetchable. Binance's own EEA-closure FAQ answers HTTP 202 with an EMPTY body — a bot-mitigation pattern that looks like SUCCESS to any code checking only the status code. Guard against that. The card programme closed to EEA residents in December 2023, and Binance withdrew its MiCA application and halted EEA services around 1 July 2026. Kept in the watchlist purely so nobody re-adds it.
 
 #### Tria Card
 - **Issuer** — Tria (self-custodial Visa; issuing EMI not stated)

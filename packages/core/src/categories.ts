@@ -142,6 +142,27 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "avondwinkel", category: "Boodschappen" },
   { match: "supermarkt", category: "Boodschappen" },
 
+  // --- Zuid-Europese kaartbetalingen. Measured, not guessed: over the owner's
+  //     real exports (1.394 rows that stayed "onbekend") the abroad rows are
+  //     Iberian and French card descriptors — PRT=48, ESP=35, FRA=16 — and they
+  //     are supermarkets, bakeries and bars, NOT one "buitenland" category.
+  //     Which is the point: a foreign transaction is not a category, it is a
+  //     circumstance, so what is added here is the merchant TYPE.
+  //     Preferring the generic Romance words over individual chain names is
+  //     deliberate — "supermercado"/"panaderia" generalise to every trip, a
+  //     chain name only to the one town he was in. All of them are checked
+  //     against rule 2 above: none is a substring of a Dutch word.
+  //     ("continente" was measured and deliberately LEFT OUT: it is a substring
+  //     of the Dutch "incontinente" and would mislabel a pharmacy row.) ---
+  { match: "supermercado", category: "Boodschappen" },
+  { match: "mercadona", category: "Boodschappen" },
+  { match: "mercearia", category: "Boodschappen" },
+  { match: "alimentacion", category: "Boodschappen" },
+  { match: "panaderia", category: "Boodschappen" },
+  { match: "padaria", category: "Boodschappen" },
+  { match: "carniceria", category: "Boodschappen" },
+  { match: "frutas", category: "Boodschappen" },
+
   // --- Eten & drinken (must precede Transport for uber eats / bolt food) ---
   { match: "thuisbezorgd", category: "Eten & drinken" },
   { match: "takeaway", category: "Eten & drinken" },
@@ -175,6 +196,19 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "cafetaria", category: "Eten & drinken" },
   { match: "pizzeria", category: "Eten & drinken" },
   { match: "sushi", category: "Eten & drinken" },
+  // Same measured Zuid-Europese block as under Boodschappen. "restaurante",
+  // "cafeteria" and "pastelaria"-with-a-cafe are already covered by the
+  // "restaurant" / "cafe" entries above (plain substring matching), so only the
+  // words those miss are listed.
+  { match: "heladeria", category: "Eten & drinken" },
+  { match: "pasteleria", category: "Eten & drinken" },
+  { match: "cerveceria", category: "Eten & drinken" },
+  { match: "churrasqueira", category: "Eten & drinken" },
+  { match: "marisqueira", category: "Eten & drinken" },
+  { match: "taberna", category: "Eten & drinken" },
+  { match: "trattoria", category: "Eten & drinken" },
+  { match: "osteria", category: "Eten & drinken" },
+  { match: "adega", category: "Eten & drinken" },
 
   // --- Transport ---
   { match: "uber", category: "Transport" },
@@ -238,6 +272,7 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "schiphol", category: "Reizen" },
   { match: "hotel", category: "Reizen" },
   { match: "hostel", category: "Reizen" },
+  { match: "camping", category: "Reizen" }, // measured 4x in his own card export
 
   // --- Entertainment ---
   { match: "netflix", category: "Entertainment" },
@@ -341,6 +376,7 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
 
   // --- Gezondheid (apotheek, drogist, medisch, sport) ---
   { match: "apotheek", category: "Gezondheid" },
+  { match: "farmacia", category: "Gezondheid" }, // ES/PT/IT pharmacy — see the Zuid-Europese block above
   { match: "kruidvat", category: "Gezondheid" },
   { match: "etos", category: "Gezondheid" },
   { match: "trekpleister", category: "Gezondheid" },
@@ -508,6 +544,49 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
   { match: "huurtoeslag", sign: "in", category: "Inkomen" },
   { match: "kinderbijslag", sign: "in", category: "Inkomen" },
 ];
+
+/* ISO-3166 alpha-3 country codes as Dutch card exports print them. ING's
+ * creditcard CSV and MT940 both end a card descriptor with the merchant's
+ * country ("MERCADONA VALENCIA ESP"), which is how LaVega can tell a foreign
+ * payment from a domestic one WITHOUT asking anyone anything — the fact is
+ * already in the row we imported.
+ *
+ * This is NOT a category and must never become one. A payment abroad is a
+ * circumstance, not a kind of spending: the measured rows are groceries, bars
+ * and campsites. The set exists so an "onbekend" row can say WHY it is unknown
+ * (see unknownReason in categorize.ts) instead of leaving the owner to guess.
+ *
+ * Three deliberate choices:
+ *   1. NLD is absent — a domestic payment is the normal case, not a signal.
+ *   2. Codes that are also ordinary words in Dutch, English, Spanish,
+ *      Portuguese, German or French are LEFT OUT even though they are valid
+ *      ISO codes: CAN, PER, MAR, CHE, IND, COL, ARE, SEN, ARM, AND, ALB, ISL,
+ *      LAO, MLI, TON. A probe over every transaction in the owner's exports
+ *      found zero legitimate uses of them, so their only possible effect was a
+ *      false "buitenland" label.
+ *   3. Matching is on a STANDALONE, UPPERCASE token. Exports print the code in
+ *      caps; requiring caps is what keeps "esp" inside a lowercase word from
+ *      firing, and requiring a whole token is what keeps "ITA" out of
+ *      "CAPITAL". */
+export const FOREIGN_COUNTRY_CODES: ReadonlySet<string> = new Set([
+  // Europe
+  "ESP", "PRT", "FRA", "DEU", "BEL", "LUX", "GBR", "IRL", "AUT", "ITA", "GRC",
+  "DNK", "SWE", "NOR", "FIN", "POL", "CZE", "SVK", "HUN", "ROU", "BGR", "HRV",
+  "SVN", "SRB", "MNE", "MKD", "BIH", "EST", "LVA", "LTU", "CYP", "MLT", "UKR",
+  "TUR", "GEO", "MCO", "SMR", "LIE", "GIB", "FRO", "GRL",
+  // Africa & Middle East. Morocco (MAR) and Switzerland (CHE) are deliberately
+  // unreachable here: both codes are ordinary words, and a false "buitenland" on
+  // a domestic row is worse than no label at all. A card row from either country
+  // simply reads "geen regel" instead — still honest, just less specific.
+  "TUN", "DZA", "EGY", "ZAF", "KEN", "TZA", "GHA", "NGA", "ISR", "JOR",
+  "LBN", "SAU", "QAT", "OMN", "KWT", "BHR",
+  // Americas
+  "USA", "MEX", "BRA", "ARG", "CHL", "URY", "PAN", "CRI", "DOM", "CUB", "JAM",
+  "PRI", "BRB", "BHS",
+  // Asia & Oceania
+  "JPN", "KOR", "CHN", "TWN", "HKG", "SGP", "THA", "IDN", "VNM", "PHL", "MYS",
+  "LKA", "NPL", "AUS", "NZL", "FJI",
+]);
 
 /* Pre-normalized once at module load so categorize() does a plain substring test
  * per entry (no per-transaction matchNorm of the match strings). `sign` is

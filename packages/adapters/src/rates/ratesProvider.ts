@@ -1,4 +1,4 @@
-import { NL_SAVINGS_RATES, RATES_AS_OF, type RateBenchmark } from "@lavega/core";
+import { NL_SAVINGS_RATES, RATES_AS_OF, mergeRateSources, type RateBenchmark } from "@lavega/core";
 
 /* Rates provider: fetches the public NL savings-rate benchmark from a URL we
  * control (the Hono /api/rates endpoint), validates it, caches the last good
@@ -63,6 +63,17 @@ export function localStorageRatesCache(key = "lavega.rates.v2"): RatesCache {
   };
 }
 
+/** RATES READ FROM EACH BANK'S OWN DOCUMENT, injected by the caller.
+ *
+ *  These outrank both the comparison scrape and the compiled-in table, because a
+ *  bank stating its own rate in its own Tarievenwijzer or Fee Information Document
+ *  is the only source with real provenance: each figure carries the URL it came
+ *  from and the date that document states, rather than sharing one asOf with
+ *  eighteen others.
+ *
+ *  They MERGE rather than replace. The catalogue and the scrape cover different
+ *  ranges, so either one replacing the other silently drops every bank it happens
+ *  to miss. */
 export type RatesProviderOptions = {
   url?: string;
   fetchFn?: typeof fetch;
@@ -72,6 +83,9 @@ export type RatesProviderOptions = {
    *  Beyond it, the (current) bundled snapshot is preferred over stale cache. */
   cacheTtlMs?: number;
   now?: () => number;
+  /** Rates read from each bank's own document, highest provenance. Empty by
+   *  default, so nothing changes for a caller that does not supply them. */
+  catalogueRates?: readonly RateBenchmark[];
 };
 
 export type RatesProvider = { getRates(): Promise<RatesResult> };
@@ -87,6 +101,7 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
   const cacheTtlMs = opts.cacheTtlMs ?? 12 * 60 * 60 * 1000;
   const now = opts.now ?? (() => Date.now());
   const bundled: RatesResult = { rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" };
+  const catalogue = opts.catalogueRates ?? [];
 
   async function fetchLive(): Promise<RatesPayload | null> {
     if (!url || !fetchFn) return null;
@@ -102,18 +117,26 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
     }
   }
 
+  /** Fold the catalogue over whatever the network produced. `asOf` still describes
+   *  the COMPARISON data, since that is what it always described; a catalogue rate
+   *  carries its own asOf on the row itself, which is the point of it. */
+  function withCatalogue(r: RatesResult): RatesResult {
+    if (!catalogue.length) return r;
+    return { ...r, rates: mergeRateSources({ rates: catalogue, provenance: "catalogue" }, { rates: r.rates, provenance: r.source === "bundled" ? "bundled" : "comparison" }) };
+  }
+
   return {
     async getRates(): Promise<RatesResult> {
       const live = await fetchLive();
       if (live) {
         cache.set({ ...live, ts: now() });
-        return { rates: live.rates, asOf: live.asOf, source: "live" };
+        return withCatalogue({ rates: live.rates, asOf: live.asOf, source: "live" });
       }
       const cached = cache.get();
       if (cached && now() - cached.ts < cacheTtlMs) {
-        return { rates: cached.rates, asOf: cached.asOf, source: "cache" };
+        return withCatalogue({ rates: cached.rates, asOf: cached.asOf, source: "cache" });
       }
-      return bundled; // no cache, or cache too stale → current bundled snapshot
+      return withCatalogue(bundled); // no cache, or cache too stale → current bundled snapshot
     },
   };
 }

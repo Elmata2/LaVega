@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey } from "@lavega/core";
-import { planTravel, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND } from "@lavega/core";
+import type {
+  Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey, CatalogueEntryLike,
+  WithdrawOption, CardOffer,
+} from "@lavega/core";
+import {
+  planTravel, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
+  describeWithdrawalFee, TRAVEL_REFERENCE_WITHDRAWAL, TRAVEL_SMALL_WITHDRAWAL,
+} from "@lavega/core";
+import catalogueFile from "../../../../../docs/catalog/catalog.json";
 import { formatEuro } from "../../format.js";
 import { dayLabelYearNL } from "./dates.js";
 import Module from "../Module.js";
@@ -14,12 +21,24 @@ import Module from "../Module.js";
  * reconcile himself. The ranked JOURNEYS and those three sections are still all
  * here; they just sit behind "waarom", as the reasoning under the answer. */
 
+/* THE PRODUCT CATALOGUE, BUNDLED AT BUILD TIME.
+ *
+ * Same bargain as the savings rates in `catalogue-rates.ts`, and for the same
+ * reason: nothing visual and nothing factual is ever fetched at runtime,
+ * because a request tells the server on the other end who is asking. The
+ * figures are as fresh as the last deploy, and every one carries the date its
+ * own document states, so the screen can show how old a number is. */
+const BUNDLED_CATALOGUE = ((catalogueFile as { entries?: CatalogueEntryLike[] }).entries ?? []);
+
 export type TravelBlockProps = {
   accounts: Account[];
   txs: Tx[];
   rates: readonly RateBenchmark[];
   facts: LearnedFact[];
   asOf: string;
+  /** The product catalogue. Defaults to the bundled artifact; injectable so a
+   *  test can pin behaviour without the whole 122-product file. */
+  catalogue?: readonly CatalogueEntryLike[];
   homeCountry: string;
   busy: boolean;
   /** Whether the server has an API key — hides the refresh action when not. */
@@ -425,6 +444,144 @@ export function TermsNotice({
   );
 }
 
+/* ---------- CASH, and the rest of the market ----------
+ *
+ * Two questions the block used to leave out, both answerable from data already
+ * on disk (app review, 20 August, items 6/7/8).
+ *
+ * TAKING MONEY OUT is a different price from paying, and almost always worse:
+ * every tariff document we hold prices it on its own row, usually as a
+ * percentage PLUS a flat fee. The flat fee is the part that matters and the
+ * part a percentage cannot express — ING's € 3,50 is 1,75% on € 200 and 7% on
+ * € 50 — so the euros are quoted on one realistic withdrawal and the small one
+ * is quoted beside it.
+ *
+ * WHAT HE COULD SWITCH TO is a separate question from what he can pay with
+ * today, and the block used to answer only the second: `rankSpendOptions`
+ * iterates his own accounts, so a cheaper card he does not hold could not
+ * appear however cheap. That is why Revolut looked like the best shot for the
+ * US while the 212 Card sat in the catalogue at a provable 0%. Both questions
+ * are on screen now, and they are kept apart by construction: `plan.offers`
+ * contains only cards he does NOT hold, and every place it renders says so. */
+
+function pctNL(n: number): string {
+  return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
+}
+
+/** What one withdrawal costs, or "onbekend". Never a zero — a missing price is
+ *  not a free one, and abroad that difference is real money. */
+function cashCost(euros: number | null): string {
+  return euros === null ? "onbekend" : formatEuro(euros);
+}
+
+/** His own cards, priced for pulling out cash. The reason a row has no price is
+ *  printed with the row: "the document points at article 13.3" and "we do not
+ *  know which ING creditcard you have" need different things from him, and one
+ *  of them he can fix in a click. */
+export function CashSection({ options, asOf }: { options: readonly WithdrawOption[]; asOf: string }) {
+  return (
+    <div className="travel-step travel-cash">
+      <h3 className="travel-step-title">Geld pinnen</h3>
+      <p className="cell-sub">
+        Pinnen is een aparte prijs, en bijna altijd hoger dan betalen. Bedragen gelden op één opname van{" "}
+        {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}.
+      </p>
+      {options.length === 0 ? (
+        <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
+      ) : (
+        <ul className="travel-legs">
+          {options.map((o) => (
+            <li key={o.provider} className="travel-leg">
+              <span className="travel-leg-name">
+                {o.provider}
+                {o.fee.known && <span className="eyebrow"> · {describeWithdrawalFee(o.fee)}</span>}
+                {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
+              </span>
+              <span className="travel-leg-cost">{cashCost(o.costOnReference)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {options.map((o) =>
+        o.fee.known ? (
+          <div key={`why-${o.provider}`}>
+            {o.penalisesSmall && o.smallEffectivePct !== null && (
+              <p className="cell-sub travel-note">
+                {o.provider}: er zit een vast bedrag per opname bij, dus {formatEuro(TRAVEL_SMALL_WITHDRAWAL)} pinnen
+                kost {pctNL(o.smallEffectivePct)} in plaats van {pctNL(o.effectivePct ?? 0)}. Neem in één keer meer op.
+              </p>
+            )}
+            {o.fee.caveat && (
+              <p className="cell-sub travel-note">
+                <strong>Let op:</strong> {o.provider} — {o.fee.caveat}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p key={`why-${o.provider}`} className="cell-sub travel-note">
+            {o.provider}: {o.fee.why}
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** The catalogue's cheapest cards that he does NOT hold.
+ *
+ *  Everything here is phrased as something to open, never as something to pay
+ *  with, because that is the whole risk of putting it on this screen. Cashback
+ *  is shown and never subtracted: every cashback figure the catalogue holds
+ *  today is paid in a token behind a stake or a subscription, so pricing it in
+ *  euros would be the same fake precision that keeps reward points out of the
+ *  ranking. */
+export function OffersSection({ offers, asOf, shown = 6 }: { offers: readonly CardOffer[]; asOf: string; shown?: number }) {
+  if (offers.length === 0) return null;
+  const top = offers.slice(0, shown);
+  return (
+    <div className="travel-step travel-offers">
+      <h3 className="travel-step-title">Wat je zou kunnen openen</h3>
+      <p className="cell-sub">
+        Kaarten uit de catalogus, geen kaarten van jou — voor zover wij kunnen zien heb je ze niet, en betalen doe je
+        vandaag met wat er onder “Betalen” staat. Eén kaart per aanbieder: de voordeligste waarvan we de bron en de
+        datum hebben.
+      </p>
+      <ul className="travel-journeys">
+        {top.map((o) => (
+          <li key={o.productId} className="travel-journey">
+            <div className="travel-journey-head">
+              <span className="travel-journey-name">{o.product}</span>
+              <span className="travel-journey-cost">
+                {formatEuro(costOnReferenceSpend(o.netCostPct) ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}
+              </span>
+            </div>
+            <p className="cell-sub travel-note">
+              {pctNL(o.fxFeePct)} wisselkosten
+              {o.cashbackPct !== null && ` · ${pctNL(o.cashbackPct)} cashback`}
+              {o.withdrawalOnReference !== null
+                ? ` · pinnen ${formatEuro(o.withdrawalOnReference)} per ${formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}`
+                : " · pinnen onbekend"}
+              {" · "}
+              {figureAge(o.asOf, asOf)}
+            </p>
+            {o.capNote && (
+              <p className="cell-sub travel-note">
+                <strong>Let op:</strong> {o.capNote}
+              </p>
+            )}
+            {o.cashbackNote && <p className="cell-sub travel-note">{o.cashbackNote} Daarom rekenen we die niet mee.</p>}
+          </li>
+        ))}
+      </ul>
+      {offers.length > top.length && (
+        <p className="cell-sub">
+          Nog {offers.length - top.length} kaarten in de catalogus met een onderbouwd tarief, allemaal duurder dan deze.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** How old a figure is, in words, because a bare date does not tell you whether
  *  to trust it. "vandaag opgezocht" and "gecontroleerd 15 jan" are different
  *  claims, and a koersopslag from seven months ago should look seven months old
@@ -441,6 +598,7 @@ export function figureAge(updatedAt: string, asOf: string): string {
 
 export default function TravelBlock({
   accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, pendingTerms = [], termsAsked = 0, termsGaveUp = false, onRefreshTerms, onRecheckAi, onCorrectFact,
+  catalogue = BUNDLED_CATALOGUE,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
   // One disclosure for the whole block. The answer is the product; everything
@@ -473,7 +631,7 @@ export default function TravelBlock({
   }
 
   const plan: TravelPlan | null = destination
-    ? planTravel({ accounts, txs, rates, facts, destination, asOf })
+    ? planTravel({ accounts, txs, rates, facts, destination, asOf, catalogue })
     : null;
 
   const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
@@ -513,6 +671,24 @@ export default function TravelBlock({
             {bestJourney?.note && (
               <p className="cell-sub travel-winner-caveat">
                 <strong>Let op:</strong> {bestJourney.note}
+              </p>
+            )}
+            {/* CASH. He asked for it in so many words — "also include taking
+                money, physical cash. Which card can you take out money?" — and
+                it is a different, worse price than paying, so it gets its own
+                sentence rather than a footnote under the card advice. */}
+            <p className="cell-sub travel-winner-cash">
+              <strong>Pinnen:</strong> {plan.withdrawHeadline}
+            </p>
+            {/* And the other question: what is cheaper out there. Marked as not
+                his, in the same breath as the number, because the one thing
+                this must never become is advice to pay with a card he does not
+                carry. */}
+            {plan.switchGain && (
+              <p className="cell-sub travel-winner-switch">
+                <strong>Nog niet van jou:</strong> {plan.switchGain.best.product} rekent{" "}
+                {pctNL(plan.switchGain.best.fxFeePct)} en zou je {formatEuro(plan.switchGain.savingCents / 100)} schelen
+                op {formatEuro(TRAVEL_REFERENCE_SPEND)}. Die moet je eerst openen — vandaag betaal je met wat je hebt.
               </p>
             )}
             {bestJourney && (
@@ -658,6 +834,12 @@ export default function TravelBlock({
                   {plan.spendNote && <p className="cell-sub travel-note">{plan.spendNote}</p>}
                 </div>
               </div>
+
+              {/* Full width, outside the three-column grid: both are lists, and
+                  a list of thirteen tariffs does not belong in a 240px column. */}
+              <CashSection options={plan.withdraw} asOf={asOf} />
+
+              <OffersSection offers={plan.offers} asOf={asOf} />
 
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">

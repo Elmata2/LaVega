@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, LearnedFact, OwnAccounts, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
 import {
   accountLabel,
   accountReturns,
@@ -12,11 +12,15 @@ import {
   subscriptionCoverage,
   resolveHousingCost,
   analyzeInterest,
+  keptRate,
+  matchBankBenchmark,
+  accountType,
   CADENCE_LABEL_NL,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { CATALOGUE_RATES } from "../catalogue-rates";
 import { formatEuro } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -67,6 +71,13 @@ type OptimalisatieProps = {
 
 const euro = (cents: number) => formatEuro(cents / 100);
 const pct = (p: number) => `${p.toLocaleString("nl-NL", { maximumFractionDigits: 2 })}%`;
+
+/** What a rate is worth to someone who stays. A teaser whose standing rate the
+ *  source never gave says "onbekend" — not the teaser, and not 0%. */
+const keptLabel = (r: RateBenchmark) => {
+  const kept = keptRate(r);
+  return kept === null ? "onbekend" : pct(kept);
+};
 
 const SOURCE_LABEL: Record<AccountRate["source"], string> = {
   manual: "handmatig",
@@ -152,7 +163,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
 
   // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
   // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
-  const provider = useMemo(() => createRatesProvider({ url: RATES_URL }), []);
+  const provider = useMemo(() => createRatesProvider({ url: RATES_URL, catalogueRates: CATALOGUE_RATES }), []);
   const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
@@ -172,6 +183,27 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   }
 
   const interest = useMemo(() => analyzeInterest(accounts, txs, rates.rates, asOf), [accounts, txs, rates, asOf]);
+  // The rate the winner still pays once its action ends: what every euro figure on
+  // this screen is measured against. Never null while `best` exists — bestRate only
+  // ranks rows whose kept rate is known.
+  const keptBest = interest.best === null ? null : keptRate(interest.best);
+
+  // The rest of the promo sentence. Written out here rather than inline because
+  // the source's own note usually already says what happens afterwards ("Actierente
+  // 6 mnd, daarna 2,10%") — repeating it produced "daarna 2,10%. Daarna houd je
+  // 2,1%.", which reads like a machine talking to itself. And when the source never
+  // says, the sentence has to say THAT, not fall silent.
+  const promoTail = (() => {
+    if (!interest.bestPromo) return "";
+    const note = interest.bestPromo.promoNote?.trim() ?? "";
+    const stop = note.endsWith(".") ? "" : ".";
+    const kept = keptRate(interest.bestPromo);
+    if (kept === null) {
+      return `${note ? ` — ${note}${stop}` : "."} Wat je daarna houdt staat niet in de bron, dus daar rekent LaVega niet mee.`;
+    }
+    if (/daarna/i.test(note)) return ` — ${note}${stop}`;
+    return `${note ? ` — ${note}${stop}` : "."} Daarna houd je ${keptLabel(interest.bestPromo)}.`;
+  })();
   // Why a suggestion might be empty: accounts missing a saldo (CSV imports) or a
   // known rente — surfaced in the guidance so the €0 isn't a dead end.
   const noSaldo = interest.accountRates.filter((a) => a.account.balance === null).length;
@@ -414,8 +446,13 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           footer={
             interest.best ? (
               <span>
-                Beste vrij opneembare rente die LaVega kent: {interest.best.bank} {pct(interest.best.ratePct)} ·{" "}
-                {RATES_SOURCE_LABEL[rates.source]}, peildatum {rates.asOf}.
+                Beste rente die je houdt: {interest.best.bank} {keptLabel(interest.best)}
+                {interest.bestPromo ? (
+                  <>
+                    {" "}· hoogste actietarief nu: {interest.bestPromo.bank} {pct(interest.bestPromo.ratePct)}
+                  </>
+                ) : null}{" "}
+                · {RATES_SOURCE_LABEL[rates.source]}, peildatum {rates.asOf}.
               </span>
             ) : (
               <span>Geen vergelijkingsrente beschikbaar.</span>
@@ -431,8 +468,8 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                 {interest.suggestions.map((s) => (
                   <p key={`sug-${s.account.key}`} className="reason">
                     Je houdt <strong>{euro(s.balanceCents)}</strong> aan bij {accountLabel(s.account)} tegen{" "}
-                    {pct(s.ratePct)}; {interest.best!.bank} betaalt {pct(interest.best!.ratePct)} — dat verschil van{" "}
-                    {pct(Math.round((interest.best!.ratePct - s.ratePct) * 100) / 100)} is{" "}
+                    {pct(s.ratePct)}; {interest.best!.bank} betaalt {keptLabel(interest.best!)}, ook als een actie
+                    afloopt — dat verschil van {pct(Math.round((keptBest! - s.ratePct) * 100) / 100)} is{" "}
                     <span className="reason-figure text-warn">{euro(s.extraPerYearCents)}</span> per jaar.
                   </p>
                 ))}
@@ -452,6 +489,29 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             </div>
           )}
 
+          {/* WHAT YOU COULD GET NOW, next to what you keep — never instead of it.
+              Ranking on the actierente sends a saver somewhere worse in month
+              seven; hiding it, which is what yesterday's fix did, drops real money
+              on the floor: "if they can use the promo for a month it's still a
+              month of 3,01% over the 2,5%". So both, each with its own period
+              attached, and the euro figure below is per MONTH because that is the
+              only unit an action is honestly priced in. */}
+          {interest.bestPromo && (
+            <p className="reason" style={{ marginTop: "var(--sp-3)" }}>
+              <span className="badge">🎁 nu te krijgen</span>{" "}
+              <strong>{interest.bestPromo.bank}</strong> geeft vandaag{" "}
+              <strong>{pct(interest.bestPromo.ratePct)}</strong>
+              {promoTail}
+              {interest.promoExtraPerMonthCents > 0 && interest.best && (
+                <>
+                  {" "}Zolang de actie loopt is dat{" "}
+                  <span className="reason-figure text-pos">{euro(interest.promoExtraPerMonthCents)}</span> per maand
+                  extra bovenop {interest.best.bank}.
+                </>
+              )}
+            </p>
+          )}
+
           <div className="table-wrap table-cards" style={{ marginTop: "var(--sp-4)" }}>
             <table className="table">
               <thead>
@@ -461,16 +521,25 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                   <th className="num">Rente %</th>
                   <th>Bron</th>
                   <th className="num">
-                    Mogelijk/jr{interest.best ? ` vs ${pct(interest.best.ratePct)}` : ""}
+                    Mogelijk/jr{keptBest !== null ? ` vs ${pct(keptBest)} die je houdt` : ""}
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {interest.accountRates.map((ar) => {
+                  // Against what he KEEPS at the winner, the same figure
+                  // analyzeInterest priced the year on. This column used to use the
+                  // headline, so the table and the sentence above it could disagree
+                  // by a teaser's worth of euros.
                   const gain =
-                    interest.best && ar.ratePct !== null && ar.balanceCents > 0 && interest.best.ratePct - ar.ratePct > 0.1
-                      ? Math.round((ar.balanceCents * (interest.best.ratePct - ar.ratePct)) / 100)
+                    keptBest !== null && ar.ratePct !== null && ar.balanceCents > 0 && keptBest - ar.ratePct > 0.1
+                      ? Math.round((ar.balanceCents * (keptBest - ar.ratePct)) / 100)
                       : 0;
+                  // The row of the catalogue/benchmark table that answers for THIS
+                  // account's own bank — the same call resolveAccountRate makes, so
+                  // the screen names the tariff the number actually came from.
+                  const bankRow = matchBankBenchmark(ar.account.bank, rates.rates, ar.account.name);
+                  const bankKept = bankRow === null ? null : keptRate(bankRow);
                   return (
                     <tr key={ar.account.key}>
                       <td data-label="Rekening">
@@ -481,7 +550,35 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                       <td className="num" data-label="Rente %">
                         <RateCell ar={ar} busy={busy} onCommit={onRateCommit} />
                       </td>
-                      <td className="cell-sub" data-label="Bron">{SOURCE_LABEL[ar.source]}</td>
+                      <td className="cell-sub" data-label="Bron">
+                        {SOURCE_LABEL[ar.source]}
+                        {/* Name the tariff, its bank and its date. "Geschat via
+                            banktarief" asks to be believed; this can be checked. */}
+                        {ar.source === "benchmark" && bankRow && bankKept !== null && (
+                          <div className="cell-sub">
+                            {bankRow.bank} {bankRow.product} · {pct(bankKept)} · peildatum {bankRow.asOf ?? rates.asOf}
+                          </div>
+                        )}
+                        {/* HIS "that ING is 0% that's bullshit". A CSV import names
+                            the account after its IBAN, so nothing in it reads as
+                            savings and the type heuristic calls it a
+                            betaalrekening — 0% before any rate is looked up. It may
+                            be right; only he knows which of two ING IBANs is the
+                            Oranje Spaarrekening. So the row states what the bank
+                            does pay, and asks once, instead of printing a
+                            measurement it never made. */}
+                        {ar.source === "assumed" &&
+                          accountType(ar.account) === "Betaalrekening" &&
+                          bankRow &&
+                          bankKept !== null &&
+                          bankKept > 0.1 && (
+                            <div className="cell-sub">
+                              {bankRow.bank} betaalt {pct(bankKept)} op {bankRow.product} (peildatum{" "}
+                              {bankRow.asOf ?? rates.asOf}). <strong>Is dit die rekening?</strong> Zet dan het
+                              percentage hiernaast — wat jij invult gaat boven elke schatting.
+                            </div>
+                          )}
+                      </td>
                       <td className="num" data-label="Mogelijk/jr">{gain > 0 ? <span className="text-warn">+{euro(gain)}</span> : "—"}</td>
                     </tr>
                   );
@@ -500,7 +597,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                   <tr>
                     <th>Bank</th>
                     <th className="num">Rente nu</th>
-                    <th className="num">Standaard</th>
+                    <th className="num">Wat je houdt</th>
                     <th>Actie</th>
                   </tr>
                 </thead>
@@ -512,8 +609,13 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                         <div className="cell-sub">{r.product}</div>
                       </td>
                       <td className="num text-pos" data-label="Rente nu">{pct(r.ratePct)}</td>
-                      <td className="num cell-sub" data-label="Standaard">
-                        {r.standardRatePct !== undefined && r.standardRatePct !== r.ratePct ? pct(r.standardRatePct) : "—"}
+                      {/* A teaser whose standing rate the source never states is
+                          "onbekend" here, and it is left out of the ranking
+                          entirely — Trade Republic's own catalogue conditions read
+                          "NOT THE STANDING RATE — do not serve 3% bare". An em
+                          dash would have read as "nothing changes afterwards". */}
+                      <td className="num cell-sub" data-label="Wat je houdt">
+                        {keptRate(r) === null ? "onbekend" : keptRate(r) === r.ratePct ? "—" : keptLabel(r)}
                       </td>
                       <td data-label="Actie">{r.promoNote ? <span className="badge">🎁 {r.promoNote}</span> : <span className="cell-sub">—</span>}</td>
                     </tr>
@@ -522,8 +624,9 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </table>
             </div>
             <p className="eyebrow">
-              "Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "standaard" is het tarief ná de
-              actie. Bron: {RATES_SOURCE_LABEL[rates.source]} via geld.nl (peildatum {rates.asOf}).{" "}
+              "Rente nu" is inclusief actietarieven (vaak alleen voor nieuwe klanten); "wat je houdt" is het tarief
+              ná de actie — daarop wordt vergeleken. Staat daar "onbekend", dan zegt de bron niet wat er na de actie
+              overblijft en doet die rekening niet mee in de vergelijking; het actietarief zie je wel. Bron: {RATES_SOURCE_LABEL[rates.source]} via geld.nl (peildatum {rates.asOf}).{" "}
               <button type="button" className="card-link" onClick={() => void refreshRates()} disabled={refreshing}>
                 {refreshing ? "verversen…" : "ververs rentes"}
               </button>

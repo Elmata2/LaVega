@@ -136,6 +136,55 @@ const MONTHS_NL = [
  *  something other than the source that stated it, which this project has now
  *  shipped twice. The document says it in machine-readable words on page 1. */
 export function readDocumentDate(text: string): string | null {
+  // THE FID FORMAT, and it is the one that matters most. The EU Payment Accounts
+  // Directive prescribes the layout of an "Informatiedocument betreffende de
+  // vergoedingen", and it dates itself with a bare label: "Naam van de rekening:
+  // BasisPakket Betalen / Datum: 1 januari 2026". Neither pattern below matched
+  // it, so 32 of 43 covered figures were stamped with the day they were READ
+  // rather than the day their document took effect — in the very document genre
+  // that had just become the sweep's primary source.
+  const fid = /\b(?:datum|ingangsdatum|geldig\s+op)\s*:\s*(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  if (fid) {
+    const month = MONTHS_NL.indexOf(fid[2].toLowerCase());
+    const day = Number(fid[1]);
+    if (month >= 0 && day >= 1 && day <= 31) {
+      return `${fid[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  // A BARE "per <day> <month> <year>", which fell between the other two patterns:
+  // one demanded the word "geldig", the other demanded no day at all. de
+  // Volksbank's brands head their Tarievenwijzer "Tarievenwijzer Betalen & Sparen
+  // per 1 februari 2026" and ASN's says "per 1 juli 2026" — so the documents were
+  // read as undated and their figures took the day we fetched them. Guarded the
+  // same way as the month-year form: it must sit on a title-like line near the
+  // top, so "wij verhogen per 1 januari 2025 de tarieven" in body prose is not
+  // mistaken for the document's own date.
+  const bare = /\bper\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text.slice(0, 2000));
+  if (bare) {
+    const month = MONTHS_NL.indexOf(bare[2].toLowerCase());
+    const day = Number(bare[1]);
+    const at = bare.index ?? 0;
+    const start = text.lastIndexOf("\n", at) + 1;
+    const end = text.indexOf("\n", at);
+    const line = text.slice(start, end === -1 ? undefined : end).trim();
+    const titleLike = line.length <= 140 && !/[.,;:]$/.test(line);
+    if (month >= 0 && day >= 1 && day <= 31 && titleLike) {
+      return `${bare[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  // "GELDEN VANAF" / "GELDT VANAF", the fifth format in one day. ABN's rate page
+  // ends its ladder with "De rentes gelden vanaf 1 mei 2025" and the pattern below
+  // wanted the adjective "geldig", not the verb — so a fifteen-month-old rate was
+  // stamped with the day it was fetched and would have looked like the freshest
+  // figure in the table.
+  const verb = /\b(?:gelden|geldt)\s+vanaf\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  if (verb) {
+    const month = MONTHS_NL.indexOf(verb[2].toLowerCase());
+    const day = Number(verb[1]);
+    if (month >= 0 && day >= 1 && day <= 31) {
+      return `${verb[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
   const m = /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
   if (m) {
     const month = MONTHS_NL.indexOf(m[2].toLowerCase());

@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import type { Account, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
 import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice } from "./TravelBlock";
+import type { CatalogueEntryLike } from "@lavega/core";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -441,4 +442,135 @@ test("when the lookups run out of time it says so, rather than spinning forever"
     />,
   );
   expect(html).toContain("Er kwam niets meer binnen");
+});
+
+/* ─────────────────────────────────────────── cash, cashback and the market
+ *
+ * App review items 6/7/8. The plan itself is covered by core's travel tests;
+ * these pin that the block puts the CASH answer on screen, and that a card he
+ * does not hold can never be mistaken for one he can pay with today. */
+
+const CATALOGUE: CatalogueEntryLike[] = [
+  {
+    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 1.4, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+        conditionsKnown: true,
+        conditions: "Geldt bij betalen in vreemde valuta; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
+      },
+    },
+  },
+  {
+    id: "revolut-standard-betaalpas", product: "Revolut Standard betaalpas",
+    issuer: "Revolut Bank UAB", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 1, route: "provider-page", sourceUrl: "https://revolut.com/fees", checkedAt: "2026-08-01",
+        conditionsKnown: true, conditions: "1% opslag op het Standard-plan.",
+      },
+    },
+  },
+  {
+    id: "212-card", product: "212 Card", issuer: "Paynetics; Trading 212 Markets Ltd", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 0, route: "provider-page", sourceUrl: "https://trading212.com/card", checkedAt: "2026-08-01",
+        conditionsKnown: true, conditions: "Geen wisselkoersopslag op kaartbetalingen in vreemde valuta.",
+      },
+    },
+  },
+  {
+    id: "wirex-card-wirex-one", product: "Wirex Card (Wirex One)", issuer: "Wirex", kind: "betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 1.5, route: "provider-page", sourceUrl: "https://wirex.com/fees", checkedAt: "2026-08-01",
+        conditionsKnown: true, conditions: "1,5% opslag buiten de euro.",
+      },
+      cashbackPct: {
+        value: 0.5, route: "provider-page", sourceUrl: "https://wirex.com/cryptoback", checkedAt: "2026-08-01",
+        conditionsKnown: true,
+        conditions: "Standard plan, Entry tier. PAID IN CRYPTO (Cryptoback), not euro. Everything above 0.5% needs 150,000 WXT locked.",
+      },
+    },
+  },
+];
+
+/** The block with a destination AND the product catalogue, which is what the
+ *  real app renders — the bundled catalogue is the default prop. */
+function renderWithCatalogue(over: Partial<TravelBlockProps> = {}): HTMLElement {
+  return renderWithDestination({ catalogue: CATALOGUE, ...over });
+}
+
+test("the block answers the cash question too, in euros, with the small-withdrawal warning", () => {
+  const el = renderWithCatalogue();
+  const text = el.textContent ?? "";
+  // ING's own document: € 3,50 per opname + 1,40% — € 6,30 on € 200.
+  expect(text).toContain("€ 6,30");
+  expect(text).toContain("in één keer meer");
+});
+
+test("a card whose document prices no withdrawal says so, and never reads as free", () => {
+  const el = renderWithCatalogue();
+  click(byText("button", "Waarom?"));
+  const cash = el.querySelector(".travel-cash")!;
+  expect(cash.textContent).toContain("Revolut betaalpas");
+  // Revolut's fee row says nothing about cash, so the price is missing.
+  expect(cash.textContent).toContain("onbekend");
+  expect(cash.textContent).not.toContain("gratis");
+});
+
+test("cards he does not hold sit in their own section and are never offered to pay with", () => {
+  const el = renderWithCatalogue();
+  click(byText("button", "Waarom?"));
+  const offers = el.querySelector(".travel-offers")!;
+  expect(offers.textContent).toContain("212 Card");
+  expect(offers.textContent).toContain("geen kaarten van jou");
+  // And it is NOT inside the list of things to pay with.
+  const spend = [...el.querySelectorAll(".travel-step")].find((s) => s.textContent?.startsWith("Betalen"));
+  expect(spend?.textContent).not.toContain("212 Card");
+});
+
+test("a cheaper card he does not hold is named beside the answer, marked as not his", () => {
+  const el = renderWithCatalogue();
+  const winner = el.querySelector(".travel-winner")!;
+  expect(winner.textContent).toContain("212 Card");
+  expect(winner.textContent).toMatch(/nog niet van jou|heb je niet/i);
+});
+
+test("catalogue cashback is shown with its gate, never subtracted from the price", () => {
+  const el = renderWithCatalogue();
+  click(byText("button", "Waarom?"));
+  const offers = el.querySelector(".travel-offers")!;
+  expect(offers.textContent).toContain("0,5% cashback");
+  expect(offers.textContent).toMatch(/crypto/i);
+  // 1,5% minus 0,5% would have put Wirex above Revolut's 1%; it does not.
+  const rows = [...offers.querySelectorAll(".travel-journey-name")].map((n) => n.textContent ?? "");
+  expect(rows.indexOf("212 Card")).toBeLessThan(rows.findIndex((r) => r.includes("Wirex")));
+});
+
+test("with no catalogue there is no market section and no invented cash price", () => {
+  const el = renderWithCatalogue({ catalogue: [] });
+  click(byText("button", "Waarom?"));
+  expect(el.querySelector(".travel-offers")).toBeNull();
+  expect(el.querySelector(".travel-cash")!.textContent).toContain("onbekend");
+});
+
+test("for a euro destination the cash line does not quote a foreign-currency tariff", () => {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} catalogue={CATALOGUE} />,
+    );
+  });
+  act(() => setNativeValue(container!.querySelector("select")!, "ES"));
+
+  const winner = container!.querySelector(".travel-winner")!;
+  expect(winner.textContent).toContain("Pinnen:");
+  expect(winner.textContent).not.toContain("€ 6,30");
+  click(byText("button", "Waarom?"));
+  // Nothing to switch to either — there is no conversion to be cheaper at.
+  expect(container.querySelector(".travel-offers")).toBeNull();
 });

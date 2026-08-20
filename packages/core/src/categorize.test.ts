@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
-import { CATEGORY_OPTIONS, uncategorizedTxs, applyCategorizations, recategorize, uncategorizedByMonth } from "./categorize.js";
+import {
+  CATEGORY_OPTIONS, uncategorizedTxs, applyCategorizations, recategorize, uncategorizedByMonth,
+  redactForAi, aiCategorizeItems, foreignCode, unknownReason, unknownBreakdown,
+} from "./categorize.js";
 
 const tx = (id: string, cp: string, amount: number, category = ""): Tx => ({
   id, accountKey: "A1", date: "2026-08-01", amount, currency: "EUR", counterparty: cp, description: "", category, manual: false,
@@ -127,4 +130,94 @@ test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () =
   expect(CATEGORY_OPTIONS).toContain("Boodschappen");
   expect(CATEGORY_OPTIONS).toContain("Overboekingen");
   expect(CATEGORY_OPTIONS.length).toBeGreaterThan(10);
+});
+
+/* ---------------------------------------------------------------------------
+ * The "onbekend" problem (app review 20-08-2026, item 2).
+ *
+ * These tests were written against MEASUREMENTS of the owner's real exports
+ * (1.394 onbekend rows over 7 files: ING NL + ING EN + ING creditcard, Revolut,
+ * Amex, MT940). The numbers quoted in the comments are from that run — they are
+ * why each case below is here rather than a guess about what might happen.
+ * ------------------------------------------------------------------------ */
+
+const abroad = (id: string, cp: string, desc: string): Tx => ({
+  id, accountKey: "A1", date: "2026-07-14", amount: -24.5, currency: "EUR",
+  counterparty: cp, description: desc, category: "", manual: false,
+});
+
+test("redactForAi keeps the merchant name that follows an IBAN", () => {
+  // THE BUG this whole block exists for: 747 of 1.394 (53,6%) onbekend rows
+  // reached the model as an EMPTY string, because the IBAN pattern was allowed
+  // to hop across spaces and ate every word after the IBAN.
+  expect(redactForAi("NL17INGB0539576085 Albert Heijn 1234 Rotterdam")).toBe("Albert Heijn Rotterdam");
+  expect(redactForAi("DE77100110012424146089 Wise Europe SA")).toBe("Wise Europe SA");
+  expect(redactForAi("PT50002300004565716939794 Continente Lisboa PRT")).toBe("Continente Lisboa PRT");
+});
+
+test("redactForAi still removes IBANs, amounts and dates", () => {
+  const out = redactForAi("IBAN NL91ABNA0417164300 op 2026-07-14 bedrag EUR 45,00 naar Netflix");
+  expect(out).not.toMatch(/NL91ABNA0417164300/);
+  expect(out).not.toMatch(/2026-07-14/);
+  expect(out).not.toMatch(/45,00/);
+  expect(out).toMatch(/Netflix/);
+});
+
+test("aiCategorizeItems sends only {id,text,sign} and drops rows with no readable text", () => {
+  const txs = [
+    abroad("t1", "NL17INGB0539576085", "Mercadona Valencia ESP"),
+    // Nothing but identifiers/numbers: after redaction there is no text to read,
+    // so this must not consume a slot in the 200-item batch.
+    abroad("t2", "NL17INGB0539576085", "0539576085 20260714"),
+  ];
+  const items = aiCategorizeItems(txs);
+  expect(items).toEqual([{ id: "t1", text: "Mercadona Valencia ESP", sign: "out" }]);
+});
+
+test("foreignCode finds the ISO country code Dutch card exports print, and ignores NLD", () => {
+  // Measured in his own exports: PRT=48, ESP=35, FRA=16, BGR=1.
+  expect(foreignCode(abroad("t1", "MERCADONA", "VALENCIA ESP"))).toBe("ESP");
+  expect(foreignCode(abroad("t2", "PINGO DOCE", "LISBOA PRT"))).toBe("PRT");
+  expect(foreignCode(abroad("t3", "ALBERT HEIJN", "ROTTERDAM NLD"))).toBe(null);
+  expect(foreignCode(abroad("t4", "Albert Heijn", "Rotterdam"))).toBe(null);
+});
+
+test("foreignCode does not fire on three-letter words that are also country codes", () => {
+  // CAN/PER/MAR/CHE/IND/COL are real ISO codes and also ordinary words; a
+  // probe over every row of his exports found 0 legitimate uses, so they are
+  // excluded rather than risked.
+  for (const w of ["CAN", "PER", "MAR", "CHE", "IND", "COL", "ARE", "SEN"]) {
+    expect(foreignCode(abroad("t", "MERCHANT", `SOMETHING ${w}`))).toBe(null);
+  }
+  // lowercase is not a country code either — exports print them in caps
+  expect(foreignCode(abroad("t", "merchant", "esp"))).toBe(null);
+});
+
+test("unknownReason names the real cause instead of just 'onbekend'", () => {
+  expect(unknownReason(abroad("t1", "MERCADONA", "VALENCIA ESP"))).toBe("buitenland");
+  expect(unknownReason(abroad("t2", "", ""))).toBe("geen-tekst");
+  expect(unknownReason(abroad("t3", "NL17INGB0539576085", "0539576085"))).toBe("alleen-nummers");
+  expect(unknownReason(abroad("t4", "Jan Jansen", "priveopname"))).toBe("onbekende-tegenpartij");
+});
+
+test("unknownBreakdown totals the onbekend rows per reason, with the countries found", () => {
+  const txs = [
+    // Foreign merchants no rule knows — "MERCADONA" would be a bad fixture here
+    // precisely because the Zuid-Europese block now places it as Boodschappen.
+    abroad("t1", "TIENDA J LOPEZ", "VALENCIA ESP"),
+    abroad("t2", "LOJA DO SR SILVA", "LISBOA PRT"),
+    abroad("t3", "Jan Jansen", "priveopname"),
+    abroad("t4", "Albert Heijn", "Rotterdam"), // categorized -> excluded
+  ];
+  const b = unknownBreakdown(txs, []);
+  expect(b.count).toBe(3);
+  expect(b.amount).toBeCloseTo(-73.5, 2);
+  const byReason = Object.fromEntries(b.byReason.map((r) => [r.reason, r]));
+  expect(byReason.buitenland.count).toBe(2);
+  expect(byReason.buitenland.countries).toEqual(["ESP", "PRT"]);
+  expect(byReason["onbekende-tegenpartij"].count).toBe(1);
+  // Reasons with no rows are not listed — an empty bucket is not a finding.
+  expect(byReason["geen-tekst"]).toBeUndefined();
+  // Sorted biggest bucket first so the UI leads with what actually matters.
+  expect(b.byReason[0].reason).toBe("buitenland");
 });

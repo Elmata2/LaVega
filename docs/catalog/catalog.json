@@ -4,13 +4,15 @@
     {
       "id": "ing-betaalpas",
       "product": "ING betaalpas",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "agent",
           "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
           "checkedAt": "2026-06-15",
-          "conditions": null,
+          "conditions": "Geldt bij betalen met de Betaalpas in het buitenland bij winkels, tankstations, restaurants, etc. in vreemde valuta (betalingen in euro's € 0,00); volgens noot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag. Hetzelfde percentage (1,40% koersopslag niet-euro Betaalpas) staat vermeld bij ING Go, ING More, ING Extra en ING Max; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
           "conditionsKnown": true
         }
       }
@@ -18,37 +20,63 @@
     {
       "id": "ing-creditcard",
       "product": "ING creditcard",
-      "fields": {}
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
+          "checkedAt": "2022-10-01",
+          "conditions": "Geldt bij betalen met een creditcard bij winkels, tankstations, restaurants, etc. \"In vreemde valuta\" (betalen \"In euro's\" is € 0,00); volgens voetnoot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag, met de wisselkoersen van MasterCard International voor haar creditcards. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ing-platinumcard",
       "product": "ING Platinumcard",
-      "fields": {}
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "abn-amro-betaalpas",
       "product": "ABN AMRO betaalpas",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.2,
           "route": "agent",
-          "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html",
-          "checkedAt": "2026-08-18",
-          "conditions": "\"per keer\" bij betalen via betaalautomaat in het buitenland in buitenlands geld, met voetnoot * over de koersopslag ten opzichte van de ECB referentiekoers in Denemarken, Zweden, Hongarije, Polen, Roemenië, Tsjechië of Bulgarije; pakketafhankelijke afwijkingen (\"Bij een Studentenpakket betaal je alleen een valutakoersopslag\") noemt de pagina alleen bij online betalen, niet bij de betaalautomaat",
-          "conditionsKnown": false
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop (de koersopslag bij geldopname in vreemde valuta is een aparte regel met eigen tariefklassen)",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "abn-amro-creditcard",
       "product": "ABN AMRO creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "agent",
-          "sourceUrl": "https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen",
-          "checkedAt": "2026-08-18",
-          "conditions": null,
+          "sourceUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta, die door Mastercard naar euro's worden omgerekend op basis van de Wisselkoers (de door Mastercard vastgestelde wisselkoers vermeerderd met een opslag); de omrekening gebeurt op de datum van de betaling of geldopname. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
           "conditionsKnown": true
         }
       }
@@ -56,177 +84,223 @@
     {
       "id": "abn-amro-gold-card",
       "product": "ABN AMRO Gold Card",
-      "fields": {}
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt voor betalingen en geldopnames in vreemde valuta: deze worden door Mastercard omgerekend naar euro's op basis van de Wisselkoers (de door Mastercard vastgestelde koers vermeerderd met een opslag); de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "rabobank-betaalpas",
       "product": "Rabobank betaalpas",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260423003428id_/https://www.rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden",
           "checkedAt": "2026-04-23",
-          "conditions": "Tarief staat per betaalpakket vermeld (hier onder \"Rabo Standaard € 3,45 per maand\", en identiek bij Rabo Comfort, Rabo RiantPakket, Rabo Free en Rabo JongerenRekening); de pagina noemt verder geen limiet, staffel of vrijstelling en verwijst voor details naar \"Tarieven en limieten particulier betalingsverkeer per dec 2025\".",
-          "conditionsKnown": false
+          "conditions": "Geldt bij betalen met je betaalpas in vreemde valuta (in euro's geen extra kosten); dezelfde 1,4% koersopslag staat vermeld bij alle betaalpakketten (Rabo Standaard, Rabo Comfort, Rabo RiantPakket, Rabo Free, Rabo JongerenRekening). Contant geld opnemen in vreemde valuta is een aparte post (bijv. € 3,50 + 1,4% koersopslag).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "rabobank-creditcard",
       "product": "Rabobank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-04-12",
-          "conditions": "Niet vast te stellen op deze pagina: er worden geen staffels, plafonds of vrijstellingen genoemd, en voor de volledige tarieven wordt verwezen naar \"Tarieven en limieten particulier betalingsverkeer 2025\"",
-          "conditionsKnown": false
+          "conditions": "Geldt voor de RaboCard: \"Betaal je met een andere munt (vreemde valuta) dan de euro, dan betaal je daar iets extra over\" — bij betalen in euro's, ook in het buitenland, zijn er geen extra kosten. Bij opname van contant geld bij een geldautomaat of aan de balie geldt € 4,50 per opname + 2% koersopslag. \"(Online) dienstverleners, banken of winkeliers vragen soms een toeslag bij betalingen of geldopnames met jouw creditcard.\"",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "rabo-goldcard",
       "product": "Rabo GoldCard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260411080707id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard",
           "checkedAt": "2026-04-11",
-          "conditions": "Geldt bij betalen in een andere muntsoort (vreemde valuta); betalingen in euro's, ook in het buitenland, kosten niets. De pagina noemt geen limiet of staffel en verwijst voor het overige naar \"Tarieven en limieten particulier betalingsverkeer per dec 2025\".",
-          "conditionsKnown": false
+          "conditions": "Geldt alleen als je betaalt \"in een andere muntsoort, dus een vreemde valuta\"; betalingen in euro's, ook in het buitenland, kennen geen extra kosten (\"kosten euro's geen extra kosten\"). Bij geld opnemen in vreemde valuta geldt daarnaast € 4,50 per opname + 2% koersopslag. (Online) dienstverleners, banken of winkeliers kunnen bovendien zelf een toeslag vragen.",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "sns-betaalpas",
       "product": "SNS betaalpas",
+      "issuer": "ASN Bank N.V. (formerly SNS Bank N.V. / de Volksbank)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "agent",
-          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html",
-          "checkedAt": "2026-08-18",
-          "conditions": "De pagina vermeldt geen cap, staffel, pakket of actieperiode bij dit tarief en zegt evenmin dat het onvoorwaardelijk geldt; alleen dat betalen in euro's niets extra's kost en dat contant opnemen in vreemde valuta 1,4% + € 3,50 per keer kost.",
-          "conditionsKnown": false
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (in euro is het € 0,00); bij betalen in een andere geldsoort dan de euro worden de wisselkoersen van Mastercard of Visa gebruikt. Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "sns-creditcard",
       "product": "SNS creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "agent",
-          "sourceUrl": "https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html",
-          "checkedAt": "2026-08-18",
-          "conditions": null,
-          "conditionsKnown": false
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Geldt voor de SNS Creditcard, een Visa-card uitgegeven door International Card Services: \"De SNS Creditcard is een product van International Card Services (ICS). SNS heeft de dienstverlening van de creditcard bij ICS ondergebracht.\" De opslag hangt aan de VALUTA, niet aan het land: de Tarievenwijzer zet \"Betalen met een creditcard / in euro € 0,00\" direct boven \"in vreemde valuta 2% wisselkoersopslag\", en de SNS-productpagina schrijft het uit als \"Betalen in het buitenland in euro's € 0\" tegenover \"Betalen met buitenlands geld 2% wisselkoersopslag\". Bij geldopname stapelt hij: \"Opname van contant geld met een creditcard in vreemde valuta 4% van opgenomen bedrag + 2% wisselkoersopslag\". De 2% komt bovenop de Visa-wisselkoers. Geen maximum, staffel, vrijstelling of pakketvoorwaarde bij deze regel; het document schrijft maxima wél uit waar ze bestaan — \"Dan betaal je 1% (in plaats van 4%) van het bedrag dat je opneemt, maar nooit meer dan € 1,50\" — dus de kale regel is informatief, niet slechts stilzwijgend. Scope: particuliere Tarievenwijzer; de SNS Creditcard bij Studentenrekening (€ 27,50/jaar i.p.v. € 37,50) valt onder dezelfde 2%-regel, zakelijke ICS-cards niet (die staan op 2,5%, zie blocker-veld van knab-creditcard).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "asn-betaalpas",
       "product": "ASN betaalpas",
+      "issuer": "ASN Bank N.V.",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "agent",
-          "sourceUrl": "https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html",
-          "checkedAt": "2026-08-18",
-          "conditions": "De pagina noemt alleen \"1,4% van het betaalde bedrag per betaling\" voor betalen in vreemde valuta; er wordt geen cap, staffel, pakket of actieperiode genoemd, en ook niet gezegd dat de opslag onvoorwaardelijk is (wel: \"Visa of Mastercard brengen soms ook kosten in rekening voor het verwerken van de transactie\").",
-          "conditionsKnown": false
+          "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+          "checkedAt": "2026-07-01",
+          "conditions": "Geldt bij betalen met een betaalpas in het buitenland in vreemde valuta (1,4% van het betaalde bedrag); betalen in euro € 0. Voor de omrekening worden de wisselkoersen van Mastercard of Visa gebruikt. Geldt voor ASN Bankrekening, ASN Basisbankrekening, ASN Studentenrekening en ASN Jongerenpakket. Contant geld opnemen in vreemde valuta is een aparte tarief (1,4% + € 3,50 per opname).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "asn-creditcard",
       "product": "ASN Creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "agent",
-          "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html",
-          "checkedAt": "2026-08-18",
-          "conditions": "Geldt voor \"Betalen binnen en buiten de EU met buitenlands geld\"; de pagina noemt verder geen cap, staffel of actieperiode (de voetnoot met 1%/4% en het maximum van € 1,50 hoort bij geld opnemen, niet bij betalen)",
-          "conditionsKnown": false
+          "sourceUrl": "https://www.icscards.nl/webdocuments/626/Algemene%20Voorwaarden%20ASN%20Creditcard%20-%2040",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt bij betalingen en geldopnames in vreemde valuta, die door Visa (Visa Cards) of Mastercard (Mastercards) worden omgerekend naar euro's op basis van de Wisselkoers; de opslag komt bovenop die Wisselkoers. Voor geldopnames worden daarnaast aparte kosten in rekening gebracht (artikel 12.3).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "regiobank-betaalpas",
       "product": "RegioBank betaalpas",
+      "issuer": "ASN Bank N.V. (formerly RegioBank N.V.)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "agent",
-          "sourceUrl": "https://www.regiobank.nl/service/betalen/buitenland.html",
-          "checkedAt": "2026-08-18",
-          "conditions": "De pagina noemt geen cap, staffel, pakket of actieperiode; er staat alleen \"Aan betalen en contant geld opnemen in een andere valuta zijn altijd extra kosten verbonden.\"",
-          "conditionsKnown": false
+          "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Geldt bij betalen met een betaalpas in vreemde valuta (een andere geldsoort dan de euro); betalen in euro is € 0,00. Plus eventuele lokale kosten bij een betaling. Voor opname van contant geld in vreemde valuta geldt een ander tarief (1,4% + € 3,50 per opname). Omrekening gebeurt met de wisselkoersen van Mastercard (Maestro, Debit Mastercard) of Visa (VPay, Visa Debit).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "regiobank-creditcard",
       "product": "RegioBank creditcard",
+      "issuer": "International Card Services (ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20241121084450id_/https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
-          "checkedAt": "2024-11-21",
-          "conditions": null,
-          "conditionsKnown": false
+          "checkedAt": "2024-07-01",
+          "conditions": "Geldt bij betalen met de RegioBank Creditcard in vreemde valuta; betalen in euro in Nederland en andere Eurolanden is € 0,00. Voor opname van contant geld in vreemde valuta geldt een ander tarief (4% van het opgenomen bedrag + 2% valutawisselkosten).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "knab-betaalpas",
       "product": "Knab betaalpas",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1.4,
           "route": "agent",
-          "sourceUrl": "https://www.knab.nl/tarieven",
-          "checkedAt": "2026-08-18",
-          "conditions": "Geldt voor \"Betalen en opname van contant geld buiten eurolanden\": Mastercard wisselkoers + 1,4% koersopslag in euro; de pagina noemt geen limiet of staffel en verwijst voor meer informatie naar \"Op deze pagina vind je meer informatie over pinnen in het buitenland.\"",
-          "conditionsKnown": false
+          "sourceUrl": "https://assets-eu-01.kc-usercontent.com/35355cb5-f8a5-0105-c237-9bab7d11ff84/3ec88fbd-4326-4bf3-be18-ed80334ade03/20251001%20Informatiedocument%20Knab%20Betaalrekening.pdf",
+          "checkedAt": "2025-10-01",
+          "conditions": "SCOPE IS DE VOORWAARDE: het Informatiedocument is gekopt \"Naam van de rekening: Knab Betaalrekening\" — het particuliere pakket (Privérekening € 6 p/m, één rekeninghouder; Gezamenlijke rekening € 7 p/m, twee rekeninghouders). Zakelijke Knab-rekeningen hebben een eigen tarievenpagina en vallen hier niet onder. Dezelfde 1,4% staat op knab.nl/tarieven (\"Tarieven per 18-02-2026\") met de geografische inkadering erbij: \"Betalen en opname van contant geld in eurolanden Gratis*\" tegenover \"Betalen en opname van contant geld buiten eurolanden Mastercard wisselkoers + 1,4% koersopslag in euro*\", met voetnoot \"* Let op: buitenlandse banken kunnen kosten rekenen voor het gebruik van een geldautomaat.\" De 1,4% komt dus bovenop de Mastercard-wisselkoers. Geen plafond, staffel, vrij bedrag of promo bij deze regel; het document schrijft samengestelde voorwaarden wél uit waar ze bestaan (\"Overboeking in andere valuta buiten SEPA € 15 + koersopslag van 0,1%\", en de pakketsplitsing Privé € 72 / Gezamenlijk € 84 totale jaarlijkse vergoeding), dus de onvoorwaardelijke 1,4%-regel is informatief. Dezelfde 1,4% geldt in het FID ook voor \"Opname van contant geld met een betaalpas in vreemde valuta\".",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "knab-creditcard",
       "product": "Knab creditcard",
+      "issuer": "Knab (Aegon Bank N.V.)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "agent",
           "sourceUrl": "https://www.knab.nl/tarieven",
-          "checkedAt": "2026-08-18",
-          "conditions": null,
-          "conditionsKnown": false
+          "checkedAt": "2026-02-18",
+          "conditions": "SCOPE IS DE VOORWAARDE: de pagina is gekopt \"Rente & tarieven — Particulier / Op deze pagina vind je de rentes en tarieven van de producten binnen het particuliere aanbod van Knab\", met aparte links naar \"Zakelijke Knab-producten\" en \"Voormalige Aegon Bank-producten\". De Knab Creditcard is een ICS-product: het Knab FID zet er een voetnoot bij — \"De Knab Creditcard is een product van International Card Services (ICS)... alle kosten met betrekking tot je creditcard betaal je aan hen\" — en de bijbehorende ICS-voorwaarden (Algemene Card Voorwaarden Banken, ICS-50-NL-05/2026, \"Diemen, mei 2026\", https://www.icscards.nl/webdocuments/628) bevestigen het per-card: art. 12.1 \"Betalingen en geldopnames in vreemde valuta worden door Visa voor Visa Cards en door Mastercard voor Mastercards omgerekend naar euro's op basis van de Wisselkoers. De opslag is 2%.\" De 2% komt dus bovenop de Visa/Mastercard-koers. Niet verwarren met art. 12.4 van diezelfde voorwaarden: \"Voor het overboeken van geld van uw Card naar een (bank)rekening... U moet 2,5% van het overgeboekte of opgewaardeerde bedrag betalen\" — dat is een geldovermakingstarief, geen valutaopslag. Los daarvan: \"Contant geld opnemen 4% van het opgenomen bedrag\". Geen plafond of vrij bedrag; de pagina schrijft plafonds en staffels wél uit waar ze bestaan (\"€ 15 + een koersopslag van 0,1% (indien overgeboekt naar landen buiten EER)\", \"Minimum inlegbedrag € 1.000\", \"Je krijgt rente tot € 500.000\").",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "triodos-betaalpas",
       "product": "Triodos betaalpas",
-      "fields": {}
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+          "checkedAt": "2026-05-01",
+          "conditions": "SCOPE IS DE VOORWAARDE: \"Naam van de rekening: Triodos Internet Betaalrekening\" — Triodos' enige particuliere betaalrekening, met een pakketprijs die per leeftijd/soort verschilt (18 t/m 22 jaar € 0,00 p/m; 23 t/m 25 jaar € 3,50; vanaf 26 jaar € 5,00; en/of-rekening € 8,00) maar de 1% is voor alle vier gelijk — één regel voor de hele rekening. Geldt alleen bij BETALEN met de betaalpas in vreemde valuta; geldopname is een aparte, duurdere regel: \"Opname van contant geld met een betaalpas in vreemde valuta — € 2,25 voor elke opname + 1% koersopslag over het opgenomen bedrag\". Creditcard is niet van toepassing (\"Aanbieden van een creditcard — Dienst niet beschikbaar\"). Geen minimum, maximum, staffel of vrij bedrag bij de 1%-regel; het document schrijft min/max wél uit waar ze bestaan (\"0,1% van het bedrag met minimum van € 7,50 en maximum van € 75,00\"), dus de kale 1% is informatief. De Triodos servicepagina voegt toe dat Visa de koers zet: \"Visa bepaalt de wisselkoersen en opslagen.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-free-betaalpas",
       "product": "bunq Free betaalpas",
+      "issuer": "bunq B.V. (NL banking licence); Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 3,
           "route": "agent",
           "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-free",
-          "checkedAt": "2026-08-18",
-          "conditions": "Geldt pas na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar; tot €1.000 per jaar krijg je met het gratis abonnement de standaard wisselkoers (ZeroFX)",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt alleen boven de gratis ZeroFX-allowance: \"Als je het gratis abonnement hebt, kun je tot €1.000 per jaar tegen deze koers uitgeven. Na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar, geldt een tarief van 3% van elk volgend transactiebedrag.\"",
           "conditionsKnown": true
         }
       }
@@ -234,13 +308,15 @@
     {
       "id": "bunq-core-betaalpas",
       "product": "bunq Core betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-core",
-          "checkedAt": "2026-08-18",
-          "conditions": "Geldt voor betalingen met je pas in het buitenland op de Mastercard-koers \"wanneer de markten open zijn\"; voor bunq Core is ZeroFX onbeperkt (\"Core, Pro en Elite hebben onbeperkt ZeroFX\"), anders dan bunq Free dat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar bevat, waarboven standaard conversiekosten gelden.",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt via ZeroFX bij paspbetalingen in het buitenland \"wanneer de markten open zijn\"; voor Core geldt \"ZeroFX tot je abonnementslimiet\" en \"Core, Pro en Elite hebben onbeperkt ZeroFX\" (de €1.000-limiet per jaar geldt alleen voor bunq Free, daarboven standaard conversiekosten)",
           "conditionsKnown": true
         }
       }
@@ -248,18 +324,31 @@
     {
       "id": "bunq-pro-betaalpas",
       "product": "bunq Pro betaalpas",
-      "fields": {}
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION AND THE COLUMN IS THE SCOPE. The sheet is an 8-column plan table (bunq Elite | bunq Pro | bunq Core | bunq Free | bunq Elite Business | bunq Pro Business | bunq Core Business | bunq Free Business) and this quote is the bunq Pro cell of the row labelled 'Kaartbetaling (vreemde valuta)', inside the section headed 'Passen'. NO CAP, NO TIER, NO ALLOWANCE for bunq Pro — and the row itself positively establishes that, because the SAME row does price a cap in two other columns: the bunq Free and bunq Free Business cells carry 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' and the Pro cell does not. A silent Pro cell in a row that demonstrably writes caps where they exist is informative, not merely silent. NOTE ON THE WORDING: 'valutaschommelin gen preventie' is how pdftotext returns the hyphenated cell — the document means 'valutaschommelingen preventie', quoted unfixed per instruction. The 0.5% is a spread added to the Mastercard rate, not a separate line-item fee; the running text on p.18 confirms 'Voor transacties die worden uitgevoerd in andere valuta dan euro, wordt het bedrag van de transactie omgezet naar euro via de Mastercard wisselkoers' and 'Wij kunnen ook valutaschommelingen preventie in rekening brengen voor uw transactie.' Footnote 7 prices the same 0,5% on cash withdrawals needing conversion. bunq issues one card type (Mastercard); there is no separate debit/credit FX row.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-elite-betaalpas",
       "product": "bunq Elite betaalpas",
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
           "route": "agent",
           "sourceUrl": "https://www.bunq.com/nl-nl/personal/plans/bunq-elite",
-          "checkedAt": "2026-08-18",
-          "conditions": "Geldt via ZeroFX (standaard aan) bij paspetalingen in het buitenland: een valutafluctuatie-aanpassing van 0,5% \"wanneer de markten open zijn\"; bunq Free heeft tot €1.000 ZeroFX-uitgaven per jaar, maar \"Core, Pro en Elite hebben onbeperkt ZeroFX\"",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"toeslag van 0,5% wanneer de markten open zijn\" (buiten de openingstijden van de markten geldt dus een andere situatie); volgens de FAQ: \"bunq Free bevat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar; daarboven gelden standaard conversiekosten. Core, Pro en Elite hebben onbeperkt ZeroFX.\"",
           "conditionsKnown": true
         }
       }
@@ -267,53 +356,116 @@
     {
       "id": "bunq-creditcard",
       "product": "bunq creditcard",
-      "fields": {}
+      "issuer": "bunq B.V. (self-issued, Mastercard) — notably NOT ICS",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://help.bunq.com/articles/whats-zerofx-and-how-does-it-save-me-money",
+          "checkedAt": "2026-08-19",
+          "conditions": "bunq Free users can make up to €1,000 ZeroFX payments per year in foreign currencies. All payments beyond the €1,000 are subject to regular 3% currency conversion fees.&nbsp; bunq Core, Pro, and Elite users can make unlimited ZeroFX payments per year.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-termijndeposito",
       "product": "bunq Termijndeposito",
+      "issuer": "bunq B.V.",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "bunq-beleggingsrekening",
       "product": "bunq beleggingsrekening",
+      "issuer": "Ginmon (execution/custody) inside the bunq app",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "bunq-crypto",
       "product": "bunq crypto",
+      "issuer": "Payward Europe Solutions Ltd t/a Kraken (Central Bank of Ireland); staking by Payward Commercial Ltd",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "bunq-free-business-betaalpas",
       "product": "bunq Free Business betaalpas",
-      "fields": {}
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "THIS IS THE CAPPED PLAN AND THE CAP IS THE WHOLE STORY. Column 8 (bunq Free Business) of the row 'Kaartbetaling (vreemde valuta)'. 0.5% applies only to the first € 1000 of foreign-currency card spend per year; above that the fee is 1.5% of the transaction amount — three times higher. Serving 0.5% here without the cap would be the same failure mode as the Revolut 0% miss. The identical cap text sits in the bunq Free (personal) column; the six paid plans (Elite/Pro/Core personal and business) carry the 0.5% cell with NO cap text. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it, and the ZERO-WIDTH SPACE between 'gen preventie' and 'Dit geldt voor' is in the PDF, not added by me.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-core-business-betaalpas",
       "product": "bunq Core Business betaalpas",
-      "fields": {}
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 7 (bunq Core Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, positively established: the same row carries 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate, not a separate fee line.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-pro-business-betaalpas",
       "product": "bunq Pro Business betaalpas",
-      "fields": {}
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 6 (bunq Pro Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. NO CAP for this plan, and that is positively established rather than assumed: the identical row prices 'Dit geldt voor € 1000 per jaar, daarna bedragen de kosten 1.5% van het transactiebedrag' in the bunq Free and bunq Free Business columns, so the document does write the cap where one exists. Wording quoted unfixed — 'valutaschommelin gen preventie' is the hyphenated cell as pdftotext returns it. The 0.5% is a spread inside the Mastercard exchange rate.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-elite-business-betaalpas",
       "product": "bunq Elite Business betaalpas",
-      "fields": {}
+      "issuer": "bunq B.V.; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "SCOPE IS THE CONDITION: column 5 (bunq Elite Business) of the row 'Kaartbetaling (vreemde valuta)' in the 8-column plan table, section 'Passen'. This row previously had NO figure at all in the catalog; the figure is 0.5% and it is the same in every one of the eight columns. NO CAP for this plan, positively established: the same row carries the €1000-per-year cap text in the bunq Free and bunq Free Business columns only. Wording quoted unfixed. The 0.5% is a spread inside the Mastercard exchange rate.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "revolut-standard-betaalpas",
       "product": "Revolut Standard betaalpas",
+      "issuer": "Revolut Bank UAB (Lithuania), in NL via passport/branch",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 1,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20250719221017id_/https://www.revolut.com/nl-NL/legal/standard-fees/",
           "checkedAt": "2025-07-19",
-          "conditions": "Geldt boven de wissellimiet van het Standard-plan: \"Standard: wissellimiet van EUR 1.000 per maand. Daarna zijn er fair usage-kosten van 1% per geldwissel van toepassing.\" Binnen de planlimieten op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd) gelden geen kosten; in het weekend (tussen 17:00 uur op vrijdag en 18:00 uur op zondag, New York tijd) geldt er eveneens een kost van 1%.",
+          "conditions": "Geldt alleen boven de wissellimiet van het Standard-plan: 'Standard: wissellimiet van EUR 1.000 per maand. Daarna zijn er fair usage-kosten van 1% per geldwissel van toepassing.' Binnen de limiet en op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd) gelden geen kosten; bij wisselen in het weekend geldt een kost van 1%.",
           "conditionsKnown": true
         }
       }
@@ -321,13 +473,15 @@
     {
       "id": "revolut-plus-betaalpas",
       "product": "Revolut Plus betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {
         "fxFeePct": {
           "value": 0.5,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20250808164730id_/https://www.revolut.com/nl-NL/legal/plus-fees/",
           "checkedAt": "2025-08-08",
-          "conditions": "Geldt voor Plus alleen boven de wissellimiet van EUR 3.000 per maand (\"Plus: wissellimiet van EUR 3.000 per maand\"); binnen de limieten van je plan gelden op weekdagen (zondag 18:00 – vrijdag 17:00, New York tijd) geen kosten, en in het weekend geldt een kost van 1%. Kaartbetalingen in vreemde valuta worden in realtime gewisseld en tellen mee voor deze fair usage-limiet.",
+          "conditions": "Geldt alleen boven de wissellimiet van het Plus-plan: \"Plus: wissellimiet van EUR 3.000 per maand. Op alle extra geldwisseltransacties zijn er fair usage-kosten van 0,5% van toepassing.\" Binnen de limieten gelden geen kosten bij wisselen op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd); in het weekend geldt een kost van 1%. Kaartbetalingen in vreemde valuta waarvoor in realtime moet worden gewisseld, tellen mee voor deze fair usage-limiet.",
           "conditionsKnown": true
         }
       }
@@ -335,126 +489,265 @@
     {
       "id": "revolut-premium-betaalpas",
       "product": "Revolut Premium betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "revolut-metal-betaalpas",
       "product": "Revolut Metal betaalpas",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "n26-standard-betaalpas",
       "product": "N26 Standard betaalpas",
-      "fields": {}
+      "issuer": "N26 Bank AG (Germany) — German IBAN even for Dutch residents; Mastercard Debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the document expresses the 0 as words, not a numeral: the row reads 'Free' + 'Conversion to real exchange rate without foreign currency surcharge'. No '0' appears in the row, so a literal value-in-quote check will fail on this and the other zero-FX findings; the value-in-DOCUMENT and quote-in-document checks both pass. SCOPE: the price list's cover names the countries it governs and the Netherlands is on that list ('Price List applicable to users who register with an address in Belgium, Denmark, Estonia, Finland, Greece, Iceland, Ireland, Latvia, Liechtenstein, Lithuania, Luxembourg, Netherlands, Norway, Poland, Portugal, Slovakia, Slovenia, Sweden, Switzerland'). The 0% is CARD PAYMENTS only. Cash withdrawal in a foreign currency is NOT free on this plan: the separate row 'Mastercard withdrawals at ATMs in other currencies:' gives 'For Business, Current Account, N26 Smart, N26 Business Smart                 1.7% of amount drawn' — the standard N26 account is the 'Current Account' line, so 1.7% applies to Standard. EUR-ATM fair-use is separate again (2 free withdrawals/calendar month, EUR 2.00 each thereafter).",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-smart-betaalpas",
       "product": "N26 Smart betaalpas",
-      "fields": {}
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL is named on the price list's country cover. The FX row is not plan-differentiated — one row covers all N26 plans. 0% is CARD PAYMENTS only; foreign-currency ATM withdrawals cost 1.7% on Smart: 'For Business, Current Account, N26 Smart, N26                 1.7% of amount drawn'. EUR-ATM fair use on Smart is 3 free withdrawals per calendar month, EUR 2.00 each thereafter. Smart costs '4.90 € per month (membership fee)'.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-go-betaalpas",
       "product": "N26 Go betaalpas",
-      "fields": {}
+      "issuer": "N26 Bank AG; Mastercard Debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-metal-betaalpas",
       "product": "N26 Metal betaalpas",
-      "fields": {}
+      "issuer": "N26 Bank AG; metal Mastercard Debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Metal also gets foreign-currency ATM withdrawals free ('For, N26 Go, N26 Business Go, N26 Metal and N26               Free'). EUR-ATM fair use on Metal is 8 free withdrawals per calendar month, EUR 2.00 each thereafter. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-instant-savings",
       "product": "N26 Instant Savings",
-      "fields": {}
+      "issuer": "N26 Bank AG; German Deposit Guarantee Scheme",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 0.3,
+          "route": "agent",
+          "sourceUrl": "https://n26.com/en-eu/savings-account",
+          "checkedAt": "2026-08-19",
+          "conditions": "Rate depends on the customer's main N26 plan, not on balance: from 11/06/2025 onwards, 0.30% p.a. for Standard and Smart, 0.50% p.a. for N26 Go, and 1.50% p.a. for Metal (before taxes) — the headline \"1.5 % interest p.a.\" requires opening an N26 Metal (paid) plan. \"Please note that rates per plan can be changed by N26 over time.\" Interest is calculated daily and paid out monthly, and is only earned on funds held in the Instant Savings account. No deposit limits; deposit and withdraw any amount, whenever you want, with no need to lock money away. Available at no extra cost in the N26 app in Estonia, Finland, Greece, Ireland, Latvia, Lithuania, Luxembourg, the Netherlands, Portugal, Slovakia, and Slovenia. Withholding taxes may apply for customers resident in Germany. Balances protected up to €100,000 by the German Deposit Guarantee Scheme. (The 2.32% p.a. figure elsewhere on the page is a flexible cash fund investment, not this savings account.)",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-flexible-cash-fund",
       "product": "N26 flexible cash fund",
-      "fields": {}
+      "issuer": "Fidelity International (fund manager), distributed by N26",
+      "kind": "beleggingsrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2.32,
+          "route": "agent",
+          "sourceUrl": "https://n26.com/en-eu/metal",
+          "checkedAt": "2026-06-11",
+          "conditions": "NOT A SAVINGS RATE AND NOT A DEPOSIT — the single most important condition, in N26's own words: \"A flexible cash fund is not a deposit, it is an investment that carries a risk of capital loss… Your investment can go up and down. Past performance is not a reliable indicator of future results.\" and \"All investments carry a risk of capital loss. A flexible cash fund is not a guaranteed investment, and a total loss of your investment is possible at any time… The flexible cash fund does not rely on external support to guarantee its liquidity or to stabilize its net asset value per share.\" No deposit-guarantee scheme applies. The figure is \"up to 2.32%\", \"presented net of fees\", variable daily, set by Fidelity International, not by N26. WITHDRAWAL IS NOT INSTANT AND NOT FREE OF MARKET RISK: \"The fund carries a low risk rating of 1 out of 7 and has a suggested minimum holding period of six months… When you withdraw from a flexible cash fund, you instruct us to sell your shares in the underlying money market fund. The proceeds from this sale may take up to 2 business days to reach your account. T&Cs apply.\" PER-PRODUCT: do not confuse with N26 Instant Savings on the same page, which IS plan-tiered — footnote 1: \"from 11/06/2025 onwards, 0.30% p.a. for Standard and Smart, 0.50% p.a. for N26 Go, and 1.50% p.a. for Metal (before taxes)\", available in a named list of countries that does include the Netherlands. The cash fund footnote names no country list, and the page is the pan-EU /en-eu/metal page (n26.com has no nl-nl locale — /nl-nl and /nl-nl/spaarrekening both 404), so NL availability of the cash fund is not stated by the issuer.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "wise-betaalpas",
       "product": "Wise betaalpas",
+      "issuer": "Wise Europe SA (Belgium) for EEA customers; Visa/Mastercard debit",
+      "kind": "betaalpas",
       "fields": {}
     },
     {
       "id": "wise-rente",
       "product": "Wise Rente",
-      "fields": {}
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2.02,
+          "route": "agent",
+          "sourceUrl": "https://wise.com/nl/interest/",
+          "checkedAt": "2026-05-08",
+          "conditions": "NOT A SAVINGS RATE — it is 7-day fund performance, net of fee, on a money-market fund: 'Interest is offered in partnership with BlackRock and through Wise Assets Europe AS. The funds aim to maximise current income through a portfolio of high quality short-term money market instruments.' The 2.02% is quoted 'After 0.26% annual fee'. Risk disclosure on the same page: 'This is a marketing communication. Growth is not guaranteed and your money is at risk if governments default or interest rates go negative.' Per-currency (GBP 3.32%, USD 3.44%). Must be switched on ('Turn on Interest'). Capital at risk, no deposit guarantee; 'You may have to pay tax on your earnings — for example, capital gains tax.'",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "wise-aandelen",
       "product": "Wise Aandelen",
+      "issuer": "Wise Assets Europe AS",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "trade-republic-betaalpas",
       "product": "Trade Republic betaalpas",
-      "fields": {}
+      "issuer": "Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+          "checkedAt": "2026-05-11",
+          "conditions": "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. The rate applied is Visa's, not Trade Republic's own: a second entry on the same page reads 'Je profiteert direct van de leidende Visa-wisselkoersen bij uitgaven in het buitenland. We rekenen geen valutawisselvergoedingen.' DCC WARNING published by the issuer itself: 'Betaal altijd in de lokale valuta als je erom wordt gevraagd, anders kunnen verkopers extra valutawisselvergoedingen rekenen.' ATM: free worldwide but only above € 100 per withdrawal — a separate entry states 'Voor opnames onder de €100 € geldt een vergoeding van €1.' Card carries no subscription fee. All Trade Republic card tiers share these terms ('bieden allemaal dezelfde voordelen').",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "trade-republic-spaarrekening-rente-op-kassaldo",
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
-      "fields": {}
+      "issuer": "Trade Republic Bank GmbH; funds held at partner banks — 'je krijgt rente van onze partnerbanken'",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 3,
+          "route": "agent",
+          "sourceUrl": "https://traderepublic.com/nl-nl/rente/_payload.json",
+          "checkedAt": "2026-07-14",
+          "conditions": "THIS IS A NEW-CUSTOMER PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare. Three hard conditions, all from the issuer: (1) new customers only — a disclaimer on the same page reads 'Aanbieding van 3 % per jaar geldt uitsluitend voor nieuwe klanten, algemene voorwaarden zijn van toepassing'; (2) it must be switched on — 'Activeer 3 % rente op je kassaldo tot €50.000, voor nieuwe klanten'; (3) it is capped at €50.000, above which the rate drops to the ECB deposit facility rate, which the same sentence puts at 2,25 %. Accrued daily, paid monthly, withdrawable any time. The money is not held by Trade Republic: 'Als je het hebt geactiveerd in je app, krijg je rente van onze partnerbanken. Rentes kunnen veranderen.' CONTRADICTION WORTH FLAGGING: elsewhere on the same page a Dutch-branch section claims 'blijf je de volledige ECB-rente ontvangen op je saldo — zonder limiet', and an offer-details card claims 'geen saldolimiet' — the FAQ quoted above is the more specific and more conservative statement, so I used it.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "212-card",
       "product": "212 Card",
-      "fields": {}
+      "issuer": "Paynetics (card issuer); NL customers under Trading 212 Markets Ltd (Cyprus) or Trading 212 EU GmbH (Germany)",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://helpcentre.trading212.com/hc/en-us/articles/17749229128221-Can-I-use-the-card-if-I-travel-abroad",
+          "checkedAt": "2026-08-19",
+          "conditions": "Applies to card payments/transactions: \"All card transactions have 0% FX fee, even if the purchase is in a currency the customer doesn't hold. Other fees may apply.\" The separate \"0.15% FX fee applies only when the customer manually converts money in the app ... It does not apply to card payments.\" Card use abroad is possible only \"as long as the payment is executed within one of the supported countries\".",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "trading-212-interest-on-cash",
       "product": "Trading 212 interest on cash",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH; cash at third-party banks or in Qualifying Money Market Funds",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "trading-212-beleggingsrekening",
       "product": "Trading 212 beleggingsrekening",
+      "issuer": "Trading 212 Markets Ltd / Trading 212 EU GmbH",
+      "kind": "beleggingsrekening",
       "fields": {}
     },
     {
       "id": "openbank-betaalpas-r42-betaalpas",
       "product": "Openbank betaalpas (R42 Betaalpas)",
-      "fields": {}
+      "issuer": "Open Bank S.A. (Spain, Santander group) — Spanish IBAN used in NL; Mastercard",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
+          "checkedAt": "2026-08-19",
+          "conditions": "Geldt in de kolom \"Travel + uitgeschakeld\" voor \"Aankopen in buitenlandse valuta (niet €)\"; met \"Travel+ ingeschakeld\" (€ 4,99/maand abonnementskosten) is dit € 0",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-blue-card",
       "product": "American Express Blue Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta; volgens 6.15 wordt slechts eenmaal een wisselkoersopslag in rekening gebracht en geen wisselkoersopslag wanneer een derde partij de transactie al in euro's heeft omgezet. De pagina noemt geen limiet, staffel of kaarttype-afhankelijkheid voor dit percentage, maar zegt ook niet dat het onvoorwaardelijk is.",
-          "conditionsKnown": false
+          "conditions": "Geldt voor een \"Transactie in vreemde valuta\": wisselkoersopslag op het omgewisselde bedrag in euro, d.w.z. \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; bij een transactie die eerst in USD en dan in euro's wordt omgezet brengen wij \"slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\". Deze overeenkomst geldt voor American Express Consumenten Kaarthouders (per maart 2022).",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "american-express-green-card",
       "product": "American Express Green Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Geldt als wisselkoersopslag op transacties die niet in euro zijn uitgevoerd; bij omrekening via een derde partij (bijv. het kaartaccepterende bedrijf) brengt American Express geen wisselkoersopslag in rekening. De pagina noemt geen limiet, staffel of kaarttype-afhankelijkheid, maar sluit die ook niet uit en noemt de Green Card niet apart.",
-          "conditionsKnown": false
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; volgens 6.15 geldt de opslag voor 'transacties die niet in euro zijn uitgevoerd', wordt bij omzetting via de VS-dollar slechts eenmaal een wisselkoersopslag in rekening gebracht, en brengen wij geen wisselkoersopslag in rekening wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's heeft omgezet.",
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "american-express-gold-card",
       "product": "American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Wisselkoersopslag geldt voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars brengen wij slechts eenmaal een wisselkoersopslag in rekening; als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór verwerking in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro, voor transacties (en terugbetalingen) die niet in euro zijn uitgevoerd; bij omrekening via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie vóór verwerking in euro's om te zetten, brengen wij geen wisselkoersopslag in rekening. Geldt volgens de Overeenkomst voor de American Express Consumenten Kaarthouders (per maart 2022).",
           "conditionsKnown": true
         }
       }
@@ -462,13 +755,15 @@
     {
       "id": "american-express-platinum-card",
       "product": "American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; bij omzetting via twee valuta brengen wij slechts eenmaal een wisselkoersopslag in rekening, en wanneer een derde partij de transactie al in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditions": "Geldt onder de \"Overeenkomst voor de American Express Consumenten Kaarthouders\" (per maart 2022) voor transacties in vreemde valuta: de wisselkoersopslag geldt \"voor transacties die niet in euro zijn uitgevoerd\" en wordt berekend op het omgewisselde bedrag in euro; bij een transactie in een andere vreemde valuta dan Amerikaanse dollars wordt eerst naar dollars en dan naar euro's omgezet, maar \"brengen wij slechts eenmaal een wisselkoersopslag in rekening\"; als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, \"zullen wij geen wisselkoersopslag in rekening brengen\".",
           "conditionsKnown": true
         }
       }
@@ -476,13 +771,15 @@
     {
       "id": "flying-blue-american-express-entry-card",
       "product": "Flying Blue - American Express Entry Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars brengen wij slechts eenmaal een wisselkoersopslag in rekening; laat u de transactie door een derde partij in euro's omzetten, dan brengen wij geen wisselkoersopslag in rekening.",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, d.w.z. de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd; bij omzetting via Amerikaanse dollars wordt slechts eenmaal een wisselkoersopslag in rekening gebracht, en als u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht",
           "conditionsKnown": true
         }
       }
@@ -490,13 +787,15 @@
     {
       "id": "flying-blue-american-express-silver-card",
       "product": "Flying Blue - American Express Silver Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Wisselkoersopslag geldt voor \"transacties die niet in euro zijn uitgevoerd\"; bij omzetting via meerdere valuta \"brengen wij slechts eenmaal een wisselkoersopslag in rekening\", en als een derde partij de transactie vóór indiening in euro's omzet: \"zullen wij geen wisselkoersopslag in rekening brengen\" (contante opnames vallen onder een aparte vergoeding van 3,5%).",
+          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta (\"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"); bij transacties in andere valuta dan de Amerikaanse dollar wordt via USD omgerekend maar wordt slechts eenmaal een wisselkoersopslag in rekening gebracht; wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzet voordat deze aan American Express wordt voorgelegd, wordt geen wisselkoersopslag in rekening gebracht. Voorwaarden gelden voor de American Express Consumenten Kaarthouders (overeenkomst per maart 2022).",
           "conditionsKnown": true
         }
       }
@@ -504,13 +803,15 @@
     {
       "id": "flying-blue-american-express-gold-card",
       "product": "Flying Blue - American Express Gold Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Geldt als \"wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; bij een omzetting via Amerikaanse dollars brengen wij \"slechts eenmaal een wisselkoersopslag in rekening\", en als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's omzet, \"zullen wij geen wisselkoersopslag in rekening brengen\".",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta; geldt volgens 6.15 voor 'transacties die niet in euro zijn uitgevoerd' en wordt slechts eenmaal in rekening gebracht (ook als eerst naar Amerikaanse dollars en dan naar euro's wordt omgezet). Wanneer u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) toestaat de transactie in euro's om te zetten voordat deze aan ons wordt voorgelegd, brengen wij geen wisselkoersopslag in rekening. Dit is de algemene overeenkomst voor American Express Consumenten Kaarthouders; er wordt geen apart tarief voor de Flying Blue Gold Card genoemd.",
           "conditionsKnown": true
         }
       }
@@ -518,13 +819,15 @@
     {
       "id": "flying-blue-american-express-platinum-card",
       "product": "Flying Blue - American Express Platinum Card",
+      "issuer": "American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
           "checkedAt": "2022-03-01",
-          "conditions": "Geldt als wisselkoersopslag op het omgewisselde bedrag in euro bij transacties in vreemde valuta; bij dubbele omzetting (via Amerikaanse dollars) wordt \"slechts eenmaal een wisselkoersopslag in rekening\" gebracht, en wanneer een derde partij de transactie vóór verwerking al in euro's omzet, brengt American Express \"geen wisselkoersopslag in rekening\"",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een transactie in vreemde valuta, ofwel \"de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd\"; geldt onder deze Overeenkomst voor de American Express Consumenten Kaarthouders (niet productspecifiek geprijsd per kaart). Laat u een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten voordat deze aan American Express wordt voorgelegd, dan \"zullen wij geen wisselkoersopslag in rekening brengen\".",
           "conditionsKnown": true
         }
       }
@@ -532,36 +835,95 @@
     {
       "id": "american-express-business-entry-card",
       "product": "American Express Business Entry Card",
-      "fields": {}
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+          "checkedAt": "2023-03-15",
+          "conditions": "Geldt als \"wisselkoersopslag op het omgewisselde bedrag in euro\" bij een \"Transactie in vreemde valuta\", d.w.z. \"de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd\"; bij een transactie in andere valuta dan USD wordt eerst naar dollars en dan naar euro's omgezet, maar \"wij brengen slechts eenmaal een wisselkoersopslag in rekening\"; laat de kaarthouder een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzetten, dan \"zullen wij geen wisselkoersopslag in rekening brengen\". Document is de Overeenkomst voor de American Express Business Card per 15 maart 2023.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-business-green-card",
       "product": "American Express Business Green Card",
-      "fields": {}
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+          "checkedAt": "2023-03-15",
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro bij een 'Transactie in vreemde valuta', d.w.z. de wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd; geldt onder de Overeenkomst voor de American Express Business Card (per 15 maart 2023). Als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór indiening in euro's omzet, geldt: 'zullen wij geen wisselkoersopslag in rekening brengen'.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-business-gold-card",
       "product": "American Express Business Gold Card",
-      "fields": {}
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+          "checkedAt": "2023-03-15",
+          "conditions": "Geldt volgens deze overeenkomst voor de American Express Business Card: wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd; bij niet-dollartransacties wordt eerst naar Amerikaanse dollars en dan naar euro's omgezet maar slechts eenmaal een wisselkoersopslag in rekening gebracht; als een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie al in euro's omzet, brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "american-express-corporate-card",
       "product": "American Express Corporate Card",
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
       "fields": {}
     },
     {
       "id": "american-express-corporate-gold-card",
       "product": "American Express Corporate Gold Card",
-      "fields": {}
+      "issuer": "American Express (self-issued in NL; NOT ICS)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+          "checkedAt": "2026-08-19",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "klm-american-express-corporate-card",
       "product": "KLM American Express Corporate Card",
-      "fields": {}
+      "issuer": "American Express (self-issued in NL; co-brand with KLM / Flying Blue / bluebiz)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_KLM_Corporate_Cardmember_TCs_Dec2022.pdf",
+          "checkedAt": "2026-08-19",
+          "conditions": "Verschuldigd wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro; de opslag komt bovenop de American Express-wisselkoers. Wordt de Transactie door een derde (bijvoorbeeld het Kaartaccepterend Bedrijf) vóór indiening omgerekend in Euro's, dan brengen wij geen wisselkoersopslag in rekening. Geldt voor de KLM American Express Corporate Card; contante opnames kennen daarnaast een aparte vergoeding van 3,8%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ics-visa-world-card",
       "product": "ICS Visa World Card",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -576,11 +938,24 @@
     {
       "id": "ics-visa-world-card-gold",
       "product": "ICS Visa World Card Gold",
-      "fields": {}
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/624/Algemene%20Voorwaarden%20ICS%20-%20121",
+          "checkedAt": "2026-08-19",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ics-visa-world-card-platinum",
       "product": "ICS Visa World Card Platinum",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -595,6 +970,8 @@
     {
       "id": "ics-visa-world-card-panda",
       "product": "ICS Visa World Card Panda",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary) — co-brand with Wereld Natuur Fonds (WWF)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -609,6 +986,8 @@
     {
       "id": "ics-mastercard-classic",
       "product": "ICS Mastercard Classic",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -623,6 +1002,8 @@
     {
       "id": "ics-mastercard-gold",
       "product": "ICS Mastercard Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -637,6 +1018,8 @@
     {
       "id": "ics-mastercard-black",
       "product": "ICS Mastercard Black",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
@@ -651,111 +1034,232 @@
     {
       "id": "ics-visa-world-card-business",
       "product": "ICS Visa World Card Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
-          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
-          "checkedAt": "2026-08-18",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/678/VISA-66-NL-072026%20AV%20Visa%20Worldcard%20Business",
+          "checkedAt": "2026-08-19",
           "conditions": null,
-          "conditionsKnown": false
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "ics-visa-world-card-business-gold",
       "product": "ICS Visa World Card Business Gold",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
-          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
-          "checkedAt": "2026-08-18",
-          "conditions": "Deze pagina noemt geen cap, staffel of voorwaarde bij de wisselkoersopslag; alleen het percentage staat in de vergelijkingstabel.",
-          "conditionsKnown": false
+          "sourceUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
+          "checkedAt": "2026-08-19",
+          "conditions": null,
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "ics-mastercard-business",
       "product": "ICS Mastercard Business",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
-          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
-          "checkedAt": "2026-08-18",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/676/MC-108-NL-072026%20AV%20ICS%20Mastercard%20Business",
+          "checkedAt": "2026-08-19",
           "conditions": null,
-          "conditionsKnown": false
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "ics-mastercard-corporate",
       "product": "ICS Mastercard Corporate",
+      "issuer": "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2.5,
           "route": "agent",
-          "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken",
-          "checkedAt": "2026-08-18",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
+          "checkedAt": "2026-08-19",
           "conditions": null,
-          "conditionsKnown": false
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "anwb-visa-classic-card",
       "product": "ANWB Visa Classic Card",
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 2,
           "route": "agent",
-          "sourceUrl": "https://www.anwb.nl/creditcard/informatie/kosten",
-          "checkedAt": "2026-08-18",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+          "checkedAt": "2026-08-19",
           "conditions": null,
-          "conditionsKnown": false
+          "conditionsKnown": true
         }
       }
     },
     {
       "id": "anwb-visa-silver-card",
       "product": "ANWB Visa Silver Card",
-      "fields": {}
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
+          "checkedAt": "2026-08-19",
+          "conditions": "Koersopslag geldt \"voor EU landen zonder euro en voor landen buiten EU\"; de pagina noemt geen bedragslimiet of vrijstelling",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "anwb-visa-gold-card",
       "product": "ANWB Visa Gold Card",
-      "fields": {}
+      "issuer": "International Card Services B.V. (ICS) on behalf of ANWB",
+      "kind": "creditcard",
+      "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+          "checkedAt": "2026-08-19",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-basic-midnight-blue",
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
-      "fields": {}
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.2,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-08-19",
+          "conditions": "Midnight tier: 0.2% applies to non-EUR purchases and ATM transactions made within the EU and UK (rate schedule stated as applying till 30 September 2026; same 0.2% restated as effective 1 October 2026)",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-plus-ruby-steel",
       "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
-      "fields": {}
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.2,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-08-19",
+          "conditions": "Effective 1 October 2026, Ruby tier: non-EUR purchases and ATM transactions within the EU & UK 0.2%; outside the EU & UK no fee up to EUR 400 per calendar month, 2.0% thereafter (until 30 September 2026 Ruby falls under \"Other Card Tiers: No fee\")",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "The two values are the table's two rate columns, headed 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' and 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. For Plus both read 2%, so 2% is the ongoing rate with no legacy first-year uplift. The same 2% appears on crypto.com/nl/cards for Ruby Steel. CAP: the article's other table reads 'Level Up Plan Monthly Spending Cap Eligible for Rewards (USD or the equivalent amount in other fiat currencies) Basic (previously Midnight) N/A Plus (previously Ruby) Prepaid Card: $1,250' — spend above $1,250 per calendar month earns nothing, resetting 00:00:00 UTC on the first of the month. TIER GATE: requires an active Level Up Plus subscription — crypto.com/nl/cards prices Ruby Steel at '€3.99/month or €39.90 yearly (16% off) or €450 12-month CRO staking' — and 'You will be downgraded to the Basic plan if you unlock or unstake your CRO after the holding period, or if you cancel your subscription and your current billing cycle has ended.' PAID IN CRO, not euro, credited to the Token Wallet after each eligible purchase; certain merchant categories, channels and countries are excluded.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-pro-jade-green-royal-indigo",
       "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
-      "fields": {}
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.2,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-08-19",
+          "conditions": "Jade / Indigo tier, effective 1 October 2026: 0.2% applies to non-EUR purchases within the EU &amp; UK; outside the EU &amp; UK there is \"No fee up to EUR 800 per calendar month, 2.0% thereafter\". Until 30 September 2026 Jade/Indigo fall under \"Other Card Tiers: No fee\".",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 3,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "WATCH THE TWO COLUMNS: 3.5% is the first column, 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' — a legacy first-year uplift for cards issued between 6 November 2024 and 1 September 2025. 3% is the second column, 'Spending Reward Rate After Year 1 1 Jan 2026 onwards', and is the ongoing rate; crypto.com/nl/cards independently shows 3% for Jade Green / Royal Indigo. CAP: 'Pro (previously Jade/Indigo) Prepaid Card: $2,500' monthly spend eligible for rewards; crypto.com/nl/cards gives the same cap as '$75' of monthly rewards. TIER GATE: Level Up Pro, priced on crypto.com/nl/cards at '€24.99/month or €249.90 yearly (16% off) or €4,500 12-month CRO staking'; unstaking or cancelling downgrades you to Basic. Paid in CRO to the Token Wallet, not euro.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-private-icy-white-rose-gold",
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
-      "fields": {}
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-07-31",
+          "conditions": "THE VALUE IS WRITTEN IN WORDS: 'Other Card Tiers: No fee'. The numerals inside the quote (0.2%, 2.0%, 400, 800) belong to the OTHER tiers and must not be attached to this card — they are quoted precisely because the enumeration is what proves 'Other Card Tiers' means Icy White / Rose Gold / Obsidian. Value 0 is the reading of 'No fee'. WHY THIS TIER IS THE RESIDUAL: the article's own tier table names the tiers as 'Basic (previously Midnight)', 'Plus (previously Ruby)', 'Pro (previously Jade/Indigo)', 'Private (previously Icy/Rose/Obsidian)'. The Effective-1-October-2026 list enumerates Midnight, Ruby, and Jade/Indigo individually and sweeps the rest into 'Other Card Tiers: No fee' — so Private is the no-fee tier. BOTH REGIMES AGREE: the earlier block, 'Foreign Transaction Fee (Till 30 September 2026): Midnight: All non-EUR purchases and ATM transactions will be charged as follows / Other Card Tiers: No fee', also puts Private at no fee. So 0% holds before and after 1 October 2026. This POSITIVELY establishes there is no cap on FX for Private, because the same paragraph writes monthly FX allowances where they exist (EUR 400/month for Ruby, EUR 800/month for Jade/Indigo). SEPARATE CONDITIONS THAT DO BITE, from the same article: ATM is not free — 'ATM Withdrawal: 2% on amounts above the monthly free ATM limit', with the Free ATM limit (Monthly) at €800 for the Icy / Rose Card. Card Max Balance – All Card Tiers: €25,000. POS Purchase Limit – All Card Tiers: Daily €25,000 / Monthly €25,000 / Yearly €250,000. Inactivity €5 per month after 12 months (€6 from 1 October 2026). Document scope: 'Crypto.com Prepaid Visa Card Fees and Limits (Europe – for users with a residential address in Europe)'. Note the document's own caveat: 'This document is a translation of its English version. In case of conflict, the English version shall prevail.'",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 4,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "Second column is the ongoing rate: 5% is 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025' (legacy), 4% is 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. crypto.com/nl/cards shows 4% for Icy White / Rose Gold. CAP: 'Private (previously Icy/Rose/Obsidian) Unlimited' monthly spend eligible for rewards. TIER GATE is severe: crypto.com/nl/cards prices Icy White / Rose Gold at '€45,000 12-month CRO staking' — there is no monthly-subscription route to this tier. Paid in CRO to the Token Wallet, not euro. Note also 'Starting 2 November 2025, non-staking card spending rewards of 1% for Icy/Rose Crypto.com cards and 2% for Obsidian prepaid cards issued before 6 November 2024 will no longer be available' — legacy holders who stopped staking now earn nothing.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "crypto-com-prepaid-card-private-obsidian",
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
-      "fields": {}
+      "issuer": "Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)",
+      "kind": "prepaid",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+          "checkedAt": "2026-07-31",
+          "conditions": "THE VALUE IS WRITTEN IN WORDS: 'Other Card Tiers: No fee'. The numerals in the quote belong to Midnight / Ruby / Jade / Indigo and must not be attached to Obsidian; they are quoted because the enumeration is what proves the residual. The article's tier table names 'Private (previously Icy/Rose/Obsidian)', and the fee list names Midnight, Ruby and Jade/Indigo individually, so Obsidian falls in 'Other Card Tiers'. BOTH REGIMES AGREE: the Till-30-September-2026 block also reads 'Midnight: All non-EUR purchases and ATM transactions will be charged as follows / Other Card Tiers: No fee'. No FX cap for this tier is positively established, because the same paragraph writes monthly FX allowances (EUR 400, EUR 800) where they exist. WHERE OBSIDIAN DIFFERS FROM ICY/ROSE: its Free ATM limit (Monthly) is €1,000 rather than €800 — above that, 'ATM Withdrawal: 2% on amounts above the monthly free ATM limit'. Shared limits: Card Max Balance – All Card Tiers €25,000; POS Purchase Limit – All Card Tiers daily €25,000 / monthly €25,000 / yearly €250,000; ATM withdrawal limit Daily €2,000, Monthly €10,000, Yearly €75,000. Scope: 'Crypto.com Prepaid Visa Card Fees and Limits (Europe – for users with a residential address in Europe)'; 'This document is a translation of its English version. In case of conflict, the English version shall prevail.'",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 5,
+          "route": "agent",
+          "sourceUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+          "checkedAt": "2026-01-01",
+          "conditions": "Second column is the ongoing rate: 6.5% is the legacy 'Spending Reward Rate in Year 1 1 Jan 2025 - 31 Dec 2025', 5% is 'Spending Reward Rate After Year 1 1 Jan 2026 onwards'. crypto.com/nl/cards shows 5% for Obsidian with rewards cap 'No limit'. TIER GATE: crypto.com/nl/cards prices Obsidian at '€450,000 12-month CRO staking'. Paid in CRO to the Token Wallet, not euro. The 'up to 5%' in the page title 'Crypto.com Visa Card: Earn Up to 5% back on your daily spending' is this tier and this tier only.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nexo-card",
       "product": "Nexo Card",
+      "issuer": "Nexo (dual Credit/Debit mode card; the issuing e-money institution is NOT named anywhere on the page)",
+      "kind": "creditcard",
       "fields": {
         "fxFeePct": {
           "value": 0.2,
@@ -770,207 +1274,598 @@
     {
       "id": "krak-card-kraken",
       "product": "Krak Card (Kraken)",
-      "fields": {}
+      "issuer": "Monavate UAB, Lithuania (EEA); Monavate Ltd in the UK — Mastercard debit",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://krak.app/pricing",
+          "checkedAt": "2026-08-19",
+          "conditions": "Applies to US debit card customers (\"Foreign Exchange (FX) for US debit card customers\"), on debit card transactions, on top of the Visa exchange rate; under \"Foreign Exchange (FX) for EEA debit card customers\" and \"for UK debit card customers\" the page instead says \"We don't charge FX fees when you spend in foreign currencies. We pass on the Mastercard exchange rate without markup.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "plutus-card",
       "product": "Plutus Card",
-      "fields": {}
+      "issuer": "Plutus (Visa debit, NL IBAN per their marketing; issuing EMI not named on the plans page)",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://plutus.it/fees",
+          "checkedAt": "2026-08-19",
+          "conditions": null,
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bleap-card",
       "product": "Bleap Card",
-      "fields": {}
+      "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
+      "kind": "crypto",
+      "fields": {
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
+          "checkedAt": "2026-04-20",
+          "conditions": "Default ongoing rate on all eligible purchases, with a fair-usage cap of €500 per transaction and €3,000 per month in transaction value. Everything above 1% is MERCHANT-SPECIFIC and belongs in a per-merchant table, not this field: 'Uber, Bolt 3%' and 'Just Eat, Deliveroo, Uber Eats, Glovo, Bolt Food 3%' (each €50 per transaction, €500/month), and 20% on named subscriptions with tight value caps — Netflix €20/month, YouTube Premium €20/month, Amazon Prime €10/month, ChatGPT €30/month, Gemini €20/month, Claude €250/year, Disney+ €200/year, Steam €80/year, PlayStation Plus €220/year, Xbox Game Pass €30/month, Nintendo Switch Online €80/year. EXPIRED PROMO: the row 'Restaurants & supermarkets (promo until 31 May 2026) 2%' has lapsed as of today — do not serve it. EXCLUSIONS are extensive: cash/quasi-cash, stored-value loads, financial institutions, securities, insurance, gambling, taxes and fines, government services, utilities, postal, gift shops, software and IT services (5734, 7372), professional services, charities, hospitals, art dealers, business services. Payments routed through Curve earn nothing even on a Bleap card.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "zeal-card-gnosis-pay-rails",
       "product": "Zeal Card (Gnosis Pay rails)",
-      "fields": {}
+      "issuer": "Monavate Limited (UK, FCA EMI, FRN 901097) with Gnosis Pay Co Ltd — Visa debit",
+      "kind": "crypto",
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+          "checkedAt": "2026-04-27",
+          "conditions": "SCOPE — READ BEFORE SERVING. This document is GNOSIS PAY'S, and it talks about 'your Gnosis Pay Card' throughout. It never mentions Zeal. Zeal runs on Gnosis Pay rails but publishes nothing of its own (zeal.app has no fee page), so this is evidence about the rails, not proof that Zeal passes them through unmarked. See askUserInstead. On the rails themselves: no added FX fee, Visa's rate applied at purchase, and the issuer's own advice is 'When travelling, always select the local currency at payment terminals for better rates.' Spending is 1:1 against stablecoin ('a €10 purchase = 10 EURe'). ATM is NOT free past a small allowance: 'You can make up to 5 free ATM withdrawals per month or withdraw up to 200 EURe/GBPe/USDCe—whichever comes first' then '2% fee per additional withdrawal'; daily ATM cap 500, single 250. Daily spend cap 8,000, single transaction 5,000. Card replacement 4.99. No gas fees on card transactions. WORDING CAVEAT — the 0 is written as 'No added fees'; no numeral appears.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+          "checkedAt": "2026-07-15",
+          "conditions": "Zeal runs no cashback programme of its own — it rides Gnosis Pay rails and inherits the Gnosis Pay tiers, so the figure and every condition are the Gnosis Pay ones. zeal.app footnote 3 states it explicitly: 'The cashback program is managed by Gnosis Pay. Rewards are paid in GNO, a digital currency, on the Gnosis Chain. To be eligible for cashback, you must hold GNO in your Gnosis Pay card Safe. The amount of cashback you earn is determined by the amount of GNO you hold. Cashback rates are subject to change and may vary by program.' TEMPORARY: the programme is 'active until 30 September 2026'. ENTRY TIER needs ≥0.1 GNO held in the Gnosis Pay Card Safe (nothing below that), capped at $250 eligible weekly spend, no rollover. Ladder: 1 GNO → 2%, 10 GNO → 3%, 100 GNO → 4%, plus 1% with the OG NFT. Paid weekly in GNO. zeal.app's own meta description advertises 'up to 4% cashback with Zeal' — that is the top base tier (100 GNO), not the entry rate, and must not be carried into this field.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "gnosis-pay-card-direct-consumer",
       "product": "Gnosis Pay Card (direct consumer)",
-      "fields": {}
+      "issuer": "Gnosis Pay Co Ltd / Monavate Limited",
+      "kind": "crypto",
+      "fields": {
+        "cashbackPct": {
+          "value": 1,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+          "checkedAt": "2026-07-15",
+          "conditions": "TEMPORARY PROGRAMME — this is the dominant caveat: 'This article details the Gnosis Pay interim cashback programme, starting on the 9 November 2025 and active until 30 September 2026 (previously it was the 31st January and 31st March).' After 30 September 2026 'new partner-led incentive programmes will be introduced'; the 1% is not guaranteed past that date, six weeks out. ENTRY TIER requires holding at least 0.1 GNO in the Gnosis Pay Card Safe — below 0.1 GNO there is no cashback at all — and at 0.1 GNO the maximum weekly spend eligible for cashback is $250, with 'No rollover: unused cap doesn't carry over.' The rest of the ladder: 1 GNO → 2% ($375/week), 10 GNO → 3% ($500/week), 100 GNO → 4% ($1250/week); the further +1% (to the advertised 'up to 5%') needs the OG NFT as well as ≥0.1 GNO. PAID WEEKLY IN GNO to the Safe, not euro; holdings are measured as 'Lowest GNO amount within the snapshot period', Sunday→Saturday, paid the following Thursday. INELIGIBLE: ATM withdrawals and cash advances, bank/wallet top-ups (Revolut, Wise, PayPal), investments, interest and insurance premiums, taxes/fines/government charges, postal services, donations, utilities, direct technology services and software, and any transaction routed through Curve.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bybit-card",
       "product": "Bybit Card",
-      "fields": {}
-    },
-    {
-      "id": "coinbase-card",
-      "product": "Coinbase Card",
-      "fields": {}
+      "issuer": "Bybit EU (EUR card for EEA residents); issuing EMI not obtainable",
+      "kind": "betaalpas",
+      "fields": {
+        "fxFeePct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+          "checkedAt": "2026-06-03",
+          "conditions": "Trigger, in the document's own words: \"Foreign exchange (FX) Fee applies to transactions that are performed in a currency other than the currency your card is denominated in. For example, a Bybit Card is denominated in EUR for USD transactions.\" De 0,5% komt bovenop de Mastercard-koers en er is geen padding: \"FX Padding 0%\". STAPELT met de crypto-kant: \"Crypto Conversion Fee 0.9% (On top of Bybit EU's One-Click Sell Exchange Rate)\" en \"Crypto Conversion Fee applies to all transactions funded with non-fiat assets in your Bybit EU Funding Account\" — wie vanuit crypto betaalt, betaalt in de praktijk 0,5% + 0,9%. Geldopname is een aparte regel: \"ATM Withdrawal Fee 2% (after the first 100 EUR monthly)\". Geen vrij bedrag of plafond op de FX-fee zelf, en dat is positief vastgesteld: diezelfde tabel schrijft vrijstellingen wél uit waar ze bestaan (\"2% (after the first 100 EUR monthly)\", \"None (for virtual Bybit Card)\", \"Replacement: 5 EUR\"). Wel bestedingslimieten per tier: Tier 1 5.000 EUR per transactie / 5.000 daily / 10.000 monthly / 60.000 annual, oplopend tot Tier 3 15.000 / 15.000 / 50.000 / 250.000; en \"the Virtual Card Lite will be subjected to a Lifetime Spending Limit of 150 EUR\". Scope: Bybit EU (EEA), kaart luidt in EUR. Disclaimer van de uitgever zelf: \"Bybit EU reserves the right to introduce or amend the Fees and Limits according to market conditions.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "wirex-card-wirex-one",
       "product": "Wirex Card (Wirex One)",
-      "fields": {}
-    },
-    {
-      "id": "binance-card",
-      "product": "Binance Card",
-      "fields": {}
+      "issuer": "Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page",
+      "kind": "crypto",
+      "fields": {
+        "cashbackPct": {
+          "value": 0.5,
+          "route": "agent",
+          "sourceUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+          "checkedAt": "2024-01-11",
+          "conditions": "Standard plan, Entry tier — the free tier: 'The Standard plan is the most basic X-tras subscription plan, and it is available to all Wirex users for free.' The article's summary table confirms it across all eight tiers: 'WXT Lock 0 150,000 0 250,00 750,000 0 1.5m 7.5m' against 'Cryptoback™ 0.5% 1% 1% 2% 3% 4% 6% 8%'. PAID IN CRYPTO (Cryptoback™), not euro. Everything above 0.5% costs money or locked tokens: Standard Enhanced needs 150,000 WXT locked for 180 days → 1%; Premium is '€9.99, or €102 annually' → 1% entry, 2% with 250,000 WXT, 3% with 750,000 WXT; Elite is '€29.99 monthly or €306 annually' → 4% entry, 6% with 1,500,000 WXT, 8% with 7,500,000 WXT. No cap on the cashback is stated anywhere in this article — that is a gap in the source, not a confirmed absence of a cap. STALENESS WARNING: this is much the oldest figure in the lane; the article's own metadata gives updatedAt 2024-01-11, more than two and a half years ago, and Wirex has restructured its EEA card issuing since (the catalogue itself records the previous issuer UAB PayrNet as defunct with no current EEA issuer stated). Re-check before serving.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "paysafecard-prepaid-code-paysafewallet",
       "product": "paysafecard (prepaid code / PaysafeWallet)",
+      "issuer": "Paysafe",
+      "kind": "prepaid",
       "fields": {}
     },
     {
       "id": "tria-card",
       "product": "Tria Card",
+      "issuer": "Tria (self-custodial Visa; issuing EMI not stated)",
+      "kind": "crypto",
       "fields": {}
     },
     {
       "id": "bigbank-flexibel-sparen",
       "product": "Bigbank Flexibel Sparen",
-      "fields": {}
+      "issuer": "Bigbank AS (Estonia) — Estonian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.bigbank.nl/flexibel-sparen/",
+          "checkedAt": "2026-08-19",
+          "conditions": "Bonus voor nieuwe klanten: \"Nieuwe klanten ontvangen gegarandeerd 2,75% voor de eerste 6 maanden. (Klanten die vóór 10.08.2026 een registratie hebben ingediend, hebben het recht op het voorgaande rentepercentage)\". Daarna geldt de flexibele rente van - op dit moment - 2,00%; dit percentage is variabel. Geen bandenstructuur, maar: \"Geen minimum inleg. Rente over een maximaal bedrag van 250.000 euro.\" — boven 250.000 euro wordt geen rente vergoed (\"Als u bijvoorbeeld een bedrag van 260.000 euro op uw Flexibel Sparen rekening heeft staan, zult u over 10.000 euro van dit bedrag geen rente verdienen.\"). \"Storten en opnemen is volledig vrij.\" Opnemen en storten alleen via een eigen Nederlandse tegenrekening; rekening staat persoonlijk op naam (geen en/of-rekening); woonplaats in Nederland vereist. Rentebetaling jaarlijks op 31 december. \"Opgenomen bedragen worden uiterlijk na 3 bankdagen uitbetaald\" (verwerkingsperiode, met rente over het gereserveerde bedrag). \"Bigbank brengt u geen kosten in rekening.\" Saldo gegarandeerd tot 100.000,- euro inclusief opgebouwde rente. Actierente 2,75% de eerste 6 maanden, daarna 2%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bunq-spaarrekening-massinterest",
       "product": "bunq spaarrekening (MassInterest)",
-      "fields": {}
+      "issuer": "bunq B.V. (NL) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.51,
+          "route": "agent",
+          "sourceUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me",
+          "checkedAt": "2026-08-19",
+          "conditions": "Personal Accounts, EUR Savings Accounts: \"When you first start saving with bunq, you'll earn the bonus interest rate (3.01%) on all your Savings until your first threshold calculation.\" Thereafter: \"The current base interest rate of 1.51%* on your savings up to the determined threshold amount\" and \"The current bonus interest rate of 3.01%* on any savings above the determined threshold amount.\" \"Your threshold is the highest balance held in your Savings Account during the previous 6 months. The threshold is calculated twice a year on: January 1 (00:00 UTC): based on your highest balance between July 1 (00:00 UTC) to December 31 (23:59 UTC); July 1 (00:00 UTC): based on your highest balance between January 1 (00:00 UTC) to June 30 (23:59 UTC).\" \"The base rate and the bonus rate are variable and are subject to change.\" Bonus rate was increased \"from 2.01% to 3.01% on July 1, 2026\"; separate rates apply to Business Accounts (0.75%) and foreign-currency savings accounts. The document says nothing about withdrawal terms or notice periods. Actierente 3,01% until your first threshold calculation, daarna 1,51%. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "santander-consumer-bank-spaarrekening",
       "product": "Santander Consumer Bank Spaarrekening",
-      "fields": {}
+      "issuer": "Santander Consumer Bank — the page footer shows 'RPR Gent, BTW BE0763.791.559' (Belgian entity) while geld.nl labels the DGS Spanish; the two disagree",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2.1,
+          "route": "agent",
+          "sourceUrl": "https://www.santanderconsumerbank.nl/nl/sparen/spaarrekening",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"*Promotionele rente voor nieuwe klanten gedurende 6 maanden op de eerste € 250.000. Boven dat bedrag en daarna op het hele bedrag basisrente, momenteel 2,10 %\". Verder: \"Dagelijks opneembaar\", \"Maandelijkse rentebetaling\", \"Variabele rente\", \"Tot € 1.000.000 per rekening\", \"Geen kosten\". En: \"er wordt rente uitgekeerd op bedragen tot en met € 1.000.000 per rekening. Op het bedrag boven deze limiet wordt geen rente uitgekeerd.\" Actierente 3,01% gedurende 6 maanden, daarna 2,1%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "garanti-bbva-international-gouden-internet-rekening",
       "product": "Garanti BBVA International Gouden Internet Rekening",
+      "issuer": "Garanti BBVA International N.V. (NL) — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "dhb-bank-saveonlinerekening",
       "product": "DHB Bank S@veOnlinerekening",
-      "fields": {}
+      "issuer": "Demir-Halk Bank (Nederland) N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.85,
+          "route": "agent",
+          "sourceUrl": "https://www.dhbbank.nl/rentetarieven",
+          "checkedAt": "2026-08-19",
+          "conditions": "Standaardrente 1,85% over saldoklasse > €0, geldig vanaf 14.07.2026. Welkomstactie alleen voor nieuwe klanten, 6 maanden lang: 3,00% geldig t/m €50.000; > €50.000 1,85% (beide geldig vanaf 14.07.2026). DHB Bank behoudt zich het recht voor om over saldi boven de € 500.000 een afwijkende rente te vergoeden. Actierente 3% 6 maanden lang, daarna 1,85%. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "anadolubank-alfa-slimmer-sparen",
       "product": "Anadolubank Alfa Slimmer Sparen",
-      "fields": {}
+      "issuer": "Anadolubank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.9,
+          "route": "agent",
+          "sourceUrl": "https://www.anadolubank.nl/klantenservice/rentetarieven/",
+          "checkedAt": "2026-06-08",
+          "conditions": "LADDER: none. The Rentetarieven page gives one flat rate per product with no saldoklassen, and prices its neighbours separately — Alfa Spaarrekening 1.85% and Alfa Rente Direct Spaarrekening 1.85% sit on the two lines around it, so the 1.90% is Alfa Slimmer Sparen only. PROMO: none running. WITHDRAWAL / CAPS, from https://www.anadolubank.nl/producten/spaarproducten/alfa-slimmer-sparen/ : \"Op uw Alfa Slimmer Sparen ontvangt u een hoge rente van 1.90 %\", \"Daarnaast hebt u de mogelijkheid om op elk gewenst moment over uw geld te beschikken\", \"Geen minimum inleg meer\", \"Maximum inleg € 500.000\", \"De rente wordt jaarlijks op 31 december op uw slimmer sparen rekening bijgeschreven\" (annual credit, not monthly), \"Alfa Slimmer Sparen is alleen via het internetbankieren te beheren\". Rate is variabel, effectief op jaarbasis.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "scalable-capital-scalable-overnight",
       "product": "Scalable Capital Scalable Overnight",
-      "fields": {}
+      "issuer": "Scalable Capital Bank GmbH (Germany) — German DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://nl.scalable.capital/overnight",
+          "checkedAt": "2026-08-19",
+          "conditions": "2,50% p.j. op onbeperkt cash in alle prijsmodellen — \"Geen minimum, geen maximum\", geen bandenstructuur en geen minimale inleg. Rente wordt dagelijks berekend en maandelijks uitbetaald; elke cent wordt onmiddellijk herbelegd (samengestelde rente). Zelfde tarief zonder en met PRIME+. Beschikbaarheid: \"Dagelijks\". Depositogarantie: zonder PRIME+ wettelijke depositogarantie tot € 100.000 per klant bij Scalable en partnerbanken, of geldmarktfondsen onder UCITS-beleggersbescherming; met PRIME+ tot 5 x € 100.000 door verdeling over Scalable en vier partnerbanken, plus aanvullende vrijwillige depositogarantie. Let op: \"Variabele rente en variabele distributie zijn onder andere afhankelijk van de marktrente, capaciteiten en voorwaarden.\" Per kind kan één Kinder Overnight account worden geopend.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "raisin-spaarrekening-platform-19-partner-banks",
       "product": "Raisin spaarrekening (platform, 19 partner banks)",
+      "issuer": "Raisin GmbH is the platform; the deposit is held by the partner bank (Banca Progetto, Banca CF+, FCM Bank, Inbank, Morrow Bank, Nordax Bank, Renault Bank, Avarda Bank, Lea Bank, BW-Bank, Resurs Bank, Collector, Carrefour Banque S.A, Imprebanca, Izola Bank, EuroExtra, Klarna, Bank B, Alisa Bank)",
+      "kind": "spaarrekening",
       "fields": {}
     },
     {
       "id": "klarna-flex-rekening",
       "product": "Klarna Flex rekening",
-      "fields": {}
+      "issuer": "Klarna Bank AB (Sweden) — Swedish DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.95,
+          "route": "agent",
+          "sourceUrl": "https://www.klarna.com/nl/flex-rekening/",
+          "checkedAt": "2026-08-19",
+          "conditions": "LADDER: none stated; one rate, \"geen minimumbedrag\". PROMO/UPSELL — this is the reason it was refused and it is now settled: 1,95% is the BASE rate you keep WITHOUT paying anything. The page separately offers \"Verhoog je rente met een lidmaatschap — Meld je aan voor een lidmaatschap ³ via de app en verdien extra rente op je spaargeld, bovenop onze aantrekkelijke tarieven\", and footnote ³ reads \"Klarna-lidmaatschap is een abonnement met maandelijkse kosten.\" A higher Klarna number in the wild is either that membership boost or Klarna's separate \"vaste rekening\". WITHDRAWAL: \"Je kunt altijd geld toevoegen aan en opnemen van flex rekeningen, zonder opnamekosten.\" ACCESS/CAPS: \"Om een flex rekening aan te maken, moet je eerst een Klarna-saldo hebben ingesteld… je hebt er maximaal 3 tegelijk.\" Interest \"wordt dagelijks berekend en maandelijks uitbetaald\". DGS: Swedish, \"Max. vergoeding per klant: SEK 1.150.000\" — not the Dutch €100.000.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ayvens-bank-flexibel-sparen",
       "product": "Ayvens Bank Flexibel Sparen",
-      "fields": {}
+      "issuer": "Ayvens Bank N.V. (formerly LeasePlan Bank, renamed Oct 2024) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.85,
+          "route": "agent",
+          "sourceUrl": "https://www.ayvensbank.nl/actuele-rentestanden",
+          "checkedAt": "2026-08-19",
+          "conditions": "Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": false
+        }
+      }
     },
     {
       "id": "argenta-internetspaarrekening",
       "product": "Argenta Internetspaarrekening",
-      "fields": {}
+      "issuer": "Argenta Spaarbank N.V., Dutch branch — Belgian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.argenta.nl/sparen/spaarrente-overzicht",
+          "checkedAt": "2026-05-12",
+          "conditions": "PRODUCT NAME IS STALE — there is no 'Internetspaarrekening' at Argenta NL any more: both /internetspaarrekening and /sparen/internetspaarrekening return 404, while /sparen/spaarrekening returns 200. The live product is 'De Argenta spaarrekening'. TWO-COLUMN TRAP: 1,80% is the plain variable rate; the 2,10% in the adjacent column is 'Variabele rente met de Argenta hypotheek' and is only available to Argenta mortgage holders — reporting 2,10% unconditionally would be wrong for everyone without an Argenta hypotheek. Sibling products on the same table are differently priced (De jongeren spaarrekening 1,90%, Hypotheek profijt spaarrekening 1,80%). From the kenmerken table on the same page: 'Maximum spaarbedrag: nvt' (no cap), internetbankieren/openen/beëindigen all 'Gratis'. Argenta Spaarbank N.V. — Belgian DGS.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "openbank-welkom-spaarrekening",
       "product": "Openbank Welkom Spaarrekening",
-      "fields": {}
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.openbank.nl/page-data/spaarrekening/page-data.json",
+          "checkedAt": "2026-08-19",
+          "conditions": "Exclusief voor nieuwe klanten die zich aanmelden met de code WELKOM; bij het openen krijg je ook een Open Betaalrekening en Я42 Betaalpas. \"De eerste zes maanden krijg je 2,80%* rente over je saldo tot en met € 1.000.000. Voor saldi boven € 1.000.000 is de rente 0,00%.\" Het rendement wordt elke maand uitgekeerd. \"Vanaf de zevende maand wordt je Welkom Spaarrekening automatisch een Open Spaarrekening\" — \"Over de volgende zes maanden ontvang je 1,80% rente over je spaarsaldo t/m € 300.000. Voor saldi boven € 300.000 geldt een rente van 0,00%.\" De FAQ vermeldt elders dat je dan \"de jaarlijkse spaarrente die van toepassing is op de Open Spaarrekening op dat moment\" ontvangt, dus 1,80% is de rente die op dit moment na de actie geldt. Geen kosten voor openen, aanhouden of opzeggen; geld en rente zijn op elk moment opneembaar. Actierente 2,8% de eerste zes maanden, daarna 1,8%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "openbank-open-spaarrekening",
       "product": "Openbank Open Spaarrekening",
-      "fields": {}
+      "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spanish DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.openbank.nl/page-data/gratis-spaarrekening/page-data.json",
+          "checkedAt": "2026-08-19",
+          "conditions": "\"Met de Open Spaarrekening ontvang je vanaf dag één 1,80% rente. De rente is van toepassing op het saldo t/m € 300.000. Voor saldi boven € 300.000 is de rente 0,00%.\" Iedere maand ontvang je de rente op je Open Spaarrekening. \"Het openen, aanhouden en opzeggen van je Openbank Spaarrekening is gratis. Je kunt op ieder gewenst moment en zonder kosten opzeggen en je geld en rendement opnemen.\" Rendement vanaf € 1. Let op: de in dit document genoemde 2,80% (eerste zes maanden, saldo t/m € 1.000.000) hoort bij de Welkom Spaarrekening, een ander product, dat na zes maanden automatisch wordt omgezet naar een Open Spaarrekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "yapi-kredi-bank-euro-plus-spaarrekening",
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
-      "fields": {}
+      "issuer": "Yapi Kredi Bank Nederland N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.8,
+          "route": "agent",
+          "sourceUrl": "https://www.yapikredi.nl/particulieren/renteoverzicht",
+          "checkedAt": "2026-06-26",
+          "conditions": "PROMO SPLIT — this is exactly the teaser case. A 3,30% \"Jubileumsrente Actie\" (its own table, \"Geldig per 26 juni 2026\") runs alongside, and https://www.yapikredi.nl/particulieren/acties settles what happens afterwards: \"Ter gelegenheid van ons 30-jarig jubileum profiteren nieuwe klanten gedurende drie maanden van een aantrekkelijke jubileumsrente van 3,30% op onze Euro-Plus Spaarrekening. Gegarandeerd voor de eerste 3 maanden!\", \"Als u deelneemt aan de actie, ontvangt u 3,30% welkomstrente effectief op jaarbasis gedurende maximaal 90 dagen\", \"U kunt slechts één keer deelnemen, en alleen bij het openen van uw eerste rekening\", \"Standaardvoorwaarden zijn van toepassing, tenzij aangepast door deze actie.\" So the standard rate after day 90 is the 1,80%. SCOPE: the rate line itself is annotated \"(voor bestaande klanten)\" — write that out, it is the flip side of the new-customer promo. LADDER: none. WITHDRAWAL, from the product page: \"Geen minimum inleg\", \"Direct geld overmaken naar uw tegenrekening\", \"Geen opnamekosten\", \"Geen opname beperkingen\", \"De rentebijschrijving vindt plaats aan het eind van ieder kwartaal\", \"Rente is variabel\". CONFLICT worth carrying: the Renteoverzicht intro says \"Minimale inleg is €2.000,- of tegenwaarde €2.000,- in US Dollar, Turkse Lira en Britse Pond\" while the Euro-Plus product page says \"Geen minimum inleg\"; the sentence right after the €2.000 line is about deposito's, so the €2.000 minimum most likely scopes to the deposito's — do not report it as a savings minimum without resolving it.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nibc-spaarrekening",
       "product": "NIBC Spaarrekening",
-      "fields": {}
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.55,
+          "route": "agent",
+          "sourceUrl": "https://www.nibc.nl/particulieren/sparen/spaarrentes",
+          "checkedAt": "2026-08-19",
+          "conditions": "LADDER: none in force. The rate table has a single Spaarrekening row with no bands, and the sister product page states \"Iedereen ontvangt bij ons dezelfde variabele basisrente en bonusrente, ongeacht de hoogte van het spaarbedrag. Het genoemde rentepercentage is nominaal op jaarbasis.\" BUT the terms reserve tiering: Voorwaarden Sparen juni 2026 §1.4 \"Wij bepalen welk rentepercentage vanaf een bepaald saldo geldt. Hierdoor ontstaan saldoklassen. De rentepercentages en de saldoklassen staan niet vast. Dit betekent dat wij deze iedere dag kunnen aanpassen.\" PROMO: none. WITHDRAWAL, from https://www.nibc.nl/particulieren/sparen/spaarrekening : \"Geen minimum inleg en geen kosten\", \"Je kunt op elk moment je geld opnemen\", \"Sparen zonder betaalrekening\", \"Maandelijkse rentebetaling\", \"Je kan kosteloos geld opnemen wanneer je maar wilt\", \"zonder vaste looptijd, zonder opnamebeperkingen en zonder extra kosten\". Terms §1.6/§1.7 restrict the route, not the freedom: \"Je mag alleen vanaf de bij ons bekende tegenrekening geld storten\" and \"Je kunt alleen geld overmaken van je spaarrekening naar je tegenrekening.\" No maximum deposit stated. Rate is variabel; note the rate page says \"nominaal op jaarbasis\" on the kwartaal page while the plain rate table is unannotated.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nibc-kwartaalspaarrekening",
       "product": "NIBC Kwartaalspaarrekening",
-      "fields": {}
+      "issuer": "NIBC Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.6,
+          "route": "agent",
+          "sourceUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
+          "checkedAt": "2026-08-04",
+          "conditions": "1,60% IS A SUM AND ONLY THE 1,20% HALF IS UNCONDITIONAL. The rate is 'Variabele basisrente van 1,20% + variabele bonusrente van 0,40%'. The bonus is quarter-gated: 'De basisrente wordt maandelijks uitbetaald. De bonusrente ontvang je aan het einde van ieder kalenderkwartaal (1 januari, 1 april, 1 juli en 1 oktober). Om de bonusrente te ontvangen, moet je spaargeld vóór de eerste dag van het nieuwe kwartaal op je rekening staan.' Money deposited mid-quarter earns 1,20% for that quarter, not 1,60%. Both components are variable. No minimum deposit, no account fee, no tiering by balance ('Iedereen ontvangt bij ons dezelfde variabele basisrente en bonusrente, ongeacht de hoogte van het spaarbedrag. Het genoemde rentepercentage is nominaal op jaarbasis'). Dutch DGS. STALE-TITLE TRAP: this same page's HTML <title> still says 'Kwartaalspaarrekening | 1,50% rente' — a regex over the page title would report 1,50%. The body and the separate /sparen/spaarrentes table both say 1,60%, so the title is the stale one.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "lloyds-bank-spaarrekening",
       "product": "Lloyds Bank Spaarrekening",
-      "fields": {}
+      "issuer": "Lloyds Bank GmbH — German DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.lloydsbank.nl/sparen/actuele-rentes-sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "Eén tarief, geen staffels of drempelbedragen genoemd. \"Dit is de rente op jaarbasis. Een variabele rente kan op ieder moment veranderen. Wijzigt de rente? Dan ontvangt u een e-mail van ons en een bericht in de beveiligde mailbox bij uw Internet Spaarrekening.\" Verder: \"Geen minimuminleg en geen kosten\", \"Uw spaargeld is altijd vrij opneembaar\", \"Spaar zo veel u wilt\". Disclaimer: \"Het weergegeven rentepercentage is onder voorbehoud van wijzigingen en tikfouten. Aan dit tarief kunnen geen rechten worden ontleend.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nationale-nederlanden-internetsparen",
       "product": "Nationale-Nederlanden Internetsparen",
-      "fields": {}
+      "issuer": "Nationale-Nederlanden Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.nn.nl/Particulier/Sparen/Actuele-spaarrentes.htm",
+          "checkedAt": "2026-08-19",
+          "conditions": "Variabele rente op jaarbasis, per saldoklasse: € 0,- tot en met € 25.000,- 1,30%; Boven € 25.000,- tot en met € 100.000,- 1,20%; Boven € 100.000,- 1,10%. \"Bij Internetsparen is de rente variabel. Dit betekent dat de rente kan wijzigen tijdens de looptijd. Elk deel van het saldo op je internetspaarrekening heeft een eigen rentepercentage. Deze delen noemen we 'saldoklassen'.\" De saldoklassen en rentes gelden per internetspaarrekening en niet per persoon; je kunt maximaal twee internetspaarrekeningen hebben (één voor jezelf en één en/of rekening) en de saldo's worden niet bij elkaar opgeteld. Rentewijzigingen voorbehouden. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "centraal-beheer-rentepl-s-rekening",
       "product": "Centraal Beheer RentePlús Rekening",
-      "fields": {}
+      "issuer": "Achmea Bank N.V. (Centraal Beheer) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.centraalbeheer.nl/sparen/renteplus-rekening/rente",
+          "checkedAt": "2025-07-10",
+          "conditions": "LADDER — this is why it was refused and it is now established, and note the direction: the rate goes DOWN with balance. € 0,- t/m € 25.000,- → 1,50%; boven € 25.000,- → 1,35%. 1,50% is the first band, where most balances sit; Centraal Beheer's own headline hedges it as \"Actuele rente maximaal 1,50 %\". Effectieve rente per jaar, variabel (\"Wij kunnen de rente op elk moment aanpassen\"), \"Wij berekenen de rente per dag\" and credited monthly. PROMO: none. WITHDRAWAL: \"Met de RentePlús Rekening spaar je met alle vrijheid. Je bepaalt zelf hoeveel geld je stort. En wanneer je jouw geld weer opneemt. Je regelt alles eenvoudig online. Zonder kosten.\", \"Geen minimale inleg en geen kosten\", \"Je kunt altijd bij je geld\". CAP: \"Bij Centraal Beheer is er geen maximum bedrag dat je op je spaarrekening mag zetten\", but \"Je mag maximaal 2 RentePlús Rekeningen hebben. Dit geldt per persoon. Een en/of rekening telt ook als 1 rekening.\" The 3,00% on the /sparen page is the RenteVast Rekening (10-jaar deposito), a different product.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "knab-flexibel-sparen",
       "product": "Knab Flexibel Sparen",
-      "fields": {}
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group) — Austrian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.knab.nl/particulier/rente-tarieven",
+          "checkedAt": "2026-02-18",
+          "conditions": "FLAT across all three tiers — 1,25% for tot € 25.000, tussen € 25.000 en € 100.000, and boven € 100.000 alike. 'Alle rentetarieven zijn variabel en effectief op jaarbasis. De saldolimiet geldt voor het totale saldo van alle Flexibele Spaarrekeningen binnen je pakket.' DATE TRAP AVOIDED: the same page also says 'De rentes gelden vanaf 25-06-2025', but that sentence is asterisk-scoped — it reads '*De variabele rente van Knab Pensioensparen en Knab Pensioenbeleggen ... De rentes gelden vanaf 25-06-2025.' — and must NOT be attached to Flexibel Sparen. PROMO IS A DIFFERENT ROW: knab.nl/sparen advertises 'Bonusrente 0,75% + Variabele rente 1,25%', conditioned on transferring in from another bank 'van 1 mei tot en met 1 juni 2026', paid after 6 months, and 'alleen voor klanten die op 30 april 2026 een Knab particuliere betaal- en of flexibele spaarrekening hadden'. The headline product rate is 1,25%.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "abn-amro-direct-sparen",
       "product": "ABN AMRO Direct Sparen",
-      "fields": {}
+      "issuer": "ABN AMRO Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.abnamro.nl/nl/prive/rente/actuele-rente.html",
+          "checkedAt": "2025-05-01",
+          "conditions": "Saldoklassen (basisrente = maximale rente, geen bonusrente): € 0 tot en met € 500.000 → 1,25% (basisrente 1,25%, bonusrente n.v.t.); € 500.000 tot en met € 1.000.000 → 1,45% (basisrente 1,45%, bonusrente n.v.t.); Vanaf € 1.000.000 → 0,00% (basisrente 0,00%, bonusrente 0,00%). \"De rentes gelden vanaf 1 mei 2025. Alle genoemde rentes zijn op jaarbasis.\" Het document noemt geen opnamebeperkingen of opzegtermijn voor Direct Sparen. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "ing-oranje-spaarrekening",
       "product": "ING Oranje Spaarrekening",
-      "fields": {}
+      "issuer": "ING Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://assets.ing.com/m/164f8ec0df799d44/original/Historische-rentetarieven-particulier-2026.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "TIERED — 1,25% is the FIRST BAND ONLY and the rate FALLS above it. The single Oranje Spaarrekening row in this document, Ingangsdatum 1 januari 2026, reads across: Saldo t/m €10.000 → 1,25%; Saldo boven €10.000 t/m €100.000 → 1,00%; Saldo boven €100.000 t/m €250.000 → 1,00%; Saldo boven €250.000 t/m €1.000.000 → 1,00%; Saldo boven €1.000.000 → 0,00%. Serving 1,25% unqualified would overstate the rate for every balance above €10.000. PACKAGE UPSELL, which is the trap on this product: ING's live rates page (same API, pageUrl=/nl/particulier/sparen/renteberekening-op-je-spaarrekening) adds 'De extra rente geldt vanaf 10 juni 2026 voor klanten met een ING Extra of ING Max betaalpakket. Over het saldo t/m €10.000 op de Oranje Spaarrekening ontvangen deze klanten tot 1,75% rente (1,25% + 0,50%) met ING Extra en tot 2,25% rente (1,25% + 1,00%) met ING Max.' — the arithmetic independently confirms 1,25% is the base. A higher ING number in the wild is that paid-package boost, not the base rate, and it evaporates on package change: 'Bij wijziging of beëindiging van het betaalpakket vervalt deze extra rente'. MECHANICS: 'De rente op de Oranje Spaarrekening (inclusief eventuele extra rente) is variabel en op jaarbasis.' 'Op je Oranje Spaarrekening wordt de rente berekend door het saldo van de verschillende Spaardoelen bij elkaar op te tellen.' Interest is credited only ONCE A YEAR, on 1 January, per Spaardoel. Daily accrual: actuele rentepercentage / 365 (366 in a leap year) × saldo. DOCUMENT'S OWN CAVEAT: 'Aan dit overzicht kunnen geen rechten worden ontleend. De rentepercentages in dit historisch overzicht zijn op jaarbasis.' DO NOT CROSS-READ THE NEIGHBOURING TABLES: 1,60% on the same page belongs to Groei Groter Rekening (a children's account) and 3,00% to TWIN — both are separate products, not Oranje Spaarrekening bands.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "rabobank-rabo-spaarrekening",
       "product": "Rabobank Rabo SpaarRekening",
-      "fields": {}
+      "issuer": "Coöperatieve Rabobank U.A. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.5,
+          "route": "agent",
+          "sourceUrl": "https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-rentes",
+          "checkedAt": "2026-08-05",
+          "conditions": "Staffelrente per schijf: € 0 t/m € 10.000 1,50%; Boven € 10.000 t/m € 20.000 1,40%; Boven € 20.000 t/m € 100.000 1,30%; Boven € 100.000 t/m € 5 miljoen 1,20%; Boven € 5 miljoen 0,00%. \"Deze schijven en rentes gelden vanaf 5 augustus 2026 en kunnen veranderen.\" Het document zegt niets over opzegtermijnen of opnamekosten. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "asn-bank-asn-ideaalsparen",
       "product": "ASN Bank ASN Ideaalsparen",
-      "fields": {}
+      "issuer": "ASN Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.asnbank.nl/sparen/rente.html",
+          "checkedAt": "2025-11-18",
+          "conditions": "PRODUCT RENAMED — the row's name is stale. ASN's current rate page lists no 'Ideaalsparen' at all; https://www.asnbank.nl/sparen/asn-ideaalsparen.html 302s to https://www.asnbank.nl/sparen/asn-sparen.html, title 'ASN Sparen'. Same product, not a dead one: that page's own 'Ben je al klant?' link still carries productId=ASNIdeaalsparen. Rate is TIERED, 1,30% applies only to the € 0 - € 25.000 saldoklasse (1,20% / 1,20% / 1,00% above it). 'De rente is variabel en kan veranderen.' Interest paid monthly, op jaarbasis. Do not confuse with the separately-dated ASN Jongeren Sparen table on the same page, whose first tier is 1,50% (also 'vanaf 18 november 2025'), nor with ASN Depositosparen ('vanaf 15 juni 2026').",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "sns-internet-sparen",
       "product": "SNS Internet Sparen",
-      "fields": {}
+      "issuer": "SNS Bank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html",
+          "checkedAt": "2026-08-19",
+          "conditions": "Variabele rente, saldoklassen: 0 - € 25.000: 1,30%; € 25.000 - € 100.000: 1,20%; Saldo boven € 100.000: 1,00%. \"Rente % vanaf 18 november 2025\". \"Voor alle rentes hierboven geldt: variabele rente over je positieve saldo op jaarbasis vanaf 23 oktober 2025. Rentewijzigingen voorbehouden.\" Met het rentepercentage van een saldoklasse berekenen we de rente over het saldo in die saldoklasse; rente wordt maandelijks verrekend (in de 1e week van de maand bijgeschreven over de maand ervoor). Het document noemt geen opnamebeperkingen of opzegtermijn voor SNS Internet Sparen. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "regiobank-spaar-op-maat-vrij",
       "product": "RegioBank Spaar-op-Maat Vrij",
-      "fields": {}
+      "issuer": "RegioBank (de Volksbank N.V.) — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://www.regiobank.nl/sparen/actuele-rentes.html",
+          "checkedAt": "2026-08-19",
+          "conditions": "Staffelrente per 18 november 2025: € 0 tot € 25.000 → 1,30%; € 25.000 tot € 100.000 → 1,20%; € 100.000 en hoger → 1,00%. \"Voor alle rentes hierboven geldt: variabele rente op jaarbasis. Rentewijzigingen voorbehouden.\" Het document noemt geen opnamebeperkingen, opzegtermijn of boete voor dit product. Opnamevoorwaarden niet vermeld.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "triodos-bank-internet-sparen",
       "product": "Triodos Bank Internet Sparen",
-      "fields": {}
+      "issuer": "Triodos Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.15,
+          "route": "agent",
+          "sourceUrl": "https://www.triodos.nl/sparen",
+          "checkedAt": "2026-08-19",
+          "conditions": "Staffelrente (sinds 01-02-2026, wijzigingen voorbehouden): 1,15% bij een saldo tot en met € 10.000; vanaf € 10.000 tot en met € 25.000 ontvang je 0,90%; vanaf € 25.000 tot en met € 100.000 ontvang je 0,90%; op het saldo daarboven 0,80%. Je kunt zo vaak als je wilt geld storten en opnemen. Het openen en aanhouden van Internet Sparen is gratis. Groeit je vermogen boven de € 500.000? Neem dan contact op met Triodos Bank Private Banking.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "brand-new-day-de-spaarrekening",
       "product": "Brand New Day De Spaarrekening",
-      "fields": {}
+      "issuer": "Brand New Day Bank N.V. — Dutch DGS",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.3,
+          "route": "agent",
+          "sourceUrl": "https://new.brandnewday.nl/rentestanden/",
+          "checkedAt": "2025-05-07",
+          "conditions": "LADDER — settled explicitly, and in the rare form of a bank saying it is not tiering: \"Brand New Day heeft de mogelijkheid om een negatief rentepercentage te hanteren of om het saldo op de rekening in verschillende categorieën (qua saldo) in te delen en voor iedere categorie een ander rentepercentage te hanteren. Momenteel is dat echter niet het geval.\" So one flat 1,30% at every balance, with a stated reservation to tier or go negative later. PROMO: none. WITHDRAWAL: \"Geen verplichtingen: storten en opnemen wanneer u wilt\", \"De rente is variabel en kan dus elk moment verhoogd of verlaagd worden\", \"De rente wordt maandelijks bijgeschreven\", \"Geen kosten\". CAP: \"u mag op al uw spaarrekeningen bij Brand New Day tezamen namelijk niet meer dan € 10.000.000 aanhouden.\" TRAP: /spaarrekening/ headlines \"De rente: tot 2,20% per jaar\" — that 2,20% is the deposito ladder (1 jr 1,30%, 2 jr 1,30%, 3 jr 1,50%, 4 jr 1,75%, 5 jr 1,90%), never the variable savings rate, and its own text concedes \"De variabele rente – die hoger of lager kan worden – is op dit moment 1,30%.\"",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "nexent-bank-spaarrekening",
       "product": "Nexent Bank Spaarrekening",
-      "fields": {}
+      "issuer": "Nexent Bank N.V. — Dutch DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 1.25,
+          "route": "agent",
+          "sourceUrl": "https://www.nexentbank.nl/onze-producten/nexent-bank-spaarrekening/",
+          "checkedAt": "2026-08-19",
+          "conditions": "Saldoband: \"1 tot 1.000.000 EUR\" tegen 1,25 % p.j. Minimumbedrag: € 1. Maximumbedrag: € 1.000.000. Dagelijks opvraagbaar. De voorwaarden zijn van toepassing vanaf 29-08-2025 tot nader order. De actierente van 2,75% p.j. gedurende 3 maanden (92 dagen) vanaf het openen geldt volgens de tabel voor de Welkom Spaarrekening, niet voor de Nexent Bank Spaarrekening.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "revolut-dagelijkse-spaarrekening",
       "product": "Revolut Dagelijkse Spaarrekening",
-      "fields": {}
+      "issuer": "Revolut Bank UAB (Lithuania) — Lithuanian DGS per geld.nl",
+      "kind": "spaarrekening",
+      "fields": {
+        "interestPct": {
+          "value": 2,
+          "route": "agent",
+          "sourceUrl": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/",
+          "checkedAt": "2026-07-09",
+          "conditions": "TIERED AND PLAN-DEPENDENT — 2.00% is the headline band only. The Deposit Information Sheet's 'Interest rate, for EUR savings' row reads: 'Standard: 2.00% p.a (per annum) up to EUR 2,500 / 1.00% p.a. (per annum) for excess amounts over EUR 2,500'; 'Plus:' identical; 'Premium: 2.00% p.a (per annum) up to EUR 2,500 / 1.50% p.a. (per annum) for excess amounts over EUR 2,500'; 'Metal: 2.00% p.a. (per annum)' flat; 'Ultra: 2.50% p.a. (per annum) up to EUR 100.000 / 2,00% p.a. (per annum) for excess amounts over EUR 100.000'. So on the free Standard plan a balance over EUR 2,500 earns 1.00%, not 2.00%. Interest type is 'Variable'; Revolut may cut it with 15 calendar days' notice and raise it immediately. Calculated daily on the balance and paid daily. USD savings are a different table (Standard 1,50%). Deposit protection is Lithuanian (VšĮ 'Indėlių ir investicijų draudimas'), EUR 100,000 per depositor, and the sheet warns 'Deposits in excess of EUR 100,000 are not covered or protected'. Product cap EUR 5,000,000 across all Revolut savings in the same currency.",
+          "conditionsKnown": true
+        }
+      }
     }
   ]
 }

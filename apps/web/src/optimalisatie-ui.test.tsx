@@ -45,15 +45,17 @@ test("the two halves sit in one grid of equal columns, subscriptions first", () 
 
 test("the interest advice is spelled out and ends in a euro figure per year", () => {
   const html = render([]);
-  // ABN AMRO's own standard rate is 1,25%; the best free-withdrawal benchmark
-  // is Bigbank at 3,1%. € 50.000 × 1,85% = € 925 per year.
+  // ABN AMRO's own standard rate is 1,25%. The comparison is now against what the
+  // winning account KEEPS rather than its headline: Bigbank's 3,1% is a six-month
+  // actierente that drops to 2,1%, so the best kept rate is Scalable Capital at
+  // 2,5%. € 50.000 × 1,25% = € 625 per year — less flattering than the € 925 this
+  // test used to assert, and the figure the saver will actually see in month seven.
   expect(html).toContain("Je houdt");
   expect(html).toContain("ABN AMRO");
   expect(html).toContain("1,25%");
-  expect(html).toContain("Bigbank");
-  expect(html).toContain("3,1%");
-  expect(html).toContain("1,85%");
-  expect(html).toContain("925,00");
+  expect(html).toContain("Scalable Capital");
+  expect(html).toContain("2,5%");
+  expect(html).toContain("625,00");
   expect(html).toContain("per jaar");
 });
 
@@ -150,4 +152,64 @@ test("no housing stream in the data prints 'onbekend', not € 0,00", () => {
   expect(html).toContain("Woonlasten");
   expect(html).toContain("niet in de data gezien");
   expect(html).not.toContain("Zelf invullen");
+});
+
+/* --- App review, 20 Aug: items 1 and 9 on screen ------------------------- *
+ *
+ * These render against the BUNDLED table (the catalogue merge arrives in an
+ * effect, which static rendering does not run), so the numbers below are that
+ * table's: best kept rate Scalable Capital 2,50%, best headline today Bigbank
+ * 3,10% falling to 2,10%, and ING's Oranje Spaarrekening at 1,25%.
+ */
+
+test("the promo is shown next to what you keep, priced per month, never added to the year", () => {
+  // His objection to yesterday's change: "for a user who doesn't have bunq, if
+  // they can use the promo for a month it's still a month of 3,01% over the 2,5%
+  // of Scalable Capital." So both numbers appear, each labelled with its period.
+  const html = render([]);
+  // Ranked on what he keeps — unchanged.
+  expect(html).toContain("Scalable Capital");
+  expect(html).toContain("625,00"); // € 50.000 × (2,50 − 1,25)% per jaar
+  // And what he could get today, with what it turns into afterwards.
+  expect(html).toContain("Bigbank");
+  expect(html).toContain("3,1%");
+  expect(html).toContain("Actierente 6 mnd, daarna 2,10%");
+  // € 50.000 × (3,10 − 2,50)% ÷ 12 = € 25,00 for each month the action runs.
+  expect(html).toContain("25,00");
+  expect(html).toContain("per maand extra");
+});
+
+test("an ING account is never left at a bare 'aangenomen 0%' — the row says what ING pays", () => {
+  // Item 1, his words: "That ING is 0% that's bullshit, we need to have those."
+  // The account arrives from the CSV with its IBAN as the name, so nothing in it
+  // says "savings" and the type heuristic reads it as a payment account. 0% may
+  // be right for one of his two ING accounts, but the screen has to name the rate
+  // ING does pay and ask which account this is instead of asserting a
+  // measurement it never made.
+  const html = render([], [
+    { key: "ING1", iban: "NL88INGB0793113504", name: "NL88INGB0793113504", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000 },
+  ]);
+  expect(html).toContain("aangenomen 0%");
+  expect(html).toContain("Oranje Spaarrekening");
+  expect(html).toContain("1,25%");
+  expect(html).toContain("Is dit die rekening?");
+});
+
+test("a savings account at ING is estimated from ING's own tariff, and the row names it", () => {
+  const html = render([], [
+    { key: "ING2", iban: "NL95INGB0674843703", name: "NL95INGB0674843703", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000, type: "Spaarrekening" },
+  ]);
+  expect(html).toContain("geschat via banktarief");
+  expect(html).toContain("ING Oranje Spaarrekening");
+  expect(html).toContain("1,25%");
+  // The gain is measured against what he KEEPS at the winner (2,50%), not the
+  // 3,10% headline: € 20.000 × 1,25% = € 250,00.
+  expect(html).toContain("250,00");
+  expect(html).not.toContain("370,00"); // what the 3,10% teaser would have promised
+});
+
+test("the comparison table separates what you get now from what you keep", () => {
+  const html = render([]);
+  expect(html).toContain("Wat je houdt");
+  expect(html).toContain("Rente nu");
 });

@@ -3,6 +3,7 @@ import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBal
 import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -283,7 +284,7 @@ export default function App() {
   // step. Public data, not user data; failing is harmless (bundled snapshot).
   useEffect(() => {
     let alive = true;
-    createRatesProvider({ url: RATES_URL })
+    createRatesProvider({ url: RATES_URL, catalogueRates: CATALOGUE_RATES })
       .getRates()
       .then((r) => alive && setRates(r))
       .catch(() => {});

@@ -56,6 +56,10 @@ export type ExtractedFigure = {
   /** null when the model did not report a kind we recognise. Unknown can never
    *  earn null conditions by exhaustiveness. */
   documentKind: DocumentKind | null;
+  /** The account, package or variant this document is scoped to, verbatim, or null
+   *  when it covers the whole range. A scoped document cannot establish that a
+   *  rate is unconditional, because the scope IS a condition. */
+  documentScope: string | null;
   /** Did the model SEE a cap, tier or allowance stated on another row of this
    *  same document? Strictly `=== true`; this is the field that turns silence
    *  into evidence, so nothing may default it. */
@@ -95,6 +99,18 @@ export function buildExtractPrompt(req: ExtractRequest): { system: string; user:
     "   out EUR 1.000 into the month and 1% applies above that, so the app recommended",
     "   it to exactly the people it was wrong for. A conditional rate presented as",
     "   unconditional is the most damaging thing you can hand back.",
+    "",
+    "   WRITE THE SCOPE OUT RATHER THAN REACHING FOR null. Which transactions the",
+    "   rate applies to IS a condition and is what a reader actually needs: 'geldt",
+    "   voor transacties die niet in euro zijn uitgevoerd', 'buiten de eurolanden',",
+    "   'bij betalen en geldopnemen in vreemde valuta', and any clause that removes",
+    "   the surcharge — a third party converting to euro first, for instance — all",
+    "   belong here. null is for a row with genuinely nothing to say about it, not",
+    "   for a row whose scope you could have described. This is measured, not",
+    "   theoretical: six Amex cards were COVERED while the model wrote their scope",
+    "   into this field, and lost coverage the moment it started claiming null",
+    "   instead, because a null claim must clear the much higher bar in 9 below.",
+    "   Describing the scope is almost always the better answer.",
     "",
     "3. conditionsKnown — false when the page does not let you settle the question",
     "   either way. \"I could not establish the conditions\" is a CORRECT answer and it",
@@ -144,7 +160,17 @@ export function buildExtractPrompt(req: ExtractRequest): { system: string; user:
     "   rate. When you are torn between 'marketing' and 'tariff-schedule', it is",
     "   marketing: a tariff schedule is unmistakable when you are on one.",
     "",
-    "7. capsExpressedElsewhere — true only if you SAW a cap, tier, allowance,",
+    "7. documentScope — the account, package or variant this document is scoped to,",
+    "   verbatim from its header, or null only when it covers the whole range.",
+    "   Measured: ABN AMRO's Fee Information Document is headed 'Naam van de",
+    "   rekening: BasisPakket Betalen' and prices the betaalpas at 1,2%, while the",
+    "   provider's own page carries an asterisk saying other pakketten differ. The",
+    "   1,2% is right for BasisPakket and says nothing about the rest, so reporting",
+    "   it as unconditional would hand it to customers it is wrong for — the same",
+    "   error as Revolut's 0%, wearing a different hat. When a document is scoped,",
+    "   NAME the scope in conditions; do not report null.",
+    "",
+    "8. capsExpressedElsewhere — true only if you SAW a cap, tier, allowance,",
     "   threshold or free-usage limit written on some OTHER row or clause of this",
     "   same document. Not on a page it links to, not one you remember from the",
     "   provider, not the row you are reporting: this document, elsewhere in it.",
@@ -154,7 +180,7 @@ export function buildExtractPrompt(req: ExtractRequest): { system: string; user:
     "   in it informative. If the document prices everything flatly and never",
     "   expresses a limit anywhere, this is false, and it should be.",
     "",
-    "8. unconditionalBasis — required whenever you report conditions: null, and it",
+    "9. unconditionalBasis — required whenever you report conditions: null, and it",
     "   must be null itself when you report conditions. It is HOW you know:",
     "   'stated' — the document says so outright: 'ongeacht het bedrag', 'op alle",
     "     transacties in vreemde valuta', 'zonder maximum'. Quote-level evidence.",
@@ -234,6 +260,11 @@ export const EXTRACT_TOOL: { name: string; description: string; input_schema: ob
         description:
           "What this document IS, judged by its purpose. 'tariff-schedule': a Tarievenwijzer, tariefoverzicht or Fee Information Document, laid out as rows of priced items. 'terms': Algemene Voorwaarden, productvoorwaarden, a reglement. 'marketing': a product or landing page that is selling — it is not trying to be complete, so what it omits means nothing. 'other': help-centre article, blog, news, or a page you cannot place. When torn between marketing and tariff-schedule, it is marketing.",
       },
+      documentScope: {
+        type: ["string", "null"],
+        description:
+          "The account, package, pakket or card variant this document is scoped to, copied verbatim from its header — ABN AMRO's Fee Information Document says 'Naam van de rekening: BasisPakket Betalen', so the scope is 'BasisPakket Betalen'. null ONLY when the document covers the provider's whole range for this product. Read the header before answering: a document that prices one package says nothing about the others, and reporting its rate as unconditional would hand it to customers on a different package.",
+      },
       capsExpressedElsewhere: {
         type: "boolean",
         description:
@@ -253,6 +284,7 @@ export const EXTRACT_TOOL: { name: string; description: string; input_schema: ob
       "quote",
       "section",
       "documentKind",
+      "documentScope",
       "capsExpressedElsewhere",
       "unconditionalBasis",
     ],
@@ -274,7 +306,15 @@ function norm(s: string): string {
  *  mistaken for a rate. */
 const PCT_TOKEN = /(\d{1,3})(?:[.,](\d{1,2}))?\s*%/g;
 
-function percentagesIn(text: string): number[] {
+/** Shared with the savings extractor so there is ONE answer to "is this quote
+ *  really in that text". Exported under a distinct name because `norm` is already
+ *  taken by hash.ts, and two functions called norm in one barrel is how the wrong
+ *  one gets imported. */
+export function normalizeQuote(s: string): string {
+  return norm(s);
+}
+
+export function percentagesIn(text: string): number[] {
   const out: number[] = [];
   PCT_TOKEN.lastIndex = 0;
   for (let m = PCT_TOKEN.exec(text); m; m = PCT_TOKEN.exec(text)) {
@@ -448,6 +488,18 @@ export function parseExtractReply(
   // Failing the rule DOWNGRADES rather than discards: the figure survives with
   // conditionsKnown false, exactly as it does today, and is kept out of the app.
   let unconditionalBasis = conditions === null ? asBasis(r.unconditionalBasis) : null;
+
+  // A SCOPED DOCUMENT CANNOT ESTABLISH UNCONDITIONALITY, whatever else it does.
+  // ABN AMRO's Fee Information Document is headed "Naam van de rekening:
+  // BasisPakket Betalen" and prices the betaalpas at 1,2%; the provider's own page
+  // carries an asterisk saying other pakketten differ. The 1,2% is right for that
+  // package and silent about the rest, so serving it as unconditional hands it to
+  // customers it is wrong for — Revolut's 0% in a different hat. The scope IS a
+  // condition, so it belongs in `conditions`, and a null alongside a scope is a
+  // contradiction the parser refuses rather than a judgement it defers to.
+  const documentScope = typeof r.documentScope === "string" && r.documentScope.trim() ? r.documentScope.trim() : null;
+  if (documentScope !== null) unconditionalBasis = null;
+
   if (
     unconditionalBasis === "exhaustive-document" &&
     !(
@@ -464,5 +516,5 @@ export function parseExtractReply(
   const conditionsKnown = claimedKnown && (conditions !== null || unconditionalBasis !== null);
   if (!conditionsKnown) unconditionalBasis = null;
 
-  return { value, conditions, conditionsKnown, quote, documentKind, capsExpressedElsewhere, unconditionalBasis };
+  return { value, conditions, conditionsKnown, quote, documentKind, documentScope, capsExpressedElsewhere, unconditionalBasis };
 }

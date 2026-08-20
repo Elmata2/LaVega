@@ -42,9 +42,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
-import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute } from "@lavega/core";
+import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
 import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
 import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
+import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "@lavega/core";
 import { sliceForExtraction } from "@lavega/core";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -79,6 +80,11 @@ function numArg(flag: string, fallback: number): number {
  *  settles its conditions". That is the judgement the whole rung exists for, and
  *  a weekly offline sweep is where paying for it is cheapest. */
 const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || "claude-opus-5";
+/** A HARD CEILING, in dollars, because a projection is not a promise. Mine ran
+ *  2.8x low on the 81-product sweep — slicing cut the input as measured, but the
+ *  fallback made 119 calls for 81 products and output tokens ran double what I
+ *  assumed. An estimate that can be wrong needs a stop, not more confidence. */
+const MAX_USD = Number(process.env.CATALOG_MAX_USD ?? "0") || null;
 /** Slowness is free here, hanging is not: one wedged request must not eat the
  *  Action's 45-minute budget. Generous, because the model is allowed to think. */
 const MODEL_TIMEOUT_MS = 180_000;
@@ -144,6 +150,20 @@ const PRICE: Record<string, { in: number; out: number }> = {
 };
 const SEARCH_PRICE_PER_1000 = 10;
 
+/** Charged AFTER a call, so the ceiling can be crossed by at most one call's worth
+ *  — you cannot know a reply's output tokens before you have it. */
+function stopIfOverBudget(): void {
+  if (!MAX_USD) return;
+  const spent = spendTotalUsd();
+  if (spent < MAX_USD) return;
+  console.error(`\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).`);
+  if (onFatal) {
+    try { onFatal(); } catch (e) { console.error(`  (could not save partial results: ${(e as Error).message})`); }
+  }
+  console.error("Products already read are kept; the rest are untouched. Raise CATALOG_MAX_USD to continue.");
+  process.exit(1);
+}
+
 function recordSpend(model: string, usage: Anthropic.Usage): void {
   const s = spend.get(model) ?? { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 };
   s.calls++;
@@ -155,15 +175,28 @@ function recordSpend(model: string, usage: Anthropic.Usage): void {
   spend.set(model, s);
 }
 
+/** One implementation of the price arithmetic. The ceiling and the report must
+ *  never be able to disagree about what has been spent. */
+function modelUsd(model: string, s: Spend): number {
+  const p = PRICE[model] ?? { in: 0, out: 0 };
+  return (
+    ((s.input + s.cacheWrite * 1.25 + s.cacheRead * 0.1) / 1e6) * p.in +
+    (s.output / 1e6) * p.out +
+    (s.searches / 1000) * SEARCH_PRICE_PER_1000
+  );
+}
+
+function spendTotalUsd(): number {
+  let t = 0;
+  for (const [model, s] of spend) t += modelUsd(model, s);
+  return t;
+}
+
 function spendLines(): string[] {
   const out: string[] = [];
   let total = 0;
   for (const [model, s] of spend) {
-    const p = PRICE[model] ?? { in: 0, out: 0 };
-    const usd =
-      ((s.input + s.cacheWrite * 1.25 + s.cacheRead * 0.1) / 1e6) * p.in +
-      (s.output / 1e6) * p.out +
-      (s.searches / 1000) * SEARCH_PRICE_PER_1000;
+    const usd = modelUsd(model, s);
     total += usd;
     out.push(
       `  ${model.padEnd(16)} ${String(s.calls).padStart(3)} call(s)  ${s.input + s.cacheRead + s.cacheWrite} in / ${s.output} out` +
@@ -442,6 +475,7 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   );
   modelCalls++;
   recordSpend(EXTRACT_MODEL, res.usage);
+  stopIfOverBudget();
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") return null; // the model declined — a real answer
   return parseExtractReply(block.input, req, today);
@@ -467,6 +501,73 @@ function toValue(
     conditions: figure.conditions,
     conditionsKnown: figure.conditionsKnown,
   };
+}
+
+/** A SAVINGS RATE AS A CATALOGUE FIGURE.
+ *
+ *  `value` is the STANDARD rate — what the saver keeps once a promotion ends — and
+ *  the promo is folded into `conditions` alongside the bands. Decided 2026-08-19:
+ *  ranking on the headline would put a six-month teaser above a permanently better
+ *  account, and the saver who followed it is worse off in month seven.
+ *
+ *  A promo that the reply reported but could not describe is downgraded here as
+ *  well as in the parser, because a rate that silently changes is exactly the
+ *  shape of the Revolut bug. */
+function rateToValue(
+  rate: ExtractedRate,
+  route: CatalogRoute,
+  sourceUrl: string,
+  text: string,
+  fallbackDate: string,
+): CatalogValue {
+  const promo =
+    rate.promoPct !== null
+      ? `Actierente ${String(rate.promoPct).replace(".", ",")}%${rate.promoUntil ? ` ${rate.promoUntil}` : ""}, daarna ${String(rate.standardPct).replace(".", ",")}%.`
+      : null;
+  const withdrawal =
+    rate.freeWithdrawal === false ? "Niet vrij opneembaar." : rate.freeWithdrawal === null ? "Opnamevoorwaarden niet vermeld." : null;
+  const parts = [rate.conditions, promo, withdrawal].filter(Boolean);
+  return {
+    value: rate.standardPct,
+    route,
+    sourceUrl,
+    checkedAt: readDocumentDate(text) ?? fallbackDate,
+    conditions: parts.length ? parts.join(" ") : null,
+    conditionsKnown: rate.conditionsKnown,
+  };
+}
+
+/** The savings question. Separate model call, separate tool, same discipline: the
+ *  quote is checked against the text we sent and a rate outside a plausible range
+ *  is refused. */
+async function askRateModel(product: string, sourceUrl: string, text: string): Promise<ExtractedRate | null> {
+  if (text.length > MAX_MODEL_CHARS) {
+    throw new Error(`document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`);
+  }
+  const cut = sliceForExtraction(text);
+  if (!cut.whole) {
+    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+  }
+  const req = { product, sourceUrl, text: cut.text };
+  const { system, user } = buildInterestPrompt(req);
+  const client = new Anthropic({ apiKey: apiKey ?? undefined });
+  const res = await createGuarded(
+    client,
+    {
+      model: EXTRACT_MODEL,
+      max_tokens: 8192,
+      system,
+      tools: [INTEREST_TOOL as unknown as Anthropic.Tool],
+      messages: [{ role: "user", content: user }],
+    },
+    { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 },
+  );
+  modelCalls++;
+  recordSpend(EXTRACT_MODEL, res.usage);
+  stopIfOverBudget();
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block) return null;
+  return parseInterestReply(block, req);
 }
 
 // ─────────────────────────────────────────────────────────────── the search rung
@@ -666,7 +767,15 @@ const ids: string[] = Object.keys(state.products).filter((id) => !only || matche
 const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).length;
 let attemptsMade = 0;
 
-const entries: { id: string; product: string; fields: { fxFeePct?: CatalogValue } }[] = [];
+const entries: { id: string; product: string; issuer?: string; kind?: string; fields: Partial<Record<CatalogField, CatalogValue>> }[] = [];
+
+/** THE FIGURE A PRODUCT ANSWERS WITH, whichever question it was asked. Counting
+ *  fxFeePct alone made a savings sweep report "covered 0/3" while printing three
+ *  ticks — the extraction had worked and the counter had not caught up. A number
+ *  that disagrees with the lines above it is worse than no number. */
+function figureOf(e: { fields: Partial<Record<CatalogField, CatalogValue>> }): CatalogValue | undefined {
+  return e.fields.fxFeePct ?? e.fields.interestPct;
+}
 
 /** ONE merge, used by the normal --only exit AND by the fatal-key guard. Two
  *  implementations of "merge a subset into the artifact" would drift, and the one
@@ -676,7 +785,32 @@ function mergeSubset(rows: typeof entries): number {
     ? JSON.parse(readFileSync(CATALOG, "utf8"))
     : { entries: [] };
   const swept = new Set(rows.map((e) => e.id));
-  const merged = [...prev.entries.filter((e) => !swept.has(e.id)), ...rows];
+  // A SWEEP MUST NOT MAKE THE ARTIFACT WORSE. Measured today: a run with no API
+  // key replaced ABN AMRO betaalpas — 1,2% covered, dated 2026-01-01 from its Fee
+  // Information Document — with the regex's 2% (the creditcard's row), refused and
+  // stamped today. Nothing wrong reached the app, because refused figures are not
+  // served, but a good figure was lost to a worse one by a run that simply could
+  // not do its job. The same evidence-ranking already applied to partials WITHIN
+  // a run (keep the best-evidenced, not the highest rung) has to hold ACROSS runs.
+  //
+  // Keep the newcomer when it is covered, or when what stood there was not. Refuse
+  // it when it would demote a covered entry — and say so, because a silent skip
+  // reads as "nothing changed" when something was actively prevented.
+  const byId = new Map(prev.entries.map((e) => [e.id, e]));
+  const kept: string[] = [];
+  const winners = rows.filter((row) => {
+    const before = byId.get(row.id);
+    const wasCovered = isCovered(before ? figureOf(before) : undefined);
+    const nowCovered = isCovered(figureOf(row));
+    if (wasCovered && !nowCovered) { kept.push(row.id); return false; }
+    return true;
+  });
+  if (kept.length) {
+    console.log(`  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`);
+  }
+  const wonIds = new Set(winners.map((e) => e.id));
+  const merged = [...prev.entries.filter((e) => !wonIds.has(e.id)), ...winners];
+  void swept;
   const order = Object.keys(state.products);
   merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
@@ -688,7 +822,7 @@ function mergeSubset(rows: typeof entries): number {
 onFatal = () => {
   if (!entries.length) { console.error("  (nothing had been read yet, so nothing to save)"); return; }
   const total = mergeSubset(entries);
-  const covered = entries.filter((e) => e.fields.fxFeePct && isCovered(e.fields.fxFeePct)).length;
+  const covered = entries.filter((e) => isCovered(figureOf(e))).length;
   console.error(`  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`);
 };
 const changes: string[] = [];
@@ -699,8 +833,38 @@ const discovered: string[] = [];
 for (const id of ids) {
   const p = state.products[id];
   const attempts: RouteAttempt[] = [];
+  // WHICH QUESTION THIS PRODUCT ANSWERS. A savings account has no foreign-currency
+  // surcharge, so asking for one produced 35 guaranteed blanks every sweep and
+  // made the coverage denominator dishonest. It has an interest rate instead, and
+  // that is a different question with a different tool.
+  const savings = p.kind === "spaarrekening" || p.kind === "beleggingsrekening";
 
-  if (p.pdfUrl) {
+  if (savings) {
+    // Only the agent rung: a rate ladder is a table, and the regex rungs were
+    // written for a percentage next to the word "koersopslag".
+    const src = p.docUrl ?? p.pdfUrl ?? (p.readable === "yes" ? p.termsUrl : null);
+    if (useAgent && src) {
+      const kind: "pdf" | "html" = p.docUrl
+        ? p.docFetch === "jina" || p.docKind === "html"
+          ? "html"
+          : "pdf"
+        : p.pdfUrl
+          ? "pdf"
+          : "html";
+      const url = p.docFetch === "jina" ? `https://r.jina.ai/${src}` : src;
+      attempts.push({
+        route: "agent",
+        run: async () => {
+          const text = await readPage(url, kind);
+          const rate = await askRateModel(p.product, src, text);
+          return rate ? rateToValue(rate, "agent", src, text, today) : null;
+        },
+      });
+    }
+  }
+
+
+  if (!savings && p.pdfUrl) {
     attempts.push({
       route: "provider-pdf",
       run: async () => {
@@ -727,7 +891,7 @@ for (const id of ids) {
       },
     });
   }
-  if (p.termsUrl && p.readable === "yes") {
+  if (!savings && p.termsUrl && p.readable === "yes") {
     attempts.push({
       route: "provider-page",
       run: async () => {
@@ -771,7 +935,7 @@ for (const id of ids) {
   // always, because provider-page cannot establish a condition and says so. The
   // provider's own PDF is preferred over its HTML when both exist: the tariff
   // sheet is where the caps and tiers actually are.
-  if (useAgent && (p.docUrl || p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
+  if (!savings && useAgent && (p.docUrl || p.pdfUrl || (p.termsUrl && p.readable === "yes"))) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -833,7 +997,10 @@ for (const id of ids) {
   // to state.json, and reading it back needs NO search, so discovery is paid for
   // once per product and every later sweep reads that document for free.
   const searchable = searchAll || !!only || (p.readable !== "yes" && !p.pdfUrl);
-  if (useAgent && (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))) {
+  // The search rung asks the FX question too, so a savings product must not reach
+  // it — it would spend a search finding a document and then ask it the wrong
+  // thing.
+  if (!savings && useAgent && (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -902,7 +1069,12 @@ for (const id of ids) {
   // would throw the reason away exactly when it explains why the product is still
   // uncovered.
   state.products[id].lastReason = reason;
-  entries.push({ id, product: p.product, fields: value ? { fxFeePct: value } : {} });
+  const field: "fxFeePct" | "interestPct" = savings ? "interestPct" : "fxFeePct";
+  // The artifact carries the issuer and kind as well as the figure. Without them
+  // it cannot be read on its own — the web app would have to bundle the 117 kB
+  // state file just to learn that "ABN AMRO Direct Sparen" is ABN AMRO's, and a
+  // consumer of a published catalogue should not need our working notes.
+  entries.push({ id, product: p.product, issuer: p.issuer, kind: p.kind, fields: value ? { [field]: value } : {} });
   // The figure and its conditions are printed, not just a tick. --dry writes
   // nothing, so this console line is the ONLY artifact of a dry run, and
   // "✓ ING creditcard  provider-pdf" does not tell you WHICH number it believed —
@@ -918,12 +1090,22 @@ for (const id of ids) {
   );
 }
 
-const c = coverage(entries, "fxFeePct");
+// Coverage is per FIELD, and a sweep can now mix both kinds in one run, so the
+// two are counted separately and added rather than asked of one field.
+const cFx = coverage(entries, "fxFeePct");
+const cInt = coverage(entries, "interestPct");
+const c = {
+  covered: cFx.covered + cInt.covered,
+  total: entries.length,
+  byRoute: Object.fromEntries(
+    (Object.keys(cFx.byRoute) as (keyof typeof cFx.byRoute)[]).map((k) => [k, cFx.byRoute[k] + cInt.byRoute[k]]),
+  ) as typeof cFx.byRoute,
+};
 console.log(`\ncovered ${c.covered}/${c.total}  by route: ${JSON.stringify(c.byRoute)}`);
 if (changes.length) console.log(`\nCHANGED:\n  ${changes.join("\n  ")}`);
 if (discovered.length) console.log(`\nDISCOVERED SOURCES (cached in ${STATE}, free from now on):\n  ${discovered.join("\n  ")}`);
 
-const figuresFound = entries.filter((e) => e.fields.fxFeePct).length;
+const figuresFound = entries.filter((e) => figureOf(e)).length;
 // Two counts, not a ratio: one route can make several requests (the archive costs
 // a CDX lookup plus the snapshot itself), so responses/attempts was going above 1
 // and reading like a bug.
