@@ -82,8 +82,7 @@ dus er wordt niets verdrongen en Email Routing is gratis.
 3. **Activeer de workflow** (de schakelaar rechtsboven). Een webhook werkt alleen
    in een actieve workflow; in de test-modus luistert hij precies één keer, en
    daarna geeft hij `404`.
-4. Kopieer de **Production URL** van de node. Die eindigt op
-   `/webhook/lavega-mail-in`. Neem níet de test-URL — die staat op
+4. Kopieer de **Production URL** van de node. Neem níet de test-URL — die staat op
    `/webhook-test/…` en levert na één keer een bounce met "404 … de workflow staat
    niet op Actief, of dit is de test-URL".
 
@@ -93,12 +92,10 @@ Er staat **geen wrangler in de repo** en de Worker heeft **nul
 afhankelijkheden** — er loopt niets mee in een pad dat een factuur draagt. Je
 haalt wrangler per keer op.
 
-1. Zet de URL uit stap 2 in `apps/email-worker/wrangler.toml`, bij
-   `N8N_WEBHOOK_URL`. Die staat er nu leeg in; zolang hij leeg is weigert de
-   Worker elke mail met precies die mededeling in de bounce.
-2. Het geheim gaat **niet** in de repo:
+1. URL en geheim gaan **niet** in de repo:
    ```bash
    cd apps/email-worker
+   pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL       # plak de Production URL
    pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET     # plak het geheim
    pnpm dlx wrangler@4 deploy
    ```

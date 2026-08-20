@@ -626,6 +626,29 @@ table tbody tr:hover {
   color: var(--ink);
   border-color: var(--accent);
 }
+
+/* Link out to the investing app — a separate deploy, not a route, so it gets
+ * the same pill treatment as the profile entry beside it but never an
+ * "active" state: leaving this app is never "where you are". */
+.appbar-investing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 14px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.appbar-investing:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
 .appbar-profile.active {
   color: var(--on-ink);
   background: linear-gradient(180deg, var(--ink), var(--ink-soft));
@@ -1123,6 +1146,9 @@ table tbody tr:hover {
   }
   .appbar-profile {
     padding: 4px 12px 4px 4px;
+  }
+  .appbar-investing {
+    padding: 4px 12px;
   }
   .profile-avatar {
     width: 24px;

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { View } from "../App";
 import type { ModuleDef } from "./moduleRegistry";
+import { INVESTING_URL } from "../api.js";
 
 /* The app bar: brand, the owner's own module selection as a horizontal tab set,
  * and the profile entry top right (the reference's avatar position).
@@ -54,6 +55,18 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
       </nav>
 
       <div className="appbar-right">
+        {/* The investing app is a separate deploy (apps/investing-web), so this
+         * is a plain link, not a nav-item: it leaves the SPA rather than
+         * changing `view`, and opens in its own tab so the personal side's
+         * unlocked vault stays exactly where it was. */}
+        <a href={INVESTING_URL} target="_blank" rel="noopener noreferrer" className="appbar-investing">
+          <Icon>
+            <path d="M4 19h16" />
+            <path d="M7 19V10M12 19V5M17 19v7" />
+          </Icon>
+          <span>Investing</span>
+        </a>
+
         <button
           type="button"
           className={`appbar-profile${view === "profiel" ? " active" : ""}`}

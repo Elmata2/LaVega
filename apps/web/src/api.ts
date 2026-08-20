@@ -5,6 +5,15 @@
 export const API_BASE: string =
   import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8787" : "");
 
+/* The investing app (apps/investing-web, served by apps/investing-server) is a
+ * separate deploy, not a route inside this SPA — it has no `View` and never
+ * will (see moduleRegistry.tsx: a ModuleId is always a View). The topbar link
+ * to it is a plain cross-origin <a>, so this only needs its origin. Default
+ * matches scripts/rebuild-investing-orbstack.sh's local port; overridable via
+ * VITE_INVESTING_URL once a hosted-tier URL exists. */
+export const INVESTING_URL: string =
+  import.meta.env.VITE_INVESTING_URL ?? "http://127.0.0.1:8790";
+
 export type ChatMessage = { role: string; content: string };
 
 /** One transaction for the AI-categorize proxy. Only these three fields ever
