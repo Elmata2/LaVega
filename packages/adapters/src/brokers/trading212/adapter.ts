@@ -110,16 +110,37 @@ function value(order: Trading212Order, ...keys: string[]): unknown {
   return keys.map((key) => order[key]).find((item) => item !== undefined && item !== null);
 }
 
+function object(valueToParse: unknown, field: string): Trading212Order {
+  if (!valueToParse || typeof valueToParse !== "object" || Array.isArray(valueToParse)) {
+    throw new Error(`Trading 212 ${field} is missing or invalid`);
+  }
+  return valueToParse as Trading212Order;
+}
+
+function optionalObject(valueToParse: unknown, field: string): Trading212Order | null {
+  if (valueToParse === undefined || valueToParse === null) return null;
+  return object(valueToParse, field);
+}
+
+function string(valueToParse: unknown, field: string): string {
+  if (typeof valueToParse !== "string" || !valueToParse) throw new Error(`Trading 212 ${field} is missing or invalid`);
+  return valueToParse;
+}
+
+function optionalString(valueToParse: unknown): string | undefined {
+  return typeof valueToParse === "string" && valueToParse ? valueToParse : undefined;
+}
+
 function number(valueToParse: unknown, field: string): number {
   const parsed = Number(valueToParse);
-  if (!Number.isFinite(parsed)) throw new Error(`Trading 212 order ${field} is missing or invalid`);
+  if (!Number.isFinite(parsed)) throw new Error(`Trading 212 ${field} is missing or invalid`);
   return parsed;
 }
 
-function date(valueToParse: unknown): string {
+function date(valueToParse: unknown, field: string): string {
   const raw = String(valueToParse ?? "");
   const parsed = new Date(raw);
-  if (!raw || Number.isNaN(parsed.getTime())) throw new Error("Trading 212 order date is missing or invalid");
+  if (!raw || Number.isNaN(parsed.getTime())) throw new Error(`Trading 212 ${field} is missing or invalid`);
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -142,56 +163,63 @@ function nullableNumber(valueToParse: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mapOrder(order: Trading212Order, entity: string): TradeWithoutId | null {
-  const instrument = order.instrument && typeof order.instrument === "object" && !Array.isArray(order.instrument)
-    ? order.instrument as Trading212Order
-    : {};
-  const get = (...keys: string[]) => value(order, ...keys) ?? value(instrument, ...keys);
-  const symbol = String(get("ticker", "symbol") ?? "");
-  if (!symbol) return null;
-  const brokerTradeId = get("id", "orderId");
-  const amount = nullableNumber(get("totalCost", "filledValue", "value", "amount"));
-  const commission = nullableNumber(get("fees", "commission"));
+function basicAuth(token: string, secret: string): string {
+  return `Basic ${globalThis.btoa(`${token}:${secret}`)}`;
+}
+
+function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId | null {
+  const fill = object(historyOrder.fill, "historical order fill");
+  if (value(fill, "type") !== "TRADE") return null;
+  const order = object(historyOrder.order, "historical order");
+  const instrument = optionalObject(order.instrument, "historical order instrument") ?? {};
+  const symbol = string(value(order, "ticker") ?? value(instrument, "ticker"), "order symbol");
+  const fillPrice = number(fill.price, "order fill price");
+  const fillQuantity = number(fill.quantity, "order fill quantity");
+  const brokerTradeId = value(fill, "id") ?? value(order, "id");
+  const walletImpact = optionalObject(fill.walletImpact, "order fill wallet impact");
+  const isin = optionalString(value(instrument, "isin"));
+  const description = optionalString(value(instrument, "name"));
+  const commission = walletImpact && Array.isArray(walletImpact.taxes)
+    ? walletImpact.taxes.reduce((total, tax) => {
+        if (!tax || typeof tax !== "object" || Array.isArray(tax)) return total;
+        return total + (nullableNumber((tax as Trading212Order).fillAmount) ?? 0);
+      }, 0)
+    : null;
   return {
     tenantId: LOCAL_TENANT_ID,
     entity,
-    date: date(get("dateExecuted", "executedAt", "fillDate", "dateCreated", "createdAt")),
+    date: date(fill.filledAt, "order fill date"),
     symbol,
-    ...(typeof get("isin") === "string" ? { isin: get("isin") as string } : {}),
-    ...(typeof get("name", "description") === "string" ? { description: get("name", "description") as string } : {}),
-    side: side(get("direction", "side")),
-    quantity: number(get("filledQuantity", "quantity"), "quantity"),
-    price: nullableNumber(get("fillPrice", "price")),
-    amount,
-    currency: String(get("currency", "currencyCode") ?? ""),
+    ...(isin ? { isin } : {}),
+    ...(description ? { description } : {}),
+    side: side(order.side),
+    quantity: fillQuantity,
+    price: fillPrice,
+    amount: fillPrice * fillQuantity,
+    currency: string(value(instrument, "currency") ?? order.currency, "order currency"),
     commission,
     ...(brokerTradeId !== undefined && brokerTradeId !== null ? { brokerTradeId: String(brokerTradeId) } : {}),
   };
 }
 
 function mapPosition(raw: Trading212Order, entity: string): Position {
-  // KNOWN GAP: the published schema names `averagePricePaid` and puts market
-  // value under `walletImpact.currentValue`, so both come back null against a
-  // real payload. The aliases below only cover the shape this adapter was
-  // written against. See docs/investing/CONNECTORS.md, Trading 212 open items.
-  const instrument = raw.instrument && typeof raw.instrument === "object" && !Array.isArray(raw.instrument)
-    ? raw.instrument as Trading212Order
-    : {};
-  const get = (...keys: string[]) => value(raw, ...keys) ?? value(instrument, ...keys);
-  const symbol = String(get("ticker", "symbol") ?? "");
-  if (!symbol) throw new Error("Trading 212 position symbol is missing");
+  const instrument = object(raw.instrument, "position instrument");
+  const walletImpact = optionalObject(raw.walletImpact, "position wallet impact");
+  const symbol = string(instrument.ticker, "position symbol");
+  const isin = optionalString(instrument.isin);
+  const description = optionalString(instrument.name);
   return {
     tenantId: LOCAL_TENANT_ID,
     entity,
     symbol,
-    ...(typeof get("isin") === "string" ? { isin: get("isin") as string } : {}),
-    ...(typeof get("name", "description") === "string" ? { description: get("name", "description") as string } : {}),
-    quantity: number(get("quantity", "position"), "position quantity"),
-    averagePrice: nullableNumber(get("averagePrice", "avgPrice")),
-    marketPrice: nullableNumber(get("currentPrice", "marketPrice", "price")),
-    marketValue: nullableNumber(get("marketValue", "value", "currentValue")),
-    currency: String(get("currency", "currencyCode") ?? ""),
-    asOf: date(get("asOf", "date", "updatedAt") ?? new Date().toISOString()),
+    ...(isin ? { isin } : {}),
+    ...(description ? { description } : {}),
+    quantity: number(raw.quantity, "position quantity"),
+    averagePrice: nullableNumber(raw.averagePricePaid),
+    marketPrice: nullableNumber(raw.currentPrice),
+    marketValue: walletImpact ? nullableNumber(walletImpact.currentValue) : null,
+    currency: string(instrument.currency ?? walletImpact?.currency, "position currency"),
+    asOf: date(raw.createdAt ?? new Date().toISOString(), "position date"),
   };
 }
 
@@ -229,7 +257,7 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
   for (let retry = 0; ; retry += 1) {
     await limiter.reserve(path);
     const response = await fetch(url, {
-      headers: { Authorization: `Basic ${Buffer.from(`${config.token}:${config.secret}`).toString("base64")}` },
+      headers: { Authorization: basicAuth(config.token, config.secret) },
     });
     const reset = resetAtMs(response);
     config.diagnostics?.({
@@ -306,9 +334,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               const trade = mapOrder(order, entity);
               if (trade) trades.push(trade);
             } catch (error) {
-              if (error instanceof Error && error.message !== "Trading 212 order symbol is missing") {
-                problems.push(error.message);
-              }
+              problems.push(error instanceof Error ? error.message : "Trading 212 order is invalid");
             }
           }
           nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";

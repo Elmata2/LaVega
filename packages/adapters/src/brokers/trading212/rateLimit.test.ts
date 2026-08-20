@@ -44,19 +44,44 @@ function withVirtualClock(): { restore: () => void; now: () => number } {
 
 function order(index: number) {
   return {
-    id: 900_000 + index,
-    ticker: `SYM${index}_US_EQ`,
-    direction: index % 2 === 0 ? "BUY" : "SELL",
-    filledQuantity: 1,
-    fillPrice: 10,
-    totalCost: 10,
-    currency: "EUR",
-    dateExecuted: "2026-08-18T10:15:00Z",
-    fees: 0.01,
+    fill: {
+      id: 900_000 + index,
+      filledAt: "2026-08-18T10:15:00Z",
+      price: 10,
+      quantity: 1,
+      type: "TRADE",
+    },
+    order: {
+      id: 800_000 + index,
+      ticker: `SYM${index}_US_EQ`,
+      side: index % 2 === 0 ? "BUY" : "SELL",
+      currency: "EUR",
+      instrument: {
+        ticker: `SYM${index}_US_EQ`,
+        isin: `US${String(index).padStart(10, "0")}`,
+        name: `Symbol ${index}`,
+        currency: "EUR",
+      },
+    },
   };
 }
 
-const holding = { ticker: "AAPL_US_EQ", isin: "US0378331005", name: "Apple Inc.", quantity: 3, averagePrice: 150.25, currentPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18T12:00:00Z" };
+const holding = {
+  averagePricePaid: 150.25,
+  createdAt: "2026-08-18T12:00:00Z",
+  currentPrice: 175.5,
+  instrument: {
+    ticker: "AAPL_US_EQ",
+    isin: "US0378331005",
+    name: "Apple Inc.",
+    currency: "USD",
+  },
+  quantity: 3,
+  walletImpact: {
+    currency: "USD",
+    currentValue: 526.5,
+  },
+};
 
 function fakeTrading212(totalOrders = TOTAL_ORDERS): { fetch: typeof globalThis.fetch; requests: string[]; rejections: number } {
   const orders = Array.from({ length: totalOrders }, (_, index) => order(index));

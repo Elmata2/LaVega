@@ -19,20 +19,48 @@ async function serve(handler: (request: IncomingMessage, response: ServerRespons
 
 function order(id: number, ticker: string, direction = "BUY") {
   return {
-    id,
-    ticker,
-    direction,
-    filledQuantity: 2,
-    fillPrice: 10,
-    totalCost: 20,
-    currency: "EUR",
-    dateExecuted: "2026-08-18T10:15:00Z",
-    fees: 0.1,
+    fill: {
+      id: id * 10,
+      filledAt: "2026-08-18T10:15:00Z",
+      price: 10,
+      quantity: 2,
+      type: "TRADE",
+    },
+    order: {
+      id,
+      ticker,
+      side: direction,
+      currency: "EUR",
+      filledQuantity: 2,
+      filledValue: 99,
+      instrument: {
+        ticker,
+        isin: "US0378331005",
+        name: `${ticker} Holding`,
+        currency: "EUR",
+      },
+    },
   };
 }
 
 function holding(ticker: string) {
-  return { ticker, isin: "US0378331005", name: "Apple Inc.", quantity: 3, averagePrice: 150.25, currentPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18T12:00:00Z" };
+  return {
+    averagePricePaid: 150.25,
+    createdAt: "2026-08-18T12:00:00Z",
+    currentPrice: 175.5,
+    instrument: {
+      ticker,
+      isin: "US0378331005",
+      name: "Apple Inc.",
+      currency: "USD",
+    },
+    quantity: 3,
+    walletImpact: {
+      currency: "USD",
+      currentValue: 526.5,
+      totalCost: 450.75,
+    },
+  };
 }
 
 function isOrderHistory(request: IncomingMessage): boolean {
@@ -65,9 +93,21 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
   expect(result.problems).toEqual([]);
   expect(result.positions).toMatchObject([{ entity: "Holding BV", symbol: "AAPL", isin: "US0378331005", quantity: 3, averagePrice: 150.25, marketPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18" }]);
   expect(result.trades).toMatchObject([
-    { entity: "Holding BV", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, brokerTradeId: "1" },
+    { entity: "Holding BV", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, brokerTradeId: "10" },
     { entity: "Holding BV", symbol: "MSFT", side: "sell" },
   ]);
+});
+
+test("maps one trade per fill and does not use order-level filledValue as fill amount", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });
+    else json(response, 200, [holding("AAPL")]);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ symbol: "AAPL", quantity: 2, price: 10, amount: 20 }]);
 });
 
 test("sync returns collected trades and problem when later page fails", async () => {
@@ -138,13 +178,13 @@ test("malformed order-history payload becomes a problem without throwing", async
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
-test("ignores non-security order rows and maps nested instruments", async () => {
+test("ignores non-trade fill rows and maps nested instruments", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) {
       json(response, 200, {
         items: [
-          { id: 1, type: "CASH_ADJUSTMENT", dateCreated: "2026-08-18T10:15:00Z" },
-          { id: 2, instrument: { ticker: "AAPL", isin: "US0378331005" }, direction: "BUY", filledQuantity: 1, fillPrice: 10, currency: "USD", dateExecuted: "2026-08-18T10:15:00Z" },
+          { fill: { id: 1, type: "STOCK_SPLIT", filledAt: "2026-08-18T10:15:00Z", price: 0, quantity: 1 }, order: { id: 1, ticker: "AAPL", side: "BUY", currency: "USD", instrument: { ticker: "AAPL", currency: "USD" } } },
+          { fill: { id: 2, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 10, quantity: 1 }, order: { id: 2, ticker: "AAPL", side: "BUY", currency: "USD", instrument: { ticker: "AAPL", isin: "US0378331005", currency: "USD" } } },
         ],
       });
     } else json(response, 200, [holding("AAPL")]);
@@ -156,6 +196,16 @@ test("ignores non-security order rows and maps nested instruments", async () => 
   expect(result.trades).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
 });
 
+test("schema-mismatched order rows become problems instead of silent empty success", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) json(response, 200, { items: [{ id: 1, ticker: "AAPL", filledQuantity: 1, fillPrice: 10 }] });
+    else json(response, 200, [holding("AAPL")]);
+  });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  expect(result.trades).toEqual([]);
+  expect(result.problems).toEqual(["Trading 212 historical order fill is missing or invalid"]);
+});
+
 test("malformed holdings rows become problems without taking trades down", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });
@@ -164,5 +214,5 @@ test("malformed holdings rows become problems without taking trades down", async
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toHaveLength(1);
   expect(result.positions).toEqual([]);
-  expect(result.problems).toEqual(["Trading 212 position symbol is missing"]);
+  expect(result.problems).toEqual(["Trading 212 position instrument is missing or invalid"]);
 });

@@ -72,6 +72,7 @@ async function collectModules(): Promise<SourceModule[]> {
     const source = await readFile(file, "utf8");
     const imports: ImportEdge[] = [];
     for (const match of source.matchAll(IMPORT_PATTERN)) {
+      if (/^(import|export)\s+type\b/.test(match[0])) continue;
       imports.push({
         file: relative(REPOSITORY_ROOT, file),
         specifier: match[1] ?? match[2] ?? "",
