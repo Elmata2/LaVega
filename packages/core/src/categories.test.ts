@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Rule, Tx } from "./model.js";
 import { categorize } from "./views.js";
+import { FOREIGN_COUNTRY_CODES } from "./categories.js";
 import { NL_CATEGORY_RULES, matchNorm } from "./categories.js";
 
 const tx = (counterparty: string, description = "", category = ""): Tx => ({
@@ -154,4 +155,17 @@ test("Eigen overboeking: generic keys never match, and manual label still wins",
 
 test("without own accounts, categorize behaves as before (no Eigen overboeking)", () => {
   expect(categorize(onKey("NL95INGB0674843703", "Naar NL88INGB0793113504"), [])).toBe("onbekend");
+});
+
+test("FOREIGN_COUNTRY_CODES holds only well-formed codes, and none that is also a word", () => {
+  // A typo here is invisible in normal use — it just quietly never matches, or
+  // matches something that is not a country ("MOR" for Morocco, which is MAR).
+  for (const c of FOREIGN_COUNTRY_CODES) expect(c).toMatch(/^[A-Z]{3}$/);
+  // Home is not a signal.
+  expect(FOREIGN_COUNTRY_CODES.has("NLD")).toBe(false);
+  // Valid ISO codes that are also ordinary words, left out on purpose — see the
+  // comment on the set. Morocco and Switzerland are unreachable as a result.
+  for (const c of ["CAN", "PER", "MAR", "CHE", "IND", "COL", "ARE", "SEN", "AND", "ALB", "ISL"]) {
+    expect(FOREIGN_COUNTRY_CODES.has(c)).toBe(false);
+  }
 });

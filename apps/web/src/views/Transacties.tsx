@@ -1,10 +1,42 @@
 import { useMemo, useState } from "react";
-import type { Account, OwnAccounts, Rule, Tx, CategoryDecision } from "@lavega/core";
-import { enrichTxs, filterTxs, categorize, uncategorizedByMonth, CATEGORY_OPTIONS } from "@lavega/core";
+import type { Account, OwnAccounts, Rule, Tx, CategoryDecision, UnknownReason, AiCategorizeItem } from "@lavega/core";
+import {
+  enrichTxs, filterTxs, categorize, uncategorizedByMonth, CATEGORY_OPTIONS,
+  unknownBreakdown, unknownReason, foreignCode, aiCategorizeItems,
+} from "@lavega/core";
 import { formatEuro } from "../format";
 import { categorizeTxs } from "../api";
 import { getAiCategorizeEnabled, setAiCategorizeEnabled } from "../settings";
-import { buildCategorizeItems, toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
+import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
+
+/* What each "onbekend" reason means and what the owner can DO about it. Written
+ * out rather than left as a bare label because the review's complaint was not
+ * that the number was wrong — it was that "onbekend" said nothing at all. The
+ * `ai` flag decides whether we may claim the AI pass can help: for a row whose
+ * only surviving text is account numbers it CANNOT, and saying otherwise would
+ * send him round a loop that can never close. */
+const REASON_TEXT: Record<UnknownReason, { label: string; what: string; ai: boolean }> = {
+  buitenland: {
+    label: "buitenlandse betaling",
+    what: "Kaartbetalingen in het buitenland. De naam van de winkel staat er wel bij, maar staat in geen enkele regel.",
+    ai: true,
+  },
+  "onbekende-tegenpartij": {
+    label: "geen regel",
+    what: "Er staat een tegenpartij in de transactie, maar geen regel en geen ingebouwde categorie past erop.",
+    ai: true,
+  },
+  "alleen-nummers": {
+    label: "alleen nummers",
+    what: "Na het weghalen van rekeningnummers en bedragen blijft er geen leesbare tekst over. Hier valt niets te lezen — ook niet voor de AI. Geef deze zelf een categorie.",
+    ai: false,
+  },
+  "geen-tekst": {
+    label: "geen tekst",
+    what: "De export gaf geen tegenpartij en geen omschrijving mee. Geef deze zelf een categorie.",
+    ai: false,
+  },
+};
 
 type TransactiesProps = {
   accounts: Account[];
@@ -84,24 +116,38 @@ export default function Transacties({
     [filtered, fCategory, rules, own],
   );
 
+  // --- The "onbekend" pile ------------------------------------------------
+  // What it IS, per reason, over the rows currently in view. Named reasons
+  // rather than a bare count: an unknown EUR 4.000 with no explanation is a
+  // dead end, and this is data we already hold (a card export prints the
+  // merchant's country on the row).
+  const unknown = useMemo(() => unknownBreakdown(filtered, rules, own), [filtered, rules, own]);
+
   // --- AI categorization (opt-in, confirm-first) --------------------------
-  // The transactions the AI flow can offer: those still "onbekend" under the
-  // current rules, within the active scope. Sliced to the server's batch cap.
-  // NEWEST MONTH FIRST, not the flat list. Storage is import-ordered, so it is
-  // oldest-first, and slicing the flat list handed the model the OLDEST unknowns
-  // — while the blocks that actually show "onbekend" (Top-uitgaven, de
-  // categorie-trend) look at the LATEST month, which a capped run would never
-  // reach. Fill the batch from the newest month down.
-  const onbekend = useMemo(() => {
-    const out: Tx[] = [];
-    for (const m of uncategorizedByMonth(scopedTxs, rules, own)) {
+  // The batch the AI flow will send. Two properties, both load-bearing:
+  //
+  //  * NEWEST MONTH FIRST, not the flat list. Storage is import-ordered, i.e.
+  //    oldest-first, so slicing the flat list handed the model the OLDEST
+  //    unknowns — while the blocks that actually show "onbekend" (Top-uitgaven,
+  //    de categorie-trend) look at the LATEST month, which a capped run would
+  //    never reach.
+  //  * ONLY ROWS WITH READABLE TEXT. aiCategorizeItems drops a row whose
+  //    redacted text has no letters left, so the 200-item cap is spent on rows
+  //    that can actually be answered instead of on blanks.
+  const batch = useMemo(() => {
+    const txs: Tx[] = [];
+    const items: AiCategorizeItem[] = [];
+    for (const m of uncategorizedByMonth(filtered, rules, own)) {
       for (const t of m.txs) {
-        if (out.length >= MAX_CATEGORIZE_BATCH) return out;
-        out.push(t);
+        if (items.length >= MAX_CATEGORIZE_BATCH) return { txs, items };
+        const [item] = aiCategorizeItems([t]);
+        if (!item) continue; // nothing to read — see REASON_TEXT["alleen-nummers"]
+        txs.push(t);
+        items.push(item);
       }
     }
-    return out;
-  }, [scopedTxs, rules, own]);
+    return { txs, items };
+  }, [filtered, rules, own]);
   const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiCategorizeEnabled());
   // idle → (consent) → loading → review → idle. `consent` only appears the
   // first time, before the owner opts in.
@@ -113,10 +159,10 @@ export default function Transacties({
     setAiNote(null);
     setAiPhase("loading");
     try {
-      const results = await categorizeTxs(buildCategorizeItems(onbekend));
+      const results = await categorizeTxs(batch.items);
       const byId = new Map(results.map((r) => [r.id, r.category]));
       // Only surface txs the model could place; the owner reviews/edits/skips each.
-      const proposed = onbekend
+      const proposed = batch.txs
         .filter((t) => byId.has(t.id))
         .map((t) => ({ tx: t, category: byId.get(t.id)! }));
       if (proposed.length === 0) {
@@ -164,23 +210,109 @@ export default function Transacties({
     setAiPhase("idle");
   }
 
+  /** The Categorie cell. For a placed row that is just the category; for an
+   *  "onbekend" row it also names WHY — with the country code when the export
+   *  gave us one, since that is the single most useful thing we already know
+   *  about a row we cannot place. */
+  function categoryCell(t: Tx) {
+    const category = categorize(t, rules, own);
+    if (category !== "onbekend") return category;
+    const reason = unknownReason(t);
+    const cc = reason === "buitenland" ? foreignCode(t) : null;
+    return (
+      <>
+        onbekend{" "}
+        <span className="badge" title={REASON_TEXT[reason].what}>
+          {REASON_TEXT[reason].label}
+          {cc ? ` ${cc}` : ""}
+        </span>
+      </>
+    );
+  }
+
   return (
     <section className="card" aria-label="Transacties">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--sp-3)", flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0 }}>Transacties</h2>
-        {configured && onbekend.length > 0 && aiPhase === "idle" && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={onCategorizeClick}
-            aria-label="Categoriseer onbekende transacties met AI"
-          >
-            Categoriseer met AI ({onbekend.length})
-          </button>
-        )}
-      </div>
+      <h2 style={{ margin: 0 }}>Transacties</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
+
+      {/* --- The onbekend panel. This is where the AI route now lives, because
+          this is where the unknowns are visible: a button on the page header
+          fixed something the owner could not see, and reported the batch cap
+          (200) as if it were the total. --- */}
+      {unknown.count > 0 && aiPhase === "idle" && (
+        <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
+          <div
+            style={{
+              display: "flex", alignItems: "baseline", justifyContent: "space-between",
+              gap: "var(--sp-3)", flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div className="cell-sub">Onbekend</div>
+              <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                {unknown.count} {unknown.count === 1 ? "transactie" : "transacties"} ·{" "}
+                <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>{formatEuro(unknown.amount)}</span>
+              </strong>
+            </div>
+            <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={"pill" + (fCategory === "onbekend" ? " pill-active" : "")}
+                onClick={() => onFCategoryChange(fCategory === "onbekend" ? "" : "onbekend")}
+              >
+                {fCategory === "onbekend" ? "Toon alles" : "Toon alleen onbekend"}
+              </button>
+              {configured && batch.items.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={onCategorizeClick}
+                  aria-label="Laat de AI de onbekende transacties lezen"
+                >
+                  {/* The honest count: how many go out THIS run, out of how many
+                      there are. The batch is capped at 200 per request. */}
+                  Laat de AI ze lezen
+                  {batch.items.length < unknown.count ? ` (${batch.items.length} van ${unknown.count})` : ` (${batch.items.length})`}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <ul style={{ listStyle: "none", padding: 0, margin: "var(--sp-3) 0 0" }}>
+            {unknown.byReason.map((b) => {
+              const t = REASON_TEXT[b.reason];
+              return (
+                <li key={b.reason} style={{ marginBottom: "var(--sp-2)" }}>
+                  <span className="badge">{t.label}</span>{" "}
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {b.count}× · {formatEuro(b.amount)}
+                  </span>
+                  {b.countries.length > 0 && <span className="cell-sub"> · {b.countries.join(", ")}</span>}
+                  <div className="cell-sub">{t.what}</div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {!configured && unknown.byReason.some((b) => REASON_TEXT[b.reason].ai) && (
+            /* Name the real cause. The AI route is not "unavailable" in the
+               abstract — the server has no Anthropic key set. Anything vaguer
+               sends someone looking in the wrong place. */
+            <p className="cell-sub">
+              De AI-route staat uit: op de server is geen Anthropic-sleutel ingesteld. Tot die er is
+              kun je deze transacties indelen met een eigen regel onder Regels, of ze hier per stuk
+              een categorie geven.
+            </p>
+          )}
+          {configured && batch.items.length === 0 && (
+            <p className="cell-sub">
+              Geen van deze transacties heeft tekst die de AI kan lezen — hier helpt alleen een eigen
+              regel of een categorie die je zelf geeft.
+            </p>
+          )}
+        </div>
+      )}
 
       {aiPhase === "consent" && (
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
@@ -361,7 +493,7 @@ export default function Transacties({
                     </span>
                   </td>
                   <td data-label="Entiteit">{t.entity}</td>
-                  <td data-label="Categorie">{categorize(t, rules, own)}</td>
+                  <td data-label="Categorie">{categoryCell(t)}</td>
                 </tr>
               ))}
             </tbody>
