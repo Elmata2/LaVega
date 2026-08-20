@@ -19,8 +19,11 @@ function rateFor(rates: FxRates, date: string): FxRate {
   return rate;
 }
 
-/** Convert one monetary value using the latest supplied rate on or before date. */
+/** Convert one monetary value using the latest supplied rate on or before date.
+ *  Same-currency values skip the rate lookup entirely, so they never go
+ *  `unpriced` just because no FX rate covers that date. */
 export function convertCurrency(value: number, from: string, to: string, date: string, fxRates: FxRates): number {
+  if (from === to) return value;
   return value * crossRate(from, to, rateFor(fxRates, date));
 }
 
@@ -66,10 +69,12 @@ export function computePortfolioValueSeries(
   });
 }
 
-/** Normalize benchmark closes to the portfolio's first priced value. */
+/** Normalize benchmark closes to the portfolio's first priced value. Skips
+ *  leading zero-value points (e.g. dates before any position was opened), so
+ *  the benchmark line isn't scaled to zero for the whole range. */
 export function normalizeBenchmarkSeries(bars: PriceBar[], portfolio: PortfolioValuePoint[]): BenchmarkPoint[] {
   const sortedBars = [...bars].sort((a, b) => a.date.localeCompare(b.date));
-  const firstPortfolio = portfolio.find((point) => point.unpriced.length === 0 && sortedBars.some((bar) => bar.date === point.date));
+  const firstPortfolio = portfolio.find((point) => point.unpriced.length === 0 && point.value !== 0 && sortedBars.some((bar) => bar.date === point.date));
   const firstBar = sortedBars.find((bar) => bar.date === firstPortfolio?.date);
   if (!firstPortfolio || !firstBar || firstBar.close === 0) return [];
   return sortedBars.filter((bar) => bar.date >= firstBar.date).map((bar) => ({ date: bar.date, value: firstPortfolio.value * bar.close / firstBar.close }));

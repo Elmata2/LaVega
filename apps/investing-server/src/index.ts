@@ -14,6 +14,7 @@ import {
 } from "@lavega/adapters";
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
+import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
 
 export { app };
 
@@ -152,12 +153,17 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
   const priceStore = options.priceStore;
-  const fxProvider = createFrankfurterFxProvider();
+  const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
+  const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
   let syncProgress: BrokerSyncProgress = { status: "idle", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: null, message: null };
   const credentials = createFileCredentialStore();
   const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
   if (startupPassphrase && await credentials.status() === "locked") await credentials.unlock(startupPassphrase);
   const brokerData = createRuntimeBrokerDataCache(await credentials.status() === "unlocked" ? await credentials.getBrokerData() : {});
+  if (devFixtureEnabled) {
+    brokerData.restore(createDevFixtureBrokerData());
+    await priceStore.upsert(createDevFixturePriceBars());
+  }
   const restoreBrokerData = async () => brokerData.restore(await credentials.getBrokerData());
   const updateProgress = (event: Trading212DiagnosticEvent) => {
     const updatedAt = new Date().toISOString();
@@ -176,6 +182,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     if (result.outcomes.some((outcome) => outcome.result !== null)) await credentials.putBrokerData(brokerData.snapshot());
   }, credentials, createFileBrokerSyncStateStore(), updateProgress);
   const brokerSync = async (force: boolean) => {
+    if (devFixtureEnabled) {
+      syncProgress = { status: "completed", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Dev fixture data active — real broker sync skipped" };
+      return { outcomes: [], problems: [] };
+    }
     if (syncProgress.status !== "running" && syncProgress.status !== "waiting") {
       syncProgress = { status: "running", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Broker synchronization started" };
     }
