@@ -380,6 +380,16 @@ export function bookingEntity(ctx: EntityContext): string {
   return ctx.entityChoices.length === 1 ? ctx.entityChoices[0] : ctx.defaultEntity;
 }
 
+/** Zijn grens, 20 augustus: boven € 10.000 boekt niets zichzelf. Een getal dat hij
+ *  koos en niet een drempel die wij verzonnen — elke waarde die wij hadden gekozen
+ *  zou willekeurig zijn geweest, en dit is een vraag over hoeveel hij wil kunnen
+ *  missen zonder het te zien. */
+export const AUTO_BOOK_CEILING_CENTS = 1_000_000;
+
+function formatCeiling(): string {
+  return `€ ${(AUTO_BOOK_CEILING_CENTS / 100).toLocaleString("nl-NL")}`;
+}
+
 export function autoBookDecision(
   row: N8nInvoiceRow,
   ctx: EntityContext,
@@ -406,6 +416,21 @@ export function autoBookDecision(
   }
   const check = pendingToInvoice(toPending(row, bookingEntity(ctx)));
   if (!check.ok) return { book: false, reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.` };
+  /* HET PLAFOND, LAATST GECONTROLEERD EN MET OPZET. Een bedrag boven de grens
+   * wacht ook als de afzender geverifieerd is en de extractie compleet — het is de
+   * enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een geverifieerde
+   * afzender kan een correcte factuur sturen met een fout bedrag, en dan is de vraag
+   * niet of hij echt is maar hoeveel je wilt kunnen missen zonder het te zien.
+   *
+   * Deze staat als LAATSTE zodat de melding de nuttigste is: bij een gespoofte
+   * afzender van € 50.000 hoort hij te lezen dat de afzender niet klopt, niet dat
+   * het bedrag hoog is. */
+  if (row.amountCents > AUTO_BOOK_CEILING_CENTS) {
+    return {
+      book: false,
+      reason: `Boven ${formatCeiling()} boekt LaVega niets zelf, ook niet van een geverifieerde afzender. Deze wacht op jou.`,
+    };
+  }
   return { book: true };
 }
 

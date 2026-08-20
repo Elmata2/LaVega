@@ -11,6 +11,7 @@ import {
   rememberAutoBooked,
   toPending,
   NOTICE_LABELS,
+  AUTO_BOOK_CEILING_CENTS,
   type N8nInvoiceRow,
 } from "./n8n.js";
 import {
@@ -331,4 +332,40 @@ test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wiss
   expect(getAutoBookedInvoices()[0].subject).toBe("Factuur juli");
   forgetAutoBooked("inv-1");
   expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-2"]);
+});
+
+/** Een geverifieerde rij zoals de app hem krijgt: via parseQueue, niet met de hand
+ *  in elkaar gezet — anders test dit een vorm die de app nooit ziet. */
+function verifiedRow(over: Partial<N8nInvoiceRow>): N8nInvoiceRow {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  return { ...row, ...over };
+}
+
+/* HET PLAFOND VAN € 10.000 — zijn grens van 20 augustus.
+ *
+ * De enige rem die niet over de HERKOMST van de mail gaat maar over de SCHADE: een
+ * geverifieerde afzender kan een correcte factuur sturen met een fout bedrag.
+ */
+test("boven het plafond boekt niets zichzelf, ook niet van een geverifieerde afzender", () => {
+  const ctx = { entityChoices: ["BV1"], defaultEntity: "BV1" };
+  const onder = autoBookDecision(verifiedRow({ amountCents: AUTO_BOOK_CEILING_CENTS }), ctx);
+  expect(onder.book).toBe(true);
+  const boven = autoBookDecision(verifiedRow({ amountCents: AUTO_BOOK_CEILING_CENTS + 1 }), ctx);
+  // Expliciet narrowen: AutoBookDecision is een union en een expect() vertelt de
+  // typechecker niets. Zonder dit compileert de test niet, en dat is de bedoeling
+  // van die union — de reden bestaat alleen als er niet geboekt wordt.
+  if (boven.book) throw new Error("verwacht dat het plafond dit tegenhoudt");
+  expect(boven.reason).toContain("10.000");
+});
+
+test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag", () => {
+  // De volgorde van de poorten bepaalt welke melding hij leest, en bij een
+  // nagemaakte afzender van € 50.000 is "de afzender klopt niet" het nuttige feit.
+  const d = autoBookDecision(
+    { ...verifiedRow({ amountCents: 5_000_000 }), senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    { entityChoices: ["BV1"], defaultEntity: "BV1" },
+  );
+  if (d.book) throw new Error("verwacht dat een gespoofte afzender dit tegenhoudt");
+  expect(d.reason).toContain("afzender");
+  expect(d.reason).not.toContain("10.000");
 });

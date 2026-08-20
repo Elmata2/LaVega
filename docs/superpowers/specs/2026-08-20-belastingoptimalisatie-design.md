@@ -304,3 +304,21 @@ holds *is* a measurement — that is a different claim about different data.)
 **One finding for another lane, not mine to fix:** `taxSheet.ts` is complete, tested and imported by
 nothing in `apps/web`, and `Belasting.tsx` calls `computeTaxReservations` without `figures`. His own
 bookkeeping cannot currently reach the BTW figure, whatever we build on top.
+
+
+---
+
+## Zijn antwoorden op sectie 8 (20 augustus, avond)
+
+**1. Factuurstelsel.** Richting A mag dus de facturenbasis gebruiken zodra elke factuur in het venster
+een btw-bedrag noemt. Het handmatige btw-veld op het factuurformulier bestaat inmiddels, dus die
+dekking is haalbaar zonder AI-concept.
+
+**2. Geen loonadministratie, en dit verandert Richting B wezenlijk.** Zijn woorden: *"het is niet voor
+DGA's met loon, het is gewoon inkomen al belast met btw."* Er is dus geen loonstrook, geen maandelijkse
+loonheffing en geen gebruikelijkloon-afweging om te signaleren. Het salaris-versus-dividend-signaal uit
+Richting B is voor hem niet van toepassing en moet NIET gebouwd worden op de aanname dat het er is.
+
+Wat er overblijft van Richting B is het deel dat wél klopt: de grens tussen privé en zakelijk zichtbaar
+maken waar die vervaagt. Dat is bij gefactureerd inkomen eerder MEER waard dan minder, want zonder
+loonstrook is er geen administratie die de scheiding voor hem al maakt.
