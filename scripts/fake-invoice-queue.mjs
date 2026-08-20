@@ -13,10 +13,34 @@
  *   node scripts/fake-invoice-queue.mjs
  *   → Koppelingen: URL http://127.0.0.1:8791/queue, token testtoken
  *
+ * JE EIGEN FACTUUR ERDOORHEEN:
+ *
+ *   node scripts/fake-invoice-queue.mjs --rows mijn-factuur.json
+ *
+ * Dan vervangen jouw rijen de vier voorbeelden. Waarom een apart bestand en niet
+ * dit script aanpassen: een echte factuur bevat de naam van een echte
+ * leverancier en een echt bedrag, en die horen niet in een repo thuis. Zet het
+ * bestand buiten de repo (bijvoorbeeld in je Downloads) en het blijft van jou.
+ *
+ * Het formaat is dat van n8n zelf — precies wat de app verwacht, dus wat hier
+ * doorheen komt komt straks ook door de echte keten:
+ *
+ *   [{ "messageId": "eigen-1", "subject": "...", "from": "...",
+ *      "senderCheck": "passed", "invoiceNumber": "...",
+ *      "issueDate": "2026-08-01", "dueDate": "2026-08-31",
+ *      "amountCents": 12100, "vatCents": 2100, "currency": "EUR",
+ *      "counterparty": "...", "direction": "expense" }]
+ *
+ * Laat je een veld weg, dan is het ONBEKEND en niet nul — de app zal die factuur
+ * dan laten wachten en zeggen wat er ontbreekt. Dat is precies wat je wilt zien.
+ * senderCheck zet je zelf: bij de echte keten komt die van Cloudflare (SPF/DKIM),
+ * hier bepaal jij of je een geverifieerde of een verdachte afzender naspeelt.
+ *
  * Draai hem NOOIT tegen een echte vault waarin je de geboekte facturen niet kwijt
  * wil: rij 1 boekt zichzelf, dat is het punt. Terugdraaien staat ernaast.
  */
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 
 const TOKEN = process.env.FAKE_QUEUE_TOKEN ?? "testtoken";
 const PORT = Number(process.env.FAKE_QUEUE_PORT ?? 8791);
@@ -110,6 +134,41 @@ const rows = [
   },
 ];
 
+/* --rows <bestand>: jouw eigen facturen in plaats van de voorbeelden.
+ *
+ * Het bestand mag een kale array zijn of {"invoices": [...]} — dat tweede is wat
+ * n8n zelf teruggeeft, dus je kunt een echt antwoord uit je workflow er zo in
+ * plakken zonder het om te bouwen.
+ *
+ * Bij een onleesbaar bestand STOPT dit script, en dat is opzet: stil terugvallen
+ * op de voorbeeldrijen zou je een geslaagde test laten zien van gegevens die
+ * niet van jou zijn. */
+const rowsFlag = process.argv.indexOf("--rows");
+let serving = rows;
+let servingLabel = "de vier voorbeeldrijen";
+if (rowsFlag !== -1) {
+  const path = process.argv[rowsFlag + 1];
+  if (!path) {
+    console.error("--rows heeft een pad nodig: node scripts/fake-invoice-queue.mjs --rows mijn-factuur.json");
+    process.exit(1);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    console.error(`Kan ${path} niet lezen als JSON: ${err.message}`);
+    console.error("Er wordt niets geserveerd — anders zou je de voorbeeldrijen testen en denken dat het je eigen factuur was.");
+    process.exit(1);
+  }
+  const list = Array.isArray(parsed) ? parsed : parsed?.invoices;
+  if (!Array.isArray(list) || list.length === 0) {
+    console.error(`${path} bevat geen facturen. Verwacht een array, of {"invoices": [...]} zoals n8n teruggeeft.`);
+    process.exit(1);
+  }
+  serving = list;
+  servingLabel = `${list.length} eigen ${list.length === 1 ? "rij" : "rijen"} uit ${path}`;
+}
+
 createServer((req, res) => {
   const token = req.headers["x-lavega-token"];
   if (token !== TOKEN) {
@@ -125,9 +184,17 @@ createServer((req, res) => {
     "access-control-allow-origin": "*",
     "access-control-allow-headers": "x-lavega-token, content-type",
   });
-  res.end(JSON.stringify({ invoices: rows, notices: [] }));
-  console.log(`200  ${rows.length} rijen geleverd`);
+  res.end(JSON.stringify({ invoices: serving, notices: [] }));
+  console.log(`200  ${serving.length} rijen geleverd`);
 }).listen(PORT, "127.0.0.1", () => {
   console.log(`nepwachtrij op http://127.0.0.1:${PORT}/queue   token: ${TOKEN}`);
-  console.log("rij 1 boekt zichzelf · rij 2 gemarkeerd (gespoofte afzender) · rij 3 wacht (incompleet)");
+  console.log(`serveert: ${servingLabel}`);
+  /* Alleen de voorbeelden beschrijven als het OOK de voorbeelden zijn. Deze regel
+   * zei eerder altijd "rij 1 boekt zichzelf", ook bij je eigen factuur, en dan
+   * lees je een uitkomst voor die je niet aan het testen bent. */
+  if (serving === rows) {
+    console.log("1 boekt zichzelf · 2 gemarkeerd (gespoofte afzender) · 3 wacht (incompleet) · 4 wacht (boven € 10.000)");
+  } else {
+    console.log("je eigen rijen — ontbrekende velden zijn ONBEKEND, niet nul; de app zegt dan wat er mist");
+  }
 });
