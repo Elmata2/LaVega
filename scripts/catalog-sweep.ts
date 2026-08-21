@@ -43,7 +43,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
 import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
-import { readIngTariffs, readDocumentDate, coverage, isCovered } from "@lavega/core";
+import { readIngTariffs, readDocumentDate, coverage, isCovered, mergeCatalogEntries } from "@lavega/core";
 import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
 import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "@lavega/core";
 import { sliceForExtraction } from "@lavega/core";
@@ -784,35 +784,16 @@ function mergeSubset(rows: typeof entries): number {
   const prev: { entries: typeof entries } = existsSync(CATALOG)
     ? JSON.parse(readFileSync(CATALOG, "utf8"))
     : { entries: [] };
-  const swept = new Set(rows.map((e) => e.id));
-  // A SWEEP MUST NOT MAKE THE ARTIFACT WORSE. Measured today: a run with no API
-  // key replaced ABN AMRO betaalpas — 1,2% covered, dated 2026-01-01 from its Fee
-  // Information Document — with the regex's 2% (the creditcard's row), refused and
-  // stamped today. Nothing wrong reached the app, because refused figures are not
-  // served, but a good figure was lost to a worse one by a run that simply could
-  // not do its job. The same evidence-ranking already applied to partials WITHIN
-  // a run (keep the best-evidenced, not the highest rung) has to hold ACROSS runs.
-  //
-  // Keep the newcomer when it is covered, or when what stood there was not. Refuse
-  // it when it would demote a covered entry — and say so, because a silent skip
-  // reads as "nothing changed" when something was actively prevented.
-  const byId = new Map(prev.entries.map((e) => [e.id, e]));
-  const kept: string[] = [];
-  const winners = rows.filter((row) => {
-    const before = byId.get(row.id);
-    const wasCovered = isCovered(before ? figureOf(before) : undefined);
-    const nowCovered = isCovered(figureOf(row));
-    if (wasCovered && !nowCovered) { kept.push(row.id); return false; }
-    return true;
-  });
+  // De samenvoeging zelf staat in packages/core/src/catalogMerge.ts: puur en
+  // getoetst, want hier was hij niet te testen zonder de sweep te draaien. Twee
+  // regels zitten erin — een veld dat deze run niet mat is geen veld dat hij
+  // heeft weerlegd, en een geweigerd cijfer verdringt geen gedekt cijfer — en
+  // die tweede geldt PER VELD. Op entry-niveau hield één zwak veld het hele
+  // product tegen, inclusief een goed cijfer ernaast.
+  const { entries: merged, kept } = mergeCatalogEntries(prev.entries, rows, Object.keys(state.products));
   if (kept.length) {
     console.log(`  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`);
   }
-  const wonIds = new Set(winners.map((e) => e.id));
-  const merged = [...prev.entries.filter((e) => !wonIds.has(e.id)), ...winners];
-  void swept;
-  const order = Object.keys(state.products);
-  merged.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
   writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
   return merged.length;
@@ -1174,6 +1155,12 @@ if (only) {
   process.exit(0);
 }
 state.lastRun = today;
-writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries }, null, 2) + "\n");
-writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
-console.log(`\nwrote ${CATALOG} and ${STATE}`);
+// THE SAME MERGE AS --only, and that is the whole point. A full run sweeps every
+// product but asks only TWO questions of them (fxFeePct, interestPct); the other
+// fields on those same products — points, cashback, what the account costs to
+// keep — were gathered by other means and are not in this run's answer. Writing
+// `entries` wholesale therefore deleted them. There is one merge for both paths
+// because two implementations would drift, and the one that drifted would be the
+// path nobody watches.
+const total = mergeSubset(entries);
+console.log(`\nwrote ${CATALOG} (${total} products) and ${STATE}`);

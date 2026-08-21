@@ -12,6 +12,7 @@ import {
 import { API_BASE } from "../api";
 import Module, { ModuleMenu } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import WorldMap from "../components/WorldMap";
 import catalogue from "../../../../docs/catalog/catalog.json";
 import "../styles/views.css";
 
@@ -43,6 +44,15 @@ import "../styles/views.css";
  *
  * The catalogue is imported at BUILD time — like `catalogue-rates.ts`, and for the
  * same reason: nothing about which banks a user compares should leave the device.
+ *
+ * THE MAP (components/WorldMap.tsx) is a THIRD way to set `to`, next to the
+ * dropdown and picking an account — you rarely think "USD", you think "Japan".
+ * It is only an input: it sets the target currency and nothing else, so there is
+ * one calculation on this screen and not two that can disagree. It does NOT
+ * always set one, and that is the point — a euro country, a currency we have no
+ * rate for and a country with two currencies are three different answers, none
+ * of which may end up as a 0% route in the ranking. The map states the answer;
+ * `to` only moves when there is a rate to move it to.
  */
 
 const CATALOGUE_FX: readonly CatalogueEntryLike[] =
@@ -476,6 +486,15 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               )}
             </>
           )}
+        </Module>
+
+        <Module
+          title="Waar ga je heen?"
+          span={2}
+          className="module-hug"
+          footer={<span>De kaart zet alleen de doelvaluta hierboven — er komt geen tweede berekening bij.</span>}
+        >
+          <WorldMap value={to} from={from} onPick={setTo} supported={currencies} />
         </Module>
       </ModuleGrid>
     </>

@@ -3,7 +3,17 @@
  *  99% primary, and one number would hide that. */
 export type CatalogRoute = "provider-page" | "provider-pdf" | "wayback" | "comparison" | "agent";
 
-export type CatalogField = "fxFeePct" | "convertFeePct" | "cashbackPct" | "pointsPerEuro" | "interestPct";
+/* accountFee hoort in deze lijst omdat er inmiddels negen van in de catalogus
+ * staan (wat een rekening kost om te HOUDEN). Stond hij er niet in, dan kende het
+ * type een veld niet dat het bestand wel draagt — en dan is de eerste die er een
+ * Record over legt degene die het stilletjes weggooit. */
+export type CatalogField =
+  | "fxFeePct"
+  | "convertFeePct"
+  | "cashbackPct"
+  | "pointsPerEuro"
+  | "interestPct"
+  | "accountFee";
 
 export type CatalogValue = {
   value: number;

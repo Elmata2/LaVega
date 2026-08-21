@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import type { OwnAccounts, Rule, Tx } from "@lavega/core";
+import { categorize, categorySpendPercentiles } from "@lavega/core";
+import type { CategoryPercentile, OwnAccounts, Rule, SpendPercentiles, SpendRow, Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import CategoryBars from "../CategoryBars.js";
 import Module, { ModulePeriod } from "../Module.js";
@@ -11,6 +12,7 @@ import {
   categoryGrowth,
   categoryShare,
   categoryPerWindow,
+  isMovedCategory,
   MIN_WEEKDAY_DAYS,
   movedTotals,
   newestTxDate,
@@ -108,6 +110,127 @@ export function customWindow(start: string, end: string): StatWindow | null {
   if (start === "" || end === "") return null;
   if (start > end) return null;
   return { start, end };
+}
+
+/* ── Percentiel per categorie ─────────────────────────────────────────────
+ *
+ * "Waar ligt wat ik deze maand aan boodschappen uitgaf, in wat ik er in eerdere
+ * maanden aan uitgaf." Het rekenwerk staat in packages/core/src/spendPercentile.ts
+ * — inclusief de drie manieren waarop zo'n cijfer kan liegen, en wat elk ervan
+ * tegenhoudt. Hier staat alleen hoe de uitkomst in woorden komt.
+ *
+ * Geen "P80" en geen balkje. Een percentiel is een plaats in een rij, geen
+ * cijfer op een rapport, dus het blok noemt de rij: "hoger dan 8 van je laatste
+ * 10 maanden" is na te tellen tegen de staven erboven, "80e percentiel" niet.
+ *
+ * De vergelijking loopt per KALENDERMAAND, ook wanneer de grafiek erboven op
+ * een andere periode staat. Huur, salaris, verzekering en elk abonnement lopen
+ * per maand, en de gekozen periode is een keuze over de gráfiek — niet over de
+ * lengte waarin zijn uitgaven zich herhalen. Welke dagen er precies naast welke
+ * zijn gelegd, staat in de regel erboven; stil vergelijken mag niet.
+ *
+ * Een vergelijking met het Nederlandse gemiddelde stond hier NIET tegenover: die
+ * is onderzocht en afgewezen (docs/research/2026-08-20-categorie-gemiddelden.md).
+ * Het CBS deelt in naar product waar LaVega naar tegenpartij deelt, het nieuwste
+ * cijfer per categorie is van 2020, en er wordt alleen een gemiddelde met een
+ * betrouwbaarheidsinterval gepubliceerd — geen verdeling, dus daar valt sowieso
+ * geen percentiel uit te halen. */
+
+/** De positie van één categorie, in woorden. Elke tak is een letterlijke
+ *  telling of een reden — geen enkele tak verzint een cijfer, en geen enkele
+ *  toont een streepje dat als nul te lezen is. */
+function positionNL(r: CategoryPercentile): string {
+  const n = r.historyCents.length;
+  switch (r.reason) {
+    case "geen-gegevens":
+      return "deze maand is nog niet gemeten";
+    case "te-weinig-geschiedenis":
+      return "te weinig eerdere maanden om in te plaatsen";
+    case "nieuwe-categorie":
+      // Nadrukkelijk geen "hoogste ooit": vóór deze maand bestond de categorie
+      // niet, en die nullen zijn geen maanden waarin hij niets uitgaf.
+      return "nieuw — geen eerdere maand met deze categorie";
+    case "te-kort-bekend":
+      return `pas ${n} ${n === 1 ? "maand" : "maanden"} bekend, te weinig om in te plaatsen`;
+    case "geen-verschil":
+      return r.currentCents === 0
+        ? `hier geen uitgaven, in je laatste ${n} maanden ook niet`
+        : `even hoog als in al je laatste ${n} maanden`;
+    default:
+      if (r.higher === n) return `hoger dan al je laatste ${n} maanden`;
+      if (r.lower === n) return `lager dan al je laatste ${n} maanden`;
+      // Gelijke maanden staan bewust in geen van beide tellingen: ze optellen
+      // bij "hoger" of bij "lager" is precies hoe dezelfde reeks als 0% én als
+      // 100% gerapporteerd wordt. De kant met de meeste maanden is de kant die
+      // iets zegt.
+      return r.higher >= r.lower
+        ? `hoger dan ${r.higher} van je laatste ${n} maanden`
+        : `lager dan ${r.lower} van je laatste ${n} maanden`;
+  }
+}
+
+/** De lijst onder de grafiek: per getekende categorie het bedrag van deze maand
+ *  en waar dat ligt in zijn eigen eerdere maanden. */
+function PercentielLijst({ result, categories }: { result: SpendPercentiles; categories: string[] }) {
+  // De volgorde van de grafiek, niet die van core: de lijst leest als bijschrift
+  // bij de staven erboven.
+  const rows = categories
+    .map((c) => result.rows.find((r) => r.category === c))
+    .filter((r): r is CategoryPercentile => r !== undefined);
+  if (rows.length === 0) return null;
+
+  const month = monthLabelNL(result.current.start.slice(0, 7));
+  const through = result.measuredThrough;
+  const n = result.compared.length;
+
+  // Te weinig maanden om ook maar één categorie in te plaatsen. Dan wordt de
+  // lijst vier keer dezelfde zin, dus staat er één regel die de echte oorzaak
+  // noemt — en alleen advies dat in déze toestand ook werkt.
+  if (through === null || n < result.minHistory) {
+    return (
+      <p className="cell-sub">
+        {through === null
+          ? `Nog geen vergelijking met je eigen maanden — er staat nog geen transactie in ${month}.`
+          : `Nog geen vergelijking met je eigen maanden: ${
+              n === 0
+                ? `er is geen volledige maand vóór ${month}`
+                : n === 1
+                  ? `er is 1 volledige maand vóór ${month}`
+                  : `er zijn ${n} volledige maanden vóór ${month}`
+            } geïmporteerd, en een plaats in je eigen geschiedenis vraagt er minstens ${result.minHistory}. Oudere afschriften importeren vult dit aan.`}
+      </p>
+    );
+  }
+
+  return (
+    <div className="lv-percentiel">
+      <p className="lv-percentiel-basis">
+        <strong>{month} tegenover je eerdere maanden.</strong>{" "}
+        {result.comparedDays === null
+          ? `De hele maand, naast de ${n} volledige maanden ervoor.`
+          : `Deze maand loopt nog: ${rangeLabelNL(result.current.start, through)} is ${result.comparedDays} dagen, en daar liggen dezelfde eerste ${result.comparedDays} dagen van de ${n} maanden ervoor naast.`}
+        {result.shortPeriods > 0 &&
+          ` ${result.shortPeriods} ${result.shortPeriods === 1 ? "maand telt" : "maanden tellen"} niet mee — korter dan ${result.comparedDays} dagen.`}
+      </p>
+      <ul className="lv-percentiel-lijst">
+        {rows.map((r) => (
+          <li key={r.category} className="lv-percentiel-rij">
+            <span className="lv-percentiel-naam">{r.category}</span>
+            <span className="lv-percentiel-bedrag">{euroFromCents(r.currentCents)}</span>
+            {/* "geen-verschil" telt hier als een gewoon antwoord: er is geen
+                percentiel, maar "even hoog als al je laatste 10 maanden" is een
+                meting en geen weigering. */}
+            <span
+              className="lv-percentiel-positie"
+              data-onbekend={r.reason !== null && r.reason !== "geen-verschil" ? "ja" : undefined}
+            >
+              {positionNL(r)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /** The reference's segmented view switch, in the module's control slot. */
@@ -218,6 +341,47 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   const moved = useMemo(
     () => (range === null ? [] : movedTotals(txs, rules, own, range)),
     [txs, rules, own, range],
+  );
+
+  /* De rijen waar het percentiel op rust: uitgaven, en zonder het geld dat
+     alleen van plek veranderde — exact dezelfde definitie als de rest van dit
+     blok hanteert (MOVED_CATEGORIES in statistics.ts), want twee definities van
+     "uitgave" op één scherm is een blok dat het met zichzelf oneens is.
+     Bewust over de HELE geschiedenis en niet over de gekozen periode: de
+     verdeling waar deze maand in geplaatst wordt ligt per definitie buiten het
+     venster van de grafiek. */
+  const spendRows = useMemo<SpendRow[]>(() => {
+    const rows: SpendRow[] = [];
+    for (const t of txs) {
+      if (!t.date || t.amount >= 0) continue;
+      const category = categorize(t, rules, own);
+      if (isMovedCategory(category)) continue;
+      rows.push({ date: t.date, category, cents: Math.round(-t.amount * 100) });
+    }
+    return rows;
+  }, [txs, rules, own]);
+
+  /* Wat er aan gegevens ÍS, gemeten over alle transacties en niet alleen over de
+     uitgaven: een maand met alleen salaris erin is een gemeten maand waarin niets
+     is uitgegeven, en die telt als waarneming. Zou dit uit `spendRows` komen, dan
+     verdween zo'n maand uit de vergelijking in plaats van er een nul in te zijn. */
+  const coverage = useMemo(() => {
+    let start: string | null = null;
+    let end: string | null = null;
+    for (const t of txs) {
+      if (!t.date) continue;
+      if (start === null || t.date < start) start = t.date;
+      if (end === null || t.date > end) end = t.date;
+    }
+    return start === null || end === null ? null : { start, end };
+  }, [txs]);
+
+  /* Peildatum is de nieuwste transactie, net als bij elk ander venster in dit
+     blok: op de klok kijken zou van een geïmporteerd historisch afschrift een
+     lege maand maken en dat als "niets uitgegeven" laten lezen. */
+  const percentiles = useMemo(
+    () => (anchor === null ? null : categorySpendPercentiles(spendRows, { asOf: anchor, coverage })),
+    [spendRows, coverage, anchor],
   );
 
   const categorySeries = (perCategory?.categories ?? []).map((c, i) => ({
@@ -379,6 +543,10 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     {capped.map((h) => h.category).join(", ")}.
                   </p>
                 )}
+                {/* Waar deze maand ligt in zijn eigen eerdere maanden. Alleen in
+                    deze weergave: hier staan de maanden al als staven, dus de
+                    lijst is het bijschrift bij wat hij ziet. */}
+                {percentiles && <PercentielLijst result={percentiles} categories={perCategory.categories} />}
               </>
             )
           ) : view === "verdeling" ? (

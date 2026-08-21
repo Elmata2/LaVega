@@ -1,0 +1,249 @@
+/* De wereldkaart in de Valuta-tab (components/WorldMap.tsx).
+ *
+ * GEEN ENKELE HEX-WAARDE HIER. Alle kaartkleuren zijn een menging van een
+ * bestaand token met het oppervlak waarop de kaart ligt (color-mix tegen
+ * --surface). Dat is niet netheid om de netheid: daardoor draait de kaart mee
+ * met het thema zonder een tweede palet dat kan gaan afwijken — wordt --surface
+ * donker, dan mengt "land" mee naar donker en blijft het verschil tussen zee,
+ * land en gekozen land staan. Een eigen prefers-color-scheme-blok stond hier
+ * eerst en dat was erger: de kaart sloeg om naar donker terwijl de rest van de
+ * app licht bleef, want de app leest het systeemthema (nog) niet.
+ *
+ * ÉÉN HUE VOOR "WIJ KUNNEN DIT PRIJZEN". Euro en "koers bekend" zijn twee
+ * sterktes van --accent, "geen koers" is grijs (--muted). Zo leest de kaart als
+ * dekking van ONS, niet als een uitspraak over het land — en de legenda zegt dat
+ * ook zo ("geen koers bij LaVega", niet "geen valuta").
+ *
+ * GEEN TRANSITION EN GEEN KEYFRAMES. Bewust: motion loopt in dit project via een
+ * eigen laag, en een kaart die 236 vlakken tegelijk laat overvloeien is precies
+ * het soort beweging dat daar een besluit hoort te zijn.
+ *
+ * De stroke per vlak is geen decoratie maar een reparatie: elk land is los
+ * vereenvoudigd, dus tussen twee buurlanden staat een haarlijn van een fractie
+ * van een eenheid. De stroke heeft dezelfde kleur als de vulling en dicht dat.
+ * Daarom staat bij ELKE toestand fill én stroke — vergeet je de stroke, dan
+ * springt het gekozen land terug naar de omtrek van zijn buur. */
+
+.lv-map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+
+  --lv-map-sea: var(--surface-2);
+  /* De percentages zijn op een gerasterde kaart gemeten, niet gegokt. Bij euro
+   * 14% liep de eurozone visueel over in de zee (de zee is warm-wit, de tint
+   * bijna-wit) en dan lijkt West-Europa water; bij 20% leest het als land. Het
+   * verschil met "koers bekend" moet groter blijven dan het verschil met de zee,
+   * vandaar 20 tegen 40. */
+  --lv-map-euro: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  --lv-map-rate: color-mix(in srgb, var(--accent) 40%, var(--surface));
+  --lv-map-norate: color-mix(in srgb, var(--muted) 20%, var(--surface));
+  --lv-map-hover: color-mix(in srgb, var(--accent) 58%, var(--surface));
+  --lv-map-selected: var(--accent);
+}
+
+/* ---------- De leesregel (naam + valutacode) ---------- */
+
+/* Vaste hoogte: de regel is leeg tot er iets aangewezen wordt, en de kaart mag
+ * niet een paar pixels omhoog springen zodra de muis erover gaat. */
+.lv-map-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: 0;
+  min-height: 1.5rem;
+  font-size: 0.95rem;
+}
+.lv-map-readout-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.lv-map-readout-ccy {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.lv-map-readout-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- Het doek ---------- */
+
+.lv-map-figure {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--lv-map-sea);
+  overflow: hidden;
+}
+.lv-map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.lv-map-sea {
+  fill: var(--lv-map-sea);
+}
+
+.lv-map-land {
+  fill: var(--lv-map-norate);
+  stroke: var(--lv-map-norate);
+  stroke-width: 0.3;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+.lv-map-land[data-tone="euro"] {
+  fill: var(--lv-map-euro);
+  stroke: var(--lv-map-euro);
+}
+.lv-map-land[data-tone="rate"] {
+  fill: var(--lv-map-rate);
+  stroke: var(--lv-map-rate);
+}
+.lv-map-land:hover {
+  fill: var(--lv-map-hover);
+  stroke: var(--lv-map-hover);
+}
+/* Ná :hover, want het gekozen land blijft het gekozen land ook als de muis
+ * ergens anders hangt. */
+.lv-map-land[data-selected="1"] {
+  fill: var(--lv-map-selected);
+  stroke: var(--lv-map-selected);
+}
+/* De focusring moet over de vulling heen leesbaar zijn, ook op het donkere
+ * gekozen land: een dikke omtrek in --ink plus de eigen outline van de browser
+ * voor wie hem al gewend is. */
+.lv-map-land:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+  stroke: var(--ink);
+  stroke-width: 1.4;
+}
+
+/* ---------- Legenda ---------- */
+
+.lv-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.lv-map-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lv-map-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--lv-map-norate);
+}
+.lv-map-swatch[data-tone="euro"] {
+  background: var(--lv-map-euro);
+}
+.lv-map-swatch[data-tone="rate"] {
+  background: var(--lv-map-rate);
+}
+.lv-map-swatch[data-selected="1"] {
+  background: var(--lv-map-selected);
+}
+
+/* ---------- Het antwoord ---------- */
+
+.lv-map-answer {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.lv-map-answer p {
+  margin: 0 0 var(--sp-2);
+}
+.lv-map-answer p:last-child {
+  margin-bottom: 0;
+}
+.lv-map-answer-lead {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.lv-map-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  list-style: none;
+}
+.lv-map-choice .btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* ---------- Zoeken (en de enige route naar de 13 landen zonder vlak) ---------- */
+
+.lv-map-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lv-map-search label {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lv-map-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lv-map-results button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+.lv-map-results button:hover {
+  border-color: var(--accent);
+}
+.lv-map-results-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.lv-map-results .cell-sub {
+  margin-top: 0;
+}
+
+.lv-map-source {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, CatalogueEntryLike, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
 import {
+  accountCosts,
   accountLabel,
   accountReturns,
+  hasCostsToShow,
   isSpendable,
   optimiseReturns,
   MIN_SPEND_DAYS,
@@ -186,6 +188,33 @@ function lastFullMonthSpend(
  *  printed a bank's name and a percentage would quietly pass one off as an
  *  ordinary bank card. Valuta labels the same two kinds for the same reason. */
 const ALT_KIND_LABEL: Record<string, string> = { prepaid: "prepaidkaart", crypto: "cryptokaart" };
+
+/* ── Vaste rekeningkosten: de kant die doorloopt ───────────────────────────
+ *
+ * De andere drie modules rekenen aan wat geld OPLEVERT. Deze rekent aan wat het
+ * kost om te houden wat je al hebt — de maand- of jaarprijs van een pakket of
+ * een kaart. Core doet het rekenwerk (`accountCosts`); dit scherm print het, en
+ * houdt zich aan dezelfde twee regels:
+ *   - een bedrag houdt de eenheid van zijn eigen document. ING rekent per maand,
+ *     ICS per jaar; het jaarbedrag staat er zichtbaar naast met "12 ×" erbij, in
+ *     plaats van dat er een jaarprijs verschijnt die nergens gedrukt staat.
+ *   - onbekend is geen nul. Een rekening zonder tarief staat in de tabel met
+ *     "niet in het totaal" in de jaarkolom, zodat de som en het scherm hetzelfde
+ *     verhaal vertellen.
+ */
+
+/** Het bedrag zoals de bron het noemt: "€ 4,00 per maand", "€ 42,95 per jaar". */
+const feeLabel = (a: FeeAmount) => `${euro(a.cents)} per ${a.period}`;
+
+/** De bron in één woord. De volledige URL staat onder de tabel, zodat de kolom
+ *  leesbaar blijft zonder dat de vindplaats verdwijnt. */
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 /** Editable rente-% cell. Holds a free-form draft while typing (so "1," etc.
  *  don't fight a number input) and commits on blur; blank clears the override
@@ -379,6 +408,14 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   // How the base was measured, so the figure can be checked against the same
   // afschrift it was read from rather than taken on trust.
   const spendOf = useMemo(() => new Map(returns.map((r) => [r.account.key, r.spend])), [returns]);
+
+  /* De vaste kosten van de rekeningen zelf. `hasCostsToShow` beslist of het blok
+     er komt: zonder een enkel tarief én zonder een enkel pakket om te tonen is
+     dit een leeg blok, en die worden hier niet gerenderd. */
+  const costs = useMemo(() => accountCosts(accounts, entries), [accounts, entries]);
+  const costRows = costs.rows;
+  const costTips = costRows.filter((r) => r.cheaperAtProvider || r.cheaperElsewhere);
+  const costSources = costRows.filter((r) => r.cost.kind === "known");
 
   return (
     <>
@@ -976,6 +1013,221 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             </p>
           )}
         </Module>
+
+        {/* ── Wat je rekeningen kosten ────────────────────────────────────── *
+            De enige module hier die geld ZIET WEGGAAN in plaats van blijven
+            liggen. Hij komt er alleen als er iets te zeggen is: geen enkel
+            tarief én geen enkel pakket om te tonen is een leeg blok, en die
+            worden niet gerenderd. */}
+        {hasCostsToShow(costs) && (
+          <Module
+            span={2}
+            title="Wat je rekeningen kosten"
+            footer={
+              <span>
+                Bedragen uit de kostendocumenten van de aanbieders zelf, met de datum die dat document noemt.
+                Alleen betaalrekeningen en creditcards; nergens is tussen maand en jaar omgerekend.
+              </span>
+            }
+          >
+            {/* HET TOTAAL, MET HET GAT ERIN BENOEMD. Core levert drie varianten en
+                dit zijn ze alle drie: een som met onbekende rekeningen erin is
+                geen totaal, en zonder één bekend tarief is er niets om op te
+                tellen. */}
+            {costs.total.kind === "complete" && (
+              <p className="reason-lead">
+                Je betaalt <strong>{euro(costs.total.perYearCents)}</strong> per jaar om deze{" "}
+                {costs.total.accounts} {costs.total.accounts === 1 ? "rekening" : "rekeningen"} aan te houden.
+              </p>
+            )}
+            {costs.total.kind === "incomplete" && (
+              <p className="reason-lead">
+                Van {costs.total.known} van je {costs.total.known + costs.total.unknown} rekeningen staat het
+                tarief vast: samen <strong>{euro(costs.total.knownPerYearCents)}</strong> per jaar. De andere{" "}
+                {costs.total.unknown} {costs.total.unknown === 1 ? "rekening telt" : "rekeningen tellen"} niet
+                als nul mee, dus dit bedrag is een ondergrens.
+              </p>
+            )}
+            {costs.total.kind === "none" && (
+              <p className="reason">
+                Van geen van deze rekeningen staat het tarief vast, dus er is geen totaal. Wat de catalogus bij
+                deze banken wél weet, staat hieronder.
+              </p>
+            )}
+
+            <div className="table-wrap table-cards">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Rekening</th>
+                    <th className="num">Kosten</th>
+                    <th className="num">Per jaar</th>
+                    <th>Bron</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costRows.map((row) => {
+                    const c = row.cost;
+                    const bank = row.account.bank || row.account.name;
+                    return (
+                      <tr key={row.account.key}>
+                        <td data-label="Rekening">
+                          <div style={{ fontWeight: 600 }}>{bank}</div>
+                          <div className="cell-sub">{row.account.name}</div>
+                        </td>
+                        <td className="num" data-label="Kosten">
+                          {c.kind === "known" ? feeLabel(c.amount) : "onbekend"}
+                        </td>
+                        {/* "niet in het totaal" in plaats van een streepje: een em
+                            dash naast euro's leest als nul, en dit is het enige
+                            veld waar de lezer kan zien wat er met een onbekende
+                            gebeurt. */}
+                        <td className="num" data-label="Per jaar">
+                          {c.kind === "known" ? (
+                            <>
+                              {euro(c.amount.perYearCents)}
+                              {c.amount.perYearDerived && (
+                                <div className="cell-sub">12 × {euro(c.amount.cents)}</div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="cell-sub">niet in het totaal</span>
+                          )}
+                        </td>
+                        <td data-label="Bron" className="cell-sub">
+                          {c.kind === "known" ? (
+                            <>
+                              <div>
+                                {c.matchedBy === "product-name"
+                                  ? c.fee.product
+                                  : `${c.agreeing.length} producten bij deze bank, alle even duur`}
+                              </div>
+                              <div>
+                                {sourceHost(c.sourceUrl)} · peildatum {c.asOf}
+                              </div>
+                              {c.conditions && (
+                                <details>
+                                  <summary>voorwaarden</summary>
+                                  <p style={{ margin: ".35rem 0 0" }}>{c.conditions}</p>
+                                </details>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                {/* Drie oorzaken, drie zinnen. De derde hangt aan
+                                    wat er te tonen is: bij Trading 212 kent de
+                                    catalogus alleen een kaarttarief en niets voor
+                                    een betaalrekening, en "we weten niet welk
+                                    product dit is" boven een lege lijst is een
+                                    melding die zijn eigen oorzaak niet noemt. */}
+                                {c.reason === "no-bank"
+                                  ? "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken."
+                                  : c.reason === "provider-unknown"
+                                    ? `LaVega kent geen tarief van ${bank}.`
+                                    : row.candidates.length === 0
+                                      ? `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`
+                                      : `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`}
+                              </div>
+                              {/* Wat er WEL is, en de enige stap die dit echt
+                                  oplost: de naam van een rekening bepaalt of
+                                  LaVega het pakket herkent, en die naam is bij
+                                  Rekeningen aan te passen. Dat staat er alleen
+                                  als er ook pakketten zijn om uit te kiezen —
+                                  anders is het advies dat in deze toestand niet
+                                  kan werken. */}
+                              {row.candidates.length > 0 && (
+                                <details>
+                                  <summary>
+                                    {row.candidates.length}{" "}
+                                    {row.candidates.length === 1 ? "tarief" : "tarieven"} bij {bank}
+                                  </summary>
+                                  <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                                    {row.candidates.map((f) => (
+                                      <li key={f.productId}>
+                                        {f.product} — {feeLabel(f.amount)}{" "}
+                                        <span style={{ opacity: 0.7 }}>
+                                          ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  {/* Geen voorbeeldnaam erbij: de lijst staat er al
+                                      boven, en het goedkoopste pakket als
+                                      voorbeeld noemen is een duwtje richting een
+                                      naam die niet klopt. */}
+                                  <p style={{ margin: ".35rem 0 0" }}>
+                                    Weet je welk het is? Zet die naam bij Rekeningen in het veld{" "}
+                                    <strong>Naam</strong> — dan rekent LaVega met dat tarief.
+                                  </p>
+                                </details>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* WAAR HET LOONT — en nooit zonder de voorwaarde. Een
+                studentenrekening is gratis áls je student bent; LaVega weet niet
+                hoe oud je bent, dus het bedrag komt er met de zin uit de bron
+                naast te staan en niet als een gedane zaak. Pakketten die de bron
+                zelf "niet meer te openen" noemt komen hier per constructie niet
+                in voor. */}
+            {costTips.length > 0 && (
+              <div className="reason-list" style={{ marginTop: "var(--sp-4)" }}>
+                {costTips.map((row) => {
+                  const c = row.cost;
+                  if (c.kind !== "known") return null;
+                  const held = c.matchedBy === "product-name" ? c.fee.product : accountLabel(row.account);
+                  const alts = [
+                    { label: "Bij dezelfde aanbieder", alt: row.cheaperAtProvider },
+                    { label: "Bij een andere aanbieder", alt: row.cheaperElsewhere },
+                  ];
+                  return alts.map(({ label, alt }) =>
+                    alt === null ? null : (
+                      <div key={`${row.account.key}-${alt.fee.productId}`}>
+                        <p className="reason">
+                          <strong>{label}</strong> — je betaalt {feeLabel(c.amount)} voor {held};{" "}
+                          {alt.fee.product} kost {feeLabel(alt.fee.amount)}. Dat scheelt{" "}
+                          <span className="reason-figure text-pos">{euro(alt.savingPerYearCents)}</span> per
+                          jaar.
+                        </p>
+                        <p className="cell-sub">
+                          {alt.conditional
+                            ? `Voorwaarde volgens de bron: ${alt.fee.conditions}`
+                            : "De bron noemt hierbij geen voorwaarde."}{" "}
+                          ({sourceHost(alt.fee.sourceUrl)}, peildatum {alt.fee.asOf})
+                        </p>
+                      </div>
+                    ),
+                  );
+                })}
+              </div>
+            )}
+
+            {costSources.length > 0 && (
+              <details className="rates-benchmark">
+                <summary className="eyebrow">Waar deze bedragen vandaan komen</summary>
+                <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                  {costSources.map((row) => {
+                    const c = row.cost;
+                    if (c.kind !== "known") return null;
+                    return (
+                      <li key={row.account.key}>
+                        {row.account.bank || row.account.name}: {c.sourceUrl} (peildatum {c.asOf})
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            )}
+          </Module>
+        )}
       </ModuleGrid>
     </>
   );

@@ -641,3 +641,91 @@
     height: 86px;
   }
 }
+
+/* ── Percentiel per categorie ─────────────────────────────────────────────
+ *
+ * Het bijschrift onder de categoriestaven: wat deze maand aan een categorie is
+ * uitgegeven, en waar dat ligt in zijn eigen eerdere maanden.
+ *
+ * Bewust geen balk, geen meter en geen gekleurde badge. Een balk van 80% leest
+ * als "80% van iets", en dat is precies wat een percentiel NIET is — het is een
+ * plaats in een rij van tien maanden. Drie kolommen tekst dus, met de zin als
+ * derde kolom, want de zin is het antwoord. De hairline erboven scheidt het van
+ * de notities over weggelaten categorieën; verder heeft dit blok geen chroom.
+ *
+ * Geen transitions en geen animatie hier, op afspraak: er beweegt niets, dus er
+ * valt niets te bewegen. */
+.lv-percentiel {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.lv-percentiel-basis {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* De maand die vergeleken wordt, in de tekstkleur: de rest van de regel is de
+ * verantwoording, dit is waar hij naar kijkt. */
+.lv-percentiel-basis strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lv-percentiel-lijst {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.lv-percentiel-rij {
+  display: grid;
+  /* Naam en bedrag zo smal als ze mogen zijn, de zin krijgt de rest: bij een
+   * lange categorienaam mag de naam afbreken, maar de zin nooit — een halve zin
+   * ("hoger dan 8 van je…") is een bewering zonder haar noemer. */
+  grid-template-columns: minmax(0, 9rem) minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--sp-3);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.lv-percentiel-naam {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.lv-percentiel-bedrag {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+}
+
+.lv-percentiel-positie {
+  color: var(--muted);
+}
+/* Een positie die niet te bepalen was, staat er als reden en niet als getal.
+ * Cursief houdt hem zichtbaar anders dan een telling zonder hem weg te dimmen
+ * tot iets dat over het hoofd te zien is — de reden is hier de informatie. */
+.lv-percentiel-positie[data-onbekend="ja"] {
+  font-style: italic;
+}
+
+/* Op een smal scherm past de zin niet naast naam en bedrag; dan zakt hij naar
+ * een eigen regel onder het paar in plaats van tot twee woorden per regel te
+ * verkruimelen. */
+@media (max-width: 560px) {
+  .lv-percentiel-rij {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 1px;
+    padding-bottom: var(--sp-1);
+  }
+  .lv-percentiel-positie {
+    grid-column: 1 / -1;
+  }
+}

@@ -94,6 +94,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2.55,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Extra ABN AMRO Credit Card € 1,05 per maand. Uitgegeven door ICS; de voorwaarden van ICS zijn van toepassing.",
+          "conditionsKnown": true
         }
       }
     },
@@ -117,6 +126,15 @@
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 4.45,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Extra ABN AMRO Gold Card € 2,10 per maand.",
           "conditionsKnown": true
         }
       }
@@ -165,6 +183,15 @@
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2.0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Bovenop de € 3,45 per maand van Rabo Standaard. Een extra RaboCard of Rabo GoldCard kost € 0,75 per maand. Bij Rabo Free is dezelfde kaart € 1,25 per maand.",
           "conditionsKnown": true
         }
       }
@@ -237,6 +264,15 @@
           "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 37.5,
+          "period": "jaar",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Jaarlijkse kosten. Bij een SNS Studentenrekening € 27,50 per jaar. De SNS Creditcard is een product van ICS; alle kosten betaal je aan ICS.",
           "conditionsKnown": true
         }
       }
@@ -333,6 +369,15 @@
           "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 37.5,
+          "period": "jaar",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Tarief bij Betaalrekening Plus Betalen. Bij een Studentenrekening € 27,50 per jaar. Uitgegeven door ICS.",
           "conditionsKnown": true
         }
       }
@@ -847,6 +892,15 @@
           "checkedAt": "2026-05-11",
           "conditions": "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. The rate applied is Visa's, not Trade Republic's own: a second entry on the same page reads 'Je profiteert direct van de leidende Visa-wisselkoersen bij uitgaven in het buitenland. We rekenen geen valutawisselvergoedingen.' DCC WARNING published by the issuer itself: 'Betaal altijd in de lokale valuta als je erom wordt gevraagd, anders kunnen verkopers extra valutawisselvergoedingen rekenen.' ATM: free worldwide but only above € 100 per withdrawal — a separate entry states 'Voor opnames onder de €100 € geldt een vergoeding van €1.' Card carries no subscription fee. All Trade Republic card tiers share these terms ('bieden allemaal dezelfde voordelen').",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+          "checkedAt": "2025-09-10",
+          "conditions": "Eenmalige kosten voor de fysieke kaart komen er wel: virtuele kaart gratis, Classic kaart € 5 eenmalig, Mirror kaart € 50 eenmalig. De pagina zegt daarnaast 'Wij rekenen geen kosten voor onze betaalrekening'. De payload noemt geen ingangsdatum, alleen een updatedAt per veld. Uitgesproken nul.",
+          "conditionsKnown": true
         }
       }
     },
@@ -878,6 +932,15 @@
           "sourceUrl": "https://helpcentre.trading212.com/hc/en-us/articles/17749229128221-Can-I-use-the-card-if-I-travel-abroad",
           "checkedAt": "2026-08-19",
           "conditions": "Applies to card payments/transactions: \"All card transactions have 0% FX fee, even if the purchase is in a currency the customer doesn't hold. Other fees may apply.\" The separate \"0.15% FX fee applies only when the customer manually converts money in the app ... It does not apply to card payments.\" Card use abroad is possible only \"as long as the payment is executed within one of the supported countries\".",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://helpcentre.trading212.com/hc/en-us/articles/19288398028317-What-are-the-fees-for-using-the-212-card",
+          "checkedAt": "2026-01-26",
+          "conditions": "Er is wél een eenmalige uitgiftevergoeding voor de fysieke kaart; die staat in een apart artikel zonder bedrag ('You will see it upon completing your order'). Het bedrag is dus onbekend, niet nul. Uitgesproken nul geldt alleen voor de doorlopende onderhoudskosten.",
           "conditionsKnown": true
         }
       }
@@ -916,6 +979,15 @@
           "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
           "checkedAt": "2024-07-01",
           "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
+          "checkedAt": "2024-07-01",
+          "conditions": "Abonnementskosten zijn € 0 zolang Travel+ uit staat; met Travel+ ingeschakeld € 4,99 per maand. Verzendkosten € 0 in beide gevallen. Uitgesproken nul.",
           "conditionsKnown": true
         }
       }
@@ -1180,6 +1252,15 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/gold/",
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 270.0,
+          "period": "jaar",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/zakelijk/kaarten/business-gold-card/pdf/xsell-26Q2-actievoorwaarden-business-gold-card.pdf",
+          "checkedAt": "2026-06-02",
+          "conditions": "Het eerste jaar kosteloos zolang je een American Express consumentenkaart blijft gebruiken; daarna € 270 per jaar. Aanvragen kan als het bedrijf minimaal 12 maanden bij de KvK staat ingeschreven. LET OP: de bron is een actievoorwaarden-PDF die gold van 2 tot en met 30 juni 2026 — het eerstejaarsaanbod is dus verlopen, het jaarbedrag van € 270 staat ook op de Business Companion Gold-pagina (die geen datum draagt).",
           "conditionsKnown": true
         }
       }
