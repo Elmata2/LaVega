@@ -15,6 +15,7 @@ import {
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
 import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
+import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
 
 export { app };
 
@@ -95,7 +96,7 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore };
+export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[] };
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
@@ -216,6 +217,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       return unlocked;
     },
     brokerSyncStatus: () => ({ ...syncProgress }),
+    priceSyncTargets: async (tenantId: string) => {
+      const { positions, trades } = brokerData.read();
+      const benchmarkSymbols = await options.benchmarkSymbols?.(tenantId) ?? [];
+      return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
+    },
   };
   if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, dashboardReader });
   const sentry = await import("@sentry/node");

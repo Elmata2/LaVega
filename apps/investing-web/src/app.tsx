@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
@@ -16,6 +16,7 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
 
 type Health = { ok: boolean; service: string };
 type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
+type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
 type DashboardState =
   | { status: "loading" }
   | { status: "ready"; data: InvestingDashboardData }
@@ -85,19 +86,7 @@ function AppOpenSync() {
         const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
         const brokerResult = await brokerResponse.json() as { problems?: string[] };
         const nextProblems = [...(brokerResult.problems ?? [])];
-        const dashboard = await fetchDashboard();
-          type PriceSyncSymbol = { symbol: string; currency: string; isin?: string; ticker?: string; exchange?: string; backfillFrom?: string };
-          const symbols: PriceSyncSymbol[] = dashboard.positions
-            .map((position) => position.isin
-              ? { symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }
-              : { symbol: position.symbol, ticker: position.symbol, exchange: "UNKNOWN", currency: position.currency, backfillFrom: position.asOf });
-          symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
-          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
-          if (priceResponse.ok) {
-            const priceResult = await priceResponse.json() as { problems?: string[] };
-            nextProblems.push(...(priceResult.problems ?? []));
-            window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-          }
+        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
         if (current) setProblems(nextProblems);
       } catch { if (current) setProblems(["Brokersynchronisatie mislukt."]); }
     };
@@ -106,6 +95,46 @@ function AppOpenSync() {
   }, []);
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
+}
+
+function PriceSyncProgressCard() {
+  const [progress, setProgress] = useState<PriceProgress | null>(null);
+  const refreshedRun = useRef<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/prices/sync/status");
+        if (!response.ok) return;
+        const next = await response.json() as PriceProgress;
+        if (!current || !["idle", "running", "waiting", "completed", "problem"].includes(next.status)) return;
+        setProgress(next);
+        if ((next.status === "completed" || next.status === "problem") && next.updatedAt && refreshedRun.current !== next.updatedAt) {
+          refreshedRun.current = next.updatedAt;
+          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        }
+      } catch { /* Dashboard remains usable with cached prices. */ }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 1_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, []);
+
+  if (!progress || progress.status === "idle") return null;
+  const active = progress.status === "running" || progress.status === "waiting";
+  const problem = progress.status === "problem";
+  return <section aria-live="polite" className={`rounded-card border p-4 ${problem ? "border-negative/30 bg-negative/5" : active ? "border-primary/20 bg-secondary/40" : "border-positive/30 bg-positive/5"}`}>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Prijsgeschiedenis</p>
+        <p className="mt-1 text-sm font-semibold">{active ? `${progress.completed} van ${progress.total} geladen` : problem ? "Voltooid met problemen" : "Actueel"}</p>
+        {active && <p className="mt-1 truncate text-xs text-muted-foreground">{progress.currentSymbol ? `${progress.currentSymbol} wordt geladen` : `${progress.remainingSymbols.length} symbolen resterend`}</p>}
+        {problem && <p className="mt-1 text-xs text-negative">{progress.problems.length} symboolproblemen; cache blijft beschikbaar.</p>}
+      </div>
+      <span className={`rounded-pill px-2.5 py-1 text-xs font-semibold ${problem ? "bg-negative/10 text-negative" : active ? "bg-primary/10 text-primary" : "bg-positive/10 text-positive"}`}>{progress.status === "waiting" ? "Wachten" : progress.status === "running" ? "Bezig" : problem ? "Probleem" : "Voltooid"}</span>
+    </div>
+  </section>;
 }
 
 function ClearPriceCache() {
@@ -362,7 +391,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><BrokerSyncProgressCard /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div><PositionList positions={state.data.positions} /></>}</div>;
 }
 
 function Positions() {

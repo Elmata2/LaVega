@@ -38,22 +38,19 @@ test("price sync uses Yahoo Finance without a browser consent gate", async () =>
   const investingApp = createApp({
     store: createInMemoryPriceStore(),
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
+    priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }],
+    priceSyncPaceMs: 0,
   });
-  const init = { method: "POST", body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }), headers: { "content-type": "application/json" } } as const;
-  const response = await investingApp.request("/api/prices/sync", init);
-  expect(response.status).toBe(200);
-  expect(fetchJsonWithCrumb).toHaveBeenCalled();
+  const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+  expect(response.status).toBe(202);
+  await vi.waitFor(() => expect(fetchJsonWithCrumb).toHaveBeenCalled());
 });
 
 test("router problems reach HTTP response unchanged", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: ["Yahoo Finance rate-limited price request"] }) };
-  const investingApp = createApp({ provider: provider as never });
-  const response = await investingApp.request("/api/prices/sync", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }),
-  });
-  expect(await response.json()).toMatchObject({ problems: ["Yahoo Finance rate-limited price request"] });
+  const investingApp = createApp({ provider: provider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0 });
+  await investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(async () => expect(await (await investingApp.request("/api/prices/sync/status")).json()).toMatchObject({ problems: ["ASML: Yahoo Finance rate-limited price request"] }));
   expect(provider.get).toHaveBeenCalledOnce();
 });
 
@@ -92,8 +89,9 @@ test("market-data routes expose FX and identifier lanes", async () => {
 test("price sync resolves ISIN before asking price provider", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
   const identifierProvider = { sourceKey: "openfigi", priority: 10, get: vi.fn().mockResolvedValue({ match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" }, problems: [] }) };
-  const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never });
-  await investingApp.request("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: [{ isin: "NL0010273215", currency: "EUR" }] }) });
+  const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "UNKNOWN", isin: "NL0010273215", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0 });
+  await investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(() => expect(provider.get).toHaveBeenCalled());
   expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
   expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
 });
@@ -105,6 +103,19 @@ test("broker sync route forwards force and keeps problems in response", async ()
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ outcomes: [{ status: "synced" }], problems: ["ibkr: unavailable"] });
   expect(brokerSync).toHaveBeenCalledWith(true);
+});
+
+test("broker sync starts server-side price orchestration despite broker problems", async () => {
+  const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
+  const investingApp = createApp({
+    brokerSync: vi.fn(async () => ({ outcomes: [], problems: ["ibkr: unavailable"] })),
+    provider: provider as never,
+    priceSyncTargets: () => [{ kind: "closed", symbol: "CLOSED", ticker: "CLOSED", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-01-01" }],
+    priceSyncPaceMs: 0,
+  });
+
+  await investingApp.request("/api/brokers/sync", { method: "POST" });
+  await vi.waitFor(() => expect(provider.get).toHaveBeenCalledOnce());
 });
 
 test("broker sync status route exposes safe progress counters", async () => {

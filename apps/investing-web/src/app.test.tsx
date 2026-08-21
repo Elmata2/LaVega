@@ -167,14 +167,37 @@ test("dashboard shows read error when route fails", async () => {
   root.unmount();
 });
 
-test("does not show Yahoo disclosure and starts price sync on app open", async () => {
+test("does not show Yahoo disclosure or build price sync requests in browser", async () => {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard)); return new Response(JSON.stringify({ problems: [] })); }));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => { root.render(<MemoryRouter><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
   expect(container.textContent).not.toContain("Yahoo Finance");
-  expect(requests).toContain("/api/prices/sync");
+  expect(requests).toContain("/api/prices/sync/status");
+  expect(requests).not.toContain("/api/prices/sync");
   expect(requests).not.toContain("/api/market-data/consent");
+  root.unmount();
+});
+
+test("overview reports independent price-sync progress", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/prices/sync/status") return new Response(JSON.stringify({ status: "running", total: 4, completed: 2, remainingSymbols: ["CLOSED", "^STOXX50E"], currentSymbol: "CLOSED", waitUntil: null, updatedAt: "2026-08-21T10:00:00.000Z", message: null, problems: [] }));
+    return responseFor(input, init);
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<MemoryRouter><App /></MemoryRouter>);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Prijsgeschiedenis");
+  expect(container.textContent).toContain("2 van 4 geladen");
+  expect(container.textContent).toContain("CLOSED wordt geladen");
   root.unmount();
 });
 
