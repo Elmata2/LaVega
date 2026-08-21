@@ -77,6 +77,12 @@ Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contra
 ## Investing stack
 Specified in **`docs/investing/STACK.md`** — the investing side's own stack, diverging deliberately from the personal side's in several places: `apps/investing-web` runs shadcn/ui (Tailwind + Radix) rather than hand-written CSS; the hosted tier runs on Cloudflare Workers rather than local Docker; local/self-hosted price data defaults to Yahoo Finance, an unofficial API used against its Terms of Service (see [ADR 0001](adr/0001-yahoo-finance-default-price-source.md)). Read it before touching `packages/core/investing/`, `apps/investing-web`, or `apps/investing-server`.
 
+### Investing glossary
+- **Position detail** — the view for one instrument, including current or historical holding state, price history, activity, and return facts.
+- **Activity** — dated broker events for one instrument: trades and dividends. Several events can share one date without an invented order when timestamps are unavailable.
+- **Quantity history** — dated changes in held units, used to explain partial buys and sells. It is an expandable detail, not a separate position.
+- **Closed position** — an instrument with zero current quantity but retained trade or dividend history. It remains addressable through its detail route.
+
 ## Conventions
 - Dutch in the UI, English in code identifiers.
 - Amounts always negative for outflow, regardless of source.
