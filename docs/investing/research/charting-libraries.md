@@ -11,7 +11,7 @@ Which charting libraries can serve the investing dashboard's chart inventory, an
 Per #16's closing comment, v1 is exactly three chart types, EUR-converted, no candlestick/OHLC anywhere (daily EOD price data only):
 
 1. **Portfolio value vs. benchmark** — multi-series line (portfolio + optional benchmark overlay), time-range switcher (1M/6M/1Y/YTD/All), hover tooltip, entity filter (combined by default).
-2. **Allocation donut** — by instrument / by broker (toggle), snapshot only (no time axis), entity filter.
+2. **Allocation donut** — by instrument / by entity (toggle), snapshot only (no time axis), entity filter.
 3. **Per-position price line** — single-series daily EOD line, trade markers (buy/sell) + dividend markers, hover tooltip.
 
 Not required: candlestick/OHLC, zoom/pan/brush, full per-entity view-switching. Candlestick is explicitly not *permanently* ruled out — if a future data source adds real OHLC, this is a re-run of #21/#22.

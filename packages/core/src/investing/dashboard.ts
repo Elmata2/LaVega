@@ -1,5 +1,5 @@
 import type { FxRates } from "./portfolio.js";
-import { bucketAllocationByBroker, bucketAllocationByInstrument, type Allocation } from "./allocation.js";
+import { bucketAllocationByEntity, bucketAllocationByInstrument, type Allocation } from "./allocation.js";
 import {
   buildPortfolioBenchmarkSeries,
   computePortfolioValueSeries,
@@ -37,7 +37,7 @@ export type InvestingDashboardData = {
   portfolio: Record<PortfolioRange, PortfolioBenchmarkPoint[]>;
   allocation: {
     instrument: Allocation;
-    broker: Allocation;
+    entity: Allocation;
   };
   positions: InvestingDashboardPosition[];
   position: InvestingPositionDetail | null;
@@ -64,7 +64,7 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     portfolio,
     allocation: {
       instrument: { buckets: [], unpriced: [] },
-      broker: { buckets: [], unpriced: [] },
+      entity: { buckets: [], unpriced: [] },
     },
     positions: [],
     position: null,
@@ -110,7 +110,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     portfolio,
     allocation: {
       instrument: bucketAllocationByInstrument([...input.positions], input.presentationCurrency, input.fxRates),
-      broker: bucketAllocationByBroker([...input.positions], input.presentationCurrency, input.fxRates),
+      entity: bucketAllocationByEntity([...input.positions], input.presentationCurrency, input.fxRates),
     },
     positions,
     position,

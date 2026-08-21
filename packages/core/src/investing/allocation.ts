@@ -1,7 +1,7 @@
 import { crossRate, type FxRate } from "../fx.js";
 import type { Position } from "./model.js";
 
-export type AllocationGroup = "instrument" | "broker";
+export type AllocationGroup = "instrument" | "entity";
 export type AllocationBucket = {
   key: string;
   label: string;
@@ -32,7 +32,7 @@ function positionValue(position: Position, presentationCurrency: string, fxRates
   }
 }
 
-/** Group current holdings by instrument or broker in one presentation currency. */
+/** Group current holdings by instrument or legal entity in one presentation currency. */
 export function bucketAllocation(
   positions: Position[],
   group: AllocationGroup,
@@ -70,10 +70,10 @@ export function bucketAllocationByInstrument(
   return bucketAllocation(positions, "instrument", presentationCurrency, fxRates);
 }
 
-export function bucketAllocationByBroker(
+export function bucketAllocationByEntity(
   positions: Position[],
   presentationCurrency: string,
   fxRates: FxRate | FxRate[],
 ): Allocation {
-  return bucketAllocation(positions, "broker", presentationCurrency, fxRates);
+  return bucketAllocation(positions, "entity", presentationCurrency, fxRates);
 }

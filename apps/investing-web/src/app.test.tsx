@@ -15,7 +15,7 @@ const dashboard: InvestingDashboardData = {
   portfolio: { ...emptyInvestingDashboard().portfolio, "1M": [{ date: "2026-08-18", portfolioValue: 120, benchmarkValue: 118, unpriced: [] }] },
   allocation: {
     instrument: { buckets: [{ key: "ASML", label: "ASML", value: 120, unpriced: false }], unpriced: [] },
-    broker: { buckets: [{ key: "Broker A", label: "Broker A", value: 120, unpriced: false }], unpriced: [] },
+    entity: { buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }], unpriced: [] },
   },
   positions: [{ symbol: "ASML", entity: "personal", description: "ASML", quantity: 1, marketValue: 120, currency: "EUR", asOf: "2026-08-18" }],
   position: { symbol: "ASML", description: "ASML", currency: "EUR", points: [{ tenantId: "local", symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }] },

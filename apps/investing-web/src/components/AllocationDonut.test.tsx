@@ -10,19 +10,19 @@ const empty: Allocation = { buckets: [], unpriced: [] };
 
 afterEach(() => document.body.replaceChildren());
 
-function render(instrument: Allocation = allocation, broker: Allocation = allocation) {
+function render(instrument: Allocation = allocation, entity: Allocation = allocation) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  act(() => { root.render(<AllocationDonut instrument={instrument} broker={broker} />); });
+  act(() => { root.render(<AllocationDonut instrument={instrument} entity={entity} />); });
   return { container, root };
 }
 
 test("renders accessible allocation and switches grouping", () => {
-  const { container, root } = render(allocation, { buckets: [{ key: "Broker A", label: "Broker A", value: 100, unpriced: false }], unpriced: [] });
+  const { container, root } = render(allocation, { buckets: [{ key: "Privé", label: "Privé", value: 100, unpriced: false }], unpriced: [] });
   expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("belegging");
   act(() => { (container.querySelector('button[aria-pressed="false"]') as HTMLButtonElement).click(); });
-  expect(container.textContent).toContain("Broker A");
+  expect(container.textContent).toContain("Privé");
   root.unmount();
 });
 

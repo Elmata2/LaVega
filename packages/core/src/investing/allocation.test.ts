@@ -1,12 +1,12 @@
 import { expect, test } from "vitest";
-import { bucketAllocationByBroker, bucketAllocationByInstrument } from "./allocation.js";
+import { bucketAllocationByEntity, bucketAllocationByInstrument } from "./allocation.js";
 import type { Position } from "./model.js";
 
 const positions: Position[] = [
-  { tenantId: "local", entity: "Broker A", symbol: "AAPL", description: "Apple", quantity: 2, averagePrice: 100, marketPrice: 110, marketValue: 220, currency: "USD", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Broker A", symbol: "MSFT", quantity: 1, averagePrice: 200, marketPrice: 200, marketValue: 200, currency: "EUR", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Broker B", symbol: "AAPL", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "USD", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Broker B", symbol: "MISSING", quantity: 3, averagePrice: null, marketPrice: null, marketValue: null, currency: "USD", asOf: "2026-01-05" },
+  { tenantId: "local", entity: "Privé", symbol: "AAPL", description: "Apple", quantity: 2, averagePrice: 100, marketPrice: 110, marketValue: 220, currency: "USD", asOf: "2026-01-05" },
+  { tenantId: "local", entity: "Privé", symbol: "MSFT", quantity: 1, averagePrice: 200, marketPrice: 200, marketValue: 200, currency: "EUR", asOf: "2026-01-05" },
+  { tenantId: "local", entity: "Holding BV", symbol: "AAPL", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "USD", asOf: "2026-01-05" },
+  { tenantId: "local", entity: "Holding BV", symbol: "MISSING", quantity: 3, averagePrice: null, marketPrice: null, marketValue: null, currency: "USD", asOf: "2026-01-05" },
 ];
 const fx = { base: "EUR", date: "2026-01-05", rates: { USD: 2 } };
 
@@ -21,13 +21,13 @@ test("buckets instruments after FX conversion and merges same symbol", () => {
   });
 });
 
-test("buckets brokers and keeps missing FX or price unpriced", () => {
-  const result = bucketAllocationByBroker(positions, "EUR", { ...fx, rates: {} });
+test("buckets entities and keeps missing FX or price unpriced", () => {
+  const result = bucketAllocationByEntity(positions, "EUR", { ...fx, rates: {} });
   expect(result.buckets).toEqual([
-    { key: "Broker A", label: "Broker A", value: 200, unpriced: true },
-    { key: "Broker B", label: "Broker B", value: null, unpriced: true },
+    { key: "Holding BV", label: "Holding BV", value: null, unpriced: true },
+    { key: "Privé", label: "Privé", value: 200, unpriced: true },
   ]);
-  expect(result.unpriced).toEqual(["Broker A", "Broker B"]);
+  expect(result.unpriced).toEqual(["Holding BV", "Privé"]);
 });
 
 test("uses quantity times market price when market value is absent", () => {
@@ -36,5 +36,5 @@ test("uses quantity times market price when market value is absent", () => {
 });
 
 test("empty holdings return empty allocation", () => {
-  expect(bucketAllocationByBroker([], "EUR", fx)).toEqual({ buckets: [], unpriced: [] });
+  expect(bucketAllocationByEntity([], "EUR", fx)).toEqual({ buckets: [], unpriced: [] });
 });

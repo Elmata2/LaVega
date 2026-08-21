@@ -362,7 +362,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><BrokerSyncProgressCard /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} broker={state.data.allocation.broker} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><BrokerSyncProgressCard /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div><PositionList positions={state.data.positions} /></>}</div>;
 }
 
 function Positions() {
