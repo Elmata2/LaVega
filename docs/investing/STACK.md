@@ -36,7 +36,15 @@ Brokers supply positions and trades, not price series — external price and FX 
 
 ## Storage seams
 
-Local broker positions, trades, and dividends use an encrypted runtime snapshot. See [ADR 0002](../adr/0002-encrypted-local-broker-snapshots.md).
+Local broker positions, trades, dividends, cash balances, and cash flows use an encrypted runtime snapshot. See [ADR 0002](../adr/0002-encrypted-local-broker-snapshots.md).
+
+**Cash and cash flows** ([Model cash and cash flows](https://github.com/Elmata2/LaVega/issues/71)): a `CashBalance` (`tenantId`/`entity`/`broker`/`currency`/`amount`/`asOf`) is the broker-reported anchor, same role `Position.quantity`/`asOf` plays for holdings. A `CashFlow` (`id`/`tenantId`/`entity`/`broker`/`date`/`currency`/`amount`/`kind`/`description?`/`brokerFlowId?`) covers the movements with no other model — `kind` is `deposit | withdrawal | interest | fee | other`; dividends and trades stay in their own types (`Dividend`, `Trade`), not folded in. `amount` is explicitly signed (positive = cash in, negative = cash out) — each broker parser normalizes to this convention at parse time, since `Trade.amount`'s sign is inconsistent per broker today and isn't a safe precedent to inherit. `Dividend` gains a `broker` field, closing an attribution gap: without it, a dividend can't be matched to the right broker's cash walk when an entity holds the same currency at two brokers.
+
+`cashOnDate` mirrors `quantityOnDate`'s bidirectional walk from the `CashBalance.asOf` anchor, folding `CashFlow` and `Dividend` (dividends always additive, regardless of walk direction). Dates the walk can't reach return unknown (`null`), surfaced via a `cashUnknown: string[]` field (`broker:currency` keys) on `PortfolioValuePoint`, sibling to the existing `unpriced` field rather than merged into it.
+
+`computePortfolioValueSeries`'s date axis stays price-bar-driven, unchanged. `PortfolioValuePoint` gains `positionsValue` and `cashValue` — the split feeding a future stacked/layered chart (portfolio value vs. total net worth) — alongside the existing `value` (their sum), so today's callers are untouched. Reconciling the stored `CashBalance` against a fold-over-flows total is deferred: real value, but no parser produces `CashFlow` rows yet to reconcile against.
+
+Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlows` per broker, synced and persisted whole the same way `positions`/`trades`/`dividends` already are — not `StorageAdapter` (personal-finance-only, see below) and not `PriceStore` (market-data-specific carve-out, see below).
 
 **`PriceStore`** is a separate seam, not an extension of `StorageAdapter` — `StorageAdapter` is CRUD/replace-all shaped (accounts/txs/rules/maps), price series need date-range queries, a different access pattern; this keeps the personal side's adapter untouched.
 
