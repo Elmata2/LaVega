@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
@@ -74,9 +74,59 @@ function DashboardProblems({ problems }: { problems: string[] }) {
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Leesproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
 
-function PositionList({ positions }: { positions: InvestingDashboardData["positions"] }) {
+type PositionSort = "instrument" | "value" | "weight" | "return";
+type SortDirection = "asc" | "desc";
+
+const POSITION_SORTS: Array<{ key: PositionSort; label: string }> = [
+  { key: "instrument", label: "Instrument" },
+  { key: "value", label: "Waarde" },
+  { key: "weight", label: "% portefeuille" },
+  { key: "return", label: "Totaal rendement" },
+];
+
+function numericCompare(left: number | null, right: number | null, direction: SortDirection): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  return (left - right) * (direction === "asc" ? 1 : -1);
+}
+
+function PositionList({ positions, currency }: { positions: InvestingDashboardData["positions"]; currency: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSort = searchParams.get("sort");
+  const sort: PositionSort = POSITION_SORTS.some(({ key }) => key === requestedSort) ? requestedSort as PositionSort : "value";
+  const direction: SortDirection = searchParams.get("direction") === "asc" ? "asc" : "desc";
   if (positions.length === 0) return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />;
-  return <div className="space-y-5"><ul aria-label="Posities" className="divide-y divide-border rounded-card border border-border"><li className="grid grid-cols-[1fr_auto] gap-4 bg-secondary/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Positie</span><span>Hoeveelheid</span></li>{positions.map((position) => <li key={`${position.symbol}-${position.entity}`} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4"><Link to={`/positions/${encodeURIComponent(position.symbol)}`} className="min-w-0 font-semibold text-primary hover:underline"><span className="block truncate">{position.description ?? position.symbol}</span><span className="block text-xs font-normal text-muted-foreground">{position.symbol} · {position.entity}</span></Link><span className="text-right text-sm tabular-nums">{position.quantity} {position.currency}</span></li>)}</ul></div>;
+  const sorted = [...positions].sort((left, right) => {
+    if (sort === "instrument") {
+      const result = `${left.description ?? left.symbol}\u0000${left.entity}`.localeCompare(`${right.description ?? right.symbol}\u0000${right.entity}`, "nl");
+      return result * (direction === "asc" ? 1 : -1);
+    }
+    if (sort === "value") return numericCompare(left.marketValue, right.marketValue, direction);
+    if (sort === "weight") return numericCompare(left.portfolioWeight, right.portfolioWeight, direction);
+    return numericCompare(left.returns.totalReturn, right.returns.totalReturn, direction);
+  });
+  const money = (value: number) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2, signDisplay: "always" });
+  const percent = (value: number) => value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  function changeSort(next: PositionSort) {
+    const nextDirection: SortDirection = sort === next ? direction === "desc" ? "asc" : "desc" : next === "instrument" ? "asc" : "desc";
+    setSearchParams({ sort: next, direction: nextDirection });
+  }
+  const query = searchParams.toString();
+  return <div className="overflow-x-auto rounded-card border border-border" role="table" aria-label="Posities">
+    <div className="min-w-[760px]">
+      <div role="row" className="grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] bg-secondary/30 px-5 py-3">
+        {POSITION_SORTS.map((column, index) => <div role="columnheader" aria-sort={sort === column.key ? direction === "asc" ? "ascending" : "descending" : "none"} key={column.key} className={index === 0 ? "text-left" : "text-right"}><button type="button" onClick={() => changeSort(column.key)} className="rounded-sm text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{column.label}{sort === column.key ? direction === "asc" ? " ↑" : " ↓" : ""}</button></div>)}
+      </div>
+      <div role="rowgroup" className="divide-y divide-border">
+        {sorted.map((position) => <Link role="row" key={`${position.symbol}-${position.entity}`} to={{ pathname: `/positions/${encodeURIComponent(position.symbol)}`, search: query ? `?${query}` : "" }} className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-none hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+          <div role="cell" className="min-w-0 pr-4"><span className="block truncate font-semibold text-primary">{position.description ?? position.symbol}</span><span className="block truncate text-xs text-muted-foreground">{position.symbol} · {position.entity} · {position.quantity.toLocaleString("nl-NL")} {position.currency}</span></div>
+          <div role="cell" className="text-right text-sm tabular-nums">{position.marketValue === null ? <span className="text-muted-foreground">{position.priceStatus === "missing-fx" ? "FX-koers ontbreekt" : "Waarde onbekend"}</span> : <><span className="font-semibold">{money(position.marketValue).replace(/^\+/, "")}</span>{position.priceStatus === "forward-filled" && <span className="block text-xs text-warning">Geschatte koers</span>}</>}</div>
+          <div role="cell" className="text-right text-sm tabular-nums">{position.portfolioWeight === null ? <span className="text-muted-foreground">Niet beschikbaar</span> : percent(position.portfolioWeight).replace(/^\+/, "")}</div>
+          <div role="cell" className="pl-4 text-right text-sm tabular-nums">{position.returns.status === "available" && position.returns.totalReturn !== null ? <><span className={position.returns.totalReturn >= 0 ? "font-semibold text-positive" : "font-semibold text-negative"}>{money(position.returns.totalReturn)}{position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}</span><span className="block text-xs text-muted-foreground">totaal rendement</span></> : <><span className="font-medium text-muted-foreground">{position.returns.status === "missing-fx" ? "FX-koers ontbreekt" : "Rendement niet beschikbaar"}</span>{position.returns.status === "missing-cost" && <span className="block text-xs leading-5 text-muted-foreground">Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.</span>}</>}</div>
+        </Link>)}
+      </div>
+    </div>
+  </div>;
 }
 
 function PortfolioCashSummary({ data }: { data: InvestingDashboardData }) {
@@ -416,21 +466,23 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {
   const state = useDashboard();
   if (state.status === "loading") return <DashboardLoading />;
   if (state.status === "error") return <DashboardError message={state.message} />;
-  return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} /></>;
+  return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>;
 }
 
 function PositionDetail() {
   const { symbol } = useParams<{ symbol: string }>();
+  const [searchParams] = useSearchParams();
   const positionSymbol = symbol?.trim().toUpperCase() ?? "";
   const state = useDashboard(positionSymbol || undefined);
-  return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><PositionPriceChart symbol={state.data.position.symbol} currency={state.data.position.currency} points={state.data.position.points} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
+  const query = searchParams.toString();
+  return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><PositionPriceChart symbol={state.data.position.symbol} currency={state.data.position.currency} points={state.data.position.points} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
 }
 
 export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Routes>; }

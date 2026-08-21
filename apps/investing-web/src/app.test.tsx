@@ -17,7 +17,11 @@ const dashboard: InvestingDashboardData = {
     instrument: { buckets: [{ key: "ASML", label: "ASML", value: 120, unpriced: false }], unpriced: [] },
     entity: { buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }], unpriced: [] },
   },
-  positions: [{ symbol: "ASML", entity: "personal", description: "ASML", quantity: 1, marketValue: 120, currency: "EUR", asOf: "2026-08-18" }],
+  positions: [{
+    symbol: "ASML", entity: "personal", description: "ASML", quantity: 1, marketValue: 120, portfolioWeight: 1,
+    priceStatus: "priced", currency: "EUR", asOf: "2026-08-18",
+    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, firstBuyDate: "2026-01-02" },
+  }],
   position: { symbol: "ASML", description: "ASML", currency: "EUR", points: [{ tenantId: "local", symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }] },
 };
 
@@ -101,6 +105,54 @@ test("positions view renders read-model positions as links", async () => {
 
   expect(container.textContent).toContain("ASML");
   expect(container.querySelector('a[href="/positions/ASML"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("positions table sorts numeric columns through URL state and preserves it in drilldown", async () => {
+  const sortable: InvestingDashboardData = {
+    ...dashboard,
+    positions: [
+      dashboard.positions[0]!,
+      { ...dashboard.positions[0]!, symbol: "SMALL", description: "Small", marketValue: 50, portfolioWeight: 0.25, returns: { ...dashboard.positions[0]!.returns, totalReturn: -10, totalReturnPercentage: -0.1 } },
+    ],
+  };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response(JSON.stringify(sortable))) : Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/positions?sort=return&direction=asc"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  const rows = Array.from(container.querySelectorAll('[role="rowgroup"] [role="row"]')).filter((row) => row.tagName === "A");
+  expect(rows.map((row) => row.textContent)).toEqual([expect.stringContaining("Small"), expect.stringContaining("ASML")]);
+  expect(container.querySelector('a[href="/positions/SMALL?sort=return&direction=asc"]')).not.toBeNull();
+  const returnHeader = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Totaal rendement"));
+  await act(async () => { returnHeader?.click(); });
+  expect(container.querySelector('[role="columnheader"][aria-sort="descending"]')?.textContent).toContain("Totaal rendement");
+  const instrumentHeader = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Instrument"));
+  await act(async () => { instrumentHeader?.click(); });
+  const alphabeticRows = Array.from(container.querySelectorAll('[role="rowgroup"] [role="row"]'));
+  expect(alphabeticRows.map((row) => row.textContent)).toEqual([expect.stringContaining("ASML"), expect.stringContaining("Small")]);
+  expect(container.querySelector('[role="columnheader"][aria-sort="ascending"]')?.textContent).toContain("Instrument");
+  root.unmount();
+});
+
+test("positions table shows forward-filled, unpriced, missing-FX, and missing-cost states", async () => {
+  const incomplete: InvestingDashboardData = {
+    ...dashboard,
+    positions: [
+      { ...dashboard.positions[0]!, priceStatus: "forward-filled" },
+      { ...dashboard.positions[0]!, symbol: "OLD", marketValue: null, portfolioWeight: null, priceStatus: "unpriced", returns: { ...dashboard.positions[0]!.returns, status: "unpriced", totalReturn: null, totalReturnPercentage: null } },
+      { ...dashboard.positions[0]!, symbol: "FX", marketValue: null, portfolioWeight: null, priceStatus: "missing-fx", returns: { ...dashboard.positions[0]!.returns, status: "missing-fx", totalReturn: null, totalReturnPercentage: null } },
+      { ...dashboard.positions[0]!, symbol: "COST", returns: { ...dashboard.positions[0]!.returns, status: "missing-cost", totalReturn: null, totalReturnPercentage: null } },
+    ],
+  };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response(JSON.stringify(incomplete))) : Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/positions"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Geschatte koers");
+  expect(container.textContent).toContain("Waarde onbekend");
+  expect(container.textContent).toContain("FX-koers ontbreekt");
+  expect(container.textContent).toContain("Rendement niet beschikbaar");
+  expect(container.textContent).toContain("Importeer eerdere transacties");
   root.unmount();
 });
 

@@ -13,7 +13,11 @@ test("GET /health reports investing server health through Hono app.request", asy
 
 test("dashboard route returns injected core-shaped read model and selected symbol", async () => {
   const dashboard = emptyInvestingDashboard();
-  dashboard.positions.push({ symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, currency: "USD", asOf: "2026-08-18" });
+  dashboard.positions.push({
+    symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, portfolioWeight: 1,
+    priceStatus: "priced", currency: "USD", asOf: "2026-08-18",
+    returns: { status: "available", remainingCostBasis: 180, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 0, totalReturn: 20, totalReturnPercentage: 20 / 180, firstBuyDate: "2026-01-02" },
+  });
   const dashboardReader = vi.fn(async ({ symbol }: { symbol?: string }) => ({ ...dashboard, problems: symbol ? [`selected:${symbol}`] : [] }));
   const investingApp = createApp({ dashboardReader });
 

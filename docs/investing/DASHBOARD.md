@@ -285,6 +285,8 @@ Omit unpriced positions from donut slices and percentage denominator. Show their
 
 ## Positions table
 
+Implementation status: current-holding rows now use Yahoo-derived EUR values, explicit price-quality states, URL-backed sorting, and the weighted-average dividend-inclusive return model described below.
+
 Show current open holdings only ([Positions table: columns, sorting, grouping](https://github.com/Elmata2/LaVega/issues/79)). Closed positions remain in portfolio history and can still be opened through a direct detail route.
 
 Use these columns:

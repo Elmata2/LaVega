@@ -10,19 +10,11 @@ import {
 import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import { buildCurrentPositions, type CurrentPosition } from "./positions.js";
 
 export const PORTFOLIO_RANGES = ["1M", "6M", "1Y", "YTD", "All"] as const satisfies readonly PortfolioRange[];
 
-export type InvestingDashboardPosition = {
-  symbol: string;
-  entity: string;
-  isin?: string;
-  description?: string;
-  quantity: number;
-  marketValue: number | null;
-  currency: string;
-  asOf: string;
-};
+export type InvestingDashboardPosition = CurrentPosition;
 
 export type InvestingPositionDetail = {
   symbol: string;
@@ -99,9 +91,15 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
   const portfolio = Object.fromEntries(
     PORTFOLIO_RANGES.map((range) => [range, buildPortfolioBenchmarkSeries(portfolioValues, benchmark, range)]),
   ) as Record<PortfolioRange, PortfolioBenchmarkPoint[]>;
-  const positions = [...input.positions]
-    .map(({ tenantId: _tenantId, ...position }) => position)
-    .sort((left, right) => `${left.symbol}\u0000${left.entity}`.localeCompare(`${right.symbol}\u0000${right.entity}`));
+  const positions = buildCurrentPositions({
+    positions: input.positions,
+    trades: input.trades,
+    dividends: input.dividends,
+    priceBars: input.priceBars,
+    presentationCurrency: input.presentationCurrency,
+    fxRates: input.fxRates,
+    today: input.today ?? new Date().toISOString().slice(0, 10),
+  });
 
   const selected = input.selectedSymbol?.trim().toUpperCase();
   const selectedPosition = selected
