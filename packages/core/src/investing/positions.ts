@@ -108,7 +108,17 @@ export function calculatePositionReturn(
     for (const dividend of dividends) {
       dividendsReceived += convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
     }
-    if (marketValue === null) return emptyReturn("unpriced", firstBuyDate);
+    if (marketValue === null) return {
+      status: "unpriced",
+      remainingCostBasis,
+      realizedCostBasisRemoved,
+      unrealizedGain: null,
+      realizedGain,
+      dividendsReceived,
+      totalReturn: null,
+      totalReturnPercentage: null,
+      firstBuyDate,
+    };
     const unrealizedGain = marketValue - remainingCostBasis;
     const totalReturn = unrealizedGain + realizedGain + dividendsReceived;
     const denominator = remainingCostBasis + realizedCostBasisRemoved;

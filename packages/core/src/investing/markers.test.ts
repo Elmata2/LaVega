@@ -13,10 +13,10 @@ const dividend = (date: string, amount: number): Dividend => ({ id: date, tenant
 describe("placePositionMarkers", () => {
   test("places trades and dividends on exact or next available price day", () => {
     const result = placePositionMarkers(bars, [trade("2026-01-05", "buy"), trade("2026-01-06", "sell")], [dividend("2026-01-06", 1.25)]);
-    expect(result[0]?.markers).toEqual([{ kind: "buy", eventDate: "2026-01-05", label: "Koop 2" }]);
+    expect(result[0]?.markers).toEqual([{ kind: "buy", eventDate: "2026-01-05", label: "Koop 2", quantity: 2, executionPrice: 100, amount: 200, commission: 0, currency: "USD" }]);
     expect(result[1]?.markers).toEqual([
-      { kind: "sell", eventDate: "2026-01-06", label: "Verkoop 2" },
-      { kind: "dividend", eventDate: "2026-01-06", label: "Dividend 1.25 USD", amount: 1.25, currency: "USD" },
+      { kind: "sell", eventDate: "2026-01-06", label: "Verkoop 2", quantity: 2, executionPrice: 100, amount: 200, commission: 0, currency: "USD" },
+      { kind: "dividend", eventDate: "2026-01-06", label: "Dividend 1.25 USD", amount: 1.25, dividendAmount: 1.25, currency: "USD" },
     ]);
   });
 

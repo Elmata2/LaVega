@@ -22,7 +22,15 @@ const dashboard: InvestingDashboardData = {
     priceStatus: "priced", currency: "EUR", asOf: "2026-08-18",
     returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, firstBuyDate: "2026-01-02" },
   }],
-  position: { symbol: "ASML", description: "ASML", currency: "EUR", points: [{ tenantId: "local", symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }] },
+  position: {
+    symbol: "ASML", description: "ASML", currency: "EUR", priceCurrency: "EUR", status: "open", quantity: 1,
+    currentValue: 120, dailyChange: 2, dailyChangePercentage: 0.017, currentPrice: 120, averageCost: 100,
+    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, firstBuyDate: "2026-01-02" },
+    returnStatus: "available", firstBuyDate: "2026-01-02",
+    quantityHistory: [{ date: "2026-01-02", quantity: 1, delta: 1, reason: "buy", sourceOrder: 0 }],
+    activity: [{ date: "2026-01-02", kind: "buy", quantity: 1, executionPrice: 100, amount: 100, commission: 0, currency: "EUR", sourceOrder: 0 }],
+    points: [{ tenantId: "local", symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }],
+  },
 };
 
 const emptyDashboard = emptyInvestingDashboard();
@@ -216,6 +224,46 @@ test("position detail selects symbol from route and links back", async () => {
   expect(container.textContent).toContain("ASML");
   expect(requests).toContain("/api/investing/dashboard?symbol=ASML");
   expect(container.querySelector('a[href="/positions"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("position detail shows returns, quantity disclosure, and activity", async () => {
+  vi.stubGlobal("fetch", vi.fn((input, init) => Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/positions/ASML?sort=return&direction=asc"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Open positie");
+  expect(container.textContent).toContain("Huidige waarde");
+  expect(container.textContent).toContain("Totaal rendement");
+  expect(container.textContent).toContain("Activiteit");
+  const quantity = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Aantalhistorie"));
+  expect(quantity?.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => { quantity?.click(); });
+  expect(quantity?.getAttribute("aria-expanded")).toBe("true");
+  expect(container.textContent).toContain("2 januari 2026 · Koop");
+  expect(container.querySelector('a[href="/positions?sort=return&direction=asc"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("closed position omits current value and keeps realized history", async () => {
+  const closed: InvestingDashboardData = { ...dashboard, position: { ...dashboard.position!, symbol: "CLOSED", description: "Closed Co", status: "closed", quantity: 0, currentValue: null, dailyChange: null, dailyChangePercentage: null, currentPrice: null, averageCost: null, returns: { ...dashboard.position!.returns, remainingCostBasis: 0, unrealizedGain: 0, realizedGain: 30, dividendsReceived: 4, totalReturn: 34 }, activity: [{ date: "2026-04-02", kind: "sell", quantity: 1, executionPrice: 130, amount: 130, commission: 1, currency: "EUR", sourceOrder: 1 }, { date: "2026-01-02", kind: "buy", quantity: 1, executionPrice: 100, amount: 100, commission: 0, currency: "EUR", sourceOrder: 0 }] } };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response(JSON.stringify(closed))) : Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/positions/CLOSED"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Gesloten positie");
+  expect(container.textContent).toContain("0 stuks · gesloten");
+  expect(container.textContent).not.toContain("Huidige waarde");
+  expect(Array.from(container.querySelectorAll('div[id^="activity-"]')).map((row) => row.id)).toEqual(["activity-2026-04-02", "activity-2026-01-02"]);
+  root.unmount();
+});
+
+test("position detail shows import prompt when return history is incomplete", async () => {
+  const incomplete: InvestingDashboardData = { ...dashboard, position: { ...dashboard.position!, returnStatus: "missing-cost", returns: { ...dashboard.position!.returns, status: "missing-cost", remainingCostBasis: null, realizedCostBasisRemoved: null, unrealizedGain: null, realizedGain: null, dividendsReceived: null, totalReturn: null, totalReturnPercentage: null } } };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response(JSON.stringify(incomplete))) : Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/positions/ASML"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.");
   root.unmount();
 });
 

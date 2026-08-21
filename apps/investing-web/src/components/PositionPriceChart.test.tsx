@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { PositionPriceChart } from "./PositionPriceChart";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 test("exposes position price history and marker details accessibly", async () => {
   const container = document.createElement("div");
@@ -11,5 +13,43 @@ test("exposes position price history and marker details accessibly", async () =>
   expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("AAPL");
   expect(container.textContent).toContain("Koop");
   expect(container.textContent).toContain("Koop 2");
+  root.unmount();
+});
+
+test("groups marker fields and supports marker keyboard activation", async () => {
+  const activate = vi.fn();
+  const points = [
+    { tenantId: "local", symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD", markers: [] },
+    { tenantId: "local", symbol: "AAPL", date: "2026-01-06", close: 102, currency: "USD", markers: [
+      { kind: "buy" as const, eventDate: "2026-01-06", label: "Koop 2", quantity: 2, executionPrice: 101, amount: 202, commission: 1, currency: "USD" },
+      { kind: "dividend" as const, eventDate: "2026-01-06", label: "Dividend 3 USD", amount: 3, dividendAmount: 3, currency: "USD" },
+    ] },
+  ];
+  const container = document.createElement("div"); const root = createRoot(container);
+  await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={points} onMarkerActivate={activate} />); });
+  expect(container.textContent).toContain("Slotkoers");
+  expect(container.textContent).toContain("2 stuks");
+  expect(container.textContent).toContain("commissie");
+  expect(container.textContent).toContain("Dividend");
+  const marker = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Koop 2"));
+  await act(async () => { marker?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); marker?.click(); });
+  expect(activate).toHaveBeenCalledWith("2026-01-06");
+  root.unmount();
+});
+
+test("moves exact-value crosshair with keyboard and clears zoom with Escape", async () => {
+  const points = ["2026-01-05", "2026-02-10", "2026-03-20"].map((date, index) => ({ tenantId: "local", symbol: "AAPL", date, close: 100 + index, currency: "USD", markers: [] }));
+  const container = document.createElement("div"); const root = createRoot(container);
+  await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={points} />); });
+  const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  await act(async () => { chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })); });
+  expect(container.querySelector('[role="status"]')?.textContent).toContain("5 jan 2026");
+  const month = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "1 maand");
+  await act(async () => { month?.click(); });
+  expect(container.querySelector('button[aria-label="Zoom wissen"]')).not.toBeNull();
+  await act(async () => { chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+  expect(container.querySelector('button[aria-label="Zoom wissen"]')).toBeNull();
+  expect(container.querySelectorAll('[aria-label="Exacte koerswaarden"] li').length).toBeGreaterThan(3);
+  expect(container.querySelector('[aria-label="Exacte koerswaarden"]')?.textContent).toContain("koers onbekend");
   root.unmount();
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
-import type { InvestingDashboardData } from "@lavega/core";
+import type { InvestingDashboardData, InvestingPositionDetail } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
@@ -477,13 +477,49 @@ function Positions() {
   return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>;
 }
 
+const detailDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+
+function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
+  const [quantityOpen, setQuantityOpen] = useState(false);
+  const money = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "currency", currency: position.currency, maximumFractionDigits: 2, signDisplay: "always" });
+  const percent = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  const available = position.returnStatus === "available";
+  return <section aria-labelledby="position-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{position.status === "closed" ? "Gesloten positie" : "Open positie"}</p><h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">{position.description ?? position.symbol}</h3><p className="mt-1 text-sm text-muted-foreground">{position.symbol} · bedragen in {position.currency}</p></div><span className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${position.status === "closed" ? "bg-secondary text-muted-foreground" : "bg-positive/10 text-positive"}`}>{position.status === "closed" ? "Gesloten" : "Open"}</span></div>
+    <dl className={`mt-6 grid gap-3 ${position.status === "closed" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Huidige waarde</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(position.currentValue).replace(/^\+/, "")}</dd></div>}
+      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Dagverandering</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(position.dailyChange)}{position.dailyChangePercentage === null ? "" : ` (${percent(position.dailyChangePercentage)})`}</dd></div>}
+      <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${!available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{available ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}` : "Niet beschikbaar"}</dd></div>
+      {position.status === "closed" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Eindstatus</dt><dd className="mt-1 text-xl font-semibold">0 stuks · gesloten</dd></div>}
+    </dl>
+    {!available && <p role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm">{position.returnStatus === "missing-fx" ? "FX-koers ontbreekt. Rendement kan niet worden berekend." : "Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen."}</p>}
+    <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div><dt className="text-muted-foreground">Aantal</dt><dd className="mt-1 font-semibold tabular-nums">{position.quantity.toLocaleString("nl-NL")}</dd><button type="button" aria-expanded={quantityOpen} aria-controls="quantity-history" onClick={() => setQuantityOpen((open) => !open)} className="pressable mt-1 rounded-sm text-xs font-semibold text-primary underline-offset-2 hover:underline">{quantityOpen ? "Historie verbergen" : "Aantalhistorie tonen"}</button></div>
+      {position.status === "open" && <><div><dt className="text-muted-foreground">Gemiddelde kostprijs</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.averageCost).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Huidige koers</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.currentPrice).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Ongerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.unrealizedGain)}{position.returns.remainingCostBasis && position.returns.unrealizedGain !== null ? ` (${percent(position.returns.unrealizedGain / position.returns.remainingCostBasis)})` : ""}</dd></div></>}
+      <div><dt className="text-muted-foreground">Gerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.realizedGain)}</dd></div><div><dt className="text-muted-foreground">Dividend ontvangen</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.dividendsReceived)}</dd></div><div><dt className="text-muted-foreground">Eerste aankoop</dt><dd className="mt-1 font-semibold">{position.firstBuyDate ? detailDate(position.firstBuyDate) : "Niet beschikbaar"}</dd></div>
+    </dl>
+    {quantityOpen && <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">{position.quantityHistory.length === 0 ? <li className="text-muted-foreground">Geen volledige aantalhistorie beschikbaar.</li> : position.quantityHistory.map((change) => <li key={`${change.date}-${change.sourceOrder}`} className="flex flex-wrap justify-between gap-2"><span>{detailDate(change.date)} · {change.reason === "buy" ? "Koop" : "Verkoop"}</span><span className="font-semibold tabular-nums">{change.delta > 0 ? "+" : ""}{change.delta.toLocaleString("nl-NL")} → {change.quantity.toLocaleString("nl-NL")}</span></li>)}</ol>}
+  </section>;
+}
+
+function PositionActivityTable({ position }: { position: InvestingPositionDetail }) {
+  const dates = [...new Set(position.activity.map((item) => item.date))];
+  const number = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString("nl-NL", { maximumFractionDigits: 4 });
+  return <section aria-labelledby="activity-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"><h3 id="activity-title" className="font-display text-2xl font-semibold">Activiteit</h3>{dates.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Geen transactie- of dividendhistorie beschikbaar.</p> : <div className="mt-4 overflow-x-auto"><div role="table" aria-label="Positieactiviteit" className="min-w-[760px] text-sm"><div role="row" className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] border-b border-border pb-2 text-xs font-semibold text-muted-foreground"><span>Datum</span><span>Type</span><span className="text-right">Aantal</span><span className="text-right">Koers</span><span className="text-right">Bedrag</span><span className="text-right">Commissie</span><span className="text-right">Valuta</span></div>{dates.map((date) => <div key={date} id={`activity-${date}`} tabIndex={-1} className="scroll-mt-4 border-b border-border/70 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring">{position.activity.filter((item) => item.date === date).map((item) => <div role="row" key={`${item.kind}-${item.sourceOrder}`} className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] py-1.5 tabular-nums"><span>{detailDate(date)}</span><span className="font-semibold">{item.kind === "buy" ? "Koop" : item.kind === "sell" ? "Verkoop" : "Dividend"}</span><span className="text-right">{number(item.quantity)}</span><span className="text-right">{number(item.executionPrice)}</span><span className="text-right">{number(item.amount)}</span><span className="text-right">{number(item.commission)}</span><span className="text-right">{item.currency}</span></div>)}</div>)}</div></div>}</section>;
+}
+
+function CompletePositionDetail({ position }: { position: InvestingPositionDetail }) {
+  const activate = (date: string) => { const row = document.getElementById(`activity-${date}`); row?.scrollIntoView?.({ block: "nearest" }); row?.focus(); };
+  return <><PositionDetailSummary position={position} /><PositionPriceChart symbol={position.symbol} currency={position.priceCurrency} points={position.points} onMarkerActivate={activate} /><PositionActivityTable position={position} /></>;
+}
+
 function PositionDetail() {
   const { symbol } = useParams<{ symbol: string }>();
   const [searchParams] = useSearchParams();
   const positionSymbol = symbol?.trim().toUpperCase() ?? "";
   const state = useDashboard(positionSymbol || undefined);
   const query = searchParams.toString();
-  return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><PositionPriceChart symbol={state.data.position.symbol} currency={state.data.position.currency} points={state.data.position.points} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
+  return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><CompletePositionDetail position={state.data.position} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
 }
 
 export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Routes>; }

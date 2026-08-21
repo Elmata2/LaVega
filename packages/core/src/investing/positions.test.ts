@@ -42,6 +42,12 @@ test("position return stays unavailable for incomplete history and a zero denomi
   expect(zero.totalReturnPercentage).toBeNull();
 });
 
+test("unpriced open position retains known realized and dividend components", () => {
+  const trades = [trade({ id: "buy", quantity: 2, amount: 20, currency: "EUR", commission: 0 }), trade({ id: "sell", side: "sell", quantity: 1, amount: 15, currency: "EUR", commission: 1 })];
+  const dividends: Dividend[] = [{ id: "dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-03", symbol: "ACME", amount: 2, currency: "EUR" }];
+  expect(calculatePositionReturn(1, null, trades, dividends, "EUR", rates)).toMatchObject({ status: "unpriced", remainingCostBasis: 10, realizedGain: 4, dividendsReceived: 2, unrealizedGain: null, totalReturn: null });
+});
+
 test("current positions omit closed holdings and expose price quality, EUR weight, and missing FX", () => {
   const positions: Position[] = [
     { tenantId: "local", entity: "Holding BV", symbol: "ACME", quantity: 6, averagePrice: 10, marketPrice: 40, marketValue: 240, currency: "USD", asOf: "2026-01-09" },

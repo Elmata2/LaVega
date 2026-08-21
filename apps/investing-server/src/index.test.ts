@@ -156,6 +156,23 @@ test("runtime dashboard recomputes only after data version changes", async () =>
   expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
 });
 
+test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const store = createInMemoryPriceStore();
+  const runtimeApp = await createRuntimeApp({ priceStore: store });
+
+  const selected = await runtimeApp.request("/api/investing/dashboard?symbol=aapl");
+  const unknown = await runtimeApp.request("/api/investing/dashboard?symbol=closed-unknown");
+  const selectedData = await selected.json() as { position: { symbol: string; status: string } | null };
+  const unknownData = await unknown.json() as { position: unknown };
+
+  expect(selected.status).toBe(200);
+  expect(selectedData.position).toMatchObject({ symbol: "AAPL", status: "open" });
+  expect(unknown.status).toBe(200);
+  expect(unknownData.position).toBeNull();
+});
+
 test("problem result cannot overwrite last successful broker snapshot", () => {
   const cache = createRuntimeBrokerDataCache();
   const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });

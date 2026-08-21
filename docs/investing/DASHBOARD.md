@@ -333,6 +333,8 @@ For incomplete trade history, do not estimate. Show `Niet beschikbaar` and `Impo
 
 The route `/positions/:symbol` supports open and closed positions ([Position detail page](https://github.com/Elmata2/LaVega/issues/81)).
 
+Implementation status: detail lookup resolves symbols from current snapshots, trades, dividends, and loaded price history. Open and closed pages expose EUR statistics, weighted-average return components, quantity history, daily-price interaction, full marker payloads, and newest-first activity. Incomplete cost or FX history remains explicit and never becomes an estimate.
+
 Show current value, daily change, and total return in EUR as primary values. Show quantity, average cost, current price, unrealized gain in EUR and percent, realized gain, dividends received, and first-buy date as secondary values.
 
 Quantity expands to a dated history of quantity changes and their reason. Use an explicit control with `aria-expanded`; do not make plain text the only affordance.
