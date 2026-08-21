@@ -1,0 +1,49 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LaVega — aan de kassa · instellingen</title>
+<link rel="stylesheet" href="stijl.css" />
+<body class="opties">
+  <p class="merk">LaVega · aan de kassa</p>
+  <h1>Instellingen</h1>
+
+  <h2>Welke kaarten heb je?</h2>
+  <p class="hint">
+    Dit is de hele koppeling met LaVega in deze versie: één lijstje dat in je browser blijft.
+    Er is geen verbinding met je kluis, geen account en geen server. Kaarten die je hier
+    aanvinkt worden behandeld als kaarten die je al betaalt — hun maandprijs of jaarprijs wordt
+    dan niet van de opbrengst afgetrokken, want die kosten lopen toch door.
+  </p>
+  <label for="zoek">Zoeken</label>
+  <input id="zoek" type="text" placeholder="naam of bank" autocomplete="off" />
+  <p class="hint" id="kaarten-telling"></p>
+  <div id="kaartenlijst"></div>
+
+  <h2>Op welke winkels mag het paneel verschijnen?</h2>
+  <p class="hint">
+    Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een
+    winkel aan, dan vraagt Chrome je apart om toestemming voor dat ene adres; die kun je in
+    <code>chrome://extensions</code> altijd weer intrekken. De lijst is kort omdat er alleen
+    winkels in staan waarvan we hebben gemeten dat het bedrag dat we lezen ook echt bij de
+    pagina hoort.
+  </p>
+  <div id="siteslijst"></div>
+  <p class="hint" id="sites-melding"></p>
+
+  <h2>Wat deze extensie niet doet</h2>
+  <ul class="grens">
+    <li>Geen netwerkverkeer. Niet naar lavega.dev, niet naar een statistiekendienst, nergens
+      heen. De kaartgegevens zitten in de bundel en worden nooit bijgewerkt zonder een nieuwe
+      versie van de extensie.</li>
+    <li>Geen bedragen bewaren. Wat er op een pagina staat wordt gelezen, gebruikt om de zin op
+      het scherm te maken, en daarna is het weg. Er is geen geschiedenis.</li>
+    <li>Geen andere pagina's dan de aangevinkte winkels. Geen <code>&lt;all_urls&gt;</code>,
+      geen achtergrondtoegang tot je tabbladen, geen cookies.</li>
+    <li>Geen advies dat je hier niet kunt navolgen. Weten we de kosten van een kaart niet, dan
+      staat er een brutobedrag met die onbekendheid erbij — en niet het woord "netto".</li>
+  </ul>
+
+  <h2>Waar de cijfers vandaan komen</h2>
+  <p class="hint" id="herkomst"></p>
+
+  <script type="module" src="options.js"></script>
+</body>

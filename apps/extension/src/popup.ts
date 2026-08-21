@@ -1,0 +1,133 @@
+/* Het venster onder het werkbalkicoon: bedrag intypen, antwoord teruglezen.
+ *
+ * DIT VENSTER LEEST GEEN ENKELE PAGINA en vraagt daar ook geen toestemming voor.
+ * Dat is geen beperking maar het punt: hierdoor werkt het overal — ook op de
+ * twintig winkels die niet in sites.ts staan, en ook op een winkel die haar
+ * prijs nergens machineleesbaar neerzet. Het handmatige veld is niet het
+ * noodgeval, het is het normale geval; het paneel op de winkelpagina is de
+ * uitzondering waar we het konden aantonen.
+ *
+ * WAAROM parseAmountToCents UIT read.ts EN NIET parseFloat. Omdat hier hetzelfde
+ * probleem staat als op een winkelpagina: "1.234" kan € 1,23 of € 1.234 zijn en
+ * dat scheelt duizend keer. Die functie weigert dat met een reden in plaats van
+ * te kiezen, en die reden is al in het Nederlands. Twee keer hetzelfde probleem
+ * op twee manieren oplossen is hoe de twee schermen andere antwoorden gaan
+ * geven op dezelfde invoer. */
+
+import { parseAmountToCents } from "./read.js";
+import { rankCheckout } from "./rank.js";
+import { panelRows, POPUP_CAPS, footer } from "./panel.js";
+import { headline } from "./lines.js";
+import { euro } from "./money.js";
+import { getHeldIds } from "./store.js";
+import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
+
+const GROEPKOP: Record<PaneelGroep, string> = {
+  mijn: "Jouw kaarten",
+  openen: "Zou je kunnen openen",
+  achteruit: "Kost na kaartkosten meer dan het oplevert",
+  "onbekende-kosten": "Kaartkosten onbekend",
+  onbekend: "Hier kunnen we niets over zeggen",
+};
+
+function el(tag: string, klasse: string, tekst?: string): HTMLElement {
+  const e = document.createElement(tag);
+  e.className = klasse;
+  if (tekst !== undefined) e.textContent = tekst;
+  return e;
+}
+
+const uitkomst = document.getElementById("uitkomst") as HTMLDivElement;
+const bedragVeld = document.getElementById("bedrag") as HTMLInputElement;
+const muntVeld = document.getElementById("munt") as HTMLSelectElement;
+const formulier = document.getElementById("formulier") as HTMLFormElement;
+
+function leeg(node: HTMLElement): void {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+async function bereken(): Promise<void> {
+  leeg(uitkomst);
+  const ruw = bedragVeld.value.trim();
+  const munt = muntVeld.value;
+
+  /* Zonder bedrag wordt er WEL gerangschikt. De volgorde hangt van de
+   * percentages af en die staan los van het bedrag, dus er valt iets zinnigs te
+   * zeggen — alleen geen euro's, en dat zegt de kop uit lines.ts er zelf bij.
+   * Doen alsof er niets te melden is zolang het veld leeg is, zou informatie
+   * achterhouden die er gewoon is. */
+  let bedragCenten: number | null = null;
+  if (ruw) {
+    const p = parseAmountToCents(ruw);
+    if (!p.ok) {
+      /* HIER NIET reasonText GEBRUIKEN, hoe verleidelijk ook. Die teksten zijn
+       * geschreven voor het lezen van een PAGINA en eindigen allemaal met "vul
+       * het bedrag zelf in". In dit venster heeft hij dat net gedaan: dan staat
+       * er "het bedrag op de pagina is niet eenduidig te lezen — vul het bedrag
+       * zelf in" onder een veld waar hij zojuist iets in tikte. Dat noemt een
+       * oorzaak die er niet is en geeft een advies dat hij al heeft opgevolgd.
+       * Gemeten in de browser met invoer "1.234"; het stond er echt. */
+      const kaart = el("div", "kaart");
+      kaart.appendChild(el("div", "kop fout", `"${ruw}" is niet eenduidig te lezen.`));
+      kaart.appendChild(
+        el(
+          "div",
+          "noot",
+          "Eén punt of komma met drie cijfers erachter kan twee dingen betekenen: " +
+            "\"1.234\" is € 1,23 volgens schema.org en € 1.234 volgens de Nederlandse gewoonte. " +
+            "Dat scheelt duizend keer, dus we kiezen niet. Schrijf het voluit met centen — " +
+            "1234,00 of 1.234,00 — dan is er niets te raden.",
+        ),
+      );
+      uitkomst.appendChild(kaart);
+      return;
+    }
+    bedragCenten = p.cents;
+  }
+
+  const heldIds = await getHeldIds();
+  const ranking = rankCheckout({
+    cards: CHECKOUT_CARDS,
+    heldIds,
+    currency: munt,
+    amountCents: bedragCenten,
+    /* De enige klokaflezing in dit scherm. rank.ts zelf kent geen tijd. */
+    asOf: new Date().toISOString().slice(0, 10),
+  });
+
+  const kaart = el("div", "kaart");
+  if (bedragCenten !== null) kaart.appendChild(el("div", "bedrag", euro(bedragCenten)));
+  kaart.appendChild(el("div", "kop", headline(ranking)));
+
+  const regels = panelRows(ranking, POPUP_CAPS);
+  let vorige: PaneelGroep | null = null;
+  for (const r of regels) {
+    if (r.groep !== vorige) {
+      kaart.appendChild(el("div", "groep", GROEPKOP[r.groep]));
+      vorige = r.groep;
+    }
+    const rij = el("div", "rij");
+    rij.appendChild(el("div", "titel", r.titel));
+    rij.appendChild(el("div", "regel", r.regel));
+    if (r.bron) rij.appendChild(el("div", "bron", r.bron));
+    kaart.appendChild(rij);
+  }
+
+  kaart.appendChild(el("div", "noot groep", footer(CATALOG_GENERATED_AT)));
+  uitkomst.appendChild(kaart);
+}
+
+formulier.addEventListener("submit", (e) => {
+  e.preventDefault();
+  void bereken();
+});
+
+document.getElementById("naar-opties")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  void chrome.runtime.openOptionsPage();
+});
+
+/* Meteen bij openen één keer rekenen. Zonder bedrag geeft dat de volgorde op
+ * percentage plus de vraag om het bedrag — nuttiger dan een leeg vlak, en het
+ * laat zien dat er kaarten aangevinkt staan (of juist niet). */
+void bereken();
