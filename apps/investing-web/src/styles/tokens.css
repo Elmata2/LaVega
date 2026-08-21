@@ -51,6 +51,9 @@
 @layer components {
   .pressable { @apply transition-transform duration-150 ease-out active:scale-[.98]; }
   .axis-label { transition: opacity 160ms ease-out; }
+  .net-worth-hatch {
+    background: repeating-linear-gradient(135deg, hsl(var(--chart-teal) / .62) 0 1px, hsl(var(--chart-teal) / .12) 1px 4px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -174,6 +174,43 @@ test("overview exposes positions as navigation links", async () => {
   root.unmount();
 });
 
+test("overview preserves responsive reading order and independent chart ranges", async () => {
+  vi.stubGlobal("fetch", vi.fn((input, init) => Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map((element) => element.dataset.dashboardSection);
+  expect(order).toEqual(["performance", "kpis", "allocation", "status", "positions", "net-worth"]);
+  const performanceRange = container.querySelector<HTMLElement>('[role="group"][aria-label="Periode kiezen"]')!;
+  const netWorthRange = container.querySelector<HTMLElement>('[role="group"][aria-label="Periode nettovermogen kiezen"]')!;
+  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("1 maand");
+  await act(async () => { Array.from(netWorthRange.querySelectorAll("button")).find((button) => button.textContent === "Alles")?.click(); });
+  expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Alles");
+  expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("1 maand");
+  root.unmount();
+});
+
+test("overview makes KPIs and all operational status chips visible", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/brokers/sync/status") return new Response(JSON.stringify({ status: "waiting", pages: 2, ordersRead: 40, positionsRead: 1, waitUntil: null, remaining: 1, updatedAt: "2026-08-21T10:00:00Z", message: "API-pauze" }));
+    if (url === "/api/prices/sync/status") return new Response(JSON.stringify({ status: "problem", total: 3, completed: 2, remainingSymbols: ["OLD"], currentSymbol: null, waitUntil: null, updatedAt: "2026-08-21T10:00:00Z", message: null, problems: ["OLD: mislukt"] }));
+    if (url === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "locked" }));
+    return responseFor(input, init);
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+  expect(container.textContent).toContain("Portefeuillewaarde");
+  expect(container.textContent).toContain("Dagmutatie");
+  expect(container.textContent).toContain("Totaal rendement");
+  expect(container.textContent).toContain("BrokersWachten");
+  expect(container.textContent).toContain("PrijsgeschiedenisProbleem");
+  expect(container.textContent).toContain("KluisVergrendeld");
+  expect(container.textContent).toContain("CacheVersie");
+  expect(container.textContent).toContain("ASML");
+  root.unmount();
+});
+
 test("overview separates positions, cash, and incomplete value states", async () => {
   const incomplete: InvestingDashboardData = {
     ...dashboard,

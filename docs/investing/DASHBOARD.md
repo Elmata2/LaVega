@@ -166,6 +166,8 @@ Maintain an in-memory `dataVersion`. Increment it after broker data is applied a
 
 Use the chart-and-right-rail layout selected by the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)).
 
+Implementation status: production overview uses this responsive reading order. KPI values and broker, price, vault, and cache states stay in the right rail on wide screens and follow the performance chart on narrow screens. Refresh failures keep the last valid dashboard payload visible.
+
 On wide screens:
 
 - Put the portfolio chart in the main column.
@@ -352,6 +354,8 @@ Provide `← Terug naar posities`. Browser Back and this link return to the URL-
 ## Net-worth chart
 
 Put a separate full-width stacked-area card below the positions table ([Design stacked/layered net-worth chart layout](https://github.com/Elmata2/LaVega/issues/85)). Stack `positionsValue` below `cashValue` and draw a `Totaal` overlay line.
+
+Implementation status: production net-worth card reads the existing range-specific `PortfolioValuePoint` series directly. It preserves null position, cash, and total legs; textures forward-filled position dates; exposes excluded symbols and unknown cash; and owns range, typed-date, wheel, drag, crosshair, and keyboard state independently from the performance chart.
 
 Apply a hatched or dashed texture to the positions area on dates where `forwardFilled` is non-empty. List `unpriced` symbols in the tooltip so excluded value is visible. Do not silently absorb missing positions into the total.
 

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
-import type { InvestingDashboardData, InvestingPositionDetail } from "@lavega/core";
+import { buildIndexedSeries, type InvestingDashboardData, type InvestingPositionDetail } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
+import { NetWorthChart } from "./components/NetWorthChart";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
@@ -19,7 +20,7 @@ type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "
 type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
 type DashboardState =
   | { status: "loading" }
-  | { status: "ready"; data: InvestingDashboardData }
+  | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
   | { status: "error"; message: string };
 
 function isDashboardData(value: unknown): value is InvestingDashboardData {
@@ -50,10 +51,14 @@ function useDashboard(symbol?: string): DashboardState {
   useEffect(() => {
     let current = true;
     const load = () => {
-      setState({ status: "loading" });
+      setState((previous) => previous.status === "ready" ? previous : { status: "loading" });
       void fetchDashboard(symbol)
         .then((data) => { if (current) setState({ status: "ready", data }); })
-        .catch((reason: unknown) => { if (current) setState({ status: "error", message: reason instanceof Error ? reason.message : "Dashboard laden mislukt" }); });
+        .catch((reason: unknown) => {
+          if (!current) return;
+          const message = reason instanceof Error ? reason.message : "Dashboard laden mislukt";
+          setState((previous) => previous.status === "ready" ? { ...previous, refreshError: message } : { status: "error", message });
+        });
     };
     load();
     window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
@@ -130,26 +135,78 @@ function PositionList({ positions, currency }: { positions: InvestingDashboardDa
   </div>;
 }
 
-function PortfolioCashSummary({ data }: { data: InvestingDashboardData }) {
-  const latest = data.portfolio.All.at(-1);
-  const money = (value: number | null) => value === null
+function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
+  const points = data.portfolio.All;
+  const latest = points.at(-1);
+  const previous = points.at(-2);
+  const dailyChange = latest?.value !== null && latest?.value !== undefined && previous?.value !== null && previous?.value !== undefined
+    ? latest.value - previous.value
+    : null;
+  const dailyChangePercentage = dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
+  const totalReturn = buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
+  const money = (value: number | null, signDisplay: "auto" | "always" = "auto") => value === null
     ? "Waarde onbekend"
-    : value.toLocaleString("nl-NL", { style: "currency", currency: data.presentationCurrency, maximumFractionDigits: 2 });
-  if (!latest) return null;
-  const incomplete = latest.unpriced.length > 0 || latest.cashUnknown.length > 0;
-  return <section aria-label="Portefeuillewaarde uitsplitsing" className="rounded-card border border-border bg-card p-5 shadow-soft">
-    <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Laatste waarde</p>
-    <p className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(latest.value)}</p>
-    <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm">
-      <div><dt className="text-muted-foreground">Posities</dt><dd className="mt-1 font-semibold tabular-nums">{money(latest.positionsValue)}</dd></div>
-      <div><dt className="text-muted-foreground">Cash</dt><dd className="mt-1 font-semibold tabular-nums">{money(latest.cashValue)}</dd></div>
+    : value.toLocaleString("nl-NL", { style: "currency", currency: data.presentationCurrency, maximumFractionDigits: 2, signDisplay });
+  const percentage = (value: number | null) => value === null ? "Rendement onbekend" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 2, signDisplay: "always" });
+  return <section aria-label="Portefeuille-KPI's" className="rounded-card border border-border bg-card p-5 shadow-soft" data-dashboard-section="kpis">
+    <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Kerncijfers</p>
+    <dl className="mt-4 space-y-4">
+      <div><dt className="text-xs text-muted-foreground">Portefeuillewaarde</dt><dd className={`mt-1 font-display text-3xl font-semibold tabular-nums ${latest?.value === null || latest?.value === undefined ? "text-muted-foreground" : ""}`}>{money(latest?.value ?? null)}</dd></div>
+      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Dagmutatie</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(dailyChange, "always")}</dd><dd className="text-xs text-muted-foreground">{percentage(dailyChangePercentage)}</dd></div>
+      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{percentage(totalReturn)}</dd><dd className="text-xs text-muted-foreground">TWR na stortingen en opnames</dd></div>
     </dl>
-    {latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
-    {incomplete && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5">
-      <p className="font-semibold">Waarde deels onbekend</p>
-      {latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}
-      {latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}
-    </div>}
+    {latest && latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
+    {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"><p className="font-semibold">Waarde deels onbekend</p>{latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}{latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}</div>}
+  </section>;
+}
+
+type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
+
+function StatusChip({ label, value, detail, tone = "neutral", children }: { label: string; value: string; detail?: string; tone?: StatusTone; children?: React.ReactNode }) {
+  const toneClass = tone === "problem" ? "border-negative/30 bg-negative/5" : tone === "warning" ? "border-warning/30 bg-warning/10" : tone === "success" ? "border-positive/30 bg-positive/5" : tone === "active" ? "border-primary/20 bg-secondary/40" : "border-border bg-secondary/20";
+  const dotClass = tone === "problem" ? "bg-negative" : tone === "warning" ? "bg-warning" : tone === "success" ? "bg-positive" : tone === "active" ? "bg-primary" : "bg-muted-foreground";
+  return <div className={`rounded-[14px] border px-3 py-2.5 ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-2 text-xs font-semibold"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />{label}</span><span className="text-xs font-semibold">{value}</span></div>{detail && <p className="mt-1 truncate pl-4 text-[11px] text-muted-foreground">{detail}</p>}{children}</div>;
+}
+
+function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
+  const [broker, setBroker] = useState<BrokerProgress | null>(null);
+  const [price, setPrice] = useState<PriceProgress | null>(null);
+  const [vault, setVault] = useState<"empty" | "locked" | "unlocked" | "unknown">("unknown");
+  const refreshedPriceRun = useRef<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      const [brokerResult, priceResult, vaultResult] = await Promise.allSettled([
+        fetch("/api/brokers/sync/status").then(async (response) => response.ok ? await response.json() as BrokerProgress : null),
+        fetch("/api/prices/sync/status").then(async (response) => response.ok ? await response.json() as PriceProgress : null),
+        fetch("/api/brokers/credentials/status").then(async (response) => response.ok ? await response.json() as { status?: string } : null),
+      ]);
+      if (!current) return;
+      if (brokerResult.status === "fulfilled" && brokerResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)) setBroker(brokerResult.value);
+      if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(priceResult.value.status)) {
+        setPrice(priceResult.value);
+        if ((priceResult.value.status === "completed" || priceResult.value.status === "problem") && priceResult.value.updatedAt && refreshedPriceRun.current !== priceResult.value.updatedAt) {
+          refreshedPriceRun.current = priceResult.value.updatedAt;
+          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        }
+      }
+      if (vaultResult.status === "fulfilled" && ["empty", "locked", "unlocked"].includes(vaultResult.value?.status ?? "")) setVault(vaultResult.value!.status as "empty" | "locked" | "unlocked");
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 1_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, []);
+  const brokerValue = broker?.status === "running" ? "Bezig" : broker?.status === "waiting" ? "Wachten" : broker?.status === "completed" ? "Actueel" : broker?.status === "problem" ? "Probleem" : broker?.status === "idle" ? "Gereed" : "Onbekend";
+  const priceValue = price?.status === "running" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
+  const statusTone = (status?: BrokerProgress["status"]): StatusTone => status === "problem" ? "problem" : status === "waiting" ? "warning" : status === "running" ? "active" : status === "completed" ? "success" : "neutral";
+  return <section aria-label="Operationele status" className="rounded-card border border-border bg-card p-4 shadow-soft" data-dashboard-section="status">
+    <p className="mb-3 text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Status</p>
+    <div className="space-y-2" aria-live="polite">
+      <StatusChip label="Brokers" value={brokerValue} tone={statusTone(broker?.status)} detail={broker?.status === "waiting" ? broker.message ?? "API-capaciteit wordt afgewacht" : broker?.status === "problem" ? broker.message ?? "Gecachete gegevens blijven zichtbaar" : undefined} />
+      <StatusChip label="Prijsgeschiedenis" value={priceValue} tone={statusTone(price?.status)} detail={price?.status === "running" ? price.currentSymbol ? `${price.currentSymbol} wordt geladen` : `${price.remainingSymbols.length} symbolen resterend` : price?.status === "problem" ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar` : undefined} />
+      <StatusChip label="Kluis" value={vault === "unlocked" ? "Open" : vault === "locked" ? "Vergrendeld" : vault === "empty" ? "Niet ingesteld" : "Onbekend"} tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"} />
+      <StatusChip label="Cache" value={`Versie ${dataVersion}`} tone={dataVersion > 0 ? "success" : "neutral"}><div className="mt-2 flex justify-end"><ClearPriceCache /></div></StatusChip>
+    </div>
   </section>;
 }
 
@@ -171,46 +228,6 @@ function AppOpenSync() {
   }, []);
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
-}
-
-function PriceSyncProgressCard() {
-  const [progress, setProgress] = useState<PriceProgress | null>(null);
-  const refreshedRun = useRef<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    const load = async () => {
-      try {
-        const response = await fetch("/api/prices/sync/status");
-        if (!response.ok) return;
-        const next = await response.json() as PriceProgress;
-        if (!current || !["idle", "running", "waiting", "completed", "problem"].includes(next.status)) return;
-        setProgress(next);
-        if ((next.status === "completed" || next.status === "problem") && next.updatedAt && refreshedRun.current !== next.updatedAt) {
-          refreshedRun.current = next.updatedAt;
-          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        }
-      } catch { /* Dashboard remains usable with cached prices. */ }
-    };
-    void load();
-    const timer = window.setInterval(() => { void load(); }, 1_000);
-    return () => { current = false; window.clearInterval(timer); };
-  }, []);
-
-  if (!progress || progress.status === "idle") return null;
-  const active = progress.status === "running" || progress.status === "waiting";
-  const problem = progress.status === "problem";
-  return <section aria-live="polite" className={`rounded-card border p-4 ${problem ? "border-negative/30 bg-negative/5" : active ? "border-primary/20 bg-secondary/40" : "border-positive/30 bg-positive/5"}`}>
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Prijsgeschiedenis</p>
-        <p className="mt-1 text-sm font-semibold">{active ? `${progress.completed} van ${progress.total} geladen` : problem ? "Voltooid met problemen" : "Actueel"}</p>
-        {active && <p className="mt-1 truncate text-xs text-muted-foreground">{progress.currentSymbol ? `${progress.currentSymbol} wordt geladen` : `${progress.remainingSymbols.length} symbolen resterend`}</p>}
-        {problem && <p className="mt-1 text-xs text-negative">{progress.problems.length} symboolproblemen; cache blijft beschikbaar.</p>}
-      </div>
-      <span className={`rounded-pill px-2.5 py-1 text-xs font-semibold ${problem ? "bg-negative/10 text-negative" : active ? "bg-primary/10 text-primary" : "bg-positive/10 text-positive"}`}>{progress.status === "waiting" ? "Wachten" : progress.status === "running" ? "Bezig" : problem ? "Probleem" : "Voltooid"}</span>
-    </div>
-  </section>;
 }
 
 function ClearPriceCache() {
@@ -467,7 +484,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {
