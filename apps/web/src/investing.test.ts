@@ -4,15 +4,12 @@ import { investingReachable, resolveInvestingUrl } from "./investing";
 /* The investing app is a separate deploy. Until this round the link to it was a
  * hardcoded `http://127.0.0.1:8790` — the port of a docker container that
  * exists on one developer machine and nowhere else, so on lavega.dev the
- * "Investing" tab opened a browser error page. Two rules come out of that:
- * the URL is configuration, and the link is only shown when something actually
- * answers at it. A dead link is worse than no link. */
+ * "Investing" tab opened a browser error page. The URL is configuration
+ * (`VITE_INVESTING_URL`, else `/investing` in production). `investingReachable`
+ * is still available for optional liveness checks. */
 
 test("with nothing configured, dev points at the local container and production at the same origin", () => {
   expect(resolveInvestingUrl({ DEV: true })).toBe("http://127.0.0.1:8790");
-  // Same-origin path: the day the server serves the investing app under
-  // /investing the link appears by itself, and until then the probe below
-  // keeps it hidden. No rebuild, no baked-in URL.
   expect(resolveInvestingUrl({ DEV: false })).toBe("/investing");
 });
 

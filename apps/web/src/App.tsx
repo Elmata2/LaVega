@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
 import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
+import { pathForView, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
@@ -31,6 +32,8 @@ import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 
+export type { View } from "./appRoutes";
+
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
 // at rest only in the encrypted vault — the app never touches the legacy
@@ -41,20 +44,19 @@ const storage = createEncryptedStorage();
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
-/* "rules" has NO route any more: Regels is a setting, so it renders inline in
+/* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
  * union still lists it only because components/TopBar.tsx types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
- * map is a label lookup, not a way to reach the view.
+ * map is a label lookup, not a way to reach the view. Path `/app/rules` still
+ * resolves for completeness.
  *
  * "koppelingen" and "backup" look equally orphaned and are NOT: Facturen sends
  * you to Koppelingen ("Koppelingen instellen", Facturen.tsx:480), and the
  * post-migration screen sends you to Back-up ("Maak nu een back-up",
  * VaultGate.tsx:284 → onBackup → setView("backup")). Both also render inline in
  * Profiel; these two are the deep links into them, so their branches stay. */
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup" | "profiel";
-
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -165,7 +167,25 @@ export default function App() {
     setAddWidget((n) => n + 1);
   }
 
-  const [view, setView] = useState<View>("overview");
+  const [view, setViewState] = useState<View>(() => viewFromPathname(window.location.pathname) ?? "overview");
+  const setView = useCallback((next: View) => {
+    setViewState(next);
+    const nextPath = pathForView(next);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, "", `${nextPath}${window.location.search}`);
+    }
+  }, []);
+  useEffect(() => {
+    // Unknown `/app/…` still mounts the app; snap URL to the resolved view.
+    const resolved = viewFromPathname(window.location.pathname) ?? "overview";
+    const canonical = pathForView(resolved);
+    if (window.location.pathname !== canonical) {
+      window.history.replaceState({}, "", `${canonical}${window.location.search}`);
+    }
+    const onPop = () => setViewState(viewFromPathname(window.location.pathname) ?? "overview");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
   // everything it has rather than an empty page.

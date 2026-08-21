@@ -36,9 +36,35 @@ Enable Banking OAuth exchange), it never stores your accounts/transactions.
    Railway's generated `*.up.railway.app` hostname can remain enabled for
    troubleshooting, but do not use it in public integrations.
 6. Verify:
-   - `https://lavega.dev/` → the app loads
+   - `https://lavega.dev/` → landing
+   - `https://lavega.dev/app` → personal vault (Overzicht)
+   - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
    - `https://lavega.dev/api/rates` → the live savings-rate JSON
+   - Landing + app topnav show **Investing** → `VITE_INVESTING_URL` or `/investing`
+
+Personal app paths (SPA; server already serves `index.html` for unknown paths):
+
+| Path | View |
+| --- | --- |
+| `/app` or `/app/overview` | Overzicht |
+| `/app/transactions` | Transacties |
+| `/app/accounts` | Rekeningen |
+| `/app/forecast` | Forecast |
+| `/app/optimalisatie` | Optimalisatie |
+| `/app/valuta` | Valuta |
+| `/app/punten` | Punten |
+| `/app/belasting` | Belasting |
+| `/app/facturen` | Facturen |
+| `/app/profiel` | Profiel |
+| `/app/koppelingen` | Koppelingen |
+| `/app/backup` | Back-up |
+
+Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
+
+Investing link: set Railway/build env `VITE_INVESTING_URL` to the investing host
+(e.g. `https://investing.lavega.dev`) if it is not served at `/investing` on the
+same origin.
 
 ## Environment variables (Railway → Variables)
 - `PORT` — set by Railway automatically; don't hardcode.

@@ -40,20 +40,14 @@ test("the profile entry sits in the app bar's right-hand slot", () => {
   expect(right).toContain("profile-avatar");
 });
 
-test("the investing link is not rendered on a first paint — it waits for the app to answer", () => {
-  // The static render has run no effects, so the reachability probe has not
-  // answered yet, and the link is absent. This is the same assertion as
-  // before, inverted on purpose: the link used to be unconditional and
-  // pointed at 127.0.0.1:8790, which on lavega.dev opened a browser error
-  // page. What the link looks like once it IS shown is asserted in
-  // NavBar.investing.test.tsx, which has the DOM the probe needs.
+test("the investing link is always a real href out of the SPA when configured", () => {
   const html = renderToStaticMarkup(
     <NavBar view="overview" modules={[]} onNavigate={() => {}} onOpenProfile={() => {}} />,
   );
-  expect(html).not.toContain("Investing");
-  // And it is a link out when it appears, never a nav-item that flips `view`.
+  expect(html).toContain("Investing");
   const nav = readFileSync(new URL("./NavBar.tsx", import.meta.url), "utf8");
-  expect(nav).toContain('<a href={investingHref} target="_blank" rel="noopener noreferrer"');
+  expect(nav).toContain('<a href={INVESTING_URL} target="_blank" rel="noopener noreferrer"');
+  expect(nav).toContain("pathForView");
 });
 
 test("the chrome no longer asserts 'lokaal & privé', and no longer holds Vergrendel", () => {

@@ -520,6 +520,7 @@ table tbody tr:hover {
   font-size: 0.95rem;
   font-weight: 500;
   text-align: left;
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: color 0.12s ease, border-color 0.12s ease;
@@ -619,6 +620,7 @@ table tbody tr:hover {
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 500;
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
 }

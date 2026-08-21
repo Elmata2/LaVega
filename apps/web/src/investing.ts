@@ -1,16 +1,16 @@
-/* Where the investing app lives, and whether it is actually there.
+/* Where the investing app lives.
  *
  * apps/investing-web (served by apps/investing-server) is a separate deploy,
  * not a route inside this SPA — it has no `View` and never will (see
- * moduleRegistry.tsx: a ModuleId is always a View). So the topbar entry is a
- * plain cross-document <a> and all it needs is an origin, or a path.
+ * moduleRegistry.tsx: a ModuleId is always a View). So the topbar / landing
+ * entry is a plain cross-document <a> and all it needs is an origin, or a path.
  *
  * It used to need nothing at all, because the origin was hardcoded to
  * http://127.0.0.1:8790 — the port scripts/rebuild-investing-orbstack.sh
  * publishes on a developer machine. On lavega.dev that link opened a browser
- * error page. Hence the two rules below: the location is configuration, and the
- * link is only rendered once something has answered at it. A link that refuses
- * to connect is worse than no link. */
+ * error page. The URL is therefore configuration. The chrome always shows the
+ * link when a URL resolves (so owners can reach a deployed investing host);
+ * `investingReachable` remains for callers that still want a liveness probe. */
 
 export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
 
@@ -20,9 +20,8 @@ export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
  *    a same-origin path (`/beleggen`) — that, minus any trailing slash.
  *  - set but blank — off; the link is not rendered at all.
  *  - unset, dev — the local container from rebuild-investing-orbstack.sh.
- *  - unset, production — `/investing` on this origin. Nothing serves that yet,
- *    so the probe below hides the link; the day the server does serve it there,
- *    the link appears without a rebuild. */
+ *  - unset, production — `/investing` on this origin (needs that path to be
+ *    served, or set `VITE_INVESTING_URL` to the real investing host). */
 export function resolveInvestingUrl(env: InvestingEnv): string | null {
   const configured = env.VITE_INVESTING_URL;
   if (configured !== undefined) {

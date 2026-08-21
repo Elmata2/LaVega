@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import CardSpiral from "./CardSpiral";
+import { INVESTING_URL } from "../investing.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -11,7 +12,7 @@ const WAITLIST_ENDPOINT = "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAi
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
  *  ondernemers). The app isn't public yet — it's a waitlist front door: the
  *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
- *  the vault (#app) via `onEnter`, for owner/Railway testing. */
+ *  the vault (`/app`) via `onEnter`, for owner/Railway testing. */
 export default function Landing({ onEnter }: { onEnter: () => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const agentsRef = useRef<HTMLDivElement | null>(null);
@@ -105,6 +106,11 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <a href="#privacy">Privacy</a>
           <a href="#how">Hoe het werkt</a>
           <a href="#wachtlijst">Wachtlijst</a>
+          {INVESTING_URL && (
+            <a href={INVESTING_URL} target="_blank" rel="noopener noreferrer">
+              Investing
+            </a>
+          )}
         </nav>
         <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
           Inloggen

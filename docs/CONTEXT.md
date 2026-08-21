@@ -35,7 +35,7 @@ lavega/
 │       ├── banking/   # BankAccess → FileImport · EnableBanking · finAPI
 │       └── brokers/   # BrokerAccess → DeGiro · IBKR · Trading 212
 ├── apps/
-│   ├── web/           # Vite + React dashboard (personal)
+│   ├── web/           # Vite + React dashboard (personal); `/` landing, `/app/<view>` vault
 │   ├── server/        # Hono API: local sync now → hosted backend later (same code)
 │   ├── investing-web/    # investing dashboard
 │   └── investing-server/ # investing API
