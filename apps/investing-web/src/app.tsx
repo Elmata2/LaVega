@@ -28,6 +28,8 @@ function isDashboardData(value: unknown): value is InvestingDashboardData {
   return typeof data.presentationCurrency === "string"
     && Boolean(data.portfolio && typeof data.portfolio === "object")
     && Boolean(data.allocation && typeof data.allocation === "object")
+    && typeof data.dataVersion === "number"
+    && Array.isArray(data.externalCashFlows)
     && Array.isArray(data.positions)
     && Array.isArray(data.problems)
     && (data.position === null || (Boolean(data.position) && typeof data.position === "object"));
@@ -75,6 +77,29 @@ function DashboardProblems({ problems }: { problems: string[] }) {
 function PositionList({ positions }: { positions: InvestingDashboardData["positions"] }) {
   if (positions.length === 0) return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />;
   return <div className="space-y-5"><ul aria-label="Posities" className="divide-y divide-border rounded-card border border-border"><li className="grid grid-cols-[1fr_auto] gap-4 bg-secondary/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Positie</span><span>Hoeveelheid</span></li>{positions.map((position) => <li key={`${position.symbol}-${position.entity}`} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4"><Link to={`/positions/${encodeURIComponent(position.symbol)}`} className="min-w-0 font-semibold text-primary hover:underline"><span className="block truncate">{position.description ?? position.symbol}</span><span className="block text-xs font-normal text-muted-foreground">{position.symbol} · {position.entity}</span></Link><span className="text-right text-sm tabular-nums">{position.quantity} {position.currency}</span></li>)}</ul></div>;
+}
+
+function PortfolioCashSummary({ data }: { data: InvestingDashboardData }) {
+  const latest = data.portfolio.All.at(-1);
+  const money = (value: number | null) => value === null
+    ? "Waarde onbekend"
+    : value.toLocaleString("nl-NL", { style: "currency", currency: data.presentationCurrency, maximumFractionDigits: 2 });
+  if (!latest) return null;
+  const incomplete = latest.unpriced.length > 0 || latest.cashUnknown.length > 0;
+  return <section aria-label="Portefeuillewaarde uitsplitsing" className="rounded-card border border-border bg-card p-5 shadow-soft">
+    <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Laatste waarde</p>
+    <p className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(latest.value)}</p>
+    <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm">
+      <div><dt className="text-muted-foreground">Posities</dt><dd className="mt-1 font-semibold tabular-nums">{money(latest.positionsValue)}</dd></div>
+      <div><dt className="text-muted-foreground">Cash</dt><dd className="mt-1 font-semibold tabular-nums">{money(latest.cashValue)}</dd></div>
+    </dl>
+    {latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
+    {incomplete && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5">
+      <p className="font-semibold">Waarde deels onbekend</p>
+      {latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}
+      {latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}
+    </div>}
+  </section>;
 }
 
 function AppOpenSync() {
@@ -391,7 +416,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} /></>}</div>;
 }
 
 function Positions() {

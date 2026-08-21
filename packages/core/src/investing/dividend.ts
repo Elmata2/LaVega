@@ -3,6 +3,7 @@ export type Dividend = {
   id: string;
   tenantId: string;
   entity: string;
+  broker: string;
   date: string;
   symbol: string;
   isin?: string;

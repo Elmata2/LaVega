@@ -12,7 +12,7 @@ afterEach(() => { vi.restoreAllMocks(); globalThis.localStorage?.clear(); });
 
 const dashboard: InvestingDashboardData = {
   ...emptyInvestingDashboard(),
-  portfolio: { ...emptyInvestingDashboard().portfolio, "1M": [{ date: "2026-08-18", portfolioValue: 120, benchmarkValue: 118, unpriced: [] }] },
+  portfolio: { ...emptyInvestingDashboard().portfolio, "1M": [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, portfolioValue: 120, benchmarkValue: 118, unpriced: [], forwardFilled: [], cashUnknown: [] }], All: [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, portfolioValue: 120, benchmarkValue: 118, unpriced: [], forwardFilled: [], cashUnknown: [] }] },
   allocation: {
     instrument: { buckets: [{ key: "ASML", label: "ASML", value: 120, unpriced: false }], unpriced: [] },
     entity: { buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }], unpriced: [] },
@@ -111,6 +111,30 @@ test("overview exposes positions as navigation links", async () => {
   await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
 
   expect(container.querySelector('a[href="/positions/ASML"]')).not.toBeNull();
+  root.unmount();
+});
+
+test("overview separates positions, cash, and incomplete value states", async () => {
+  const incomplete: InvestingDashboardData = {
+    ...dashboard,
+    portfolio: {
+      ...dashboard.portfolio,
+      All: [{ date: "2026-08-18", positionsValue: 100, cashValue: null, value: 100, portfolioValue: 100, benchmarkValue: null, unpriced: ["MSFT"], forwardFilled: ["ASML"], cashUnknown: ["ibkr:USD"] }],
+    },
+  };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard")
+    ? Promise.resolve(new Response(JSON.stringify(incomplete)))
+    : Promise.resolve(responseFor(input, init))));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Posities");
+  expect(container.textContent).toContain("Cash");
+  expect(container.textContent).toContain("Waarde deels onbekend");
+  expect(container.textContent).toContain("MSFT");
+  expect(container.textContent).toContain("ibkr:USD");
+  expect(container.textContent).toContain("Geschatte koers: ASML");
   root.unmount();
 });
 

@@ -1,47 +1,87 @@
 import { expect, test } from "vitest";
+import type { CashBalance, CashFlow, PriceBar, Trade } from "./model.js";
 import {
-  computePortfolioValueSeries,
   buildPortfolioBenchmarkSeries,
+  computePortfolioValueSeries,
   filterPortfolioValueRange,
   normalizeBenchmarkSeries,
   type PortfolioValuePoint,
 } from "./portfolio.js";
-import { FX_RATES, POSITIONS, PRICE_BARS, TRADES, BENCHMARK_BARS } from "./__fixtures__/portfolio.js";
+import { BENCHMARK_BARS, FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
 
-test("computes EUR portfolio value from holdings, trades, prices, and FX", () => {
-  expect(computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES)).toEqual([
-    { date: "2026-01-02", value: 2200, unpriced: [] },
-    { date: "2026-01-05", value: 1952.3809523809523, unpriced: [] },
-    { date: "2026-02-02", value: 2090.909090909091, unpriced: [] },
+const point = (date: string, value: number, unpriced: string[] = []): PortfolioValuePoint => ({
+  date,
+  positionsValue: value,
+  cashValue: null,
+  value,
+  unpriced,
+  forwardFilled: [],
+  cashUnknown: [],
+});
+
+test("reconstructs holdings from signed trades instead of current positions", () => {
+  const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
+
+  expect(result.find(({ date }) => date === "2026-01-02")).toEqual(point("2026-01-02", 2200));
+  expect(result.find(({ date }) => date === "2026-01-05")).toEqual(point("2026-01-05", 1952.3809523809523));
+  expect(result.at(-1)).toEqual(point("2026-02-02", 2090.909090909091));
+});
+
+test("includes closed positions only while trade history says they were held", () => {
+  const trades: Trade[] = [
+    { id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "CLOSED", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 },
+    { id: "sell", tenantId: "local", entity: "personal", date: "2026-01-06", symbol: "CLOSED", side: "sell", quantity: 2, price: 12, amount: 24, currency: "EUR", commission: 0 },
+  ];
+  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({ tenantId: "local", symbol: "CLOSED", date, close: 10, currency: "EUR" }));
+
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-06" });
+  expect(result.map(({ date, positionsValue }) => ({ date, positionsValue }))).toEqual([
+    { date: "2026-01-02", positionsValue: 20 },
+    { date: "2026-01-05", positionsValue: 20 },
+    { date: "2026-01-06", positionsValue: 0 },
   ]);
 });
 
-test("reports missing instrument prices instead of treating them as zero", () => {
-  const result = computePortfolioValueSeries(
-    POSITIONS,
-    TRADES,
-    PRICE_BARS.filter((bar) => bar.symbol !== "MSFT"),
-    "EUR",
-    FX_RATES,
-  );
+test("forward-fills five business days then marks held symbol unpriced", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL" && bar.date === "2026-01-05");
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-13" });
 
-  expect(result[1]).toEqual({ date: "2026-01-05", value: 952.3809523809523, unpriced: ["MSFT"] });
+  expect(result.find(({ date }) => date === "2026-01-12")?.forwardFilled).toEqual(["AAPL"]);
+  expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({ positionsValue: null, value: null, unpriced: ["AAPL"], forwardFilled: [] });
 });
 
-test("normalizes benchmark to portfolio's first value", () => {
-  const portfolio: PortfolioValuePoint[] = [
-    { date: "2026-01-02", value: 2200, unpriced: [] },
-    { date: "2026-01-05", value: 2310, unpriced: [] },
+test("walks cash anchors with deduplicated flows and dividends", () => {
+  const cashBalances: CashBalance[] = [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
+  const cashFlows: CashFlow[] = [
+    { id: "deposit-1", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
+    { id: "deposit-copy", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
   ];
+  const dividends = [{ id: "dividend", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 50, currency: "EUR" }];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, dividends, today: "2026-01-06" });
+
+  expect(result.find(({ date }) => date === "2026-01-02")?.cashValue).toBe(100);
+  expect(result.find(({ date }) => date === "2026-01-05")?.cashValue).toBe(150);
+  expect(result.find(({ date }) => date === "2026-01-06")?.cashValue).toBe(150);
+});
+
+test("keeps unreachable and unconvertible cash legs unknown", () => {
+  const cashBalances: CashBalance[] = [
+    { tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
+    { tenantId: "local", entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
+  ];
+  const cashFlows: CashFlow[] = [{ id: "late", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 100, kind: "deposit" }];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, today: "2026-01-02" });
+
+  expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });
+});
+
+test("normalizes benchmark to first shared complete portfolio value", () => {
+  const portfolio = [point("2026-01-02", 2200), point("2026-01-05", 2310)];
   expect(normalizeBenchmarkSeries(BENCHMARK_BARS, portfolio)).toEqual([
     { date: "2026-01-02", value: 2200 },
     { date: "2026-01-05", value: 2310 },
   ]);
-});
-
-test("normalizes benchmark from first date shared with portfolio", () => {
-  const portfolio: PortfolioValuePoint[] = [{ date: "2026-01-05", value: 2310, unpriced: [] }];
-  expect(normalizeBenchmarkSeries(BENCHMARK_BARS, portfolio)).toEqual([{ date: "2026-01-05", value: 2310 }]);
 });
 
 test.each([
@@ -51,28 +91,15 @@ test.each([
   ["YTD", "2026-01-01"],
   ["All", "0000-01-01"],
 ] as const)("filters %s from latest data date", (range, start) => {
-  const points: PortfolioValuePoint[] = [
-    { date: "2025-01-01", value: 1, unpriced: [] },
-    { date: "2026-01-01", value: 2, unpriced: [] },
-    { date: "2026-02-02", value: 3, unpriced: [] },
-  ];
-  expect(filterPortfolioValueRange(points, range).map((point) => point.date)).toEqual(
-    points.filter((point) => point.date >= start).map((point) => point.date),
-  );
+  const points = [point("2025-01-01", 1), point("2026-01-01", 2), point("2026-02-02", 3)];
+  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(points.filter(({ date }) => date >= start).map(({ date }) => date));
 });
 
-test("joins portfolio and benchmark values at selected range", () => {
-  const portfolio: PortfolioValuePoint[] = [
-    { date: "2025-12-31", value: 90, unpriced: [] },
-    { date: "2026-01-02", value: 100, unpriced: [] },
-    { date: "2026-02-02", value: 110, unpriced: ["MSFT"] },
-  ];
-  expect(buildPortfolioBenchmarkSeries(portfolio, [
-    { date: "2026-01-02", value: 100 },
-    { date: "2026-01-15", value: 105 },
-  ], "1M")).toEqual([
-    { date: "2026-01-02", portfolioValue: 100, benchmarkValue: 100, unpriced: [] },
-    { date: "2026-01-15", portfolioValue: null, benchmarkValue: 105, unpriced: [] },
-    { date: "2026-02-02", portfolioValue: 110, benchmarkValue: null, unpriced: ["MSFT"] },
-  ]);
+test("joins portfolio and benchmark while preserving data-quality fields", () => {
+  const portfolio = [point("2025-12-31", 90), point("2026-01-02", 100), point("2026-02-02", 110, ["MSFT"])];
+  const result = buildPortfolioBenchmarkSeries(portfolio, [{ date: "2026-01-02", value: 100 }, { date: "2026-01-15", value: 105 }], "1M");
+
+  expect(result[0]).toMatchObject({ date: "2026-01-02", portfolioValue: 100, benchmarkValue: 100, positionsValue: 100 });
+  expect(result[1]).toMatchObject({ date: "2026-01-15", portfolioValue: null, benchmarkValue: 105, cashUnknown: [] });
+  expect(result[2]).toMatchObject({ date: "2026-02-02", portfolioValue: 110, benchmarkValue: null, unpriced: ["MSFT"] });
 });

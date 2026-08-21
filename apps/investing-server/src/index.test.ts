@@ -108,6 +108,50 @@ test("runtime broker cache restores encrypted snapshot after restart", () => {
   expect(restarted.read().positions[0]?.symbol).toBe("AAPL");
 });
 
+test("runtime broker cache persists cash facts and increments data version", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const before = cache.read().dataVersion;
+  cache.apply({
+    outcomes: [{
+      broker: "ibkr",
+      status: "synced",
+      lastSyncedAt: "2026-08-19T14:00:00.000Z",
+      result: {
+        positions: [],
+        trades: [],
+        dividends: [],
+        cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
+        cashFlows: [{ id: "flow", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" }],
+        source: "ibkr-flex",
+        problems: [],
+      },
+    }],
+    problems: [],
+  });
+
+  expect(cache.read()).toMatchObject({ dataVersion: before + 1, cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
+  expect(createRuntimeBrokerDataCache(cache.snapshot()).read()).toMatchObject({ cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
+});
+
+test("runtime dashboard recomputes only after data version changes", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const store = createInMemoryPriceStore();
+  const getRange = vi.spyOn(store, "getRange");
+  const runtimeApp = await createRuntimeApp({ priceStore: store });
+
+  const first = await runtimeApp.request("/api/investing/dashboard");
+  const callsAfterFirst = getRange.mock.calls.length;
+  const second = await runtimeApp.request("/api/investing/dashboard");
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(getRange).toHaveBeenCalledTimes(callsAfterFirst);
+
+  await runtimeApp.request("/api/prices/cache", { method: "DELETE" });
+  await runtimeApp.request("/api/investing/dashboard");
+  expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+});
+
 test("problem result cannot overwrite last successful broker snapshot", () => {
   const cache = createRuntimeBrokerDataCache();
   const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });

@@ -202,9 +202,11 @@ test("reporting stays disabled when SENTRY_DSN is absent", () => {
 
 test("price cache delete purges store and returns success", async () => {
   const store = createInMemoryPriceStore();
+  const onPriceDataChanged = vi.fn();
   await store.upsert([{ tenantId: "local", symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" }]);
-  const response = await createApp({ store }).request("/api/prices/cache", { method: "DELETE" });
+  const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
   expect(await store.getRange("ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(onPriceDataChanged).toHaveBeenCalledOnce();
 });

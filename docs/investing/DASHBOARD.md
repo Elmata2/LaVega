@@ -71,6 +71,8 @@ Broker coverage differs ([Research: broker cash and cash-flow reporting](https:/
 
 Reconstruct daily value from trades and prices, not from today's open-position set ([Rebuild the portfolio value series from trades](https://github.com/Elmata2/LaVega/issues/73)).
 
+Implementation status: core and investing-server now expose this cash-aware read model. Broker-specific cash ingestion remains in the IBKR and Trading 212 implementation slices. Until an adapter supplies cash anchors and flow coverage, `cashValue` stays unknown instead of defaulting to zero.
+
 Use the union of symbols in trades and current positions. For each date, calculate quantity as the running sum of signed trades through that date. A buy adds quantity. A sell removes quantity. This rule includes closed positions only while they were held. The series starts on the first trade date.
 
 Build the date axis from a shared Monday-to-Friday calendar plus all price-bar dates, from the first trade through today. Do not add an exchange-holiday table. A holiday or exchange-specific closure is a missing price day and follows the same forward-fill rule as any other gap.

@@ -1,4 +1,4 @@
-import type { Dividend, Position, Trade } from "@lavega/core";
+import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
 
 /* The shape of a broker snapshot, and nothing else.
  *
@@ -21,6 +21,8 @@ export type RuntimeBrokerDataSnapshot = Partial<
       positions: Position[];
       trades: Trade[];
       dividends: Dividend[];
+      cashBalances?: CashBalance[];
+      cashFlows?: CashFlow[];
     }
   >
 >;
