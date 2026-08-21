@@ -188,6 +188,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const updatedAt = new Date().toISOString();
     if (event.type === "history-page") {
       syncProgress = { ...syncProgress, status: "running", pages: event.page, ordersRead: event.ordersRead, waitUntil: null, updatedAt, message: event.hasNext ? "Order history is loading" : "Order history is complete" };
+    } else if (event.type === "cash-history-page") {
+      syncProgress = { ...syncProgress, status: "running", updatedAt, message: `${event.history === "transactions" ? "Cash transaction" : "Dividend"} history ${event.hasNext ? "is loading" : "is complete"}` };
     } else if (event.type === "wait") {
       syncProgress = { ...syncProgress, status: "waiting", waitUntil: new Date(Date.now() + event.waitMs).toISOString(), remaining: 0, updatedAt, message: "Waiting for new Trading 212 API capacity" };
     } else if (event.type === "positions") {

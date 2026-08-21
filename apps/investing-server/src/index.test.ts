@@ -64,8 +64,12 @@ test("runtime broker sync coalesces concurrent runs", async () => {
       orderRequests += 1;
       return json(response, { items: [{ id: 1, ticker: "AAPL", direction: "BUY", filledQuantity: 1, fillPrice: 10, totalCost: 10, currency: "EUR", dateExecuted: "2026-08-18T10:15:00Z" }] });
     }
-    positionRequests += 1;
-    return json(response, [{ ticker: "AAPL", quantity: 1, averagePrice: 10, currentPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-18T10:15:00Z" }]);
+    if (request.url === "/api/v0/equity/positions") {
+      positionRequests += 1;
+      return json(response, [{ ticker: "AAPL", quantity: 1, averagePrice: 10, currentPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-18T10:15:00Z" }]);
+    }
+    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+    return json(response, { items: [], nextPagePath: null });
   });
   vi.stubEnv("TRADING212_BASE_URL", baseUrl);
   const credentials = {
@@ -171,6 +175,8 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
 
     const baseUrl = await serve((request, response) => {
       if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
       return json(response, []);
     });
     vi.stubEnv("LAVEGA_VAULT_FILE", filePath);

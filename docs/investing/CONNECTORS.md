@@ -139,6 +139,8 @@ Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (U
 
 **Paging:** `limit` defaults to 20 and maxes at 50. Always request 50 — the default costs 2.5x the requests for the same history against a 6-per-minute budget.
 
+**Cash history:** `GET /api/v0/equity/account/summary` anchors available cash. Transaction and dividend endpoints follow every returned `nextPagePath` without date assumptions, deduplicate stable `reference` values, and persist normalized records in encrypted broker snapshots. Malformed rows and incomplete pagination become visible problems, so a partial sync cannot replace the last good snapshot. `TRANSFER` direction, provider sign behavior, and account-specific retention still require one sanitized live-response check. Until then, ambiguous transfers are not invented, and non-zero `inPies` or `reservedForOrders` prevents treating `availableToTrade` as total cash.
+
 **Sync model: scheduled, automatic, daily.** Deliberately coarse and paced by confirmed limits above. Sync state (`lastSyncedAt` plus any rate-limit cooldown) is persisted, so a restart does not turn into a fresh full sync.
 
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
@@ -147,6 +149,7 @@ Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (U
 - ~~per-endpoint numeric rate limits~~ — confirmed, see the table above.
 - ~~exact positions/holdings endpoint name~~ — confirmed as `GET /api/v0/equity/positions`, returning a bare `Position[]`.
 - ~~response field names and trade granularity~~ — mapped against the published schemas. `GET /api/v0/equity/history/orders` emits one LaVega trade per `HistoricalOrder.fill`, because fills are the executed units and carry execution price/time; `amount` is `fill.price * fill.quantity`, not `order.filledValue`, so partial fills are not double-counted. `GET /api/v0/equity/positions` maps `averagePricePaid` and `walletImpact.currentValue`; schema mismatches become `problems[]` entries.
+- sanitized live-response verification for transaction signs, transfer direction, and retained history depth.
 - whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable). The spec does show per-scope 403s (`history:orders`, `portfolio`), so scopes exist; whether a read-only set can be granted is still unconfirmed.
 
 ---

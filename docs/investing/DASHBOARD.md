@@ -64,14 +64,14 @@ Store `cashBalances` and `cashFlows` in each broker's `RuntimeBrokerDataSnapshot
 Broker coverage differs ([Research: broker cash and cash-flow reporting](https://github.com/Elmata2/LaVega/issues/70)):
 
 - IBKR Cash Report supplies balance anchors. Statement of Funds supplies dated deposits, withdrawals, fees, and dividends. Users can add both sections to their existing Flex query without changing the token and Query ID setup.
-- Trading 212 `/account/cash` and `/account/summary` supply the current cash balance. `/history/transactions` and `/history/dividends` supply dated activity. Adapter implementation must verify the live response fields because public documentation did not expose the full schema.
+- Trading 212 `/api/v0/equity/account/summary` supplies current available cash. `/history/transactions` and `/history/dividends` supply dated activity. Official documentation now exposes these schemas. Sanitized live-response verification remains required for provider sign behavior, `TRANSFER` direction, and account-specific history retention. Until verified, ambiguous transfers become explicit problems and non-zero `inPies` or `reservedForOrders` prevents an unsafe total-cash anchor.
 - If flow history cannot reach a requested date, return unknown. Never fabricate an opening cash balance.
 
 ## Historical portfolio value
 
 Reconstruct daily value from trades and prices, not from today's open-position set ([Rebuild the portfolio value series from trades](https://github.com/Elmata2/LaVega/issues/73)).
 
-Implementation status: core and investing-server now expose this cash-aware read model. Broker-specific cash ingestion remains in the IBKR and Trading 212 implementation slices. Until an adapter supplies cash anchors and flow coverage, `cashValue` stays unknown instead of defaulting to zero.
+Implementation status: core and investing-server expose this cash-aware read model. IBKR and Trading 212 adapters ingest cash anchors and activity into encrypted broker snapshots. If an adapter cannot prove an anchor or complete available history, `cashValue` stays unknown instead of defaulting to zero.
 
 Use the union of symbols in trades and current positions. For each date, calculate quantity as the running sum of signed trades through that date. A buy adds quantity. A sell removes quantity. This rule includes closed positions only while they were held. The series starts on the first trade date.
 
