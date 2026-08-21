@@ -380,8 +380,8 @@ function BrokerConnect() {
         name="Interactive Brokers"
         eyebrow="IBKR"
         description="Gebruik IBKR Flex Web Service. Dit werkt met dagelijks bijgewerkte rapporten, zonder lokale gateway of browser-login."
-        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions en Trades"]}
-        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions en Trades.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
+        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions, Trades, Cash Report en Statement of Funds"]}
+        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions, Trades, Cash Report en Statement of Funds.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
       />
       <BrokerSetupCard
         name="Trading 212"

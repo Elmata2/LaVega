@@ -104,7 +104,7 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 **Approach:** IBKR's official **Flex Web Service** — token + numeric Query ID, no browser session login, no always-on local process, no re-auth ritual. The trade-off is near-real-time data for a report that refreshes daily server-side, which is fine given the sync cadence below.
 
-**Query shape:** one combined Flex Query with both **Open Positions** and **Trades** sections under a single Query ID — one token, one fetch, mapping directly onto `{positions, trades, source, problems}`.
+**Query shape:** one combined Flex Query with **Open Positions**, **Trades**, **Cash Report**, and **Statement of Funds** sections under a single Query ID. One token and one fetch now supply positions, trades, per-currency ending-cash anchors, deposits, withdrawals, interest, fees, other cash movements, and dividends. Existing token and Query ID setup stays unchanged.
 
 **Sync model: scheduled, automatic, daily (end of day).** No lockout to protect against, and the report's own refresh cadence is a daily ceiling regardless, so manual-only would add friction for no benefit.
 
@@ -112,7 +112,7 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 **Dependency:** none. Flex reports used by the adapter are flat, attribute-based rows (`<OpenPosition symbol="..." position="..." />` and `<Trade ... />`). A small parser handles those rows, XML entities, IBKR's `YYYYMMDD;HHMMSS` date format, and per-row problems without adding an XML runtime dependency.
 
-**Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions and Trades sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID.
+**Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions, Trades, Cash Report, and Statement of Funds sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID. Statement duplicates use IBKR transaction identities when available. Dividend rows remain dividend records and are not also emitted as cash flows.
 
 ## Trading 212
 

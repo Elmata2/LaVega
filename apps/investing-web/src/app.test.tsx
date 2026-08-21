@@ -259,6 +259,8 @@ test("broker koppelen opens setup guide with IBKR instructions", async () => {
   expect(container.textContent).toContain("Flex Web Service");
   expect(container.textContent).toContain("Trading 212");
   expect(container.textContent).toContain("Flex-token");
+  expect(container.textContent).toContain("Cash Report");
+  expect(container.textContent).toContain("Statement of Funds");
   expect(container.querySelector('a[href="/"]')).not.toBeNull();
   root.unmount();
 });
