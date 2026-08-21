@@ -16,6 +16,9 @@ When you are over 50% of the context window, create a new chat to continue the p
 
 Do not be lazy! if you need to use/check it with the database, do check it and do not go of standard/old caches
 
+Keep the docs updated at all time. It is oke to disagree with the docs at a certain point if your new insights are contradicting the documents. Then, it is important to adjust the docs to keep them up to date.
+This improves verfication at a later stage.
+
 When you are using or interacting anything with ui, check the skills of Emil Kowalski:
 emil-design-eng — The main skill that consists of mostly animation, but also some design advice.
 animate — Builds an animation from scratch while choosing the correct curve, duration, properties, and so on.
