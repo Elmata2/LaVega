@@ -5,7 +5,9 @@ import {
   parseWithdrawalFee, withdrawalCost, withdrawalEffectivePct, rankWithdrawOptions, marketCardOffers,
   withdrawalHeadline, catalogueCandidates, cheapestPerIssuer,
   bestPayAdvice, payHeadline, marketWithdrawOptions, bestWithdrawAdvice,
+  compareCardOffers, offerSwitchGain, TRAVEL_TRIP_MONTHS,
 } from "./travel.js";
+import { describeNetBenefit } from "./netBenefit.js";
 import type { CatalogueEntryLike } from "./catalogRates.js";
 import { makeFact, upsertFacts } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
@@ -931,30 +933,415 @@ test("his own card still wins the cash advice when nothing proven beats it", () 
  * Platinum allemaal op 0%. Iemand naar een nieuwe kaart sturen voor exact hetzelfde
  * tarief is advies dat niets oplevert en werk kost.
  */
+/* DE ECHTE VERGELIJKER WORDT AANGEROEPEN, niet nagebouwd. Deze tests sorteerden
+ * eerst met een met de hand gekopieerde sorteerregel, en dan test je je eigen
+ * kopie: `compareCardOffers` kon stuk terwijl dit groen bleef. Erger nog, de kopie
+ * liep achter — hij kende `tripCostCents` niet, dus precies het criterium dat er
+ * op 21 augustus bijkwam werd hier niet getoetst. Vandaar dat de functie een eigen
+ * export en een eigen invoertype heeft. */
 describe("gelijkspel in de aanbevelingen", () => {
-  const offer = (id: string, pct: number, held: boolean, conditional = false) => ({
-    productId: id, product: id, bank: id, netCostPct: pct, conditional, held,
+  const offer = (id: string, tripEur: number, held: boolean, conditional = false, tripCostKnown = true) => ({
+    productId: id, tripCostCents: Math.round(tripEur * 100), tripCostKnown, conditional, held,
   });
+  const first = (...offers: ReturnType<typeof offer>[]) => [...offers].sort(compareCardOffers)[0].productId;
 
   test("bij dezelfde prijs staat zijn eigen kaart bovenaan", () => {
-    const sorted = [offer("nieuw", 0, false), offer("zijne", 0, true)].sort(
-      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
-    );
-    expect(sorted[0].productId).toBe("zijne");
+    expect(first(offer("nieuw", 0, false), offer("zijne", 0, true))).toBe("zijne");
   });
 
   test("maar een echt goedkopere kaart wint nog steeds van de zijne", () => {
     // Anders zou de aanbeveling nooit meer iets nieuws kunnen voorstellen.
-    const sorted = [offer("zijne", 1.4, true), offer("nieuw", 0, false)].sort(
-      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
-    );
-    expect(sorted[0].productId).toBe("nieuw");
+    expect(first(offer("zijne", 14, true), offer("nieuw", 0, false))).toBe("nieuw");
   });
 
   test("en een onvoorwaardelijke 0% wint van zijn eigen 0% met een plafond", () => {
-    const sorted = [offer("zijne-met-plafond", 0, true, true), offer("nieuw-vrij", 0, false, false)].sort(
-      (a, b) => a.netCostPct - b.netCostPct || Number(a.conditional) - Number(b.conditional) || Number(b.held) - Number(a.held),
-    );
-    expect(sorted[0].productId).toBe("nieuw-vrij");
+    expect(first(offer("zijne-met-plafond", 0, true, true), offer("nieuw-vrij", 0, false, false))).toBe("nieuw-vrij");
   });
+
+  test("bij gelijke stand wint de prijs die we KUNNEN AANTONEN", () => {
+    // Van een onbekende kaartprijs weten we alleen dat er nog iets af kan gaan,
+    // dus het gelijke bedrag is bij hem een ondergrens en bij de ander een feit.
+    expect(first(offer("onbekend", 0, false, false, false), offer("bewezen", 0, false, false, true))).toBe("bewezen");
+  });
+
+  test("en de kaartkosten beslissen: 0% opslag voor € 16,90 per maand verliest van 1% gratis", () => {
+    // ZIJN ZIN, in één assert: "als een kaart 5 euro per maand kost en ons 3
+    // oplevert gaan we er op achteruit." Op de opslag alleen won de duurste kaart.
+    expect(first(offer("metal-0%-maar-16,90", 16.9, false), offer("gratis-1%", 10, false))).toBe("gratis-1%");
+  });
+});
+
+/* ══════════════════════════════════════════ WAT DE KAART ZELF KOST
+ *
+ * Zijn opdracht van 21 augustus: "als een kaart 5 euro per maand kost en ons 3
+ * oplevert gaan we er op achteruit." Elke rangschikking hierboven rekende aan de
+ * OPBRENGST — een lagere opslag, een gratis opname — en niet aan wat het product
+ * kost om te hebben.
+ *
+ * De rijen hieronder staan LETTERLIJK zo in docs/catalog/catalog.json, en dat is
+ * hier geen stijlkeuze maar de kern van de zaak: de fout die dit blok bewaakt zit
+ * juist in de MANIER waarop dat bestand een kaart van zijn pakket scheidt. Een
+ * verzonnen catalogus met de prijs netjes op de kaartrij zou bewijzen dat de code
+ * werkt op een bestand dat niet bestaat.
+ */
+
+/** De kaart draagt de OPSLAG (0%), niet de prijs. Let op de laatste zin van de
+ *  voorwaarden: het bedrag van € 16,90 staat woordelijk in ditzelfde document —
+ *  het stond dus nooit in een blinde vlek, het werd alleen niet gelezen. */
+const CAT_N26_METAL_CARD: CatalogueEntryLike = {
+  id: "n26-metal-betaalpas",
+  product: "N26 Metal betaalpas",
+  issuer: "N26 Bank AG; metal Mastercard Debit",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "agent", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      conditionsKnown: true,
+      conditions: "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
+    },
+  },
+};
+
+/** ...en het PAKKET draagt de prijs. Een aparte rij, met een ander id en een
+ *  ander `kind`. Dit is de scheiding waar `holdingCostsById` op stukliep. */
+const CAT_N26_METAL_PLAN: CatalogueEntryLike = {
+  id: "n26-metal",
+  product: "N26 Metal",
+  issuer: "N26 Bank AG",
+  kind: "betaalrekening",
+  fields: {
+    accountFee: {
+      value: 16.9, period: "maand", route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      conditionsKnown: true,
+      conditions: "Membership fee. N26 kan korting geven bij vooruitbetaling per jaar of half jaar; de hoogte daarvan staat niet in de prijslijst.",
+      // `CatalogValue` kent geen `period`, de accountFee-rij wel — `readAccountFee`
+      // valideert hem apart. Vandaar de cast: het veld is echt, het type hier niet.
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+/** Het pakket bij de N26 Go-kaart die hierboven al als fixture staat. */
+const CAT_N26_GO_PLAN: CatalogueEntryLike = {
+  id: "n26-go",
+  product: "N26 Go",
+  issuer: "N26 Bank AG",
+  kind: "betaalrekening",
+  fields: {
+    accountFee: {
+      value: 9.9, period: "maand", route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      conditionsKnown: true, conditions: "Membership fee. Dit is het abonnement dat vroeger 'N26 You' heette.",
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+/** EEN UITGESPROKEN NUL, op de kaartrij zelf: 0% opslag én € 0,00 per maand. De
+ *  tegenhanger die de vergelijking pas ergens over laat gaan. */
+const CAT_TRADE_REPUBLIC: CatalogueEntryLike = {
+  id: "trade-republic-betaalpas",
+  product: "Trade Republic betaalpas",
+  issuer: "Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 0, route: "agent", sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json", checkedAt: "2026-05-11",
+      conditionsKnown: true,
+      conditions: "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. Card carries no subscription fee.",
+    },
+    accountFee: {
+      value: 0, period: "maand", route: "provider-page",
+      sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json", checkedAt: "2025-09-10",
+      conditionsKnown: true,
+      conditions: "De pagina zegt 'Wij rekenen geen kosten voor onze betaalrekening'. Uitgesproken nul.",
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+/** ING's pakketprijs. Hoort NIET bij "ING betaalpas": ING verkoopt die kaart in
+ *  zeven pakketten van € 4,00 tot € 44,99, en dit is er één van (en nog een die
+ *  je niet meer kunt openen). */
+const CAT_ING_BETAALPAKKET: CatalogueEntryLike = {
+  id: "ing-betaalpakket",
+  product: "ING BetaalPakket",
+  issuer: "ING Bank N.V.",
+  kind: "betaalpakket",
+  fields: {
+    accountFee: {
+      value: 6.85, period: "maand", route: "provider-pdf",
+      sourceUrl: "https://assets.ing.com/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf", checkedAt: "2026-06-15",
+      conditionsKnown: true,
+      conditions: "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+/** De ABN-creditcardbijdrage, op zijn EIGEN rij. Mag nooit op de ABN-betaalpas
+ *  landen: dat zijn twee producten met twee tarieven. */
+const CAT_ABN_CREDITCARD_PRICED: CatalogueEntryLike = {
+  ...CAT_ABN_CREDITCARD,
+  fields: {
+    ...CAT_ABN_CREDITCARD.fields,
+    accountFee: {
+      value: 2.55, period: "maand", route: "provider-pdf",
+      sourceUrl: "https://www.icscards.nl/webdocuments/666/av-abn-amro", checkedAt: "2026-08-19",
+      conditionsKnown: true, conditions: "Maandelijkse bijdrage voor de creditcard.",
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+const CAT_ABN_BETAALPAS: CatalogueEntryLike = {
+  id: "abn-amro-betaalpas",
+  product: "ABN AMRO betaalpas",
+  issuer: "ABN AMRO Bank N.V.",
+  kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: 1.2, route: "agent", sourceUrl: "https://assets.abnamro.com/informatiedocument-basispakket-betalen.pdf", checkedAt: "2026-01-01",
+      conditionsKnown: true,
+      conditions: "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop.",
+    },
+  },
+};
+
+/** EEN JAARKAART, en het enige product in de catalogus waar de eenheid het
+ *  antwoord bepaalt: € 270 PER JAAR naast maandprijzen van € 2,55. */
+const CAT_AMEX_BUSINESS_GOLD: CatalogueEntryLike = {
+  id: "american-express-business-gold-card",
+  product: "American Express Business Gold Card",
+  issuer: "American Express (self-issued in NL; NOT ICS)",
+  kind: "creditcard",
+  fields: {
+    fxFeePct: {
+      value: 2.5, route: "agent", sourceUrl: "https://www.americanexpress.com/NL-Overeenkomst-Business-Card.pdf", checkedAt: "2023-03-15",
+      conditionsKnown: true,
+      conditions: "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd.",
+    },
+    accountFee: {
+      value: 270, period: "jaar", route: "provider-pdf",
+      sourceUrl: "https://www.americanexpress.com/business-gold-card/actievoorwaarden.pdf", checkedAt: "2026-06-02",
+      conditionsKnown: true, conditions: "Het jaarbedrag van € 270 staat op de Business Companion Gold-pagina.",
+    } as unknown as import("./catalog.js").CatalogValue,
+  },
+};
+
+describe("de prijs van de kaart staat vaak op een ANDERE catalogusrij", () => {
+  test("de pakketrij levert de kaartprijs — anders is € 16,90 per maand een nul", () => {
+    const offers = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], [], 1);
+    const metal = offers.find((o) => o.productId === "n26-metal-betaalpas")!;
+    expect(metal.holdingCost.kind).toBe("known");
+    // De EENHEID blijft die van het document. Een jaarbedrag van hem maken is
+    // een factor twaalf, en dat is de fout die accountCosts.ts bewaakt.
+    expect(metal.holdingCost).toMatchObject({ kind: "known", why: "stated", amount: { cents: 1690, period: "maand" } });
+    expect(metal.tripCostKnown).toBe(true);
+    // 0% opslag op € 1.000 is niets; de reis kost dus precies één maandnota.
+    expect(metal.tripCostCents).toBe(1690);
+  });
+
+  test("ZIJN ZIN: een kaart van € 16,90 per maand verliest van een kaart die niets kost", () => {
+    // Beide 0% opslag. Op de opslag alleen was dit een gelijkspel dat door de
+    // catalogusvolgorde werd beslist — en dan kon de kaart van € 16,90 bovenaan
+    // komen. Nu niet meer.
+    const offers = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN, CAT_TRADE_REPUBLIC], [], 1);
+    expect(offers.map((o) => o.productId)).toEqual(["trade-republic-betaalpas", "n26-metal-betaalpas"]);
+    expect(offers[0].tripCostCents).toBe(0);
+    expect(offers[1].tripCostCents).toBe(1690);
+  });
+
+  test("een UITGESPROKEN nul is een bekende prijs, geen ontbrekende", () => {
+    const [tr] = marketCardOffers([CAT_TRADE_REPUBLIC], [], 1);
+    expect(tr.holdingCost).toMatchObject({ kind: "known", amount: { cents: 0 } });
+    expect(tr.tripCostKnown).toBe(true); // niet "onbekend, dus achteraan"
+  });
+
+  test("een pakketnaam die alleen de BANK noemt wordt geweigerd", () => {
+    // "ING betaalpas" ontdaan van zijn soortwoord is "ING", en dat is geen pakket
+    // maar een bank. Zou dat matchen, dan kreeg de generieke ING-betaalpas de
+    // € 6,85 van één van de zeven pakketten waarin ING hem verkoopt — een prijs
+    // die voor de meeste ING-klanten niet klopt. Onbekend is dan het eerlijke
+    // antwoord, ook al voelt het als een gemiste kans.
+    const offers = marketCardOffers([CAT_ING_BETAALPAS, CAT_ING_BETAALPAKKET], [], 1);
+    const pas = offers.find((o) => o.productId === "ing-betaalpas")!;
+    expect(pas.holdingCost).toEqual({ kind: "unknown", reason: "no-source" });
+    expect(pas.tripCostKnown).toBe(false);
+    // ...en dan is de reistotaal alleen de opslag, dus een ONDERGRENS.
+    expect(pas.tripCostCents).toBe(1400);
+  });
+
+  test("een creditcardbijdrage landt nooit op een betaalpas", () => {
+    const offers = marketCardOffers([CAT_ABN_BETAALPAS, CAT_ABN_CREDITCARD_PRICED], [], 1);
+    const pas = offers.find((o) => o.productId === "abn-amro-betaalpas")!;
+    expect(pas.holdingCost.kind).toBe("unknown");
+    // De creditcard houdt zijn eigen prijs wel, want die staat op zijn eigen rij.
+    const card = offers.find((o) => o.productId === "abn-amro-creditcard")!;
+    expect(card.holdingCost).toMatchObject({ kind: "known", amount: { cents: 255, period: "maand" } });
+  });
+
+  test("de eigen rij gaat voor de pakketrij", () => {
+    // Trade Republic draagt zijn nul op de kaartrij zelf. Zou een pakketrij hem
+    // kunnen overschrijven, dan besliste de leesvolgorde de prijs.
+    const [tr] = marketCardOffers([CAT_TRADE_REPUBLIC, CAT_N26_METAL_PLAN], [], 1);
+    expect(tr.holdingCost).toMatchObject({ kind: "known", amount: { cents: 0 } });
+  });
+});
+
+describe("een kaart die hij AL HEEFT kost hem marginaal niets", () => {
+  const CAT = [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN, CAT_TRADE_REPUBLIC];
+
+  test("de € 16,90 valt weg zodra hij de kaart heeft — die loopt toch al", () => {
+    const offers = marketCardOffers(CAT, [{ provider: "N26 Metal betaalpas", fxFeePct: 0 }], 1);
+    const metal = offers.find((o) => o.productId === "n26-metal-betaalpas")!;
+    expect(metal.held).toBe(true);
+    // Nul, en met de REDEN erbij: dezelfde nul in de rekensom en een heel ander
+    // verhaal op het scherm dan een prijs die niemand noemt.
+    expect(metal.holdingCost).toMatchObject({ kind: "known", why: "already-held", amount: { cents: 0 } });
+    expect(metal.tripCostCents).toBe(0);
+  });
+
+  test("...en daardoor vecht de gelijkspelregel niet met de kostenregel", () => {
+    // Zonder het marginale onderscheid zou zijn eigen Metal (€ 16,90) verliezen
+    // van elke kaart waarvan we de prijs niet kennen, en zou de app hem een kaart
+    // laten openen om kosten te ontlopen die hij toch al maakt.
+    const offers = marketCardOffers(CAT, [{ provider: "N26 Metal betaalpas", fxFeePct: 0 }], 1);
+    const metal = offers.find((o) => o.productId === "n26-metal-betaalpas")!;
+    expect(metal.tripCostKnown).toBe(true); // een bekende nul, dus regel 3 raakt hem niet
+    expect(offers[0].held).toBe(true); // bij gelijke stand staat de zijne bovenaan
+  });
+});
+
+describe("maand tegenover jaar, en de ondergrens van één periode", () => {
+  test("een jaarkaart wordt PER JAAR afgerekend, ook op een reis van één maand", () => {
+    const [amex] = marketCardOffers([CAT_AMEX_BUSINESS_GOLD], [], 1);
+    // € 25 opslag (2,5% van € 1.000) + € 270 voor het hele jaar. Delen door twaalf
+    // zou € 22,50 opleveren: een bedrag dat in geen enkel document staat en dat een
+    // jaarkaart twaalf keer zo goedkoop maakt als hij is.
+    expect(amex.tripCostCents).toBe(2500 + 27000);
+  });
+
+  test("twaalf maanden is nog steeds één jaarnota, dertien maanden zijn er twee", () => {
+    expect(marketCardOffers([CAT_AMEX_BUSINESS_GOLD], [], 12)[0].tripCostCents).toBe(2500 + 27000);
+    expect(marketCardOffers([CAT_AMEX_BUSINESS_GOLD], [], 13)[0].tripCostCents).toBe(2500 + 54000);
+  });
+
+  test("een reis van een week kost toch een hele maand kaart", () => {
+    // De ondergrens. Minder dan één factureringsperiode kun je niet afnemen, en
+    // een horizon die naar nul afrondt is precies de kostenpost die verdwijnt.
+    for (const months of [0.25, 0, TRAVEL_TRIP_MONTHS]) {
+      const [metal] = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], [], months);
+      expect(metal.tripCostCents).toBe(1690);
+    }
+  });
+
+  test("twee maanden reizen zijn twee maandnota's", () => {
+    const [metal] = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], [], 2);
+    expect(metal.tripCostCents).toBe(3380);
+  });
+});
+
+describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
+  const HIS = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+  const HIS_FACTS = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+
+  test("KOSTEN BEKEND en netto negatief: geen aanbeveling, en hij ziet het staan", () => {
+    // Zijn ING kost € 14 opslag op € 1.000. N26 Metal rekent 0% opslag maar
+    // € 16,90 per maand: dat is € 2,90 ACHTERUIT op een reis van een maand.
+    const offers = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], [], 1);
+    const gain = offerSwitchGain(1.4, offers)!;
+    expect(gain.savingCents).toBe(1400); // bruto: het verschil in opslag
+    expect(gain.net.kind).toBe("no-recommendation");
+    expect(gain.net.kind !== "gross-cost-unknown" && gain.net.netCents).toBe(-290);
+    // Hij moet het kunnen ZIEN in plaats van uit te rekenen.
+    expect(describeNetBenefit(gain.net)).toContain("Geen aanbeveling");
+    expect(describeNetBenefit(gain.net)).toContain("achteruit");
+  });
+
+  test("...en dan blijft de aanbeveling zijn EIGEN kaart", () => {
+    const plan = planTravel({
+      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
+      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], tripMonths: 1,
+    });
+    expect(plan.pay?.held).toBe(true);
+    expect(plan.pay?.product).toBe("ING betaalpas");
+    // Geen "open deze kaart" in de kop, want dat zou geld kosten.
+    expect(plan.headline).not.toContain("N26 Metal");
+  });
+
+  test("maar over een half jaar wint diezelfde kaart WEL — de horizon beslist", () => {
+    // Niets aan de kaart verandert; alleen de periode waarover we rekenen. Daarom
+    // is de horizon een parameter en staat hij in het plan.
+    const offers = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], [], 1);
+    expect(offerSwitchGain(14, offers)!.net.kind).toBe("net"); // 14% opslag = € 140 winst
+  });
+
+  test("KOSTEN ONBEKEND: het brutobedrag, en het woord netto valt NIET", () => {
+    // ING PlatinumCard staat op 0% en heeft geen enkele pakketrij die bij zijn
+    // naam past. Onbekend is geen nul: het bedrag komt door als BRUTO.
+    const offers = marketCardOffers([CAT_ING_PLATINUM], [], 1);
+    const gain = offerSwitchGain(1.4, offers)!;
+    expect(gain.net.kind).toBe("gross-cost-unknown");
+    expect(gain.net.kind === "gross-cost-unknown" && gain.net.grossCents).toBe(1400);
+    const words = describeNetBenefit(gain.net);
+    expect(words).not.toContain("netto");
+    expect(words).toContain("geen nul");
+  });
+
+  test("en de kop zegt bij onbekende kosten dat er een gat zit, zonder 'netto'", () => {
+    const plan = planTravel({
+      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
+      catalogue: [CAT_ING_PLATINUM], tripMonths: 1,
+    });
+    expect(plan.pay?.held).toBe(false);
+    expect(plan.pay?.netSavingOnReference).toBeNull(); // er is geen netto
+    expect(plan.pay?.savingOnReference).toBe(14); // bruto wel
+    expect(plan.headline).not.toContain("netto");
+    expect(plan.headline).toContain("geen nul");
+  });
+
+  test("KOSTEN BEKEND en netto positief: dan mag het woord netto er staan", () => {
+    // N26 Go kost € 9,90 per maand en scheelt € 14 opslag: € 4,10 over.
+    const plan = planTravel({
+      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
+      catalogue: [CAT_N26_GO, CAT_N26_GO_PLAN], tripMonths: 1,
+    });
+    expect(plan.pay?.held).toBe(false);
+    expect(plan.pay?.netSavingOnReference).toBe(4.1);
+    expect(plan.pay?.benefit?.kind).toBe("net");
+    expect(plan.headline).toContain("€ 9,90");
+    expect(plan.headline).toContain("€ 4,10");
+    // DE PERIODE STAAT ERBIJ, want zonder haar is € 4,10 niet na te rekenen.
+    expect(plan.headline).toContain("minstens één maand");
+    expect(plan.tripMonths).toBe(1);
+  });
+
+  test("een bekende kaartprijs wordt ook genoemd als er niets is om tegen af te zetten", () => {
+    // Hij heeft nog geen enkele opslag ingevuld, dus er is geen eigen route om
+    // het voordeel tegen te meten en dus geen netto. De kaartprijs is dan wél
+    // bekend, en die mag niet uit de zin verdwijnen: "dat kost je niets op
+    // € 1.000" over een kaart van € 16,90 per maand is de misleiding waar deze
+    // hele lane voor bestaat.
+    const plan = planTravel({
+      accounts: HIS, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-21",
+      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], tripMonths: 1,
+    });
+    expect(plan.pay?.held).toBe(false);
+    expect(plan.pay?.benefit).toBeNull(); // niets om te verrekenen
+    expect(plan.pay?.holdingCost).toMatchObject({ kind: "known", amount: { cents: 1690 } });
+    expect(plan.headline).toContain("€ 16,90");
+    expect(plan.headline).not.toContain("netto");
+  });
+});
+
+test("een kaart die niets kost krijgt geen rekensom over een periode", () => {
+  // Op de echte catalogus is dit de meest voorkomende zin: Trade Republic en
+  // 212 Card staan allebei op € 0,00 per maand. "kost zelf € 0,00 per maand en
+  // dat betaal je minstens één maand" is waar en onleesbaar.
+  const plan = planTravel({
+    accounts: [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })],
+    txs: [], rates: [], facts: upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]),
+    destination: "US", asOf: "2026-08-21", catalogue: [CAT_TRADE_REPUBLIC], tripMonths: 6,
+  });
+  expect(plan.headline).toContain("kost zelf niets om aan te houden");
+  expect(plan.headline).toContain("je houdt € 14,00 over");
+  expect(plan.headline).not.toContain("€ 0,00 per maand");
+  expect(plan.headline).not.toContain("6 maanden");
 });

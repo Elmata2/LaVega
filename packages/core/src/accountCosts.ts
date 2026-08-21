@@ -58,6 +58,55 @@ export type FeeAmount = {
   perYearDerived: boolean;
 };
 
+/** Hoeveel maanden één factureringsperiode duurt. Staat hier, naast het type dat
+ *  de periode draagt, zodat "een jaar is twaalf maanden" nergens anders nog een
+ *  keer wordt opgeschreven — en zodat een derde eenheid (per kwartaal, en die
+ *  bestaat bij zakelijke pakketten) op één plek bijkomt in plaats van in elke
+ *  aanroeper. */
+export const FEE_PERIOD_MONTHS: Record<FeePeriod, number> = { maand: 1, jaar: 12 };
+
+/** Wat een vaste prijs kost over een horizon van `months` maanden.
+ *
+ *  HIER KOMEN EENMALIG EN TERUGKEREND BIJ ELKAAR, en dat is de stille fout die
+ *  deze functie bestaat om te voorkomen. "€ 14 voordeel op een overboeking van
+ *  € 1.000" is ÉÉN KEER; "€ 16,99 per maand" is ELKE MAAND. Die twee van elkaar
+ *  aftrekken zonder te zeggen over welke periode levert 14 − 16,99 op, en dat
+ *  getal betekent niets. Dus de periode is een parameter en het antwoord draagt
+ *  hem terug mee.
+ *
+ *  ER WORDT NOOIT GEDEELD, alleen naar boven afgerond. Een jaarprijs van € 270
+ *  wordt geen € 22,50 voor een maand reizen: dat bedrag staat in geen enkel
+ *  document en je kunt geen twaalfde jaar kaart kopen. Wie een kaart opent
+ *  betaalt minstens één hele periode, en `flooredToOnePeriod` is er zodat het
+ *  scherm dat kan zeggen in plaats van dat de lezer het moet vermoeden. Om
+ *  dezelfde reden naar boven: anderhalve maand op reis zijn twee maandnota's.
+ *
+ *  Toen dit nog gedeeld werd, kwam een jaarkaart van € 270 op een reis van een
+ *  maand uit op € 22,50 en won hij van een maandkaart van € 25 — terwijl je bij
+ *  de eerste € 270 kwijt was en bij de tweede € 25. */
+export type FeeOverHorizon = {
+  cents: number;
+  periodsCharged: number;
+  /** true als de horizon korter is dan één hele factureringsperiode, en er dus
+   *  een volle periode is gerekend voor minder gebruik. Dat is geen detail: het
+   *  is het verschil tussen een eerlijk en een te mooi bedrag. */
+  flooredToOnePeriod: boolean;
+};
+
+export function feeCostOverMonths(amount: FeeAmount, months: number): FeeOverHorizon {
+  const perPeriod = FEE_PERIOD_MONTHS[amount.period];
+  // Een niet-eindige, negatieve of nul-horizon is geen horizon. Die valt op de
+  // ondergrens terug in plaats van een NaN of een 0 door de rekensom te sturen —
+  // een kostenpost die per ongeluk nul wordt is precies wat hier niet mag.
+  const horizon = Number.isFinite(months) && months > 0 ? months : 0;
+  const periodsCharged = Math.max(1, Math.ceil(horizon / perPeriod));
+  return {
+    cents: periodsCharged * amount.cents,
+    periodsCharged,
+    flooredToOnePeriod: horizon < perPeriod,
+  };
+}
+
 /** Het catalogusveld, in de vorm van de bestaande velden (zie catalog.ts) plus de
  *  periode die een bedrag nu eenmaal nodig heeft en een percentage niet.
  *

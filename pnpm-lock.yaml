@@ -32,6 +32,8 @@ importers:
 
   apps/email-worker: {}
 
+  apps/extension: {}
+
   apps/investing-server:
     dependencies:
       '@hono/node-server':

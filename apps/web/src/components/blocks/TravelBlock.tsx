@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey, CatalogueEntryLike,
-  WithdrawOption, CardOffer, WithdrawAdvice,
+  WithdrawOption, CardOffer, WithdrawAdvice, FeeAmount, HoldingCost, NetBasis, NetBenefit,
 } from "@lavega/core";
 import {
-  planTravel, makeFact, costOnReferenceSpend, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
+  planTravel, makeFact, costOnReferenceSpend, netBenefit, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
   describeWithdrawalFee, TRAVEL_REFERENCE_WITHDRAWAL, TRAVEL_SMALL_WITHDRAWAL,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
@@ -148,6 +148,213 @@ function pct(n: number | null): string {
  *  existing `.badge` chip and not another sentence. */
 function NotYours() {
   return <span className="badge">nog niet van jou</span>;
+}
+
+/* ══════════════════════ WAT DE KAART ZELF KOST, als eigen velden ══════════════
+ *
+ * De core-laag rekent de kaartprijs sinds deze ronde mee: `CardOffer.holdingCost`
+ * draagt hem in de drie toestanden die er echt zijn en `netBenefit` verrekent hem
+ * over de reisduur. Op DIT scherm kwam dat bedrag alleen mee binnen één zin —
+ * `plan.headline` — en die zin haalde het juist niet in het geval waarvoor de
+ * core-laag hem schreef: `termsHeadline` hieronder VERVANGT de hele kop zodra er
+ * geen enkele beprijsde eigen route is, en dat is de begintoestand van iedere
+ * nieuwe gebruiker. De kop las dan "De voorwaarden van je kaarten zijn nog niet
+ * opgezocht" en de € 16,90 per maand van de aangeraden kaart stond nergens meer
+ * op het scherm. Precies de misleiding die de kostenlane moest wegnemen, één
+ * laag hoger teruggekomen.
+ *
+ * Daarom staan prijs, periode en uitkomst hier als EIGEN velden onder de
+ * aanbeveling, en niet als drie getallen om uit een zin te vissen. De drie
+ * toestanden komen uit het TYPE en niet uit een boolean van ons:
+ *
+ *   kosten bekend, netto positief  → het nettobedrag, met de aftrek erbij
+ *   kosten bekend, netto nul of −  → geen aanbeveling, met de reden in euro's
+ *   kosten onbekend                → alleen het brutobedrag; het woord "netto"
+ *                                    komt in die tak niet voor
+ *
+ * Een kaart die hij AL HEEFT rendert niets. Die maandprijs loopt door of hij hem
+ * meeneemt of niet, dus hij hoort niet bij DEZE keuze; core maakt daar met
+ * `marginalHoldingCost` een BEKENDE nul van. Hier wordt geen tweede regel naast
+ * gezet — er wordt alleen niets over gezegd, want "kaartkosten € 0,00" zou
+ * suggereren dat de kaart gratis is in plaats van al betaald.
+ */
+
+/** Het bedrag in de eenheid van zijn eigen document. NOOIT omgerekend: een
+ *  jaarprijs die als maandprijs op het scherm komt scheelt een factor twaalf, en
+ *  "€ 42,95 per jaar" is ook wat hij op zijn afschrift terugvindt. */
+function feeLabel(a: FeeAmount): string {
+  return `${formatEuro(a.cents / 100)} per ${a.period}`;
+}
+
+/** De opslag op de referentiebesteding in CENTEN. Langs core's eigen
+ *  `costOnReferenceSpend`, zodat er hier geen tweede rekenpad naar hetzelfde
+ *  bedrag ontstaat: twee paden verschillen op de cent, en dan komt er een
+ *  "voordeel" van één cent uit een vergelijking die gelijkspel hoort te zijn. */
+function surchargeCents(pctValue: number): number {
+  return Math.round((costOnReferenceSpend(pctValue) ?? 0) * 100);
+}
+
+/** OVER WELKE PERIODE ER GEREKEND IS, in woorden. Een eenmalig voordeel krijgt de
+ *  horizon in hele factureringsperiodes ("over 1 maand", "over 1 jaar"); een
+ *  terugkerend voordeel staat al in dezelfde eenheid als de kosten en heeft er
+ *  geen nodig. Dit getal hoort op het scherm en niet in een tooltip: zonder de
+ *  periode is een nettobedrag niet na te rekenen, en dan kan hij ons niet
+ *  nakijken. */
+function spanWords(basis: NetBasis): string {
+  if (basis.kind !== "one-off") return `per ${basis.period}`;
+  const n = basis.periodsCharged;
+  return basis.costPeriod === "jaar" ? `over ${n} jaar` : `over ${n} ${n === 1 ? "maand" : "maanden"}`;
+}
+
+/** DE ONDERGRENS, HARDOP, en als eigen zin in plaats van een bijzin. Een reis van
+ *  een week kost toch een hele maand kaart; zonder deze zin lijkt dat bedrag uit
+ *  de lucht te komen. Bij een jaarproduct is het bovendien het antwoord op de
+ *  vraag die hij anders stelt — "maar ik ga maar één maand". Dezelfde woorden als
+ *  core's eigen `floorNote`, zodat de zin die in de kop staat en de zin die hier
+ *  staat niet twee verschillende dingen beweren. */
+function floorNote(basis: NetBasis): string {
+  if (basis.kind !== "one-off" || !basis.flooredToMinimum) return "";
+  return basis.costPeriod === "jaar"
+    ? " Dit product wordt per jaar afgerekend, dus een kortere reis maakt het niet goedkoper."
+    : " Minder dan één maand kun je niet afnemen, dus daar rekenen we mee.";
+}
+
+export function Kaartkosten({ product, cost, benefit, testId }: {
+  product: string;
+  /** Null bij zijn eigen kaart: die kosten zijn geen gevolg van deze keuze. */
+  cost: HoldingCost | null;
+  /** De uitkomst met de kosten erin verrekend, of null als er geen voordeel is om
+   *  ze tegen af te zetten. Dan blijft alleen de prijs staan — en dat is geen
+   *  randgeval maar de begintoestand: zolang van geen enkele eigen kaart de opslag
+   *  bekend is, is er niets om tegen te meten. */
+  benefit: NetBenefit | null;
+  testId: string;
+}) {
+  if (!cost) return null;
+  if (cost.kind === "known" && cost.why === "already-held") return null;
+
+  if (cost.kind === "unknown") {
+    const why =
+      cost.reason === "needs-another-product"
+        ? `de prijs die onze bron noemt geldt bovenop een ander product, dus wat ${product} los kost weten we niet`
+        : `wat ${product} zelf kost, staat niet in onze bronnen`;
+    // Het woord "netto" komt hier NIET voor, en dat is de hele reden dat deze tak
+    // apart staat: er is geen netto zolang de ene helft ontbreekt. Wel gezegd dat
+    // het bedrag hierboven bruto is — anders leest een onbekende prijs als nul.
+    return (
+      <p className="cell-sub travel-note" data-testid={testId}>
+        <strong>Kaartkosten: onbekend</strong> — {why}. Dat is geen nul.
+        {benefit !== null && " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af."}
+      </p>
+    );
+  }
+
+  const price = feeLabel(cost.amount);
+  // EEN UITGESPROKEN NUL IS EEN BEKENDE NUL — de keerzijde van "onbekend is geen
+  // nul". Zegt een bron letterlijk dat de kaart niets kost, dan is dat een
+  // gemeten feit en scheelt het hem de vraag of we het gewoon niet weten. Zonder
+  // rekensom: er is niets om over een periode uit te smeren, en "€ 0,00 per maand
+  // en dat betaal je minstens één maand" is waar en onleesbaar.
+  if (cost.amount.cents === 0) {
+    return (
+      <p className="cell-sub travel-note" data-testid={testId}>
+        <strong>Kaartkosten: {price}</strong> — de bron zegt dat {product} niets kost om aan te houden.
+      </p>
+    );
+  }
+
+  // Geen voordeel om de prijs tegen af te zetten — de begintoestand van een nieuwe
+  // gebruiker, zolang van geen enkele eigen kaart de opslag bekend is. Dan staat de
+  // prijs er kaal, en het woord "netto" valt niet: er is niets netto te maken.
+  // Kort, want core's kopzin zegt hetzelfde er al in proza bij; twee bijna
+  // identieke zinnen naast elkaar lezen als een fout in de app.
+  if (benefit === null || benefit.kind === "gross-cost-unknown") {
+    return (
+      <p className="cell-sub travel-note" data-testid={testId}>
+        <strong>Kaartkosten: {price}</strong>.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <p className="cell-sub travel-note" data-testid={testId}>
+        {/* Het TOTAAL staat er alleen als het van de prijs afwijkt. Bij een reis
+            van één maand en een maandprijs zijn ze gelijk, en "€ 1,00 per maand,
+            over 1 maand is dat € 1,00" is waar en leest als een rekenfout. Bij
+            een langere reis (meer dan één factureringsperiode) verschillen ze wel,
+            en dan is het totaal juist het getal dat de aftrek verklaart. */}
+        <strong>Kaartkosten: {price}</strong> — gerekend {spanWords(benefit.basis)}
+        {benefit.costCents !== cost.amount.cents && <>: {formatEuro(benefit.costCents / 100)}</>}.
+        {floorNote(benefit.basis)}
+      </p>
+      {benefit.kind === "net" ? (
+        <p className="cell-sub travel-note" data-testid={`${testId}-netto`}>
+          <strong>Netto:</strong> <span className="text-pos">{formatEuro(benefit.netCents / 100)}</span> —{" "}
+          {formatEuro(benefit.grossCents / 100)} voordeel min {formatEuro(benefit.costCents / 100)} kaartkosten.
+        </p>
+      ) : (
+        /* GEEN AANBEVELING, en het bedrag staat er zodat hij het niet zelf hoeft
+           uit te rekenen. Zijn woorden: een kaart die € 5 per maand kost en € 3
+           oplevert is achteruit, en dat moet hij kunnen zien staan. */
+        <p className="cell-sub travel-note text-warn" data-testid={`${testId}-geen`}>
+          <strong>Geen aanbeveling:</strong> {formatEuro(benefit.grossCents / 100)} voordeel tegen{" "}
+          {formatEuro(benefit.costCents / 100)} kaartkosten{" "}
+          {benefit.netCents === 0
+            ? "— dat levert niets op."
+            : `— je gaat er ${formatEuro(-benefit.netCents / 100)} op achteruit.`}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Wat overstappen naar DEZE kaart oplevert, met de kaartprijs erin verrekend.
+ *
+ *  Dezelfde rekensom als core's `offerSwitchGain`, maar per rij in plaats van
+ *  alleen voor de winnaar — zodat bij elke kaart staat wat ze oplevert, en bij
+ *  welke kaart de prijs het voordeel opeet. `netBenefit` doet het rekenwerk met de
+ *  horizon van de offer zelf, zodat de ondergrens van één factureringsperiode
+ *  meekomt en er niet ergens een tweede horizonregel ontstaat. */
+function offerNet(offer: CardOffer, ownPct: number): NetBenefit {
+  return netBenefit({
+    benefit: { kind: "one-off", cents: surchargeCents(ownPct) - surchargeCents(offer.netCostPct) },
+    cost: offer.holdingCost,
+    horizonMonths: offer.tripMonths,
+  });
+}
+
+/** DE KAART DIE AFVIEL OMDAT HIJ TE DUUR IS.
+ *
+ *  `bestPayAdvice` kiest zijn eigen route zodra die over de hele reis niet duurder
+ *  is dan de goedkoopste kaart uit de catalogus, en de kaartprijs zit sinds deze
+ *  ronde in die vergelijking. De uitkomst klopt, maar op het scherm was ze
+ *  onzichtbaar: de kaart met 0% opslag verdween zonder een woord uit de
+ *  aanbeveling, en de lezer moest zelf uitrekenen waarom een lagere opslag niet de
+ *  tip werd. Zijn eis is het omgekeerde — hij moet kunnen ZIEN dat een kaart
+ *  afvalt omdat hij te duur is.
+ *
+ *  Gekozen wordt de kaart met de LAAGSTE OPSLAG, niet die met de laagste
+ *  reiskosten: dat is de kaart die er in de oude rangschikking als winnaar uitkwam
+ *  en dus degene waarover hij de vraag stelt. Kaarten met ONBEKENDE kosten komen
+ *  hier nooit in voor — die vallen niet af omdat ze te duur zijn, we kennen hun
+ *  prijs niet, en dat is een ander verhaal met een andere zin (zie `Kaartkosten`). */
+function rejectedByPrice(
+  offers: readonly CardOffer[],
+  ownPct: number,
+): { offer: CardOffer; net: Extract<NetBenefit, { kind: "no-recommendation" }> } | null {
+  const ownCents = surchargeCents(ownPct);
+  let pick: CardOffer | null = null;
+  for (const o of offers) {
+    if (o.holdingCost.kind !== "known") continue;
+    // Zonder lagere opslag valt er niets uit te leggen: zo'n kaart is niet
+    // afgevallen op haar prijs maar op haar tarief, en dat staat al in de lijst.
+    if (surchargeCents(o.netCostPct) >= ownCents) continue;
+    if (pick === null || o.netCostPct < pick.netCostPct) pick = o;
+  }
+  if (pick === null) return null;
+  const net = offerNet(pick, ownPct);
+  return net.kind === "no-recommendation" ? { offer: pick, net } : null;
 }
 
 /** A leg's price on the reference spend. `null` is UNKNOWN and must never read
@@ -520,6 +727,16 @@ export function CashSection({ options, asOf, advice = null }: {
           {advice.asOf && <> · {figureAge(advice.asOf, asOf)}</>}.
         </p>
       )}
+      {/* Een opnametarief van nul is nog geen gratis kaart: het gaat om een kaart
+          die hij moet OPENEN, en die brengt zijn eigen maandnota mee. */}
+      {advice && !advice.held && (
+        <Kaartkosten
+          product={advice.product}
+          cost={advice.holdingCost}
+          benefit={advice.benefit}
+          testId="travel-cash-kosten"
+        />
+      )}
       {options.length === 0 ? (
         <p className="cell-sub">Nog geen kaarten of betaalrekeningen bekend.</p>
       ) : (
@@ -569,9 +786,21 @@ export function CashSection({ options, asOf, advice = null }: {
  *  today is paid in a token behind a stake or a subscription, so pricing it in
  *  euros would be the same fake precision that keeps reward points out of the
  *  ranking. */
-export function OffersSection({ offers, asOf, shown = 6 }: { offers: readonly CardOffer[]; asOf: string; shown?: number }) {
+export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
+  offers: readonly CardOffer[];
+  asOf: string;
+  shown?: number;
+  /** De opslag van zijn eigen beste beprijsde route, in procenten. Daarmee kan per
+   *  kaart staan wat overstappen NETTO oplevert. Zonder dat getal blijft het bij de
+   *  prijzen: een netto met één helft ontbrekend is een verzonnen bedrag. */
+  ownPct?: number | null;
+}) {
   if (offers.length === 0) return null;
   const top = offers.slice(0, shown);
+  // Alle offers zijn met dezelfde horizon doorgerekend (`planTravel` geeft er één
+  // door aan `marketCardOffers`), dus de eerste rij mag hem voor de hele lijst
+  // noemen.
+  const tripMonths = offers[0].tripMonths;
   return (
     <div className="travel-step travel-offers">
       <h3 className="travel-step-title">Wat je zou kunnen openen</h3>
@@ -579,6 +808,17 @@ export function OffersSection({ offers, asOf, shown = 6 }: { offers: readonly Ca
         Kaarten uit de catalogus, geen kaarten van jou — voor zover wij kunnen zien heb je ze niet, en betalen doe je
         vandaag met wat er onder “Betalen” staat. Eén kaart per aanbieder: de voordeligste waarvan we de bron en de
         datum hebben.
+      </p>
+      {/* WAAROM DE VOLGORDE IS WAT ZE IS. De lijst wordt gerangschikt op wat een
+          kaart deze reis KOST — opslag plus kaartprijs — en toonde alleen de
+          opslag. Een kaart met 0% opslag en € 16,90 per maand stond dan onder een
+          kaart met 1% en geen kosten, met een lager bedrag ernaast: een volgorde
+          die willekeurig leest omdat de helft van het criterium niet op het scherm
+          stond. Nu staat die helft er, per rij. */}
+      <p className="cell-sub">
+        De volgorde is wat een kaart je op deze reis kost: de opslag op {formatEuro(TRAVEL_REFERENCE_SPEND)} plus wat
+        de kaart zelf kost over {tripMonths} {tripMonths === 1 ? "maand" : "maanden"}. Staat er “kaartkosten
+        onbekend”, dan zit alleen de opslag in dat bedrag — dat is een ondergrens, geen bewijs dat de kaart gratis is.
       </p>
       <ul className="travel-journeys">
         {top.map((o) => (
@@ -605,6 +845,20 @@ export function OffersSection({ offers, asOf, shown = 6 }: { offers: readonly Ca
               </p>
             )}
             {o.cashbackNote && <p className="cell-sub travel-note">{o.cashbackNote} Daarom rekenen we die niet mee.</p>}
+            {/* De prijs van de kaart, en — als we zijn eigen opslag kennen — wat
+                overstappen er netto van overhoudt. Alleen bij een LAGERE opslag
+                wordt er een voordeel berekend: bij een hogere is er geen voordeel
+                om kosten van af te trekken, en "€ −5,00 voordeel" is geen zin. */}
+            <Kaartkosten
+              product={o.product}
+              cost={o.holdingCost}
+              benefit={
+                ownPct !== null && surchargeCents(o.netCostPct) < surchargeCents(ownPct)
+                  ? offerNet(o, ownPct)
+                  : null
+              }
+              testId={`travel-offer-kosten-${o.productId}`}
+            />
           </li>
         ))}
       </ul>
@@ -670,6 +924,14 @@ export default function TravelBlock({
     : null;
 
   const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
+  /* Zijn beste BEPRIJSDE route, met dezelfde test als core's `bestPayAdvice`
+     gebruikt om de winnaar te kiezen — `bestJourney` hierboven laat `costOnReference`
+     vrij en zou dus een andere route kunnen aanwijzen dan degene waartegen de
+     kaarten zijn afgewogen. Zijn opslag is de tweede helft van elk nettobedrag op
+     dit scherm: zonder die helft wordt er niets netto genoemd. */
+  const ownRoute = plan?.journeys.find((j) => j.known && j.costOnReference !== null) ?? null;
+  const ownPct = ownRoute?.totalCostPct ?? null;
+  const rejected = plan && plan.pay?.held && ownPct !== null ? rejectedByPrice(plan.offers, ownPct) : null;
   const terms = plan ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms) : null;
   // Core's headline advises a refresh whenever no route is priced; when the
   // refresh cannot work, or was never the missing piece, we say what is.
@@ -717,6 +979,19 @@ export default function TravelBlock({
                 {plan.pay.asOf && <> · tarief {figureAge(plan.pay.asOf, asOf)}</>}.
               </p>
             )}
+            {/* WAT DIE KAART ZELF KOST. Een kaart die hij moet openen brengt zijn
+                eigen maandnota mee, en die hoort naast het voordeel te staan en
+                niet in een voetnoot: € 14 winst op € 1.000 tegen € 16,90 per maand
+                is achteruit. Bij zijn EIGEN kaart is `holdingCost` null en rendert
+                dit niets — die prijs loopt toch al door. */}
+            {plan.pay && !plan.pay.held && (
+              <Kaartkosten
+                product={plan.pay.product}
+                cost={plan.pay.holdingCost}
+                benefit={plan.pay.benefit}
+                testId="travel-pay-kosten"
+              />
+            )}
             {/* ...and what he can pay with TODAY stays on screen. He still has to
                 be able to pay for lunch tomorrow; it is simply no longer the
                 headline, which is what he asked for in so many words. */}
@@ -733,6 +1008,23 @@ export default function TravelBlock({
                 <strong>Let op:</strong> {plan.pay.note}
               </p>
             )}
+            {/* WAAROM DE GOEDKOPERE KAART HET NIET WERD. Zijn eigen route wint
+                hier op de HELE reis, en soms alleen omdat de andere kaart geld
+                kost. Zonder deze regel verdwijnt die kaart zonder uitleg en moet
+                hij de aftrek zelf maken; dat is precies wat hij niet wil. */}
+            {plan.pay?.held && rejected && ownPct !== null && (
+              <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
+                <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag (
+                {pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
+                {feeLabel(rejected.net.cost.amount)} om aan te houden:{" "}
+                {formatEuro(rejected.net.grossCents / 100)} lagere opslag tegen{" "}
+                {formatEuro(rejected.net.costCents / 100)} kaartkosten {spanWords(rejected.net.basis)}, dus{" "}
+                {rejected.net.netCents === 0
+                  ? "even duur als"
+                  : `${formatEuro(-rejected.net.netCents / 100)} duurder dan`}{" "}
+                {plan.pay.product}.{floorNote(rejected.net.basis)}
+              </p>
+            )}
             {/* CASH. He asked for it in so many words — "also include taking
                 money, physical cash. Which card can you take out money?" — and
                 it is a different, worse price than paying, so it gets its own
@@ -742,6 +1034,16 @@ export default function TravelBlock({
               {plan.withdrawAdvice && !plan.withdrawAdvice.held && <><NotYours /> </>}
               {plan.withdrawHeadline}
             </p>
+            {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
+                toestanden; bij zijn eigen kaart staat er niets. */}
+            {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
+              <Kaartkosten
+                product={plan.withdrawAdvice.product}
+                cost={plan.withdrawAdvice.holdingCost}
+                benefit={plan.withdrawAdvice.benefit}
+                testId="travel-pin-kosten"
+              />
+            )}
             {bestJourney && (
               <div className="cell-sub">
                 Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst
@@ -890,7 +1192,7 @@ export default function TravelBlock({
                   a list of thirteen tariffs does not belong in a 240px column. */}
               <CashSection options={plan.withdraw} asOf={asOf} advice={plan.withdrawAdvice} />
 
-              <OffersSection offers={plan.offers} asOf={asOf} />
+              <OffersSection offers={plan.offers} asOf={asOf} ownPct={ownPct} />
 
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">

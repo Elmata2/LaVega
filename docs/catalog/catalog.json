@@ -101,7 +101,7 @@
           "route": "provider-pdf",
           "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
           "checkedAt": "2026-01",
-          "conditions": "Extra ABN AMRO Credit Card € 1,05 per maand. Uitgegeven door ICS; de voorwaarden van ICS zijn van toepassing.",
+          "conditions": "Extra ABN AMRO Credit Card € 1,05 per maand. Uitgegeven door ICS; de voorwaarden van ICS zijn van toepassing. Binnen het ABN AMRO Studenten Pakket € 1,31 per maand (€ 15,72 per jaar), uit hetzelfde informatieblad.",
           "conditionsKnown": true
         }
       }
@@ -2356,6 +2356,1067 @@
           "conditionsKnown": true
         }
       }
+    },
+    {
+      "id": "ing-go",
+      "product": "ING Go",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs voor een betaalrekening op 1 naam inclusief fysieke betaalpas. Tweede rekeninghouder bij een en/of-rekening kost € 1,20 per maand extra (inclusief betaalpas). Getoonde tarieven zijn per maand, tenzij anders aangegeven.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-more",
+      "product": "ING More",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 7,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs voor een betaalrekening op 1 naam inclusief fysieke betaalpas. Tweede rekeninghouder bij een en/of-rekening kost € 1,20 per maand extra (inclusief betaalpas). Getoonde tarieven zijn per maand, tenzij anders aangegeven.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-extra",
+      "product": "ING Extra",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 15.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs voor een betaalrekening op 1 naam inclusief fysieke betaalpas. Tweede rekeninghouder bij een en/of-rekening kost € 1,20 per maand extra (inclusief betaalpas). Getoonde tarieven zijn per maand, tenzij anders aangegeven.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-max",
+      "product": "ING Max",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 44.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs voor een betaalrekening op 1 naam inclusief fysieke betaalpas. Tweede rekeninghouder bij een en/of-rekening kost € 1,20 per maand extra (inclusief betaalpas). Getoonde tarieven zijn per maand, tenzij anders aangegeven.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-student",
+      "product": "ING Student",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Alleen voor rekeninghouders van 18 tot 30 jaar. Het document noemt de nul zelf ('gratis'); dit is dus een bekende nul en geen ontbrekend cijfer. De buitenlandtoeslag geldt niet voor ING Student.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-jongerenrekening",
+      "product": "ING Jongerenrekening",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Alleen voor 12 tot 18 jaar. Uitgesproken nul in het kostenoverzicht.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-kinderrekening",
+      "product": "ING Kinderrekening",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Alleen voor 0 tot 12 jaar. Uitgesproken nul in het kostenoverzicht.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-oranjepakket-met-korting",
+      "product": "ING OranjePakket met korting",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 3.55,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-basispakket",
+      "product": "ING BasisPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4.85,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-betaalpakket",
+      "product": "ING BetaalPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 6.85,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-royaalpakket",
+      "product": "ING RoyaalPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 9.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-oranjepakket",
+      "product": "ING OranjePakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Het informatiedocument van 1 januari 2026 noemt ook het jaartotaal: € 48,00. In het kostenoverzicht van 15 juni 2026 komt het OranjePakket niet voor in de actuele lijst en ook niet in de lijst 'Niet meer te openen betaalpakketten'; of het nog te openen is, is dus niet vast te stellen. ING Go staat in dat kostenoverzicht op dezelfde € 4,00 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-creditcard-more",
+      "product": "ING Creditcard More",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "fields": {
+        "accountFee": {
+          "value": 2,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs geldt bij ING Go; bij ING More is de kaart inbegrepen in het pakket. Een extra ING Creditcard More kost € 1,25 per maand. De kosten van een additioneel afgenomen creditcard worden 1x per jaar afgeschreven.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-creditcard-extra",
+      "product": "ING Creditcard Extra",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "fields": {
+        "accountFee": {
+          "value": 4.35,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Prijs geldt bij ING Go. Bij ING More € 2,18 (50% korting), bij ING Extra inbegrepen. Additionele ING Creditcard Extra € 2,60 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "ing-creditcard-max",
+      "product": "ING Creditcard Max",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Alleen binnen het ING Max-pakket (€ 44,99 per maand); de kaart zelf kost daarbovenop niets. Een additionele ING Creditcard Max kost € 10,00 per maand. Dit is dus geen gratis kaart, maar een kaart zonder aparte cardfee binnen een betaald pakket.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-studenten-pakket",
+      "product": "ABN AMRO Studenten Pakket",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Beschikbaar voor klanten van 18 tot 25 jaar; voor medische studenten tot 30 jaar. Daarna wordt het pakket omgezet naar BasisPakket Betalen (€ 4,30 per maand). Openingskosten: geen. Uitgesproken nul in het document.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-jongerengroeirekening",
+      "product": "ABN AMRO Jongerengroeirekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Inclusief Jongerengroeirekening, één betaalpas, Internet Bankieren en ABN AMRO app. Openingskosten: geen. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-vreemde-valuta-rekening",
+      "product": "ABN AMRO Vreemde Valuta Rekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Openingskosten: geen. Transactiekosten komen daar bovenop.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-losse-betaalrekening",
+      "product": "ABN AMRO losse betaalrekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4.3,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Geldt als je geen BasisPakket Betalen of Studenten Pakket hebt. Een extra betaalrekening kost € 1,90 per maand. Maximaal 3 betaalrekeningen en 3 gezamenlijke.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-comfort",
+      "product": "Rabo Comfort",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 6.95,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/00a13f9d8f3575a1/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-Comfort-1.pdf",
+          "checkedAt": "2026-01-07",
+          "conditions": "Inclusief betaalpas en RaboCard of Rabo GoldCard. Jaartotaal € 83,40. Buitenlandtoeslag € 2,00 per maand indien van toepassing. Extra rekeninghouder € 0,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-riantpakket",
+      "product": "Rabo RiantPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 8.05,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/24fdccc361593353/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-RiantPakket-2025.pdf",
+          "checkedAt": "2025-06-01",
+          "conditions": "Inclusief betaalpas en Rabo GoldCard. Jaartotaal € 96,90. Buitenlandtoeslag € 2,00 per maand indien van toepassing.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-jongerenrekening",
+      "product": "Rabo JongerenRekening",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/11cd24df945a70e8/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-JongerenRekening-2025.pdf",
+          "checkedAt": "2025-06-01",
+          "conditions": "Tot 18 jaar. Jaartotaal € 0,00. De buitenlandtoeslag is niet van toepassing op de Rabo JongerenRekening. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-free",
+      "product": "Rabo Free",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Bedoeld voor rekeninghouders van 18 tot en met 24 jaar; met toestemming kan een minderjarige vanaf 16 jaar het pakket ook gebruiken (Bijzondere voorwaarden Rabo Free 2025, art. 2). Rabobank zet het pakket in ieder geval om als je 25 wordt. Een RaboCard of Rabo GoldCard kost € 1,25 per maand extra. De buitenlandtoeslag geldt niet voor Rabo Free. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-directpakket",
+      "product": "Rabo DirectPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 3.45,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Ouder pakket uit de tarievenlijst van december 2025; extra rekeninghouder € 1,40; RaboCard € 2,00. Buitenlandtoeslag € 2,00 per maand per betaalrekening indien minimaal één rekeninghouder buiten Nederland woont.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-basispakket",
+      "product": "Rabo BasisPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 5.45,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Ouder pakket uit de tarievenlijst van december 2025; inclusief betaalpas en RaboCard; extra rekeninghouder € 1,20. Buitenlandtoeslag € 2,00 per maand per betaalrekening indien minimaal één rekeninghouder buiten Nederland woont.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-totaalpakket",
+      "product": "Rabo TotaalPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 6.95,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Ouder pakket uit de tarievenlijst van december 2025; inclusief betaalpas en Rabo GoldCard; extra rekeninghouder € 0,00. Buitenlandtoeslag € 2,00 per maand per betaalrekening indien minimaal één rekeninghouder buiten Nederland woont.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-vreemde-valutarekening",
+      "product": "Rabo Vreemde Valuta-rekening",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4.75,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+          "checkedAt": "2025-12",
+          "conditions": "Betaalrekening-variant. De beleggersrekening-variant staat in dezelfde tabel op € 0,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "sns-basis",
+      "product": "SNS Basis",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Prijs per maand voor het aanhouden van de betaalrekening. Extra betaalpas € 1,35 per maand (bij SNS Compleet € 0,00).",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "sns-eu-betaalrekening",
+      "product": "SNS EU Betaalrekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Prijs per maand voor het aanhouden van de betaalrekening. Extra betaalpas € 1,35 per maand (bij SNS Compleet € 0,00).",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "sns-basis-priverekening",
+      "product": "SNS Basis Privérekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Prijs per maand voor het aanhouden van de betaalrekening. Extra betaalpas € 1,35 per maand (bij SNS Compleet € 0,00). Aanvraag alleen via een erkende hulpverleningsinstantie.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "sns-jongerenpakket",
+      "product": "SNS Jongerenpakket",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Bestaat uit SNS Jongeren Betalen, SNS Jongeren Sparen en Mijn SNS/SNS App. Uitgesproken nul in de tarievenwijzer.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "sns-studentenrekening",
+      "product": "SNS Studentenrekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Inclusief Mijn SNS en de SNS App; 3 dagen per maand geen rente als je tot € 1.000 rood staat. De tarievenwijzer noemt geen leeftijdsgrens bij dit tarief. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "asn-basisbankrekening",
+      "product": "ASN Basisbankrekening",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+          "checkedAt": "2026-07-01",
+          "conditions": "Per rekening per kalendermaand, inclusief één betaalpas (€ 48,00 per jaar). Één rekeninghouder; roodstand is niet toegestaan.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "asn-studentenrekening",
+      "product": "ASN Studentenrekening",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+          "checkedAt": "2026-07-01",
+          "conditions": "Geldt ook voor het ASN Jongerenpakket. Eerste verstrekking betaalpas € 0; vervangende betaalpas geen extra kosten. De tarievenwijzer noemt geen leeftijdsgrens bij dit tarief. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "asn-jongerenpakket",
+      "product": "ASN Jongerenpakket",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+          "checkedAt": "2026-07-01",
+          "conditions": "Zelfde regel als de ASN Studentenrekening. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "regiobank-jongwijs",
+      "product": "RegioBank JongWijs Betaalrekening",
+      "issuer": "RegioBank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Onderdeel van JongWijs; inclusief app en een betaalpas of Jeugdpas. Papieren rekeningafschriften € 0,00 per maand. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "regiobank-studentenrekening",
+      "product": "RegioBank Studentenrekening",
+      "issuer": "RegioBank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Inclusief app en een betaalpas; emergency cash in het buitenland € 0,00. Extra betaalpas € 1,35 per maand. De tarievenwijzer noemt geen leeftijdsgrens bij dit tarief. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "knab-gezamenlijke-rekening",
+      "product": "Knab Gezamenlijke rekening",
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 7,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-02-18",
+          "conditions": "Twee rekeninghouders. Het informatiedocument van 01-10-2025 noemt hetzelfde bedrag plus het jaartotaal € 84. Betaalpas en vervangende betaalpas zijn gratis.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalrekening-23-25",
+      "product": "Triodos Internet Betaalrekening (23 t/m 25 jaar)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 3.5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+          "checkedAt": "2026-05",
+          "conditions": "Rekening voor één persoon van 23 tot en met 25 jaar. Jaartotaal € 42,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalrekening-26plus",
+      "product": "Triodos Internet Betaalrekening (vanaf 26 jaar)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+          "checkedAt": "2026-05",
+          "conditions": "Rekening voor één persoon vanaf 26 jaar. Jaartotaal € 60,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalrekening-enof",
+      "product": "Triodos Internet Betaalrekening (en/of rekening)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 8,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+          "checkedAt": "2026-05",
+          "conditions": "En/of rekening, voor alle leeftijden. Jaartotaal € 96,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-free",
+      "product": "bunq Free",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "3 rekeningen inbegrepen. Extra rekeningen € 20 per maand per 25. Bij bunq Free is één pas inbegrepen en gelden ZeroFX-uitgaven tot € 1.000 per jaar; bij Core, Pro en Elite is ZeroFX onbeperkt.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-core",
+      "product": "bunq Core",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 3.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "5 rekeningen inbegrepen. Extra rekeningen € 20 per maand per 25.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-pro",
+      "product": "bunq Pro",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 9.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "25 rekeningen inbegrepen. Extra rekeningen € 20 per maand per 25.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-elite",
+      "product": "bunq Elite",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 18.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "25 rekeningen inbegrepen. Extra rekeningen € 20 per maand per 25.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-free-business",
+      "product": "bunq Free Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "3 rekeningen inbegrepen. Bij Free Business is slechts één bestuurder mogelijk; bij de betaalde abonnementen zijn de eerste drie bestuurders gratis en kost elke volgende € 5,99 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-core-business",
+      "product": "bunq Core Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 7.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "5 rekeningen inbegrepen. Bij Free Business is slechts één bestuurder mogelijk; bij de betaalde abonnementen zijn de eerste drie bestuurders gratis en kost elke volgende € 5,99 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-pro-business",
+      "product": "bunq Pro Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 13.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "25 rekeningen inbegrepen. Bij Free Business is slechts één bestuurder mogelijk; bij de betaalde abonnementen zijn de eerste drie bestuurders gratis en kost elke volgende € 5,99 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "bunq-elite-business",
+      "product": "bunq Elite Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 23.99,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+          "checkedAt": "2026-08-03",
+          "conditions": "25 rekeningen inbegrepen. Bij Free Business is slechts één bestuurder mogelijk; bij de betaalde abonnementen zijn de eerste drie bestuurders gratis en kost elke volgende € 5,99 per maand.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-standard",
+      "product": "N26 Account (Standard)",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Prijslijst voor wie zich registreert met een adres in onder meer Nederland. Een eerste fysieke Mastercard-debitcard kost € 10,00 (gratis voor premium-abonnees). Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-smart",
+      "product": "N26 Smart",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee, maandelijks automatisch afgeschreven. Inclusief een N26 Mastercard.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-go",
+      "product": "N26 Go",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 9.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee. Dit is het abonnement dat vroeger 'N26 You' heette; onder de naam You komt het in deze prijslijst niet meer voor.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-metal",
+      "product": "N26 Metal",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 16.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee. N26 kan korting geven bij vooruitbetaling per jaar of half jaar; de hoogte daarvan wordt pas in de sign-up flow getoond en staat niet in de prijslijst.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-business",
+      "product": "N26 Business",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "0,1% cashback op alle aankopen met de N26 Business Mastercard. Uitgesproken nul.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-business-smart",
+      "product": "N26 Business Smart",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-business-go",
+      "product": "N26 Business Go",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 9.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee. Niet beschikbaar in Zwitserland.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "n26-business-metal",
+      "product": "N26 Business Metal",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 16.9,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+          "checkedAt": "2026-06-26",
+          "conditions": "Membership fee. 0,5% cashback op alle aankopen met de N26 Business Metal Mastercard.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-standard",
+      "product": "Revolut Standaard",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20250719221017id_/https://www.revolut.com/nl-NL/legal/standard-fees/",
+          "checkedAt": "2025-04-22",
+          "conditions": "Eerste Revolut-kaart kosteloos (leveringskosten wel van toepassing), vervangende kaart € 6. Uitgesproken nul. Let op: dit is een Wayback-snapshot; revolut.com weigert een directe fetch met HTTP 403.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-plus",
+      "product": "Revolut Plus",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 3.99,
+          "period": "maand",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20250808164730id_/https://www.revolut.com/nl-NL/legal/plus-fees/",
+          "checkedAt": "2025-04-22",
+          "conditions": "Het document noemt ook een jaarprijs: € 40,00 per jaar.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-premium",
+      "product": "Revolut Premium",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 9.99,
+          "period": "maand",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20250113142818id_/https://www.revolut.com/nl-NL/legal/premium-fees/",
+          "checkedAt": "2024-08-28",
+          "conditions": "Het document noemt ook een jaarprijs: € 100 per jaar. Deze versie van de voorwaarden is van 28 augustus 2024 — ouder dan die van Standaard en Plus, dus mogelijk achterhaald.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-metal",
+      "product": "Revolut Metal",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 18.99,
+          "period": "maand",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20250210225314id_/https://www.revolut.com/nl-NL/legal/metal-fees/",
+          "checkedAt": "2024-09-16",
+          "conditions": "Het document noemt ook een jaarprijs: € 185 per jaar. Deze versie is van 16 september 2024 — de oudste van de vijf plannen, dus het meest kans op veroudering.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "revolut-ultra",
+      "product": "Revolut Ultra",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 60,
+          "period": "maand",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20250711052252id_/https://www.revolut.com/nl-NL/legal/ultra-fees/",
+          "checkedAt": "2025-04-22",
+          "conditions": "Het document noemt ook een jaarprijs: € 600 per jaar.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "wise-rekening",
+      "product": "Wise-rekening",
+      "issuer": "Wise Europe SA",
+      "kind": "betaalrekening",
+      "fields": {}
     }
   ]
 }

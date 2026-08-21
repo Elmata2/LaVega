@@ -6,6 +6,8 @@ import {
   hasCostsToShow,
   MIN_SAVING_PER_YEAR_CENTS,
   readAccountFee,
+  feeCostOverMonths,
+  FEE_PERIOD_MONTHS,
   type AccountFeeEntryLike,
 } from "./accountCosts.js";
 
@@ -397,5 +399,72 @@ describe("hasCostsToShow", () => {
 
   test("een lege catalogus geeft een leeg blok, en dat wordt niet gerenderd", () => {
     expect(hasCostsToShow(accountCosts([account()], []))).toBe(false);
+  });
+});
+
+/* DE HORIZON, en dit is de stille fout waar de kosten-rangschikking op stond.
+ *
+ * Een winst van € 14 op een overboeking van € 1.000 is EENMALIG. € 16,99 per
+ * maand is TERUGKEREND. Die twee mag je niet van elkaar aftrekken zonder te
+ * zeggen over welke periode, anders is 14 − 16,99 een getal dat niets betekent.
+ * `feeCostOverMonths` is de plek waar die periode expliciet wordt, en de reden
+ * dat hij hier staat en niet bij de aanroeper is dat `FeeAmount` de eenheid
+ * draagt: wie de eenheid heeft, hoort de rekensom te hebben.
+ */
+describe("feeCostOverMonths", () => {
+  const amount = (cents: number, period: "maand" | "jaar") => ({
+    cents,
+    period,
+    perYearCents: period === "maand" ? cents * 12 : cents,
+    perYearDerived: period === "maand",
+  });
+
+  test("een maandprijs loopt door: drie maanden zijn drie nota's", () => {
+    expect(feeCostOverMonths(amount(445, "maand"), 3)).toEqual({
+      cents: 1335,
+      periodsCharged: 3,
+      flooredToOnePeriod: false,
+    });
+  });
+
+  test("EEN JAARPRIJS WORDT NIET DOOR TWAALF GEDEELD voor een kortere periode", () => {
+    // American Express Business Gold kost € 270 per jaar. Wie hem opent voor een
+    // reis van een maand is € 270 kwijt, niet € 22,50 — dat bedrag staat in geen
+    // enkel document en je kunt geen twaalfde jaar kaart kopen. Toen dit wél
+    // gedeeld werd, won een jaarkaart van € 270 van een maandkaart van € 25.
+    const over = feeCostOverMonths(amount(27000, "jaar"), 1);
+    expect(over.cents).toBe(27000);
+    expect(over.periodsCharged).toBe(1);
+    expect(over.flooredToOnePeriod).toBe(true);
+  });
+
+  test("dertien maanden zijn twee jaarnota's, want het tweede jaar wordt gewoon geïnd", () => {
+    expect(feeCostOverMonths(amount(27000, "jaar"), 13).cents).toBe(54000);
+  });
+
+  test("anderhalve maand zijn twee maandnota's — er wordt naar BOVEN afgerond", () => {
+    expect(feeCostOverMonths(amount(445, "maand"), 1.5).periodsCharged).toBe(2);
+  });
+
+  test("de ondergrens is één hele periode, ook bij nul, negatief of onzin", () => {
+    // Wie een kaart opent voor één reis betaalt minstens één periode. Een horizon
+    // van nul zou de kostenpost laten verdampen, en een kostenpost die per ongeluk
+    // nul wordt is precies wat hier niet mag.
+    for (const months of [0, -4, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const over = feeCostOverMonths(amount(445, "maand"), months);
+      expect(over.periodsCharged).toBe(1);
+      expect(over.cents).toBe(445);
+      expect(over.flooredToOnePeriod).toBe(true);
+    }
+  });
+
+  test("een uitgesproken nul blijft nul over elke horizon — nul keer twaalf is nul", () => {
+    // 212 Card en Trade Republic staan letterlijk op € 0 per maand. Dat is een
+    // BEKENDE nul en die mag gewoon meedoen in de som.
+    expect(feeCostOverMonths(amount(0, "maand"), 24).cents).toBe(0);
+  });
+
+  test("FEE_PERIOD_MONTHS is de enige plek waar staat dat een jaar twaalf maanden is", () => {
+    expect(FEE_PERIOD_MONTHS).toEqual({ maand: 1, jaar: 12 });
   });
 });

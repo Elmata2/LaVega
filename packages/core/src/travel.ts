@@ -8,6 +8,11 @@ import type { CatalogValue } from "./catalog.js";
 import { isCovered } from "./catalog.js";
 import { issuerToBank, type CatalogueEntryLike } from "./catalogRates.js";
 import { splitProductName, bankNameMatches } from "./bankNl.js";
+import { accountFees, type ProductFee } from "./accountCosts.js";
+import {
+  MIN_HORIZON_MONTHS, describeNetBenefit, holdingCostOfProduct, marginalHoldingCost, netBenefit,
+  type HoldingCost, type NetBenefit,
+} from "./netBenefit.js";
 
 /** Travel's slot in the agent namespace (see `agentFacts.ts` for what it may
  *  learn: fxFeePct / convertFeePct / cashbackPct / pointsPerEuro /
@@ -22,6 +27,30 @@ export const TRAVEL_REFERENCE_SPEND = 1000;
  *  you (cashback above the surcharge). Null when the terms are unknown. */
 export function costOnReferenceSpend(netCostPct: number | null): number | null {
   return netCostPct === null ? null : Math.round(netCostPct * TRAVEL_REFERENCE_SPEND) / 100;
+}
+
+/** HOELANG DE REIS DUURT ALS NIEMAND HET ZEGT: één maand, en dat is niet
+ *  toevallig `MIN_HORIZON_MONTHS`.
+ *
+ *  Zonder een periode is een kaartprijs niet af te trekken van een reisvoordeel:
+ *  € 14 winst op € 1.000 is eenmalig, € 2,55 per maand loopt door, en 14 − 2,55
+ *  betekent pas iets als erbij staat over hoeveel maanden. Wie een kaart opent
+ *  voor één reis betaalt minstens één hele maandnota — of één heel jaar, bij een
+ *  jaarkaart. Wie langer weggaat geeft `tripMonths` mee en dan schuift de
+ *  rekening mee. */
+export const TRAVEL_TRIP_MONTHS = MIN_HORIZON_MONTHS;
+
+/** Dezelfde euro's als `costOnReferenceSpend`, maar in CENTEN — de eenheid waarin
+ *  een percentage en een maandprijs bij elkaar kunnen komen.
+ *
+ *  Dit is de enige noemer waarop de twee kanten van de rekening naast elkaar
+ *  kunnen staan: een opslag is een percentage van een bedrag, een kaartprijs is
+ *  een bedrag per periode. Zolang de besteding vastligt op € 1.000 en de periode
+ *  op `tripMonths`, zijn beide gewoon euro's voor DEZE reis en mag je ze optellen.
+ *  In centen omdat een halve cent verschil anders een willekeurige rangschikking
+ *  oplevert. */
+function surchargeCents(netCostPct: number): number {
+  return Math.round((netCostPct / 100) * TRAVEL_REFERENCE_SPEND * 100);
 }
 
 /** Destination → the currency you will actually be charged in. Only the
@@ -87,6 +116,10 @@ export type TravelPlan = {
    *  dearer one does. Stated as a choice, not resolved — only the owner knows
    *  what his points are worth to him. */
   spendNote: string | null;
+  /** Over hoeveel maanden de kaartkosten in dit plan zijn gerekend. Hoort in het
+   *  plan omdat het scherm de periode moet kunnen noemen: zonder die periode is
+   *  een nettobedrag niet na te rekenen. */
+  tripMonths: number;
   /** Providers we have no terms for yet — what an agent refresh should look up. */
   unknownProviders: string[];
   /** Payment accounts we can't attribute to a bank, so they can't be ranked or
@@ -129,9 +162,26 @@ export type PayAdvice = {
    *  because he still has to be able to pay for lunch today. */
   ownProduct: string | null;
   ownCostOnReference: number | null;
-  /** Euros saved on the reference spend by switching. Null when there is nothing
-   *  honest to claim — his own figure unknown, or no real gain. */
+  /** BRUTO: euro's die de OPSLAG scheelt op de referentiebesteding. Wat de kaart
+   *  zelf per maand kost zit hier NIET in — dat is `netSavingOnReference`, en het
+   *  verschil is het hele punt van `benefit`. Null wanneer er niets eerlijks te
+   *  claimen is: zijn eigen cijfer onbekend, of geen echt voordeel. */
   savingOnReference: number | null;
+  /** NETTO: hetzelfde voordeel met de kaartkosten eraf, in euro's, en ALLEEN als
+   *  die kosten bekend zijn. Null zodra ze dat niet zijn — dan is er geen netto en
+   *  mag het woord ook niet vallen. */
+  netSavingOnReference: number | null;
+  /** Wat de aanbevolen kaart kost om aan te HOUDEN, in de drie toestanden die er
+   *  echt zijn. Null bij zijn eigen kaart: die kosten betaalt hij al, dus voor
+   *  deze keuze zijn ze nul (zie `marginalHoldingCost`). */
+  holdingCost: HoldingCost | null;
+  /** Het voordeel met de kosten erin verrekend, zodat het scherm een brutobedrag
+   *  niet als netto kan presenteren. Null bij zijn eigen kaart — daar valt niets
+   *  te winnen en dus ook niets te verrekenen. */
+  benefit: NetBenefit | null;
+  /** Over hoeveel maanden de kaartkosten zijn gerekend. Hoort erbij: zonder deze
+   *  periode is het nettobedrag niet te controleren. */
+  tripMonths: number;
   /** The recommendation's own caveat (a cap, a monthly free limit). */
   note: string | null;
   /** Where a catalogue recommendation was read, and when. Null for his own card,
@@ -151,7 +201,21 @@ export type PayAdvice = {
  *    have no idea what funding it would cost. So a market card has to be
  *    cheaper than his best FULL route to win, which is the conservative test.
  *  · a tie goes to the card he already carries. "Open this account to save
- *    nothing" is not advice, and a 0% card cannot beat a 0% route. */
+ *    nothing" is not advice, and a 0% card cannot beat a 0% route.
+ *
+ *  DE KAARTPRIJS ZIT NU IN DIE VERGELIJKING, en hij zit er maar aan één kant in.
+ *  Zijn eigen route loopt over kaarten die hij al heeft: die maandprijs betaalt
+ *  hij toch al, dus voor deze keuze is hij nul. Een kaart uit de catalogus moet
+ *  hij openen, dus daar komt de prijs er wél bij (`CardOffer.tripCostCents`).
+ *  Daarmee valt zijn beslissing eruit zonder dat er een extra regel voor nodig
+ *  is: netto = zijn kosten − de kosten van de kaart, dus netto ≤ 0 betekent dat
+ *  zijn eigen route wint en de kaart geen aanbeveling wordt. Een kaart van € 5 per
+ *  maand die € 3 oplevert komt hier dus nooit uit als tip.
+ *
+ *  Zijn de kaartkosten ONBEKEND, dan blijft dit de oude vergelijking op de opslag
+ *  alleen — en dat is bewust. Onbekend is geen nul, maar de kaart verzwijgen is
+ *  ook geen antwoord: hij komt door met zijn BRUTObedrag en `benefit` zegt dat er
+ *  geen netto is. `payHeadline` zet dat gat in dezelfde zin als het bedrag. */
 export function bestPayAdvice(
   journeys: readonly Journey[],
   offers: readonly CardOffer[],
@@ -161,8 +225,15 @@ export function bestPayAdvice(
   const own = journeys.find((j) => j.known && j.costOnReference !== null) ?? null;
   const market = offers.find((o) => !o.held) ?? null;
   const marketCost = market ? costOnReferenceSpend(market.netCostPct) : null;
+  // De horizon komt van de kaart zelf en niet als parameter: de offers zijn met
+  // één `tripMonths` doorgerekend en die twee mogen niet uit elkaar lopen. Een
+  // tweede parameter hier zou precies dat toestaan.
+  const tripMonths = market?.tripMonths ?? TRAVEL_TRIP_MONTHS;
 
-  if (own && (marketCost === null || own.costOnReference! <= marketCost)) {
+  // In centen, langs één rekenpad, zodat de winnaar en het nettobedrag hieronder
+  // niet op een halve cent van elkaar kunnen verschillen.
+  const ownCents = own && own.totalCostPct !== null ? surchargeCents(own.totalCostPct) : null;
+  if (own && (market === null || ownCents === null || ownCents <= market.tripCostCents)) {
     return {
       product: own.provider,
       held: true,
@@ -172,6 +243,10 @@ export function bestPayAdvice(
       // Nothing to switch to, so nothing to claim. The runner-up comparison for
       // his OWN options is journeyHeadline's job and it already does it.
       savingOnReference: null,
+      netSavingOnReference: null,
+      holdingCost: null,
+      benefit: null,
+      tripMonths,
       note: own.note,
       sourceUrl: null,
       asOf: null,
@@ -189,6 +264,10 @@ export function bestPayAdvice(
     ownProduct: own?.provider ?? null,
     ownCostOnReference: own?.costOnReference ?? null,
     savingOnReference: gain ? gain.savingCents / 100 : null,
+    netSavingOnReference: gain && gain.net.kind === "net" ? gain.net.netCents / 100 : null,
+    holdingCost: market.holdingCost,
+    benefit: gain?.net ?? null,
+    tripMonths,
     note: market.capNote,
     sourceUrl: market.sourceUrl,
     asOf: market.asOf,
@@ -219,7 +298,82 @@ export function payHeadline(
     advice.savingOnReference !== null && advice.ownProduct
       ? `, ${euro(advice.savingOnReference)} minder dan met je eigen ${advice.ownProduct}`
       : "";
-  return `Betaal met ${advice.product}:${cost}${versus}. Die heb je nog niet — die moet je eerst openen.`;
+  return `Betaal met ${advice.product}:${cost}${versus}. Die heb je nog niet — die moet je eerst openen.${holdingCostClause(advice.product, advice.benefit, advice.holdingCost)}`;
+}
+
+/** WAT DE KAART ZELF KOST, in dezelfde zin als wat ze oplevert.
+ *
+ *  Het bedrag in de zin hierboven is BRUTO: het verschil in opslag op € 1.000.
+ *  Zonder deze staart is dat het enige getal dat op het scherm staat, en dan leest
+ *  een kaart van € 42,95 per jaar als een winst van € 14 — terwijl je er over een
+ *  reis van een maand € 28,95 op achteruit gaat. Vandaar dat de kosten niet in een
+ *  voetnoot staan maar in de aanbeveling zelf.
+ *
+ *  Zijn de kosten onbekend, dan staat er dat er een gat is en dat het geen nul is.
+ *  Het woord "netto" komt in die tak niet voor: er is geen netto.
+ *
+ *  IS ER GEEN VOORDEEL OM TEGEN AF TE ZETTEN, dan blijft de PRIJS staan. Dat
+ *  klinkt als een randgeval maar het is de begintoestand van elke nieuwe
+ *  gebruiker: zolang hij van geen enkele eigen kaart de opslag heeft ingevuld, is
+ *  er geen route om het voordeel tegen te meten en levert `offerSwitchGain` niets
+ *  op — en dan viel deze staart helemaal weg. De kop las: "Betaal met N26 Metal
+ *  betaalpas: dat kost je niets op € 1.000. Die heb je nog niet." Over een kaart
+ *  van € 16,90 per maand. Dat "niets" gaat over de OPSLAG, en zonder de prijs
+ *  ernaast is het precies de misleiding die dit bestand moet voorkomen. */
+function holdingCostClause(product: string, b: NetBenefit | null, cost: HoldingCost | null = null): string {
+  if (!b) return bareHoldingCostClause(product, cost);
+  if (b.kind === "gross-cost-unknown") {
+    const why =
+      b.cost.reason === "needs-another-product"
+        ? `Wat ${product} los kost weten we niet: de prijs die onze bron noemt geldt bovenop een ander product`
+        : `Wat ${product} zelf kost, staat niet in onze bronnen`;
+    return ` ${why} — dat is geen nul, en het gaat van dat bedrag af.`;
+  }
+  // Een terugkerend voordeel komt op dit scherm niet voor (een reis is eenmalig),
+  // maar als het er ooit komt hoort er een zin te staan en geen leegte.
+  if (b.basis.kind !== "one-off") return ` ${describeNetBenefit(b)}`;
+  // EEN KAART DIE NIETS KOST KRIJGT GEEN REKENSOM. Er is niets om over een periode
+  // uit te smeren, dus de ondergrens hoort er niet bij: "kost zelf € 0,00 per maand
+  // en dat betaal je minstens één maand" is waar en onleesbaar, en op de echte
+  // catalogus is dit de MEEST voorkomende zin — Trade Republic en 212 Card staan
+  // allebei op nul. Het brutobedrag is hier ook het nettobedrag.
+  if (b.cost.amount.cents === 0) {
+    return ` ${product} kost zelf niets om aan te houden, dus je houdt ${euro(b.grossCents / 100)} over.`;
+  }
+  const price = `${euro(b.cost.amount.cents / 100)} ${b.cost.amount.period === "maand" ? "per maand" : "per jaar"}`;
+  // DE ONDERGRENS STAAT HARDOP IN DE ZIN. Zonder "minstens één maand" lijkt het
+  // nettobedrag uit de lucht te komen, en de gebruiker moet kunnen zien over welke
+  // periode we rekenen — anders kan hij ons niet nakijken.
+  const period =
+    b.basis.costPeriod === "jaar"
+      ? "en wordt per jaar afgerekend"
+      : `en dat betaal je ${b.basis.periodsCharged === 1 ? "minstens één maand" : `${b.basis.periodsCharged} maanden`}`;
+  return b.kind === "net"
+    ? ` ${product} kost zelf ${price} ${period}, dus je houdt ${euro(b.netCents / 100)} over.`
+    : ` ${product} kost zelf ${price} ${period}, dus je gaat er ${euro(-b.netCents / 100)} op achteruit.`;
+}
+
+/** DE PRIJS ZONDER REKENSOM: wat de kaart kost, als er niets is om het van af te
+ *  trekken. Nooit het woord "netto" — er valt hier per definitie niets netto te
+ *  maken, en dat is juist waarom deze zin bestaat.
+ *
+ *  Een uitgesproken nul wordt ook genoemd. Dat is de keerzijde van "onbekend is
+ *  geen nul": als een bron letterlijk zegt dat een kaart niets kost, is dat een
+ *  gemeten feit en het scheelt hem de vraag of we het gewoon niet weten. */
+function bareHoldingCostClause(product: string, cost: HoldingCost | null): string {
+  if (!cost) return "";
+  if (cost.kind === "unknown") {
+    return cost.reason === "needs-another-product"
+      ? ` Wat ${product} los kost weten we niet: de prijs die onze bron noemt geldt bovenop een ander product — dat is geen nul.`
+      : ` Wat ${product} zelf kost, staat niet in onze bronnen — dat is geen nul.`;
+  }
+  // Zijn eigen kaart: die prijs loopt toch al door, dus er is niets bij te
+  // vertellen. Hem hier noemen zou suggereren dat deze keuze hem geld kost.
+  if (cost.why === "already-held") return "";
+  const period = cost.amount.period === "maand" ? "per maand" : "per jaar";
+  return cost.amount.cents === 0
+    ? ` ${product} kost zelf niets om aan te houden.`
+    : ` ${product} kost zelf ${euro(cost.amount.cents / 100)} ${period}, en dat loopt door zolang je hem houdt.`;
 }
 
 /** The product a card's terms belong to: the BANK, and only the bank.
@@ -517,9 +671,16 @@ export function planTravel(input: {
    *  no catalogue there are no market offers and no withdrawal prices, and the
    *  plan says so rather than inventing either. */
   catalogue?: readonly CatalogueEntryLike[];
+  /** HOELANG DE REIS DUURT, in maanden, en dus over hoeveel maanden de prijs van
+   *  een kaart die hij zou openen meetelt. Optioneel omdat een reis zonder opgave
+   *  op de ondergrens valt (`TRAVEL_TRIP_MONTHS`): minder dan één maandnota kun je
+   *  niet afnemen. Niet weglaten uit de rekensom — een kaartprijs die nul wordt
+   *  omdat niemand een periode noemde is precies de fout die dit veld voorkomt. */
+  tripMonths?: number;
 }): TravelPlan {
   const { accounts, txs, rates, facts, destination, asOf } = input;
   const catalogue = input.catalogue ?? [];
+  const tripMonths = input.tripMonths ?? TRAVEL_TRIP_MONTHS;
   const currency = countryCurrency(destination);
 
   const interest = analyzeInterest(accounts, txs, rates, asOf);
@@ -562,7 +723,7 @@ export function planTravel(input: {
   // is right that it is not the answer; the answer is a proven zero he does not
   // hold yet, and the cards we have NO withdrawal figure for get named rather
   // than dropped (review 3, item 3).
-  const cashOffers = currency === "EUR" ? [] : marketWithdrawOptions(catalogue, spend);
+  const cashOffers = currency === "EUR" ? [] : marketWithdrawOptions(catalogue, spend, tripMonths);
   // Only cards he does NOT hold. `marketCardOffers` marks the held ones so this
   // filter is possible at all; dropping them here means the block physically
   // cannot present a card he already carries as something to go and open, nor
@@ -570,7 +731,7 @@ export function planTravel(input: {
   const offers =
     currency === "EUR"
       ? []
-      : cheapestPerIssuer(marketCardOffers(catalogue, spend).filter((o) => !o.held));
+      : cheapestPerIssuer(marketCardOffers(catalogue, spend, tripMonths).filter((o) => !o.held));
   const pay = currency === "EUR" ? null : bestPayAdvice(journeys, offers);
 
   return {
@@ -582,6 +743,7 @@ export function planTravel(input: {
     headline: payHeadline(pay, journeys, currency),
     spend,
     spendNote,
+    tripMonths,
     unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],
     unidentifiedCount,
     withdraw,
@@ -1015,7 +1177,62 @@ export type CardOffer = {
   sourceUrl: string;
   asOf: string;
   held: boolean;
+  /** WAT DEZE KAART KOST OM TE HEBBEN, marginaal: nul als hij hem al heeft, want
+   *  die maandprijs loopt toch door. Zie `marginalHoldingCost` — dat is de val
+   *  waar dit veld voor bestaat. */
+  holdingCost: HoldingCost;
+  /** Wat deze kaart DEZE REIS kost in centen: de opslag op € 1.000 plus de
+   *  kaartkosten over `tripMonths`. Dit is waarop gerangschikt wordt, want het is
+   *  de enige noemer waarop een percentage en een maandprijs samen kunnen komen. */
+  tripCostCents: number;
+  /** false als de kaartkosten onbekend zijn. Dan is `tripCostCents` alleen de
+   *  opslag en dus een ONDERGRENS van wat de reis kost — geen volledig bedrag, en
+   *  zeker geen bewijs dat de kaart gratis is. */
+  tripCostKnown: boolean;
+  tripMonths: number;
 };
+
+/** Wat de rangschikking van kaarten nodig heeft, en niets meer. Los type zodat een
+ *  test de ECHTE vergelijking kan aanroepen in plaats van hem na te bouwen — de
+ *  vorige versie van deze test had de sorteerregel gekopieerd, en dan test je je
+ *  eigen kopie. */
+export type CardOfferRanking = {
+  tripCostCents: number;
+  tripCostKnown: boolean;
+  conditional: boolean;
+  held: boolean;
+};
+
+/** DE VOLGORDE, en elke regel is een beslissing die eerder een keer fout viel:
+ *
+ *  1. HET GOEDKOOPST OVER DE HELE REIS. Opslag plus kaartkosten, in centen. Een
+ *     kaart met 0% opslag die € 16,99 per maand kost is voor één reis duurder dan
+ *     een kaart met 1% die niets kost, en op de opslag alleen was hij de winnaar.
+ *  2. HET GOEDKOOPSTE ZONDER VOORWAARDEN. Een 0% die op € 1.000 per maand afloopt
+ *     is geen 0% voor wie meer besteedt.
+ *  3. WAT WE KUNNEN AANTONEN, boven wat we niet weten. Bij hetzelfde bedrag wint
+ *     de kaart waarvan de prijs vaststaat: van de ander weten we alleen dat er nog
+ *     iets af kan gaan. Dezelfde regel als 2, een laag lager.
+ *  4. EEN KAART DIE HIJ AL HEEFT. Zijn beslissing van 20 augustus: op de echte
+ *     catalogus staan Trade Republic, 212 Card, N26 Standard en ING Platinum
+ *     allemaal op 0%, en iemand naar een nieuwe kaart sturen voor exact hetzelfde
+ *     tarief is advies dat niets oplevert en werk kost.
+ *  5. Daarna de catalogusvolgorde, zodat de lijst niet herschikt tussen renders.
+ *
+ *  Regel 3 en regel 4 kunnen niet met elkaar vechten, en dat is geen toeval: een
+ *  kaart die hij heeft kost hem marginaal niets, en die nul is BEKEND. Zijn eigen
+ *  kaart heeft dus altijd `tripCostKnown === true` en kan door regel 3 nooit
+ *  gezakt worden. Zou de kaartprijs ook bij zijn eigen kaarten meegeteld worden,
+ *  dan zouden die twee regels elkaar wél in de weg zitten — en dan zou de app hem
+ *  aanraden een kaart te openen om kosten te ontlopen die hij toch al maakt. */
+export function compareCardOffers(a: CardOfferRanking, b: CardOfferRanking): number {
+  return (
+    a.tripCostCents - b.tripCostCents ||
+    Number(a.conditional) - Number(b.conditional) ||
+    Number(!a.tripCostKnown) - Number(!b.tripCostKnown) ||
+    Number(b.held) - Number(a.held)
+  );
+}
 
 /** The catalogue's own words, reduced to the caveats that decide whether a
  *  cashback figure is money. Each clause is only claimed when the source text
@@ -1078,11 +1295,95 @@ function heldCatalogueIds(
   return held;
 }
 
+/** Namen vergelijken zoals een mens ze leest: kleine letters, zonder accenten,
+ *  losse woorden. De catalogus schrijft "Privérekening" en "priverekening" door
+ *  elkaar, en dat mag geen twee producten worden. */
+function normProduct(s: string): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** DE KAARTPRIJZEN, uit hetzelfde artefact als de opslagen.
+ *
+ *  De catalogus draagt `accountFee` op 71 rijen (augustus 2026), en dat is
+ *  hetzelfde bestand dat hier al binnenkomt — er is dus geen nieuwe invoer nodig,
+ *  alleen een veld dat nog niet gelezen werd. `accountFees` doet de validatie
+ *  (eenheid, bron, datum, voorwaarden) en beslist ook of het bedrag de prijs van
+ *  DIT product op zichzelf is; die kennis hier nog eens opschrijven zou hem laten
+ *  verlopen. Eén keer opbouwen per ranking, want het loopt de hele catalogus door.
+ *
+ *  DE PRIJS STAAT VAAK OP EEN ANDERE RIJ DAN DE KAART, en daar liep deze hele
+ *  lane in stilte op stuk. De catalogus splitst een KAART (kind `betaalpas`, die
+ *  `fxFeePct` draagt) van het PAKKET waarin hij zit (kind `betaalrekening` of
+ *  `betaalpakket`, dat `accountFee` draagt): `n26-metal-betaalpas` heeft de 0%
+ *  opslag, `n26-metal` heeft de € 16,90 per maand. Op `id` alleen matchen vond
+ *  die prijs dus nooit, en N26 Metal kwam als gedeeld goedkoopste kaart uit de
+ *  rangschikking met "kosten onbekend" — een kaart van € 16,90 per maand
+ *  bovenaan, precies het advies dat deze lane moet voorkomen. Erger nog: de
+ *  melding zei dat onze bronnen de prijs niet noemen, terwijl hij er wél in
+ *  staat, één rij verderop.
+ *
+ *  DE MATCH IS OPZETTELIJK STRIKT, want een verkeerde prijs rekent door en is
+ *  erger dan geen prijs:
+ *   · alleen de kaartnaam wordt van zijn soortwoord ontdaan ("N26 Metal
+ *     betaalpas" → "N26 Metal"). De pakketnaam blijft VOLLEDIG. Toen die ook
+ *     werd ingekort viel "ING BetaalPakket" terug op "ing" en trok dan de
+ *     € 6,85 van dat pakket naar de generieke "ING betaalpas" — terwijl ING die
+ *     kaart in zeven pakketten van € 4 tot € 44,99 verkoopt. Om dezelfde reden
+ *     kwam de creditcardbijdrage van ABN, Rabo, SNS en RegioBank op hun
+ *     BETAALPAS terecht. Twaalf rijen matchen nu, en alle twaalf zijn een kaart
+ *     die alleen binnen dat ene pakket bestaat;
+ *   · het pakket moet een REKENING of PAKKET zijn (`group === "betaalrekening"`,
+ *     wat betaalpakket meedekt). Zo kan een creditcardbijdrage nooit op een
+ *     betaalpas landen, ook niet als de catalogus ooit een rij omdoopt;
+ *   · precies één kandidaat, anders niets. Twee pakketten met dezelfde naam is
+ *     geen keuze die wij mogen maken;
+ *   · dezelfde bank aan beide kanten, als extra slot op een naam die toevallig
+ *     tweemaal voorkomt.
+ *
+ *  Zijn EIGEN rij gaat altijd voor: een kaart die zelf geprijsd is, is geprijsd. */
+function holdingCostsById(entries: readonly CatalogueEntryLike[]): Map<string, ProductFee> {
+  const fees = accountFees(entries);
+  const out = new Map<string, ProductFee>(fees.map((f) => [f.productId, f]));
+
+  const plans = new Map<string, ProductFee[]>();
+  for (const f of fees) {
+    if (f.group !== "betaalrekening") continue;
+    const key = normProduct(f.product);
+    const list = plans.get(key);
+    if (list) list.push(f);
+    else plans.set(key, [f]);
+  }
+
+  for (const e of entries) {
+    if (out.has(e.id)) continue; // eigen prijs gaat voor
+    const split = splitProductName(e.product);
+    if (!split) continue;
+    const candidates = plans.get(normProduct(split.bank));
+    if (!candidates || candidates.length !== 1) continue;
+    const plan = candidates[0];
+    // Beide kanten dezelfde bank. `issuerToBank` haalt de merknaam uit de
+    // juridische uitgever ("N26 Bank AG; Mastercard Debit" → "N26"), zodat de
+    // kaartrij en de pakketrij op hun bank vergeleken kunnen worden en niet op
+    // hun uitgeverstekst.
+    if (e.issuer && plan.issuer && !bankNameMatches(issuerToBank(e.issuer), issuerToBank(plan.issuer))) continue;
+    out.set(e.id, plan);
+  }
+  return out;
+}
+
 export function marketCardOffers(
   entries: readonly CatalogueEntryLike[],
   heldProducts: readonly HeldProduct[],
+  /** Over hoeveel maanden de kaartkosten meetellen. Zie `TRAVEL_TRIP_MONTHS`. */
+  tripMonths: number = TRAVEL_TRIP_MONTHS,
 ): CardOffer[] {
   const held = heldCatalogueIds(entries, heldProducts);
+  const fees = holdingCostsById(entries);
 
   const offers: CardOffer[] = [];
   for (const e of entries) {
@@ -1091,7 +1392,29 @@ export function marketCardOffers(
     if (!fx) continue;
     const cashback = coveredField(e, "cashbackPct");
     const withdrawal = parseWithdrawalFee(fx.conditions);
+    const isHeld = held.has(e.id);
+    const holdingCost = marginalHoldingCost(holdingCostOfProduct(fees.get(e.id)), isHeld);
+    const over = netBenefit({
+      // Nul voordeel: hier wordt niets vergeleken, alleen de KOSTEN van deze kaart
+      // over de horizon uitgerekend. Via `netBenefit` en niet met de hand, zodat
+      // de horizonregel (naar boven afronden, ondergrens één periode) op één plek
+      // staat en niet in elke rangschikking opnieuw.
+      benefit: { kind: "one-off", cents: 0 },
+      cost: holdingCost,
+      horizonMonths: tripMonths,
+    });
+    // Onbekende kosten tellen als NIETS IN DIT GETAL — niet omdat ze nul zijn,
+    // maar omdat er niets is om op te tellen. Daarom reist `tripCostKnown` mee:
+    // dit bedrag is dan een ondergrens en mag nooit als de prijs van de reis
+    // gepresenteerd worden. Ze op oneindig zetten zou de andere fout maken en de
+    // halve catalogus onderaan gooien, inclusief de 0%-kaarten die de vergelijking
+    // interessant maken.
+    const holdingCents = over.kind === "gross-cost-unknown" ? 0 : over.costCents;
     offers.push({
+      holdingCost,
+      tripCostCents: surchargeCents(fx.value) + holdingCents,
+      tripCostKnown: holdingCost.kind === "known",
+      tripMonths,
       productId: e.id,
       product: e.product,
       bank: e.issuer ? issuerToBank(e.issuer) : "",
@@ -1107,25 +1430,13 @@ export function marketCardOffers(
       conditions: fx.conditions,
       sourceUrl: fx.sourceUrl,
       asOf: fx.checkedAt,
-      held: held.has(e.id),
+      held: isHeld,
     });
   }
-  // Cheapest first. Dan, bij dezelfde prijs, in deze orde:
-  //
-  //  1. HET GOEDKOOPSTE ZONDER VOORWAARDEN. Een 0% die op € 1.000 per maand
-  //     afloopt is geen 0% voor wie meer besteedt.
-  //  2. EEN KAART DIE HIJ AL HEEFT. Zijn beslissing van 20 augustus, en het is de
-  //     juiste: op de echte catalogus staan Trade Republic, 212 Card, N26 Standard
-  //     en ING Platinum allemaal op 0%, en dan iemand naar een nieuwe kaart sturen
-  //     voor exact hetzelfde tarief is advies dat niets oplevert en werk kost.
-  //     Alleen als een ANDERE kaart echt goedkoper is, is overstappen het waard.
-  //  3. Daarna de catalogusvolgorde, zodat de lijst niet herschikt tussen renders.
-  return offers.sort(
-    (a, b) =>
-      a.netCostPct - b.netCostPct ||
-      Number(a.conditional) - Number(b.conditional) ||
-      Number(b.held) - Number(a.held),
-  );
+  // De volgorde staat in `compareCardOffers`, met de reden per regel. Hij staat
+  // apart zodat de test de echte vergelijking kan aanroepen; sort is stabiel, dus
+  // gelijke rijen houden hun catalogusvolgorde.
+  return offers.sort(compareCardOffers);
 }
 
 /** A surcharge that only holds inside a limit. The vocabulary is the
@@ -1146,18 +1457,35 @@ export function fxCaveat(conditions: string | null | undefined): string | null {
 
 /** What a switch would actually save on the reference spend, or null when there
  *  is nothing honest to claim: his own figure unknown, or the market's best no
- *  better than what he already carries. A zero-euro "saving" is noise. */
+ *  better than what he already carries. A zero-euro "saving" is noise.
+ *
+ *  `savingCents` IS EN BLIJFT BRUTO: het verschil in OPSLAG, want dat is wat een
+ *  percentage zegt. Wat de kaart zelf kost staat in `net`, in de drie toestanden
+ *  die er echt zijn — en dat veld is de enige plek waar het woord netto vandaan
+ *  mag komen. De twee naast elkaar in plaats van één samengevoegd getal, omdat een
+ *  kaart met onbekende kosten geen netto HEEFT en een bruto bedrag dat "netto"
+ *  heet de fout is die netBenefit.ts bestaat om te voorkomen. */
 export function offerSwitchGain(
   heldPct: number | null,
   offers: readonly CardOffer[],
-): { best: CardOffer; savingCents: number } | null {
+): { best: CardOffer; savingCents: number; net: NetBenefit } | null {
   if (heldPct === null) return null;
   const best = offers.find((o) => !o.held);
   if (!best) return null;
-  const delta = heldPct - best.netCostPct;
-  if (delta <= 0) return null;
-  const savingCents = Math.round((TRAVEL_REFERENCE_SPEND * 100 * delta) / 100);
-  return savingCents > 0 ? { best, savingCents } : null;
+  // Langs `surchargeCents`, hetzelfde rekenpad als `bestPayAdvice` gebruikt om de
+  // winnaar te kiezen. Twee paden naar hetzelfde bedrag verschillen op de cent, en
+  // dan kan de winnaar een "voordeel" van −1 cent krijgen.
+  const savingCents = surchargeCents(heldPct) - surchargeCents(best.netCostPct);
+  if (savingCents <= 0) return null;
+  return {
+    best,
+    savingCents,
+    net: netBenefit({
+      benefit: { kind: "one-off", cents: savingCents },
+      cost: best.holdingCost,
+      horizonMonths: best.tripMonths,
+    }),
+  };
 }
 
 /* ---------- cash, across the whole market ---------- */
@@ -1178,6 +1506,17 @@ export type CashOffer = {
   sourceUrl: string;
   asOf: string;
   held: boolean;
+  /** Wat de kaart kost om te hebben; nul als hij hem al heeft. Zelfde reden als
+   *  bij `CardOffer` — zie `marginalHoldingCost`. */
+  holdingCost: HoldingCost;
+  /** Eén opname van € 200 PLUS de kaartkosten over `tripMonths`, in centen. Hier
+   *  bijt de horizonregel het hardst: een kaart van € 4,45 per maand die één
+   *  opname van € 6,30 gratis maakt, kost je € 4,45 om € 6,30 te besparen. Zonder
+   *  de kaartprijs erbij zou dat een aanbeveling van € 6,30 heten. */
+  tripCostCents: number;
+  /** false als de kaartkosten onbekend zijn; `tripCostCents` is dan een ondergrens. */
+  tripCostKnown: boolean;
+  tripMonths: number;
 };
 
 /** Rank the catalogue on what one € 200 withdrawal costs, cheapest first.
@@ -1189,8 +1528,11 @@ export type CashOffer = {
 export function marketWithdrawOptions(
   entries: readonly CatalogueEntryLike[],
   heldProducts: readonly HeldProduct[],
+  /** Over hoeveel maanden de kaartkosten meetellen. Zie `TRAVEL_TRIP_MONTHS`. */
+  tripMonths: number = TRAVEL_TRIP_MONTHS,
 ): CashOffer[] {
   const held = heldCatalogueIds(entries, heldProducts);
+  const fees = holdingCostsById(entries);
   const out: CashOffer[] = [];
   for (const e of entries) {
     if (!SPENDABLE_KINDS.has(String(e.kind ?? ""))) continue;
@@ -1202,6 +1544,9 @@ export function marketWithdrawOptions(
     const fee = parseWithdrawalFee(fx.conditions);
     const costOnReference = withdrawalCost(fee, TRAVEL_REFERENCE_WITHDRAWAL);
     if (!fee.known || costOnReference === null) continue;
+    const isHeld = held.has(e.id);
+    const holdingCost = marginalHoldingCost(holdingCostOfProduct(fees.get(e.id)), isHeld);
+    const over = netBenefit({ benefit: { kind: "one-off", cents: 0 }, cost: holdingCost, horizonMonths: tripMonths });
     out.push({
       productId: e.id,
       product: e.product,
@@ -1211,13 +1556,25 @@ export function marketWithdrawOptions(
       effectivePct: withdrawalEffectivePct(fee, TRAVEL_REFERENCE_WITHDRAWAL),
       sourceUrl: fx.sourceUrl,
       asOf: fx.checkedAt,
-      held: held.has(e.id),
+      held: isHeld,
+      holdingCost,
+      // Zie de opmerking bij `marketCardOffers`: onbekende kosten tellen hier als
+      // niets omdat er niets is om op te tellen, en `tripCostKnown` zegt dat.
+      tripCostCents: Math.round(costOnReference * 100) + (over.kind === "gross-cost-unknown" ? 0 : over.costCents),
+      tripCostKnown: holdingCost.kind === "known",
+      tripMonths,
     });
   }
-  // Cheapest first; at the same price the row with no second, conditional
-  // withdrawal clause wins, and ties beyond that keep catalogue order.
+  // Goedkoopst over de hele reis eerst — de opname PLUS wat de kaart kost om te
+  // hebben, want een kaart openen om één keer € 6,30 te besparen is geen advies als
+  // die kaart € 4,45 per maand kost. Daarna dezelfde twee regels als bij het
+  // betalen: geen tweede, voorwaardelijke opnameregel gaat voor, en bij gelijke
+  // stand wint de prijs die we kunnen aantonen. Ties daarna houden catalogusvolgorde.
   return out.sort(
-    (a, b) => a.costOnReference! - b.costOnReference! || Number(a.fee.caveat !== null) - Number(b.fee.caveat !== null),
+    (a, b) =>
+      a.tripCostCents - b.tripCostCents ||
+      Number(a.fee.caveat !== null) - Number(b.fee.caveat !== null) ||
+      Number(!a.tripCostKnown) - Number(!b.tripCostKnown),
   );
 }
 
@@ -1232,7 +1589,14 @@ export type WithdrawAdvice = {
   /** His own cheapest PROVEN card, for the comparison. */
   ownProduct: string | null;
   ownCostOnReference: number | null;
+  /** BRUTO: wat één opname van € 200 goedkoper is. De kaartprijs zit hier niet in
+   *  — zie `netSavingOnReference` en `benefit`. */
   savingOnReference: number | null;
+  /** NETTO, en alleen als de kaartkosten bekend zijn. Null zodra dat niet zo is. */
+  netSavingOnReference: number | null;
+  holdingCost: HoldingCost | null;
+  benefit: NetBenefit | null;
+  tripMonths: number;
   /** HIS cards whose withdrawal price no source states. He believes Revolut wins
    *  here; we cannot prove it either way, and silence would read as agreement. */
   unpricedOwn: string[];
@@ -1249,8 +1613,15 @@ export function bestWithdrawAdvice(
   const marketBest = market.find((o) => !o.held) ?? null;
   const unpricedOwn = own.filter((o) => !o.fee.known).map((o) => o.provider);
   if (!ownBest && !marketBest) return null;
+  const tripMonths = marketBest?.tripMonths ?? TRAVEL_TRIP_MONTHS;
 
-  if (ownBest && (!marketBest || ownBest.costOnReference! <= marketBest.costOnReference!)) {
+  // Zijn eigen kaart tegen de kaart die hij zou moeten OPENEN, en dus tegen de
+  // opname PLUS de kaartprijs. Zijn eigen kaartprijs loopt toch al door, dus die
+  // hoort hier niet bij — hetzelfde onderscheid als bij `bestPayAdvice`, en om
+  // dezelfde reden: anders raadt de app hem aan een kaart te openen om kosten te
+  // ontlopen die hij toch al maakt.
+  const ownCents = ownBest ? Math.round(ownBest.costOnReference! * 100) : null;
+  if (ownBest && (!marketBest || ownCents! <= marketBest.tripCostCents)) {
     return {
       product: ownBest.provider,
       held: true,
@@ -1259,6 +1630,10 @@ export function bestWithdrawAdvice(
       ownProduct: ownBest.provider,
       ownCostOnReference: ownBest.costOnReference,
       savingOnReference: null,
+      netSavingOnReference: null,
+      holdingCost: null,
+      benefit: null,
+      tripMonths,
       unpricedOwn,
       caveat: ownBest.fee.caveat,
       sourceUrl: ownBest.sourceUrl,
@@ -1266,9 +1641,11 @@ export function bestWithdrawAdvice(
     };
   }
   const best = marketBest!;
-  const saving =
-    ownBest && ownBest.costOnReference! > best.costOnReference!
-      ? Math.round((ownBest.costOnReference! - best.costOnReference!) * 100) / 100
+  const savingCents = ownCents !== null ? ownCents - Math.round(best.costOnReference! * 100) : null;
+  const saving = savingCents !== null && savingCents > 0 ? savingCents / 100 : null;
+  const benefit =
+    savingCents !== null && savingCents > 0
+      ? netBenefit({ benefit: { kind: "one-off", cents: savingCents }, cost: best.holdingCost, horizonMonths: best.tripMonths })
       : null;
   return {
     product: best.product,
@@ -1278,6 +1655,10 @@ export function bestWithdrawAdvice(
     ownProduct: ownBest?.provider ?? null,
     ownCostOnReference: ownBest?.costOnReference ?? null,
     savingOnReference: saving,
+    netSavingOnReference: benefit && benefit.kind === "net" ? benefit.netCents / 100 : null,
+    holdingCost: best.holdingCost,
+    benefit,
+    tripMonths,
     unpricedOwn,
     caveat: best.fee.caveat,
     sourceUrl: best.sourceUrl,
@@ -1334,7 +1715,7 @@ export function withdrawalHeadline(
       // The "X duurder" clause only earns its place when it is a DIFFERENT number
       // from the one just quoted; against a proven zero it repeats itself.
       : ` Van jouw kaarten is ${advice.ownProduct} de goedkoopste die we kunnen aantonen: ${euro(advice.ownCostOnReference!)}${advice.savingOnReference === null || advice.costOnReference === 0 ? "" : `, dus ${euro(advice.savingOnReference)} duurder`}.`;
-  return `Het voordeligst pin je met ${advice.product}: ${price}. Die heb je nog niet.${own}${small}${missingCashNote(options)}`;
+  return `Het voordeligst pin je met ${advice.product}: ${price}. Die heb je nog niet.${own}${holdingCostClause(advice.product, advice.benefit, advice.holdingCost)}${small}${missingCashNote(options)}`;
 }
 
 /** The cards whose withdrawal price no source states, named.

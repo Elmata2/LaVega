@@ -20,6 +20,7 @@ export * from "./catalogSlice.js";
 export * from "./catalogInterest.js";
 export * from "./catalogRates.js";
 export * from "./accountCosts.js";
+export * from "./netBenefit.js";
 export * from "./categorize.js";
 export * from "./scheduledFlows.js";
 export * from "./invoices.js";

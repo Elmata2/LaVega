@@ -3,10 +3,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
-import type { Account, LearnedFact } from "@lavega/core";
+import type { Account, CatalogValue, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
 import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice } from "./TravelBlock";
 import type { CatalogueEntryLike } from "@lavega/core";
+import { formatEuro } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -634,4 +635,180 @@ test("for a euro destination the cash line does not quote a foreign-currency tar
   click(byText("button", "Waarom?"));
   // Nothing to switch to either — there is no conversion to be cheaper at.
   expect(container.querySelector(".travel-offers")).toBeNull();
+});
+
+/* ══════════════════ wat de kaart zelf kost, op het scherm ═══════════════════
+ *
+ * De rekensom staat in core (`netBenefit`, `accountCosts`) en is daar getest.
+ * Deze tests pinnen dat ze het SCHERM bereikt, met de prijs en de periode als
+ * eigen velden — en dat is geen formaliteit: de kaartprijs kwam alleen mee in
+ * core's kopzin, en `termsHeadline` hierboven vervangt die hele zin zodra er geen
+ * beprijsde eigen route is. Dat is de begintoestand van elke nieuwe gebruiker, en
+ * dus precies het geval waarvoor de kostenlane die zin schreef.
+ *
+ * Drie toestanden, drie andere dingen op het scherm:
+ *   kosten bekend, netto positief  → het nettobedrag, met de aftrek erbij
+ *   kosten bekend, netto nul of −  → geen aanbeveling, met de reden in euro's
+ *   kosten onbekend                → bruto, en het woord "netto" valt daar niet
+ */
+
+/** Het `accountFee`-veld zoals het echte artefact het draagt: een bedrag mét een
+ *  periode. `CatalogValue` kent die periode niet — de kostenlane leest het veld
+ *  als `unknown` en bepaalt de eenheid zelf (`readPeriod`), juist omdat een bedrag
+ *  zonder eenheid stilzwijgend maandelijks noemen een factor twaalf scheelt.
+ *  Vandaar de cast, en niet een opgerekt type. */
+const feeField = (value: number, period: "maand" | "jaar"): CatalogValue =>
+  ({
+    value, period, route: "provider-page", sourceUrl: "https://example.test/tarieven",
+    checkedAt: "2026-08-01", conditions: null, conditionsKnown: true,
+  } as unknown as CatalogValue);
+
+/** Eén kaart uit de catalogus: een opslag, en optioneel wat de kaart zelf kost.
+ *  `fee: null` is een kaart waarvan geen bron de prijs noemt — de meest
+ *  voorkomende rij, en de reden dat "onbekend is geen nul" hier hoort te blijken. */
+const marketCard = (
+  id: string,
+  product: string,
+  issuer: string,
+  fxPct: number,
+  fee: { value: number; period: "maand" | "jaar" } | null,
+  fxConditions = "Opslag buiten de euro.",
+): CatalogueEntryLike => ({
+  id, product, issuer, kind: "betaalpas",
+  fields: {
+    fxFeePct: {
+      value: fxPct, route: "provider-page", sourceUrl: "https://example.test/tarieven",
+      checkedAt: "2026-08-01", conditionsKnown: true, conditions: fxConditions,
+    },
+    ...(fee ? { accountFee: feeField(fee.value, fee.period) } : {}),
+  },
+});
+
+/* Zijn eigen beste route is 1% bij Revolut (DEARER_OWN), dus € 10,00 opslag op
+ * € 1.000. Elke kaart hieronder heeft 0% opslag: het verschil is altijd € 10,00
+ * bruto, en wat er overblijft hangt alleen nog af van wat de kaart zelf kost. */
+const GOEDKOOP = [marketCard("licht", "Testkaart Licht", "Lichtbank N.V.", 0, { value: 1, period: "maand" })];
+const TE_DUUR = [marketCard("zwaar", "Testkaart Zwaar", "Zwaarbank N.V.", 0, { value: 16.9, period: "maand" })];
+const JAARKAART = [marketCard("jaar", "Testkaart Jaar", "Jaarbank N.V.", 0, { value: 42.95, period: "jaar" })];
+const GEEN_PRIJS = [marketCard("stil", "Testkaart Stil", "Stilbank N.V.", 0, null)];
+
+test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto overblijft", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
+  expect(kosten).not.toBeNull();
+  // De prijs in de eenheid van de bron, en de periode waarover gerekend is —
+  // beide als eigen veld, niet als een getal om uit een zin te vissen.
+  expect(kosten.textContent).toContain(`${formatEuro(1)} per maand`);
+  expect(kosten.textContent).toContain("gerekend over 1 maand");
+
+  // € 10,00 opslagverschil min € 1,00 kaartkosten = € 9,00 netto, en de aftrek
+  // staat erbij zodat hij hem kan navolgen.
+  const netto = el.querySelector('[data-testid="travel-pay-kosten-netto"]')!;
+  expect(netto.textContent).toContain(formatEuro(9));
+  expect(netto.textContent).toContain(formatEuro(10));
+  expect(netto.textContent).toContain(formatEuro(1));
+});
+
+test("een kaart waarvan de prijs nergens staat komt BRUTO op het scherm, en het woord netto valt niet", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GEEN_PRIJS });
+  const winner = el.querySelector(".travel-winner")!;
+  // De kaart wordt niet verzwegen: het brutovoordeel staat er.
+  expect(winner.textContent).toContain("Testkaart Stil");
+  expect(winner.textContent).toContain(formatEuro(10));
+
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
+  expect(kosten.textContent).toContain("Kaartkosten: onbekend");
+  expect(kosten.textContent).toContain("staat niet in onze bronnen");
+  expect(kosten.textContent).toContain("geen nul");
+  expect(kosten.textContent).toContain("bruto");
+
+  // DE REGEL WAAR HET OM GAAT: onbekende kosten hebben geen netto, dus het woord
+  // mag in deze hele aanbeveling niet voorkomen.
+  expect(winner.textContent).not.toMatch(/netto/i);
+  expect(el.querySelector('[data-testid="travel-pay-kosten-netto"]')).toBeNull();
+});
+
+test("een kaart die meer kost dan hij oplevert wordt GEEN aanbeveling, en het scherm zegt waarom niet", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: TE_DUUR });
+  // Zijn eigen kaart blijft de aanbeveling: € 10,00 lagere opslag tegen € 16,90
+  // kaartkosten is achteruit, en core kiest daarom zijn eigen route.
+  const name = el.querySelector(".travel-winner-name")!.textContent ?? "";
+  expect(name).toContain("Revolut betaalpas");
+  expect(name).not.toContain("Testkaart Zwaar");
+
+  // En dat mag hij niet zelf hoeven uitrekenen: de kaart valt zichtbaar af.
+  const afgevallen = el.querySelector('[data-testid="travel-pay-afgevallen"]')!;
+  expect(afgevallen).not.toBeNull();
+  expect(afgevallen.textContent).toContain("Niet aangeraden");
+  expect(afgevallen.textContent).toContain("Testkaart Zwaar");
+  expect(afgevallen.textContent).toContain("0% tegen 1%");
+  expect(afgevallen.textContent).toContain(`${formatEuro(16.9)} per maand`);
+  expect(afgevallen.textContent).toContain(`${formatEuro(6.9)} duurder`);
+});
+
+test("een kaart die hij al heeft krijgt geen kostenregel — die maandprijs loopt toch door", () => {
+  // De standaardfeiten geven hem een route van 0%; dan wint zijn eigen kaart en
+  // is de kaartprijs geen gevolg van deze keuze. `holdingCost` is dan null en er
+  // hoort niets te staan: "kaartkosten € 0,00" zou suggereren dat de kaart gratis
+  // is in plaats van al betaald.
+  const el = renderWithDestination({ catalogue: GOEDKOOP });
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')).toBeNull();
+  expect(el.querySelector(".travel-winner")!.textContent).not.toMatch(/kaartkosten/i);
+});
+
+test("een jaarprijs blijft een jaarprijs — er wordt niet door twaalf gedeeld", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: JAARKAART });
+  const afgevallen = el.querySelector('[data-testid="travel-pay-afgevallen"]')!;
+  expect(afgevallen.textContent).toContain(`${formatEuro(42.95)} per jaar`);
+  expect(afgevallen.textContent).toContain("over 1 jaar");
+  // Je kunt geen twaalfde jaar kaart kopen, en dat staat er ook.
+  expect(afgevallen.textContent).toContain("per jaar afgerekend");
+  expect(afgevallen.textContent).toContain(`${formatEuro(32.95)} duurder`);
+  // € 42,95 / 12 = € 3,58 — het bedrag dat in geen enkel document staat.
+  expect(afgevallen.textContent).not.toContain("3,58");
+});
+
+test("de lijst met kaarten om te openen zegt per kaart wat ze zelf kost, en waarop de volgorde staat", () => {
+  const el = renderWithDestination({
+    facts: DEARER_OWN,
+    catalogue: [...GOEDKOOP, ...GEEN_PRIJS],
+  });
+  click(byText("button", "Waarom?"));
+  const offers = el.querySelector(".travel-offers")!;
+  expect(offers.textContent).toContain("De volgorde is wat een kaart je op deze reis kost");
+  // Een kaart zonder bekende prijs staat met alleen de opslag in de rangschikking;
+  // dat is een ondergrens en het scherm zegt het.
+  expect(offers.textContent).toContain("ondergrens");
+
+  const licht = el.querySelector('[data-testid="travel-offer-kosten-licht"]')!;
+  expect(licht.textContent).toContain(`${formatEuro(1)} per maand`);
+  const stil = el.querySelector('[data-testid="travel-offer-kosten-stil"]')!;
+  expect(stil.textContent).toContain("Kaartkosten: onbekend");
+  expect(stil.textContent).not.toMatch(/netto/i);
+});
+
+test("een te dure kaart in de lijst zegt per rij dat ze niets oplevert", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: TE_DUUR });
+  click(byText("button", "Waarom?"));
+  const geen = el.querySelector('[data-testid="travel-offer-kosten-zwaar-geen"]')!;
+  expect(geen).not.toBeNull();
+  expect(geen.textContent).toContain("Geen aanbeveling");
+  expect(geen.textContent).toContain(formatEuro(16.9));
+  expect(geen.textContent).toContain("achteruit");
+});
+
+test("de pinaanbeveling noemt de kaartprijs ook als er geen voordeel is om hem tegen af te zetten", () => {
+  // Een opnametarief van nul is geen gratis kaart: dit is een kaart die hij moet
+  // OPENEN, en die brengt zijn eigen maandnota mee. Van zijn eigen kaarten prijst
+  // geen bron een opname, dus er is niets om een voordeel tegen te meten — en dan
+  // hoort de prijs er nog steeds te staan, zonder het woord netto.
+  const el = renderWithDestination({
+    facts: DEARER_OWN,
+    catalogue: [marketCard("pin", "Testkaart Pin", "Pinbank N.V.", 0, { value: 2.55, period: "maand" },
+      "Geldopnames in vreemde valuta zijn gratis.")],
+  });
+  const kosten = el.querySelector('[data-testid="travel-pin-kosten"]')!;
+  expect(kosten).not.toBeNull();
+  expect(kosten.textContent).toContain(`${formatEuro(2.55)} per maand`);
+  expect(kosten.textContent).not.toMatch(/netto/i);
 });

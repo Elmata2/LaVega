@@ -23,6 +23,8 @@ import {
   cashbackSwitchGain,
   marketCashbackOptions,
   categorize,
+  holdingCostOfProduct,
+  netBenefit,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
@@ -416,6 +418,42 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   const costRows = costs.rows;
   const costTips = costRows.filter((r) => r.cheaperAtProvider || r.cheaperElsewhere);
   const costSources = costRows.filter((r) => r.cost.kind === "known");
+
+  /* ── WAT DE AANGERADEN CASHBACKKAART ZELF KOST ────────────────────────────
+   *
+   * De cashbackmodule rekende alleen aan de OPBRENGST: 2% tegen 1,5% op wat hij
+   * uitgeeft, en dan een bedrag per jaar. De helft die je niet ziet is degene die
+   * je pakt — een kaart die € 5 per maand kost en € 3 oplevert is achteruit, en
+   * dat stond hier nergens. `netBenefit` doet de aftrek.
+   *
+   * HIER IS GEEN HORIZON NODIG, en dat is geen slordigheid maar het verschil met
+   * het reisblok. Cashback is TERUGKEREND (elke maand opnieuw) en de kaartprijs
+   * ook, dus opbrengst en kosten staan al in dezelfde eenheid en gaan schoon van
+   * elkaar af. Bij een reis is het voordeel eenmalig en de prijs terugkerend, en
+   * dan moet er een periode bij — vandaar dat travel.ts wél een horizon meegeeft.
+   * `netBenefit` rekent de eenheid naar de GROFSTE van de twee (hier het jaar) en
+   * nooit naar de fijnste: van een jaarprijs een maandprijs maken is een bedrag
+   * verzinnen dat in geen enkel document staat.
+   *
+   * DE MATCH IS OP ID EN VERDER NIETS. `costs.fees` is de hele geprijsde markt uit
+   * dezelfde catalogus; staat de prijs van een kaart op de rij van het PAKKET
+   * waarin ze zit (zoals N26 Metal), dan vinden we hem hier niet en blijft het
+   * "onbekend". Dat is de veilige kant — er wordt nooit een verkeerde prijs
+   * geclaimd — maar het is wel minder dan travel.ts kan: die heeft een strikte
+   * pakketmatcher, en die staat daar privé. Zolang dat zo is hoort die kennis niet
+   * hier nagebouwd te worden; dan verlopen er twee kopieën apart. */
+  const cashbackNet = useMemo(() => {
+    if (cashbackUpgrade === null) return null;
+    // De prijs van de kaart die de vergelijking hierboven NOEMT, en niet die van
+    // de eerste rij van de ranglijst: dat zijn vandaag dezelfde kaart, maar als
+    // dat ooit uit elkaar loopt hoort de prijs bij de kaart in de zin te staan en
+    // niet bij een andere.
+    const fee = costs.fees.find((f) => f.productId === cashbackUpgrade.best.productId) ?? null;
+    return netBenefit({
+      benefit: { kind: "recurring", cents: cashbackUpgrade.extraPerYearCents, period: "jaar" },
+      cost: holdingCostOfProduct(fee),
+    });
+  }, [cashbackUpgrade, costs]);
 
   return (
     <>
@@ -859,7 +897,14 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           footer={<span>Percentages gelden op wat je uitgeeft, niet op je saldo.</span>}
         >
           {/* First, the cards he ALREADY holds — a switch he can make today
-              beats one that needs an application. */}
+              beats one that needs an application.
+
+              EN DAAROM STAAN HIER GEEN KAARTKOSTEN. Beide kaarten zijn van hem,
+              dus beide maandprijzen lopen door of hij overstapt of niet: voor
+              DEZE keuze zijn ze nul. Dat is dezelfde regel die core's
+              `marginalHoldingCost` in het reisblok toepast, en hier is er niets
+              te tonen in plaats van een nul om uit te leggen. Wat die rekeningen
+              wél kosten staat in de module "Wat je rekeningen kosten". */}
           {routing.map((a) => {
             const base = spendOf.get(a.from.key);
             return (
@@ -889,7 +934,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             );
           })}
 
-          {cashbackUpgrade && monthlyBaseCents !== null && bestHeldCashback !== null ? (
+          {cashbackUpgrade && cashbackNet && monthlyBaseCents !== null && bestHeldCashback !== null ? (
             <div className="reason-list" style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}>
               {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
                   NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
@@ -912,15 +957,85 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                 </span>
                 <span>{euro(Math.round((monthlyBaseCents * cashbackUpgrade.best.cashbackPct) / 100))} per maand</span>
               </div>
+              {/* HET VERSCHIL IS BRUTO, en dat staat er nu bij. Zonder dat woord
+                  las deze regel als wat je erop overhoudt, terwijl de kaart zelf
+                  ook geld kost: 2% tegen 1,5% levert € 163,92 per jaar op, en een
+                  kaart van € 16,90 per maand kost € 202,80. De aftrek staat in de
+                  twee regels hieronder, in deze volgorde: bruto, kosten, netto. */}
               <div className="position-row" data-testid="cashback-verschil">
                 <span>
-                  <strong>Verschil</strong> — wat dezelfde uitgaven daar extra opleveren
+                  <strong>Verschil</strong> — wat dezelfde uitgaven daar extra opleveren, vóór kaartkosten
                 </span>
                 <span className="text-pos">
                   {euro(Math.round(cashbackUpgrade.extraPerYearCents / 12))} per maand ·{" "}
                   {euro(cashbackUpgrade.extraPerYearCents)} per jaar
                 </span>
               </div>
+
+              {/* WAT DE KAART ZELF KOST, in de drie toestanden die er echt zijn.
+                  Onbekend is geen nul: een kaart waarvan geen bron de prijs noemt
+                  wordt niet stilzwijgend als gratis behandeld (dan wint hij elke
+                  vergelijking) en ook niet verzwegen (dan zie je hem nooit). In die
+                  tak valt het woord "netto" niet — er IS geen netto. */}
+              {cashbackNet.kind === "gross-cost-unknown" ? (
+                <p className="cell-sub" data-testid="cashback-kosten">
+                  <strong>Wat deze kaart zelf kost, weten we niet.</strong>{" "}
+                  {cashbackNet.cost.reason === "needs-another-product"
+                    ? "De prijs die onze bron noemt geldt bovenop een ander product, dus wat deze kaart los kost staat er niet."
+                    : "Geen van onze bronnen noemt een maand- of jaarprijs voor dit product."}{" "}
+                  Dat is geen nul, en het gaat van het bedrag hierboven af — daarom staat er bruto en geen ander
+                  woord. Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Wat je rekeningen
+                  kosten”.
+                </p>
+              ) : (
+                <>
+                  <div className="position-row" data-testid="cashback-kosten">
+                    <span>
+                      <strong>Wat de kaart zelf kost</strong> — {feeLabel(cashbackNet.cost.amount)}
+                      {/* De rekensom alleen als er iets te rekenen valt. "12 ×
+                          € 0,00" is waar en is ruis; een uitgesproken nul is al
+                          een compleet antwoord. */}
+                      {cashbackNet.cost.amount.perYearDerived && cashbackNet.cost.amount.cents > 0 && (
+                        <span className="cell-sub"> (12 × {euro(cashbackNet.cost.amount.cents)})</span>
+                      )}
+                    </span>
+                    <span className={cashbackNet.costCents > 0 ? "text-warn" : undefined}>
+                      {euro(cashbackNet.costCents)} per jaar
+                    </span>
+                  </div>
+                  {cashbackNet.kind === "net" ? (
+                    <div className="position-row" data-testid="cashback-netto">
+                      <span>
+                        <strong>Netto</strong> — wat er overblijft als die kosten eraf zijn
+                      </span>
+                      <span className="text-pos">
+                        {euro(Math.round(cashbackNet.netCents / 12))} per maand · {euro(cashbackNet.netCents)} per
+                        jaar
+                      </span>
+                    </div>
+                  ) : (
+                    /* GEEN AANBEVELING, en zichtbaar waarom niet. Zijn beslissing,
+                       en de reden dat het bedrag erbij staat: hij moet kunnen zien
+                       dat een kaart afvalt omdat hij te duur is, in plaats van het
+                       zelf te moeten uitrekenen. */
+                    <p className="reason" data-testid="cashback-geen">
+                      <strong>Geen aanbeveling.</strong> {euro(cashbackNet.grossCents)} per jaar meer cashback tegen{" "}
+                      {euro(cashbackNet.costCents)} per jaar kaartkosten:{" "}
+                      {cashbackNet.netCents === 0 ? (
+                        "dat levert niets op."
+                      ) : (
+                        <>
+                          je gaat er{" "}
+                          <span className="reason-figure text-warn">{euro(-cashbackNet.netCents)}</span> per jaar op
+                          achteruit.
+                        </>
+                      )}{" "}
+                      Overstappen kost werk en levert hier niets op, dus LaVega raadt deze kaart niet aan — de
+                      cijfers staan er zodat je het kunt nakijken.
+                    </p>
+                  )}
+                </>
+              )}
               {/* The base, and how it was measured, so the figure can be redone
                   against the same afschrift instead of taken on trust. Two
                   paragraphs: the number first, then what it does and does not

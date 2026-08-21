@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
+import type { RewardProgram, RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
 import {
   makeRewardsBalance, REWARD_PROGRAMS, rewardsTracked, trackingStatuses,
   applyRewardsReply, snoozeTracker, parseBalanceReply, norm,
@@ -40,20 +40,183 @@ export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): Reward
   return next;
 }
 
+/* ---------------------------------------------------------------------------
+ * ING PUNTEN — een programma met regels, zonder koers.
+ *
+ * Waarom dit hier staat en niet in REWARD_PROGRAMS (core): die lijst is deze run
+ * van een andere lane. Zodra core bijgewerkt kan worden hoort ING Punten daar
+ * thuis en mag EXTRA_PROGRAMS leeg. Let op: de bestaande core-regel
+ * { name: "ING", note: "ING NL heeft geen puntenprogramma" } is inmiddels
+ * WEERLEGD — zie het open punt in het slotverslag. Die note wordt nergens
+ * afgedrukt, dus hij staat niet op het scherm, maar hij staat wel fout in de
+ * data.
+ *
+ * Wat we van ING weten (bron: ING's eigen pagemodel-API achter
+ * ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten, opgehaald 21-08-2026,
+ * plus de Voorwaarden ING Punten geldig vanaf 01-10-2025 —
+ * docs/research/2026-08-20-punten-koersen.md):
+ *
+ *   - Er is GEEN koers per bestede euro. ING beloont drempels: "meer dan € 100
+ *     uitgeven" geeft 250 punten bij € 100 én bij € 4.000. Delen door de drempel
+ *     levert 2,5 punt per euro op — een koers die niet bestaat en die bij normaal
+ *     gebruik een factor 40 te hoog uitvalt. `pointsPerEuro` blijft dus leeg en
+ *     op het scherm staan de regels zelf, in ING's eigen woorden.
+ *   - Aan de inwisselkant zegt ING het zelf: "ING Punten hebben geen geldwaarde.
+ *     Je kan je ING Punten niet inwisselen voor geld." Dat is een UITGESPROKEN
+ *     nul, met bron en datum, en dus iets anders dan onbekend. Hij staat er als
+ *     nul: "in geld: niets".
+ *   - Wat een punt aan korting waard is in de ING Winkel is NIET openbaar (die
+ *     winkel zit achter Mijn ING). Dat is onbekend, en het staat er als onbekend.
+ *   - De Platinumcard staat niet in ING's tabel. Of die onder een van de regels
+ *     valt is niet vastgesteld: geen regel, en ook geen nul.
+ *
+ * Daarom komt er bij ING nergens een euro-bedrag op het scherm. De euro's die je
+ * hieronder ziet staan zijn ING's eigen DREMPELS (€ 700 instroom, € 100
+ * besteding) — een voorwaarde om punten te krijgen, geen waarde van een punt.
+ * De test in views/Punten.test.tsx pint dat verschil vast.
+ * ------------------------------------------------------------------------- */
+
+/** Eén verdienregel zoals de aanbieder hem publiceert: een voorwaarde en wat je
+ *  ervoor krijgt. Geen koers, geen omrekening. */
+export type EarnRule = { what: string; reward: string };
+
+export type ProgramFacts = {
+  /** Canonieke programmanaam; de rij-id is norm(name). */
+  program: string;
+  /** Wat je moet doen en wat je krijgt — letterlijk de tabel van de aanbieder. */
+  earn: readonly EarnRule[];
+  /** Opslag per pakket, in de bewoordingen van de aanbieder. */
+  packages: readonly string[];
+  /** Waarom er geen koers per euro staat. */
+  noRate: string;
+  /** De geldkant. `stated-none` = de aanbieder zegt zélf dat er geen geldwaarde
+   *  is; dat is een bekende nul, met bron en datum, en geen "onbekend". */
+  cash: { kind: "stated-none"; quote: string; source: string; validFrom: string };
+  /** Wat niet is vastgesteld, met de reden erbij. Nooit als nul opgeschreven. */
+  unknowns: readonly string[];
+  /** Voorbehoud van de aanbieder zelf. */
+  caveat: string;
+  /** Herkomst als tekst. Geen link en geen <a>: er valt niets op te halen. */
+  sources: readonly string[];
+};
+
+const ING_PUNTEN: ProgramFacts = {
+  program: "ING Punten",
+  earn: [
+    { what: "Elke maand minimaal € 700 bijschrijven op je Betaalrekening", reward: "250 punten per maand" },
+    { what: "10 transacties met je Betaalrekening", reward: "100 punten per maand" },
+    { what: "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max", reward: "250 punten per maand" },
+    { what: "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More", reward: "100 punten per maand" },
+    { what: "Rond af & Spaar actief gebruiken", reward: "100 punten per maand" },
+    { what: "Een hypotheek hebben", reward: "250 punten per maand" },
+    { what: "Je eerste Betaalrekening openen", reward: "2.500 punten, eenmalig" },
+    { what: "Je eerste Oranje Spaarrekening openen", reward: "500 punten, eenmalig" },
+    { what: "Je creditcard aan je wallet toevoegen", reward: "100 punten, eenmalig" },
+  ],
+  packages: [
+    "ING Go: het aantal hierboven",
+    "ING More: 10% meer punten",
+    "ING Extra: 20% meer punten",
+    "ING Max: 30% meer punten",
+  ],
+  noRate:
+    "Er is geen aantal punten per bestede euro. “Meer dan € 100 uitgeven” levert bij € 100 evenveel punten op als bij € 4.000: het is een drempel, geen tarief. Door die drempel delen zou een koers opleveren die niet bestaat, dus die staat hier niet.",
+  cash: {
+    kind: "stated-none",
+    quote: "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
+    source: "Voorwaarden ING Punten",
+    validFrom: "1 oktober 2025",
+  },
+  unknowns: [
+    "Wat een punt aan korting oplevert in de ING Winkel maakt ING niet openbaar. Dat cijfer is onbekend — niet nul.",
+    "De ING Platinumcard staat niet in ING's tabel. Of je daarmee punten spaart, is niet vastgesteld: er staat hierboven geen regel voor, en ook geen nul.",
+  ],
+  caveat: "ING schrijft erbij dat zij het aantal punten per bankzaak bepalen en kunnen wijzigen.",
+  sources: [
+    "ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten, opgehaald op 21 augustus 2026",
+    "Voorwaarden ING Punten, geldig vanaf 1 oktober 2025",
+  ],
+};
+
+/** Programma's die deze view kent en core (nog) niet. Zie de kop hierboven. */
+export const EXTRA_PROGRAMS: readonly RewardProgram[] = [{ name: ING_PUNTEN.program, category: "Bank" }];
+
+/** De keuzelijst: core eerst, daarna wat deze view zelf kent, zonder dubbele
+ *  namen. Zo blijft de bestaande lijst intact en komt ING Punten erbij. */
+export const ALL_PROGRAMS: readonly RewardProgram[] = [
+  ...REWARD_PROGRAMS,
+  ...EXTRA_PROGRAMS.filter((e) => !REWARD_PROGRAMS.some((r) => norm(r.name) === norm(e.name))),
+];
+
+/** De gepubliceerde regels van dit programma, of null als we ze niet hebben.
+ *  Matcht alleen op de canonieke naam: de losse core-regel "ING" kan iets anders
+ *  zijn (cashback, een actie), en daar de puntenregels bij zetten zou een claim
+ *  zijn over het verkeerde ding. */
+export function programFacts(program: string): ProgramFacts | null {
+  return norm(program) === norm(ING_PUNTEN.program) ? ING_PUNTEN : null;
+}
+
+/** De waarde-regel onder het saldo. Drie verschillende zinnen, omdat het drie
+ *  verschillende situaties zijn: euro's (het bedrag is de waarde), een bekende
+ *  nul aan de geldkant (de aanbieder zegt het zelf, met bron), en onbekend. */
+export function worthLine(program: string, unit: "eur" | "points"): string {
+  if (unit === "eur") {
+    return "Waarde: dit bedrag zelf — dit programma keert uit in euro's, er zit geen omrekening tussen.";
+  }
+  const facts = programFacts(program);
+  if (facts) {
+    return (
+      `In geld: niets. ${facts.cash.source} (geldig vanaf ${facts.cash.validFrom}): “${facts.cash.quote}”` +
+      " Wat één punt aan korting oplevert, is niet gepubliceerd: dat is onbekend en niet nul."
+    );
+  }
+  return "Waarde: niet vast te stellen zonder te weten waarvoor je ze inwisselt.";
+}
+
+/** De gepubliceerde regels, uitgeschreven. Alles wat hier een euroteken heeft is
+ *  een DREMPEL van de aanbieder; er staat nergens wat een punt waard is. */
+function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
+  return (
+    <div className="field-note punt-facts">
+      <p className="punt-facts-lead">
+        <strong>Zo spaar je {facts.program}.</strong> {facts.noRate}
+      </p>
+      <ul className="punt-facts-earn" style={{ margin: "0.5rem 0", paddingLeft: "1.1rem" }}>
+        {facts.earn.map((r) => (
+          <li key={r.what}>
+            {r.what}: {r.reward}
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: "0.5rem 0" }}>
+        Pakket: {facts.packages.join(" · ")}. {facts.caveat}
+      </p>
+      {facts.unknowns.map((u) => (
+        <p key={u} style={{ margin: "0.5rem 0" }}>
+          {u}
+        </p>
+      ))}
+      <p className="eyebrow" style={{ margin: "0.5rem 0 0" }}>
+        Bron: {facts.sources.join(" — ")}
+      </p>
+    </div>
+  );
+}
+
 /** What one unit of this programme IS. "eur" only for programmes the reference
  *  list documents as paying out in euros — then the balance is the value, with
  *  no rate and no conversion in between. Everything else is "points", which this
  *  screen refuses to price. An unknown programme name is points, never euros:
  *  guessing the other way would put a euro sign on a number that has none. */
 export function programUnit(program: string): "eur" | "points" {
-  const p = REWARD_PROGRAMS.find((r) => norm(r.name) === norm(program));
+  const p = ALL_PROGRAMS.find((r) => norm(r.name) === norm(program));
   return p && /cashback in euro/i.test(p.note ?? "") ? "eur" : "points";
 }
 
 /** The reference list's category ("Airline", "Hotel", …), or null for a
  *  programme the owner typed himself — we don't invent one for it. */
 export function programCategory(program: string): string | null {
-  return REWARD_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
+  return ALL_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
 }
 
 /** A programme id (a normalised name, so it carries spaces) turned into
@@ -137,6 +300,9 @@ export default function Punten({
   const rows = puntenRows(balances, asOf);
   const attention = rows.filter((r) => r.status.state === "due" || r.status.state === "overdue").length;
   const addUnit = programUnit(program);
+  // De regels van het programma waar dit formulier nú op gericht staat, zodat hij
+  // ze ziet vóórdat hij een getal opslaat en niet pas op de kaart erna.
+  const addFacts = programFacts(program);
   /* The row this form is currently aimed at, if it already exists. The id IS the
    * normalised programme name, so saving would write straight over that row —
    * and the field is pre-filled (with the first reference programme on a fresh
@@ -232,6 +398,7 @@ export default function Punten({
         <div className="punt-list">
           {rows.map(({ balance: b, status, unit }) => {
             const category = programCategory(b.program);
+            const facts = programFacts(b.program);
             const asking = ask && ask.id === b.id ? ask : null;
             return (
               <article className={`punt-card punt-${status.state}`} key={b.id}>
@@ -252,11 +419,8 @@ export default function Punten({
                 <p className="punt-asof">
                   Stand van {dateNL(b.updatedAt)} — {ageSentence(status)}
                 </p>
-                <p className="punt-worth">
-                  {unit === "eur"
-                    ? "Waarde: dit bedrag zelf — dit programma keert uit in euro's, er zit geen omrekening tussen."
-                    : "Waarde: niet vast te stellen zonder te weten waarvoor je ze inwisselt."}
-                </p>
+                <p className="punt-worth">{worthLine(b.program, unit)}</p>
+                {facts ? <ProgramFactsBlock facts={facts} /> : null}
 
                 {asking ? (
                   <div className="punt-ask">
@@ -353,7 +517,7 @@ export default function Punten({
               placeholder="bijv. Marriott Bonvoy"
               onChange={(e) => setProgram(e.target.value)} />
             <datalist id="reward-programs">
-              {REWARD_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
+              {ALL_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
             </datalist>
           </label>
           <label>
@@ -369,6 +533,17 @@ export default function Punten({
               onChange={(e) => setUpdatedAt(e.target.value)} />
           </label>
         </div>
+        {addFacts ? <ProgramFactsBlock facts={addFacts} /> : null}
+        {/* De keuzelijst kent ook een losse regel "ING", en die kan iets anders
+            zijn (een cashbackactie). Wie ING Punten bedoelt en "ING" kiest,
+            krijgt een rij zonder verdienregels. Deze wijzer kan hier wél werken:
+            de optie staat in dezelfde lijst, één veld hoger. */}
+        {norm(program) === "ing" ? (
+          <p className="field-note">
+            Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar staan de
+            verdienregels van ING bij. Wat “ING” zelf bijhoudt, weet LaVega niet.
+          </p>
+        ) : null}
         {existing ? (
           <p className="field-note punt-overwrite">
             <strong>{existing.program}</strong> staat al in de lijst:{" "}

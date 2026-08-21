@@ -1,53 +1,85 @@
-/* De wereldkaart in de Valuta-tab (components/WorldMap.tsx).
+/* De draaibare wereldbol in de Valuta-tab (components/Globe.tsx).
  *
- * GEEN ENKELE HEX-WAARDE HIER. Alle kaartkleuren zijn een menging van een
- * bestaand token met het oppervlak waarop de kaart ligt (color-mix tegen
- * --surface). Dat is niet netheid om de netheid: daardoor draait de kaart mee
- * met het thema zonder een tweede palet dat kan gaan afwijken — wordt --surface
- * donker, dan mengt "land" mee naar donker en blijft het verschil tussen zee,
- * land en gekozen land staan. Een eigen prefers-color-scheme-blok stond hier
- * eerst en dat was erger: de kaart sloeg om naar donker terwijl de rest van de
- * app licht bleef, want de app leest het systeemthema (nog) niet.
+ * De bestandsnaam is worldmap.css gebleven terwijl de platte kaart eruit is. Dat
+ * is geen vergeetachtigheid: main.tsx importeert de stijlbladen op naam, en een
+ * hernoeming is een regel in een bestand van een andere lane. Dit blad hoort bij
+ * de bol en bij niets anders.
  *
- * ÉÉN HUE VOOR "WIJ KUNNEN DIT PRIJZEN". Euro en "koers bekend" zijn twee
- * sterktes van --accent, "geen koers" is grijs (--muted). Zo leest de kaart als
- * dekking van ONS, niet als een uitspraak over het land — en de legenda zegt dat
- * ook zo ("geen koers bij LaVega", niet "geen valuta").
+ * GEEN ENKELE HEX-WAARDE HIER, en op een canvas is dat niet vanzelfsprekend. Een
+ * doek kan geen var(--token) lezen, dus de component moet de kleuren als tekst
+ * kennen. Dat gaat NIET via getComputedStyle op de custom property zelf: de
+ * berekende waarde daarvan is de tekst zoals hij hier staat — "color-mix(in srgb,
+ * var(--accent) 40%, …)", met de var() er nog ongereduceerd in — en daar maakt een
+ * canvas een lege vulling van. Daarom staat er in .lv-globe-inks per rol een
+ * spannetje van nul bij nul met `color:` op het token. `color` is een echte
+ * eigenschap, dus dáár komt een echte rgb() uit. Eén keer gelezen per doek.
  *
- * GEEN TRANSITION EN GEEN KEYFRAMES. Bewust: motion loopt in dit project via een
- * eigen laag, en een kaart die 236 vlakken tegelijk laat overvloeien is precies
- * het soort beweging dat daar een besluit hoort te zijn.
+ * DE ZEE IS GEBLEVEN WAT HIJ WAS (--surface-2) EN DE LANDEN ZIJN DONKERDER
+ * GEWORDEN. De platte kaart had euro op 20%, koers op 40% en "geen koers" op 20%
+ * grijs; die waren daar op een gerasterde kaart gemeten. Op een bol hield dat geen
+ * stand: op de eerste schermafdruk was Afrika bijna niet van de oceaan te
+ * onderscheiden. Nagerekend op de tokens is dat ook geen kwestie van smaak — grijs
+ * 20% op wit tegen --surface-2 is een contrast van 1,10, en dat is niets. Nu staat
+ * "geen koers" op 34% (contrast 1,34) en zijn euro, koers en hover meegeschoven
+ * naar 24 / 48 / 68% zodat de reeks van licht naar donker blijft lopen: hoe meer
+ * wij van een land weten, hoe steviger de kleur, met het gekozen land als --accent
+ * en dus het donkerst. Een blauwere oceaan is geprobeerd en weer weggehaald: dan
+ * botst de zee met de eurokleur, want dat is dezelfde hue. Dat een bol als bol
+ * leest komt van de rand en de graticule, niet van blauw water.
  *
- * De stroke per vlak is geen decoratie maar een reparatie: elk land is los
- * vereenvoudigd, dus tussen twee buurlanden staat een haarlijn van een fractie
- * van een eenheid. De stroke heeft dezelfde kleur als de vulling en dicht dat.
- * Daarom staat bij ELKE toestand fill én stroke — vergeet je de stroke, dan
- * springt het gekozen land terug naar de omtrek van zijn buur. */
+ * GEEN TRANSITION EN GEEN KEYFRAMES. Bewust: bewegen loopt in dit project via een
+ * eigen laag. Slepen is geen animatie — daar beweegt de vinger — maar een bol die
+ * ergens naartoe zweeft of een land dat invloeit, is dat wel. */
 
-.lv-map {
+.lv-globe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+
+  --lv-globe-sea: var(--surface-2);
+  --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
+  --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
+  --lv-globe-euro: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  --lv-globe-rate: color-mix(in srgb, var(--accent) 48%, var(--surface));
+  --lv-globe-norate: color-mix(in srgb, var(--muted) 34%, var(--surface));
+  --lv-globe-hover: color-mix(in srgb, var(--accent) 68%, var(--surface));
+  --lv-globe-selected: var(--accent);
+  --lv-globe-pin: var(--ink);
+}
+
+/* ---------- De opstelling: bol links, besturing rechts ---------- */
+
+/* De lijst staat NAAST de bol en niet eronder. Dat is geen smaak: een canvas is
+ * voor een schermlezer leeg, dus de lijst is de tweede volwaardige besturing en
+ * hoort niet onder de plooi te beginnen. Onder 760 px wordt het één kolom, met de
+ * bol eerst — daar is de bol het snelst en de lijst het volledigst. */
+.lv-globe-stage {
+  display: grid;
+  grid-template-columns: minmax(220px, 460px) minmax(240px, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .lv-globe-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lv-globe-figure,
+.lv-globe-side {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   min-width: 0;
-
-  --lv-map-sea: var(--surface-2);
-  /* De percentages zijn op een gerasterde kaart gemeten, niet gegokt. Bij euro
-   * 14% liep de eurozone visueel over in de zee (de zee is warm-wit, de tint
-   * bijna-wit) en dan lijkt West-Europa water; bij 20% leest het als land. Het
-   * verschil met "koers bekend" moet groter blijven dan het verschil met de zee,
-   * vandaar 20 tegen 40. */
-  --lv-map-euro: color-mix(in srgb, var(--accent) 20%, var(--surface));
-  --lv-map-rate: color-mix(in srgb, var(--accent) 40%, var(--surface));
-  --lv-map-norate: color-mix(in srgb, var(--muted) 20%, var(--surface));
-  --lv-map-hover: color-mix(in srgb, var(--accent) 58%, var(--surface));
-  --lv-map-selected: var(--accent);
 }
 
 /* ---------- De leesregel (naam + valutacode) ---------- */
 
-/* Vaste hoogte: de regel is leeg tot er iets aangewezen wordt, en de kaart mag
- * niet een paar pixels omhoog springen zodra de muis erover gaat. */
-.lv-map-readout {
+/* Vaste hoogte: de regel is leeg tot er iets aangewezen wordt, en de bol mag niet
+ * een paar pixels omhoog springen zodra de muis erover gaat. */
+.lv-globe-readout {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -56,76 +88,70 @@
   min-height: 1.5rem;
   font-size: 0.95rem;
 }
-.lv-map-readout-name {
+.lv-globe-readout-name {
   font-weight: 600;
   color: var(--ink);
 }
-.lv-map-readout-ccy {
+.lv-globe-readout-ccy {
   font-family: var(--font-mono);
   font-size: 0.8rem;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
-.lv-map-readout-empty {
+.lv-globe-readout-empty {
   color: var(--muted);
   font-size: 0.88rem;
 }
 
 /* ---------- Het doek ---------- */
 
-.lv-map-figure {
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--lv-map-sea);
-  overflow: hidden;
-}
-.lv-map-svg {
+/* `touch-action: none` is het verschil tussen een bol die draait en een pagina
+ * die scrollt. Zonder deze regel neemt de browser op een telefoon elke
+ * verticale veeg zelf en draait de bol alleen zijwaarts — en dat leek op een bug
+ * in de sleepwiskunde, niet op een ontbrekende CSS-regel.
+ *
+ * De maat komt uit de component (style width/height in px) omdat het aantal
+ * pixels in het doek en de maat op het scherm bij elkaar moeten horen. `max-width`
+ * staat er als vangnet voor het beeld tussen twee metingen in: liever een bol die
+ * een fractie kleiner staat dan een kolom die overloopt. */
+.lv-globe-canvas {
   display: block;
-  width: 100%;
-  height: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 50%;
+  touch-action: none;
+  cursor: grab;
 }
-.lv-map-sea {
-  fill: var(--lv-map-sea);
+.lv-globe-canvas[data-dragging="1"] {
+  cursor: grabbing;
+}
+.lv-globe-canvas:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
 }
 
-.lv-map-land {
-  fill: var(--lv-map-norate);
-  stroke: var(--lv-map-norate);
-  stroke-width: 0.3;
-  stroke-linejoin: round;
-  cursor: pointer;
+/* De kleuren van het doek, leesbaar gemaakt voor de component. Zie de kop. Geen
+ * display:none maar nul bij nul: zo staat buiten kijf dat de stijl echt berekend
+ * wordt. */
+.lv-globe-inks {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
-.lv-map-land[data-tone="euro"] {
-  fill: var(--lv-map-euro);
-  stroke: var(--lv-map-euro);
-}
-.lv-map-land[data-tone="rate"] {
-  fill: var(--lv-map-rate);
-  stroke: var(--lv-map-rate);
-}
-.lv-map-land:hover {
-  fill: var(--lv-map-hover);
-  stroke: var(--lv-map-hover);
-}
-/* Ná :hover, want het gekozen land blijft het gekozen land ook als de muis
- * ergens anders hangt. */
-.lv-map-land[data-selected="1"] {
-  fill: var(--lv-map-selected);
-  stroke: var(--lv-map-selected);
-}
-/* De focusring moet over de vulling heen leesbaar zijn, ook op het donkere
- * gekozen land: een dikke omtrek in --ink plus de eigen outline van de browser
- * voor wie hem al gewend is. */
-.lv-map-land:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-  stroke: var(--ink);
-  stroke-width: 1.4;
-}
+.lv-globe-inks [data-ink="sea"] { color: var(--lv-globe-sea); }
+.lv-globe-inks [data-ink="grid"] { color: var(--lv-globe-grid); }
+.lv-globe-inks [data-ink="rim"] { color: var(--lv-globe-rim); }
+.lv-globe-inks [data-ink="euro"] { color: var(--lv-globe-euro); }
+.lv-globe-inks [data-ink="rate"] { color: var(--lv-globe-rate); }
+.lv-globe-inks [data-ink="norate"] { color: var(--lv-globe-norate); }
+.lv-globe-inks [data-ink="hover"] { color: var(--lv-globe-hover); }
+.lv-globe-inks [data-ink="selected"] { color: var(--lv-globe-selected); }
+.lv-globe-inks [data-ink="pin"] { color: var(--lv-globe-pin); }
 
 /* ---------- Legenda ---------- */
 
-.lv-map-legend {
+.lv-globe-legend {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2) var(--sp-4);
@@ -135,31 +161,100 @@
   font-size: 0.78rem;
   color: var(--muted);
 }
-.lv-map-legend li {
+.lv-globe-legend li {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
 }
-.lv-map-swatch {
+.lv-globe-swatch {
   width: 11px;
   height: 11px;
   border-radius: 3px;
   border: 1px solid var(--line);
-  background: var(--lv-map-norate);
+  background: var(--lv-globe-norate);
 }
-.lv-map-swatch[data-tone="euro"] {
-  background: var(--lv-map-euro);
+.lv-globe-swatch[data-tone="euro"] {
+  background: var(--lv-globe-euro);
 }
-.lv-map-swatch[data-tone="rate"] {
-  background: var(--lv-map-rate);
+.lv-globe-swatch[data-tone="rate"] {
+  background: var(--lv-globe-rate);
 }
-.lv-map-swatch[data-selected="1"] {
-  background: var(--lv-map-selected);
+.lv-globe-swatch[data-tone="selected"] {
+  background: var(--lv-globe-selected);
+}
+
+/* ---------- Zoeken en de landenlijst ---------- */
+
+.lv-globe-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.lv-globe-search label {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
+ * altijd — ook met een leeg zoekveld, en dan staan alle 249 landen erin. Een
+ * lijst die pas iets laat zien als je het juiste woord al weet, helpt precies
+ * degene niet die de bol niet kan zien. Vandaar de vaste hoogte met eigen
+ * scroll: 249 regels mogen de pagina niet uitrekken. */
+.lv-globe-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-1);
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.lv-globe-results li[role="option"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.lv-globe-results li[role="option"]:hover {
+  border-color: var(--accent);
+}
+/* Waar de pijltjes staan. Een rand en niet alleen een achtergrond: op het gekozen
+ * land liggen die twee anders over elkaar en zie je niet meer welke van de twee
+ * je aanwijst. */
+.lv-globe-results li[data-active="1"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.lv-globe-results li[aria-selected="true"] {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.lv-globe-results .cell-sub {
+  margin-top: 0;
+  white-space: nowrap;
+}
+.lv-globe-results-empty {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 /* ---------- Het antwoord ---------- */
 
-.lv-map-answer {
+.lv-globe-answer {
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
@@ -168,19 +263,25 @@
   font-size: 0.9rem;
   line-height: 1.5;
 }
-.lv-map-answer p {
+.lv-globe-answer p {
   margin: 0 0 var(--sp-2);
 }
-.lv-map-answer p:last-child {
+.lv-globe-answer p:last-child {
   margin-bottom: 0;
 }
-.lv-map-answer-lead {
+.lv-globe-answer-lead {
   font-family: var(--font-display);
   font-size: 1.1rem;
   color: var(--ink);
 }
 
-.lv-map-choice {
+/* Een klik die geen land raakte. Niet rood: er is niets fout gegaan, er is alleen
+ * niets te kiezen op die plek. */
+.lv-globe-miss {
+  color: var(--muted);
+}
+
+.lv-globe-choice {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
@@ -188,60 +289,12 @@
   padding: 0;
   list-style: none;
 }
-.lv-map-choice .btn[aria-pressed="true"] {
+.lv-globe-choice .btn[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--ink);
 }
 
-/* ---------- Zoeken (en de enige route naar de 13 landen zonder vlak) ---------- */
-
-.lv-map-search {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.lv-map-search label {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.lv-map-results {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lv-map-results button {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  width: 100%;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.9rem;
-  text-align: left;
-  cursor: pointer;
-}
-.lv-map-results button:hover {
-  border-color: var(--accent);
-}
-.lv-map-results-empty {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-.lv-map-results .cell-sub {
-  margin-top: 0;
-}
-
-.lv-map-source {
+.lv-globe-source {
   margin: 0;
   color: var(--muted);
   font-size: 0.75rem;

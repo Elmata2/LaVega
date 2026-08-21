@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, CatalogueEntryLike, Tx } from "@lavega/core";
+import type { Account, CatalogueEntryLike, CatalogValue, Tx } from "@lavega/core";
 import { makeFact, ownAccounts, TRAVEL_AGENT } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 
@@ -229,4 +229,111 @@ test("the 212 Card is absent from the cashback ranking — proven 0% FX, no prov
   // data, not code — and this test fails the day someone invents the figure.
   const html = render({ entries: undefined }); // the real catalogue
   expect(html).not.toContain("212 Card");
+});
+
+/* ══════════════════ wat de kaart zelf kost, ook hier ════════════════════════
+ *
+ * De module rekende alleen aan de OPBRENGST: 2% tegen 1,5% op wat hij uitgeeft,
+ * en dan een bedrag per jaar. Een kaart die € 5 per maand kost en € 3 oplevert is
+ * achteruit, en dat stond er niet — de helft die je niet ziet is degene die je
+ * pakt.
+ *
+ * Cashback is TERUGKEREND en een kaartprijs ook, dus hier is geen horizon nodig:
+ * opbrengst en kosten staan al in dezelfde eenheid en gaan schoon van elkaar af.
+ * Dat is het verschil met het reisblok, waar een eenmalige winst tegen een
+ * doorlopende prijs staat en de periode er dus bij moet.
+ *
+ * De basis van alle bedragen hieronder: € 32.784,43 aan uitgaven per jaar, 2%
+ * tegen 1,5% = € 163,92 bruto per jaar.
+ */
+
+/** Hetzelfde aanbod, nu met een PRIJS op de kaart. De periode staat er expliciet
+ *  in; een bedrag zonder eenheid stilzwijgend maandelijks noemen scheelt een
+ *  factor twaalf. `CatalogValue` kent die periode niet — de kostenlane leest het
+ *  veld als `unknown` en valideert de eenheid zelf (`readPeriod`), en het echte
+ *  artefact draagt hem er net zo in. Vandaar de cast en niet een opgerekt type. */
+const withFee = (entry: CatalogueEntryLike, value: number, period: "maand" | "jaar"): CatalogueEntryLike => ({
+  ...entry,
+  fields: {
+    ...entry.fields,
+    accountFee: {
+      value, period, route: "provider-pdf", sourceUrl: "https://example.test/kosten",
+      checkedAt: "2026-08-01", conditions: null, conditionsKnown: true,
+    } as unknown as CatalogValue,
+  },
+});
+
+/** Eén regel uit de gerenderde HTML, op zijn testid. Faalt hard als de regel er
+ *  niet is, zodat een verdwenen regel de test breekt in plaats van een assertie
+ *  stil te laten slagen op tekst die elders op het scherm staat. */
+const row = (html: string, testid: string): string => {
+  const m = html.match(new RegExp(`data-testid="${testid}"[\\s\\S]*?</(?:div|p)>`));
+  if (!m) throw new Error(`geen regel met data-testid="${testid}"`);
+  return m[0];
+};
+
+const CARD = offer({ pct: 2, kind: "creditcard" });
+
+test("het brutoverschil heet bruto, zodra er kaartkosten naast kunnen staan", () => {
+  expect(render()).toContain("vóór kaartkosten");
+});
+
+test("een bekende maandprijs wordt verrekend, met de jaarprijs erbij en het nettobedrag eronder", () => {
+  const html = render({ entries: [withFee(CARD, 5, "maand")] });
+  // De prijs in de eenheid van de bron, en het jaarbedrag als ONZE rekensom
+  // gemarkeerd — zoals de kostentabel van deze view het ook doet.
+  expect(row(html, "cashback-kosten")).toContain("5,00 per maand");
+  expect(row(html, "cashback-kosten")).toContain("12 × ");
+  expect(row(html, "cashback-kosten")).toContain("60,00 per jaar");
+  // € 163,92 bruto min € 60,00 = € 103,92 per jaar, € 8,66 per maand.
+  const netto = row(html, "cashback-netto");
+  expect(netto).toContain("103,92");
+  expect(netto).toContain("8,66");
+  // En het brutobedrag blijft staan, zodat de aftrek te volgen is.
+  expect(html).toContain("163,92");
+});
+
+test("een jaarprijs blijft een jaarprijs — er wordt niet met twaalf vermenigvuldigd", () => {
+  const html = render({ entries: [withFee(CARD, 120, "jaar")] });
+  const kosten = row(html, "cashback-kosten");
+  expect(kosten).toContain("120,00 per jaar");
+  // Geen "12 ×": dit bedrag staat zo in het document.
+  expect(kosten).not.toContain("12 × ");
+  // 12 × € 120,00 = € 1.440,00 — het bedrag dat eruit komt als de eenheid wordt
+  // genegeerd, en dat hier nergens mag staan.
+  expect(html).not.toContain("1.440,00");
+  expect(row(html, "cashback-netto")).toContain("43,92");
+});
+
+test("een kaart die meer kost dan hij oplevert is GEEN aanbeveling, en het scherm zegt met hoeveel", () => {
+  const html = render({ entries: [withFee(CARD, 16.9, "maand")] });
+  const geen = row(html, "cashback-geen");
+  expect(geen).toContain("Geen aanbeveling");
+  expect(geen).toContain("163,92"); // bruto
+  expect(geen).toContain("202,80"); // 12 × € 16,90 kaartkosten
+  expect(geen).toContain("38,88"); // wat je erop achteruit gaat
+  expect(geen).toContain("achteruit");
+  // Er is geen netto om te tonen, dus er staat ook geen nettoregel.
+  expect(html).not.toContain('data-testid="cashback-netto"');
+});
+
+test("een onbekende kaartprijs is geen nul, en het woord netto valt daar niet", () => {
+  // De echte catalogus is dit geval: van geen enkele kaart met een aantoonbare
+  // cashback noemt een bron een maand- of jaarprijs (augustus 2026).
+  const html = render();
+  const kosten = row(html, "cashback-kosten");
+  expect(kosten).toContain("Wat deze kaart zelf kost, weten we niet");
+  expect(kosten).toContain("geen nul");
+  expect(html).not.toContain('data-testid="cashback-netto"');
+  // Het brutobedrag blijft wel staan: de kaart wordt niet verzwegen.
+  expect(html).toContain("163,92");
+});
+
+test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () => {
+  // De keerzijde van "onbekend is geen nul": zegt de bron letterlijk € 0,00, dan
+  // is dat een gemeten feit en scheelt het hem de vraag of we het niet weten.
+  const html = render({ entries: [withFee(CARD, 0, "maand")] });
+  expect(row(html, "cashback-kosten")).toContain("0,00 per maand");
+  expect(row(html, "cashback-netto")).toContain("163,92");
+  expect(html).not.toContain("weten we niet");
 });
