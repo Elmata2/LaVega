@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
-import type { InvestingDashboardData } from "@lavega/core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { buildIndexedSeries, type InvestingDashboardData, type InvestingPositionDetail } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { Button } from "./components/ui/button";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
+import { NetWorthChart } from "./components/NetWorthChart";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
@@ -16,9 +17,10 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
 
 type Health = { ok: boolean; service: string };
 type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
+type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
 type DashboardState =
   | { status: "loading" }
-  | { status: "ready"; data: InvestingDashboardData }
+  | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
   | { status: "error"; message: string };
 
 function isDashboardData(value: unknown): value is InvestingDashboardData {
@@ -27,6 +29,9 @@ function isDashboardData(value: unknown): value is InvestingDashboardData {
   return typeof data.presentationCurrency === "string"
     && Boolean(data.portfolio && typeof data.portfolio === "object")
     && Boolean(data.allocation && typeof data.allocation === "object")
+    && typeof data.dataVersion === "number"
+    && (data.benchmarks === undefined || Array.isArray(data.benchmarks))
+    && Array.isArray(data.externalCashFlows)
     && Array.isArray(data.positions)
     && Array.isArray(data.problems)
     && (data.position === null || (Boolean(data.position) && typeof data.position === "object"));
@@ -46,10 +51,14 @@ function useDashboard(symbol?: string): DashboardState {
   useEffect(() => {
     let current = true;
     const load = () => {
-      setState({ status: "loading" });
+      setState((previous) => previous.status === "ready" ? previous : { status: "loading" });
       void fetchDashboard(symbol)
         .then((data) => { if (current) setState({ status: "ready", data }); })
-        .catch((reason: unknown) => { if (current) setState({ status: "error", message: reason instanceof Error ? reason.message : "Dashboard laden mislukt" }); });
+        .catch((reason: unknown) => {
+          if (!current) return;
+          const message = reason instanceof Error ? reason.message : "Dashboard laden mislukt";
+          setState((previous) => previous.status === "ready" ? { ...previous, refreshError: message } : { status: "error", message });
+        });
     };
     load();
     window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
@@ -71,39 +80,183 @@ function DashboardProblems({ problems }: { problems: string[] }) {
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Leesproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
 
-function PositionList({ positions }: { positions: InvestingDashboardData["positions"] }) {
+type PositionSort = "instrument" | "value" | "weight" | "return";
+type SortDirection = "asc" | "desc";
+
+const POSITION_SORTS: Array<{ key: PositionSort; label: string }> = [
+  { key: "instrument", label: "Instrument" },
+  { key: "value", label: "Waarde" },
+  { key: "weight", label: "% portefeuille" },
+  { key: "return", label: "Totaal rendement" },
+];
+
+function numericCompare(left: number | null, right: number | null, direction: SortDirection): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  return (left - right) * (direction === "asc" ? 1 : -1);
+}
+
+function PositionList({ positions, currency }: { positions: InvestingDashboardData["positions"]; currency: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSort = searchParams.get("sort");
+  const sort: PositionSort = POSITION_SORTS.some(({ key }) => key === requestedSort) ? requestedSort as PositionSort : "value";
+  const direction: SortDirection = searchParams.get("direction") === "asc" ? "asc" : "desc";
   if (positions.length === 0) return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />;
-  return <div className="space-y-5"><ul aria-label="Posities" className="divide-y divide-border rounded-card border border-border"><li className="grid grid-cols-[1fr_auto] gap-4 bg-secondary/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Positie</span><span>Hoeveelheid</span></li>{positions.map((position) => <li key={`${position.symbol}-${position.entity}`} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4"><Link to={`/positions/${encodeURIComponent(position.symbol)}`} className="min-w-0 font-semibold text-primary hover:underline"><span className="block truncate">{position.description ?? position.symbol}</span><span className="block text-xs font-normal text-muted-foreground">{position.symbol} · {position.entity}</span></Link><span className="text-right text-sm tabular-nums">{position.quantity} {position.currency}</span></li>)}</ul></div>;
+  const sorted = [...positions].sort((left, right) => {
+    if (sort === "instrument") {
+      const result = `${left.description ?? left.symbol}\u0000${left.entity}`.localeCompare(`${right.description ?? right.symbol}\u0000${right.entity}`, "nl");
+      return result * (direction === "asc" ? 1 : -1);
+    }
+    if (sort === "value") return numericCompare(left.marketValue, right.marketValue, direction);
+    if (sort === "weight") return numericCompare(left.portfolioWeight, right.portfolioWeight, direction);
+    return numericCompare(left.returns.totalReturn, right.returns.totalReturn, direction);
+  });
+  const money = (value: number) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2, signDisplay: "always" });
+  const percent = (value: number) => value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  function changeSort(next: PositionSort) {
+    const nextDirection: SortDirection = sort === next ? direction === "desc" ? "asc" : "desc" : next === "instrument" ? "asc" : "desc";
+    setSearchParams({ sort: next, direction: nextDirection });
+  }
+  const query = searchParams.toString();
+  return <div className="overflow-x-auto rounded-card border border-border" role="table" aria-label="Posities">
+    <div className="min-w-[760px]">
+      <div role="row" className="grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] bg-secondary/30 px-5 py-3">
+        {POSITION_SORTS.map((column, index) => <div role="columnheader" aria-sort={sort === column.key ? direction === "asc" ? "ascending" : "descending" : "none"} key={column.key} className={index === 0 ? "text-left" : "text-right"}><button type="button" onClick={() => changeSort(column.key)} className="rounded-sm text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{column.label}{sort === column.key ? direction === "asc" ? " ↑" : " ↓" : ""}</button></div>)}
+      </div>
+      <div role="rowgroup" className="divide-y divide-border">
+        {sorted.map((position) => <Link role="row" key={`${position.symbol}-${position.entity}`} to={{ pathname: `/positions/${encodeURIComponent(position.symbol)}`, search: query ? `?${query}` : "" }} className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-none hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+          <div role="cell" className="min-w-0 pr-4"><span className="block truncate font-semibold text-primary">{position.description ?? position.symbol}</span><span className="block truncate text-xs text-muted-foreground">{position.symbol} · {position.entity} · {position.quantity.toLocaleString("nl-NL")} {position.currency}</span></div>
+          <div role="cell" className="text-right text-sm tabular-nums">{position.marketValue === null ? <span className="text-muted-foreground">{position.priceStatus === "missing-fx" ? "FX-koers ontbreekt" : "Waarde onbekend"}</span> : <><span className="font-semibold">{money(position.marketValue).replace(/^\+/, "")}</span>{position.priceStatus === "forward-filled" && <span className="block text-xs text-warning">Geschatte koers</span>}</>}</div>
+          <div role="cell" className="text-right text-sm tabular-nums">{position.portfolioWeight === null ? <span className="text-muted-foreground">Niet beschikbaar</span> : percent(position.portfolioWeight).replace(/^\+/, "")}</div>
+          <div role="cell" className="pl-4 text-right text-sm tabular-nums">{position.returns.status === "available" && position.returns.totalReturn !== null ? <><span className={position.returns.totalReturn >= 0 ? "font-semibold text-positive" : "font-semibold text-negative"}>{money(position.returns.totalReturn)}{position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}</span><span className="block text-xs text-muted-foreground">totaal rendement</span></> : <><span className="font-medium text-muted-foreground">{position.returns.status === "missing-fx" ? "FX-koers ontbreekt" : "Rendement niet beschikbaar"}</span>{position.returns.status === "missing-cost" && <span className="block text-xs leading-5 text-muted-foreground">Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.</span>}</>}</div>
+        </Link>)}
+      </div>
+    </div>
+  </div>;
+}
+
+function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
+  const points = data.portfolio.All;
+  const latest = points.at(-1);
+  const previous = points.at(-2);
+  const dailyChange = latest?.value !== null && latest?.value !== undefined && previous?.value !== null && previous?.value !== undefined
+    ? latest.value - previous.value
+    : null;
+  const dailyChangePercentage = dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
+  const totalReturn = buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
+  const money = (value: number | null, signDisplay: "auto" | "always" = "auto") => value === null
+    ? "Waarde onbekend"
+    : value.toLocaleString("nl-NL", { style: "currency", currency: data.presentationCurrency, maximumFractionDigits: 2, signDisplay });
+  const percentage = (value: number | null) => value === null ? "Rendement onbekend" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 2, signDisplay: "always" });
+  return <section aria-label="Portefeuille-KPI's" className="rounded-card border border-border bg-card p-5 shadow-soft" data-dashboard-section="kpis">
+    <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Kerncijfers</p>
+    <dl className="mt-4 space-y-4">
+      <div><dt className="text-xs text-muted-foreground">Portefeuillewaarde</dt><dd className={`mt-1 font-display text-3xl font-semibold tabular-nums ${latest?.value === null || latest?.value === undefined ? "text-muted-foreground" : ""}`}>{money(latest?.value ?? null)}</dd></div>
+      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Dagmutatie</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(dailyChange, "always")}</dd><dd className="text-xs text-muted-foreground">{percentage(dailyChangePercentage)}</dd></div>
+      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{percentage(totalReturn)}</dd><dd className="text-xs text-muted-foreground">TWR na stortingen en opnames</dd></div>
+    </dl>
+    {latest && latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
+    {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"><p className="font-semibold">Waarde deels onbekend</p>{latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}{latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}</div>}
+  </section>;
+}
+
+type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
+
+function StatusChip({ label, value, detail, tone = "neutral", children }: { label: string; value: string; detail?: string; tone?: StatusTone; children?: React.ReactNode }) {
+  const toneClass = tone === "problem" ? "border-negative/30 bg-negative/5" : tone === "warning" ? "border-warning/30 bg-warning/10" : tone === "success" ? "border-positive/30 bg-positive/5" : tone === "active" ? "border-primary/20 bg-secondary/40" : "border-border bg-secondary/20";
+  const dotClass = tone === "problem" ? "bg-negative" : tone === "warning" ? "bg-warning" : tone === "success" ? "bg-positive" : tone === "active" ? "bg-primary" : "bg-muted-foreground";
+  return <div className={`rounded-[14px] border px-3 py-2.5 ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-2 text-xs font-semibold"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />{label}</span><span className="text-xs font-semibold">{value}</span></div>{detail && <p className="mt-1 truncate pl-4 text-[11px] text-muted-foreground">{detail}</p>}{children}</div>;
+}
+
+function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
+  const [broker, setBroker] = useState<BrokerProgress | null>(null);
+  const [price, setPrice] = useState<PriceProgress | null>(null);
+  const [vault, setVault] = useState<"empty" | "locked" | "unlocked" | "unknown">("unknown");
+  const refreshedPriceRun = useRef<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    const load = async () => {
+      const [brokerResult, priceResult, vaultResult] = await Promise.allSettled([
+        fetch("/api/brokers/sync/status").then(async (response) => response.ok ? await response.json() as BrokerProgress : null),
+        fetch("/api/prices/sync/status").then(async (response) => response.ok ? await response.json() as PriceProgress : null),
+        fetch("/api/brokers/credentials/status").then(async (response) => response.ok ? await response.json() as { status?: string } : null),
+      ]);
+      if (!current) return;
+      if (brokerResult.status === "fulfilled" && brokerResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)) setBroker(brokerResult.value);
+      if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(priceResult.value.status)) {
+        setPrice(priceResult.value);
+        if ((priceResult.value.status === "completed" || priceResult.value.status === "problem") && priceResult.value.updatedAt && refreshedPriceRun.current !== priceResult.value.updatedAt) {
+          refreshedPriceRun.current = priceResult.value.updatedAt;
+          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        }
+      }
+      if (vaultResult.status === "fulfilled" && ["empty", "locked", "unlocked"].includes(vaultResult.value?.status ?? "")) setVault(vaultResult.value!.status as "empty" | "locked" | "unlocked");
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 1_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, []);
+  const brokerValue = broker?.status === "running" ? "Bezig" : broker?.status === "waiting" ? "Wachten" : broker?.status === "completed" ? "Actueel" : broker?.status === "problem" ? "Probleem" : broker?.status === "idle" ? "Gereed" : "Onbekend";
+  const priceValue = price?.status === "running" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
+  const statusTone = (status?: BrokerProgress["status"]): StatusTone => status === "problem" ? "problem" : status === "waiting" ? "warning" : status === "running" ? "active" : status === "completed" ? "success" : "neutral";
+  return <section aria-label="Operationele status" className="rounded-card border border-border bg-card p-4 shadow-soft" data-dashboard-section="status">
+    <p className="mb-3 text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Status</p>
+    <div className="space-y-2" aria-live="polite">
+      <StatusChip label="Brokers" value={brokerValue} tone={statusTone(broker?.status)} detail={broker?.status === "waiting" ? broker.message ?? "API-capaciteit wordt afgewacht" : broker?.status === "problem" ? broker.message ?? "Gecachete gegevens blijven zichtbaar" : undefined} />
+      <StatusChip label="Prijsgeschiedenis" value={priceValue} tone={statusTone(price?.status)} detail={price?.status === "running" ? price.currentSymbol ? `${price.currentSymbol} wordt geladen` : `${price.remainingSymbols.length} symbolen resterend` : price?.status === "problem" ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar` : undefined} />
+      <StatusChip label="Kluis" value={vault === "unlocked" ? "Open" : vault === "locked" ? "Vergrendeld" : vault === "empty" ? "Niet ingesteld" : "Onbekend"} tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"} />
+      <StatusChip label="Cache" value={`Versie ${dataVersion}`} tone={dataVersion > 0 ? "success" : "neutral"}><div className="mt-2 flex justify-end"><ClearPriceCache /></div></StatusChip>
+    </div>
+  </section>;
 }
 
 function AppOpenSync() {
   const [problems, setProblems] = useState<string[]>([]);
+  const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
+  const [consentBusy, setConsentBusy] = useState(false);
+  const runSync = useCallback(async (current: () => boolean) => {
+    try {
+      const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
+      const brokerResult = await brokerResponse.json() as { problems?: string[] };
+      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+      if (current()) setProblems([...(brokerResult.problems ?? [])]);
+    } catch { if (current()) setProblems(["Brokersynchronisatie mislukt."]); }
+  }, []);
   useEffect(() => {
     let current = true;
-    const run = async () => {
+    const prepare = async () => {
       try {
-        const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
-        const brokerResult = await brokerResponse.json() as { problems?: string[] };
-        const nextProblems = [...(brokerResult.problems ?? [])];
-        const dashboard = await fetchDashboard();
-          type PriceSyncSymbol = { symbol: string; currency: string; isin?: string; ticker?: string; exchange?: string; backfillFrom?: string };
-          const symbols: PriceSyncSymbol[] = dashboard.positions
-            .map((position) => position.isin
-              ? { symbol: position.symbol, isin: position.isin, currency: position.currency, backfillFrom: position.asOf }
-              : { symbol: position.symbol, ticker: position.symbol, exchange: "UNKNOWN", currency: position.currency, backfillFrom: position.asOf });
-          symbols.push({ symbol: "SP500", ticker: "^GSPC", exchange: "NASDAQ", currency: "EUR", backfillFrom: "2000-01-01" });
-          const priceResponse = await fetch("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols }) });
-          if (priceResponse.ok) {
-            const priceResult = await priceResponse.json() as { problems?: string[] };
-            nextProblems.push(...(priceResult.problems ?? []));
-            window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-          }
-        if (current) setProblems(nextProblems);
-      } catch { if (current) setProblems(["Brokersynchronisatie mislukt."]); }
+        const response = await fetch("/api/market-data/consent");
+        const decision = await response.json() as { accepted?: boolean };
+        if (!response.ok) throw new Error("Toestemming kon niet worden gelezen.");
+        if (!current) return;
+        if (!decision.accepted) { setConsent("required"); return; }
+        setConsent("accepted");
+        await runSync(() => current);
+      } catch (error) {
+        if (current) setProblems([error instanceof Error ? error.message : "Toestemming kon niet worden gelezen."]);
+      }
     };
-    void run();
+    void prepare();
     return () => { current = false; };
-  }, []);
+  }, [runSync]);
+  async function acceptYahoo() {
+    setConsentBusy(true); setProblems([]);
+    try {
+      const response = await fetch("/api/market-data/consent", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
+      if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
+      setConsent("accepted");
+      await runSync(() => true);
+    } catch (error) { setProblems([error instanceof Error ? error.message : "Toestemming opslaan mislukt."]); }
+    finally { setConsentBusy(false); }
+  }
+  if (consent === "required") return <section aria-labelledby="yahoo-consent-title" className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm">
+    <h3 id="yahoo-consent-title" className="font-semibold">Yahoo Finance-toestemming</h3>
+    <p className="mt-2 leading-6 text-muted-foreground">LaVega stuurt tickers en zoektermen naar Yahoo Finance om koershistorie en benchmarks op te halen. Keuze blijft lokaal bewaard. Zonder toestemming blijven gecachete gegevens zichtbaar.</p>
+    <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>{consentBusy ? "Opslaan…" : "Yahoo Finance toestaan"}</Button>
+    {problems.length > 0 && <p role="alert" className="mt-3 text-negative">{problems[0]}</p>}
+  </section>;
+  if (consent === "checking" && problems.length === 0) return <div role="status" className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground">Marktdata-toestemming controleren…</div>;
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
@@ -326,8 +479,8 @@ function BrokerConnect() {
         name="Interactive Brokers"
         eyebrow="IBKR"
         description="Gebruik IBKR Flex Web Service. Dit werkt met dagelijks bijgewerkte rapporten, zonder lokale gateway of browser-login."
-        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions en Trades"]}
-        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions en Trades.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
+        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions, Trades, Cash Report en Statement of Funds"]}
+        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions, Trades, Cash Report en Statement of Funds.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
       />
       <BrokerSetupCard
         name="Trading 212"
@@ -362,21 +515,60 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><BrokerSyncProgressCard /><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div><PositionList positions={state.data.positions} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {
   const state = useDashboard();
   if (state.status === "loading") return <DashboardLoading />;
   if (state.status === "error") return <DashboardError message={state.message} />;
-  return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} /></>;
+  return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>;
+}
+
+const detailDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+
+function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
+  const [quantityOpen, setQuantityOpen] = useState(false);
+  const money = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "currency", currency: position.currency, maximumFractionDigits: 2, signDisplay: "always" });
+  const percent = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  const available = position.returnStatus === "available";
+  return <section aria-labelledby="position-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{position.status === "closed" ? "Gesloten positie" : "Open positie"}</p><h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">{position.description ?? position.symbol}</h3><p className="mt-1 text-sm text-muted-foreground">{position.symbol} · bedragen in {position.currency}</p></div><span className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${position.status === "closed" ? "bg-secondary text-muted-foreground" : "bg-positive/10 text-positive"}`}>{position.status === "closed" ? "Gesloten" : "Open"}</span></div>
+    <dl className={`mt-6 grid gap-3 ${position.status === "closed" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Huidige waarde</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(position.currentValue).replace(/^\+/, "")}</dd></div>}
+      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Dagverandering</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(position.dailyChange)}{position.dailyChangePercentage === null ? "" : ` (${percent(position.dailyChangePercentage)})`}</dd></div>}
+      <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${!available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{available ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}` : "Niet beschikbaar"}</dd></div>
+      {position.status === "closed" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Eindstatus</dt><dd className="mt-1 text-xl font-semibold">0 stuks · gesloten</dd></div>}
+    </dl>
+    {!available && <p role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm">{position.returnStatus === "missing-fx" ? "FX-koers ontbreekt. Rendement kan niet worden berekend." : "Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen."}</p>}
+    <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div><dt className="text-muted-foreground">Aantal</dt><dd className="mt-1 font-semibold tabular-nums">{position.quantity.toLocaleString("nl-NL")}</dd><button type="button" aria-expanded={quantityOpen} aria-controls="quantity-history" onClick={() => setQuantityOpen((open) => !open)} className="pressable mt-1 rounded-sm text-xs font-semibold text-primary underline-offset-2 hover:underline">{quantityOpen ? "Historie verbergen" : "Aantalhistorie tonen"}</button></div>
+      {position.status === "open" && <><div><dt className="text-muted-foreground">Gemiddelde kostprijs</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.averageCost).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Huidige koers</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.currentPrice).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Ongerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.unrealizedGain)}{position.returns.remainingCostBasis && position.returns.unrealizedGain !== null ? ` (${percent(position.returns.unrealizedGain / position.returns.remainingCostBasis)})` : ""}</dd></div></>}
+      <div><dt className="text-muted-foreground">Gerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.realizedGain)}</dd></div><div><dt className="text-muted-foreground">Dividend ontvangen</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.dividendsReceived)}</dd></div><div><dt className="text-muted-foreground">Eerste aankoop</dt><dd className="mt-1 font-semibold">{position.firstBuyDate ? detailDate(position.firstBuyDate) : "Niet beschikbaar"}</dd></div>
+    </dl>
+    {position.firstBuyDate && <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">Sinds eerste aankoop: <strong className={position.returns.sinceFirstBuyPercentage === null ? "text-muted-foreground" : position.returns.sinceFirstBuyPercentage >= 0 ? "text-positive" : "text-negative"}>{percent(position.returns.sinceFirstBuyPercentage)}</strong> vanaf {position.firstBuyDate}</p>}
+    {quantityOpen && <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">{position.quantityHistory.length === 0 ? <li className="text-muted-foreground">Geen volledige aantalhistorie beschikbaar.</li> : position.quantityHistory.map((change) => <li key={`${change.date}-${change.sourceOrder}`} className="flex flex-wrap justify-between gap-2"><span>{detailDate(change.date)} · {change.reason === "buy" ? "Koop" : "Verkoop"}</span><span className="font-semibold tabular-nums">{change.delta > 0 ? "+" : ""}{change.delta.toLocaleString("nl-NL")} → {change.quantity.toLocaleString("nl-NL")}</span></li>)}</ol>}
+  </section>;
+}
+
+function PositionActivityTable({ position }: { position: InvestingPositionDetail }) {
+  const dates = [...new Set(position.activity.map((item) => item.date))];
+  const number = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString("nl-NL", { maximumFractionDigits: 4 });
+  return <section aria-labelledby="activity-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"><h3 id="activity-title" className="font-display text-2xl font-semibold">Activiteit</h3>{dates.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Geen transactie- of dividendhistorie beschikbaar.</p> : <div className="mt-4 overflow-x-auto"><div role="table" aria-label="Positieactiviteit" className="min-w-[760px] text-sm"><div role="row" className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] border-b border-border pb-2 text-xs font-semibold text-muted-foreground"><span>Datum</span><span>Type</span><span className="text-right">Aantal</span><span className="text-right">Koers</span><span className="text-right">Bedrag</span><span className="text-right">Commissie</span><span className="text-right">Valuta</span></div>{dates.map((date) => <div key={date} id={`activity-${date}`} tabIndex={-1} className="scroll-mt-4 border-b border-border/70 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring">{position.activity.filter((item) => item.date === date).map((item) => <div role="row" key={`${item.kind}-${item.sourceOrder}`} className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] py-1.5 tabular-nums"><span>{detailDate(date)}</span><span className="font-semibold">{item.kind === "buy" ? "Koop" : item.kind === "sell" ? "Verkoop" : "Dividend"}</span><span className="text-right">{number(item.quantity)}</span><span className="text-right">{number(item.executionPrice)}</span><span className="text-right">{number(item.amount)}</span><span className="text-right">{number(item.commission)}</span><span className="text-right">{item.currency}</span></div>)}</div>)}</div></div>}</section>;
+}
+
+function CompletePositionDetail({ position }: { position: InvestingPositionDetail }) {
+  const activate = (date: string) => { const row = document.getElementById(`activity-${date}`); row?.scrollIntoView?.({ block: "nearest" }); row?.focus(); };
+  return <><PositionDetailSummary position={position} /><PositionPriceChart symbol={position.symbol} currency={position.priceCurrency} points={position.points} onMarkerActivate={activate} /><PositionActivityTable position={position} /></>;
 }
 
 function PositionDetail() {
   const { symbol } = useParams<{ symbol: string }>();
+  const [searchParams] = useSearchParams();
   const positionSymbol = symbol?.trim().toUpperCase() ?? "";
   const state = useDashboard(positionSymbol || undefined);
-  return <div className="space-y-5"><Link to="/positions" className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><PositionPriceChart symbol={state.data.position.symbol} currency={state.data.position.currency} points={state.data.position.points} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
+  const query = searchParams.toString();
+  return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><CompletePositionDetail position={state.data.position} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
 }
 
 export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Routes>; }

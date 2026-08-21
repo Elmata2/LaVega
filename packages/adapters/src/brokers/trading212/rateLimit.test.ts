@@ -103,6 +103,12 @@ function fakeTrading212(totalOrders = TOTAL_ORDERS): { fetch: typeof globalThis.
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     requests.push(`${url.pathname}${url.search}`);
+    if (url.pathname.endsWith("/account/summary")) {
+      return new Response(JSON.stringify({ currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname.endsWith("/history/transactions") || url.pathname.endsWith("/history/dividends")) {
+      return new Response(JSON.stringify({ items: [], nextPagePath: null }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     const name = url.pathname.endsWith("/positions") ? "positions" : "orders";
     const bucket = buckets.get(name)!;
     if (Date.now() - bucket.start >= bucket.periodMs) {

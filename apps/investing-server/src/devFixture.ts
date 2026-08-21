@@ -38,7 +38,7 @@ function trade(id: string, now: Date, daysAgoCount: number, symbol: string, side
 }
 
 function dividend(id: string, now: Date, daysAgoCount: number, symbol: string, amount: number): Dividend {
-  return { id, tenantId: TENANT_ID, entity: ENTITY, date: isoDate(daysAgo(now, daysAgoCount)), symbol, amount, currency: currencyOf(symbol) };
+  return { id, tenantId: TENANT_ID, entity: ENTITY, broker: FIXTURE_BROKER, date: isoDate(daysAgo(now, daysAgoCount)), symbol, amount, currency: currencyOf(symbol) };
 }
 
 export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataSnapshot {
@@ -65,7 +65,7 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
     dividend("fixture-div-1", now, 90, "AAPL", 6.25),
     dividend("fixture-div-2", now, 75, "MSFT", 7.5),
   ];
-  return { [FIXTURE_BROKER]: { positions, trades, dividends } };
+  return { [FIXTURE_BROKER]: { positions, trades, dividends, cashBalances: [], cashFlows: [] } };
 }
 
 function series(symbol: string, currency: string, startClose: number, endClose: number, volatility: number, now: Date): PriceBar[] {

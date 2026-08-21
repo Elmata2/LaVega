@@ -1,8 +1,13 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
-import { createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
+import { createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
+
+const acceptedConsentStore = () => ({
+  get: vi.fn(async () => ({ tenantId: "local", accepted: true, decidedAt: "2026-08-21T12:00:00.000Z", disclosureVersion: "yahoo-finance-v1" })),
+  set: vi.fn(async () => undefined),
+});
 
 test("GET /health reports investing server health through Hono app.request", async () => {
   const response = await app.request("/health");
@@ -13,7 +18,11 @@ test("GET /health reports investing server health through Hono app.request", asy
 
 test("dashboard route returns injected core-shaped read model and selected symbol", async () => {
   const dashboard = emptyInvestingDashboard();
-  dashboard.positions.push({ symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, currency: "USD", asOf: "2026-08-18" });
+  dashboard.positions.push({
+    symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, portfolioWeight: 1,
+    priceStatus: "priced", currency: "USD", asOf: "2026-08-18",
+    returns: { status: "available", remainingCostBasis: 180, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 0, totalReturn: 20, totalReturnPercentage: 20 / 180, sinceFirstBuyPercentage: 20 / 180, firstBuyDate: "2026-01-02" },
+  });
   const dashboardReader = vi.fn(async ({ symbol }: { symbol?: string }) => ({ ...dashboard, problems: symbol ? [`selected:${symbol}`] : [] }));
   const investingApp = createApp({ dashboardReader });
 
@@ -33,27 +42,62 @@ test("dashboard route reports read-model failures without inventing values", asy
   expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
 });
 
-test("price sync uses Yahoo Finance without a browser consent gate", async () => {
+test("benchmark API persists ordered replace-whole selection and rejects invalid caps", async () => {
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const investingApp = createApp({ benchmarkSelectionStore, priceSyncTargets: () => [], priceSyncPaceMs: 0 });
+  const saved = await investingApp.request("/api/investing/benchmarks", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: ["^AEX", "^GDAXI"] }) });
+  expect(saved.status).toBe(200);
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({ tenantId: "local", symbols: ["^AEX", "^GDAXI"] });
+  const invalid = await investingApp.request("/api/investing/benchmarks", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }) });
+  expect(invalid.status).toBe(400);
+});
+
+test("benchmark search route returns results after persisted consent", async () => {
+  const benchmarkSearch = vi.fn().mockResolvedValue({ results: [{ symbol: "^AEX", name: "AEX", exchange: "Amsterdam", currency: "EUR" }], fallback: false, problems: [] });
+  const investingApp = createApp({ benchmarkSearch, marketDataConsentStore: acceptedConsentStore() });
+  const response = await investingApp.request("/api/investing/benchmarks/search?q=AEX");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ results: [{ symbol: "^AEX" }], fallback: false });
+  expect(benchmarkSearch).toHaveBeenCalledWith("AEX");
+});
+
+test("Yahoo search and price calls fail before consent, then stored consent starts sync", async () => {
+  const marketDataConsentStore = {
+    accepted: false,
+    async get() { return { tenantId: "local", accepted: this.accepted, decidedAt: null, disclosureVersion: "yahoo-finance-v1" }; },
+    async set(decision: { accepted: boolean }) { this.accepted = decision.accepted; },
+  };
+  const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
+  const investingApp = createApp({ marketDataConsentStore, provider: provider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0 });
+
+  expect((await investingApp.request("/api/investing/benchmarks/search?q=AEX")).status).toBe(428);
+  expect((await investingApp.request("/api/prices/sync", { method: "POST" })).status).toBe(428);
+  expect(provider.get).not.toHaveBeenCalled();
+  const accepted = await investingApp.request("/api/market-data/consent", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
+  expect(accepted.status).toBe(200);
+  await vi.waitFor(() => expect(provider.get).toHaveBeenCalledOnce());
+  expect(await (await investingApp.request("/api/market-data/consent")).json()).toMatchObject({ accepted: true });
+});
+
+test("price sync uses Yahoo Finance after persisted consent", async () => {
   const fetchJsonWithCrumb = vi.fn();
   const investingApp = createApp({
     store: createInMemoryPriceStore(),
     provider: createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never }),
+    priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }],
+    priceSyncPaceMs: 0,
+    marketDataConsentStore: acceptedConsentStore(),
   });
-  const init = { method: "POST", body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }), headers: { "content-type": "application/json" } } as const;
-  const response = await investingApp.request("/api/prices/sync", init);
-  expect(response.status).toBe(200);
-  expect(fetchJsonWithCrumb).toHaveBeenCalled();
+  const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+  expect(response.status).toBe(202);
+  await vi.waitFor(() => expect(fetchJsonWithCrumb).toHaveBeenCalled());
 });
 
 test("router problems reach HTTP response unchanged", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: ["Yahoo Finance rate-limited price request"] }) };
-  const investingApp = createApp({ provider: provider as never });
-  const response = await investingApp.request("/api/prices/sync", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ symbols: [{ symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR" }] }),
-  });
-  expect(await response.json()).toMatchObject({ problems: ["Yahoo Finance rate-limited price request"] });
+  const investingApp = createApp({ provider: provider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0, marketDataConsentStore: acceptedConsentStore() });
+  await investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(async () => expect(await (await investingApp.request("/api/prices/sync/status")).json()).toMatchObject({ problems: ["ASML: Yahoo Finance rate-limited price request"] }));
   expect(provider.get).toHaveBeenCalledOnce();
 });
 
@@ -92,8 +136,9 @@ test("market-data routes expose FX and identifier lanes", async () => {
 test("price sync resolves ISIN before asking price provider", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
   const identifierProvider = { sourceKey: "openfigi", priority: 10, get: vi.fn().mockResolvedValue({ match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" }, problems: [] }) };
-  const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never });
-  await investingApp.request("/api/prices/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: [{ isin: "NL0010273215", currency: "EUR" }] }) });
+  const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "UNKNOWN", isin: "NL0010273215", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0, marketDataConsentStore: acceptedConsentStore() });
+  await investingApp.request("/api/prices/sync", { method: "POST" });
+  await vi.waitFor(() => expect(provider.get).toHaveBeenCalled());
   expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
   expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
 });
@@ -105,6 +150,20 @@ test("broker sync route forwards force and keeps problems in response", async ()
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ outcomes: [{ status: "synced" }], problems: ["ibkr: unavailable"] });
   expect(brokerSync).toHaveBeenCalledWith(true);
+});
+
+test("broker sync starts server-side price orchestration despite broker problems", async () => {
+  const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: [] }) };
+  const investingApp = createApp({
+    brokerSync: vi.fn(async () => ({ outcomes: [], problems: ["ibkr: unavailable"] })),
+    provider: provider as never,
+    priceSyncTargets: () => [{ kind: "closed", symbol: "CLOSED", ticker: "CLOSED", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-01-01" }],
+    priceSyncPaceMs: 0,
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+
+  await investingApp.request("/api/brokers/sync", { method: "POST" });
+  await vi.waitFor(() => expect(provider.get).toHaveBeenCalledOnce());
 });
 
 test("broker sync status route exposes safe progress counters", async () => {
@@ -191,9 +250,11 @@ test("reporting stays disabled when SENTRY_DSN is absent", () => {
 
 test("price cache delete purges store and returns success", async () => {
   const store = createInMemoryPriceStore();
+  const onPriceDataChanged = vi.fn();
   await store.upsert([{ tenantId: "local", symbol: "ASML", date: "2026-01-01", close: 100, currency: "EUR" }]);
-  const response = await createApp({ store }).request("/api/prices/cache", { method: "DELETE" });
+  const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
   expect(await store.getRange("ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(onPriceDataChanged).toHaveBeenCalledOnce();
 });

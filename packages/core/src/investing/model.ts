@@ -23,6 +23,32 @@ export type PriceBar = {
   currency: string;
 };
 
+/** Broker-reported cash anchor. Amount uses the recorded currency. */
+export type CashBalance = {
+  tenantId: string;
+  entity: string;
+  broker: string;
+  currency: string;
+  amount: number;
+  asOf: string;
+};
+
+export type CashFlowKind = "deposit" | "withdrawal" | "interest" | "fee" | "other";
+
+/** Signed broker cash movement. Positive means cash in; negative means cash out. */
+export type CashFlow = {
+  id: string;
+  tenantId: string;
+  entity: string;
+  broker: string;
+  date: string;
+  currency: string;
+  amount: number;
+  kind: CashFlowKind;
+  description?: string;
+  brokerFlowId?: string;
+};
+
 export type TradeSide = "buy" | "sell" | "other";
 
 /** A broker-reported execution. `amount` and `commission` use currency. */

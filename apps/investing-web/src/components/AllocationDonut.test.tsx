@@ -31,3 +31,18 @@ test("renders explicit empty state", () => {
   expect(container.textContent).toContain("Geen posities");
   root.unmount();
 });
+
+test("excludes unpriced holdings and names unknown symbols", () => {
+  const incomplete: Allocation = {
+    buckets: [
+      { key: "AAPL", label: "Apple", value: 100, unpriced: false },
+      { key: "OLD", label: "Old Holding", value: null, unpriced: true },
+    ],
+    unpriced: ["OLD"],
+  };
+  const { container, root } = render(incomplete, incomplete);
+  expect(container.textContent).toContain("Waarde onbekend: OLD");
+  expect(container.textContent).toContain("Niet opgenomen in grafiek of percentage");
+  expect(container.textContent).not.toContain("Old Holding");
+  root.unmount();
+});

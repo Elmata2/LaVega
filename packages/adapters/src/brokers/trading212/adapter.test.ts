@@ -67,9 +67,21 @@ function isOrderHistory(request: IncomingMessage): boolean {
   return (request.url ?? "").startsWith("/api/v0/equity/history/orders");
 }
 
+function isPositions(request: IncomingMessage): boolean {
+  return request.url === "/api/v0/equity/positions";
+}
+
 function json(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
+}
+
+function standardNonOrder(request: IncomingMessage, response: ServerResponse, positions = [holding("AAPL")]) {
+  if (isPositions(request)) return json(response, 200, positions);
+  if (request.url === "/api/v0/equity/account/summary") {
+    return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 0, reservedForOrders: 0 } });
+  }
+  return json(response, 200, { items: [], nextPagePath: null });
 }
 
 test("sync follows nextPagePath, sends Basic auth, and maps every order", async () => {
@@ -81,14 +93,19 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
       json(response, 200, { items: [order(1, "AAPL")] , nextPagePath: "/next" });
     } else if (request.url === "/next") {
       json(response, 200, { items: [order(2, "MSFT", "SELL")] });
-    } else {
-      json(response, 200, [holding("AAPL")]);
-    }
+    } else standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "Holding BV" });
 
-  expect(paths).toEqual(["/api/v0/equity/history/orders?limit=50", "/next", "/api/v0/equity/positions"]);
+  expect(paths).toEqual([
+    "/api/v0/equity/history/orders?limit=50",
+    "/next",
+    "/api/v0/equity/positions",
+    "/api/v0/equity/account/summary",
+    "/api/v0/equity/history/transactions?limit=50",
+    "/api/v0/equity/history/dividends?limit=50",
+  ]);
   expect(result.source).toBe("trading-212");
   expect(result.problems).toEqual([]);
   expect(result.positions).toMatchObject([{ entity: "Holding BV", symbol: "AAPL", isin: "US0378331005", quantity: 3, averagePrice: 150.25, marketPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18" }]);
@@ -96,12 +113,13 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
     { entity: "Holding BV", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, brokerTradeId: "10" },
     { entity: "Holding BV", symbol: "MSFT", side: "sell" },
   ]);
+  expect(result.cashBalances).toMatchObject([{ broker: "trading212", entity: "Holding BV", currency: "EUR", amount: 100 }]);
 });
 
 test("maps one trade per fill and does not use order-level filledValue as fill amount", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });
-    else json(response, 200, [holding("AAPL")]);
+    else standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
@@ -114,7 +132,7 @@ test("sync returns collected trades and problem when later page fails", async ()
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
     else if (request.url === "/next") json(response, 503, { error: "unavailable" });
-    else json(response, 200, [holding("AAPL")]);
+    else standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
@@ -126,7 +144,8 @@ test("sync returns collected trades and problem when later page fails", async ()
 test("holdings failure returns trades and holdings problem", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });
-    else json(response, 503, { error: "unavailable" });
+    else if (isPositions(request)) json(response, 503, { error: "unavailable" });
+    else standardNonOrder(request, response);
   });
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toHaveLength(1);
@@ -156,7 +175,7 @@ test("retries rate-limited order-history request using Retry-After", async () =>
       }
       return json(response, 200, { items: [order(1, "AAPL")] });
     }
-    return json(response, 200, [holding("AAPL")]);
+    return standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
@@ -169,7 +188,7 @@ test("retries rate-limited order-history request using Retry-After", async () =>
 test("malformed order-history payload becomes a problem without throwing", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { orders: [] });
-    else json(response, 200, [holding("AAPL")]);
+    else standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
@@ -187,7 +206,7 @@ test("ignores non-trade fill rows and maps nested instruments", async () => {
           { fill: { id: 2, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 10, quantity: 1 }, order: { id: 2, ticker: "AAPL", side: "BUY", currency: "USD", instrument: { ticker: "AAPL", isin: "US0378331005", currency: "USD" } } },
         ],
       });
-    } else json(response, 200, [holding("AAPL")]);
+    } else standardNonOrder(request, response);
   });
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
@@ -199,7 +218,7 @@ test("ignores non-trade fill rows and maps nested instruments", async () => {
 test("schema-mismatched order rows become problems instead of silent empty success", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [{ id: 1, ticker: "AAPL", filledQuantity: 1, fillPrice: 10 }] });
-    else json(response, 200, [holding("AAPL")]);
+    else standardNonOrder(request, response);
   });
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toEqual([]);
@@ -209,10 +228,114 @@ test("schema-mismatched order rows become problems instead of silent empty succe
 test("malformed holdings rows become problems without taking trades down", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });
-    else json(response, 200, [{ ticker: "", quantity: "not-a-number" }]);
+    else if (isPositions(request)) json(response, 200, [{ ticker: "", quantity: "not-a-number" }]);
+    else standardNonOrder(request, response);
   });
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toHaveLength(1);
   expect(result.positions).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 position instrument is missing or invalid"]);
+});
+
+test("maps paginated cash and dividends, deduplicates references, and falls back to account currency", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    paths.push(request.url ?? "");
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { id: 7, currency: "EUR", cash: { availableToTrade: 250, inPies: 0, reservedForOrders: 0 }, ignored: "future-field" });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          { amount: 100, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "deposit-1", type: "DEPOSIT", ignored: true },
+          { amount: 2, dateTime: "2026-08-02T10:00:00Z", reference: "fee-1", type: "FEE" },
+          { amount: -1, dateTime: "2026-08-02T11:00:00Z", reference: "deposit-reversal", type: "DEPOSIT" },
+        ],
+        nextPagePath: "/cash-page-2?cursor=opaque",
+      });
+    }
+    if (request.url === "/cash-page-2?cursor=opaque") {
+      return json(response, 200, { items: [
+        { amount: 100, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "deposit-1", type: "DEPOSIT" },
+        { amount: 10, currency: "EUR", dateTime: "2026-08-03T10:00:00Z", reference: "withdraw-1", type: "WITHDRAW" },
+      ], nextPagePath: null });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/dividends")) {
+      return json(response, 200, { items: [{
+        amount: 3.5,
+        paidOn: "2026-08-04T10:00:00Z",
+        reference: "dividend-1",
+        ticker: "AAPL_US_EQ",
+        type: "ORDINARY",
+        instrument: { ticker: "AAPL_US_EQ", isin: "US0378331005", name: "Apple", currency: "USD" },
+        grossAmountPerShare: 99,
+      }], nextPagePath: null });
+    }
+    return json(response, 404, {});
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "Holding BV" });
+
+  expect(result.problems).toEqual([]);
+  expect(result.cashBalances).toMatchObject([{ amount: 250, currency: "EUR", broker: "trading212" }]);
+  expect(result.cashFlows).toMatchObject([
+    { brokerFlowId: "deposit-1", amount: 100, kind: "deposit", currency: "EUR" },
+    { brokerFlowId: "fee-1", amount: -2, kind: "fee", currency: "EUR" },
+    { brokerFlowId: "deposit-reversal", amount: -1, kind: "deposit", currency: "EUR" },
+    { brokerFlowId: "withdraw-1", amount: -10, kind: "withdrawal", currency: "EUR" },
+  ]);
+  expect(result.dividends).toMatchObject([{
+    brokerDividendId: "dividend-1",
+    broker: "trading212",
+    amount: 3.5,
+    currency: "EUR",
+    symbol: "AAPL_US_EQ",
+    isin: "US0378331005",
+  }]);
+  expect(paths).toContain("/cash-page-2?cursor=opaque");
+});
+
+test("surfaces ambiguous transfers, unknown kinds, malformed rows, and unsafe summary cash", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 5, reservedForOrders: 0 } });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, { items: [
+        { amount: 10, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "transfer-1", type: "TRANSFER" },
+        { amount: -4, currency: "EUR", dateTime: "2026-08-02T10:00:00Z", reference: "future-1", type: "NEW_KIND", extra: "kept-compatible" },
+        { amount: "invalid", dateTime: "bad", reference: "bad-1", type: "DEPOSIT" },
+      ] });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(result.cashBalances).toEqual([]);
+  expect(result.cashFlows).toMatchObject([{ brokerFlowId: "future-1", amount: -4, kind: "other" }]);
+  expect(result.problems).toEqual(expect.arrayContaining([
+    expect.stringContaining("do not define a safe total cash balance"),
+    "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
+    "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
+    "Trading 212 transaction amount is missing or invalid",
+  ]));
+});
+
+test("repeated cash-history nextPagePath stops with an explicit partial-history problem", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") return json(response, 200, { currency: "EUR", cash: { availableToTrade: 1, inPies: 0, reservedForOrders: 0 } });
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) return json(response, 200, { items: [], nextPagePath: "/loop" });
+    if (request.url === "/loop") return json(response, 200, { items: [], nextPagePath: "/loop" });
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  expect(result.problems).toContain("Trading 212 transactions pagination repeated nextPagePath");
 });

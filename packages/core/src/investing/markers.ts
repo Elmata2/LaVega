@@ -5,7 +5,11 @@ export type PositionMarker = {
   kind: "buy" | "sell" | "dividend";
   eventDate: string;
   label: string;
+  quantity?: number;
+  executionPrice?: number | null;
   amount?: number;
+  commission?: number | null;
+  dividendAmount?: number;
   currency?: string;
 };
 
@@ -35,6 +39,11 @@ export function placePositionMarkers(
       kind: trade.side,
       eventDate: trade.date,
       label: `${trade.side === "buy" ? "Koop" : "Verkoop"} ${trade.quantity}`,
+      quantity: trade.quantity,
+      executionPrice: trade.price,
+      ...(trade.amount === null ? {} : { amount: trade.amount }),
+      commission: trade.commission,
+      currency: trade.currency,
     });
   }
   for (const dividend of dividends) {
@@ -43,6 +52,7 @@ export function placePositionMarkers(
       eventDate: dividend.date,
       label: `Dividend ${dividend.amount} ${dividend.currency}`,
       amount: dividend.amount,
+      dividendAmount: dividend.amount,
       currency: dividend.currency,
     });
   }

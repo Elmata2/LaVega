@@ -7,6 +7,8 @@ export const POSITIONS: Position[] = [
 ];
 
 export const TRADES: Trade[] = [
+  { id: "0", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "AAPL", side: "buy", quantity: 8, price: 100, amount: 800, currency: "USD", commission: 0 },
+  { id: "00", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "MSFT", side: "buy", quantity: 7, price: 200, amount: 1400, currency: "USD", commission: 0 },
   { id: "a", tenantId: "local", entity: "personal", date: "2026-01-03", symbol: "AAPL", side: "buy", quantity: 2, price: 100, amount: 200, currency: "USD", commission: 0 },
   { id: "b", tenantId: "local", entity: "personal", date: "2026-01-04", symbol: "MSFT", side: "sell", quantity: 2, price: 200, amount: 400, currency: "USD", commission: 0 },
 ];

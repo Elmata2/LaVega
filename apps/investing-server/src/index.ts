@@ -1,9 +1,10 @@
 import { app } from "./app.js";
 import { createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "./app.js";
 import { createProblemReporter } from "./observability.js";
-import { buildInvestingDashboard, type Dividend, type Position, type Trade } from "@lavega/core";
+import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
   createFrankfurterFxProvider,
+  createInMemoryBenchmarkSelectionStore,
   createIbkrFlexAdapter,
   createTrading212Adapter,
   syncScheduledBrokers,
@@ -14,7 +15,9 @@ import {
 } from "@lavega/adapters";
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
+import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
+import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
 
 export { app };
 
@@ -95,24 +98,32 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore };
+export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore };
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
   const tradesByBroker = new Map<string, Trade[]>();
   const dividendsByBroker = new Map<string, Dividend[]>();
+  const cashBalancesByBroker = new Map<string, CashBalance[]>();
+  const cashFlowsByBroker = new Map<string, CashFlow[]>();
   let problems: string[] = [];
+  let dataVersion = 0;
 
   const restore = (snapshot: RuntimeBrokerDataSnapshot) => {
     positionsByBroker.clear();
     tradesByBroker.clear();
     dividendsByBroker.clear();
+    cashBalancesByBroker.clear();
+    cashFlowsByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
       positionsByBroker.set(broker, structuredClone(data.positions));
       tradesByBroker.set(broker, structuredClone(data.trades));
-      dividendsByBroker.set(broker, structuredClone(data.dividends));
+      dividendsByBroker.set(broker, structuredClone(data.dividends ?? []));
+      cashBalancesByBroker.set(broker, structuredClone(data.cashBalances ?? []));
+      cashFlowsByBroker.set(broker, structuredClone(data.cashFlows ?? []));
     }
+    dataVersion += 1;
   };
   restore(initial);
 
@@ -123,26 +134,34 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         positionsByBroker.set(outcome.broker, outcome.result.positions);
         tradesByBroker.set(outcome.broker, outcome.result.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
         dividendsByBroker.set(outcome.broker, outcome.result.dividends ?? []);
+        cashBalancesByBroker.set(outcome.broker, outcome.result.cashBalances ?? []);
+        cashFlowsByBroker.set(outcome.broker, outcome.result.cashFlows ?? []);
       }
       problems = result.problems;
+      if (result.outcomes.some((outcome) => outcome.status === "synced" && outcome.result !== null)) dataVersion += 1;
     },
     read() {
       return {
         positions: [...positionsByBroker.values()].flat(),
         trades: [...tradesByBroker.values()].flat(),
         dividends: [...dividendsByBroker.values()].flat(),
+        cashBalances: [...cashBalancesByBroker.values()].flat(),
+        cashFlows: [...cashFlowsByBroker.values()].flat(),
         problems: [...problems],
+        dataVersion,
       };
     },
     restore,
     snapshot(): RuntimeBrokerDataSnapshot {
       const snapshot: RuntimeBrokerDataSnapshot = {};
-      for (const broker of new Set([...positionsByBroker.keys(), ...tradesByBroker.keys(), ...dividendsByBroker.keys()])) {
+      for (const broker of new Set([...positionsByBroker.keys(), ...tradesByBroker.keys(), ...dividendsByBroker.keys(), ...cashBalancesByBroker.keys(), ...cashFlowsByBroker.keys()])) {
         if (broker !== "ibkr" && broker !== "trading212") continue;
         snapshot[broker] = {
           positions: structuredClone(positionsByBroker.get(broker) ?? []),
           trades: structuredClone(tradesByBroker.get(broker) ?? []),
           dividends: structuredClone(dividendsByBroker.get(broker) ?? []),
+          cashBalances: structuredClone(cashBalancesByBroker.get(broker) ?? []),
+          cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
         };
       }
       return snapshot;
@@ -153,8 +172,11 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
   const priceStore = options.priceStore;
+  const benchmarkSelectionStore = options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const marketDataConsentStore = options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
   const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
+  let priceDataVersion = 0;
   let syncProgress: BrokerSyncProgress = { status: "idle", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: null, message: null };
   const credentials = createFileCredentialStore();
   const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
@@ -163,12 +185,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   if (devFixtureEnabled) {
     brokerData.restore(createDevFixtureBrokerData());
     await priceStore.upsert(createDevFixturePriceBars());
+    priceDataVersion += 1;
   }
   const restoreBrokerData = async () => brokerData.restore(await credentials.getBrokerData());
   const updateProgress = (event: Trading212DiagnosticEvent) => {
     const updatedAt = new Date().toISOString();
     if (event.type === "history-page") {
       syncProgress = { ...syncProgress, status: "running", pages: event.page, ordersRead: event.ordersRead, waitUntil: null, updatedAt, message: event.hasNext ? "Order history is loading" : "Order history is complete" };
+    } else if (event.type === "cash-history-page") {
+      syncProgress = { ...syncProgress, status: "running", updatedAt, message: `${event.history === "transactions" ? "Cash transaction" : "Dividend"} history ${event.hasNext ? "is loading" : "is complete"}` };
     } else if (event.type === "wait") {
       syncProgress = { ...syncProgress, status: "waiting", waitUntil: new Date(Date.now() + event.waitMs).toISOString(), remaining: 0, updatedAt, message: "Waiting for new Trading 212 API capacity" };
     } else if (event.type === "positions") {
@@ -199,13 +224,23 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       throw error;
     }
   };
+  const dashboardCache = new Map<string, { version: number; data: InvestingDashboardData }>();
   const dashboardReader = async ({ symbol }: { symbol?: string }) => {
-    const { positions, trades, dividends, problems } = brokerData.read();
-    const symbols = [...new Set(positions.map((position) => position.symbol))];
+    const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } = brokerData.read();
+    const version = dataVersion + priceDataVersion;
+    const selectedBenchmarks = options.benchmarkSymbols
+      ? await options.benchmarkSymbols(LOCAL_TENANT_ID)
+      : (await benchmarkSelectionStore.get(LOCAL_TENANT_ID)).symbols;
+    const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
+    const cached = dashboardCache.get(cacheKey);
+    if (cached?.version === version) return cached.data;
+    const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
     const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(value, "0000-01-01", "9999-12-31")))).flat();
-    const benchmarkBars = await priceStore.getRange("SP500", "0000-01-01", "9999-12-31");
+    const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(benchmark, "0000-01-01", "9999-12-31")))).flat();
     const fxResult = await fxProvider.getLatestRate();
-    return buildInvestingDashboard({ positions, trades, dividends, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems] });
+    const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benchmarkBars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
+    dashboardCache.set(cacheKey, { version, data });
+    return data;
   };
   const credentialDependencies = {
     configureBroker: createRuntimeBrokerCredentialSetup(credentials, restoreBrokerData),
@@ -216,9 +251,15 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       return unlocked;
     },
     brokerSyncStatus: () => ({ ...syncProgress }),
+    priceSyncTargets: async (tenantId: string) => {
+      const { positions, trades } = brokerData.read();
+      const benchmarkSymbols = options.benchmarkSymbols ? await options.benchmarkSymbols(tenantId) : (await benchmarkSelectionStore.get(tenantId)).symbols;
+      return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
+    },
   };
-  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, dashboardReader });
+  const onPriceDataChanged = () => { priceDataVersion += 1; };
+  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged });
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, dashboardReader, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
 }

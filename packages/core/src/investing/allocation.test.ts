@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bucketAllocationByEntity, bucketAllocationByInstrument } from "./allocation.js";
+import { bucketAllocationByEntity, bucketAllocationByInstrument, bucketPricedAllocation } from "./allocation.js";
 import type { Position } from "./model.js";
 
 const positions: Position[] = [
@@ -37,4 +37,27 @@ test("uses quantity times market price when market value is absent", () => {
 
 test("empty holdings return empty allocation", () => {
   expect(bucketAllocationByEntity([], "EUR", fx)).toEqual({ buckets: [], unpriced: [] });
+});
+
+test("buckets current capped values without falling back to broker snapshot prices", () => {
+  expect(bucketPricedAllocation([
+    { symbol: "AAPL", entity: "Privé", description: "Apple", marketValue: 120 },
+    { symbol: "OLD", entity: "Privé", marketValue: null },
+  ], "instrument")).toEqual({
+    buckets: [
+      { key: "AAPL", label: "Apple", value: 120, unpriced: false },
+      { key: "OLD", label: "OLD", value: null, unpriced: true },
+    ],
+    unpriced: ["OLD"],
+  });
+});
+
+test("keeps priced entity subtotal when another holding is unpriced", () => {
+  expect(bucketPricedAllocation([
+    { symbol: "AAPL", entity: "Privé", description: "Apple", marketValue: 120 },
+    { symbol: "OLD", entity: "Privé", marketValue: null },
+  ], "entity")).toEqual({
+    buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }],
+    unpriced: ["OLD"],
+  });
 });

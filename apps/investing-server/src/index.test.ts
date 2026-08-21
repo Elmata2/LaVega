@@ -64,8 +64,12 @@ test("runtime broker sync coalesces concurrent runs", async () => {
       orderRequests += 1;
       return json(response, { items: [{ id: 1, ticker: "AAPL", direction: "BUY", filledQuantity: 1, fillPrice: 10, totalCost: 10, currency: "EUR", dateExecuted: "2026-08-18T10:15:00Z" }] });
     }
-    positionRequests += 1;
-    return json(response, [{ ticker: "AAPL", quantity: 1, averagePrice: 10, currentPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-18T10:15:00Z" }]);
+    if (request.url === "/api/v0/equity/positions") {
+      positionRequests += 1;
+      return json(response, [{ ticker: "AAPL", quantity: 1, averagePrice: 10, currentPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-18T10:15:00Z" }]);
+    }
+    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+    return json(response, { items: [], nextPagePath: null });
   });
   vi.stubEnv("TRADING212_BASE_URL", baseUrl);
   const credentials = {
@@ -108,6 +112,67 @@ test("runtime broker cache restores encrypted snapshot after restart", () => {
   expect(restarted.read().positions[0]?.symbol).toBe("AAPL");
 });
 
+test("runtime broker cache persists cash facts and increments data version", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const before = cache.read().dataVersion;
+  cache.apply({
+    outcomes: [{
+      broker: "ibkr",
+      status: "synced",
+      lastSyncedAt: "2026-08-19T14:00:00.000Z",
+      result: {
+        positions: [],
+        trades: [],
+        dividends: [],
+        cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
+        cashFlows: [{ id: "flow", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" }],
+        source: "ibkr-flex",
+        problems: [],
+      },
+    }],
+    problems: [],
+  });
+
+  expect(cache.read()).toMatchObject({ dataVersion: before + 1, cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
+  expect(createRuntimeBrokerDataCache(cache.snapshot()).read()).toMatchObject({ cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
+});
+
+test("runtime dashboard recomputes only after data version changes", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const store = createInMemoryPriceStore();
+  const getRange = vi.spyOn(store, "getRange");
+  const runtimeApp = await createRuntimeApp({ priceStore: store });
+
+  const first = await runtimeApp.request("/api/investing/dashboard");
+  const callsAfterFirst = getRange.mock.calls.length;
+  const second = await runtimeApp.request("/api/investing/dashboard");
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(getRange).toHaveBeenCalledTimes(callsAfterFirst);
+
+  await runtimeApp.request("/api/prices/cache", { method: "DELETE" });
+  await runtimeApp.request("/api/investing/dashboard");
+  expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+});
+
+test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const store = createInMemoryPriceStore();
+  const runtimeApp = await createRuntimeApp({ priceStore: store });
+
+  const selected = await runtimeApp.request("/api/investing/dashboard?symbol=aapl");
+  const unknown = await runtimeApp.request("/api/investing/dashboard?symbol=closed-unknown");
+  const selectedData = await selected.json() as { position: { symbol: string; status: string } | null };
+  const unknownData = await unknown.json() as { position: unknown };
+
+  expect(selected.status).toBe(200);
+  expect(selectedData.position).toMatchObject({ symbol: "AAPL", status: "open" });
+  expect(unknown.status).toBe(200);
+  expect(unknownData.position).toBeNull();
+});
+
 test("problem result cannot overwrite last successful broker snapshot", () => {
   const cache = createRuntimeBrokerDataCache();
   const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });
@@ -127,6 +192,8 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
 
     const baseUrl = await serve((request, response) => {
       if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
       return json(response, []);
     });
     vi.stubEnv("LAVEGA_VAULT_FILE", filePath);

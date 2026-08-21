@@ -1,10 +1,12 @@
-import type { Dividend, Position, Trade } from "@lavega/core";
+import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
 
 export type BrokerResult = {
   positions: Position[];
   trades: Omit<Trade, "id">[];
   /** Optional until each broker adapter maps its dividend records. */
   dividends?: Dividend[];
+  cashBalances?: CashBalance[];
+  cashFlows?: CashFlow[];
   source: string;
   problems: string[];
   /**

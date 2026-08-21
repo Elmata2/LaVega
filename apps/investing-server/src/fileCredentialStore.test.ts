@@ -43,17 +43,21 @@ test("encrypted vault restores broker data after process restart", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lavega-broker-data-"));
   const filePath = join(directory, "credentials.json");
   const brokerData = {
-    trading212: {
+    ibkr: {
       positions: [{ tenantId: "local", entity: "BV", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: 12, marketValue: 24, currency: "EUR", asOf: "2026-08-19" }],
       trades: [],
-      dividends: [],
+      dividends: [{ id: "dividend", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", symbol: "AAPL", amount: 2, currency: "EUR", brokerDividendId: "U1:dividend" }],
+      cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
+      cashFlows: [{ id: "deposit", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" as const, brokerFlowId: "U1:deposit" }],
     },
   };
   try {
     const first = createFileCredentialStore(filePath);
     await first.setup("vault-passphrase");
     await first.putBrokerData(brokerData);
-    expect(await readFile(filePath, "utf8")).not.toContain("AAPL");
+    const onDisk = await readFile(filePath, "utf8");
+    expect(onDisk).not.toContain("AAPL");
+    expect(onDisk).not.toContain("U1:deposit");
 
     const second = createFileCredentialStore(filePath);
     expect(await second.unlock("vault-passphrase")).toBe(true);

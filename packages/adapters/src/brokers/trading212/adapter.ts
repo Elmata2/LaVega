@@ -1,4 +1,13 @@
-import { LOCAL_TENANT_ID, type Position, type TradeSide, type TradeWithoutId } from "@lavega/core";
+import {
+  LOCAL_TENANT_ID,
+  type CashBalance,
+  type CashFlow,
+  type CashFlowKind,
+  type Dividend,
+  type Position,
+  type TradeSide,
+  type TradeWithoutId,
+} from "@lavega/core";
 import type { BrokerAccessAdapter, BrokerResult } from "../BrokerAccessAdapter.js";
 
 export type Trading212Config = {
@@ -12,6 +21,7 @@ export type Trading212DiagnosticEvent =
   | { type: "response"; endpoint: string; attempt: number; status: number; limit: number | null; remaining: number | null; resetAt: string | null }
   | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
   | { type: "history-page"; page: number; pageItems: number; ordersRead: number; hasNext: boolean }
+  | { type: "cash-history-page"; history: "transactions" | "dividends"; page: number; pageItems: number; hasNext: boolean }
   | { type: "positions"; count: number };
 
 type Trading212Order = Record<string, unknown>;
@@ -21,8 +31,12 @@ type Trading212Positions = Trading212Order[];
 const SOURCE = "trading-212";
 const ORDER_HISTORY_PATH = "/api/v0/equity/history/orders";
 const POSITIONS_PATH = "/api/v0/equity/positions";
+const ACCOUNT_SUMMARY_PATH = "/api/v0/equity/account/summary";
+const TRANSACTIONS_PATH = "/api/v0/equity/history/transactions";
+const DIVIDENDS_PATH = "/api/v0/equity/history/dividends";
 /** Provider maximum. The default of 20 costs 2.5x the requests for the same history. */
 const ORDER_HISTORY_PAGE_SIZE = 50;
+const CASH_HISTORY_PAGE_SIZE = 50;
 const MAX_RATE_LIMIT_RETRIES = 3;
 /** One order-history window is 60s; leave room for a reset timestamp plus clock skew. */
 const MAX_RATE_LIMIT_WAIT_MS = 120_000;
@@ -163,6 +177,93 @@ function nullableNumber(valueToParse: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function stableId(entity: string, kind: "cash" | "dividend", reference: string): string {
+  return `trading212:${encodeURIComponent(entity)}:${kind}:${reference}`;
+}
+
+function mapCashBalance(raw: Trading212Order, entity: string, asOf: string): { balance: CashBalance | null; problems: string[] } {
+  const cash = object(raw.cash, "account summary cash");
+  const currency = string(raw.currency, "account summary currency");
+  const available = number(cash.availableToTrade, "account summary available cash");
+  const inPies = nullableNumber(cash.inPies) ?? 0;
+  const reserved = nullableNumber(cash.reservedForOrders) ?? 0;
+  if (inPies !== 0 || reserved !== 0) {
+    return {
+      balance: null,
+      problems: ["Trading 212 account cash has non-zero inPies or reservedForOrders; documented fields do not define a safe total cash balance"],
+    };
+  }
+  return {
+    balance: { tenantId: LOCAL_TENANT_ID, entity, broker: "trading212", currency, amount: available, asOf },
+    problems: [],
+  };
+}
+
+function transactionKind(type: string): CashFlowKind | null {
+  switch (type) {
+    case "DEPOSIT": return "deposit";
+    case "WITHDRAW": return "withdrawal";
+    case "FEE": return "fee";
+    case "INTEREST_ON_FREE_CASH":
+    case "LENDING_INTEREST": return "interest";
+    case "TRANSFER": return null;
+    default: return "other";
+  }
+}
+
+function mapTransaction(raw: Trading212Order, entity: string, accountCurrency: string): { flow: CashFlow | null; problem?: string } {
+  const reference = string(raw.reference, "transaction reference");
+  const sourceType = string(raw.type, "transaction type").toUpperCase();
+  const kind = transactionKind(sourceType);
+  if (kind === null) {
+    return { flow: null, problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction` };
+  }
+  const sourceAmount = number(raw.amount, "transaction amount");
+  const amount = sourceAmount < 0
+    ? sourceAmount
+    : kind === "withdrawal" || kind === "fee"
+      ? -sourceAmount
+      : sourceAmount;
+  const currency = string(raw.currency ?? accountCurrency, "transaction currency");
+  const flow: CashFlow = {
+    id: stableId(entity, "cash", reference),
+    tenantId: LOCAL_TENANT_ID,
+    entity,
+    broker: "trading212",
+    date: date(raw.dateTime, "transaction date"),
+    currency,
+    amount,
+    kind,
+    description: `Trading 212 ${sourceType}`,
+    brokerFlowId: reference,
+  };
+  return sourceType === "DEPOSIT" || sourceType === "WITHDRAW" || sourceType === "FEE" || sourceType === "INTEREST_ON_FREE_CASH" || sourceType === "LENDING_INTEREST"
+    ? { flow }
+    : { flow, problem: `Trading 212 transaction ${reference} has unknown type ${sourceType}; provider sign was preserved` };
+}
+
+function mapDividend(raw: Trading212Order, entity: string, accountCurrency: string): Dividend {
+  const reference = string(raw.reference, "dividend reference");
+  const instrument = optionalObject(raw.instrument, "dividend instrument") ?? {};
+  const symbol = string(raw.ticker ?? instrument.ticker, "dividend ticker");
+  const isin = optionalString(instrument.isin);
+  const name = optionalString(instrument.name);
+  const sourceType = optionalString(raw.type);
+  return {
+    id: stableId(entity, "dividend", reference),
+    tenantId: LOCAL_TENANT_ID,
+    entity,
+    broker: "trading212",
+    date: date(raw.paidOn, "dividend date"),
+    symbol,
+    ...(isin ? { isin } : {}),
+    ...((name || sourceType) ? { description: [name, sourceType && `Trading 212 ${sourceType}`].filter(Boolean).join(" — ") } : {}),
+    amount: Math.abs(number(raw.amount, "dividend amount")),
+    currency: string(raw.currency ?? accountCurrency, "dividend currency"),
+    brokerDividendId: reference,
+  };
+}
+
 function basicAuth(token: string, secret: string): string {
   return `Basic ${globalThis.btoa(`${token}:${secret}`)}`;
 }
@@ -223,13 +324,54 @@ function mapPosition(raw: Trading212Order, entity: string): Position {
   };
 }
 
-function result(positions: Position[], trades: TradeWithoutId[], problems: string[], retryAfterMs: number | null): BrokerResult {
+function result(
+  positions: Position[],
+  trades: TradeWithoutId[],
+  dividends: Dividend[],
+  cashBalances: CashBalance[],
+  cashFlows: CashFlow[],
+  problems: string[],
+  retryAfterMs: number | null,
+): BrokerResult {
   return {
     positions,
     trades,
+    dividends,
+    cashBalances,
+    cashFlows,
     source: SOURCE,
     problems,
     ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
+  };
+}
+
+async function accountSummary(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Order> {
+  const response = await request(url, config, limiter);
+  if (!response.ok) throw new Error(`Trading 212 account-summary request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Trading 212 account-summary response is malformed");
+  }
+  return payload as Trading212Order;
+}
+
+async function historyPage(url: string, label: "transaction" | "dividend", config: Trading212Config, limiter: RateLimiter): Promise<Trading212Page> {
+  const response = await request(url, config, limiter);
+  if (!response.ok) throw new Error(`Trading 212 ${label}-history request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
+    throw new Error(`Trading 212 ${label}-history response is malformed`);
+  }
+  const data = payload as { items: unknown[]; nextPagePath?: unknown };
+  if (!data.items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
+    throw new Error(`Trading 212 ${label}-history items are malformed`);
+  }
+  if (data.nextPagePath !== undefined && data.nextPagePath !== null && typeof data.nextPagePath !== "string") {
+    throw new Error(`Trading 212 ${label}-history nextPagePath is malformed`);
+  }
+  return {
+    items: data.items as Trading212Order[],
+    ...(typeof data.nextPagePath === "string" && data.nextPagePath ? { nextPagePath: data.nextPagePath } : {}),
   };
 }
 
@@ -312,6 +454,9 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
     async sync({ entity }) {
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
+      const dividends: Dividend[] = [];
+      const cashBalances: CashBalance[] = [];
+      const cashFlows: CashFlow[] = [];
       const problems: string[] = [];
       const limiter = createRateLimiter(config.diagnostics ?? (() => undefined));
       let retryAfterMs: number | null = null;
@@ -362,7 +507,62 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         noteRateLimit(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
       }
-      return result(positionsResult, trades, problems, retryAfterMs);
+
+      let accountCurrency = "";
+      try {
+        const summary = await accountSummary(new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(), config, limiter);
+        accountCurrency = string(summary.currency, "account summary currency");
+        const mapped = mapCashBalance(summary, entity, new Date().toISOString().slice(0, 10));
+        if (mapped.balance) cashBalances.push(mapped.balance);
+        problems.push(...mapped.problems);
+      } catch (error) {
+        noteRateLimit(error);
+        problems.push(error instanceof Error ? error.message : "Trading 212 account-summary sync failed");
+      }
+
+      const readCashHistory = async (history: "transactions" | "dividends") => {
+        const path = history === "transactions" ? TRANSACTIONS_PATH : DIVIDENDS_PATH;
+        const seenPaths = new Set<string>();
+        const seenReferences = new Set<string>();
+        const firstUrl = new URL(path, config.baseUrl);
+        firstUrl.searchParams.set("limit", String(CASH_HISTORY_PAGE_SIZE));
+        let nextUrl = firstUrl.toString();
+        let pageNumber = 0;
+        while (nextUrl) {
+          if (seenPaths.has(nextUrl)) throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
+          seenPaths.add(nextUrl);
+          const current = await historyPage(nextUrl, history === "transactions" ? "transaction" : "dividend", config, limiter);
+          pageNumber += 1;
+          config.diagnostics?.({ type: "cash-history-page", history, page: pageNumber, pageItems: current.items.length, hasNext: Boolean(current.nextPagePath) });
+          for (const row of current.items) {
+            try {
+              const reference = string(row.reference, `${history === "transactions" ? "transaction" : "dividend"} reference`);
+              if (seenReferences.has(reference)) continue;
+              seenReferences.add(reference);
+              if (history === "transactions") {
+                const mapped = mapTransaction(row, entity, accountCurrency);
+                if (mapped.flow) cashFlows.push(mapped.flow);
+                if (mapped.problem) problems.push(mapped.problem);
+              } else {
+                dividends.push(mapDividend(row, entity, accountCurrency));
+              }
+            } catch (error) {
+              problems.push(error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`);
+            }
+          }
+          nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
+        }
+      };
+
+      for (const history of ["transactions", "dividends"] as const) {
+        try {
+          await readCashHistory(history);
+        } catch (error) {
+          noteRateLimit(error);
+          problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
+        }
+      }
+      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs);
     },
   };
 }
