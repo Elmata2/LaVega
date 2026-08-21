@@ -208,6 +208,9 @@ type IndexedSeriesPoint = {
   portfolioReturn: number | null;
   benchmarkReturns: Record<string, number | null>;
   portfolioValue: number | null;
+  benchmarkValues: Record<string, number | null>;
+  portfolioXirr: number | null;
+  benchmarkXirr: Record<string, number | null>;
   unpriced: string[];
   cashUnknown: string[];
 };
@@ -243,6 +246,8 @@ Assign benchmark colors by current selection order: `chart-blue`, `chart-purple`
 Render missing benchmark history as `null` with disconnected line segments. Keep its legend entry visible while its backfill progresses.
 
 ## Portfolio chart interaction
+
+Implementation status: core calculates gap-safe TWR and since-window portfolio and benchmark XIRR. Dashboard uses one visible-window state for range presets, pointer drag, chart-local wheel zoom, and typed dates. Crosshair, keyboard navigation, exact-value list, unknown-value announcements, zoom clearing, multi-benchmark outperformance readout, and reduced-motion behavior follow this section.
 
 The chart supports direct drag-to-zoom, scroll-wheel zoom, and typed date input ([Interaction model for the portfolio chart](https://github.com/Elmata2/LaVega/issues/77)). This decision deliberately overturns the earlier “no zoom, pan, or brush” ruling.
 
