@@ -1,0 +1,35 @@
+/* Copied from apps/investing-web/src/styles/tokens.css — the tokens the
+   product already ships with. This prototype has no Tailwind build, so
+   they're consumed directly as CSS custom properties. */
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  --background: 40 27% 97%;
+  --foreground: 60 7% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 60 7% 10%;
+  --muted: 40 20% 93%;
+  --muted-foreground: 48 5% 41%;
+  --border: 40 17% 88%;
+  --pos: 101 35% 35%;
+  --neg: 11 59% 44%;
+  --chart-blue: 211 47% 44%;
+  --chart-purple: 249 42% 59%;
+  --chart-teal: 174 51% 37%;
+  --chart-amber: 39 71% 48%;
+  --radius: 18px;
+  --radius-card: 22px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 1px 2px rgba(26, 26, 23, .04), 0 18px 40px -28px rgba(26, 26, 23, .16);
+  --font-display: "EB Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
