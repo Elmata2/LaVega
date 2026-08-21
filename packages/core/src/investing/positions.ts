@@ -1,6 +1,8 @@
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
+import { businessDaysAfter } from "./calendar.js";
+import { solveXirr } from "./benchmarks.js";
 
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
 export type PositionReturnStatus = "available" | "missing-cost" | "missing-fx" | "unpriced";
@@ -14,6 +16,7 @@ export type PositionReturn = {
   dividendsReceived: number | null;
   totalReturn: number | null;
   totalReturnPercentage: number | null;
+  sinceFirstBuyPercentage: number | null;
   firstBuyDate: string | null;
 };
 
@@ -33,19 +36,6 @@ export type CurrentPosition = {
 
 const EPSILON = 1e-9;
 
-function businessDaysAfter(from: string, to: string): number {
-  const cursor = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  let count = 0;
-  cursor.setUTCDate(cursor.getUTCDate() + 1);
-  while (cursor <= end) {
-    const day = cursor.getUTCDay();
-    if (day !== 0 && day !== 6) count += 1;
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return count;
-}
-
 function emptyReturn(status: PositionReturnStatus, firstBuyDate: string | null = null): PositionReturn {
   return {
     status,
@@ -56,6 +46,7 @@ function emptyReturn(status: PositionReturnStatus, firstBuyDate: string | null =
     dividendsReceived: null,
     totalReturn: null,
     totalReturnPercentage: null,
+    sinceFirstBuyPercentage: null,
     firstBuyDate,
   };
 }
@@ -73,6 +64,7 @@ export function calculatePositionReturn(
   dividends: readonly Dividend[],
   presentationCurrency: string,
   fxRates: FxRates,
+  options: { valuationDate?: string } = {},
 ): PositionReturn {
   const orderedTrades = [...trades].sort((left, right) => left.date.localeCompare(right.date));
   const firstBuyDate = orderedTrades.find((trade) => trade.side === "buy")?.date ?? null;
@@ -84,6 +76,7 @@ export function calculatePositionReturn(
   let remainingCostBasis = 0;
   let realizedCostBasisRemoved = 0;
   let realizedGain = 0;
+  const datedFlows: Array<{ date: string; amount: number }> = [];
   try {
     for (const trade of orderedTrades) {
       const gross = tradeValue(trade);
@@ -93,6 +86,7 @@ export function calculatePositionReturn(
       if (trade.side === "buy") {
         heldQuantity += trade.quantity;
         remainingCostBasis += grossEur + feeEur;
+        datedFlows.push({ date: trade.date, amount: -(grossEur + feeEur) });
         continue;
       }
       if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return emptyReturn("missing-cost", firstBuyDate);
@@ -101,12 +95,15 @@ export function calculatePositionReturn(
       remainingCostBasis -= removed;
       realizedCostBasisRemoved += removed;
       realizedGain += grossEur - removed - feeEur;
+      datedFlows.push({ date: trade.date, amount: grossEur - feeEur });
     }
 
     if (Math.abs(heldQuantity - quantity) > EPSILON) return emptyReturn("missing-cost", firstBuyDate);
     let dividendsReceived = 0;
     for (const dividend of dividends) {
-      dividendsReceived += convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+      const converted = convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+      dividendsReceived += converted;
+      datedFlows.push({ date: dividend.date, amount: converted });
     }
     if (marketValue === null) return {
       status: "unpriced",
@@ -117,11 +114,23 @@ export function calculatePositionReturn(
       dividendsReceived,
       totalReturn: null,
       totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
       firstBuyDate,
     };
     const unrealizedGain = marketValue - remainingCostBasis;
     const totalReturn = unrealizedGain + realizedGain + dividendsReceived;
     const denominator = remainingCostBasis + realizedCostBasisRemoved;
+    const valuationDate = options.valuationDate
+      ?? [...orderedTrades.map((trade) => trade.date), ...dividends.map((dividend) => dividend.date)].sort().at(-1)
+      ?? firstBuyDate;
+    if (marketValue > EPSILON && valuationDate) datedFlows.push({ date: valuationDate, amount: marketValue });
+    const annualized = solveXirr(datedFlows);
+    const elapsedYears = firstBuyDate && valuationDate
+      ? (Date.parse(`${valuationDate}T00:00:00Z`) - Date.parse(`${firstBuyDate}T00:00:00Z`)) / 31_536_000_000
+      : 0;
+    const sinceFirstBuyPercentage = annualized !== null && elapsedYears > 0
+      ? Math.pow(1 + annualized, elapsedYears) - 1
+      : null;
     return {
       status: "available",
       remainingCostBasis,
@@ -131,6 +140,7 @@ export function calculatePositionReturn(
       dividendsReceived,
       totalReturn,
       totalReturnPercentage: Math.abs(denominator) <= EPSILON ? null : totalReturn / denominator,
+      sinceFirstBuyPercentage,
       firstBuyDate,
     };
   } catch {
@@ -182,6 +192,7 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
+      { valuationDate: latest?.date },
     );
     const returns = priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
       ? { ...calculatedReturns, status: "missing-fx" as const }

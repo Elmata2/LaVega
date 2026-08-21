@@ -7,19 +7,16 @@ import {
   type PortfolioRange,
   type PortfolioValuePoint,
 } from "@lavega/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip } from "./ui/chart";
-
-const ranges: { value: PortfolioRange; label: string }[] = [
-  { value: "1M", label: "1 maand" }, { value: "6M", label: "6 maanden" }, { value: "1Y", label: "1 jaar" }, { value: "YTD", label: "Dit jaar" }, { value: "All", label: "Alles" },
-];
+import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 const colors = ["chart-blue", "chart-purple", "chart-teal"];
 type Props = { data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>; benchmarks?: BenchmarkSeries[]; externalCashFlows?: Array<{ date: string; amount: number | null }>; currency?: string };
 type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; problems?: string[] };
-export type VisibleWindow = { kind: "preset"; range: PortfolioRange } | { kind: "custom"; from: string; to: string; baseRange: PortfolioRange };
+export type VisibleWindow = ChartWindow;
 
 const money = (value: number, currency: string) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
 const percent = (value: number) => value.toLocaleString("nl-NL", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 2 });
@@ -34,12 +31,10 @@ function allPoints(data: Props["data"]): PortfolioValuePoint[] {
 }
 
 export function pointsForWindow(data: Props["data"], window: VisibleWindow): PortfolioValuePoint[] {
-  if (window.kind === "preset") return data[window.range] ?? (window.range === "All" ? allPoints(data) : []);
-  return allPoints(data).filter((point) => point.date >= window.from && point.date <= window.to);
+  return pointsInWindow(allPoints(data), window, (range) => data[range] ?? (range === "All" ? allPoints(data) : []));
 }
 
 export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlows = [], currency = "EUR" }: Props) {
-  const [visibleWindow, setVisibleWindow] = useState<VisibleWindow>({ kind: "preset", range: "1M" });
   const [selected, setSelected] = useState<string[]>(benchmarks.map((benchmark) => benchmark.symbol));
   const [visible, setVisible] = useState<Set<string>>(new Set(["portfolio", ...selected]));
   const [comparing, setComparing] = useState(false);
@@ -48,13 +43,10 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
   const [searchStatus, setSearchStatus] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
-  const [pointerRatio, setPointerRatio] = useState(0);
-  const [drag, setDrag] = useState<{ pointerId: number; from: number; to: number; startX: number } | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [dateError, setDateError] = useState<string | null>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
+  const fullPoints = useMemo(() => allPoints(data), [data]);
+  const presetPoints = useCallback((range: PortfolioRange) => data[range] ?? (range === "All" ? fullPoints : []), [data, fullPoints]);
+  const chart = useChartWindow({ allPoints: fullPoints, presetPoints, minimumWheelPoints: 5 });
+  const { points, focusIndex, setFocusIndex, pointerRatio, setPointerRatio, drag, chartRef, dateFrom, setDateFrom, dateTo, setDateTo, dateError, minDate, maxDate } = chart;
 
   useEffect(() => {
     let active = true;
@@ -93,8 +85,6 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
     } finally { setBusy(false); }
   }
 
-  const points = useMemo(() => pointsForWindow(data, visibleWindow), [data, visibleWindow]);
-  const fullPoints = useMemo(() => allPoints(data), [data]);
   const selectedSeries = selected.map((symbol) => benchmarks.find((benchmark) => benchmark.symbol === symbol) ?? { symbol, name: symbol, exchange: "Yahoo Finance", currency: "EUR", points: [] });
   const visibleBenchmarks = selectedSeries.filter((benchmark) => visible.has(benchmark.symbol));
   const mode = deriveChartMode(selected);
@@ -109,78 +99,16 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
   }, [points]);
   const label = mode === "euros" ? "Portefeuillewaarde" : "Geïndexeerd rendement";
   const summaryPoint = indexed[focusIndex ?? indexed.length - 1] ?? null;
-  const minDate = fullPoints[0]?.date;
-  const maxDate = fullPoints.at(-1)?.date;
-  const baseRange = visibleWindow.kind === "preset" ? visibleWindow.range : visibleWindow.baseRange;
-
-  const applyPreset = useCallback((range: PortfolioRange) => {
-    setVisibleWindow({ kind: "preset", range });
-    setFocusIndex(null);
-    setDateError(null);
-  }, []);
-  const clearZoom = useCallback(() => {
-    setVisibleWindow((current) => current.kind === "custom" ? { kind: "preset", range: current.baseRange } : current);
-    setFocusIndex(null);
-    setDateError(null);
-  }, []);
-
-  const indexForClientX = useCallback((clientX: number, count = points.length) => {
-    const rect = chartRef.current?.getBoundingClientRect();
-    if (!rect || count === 0 || rect.width <= 0) return null;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left - 72) / Math.max(1, rect.width - 88)));
-    return Math.round(ratio * (count - 1));
-  }, [points.length]);
-
-  useEffect(() => {
-    const element = chartRef.current;
-    if (!element || fullPoints.length < 2) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const current = points;
-      if (current.length < 2) return;
-      const ratio = Math.max(0, Math.min(1, (event.clientX - element.getBoundingClientRect().left) / Math.max(1, element.clientWidth)));
-      const step = Math.max(1, Math.round(current.length * 0.05));
-      const nextCount = Math.max(5, Math.min(fullPoints.length, current.length + (event.deltaY < 0 ? -step : step)));
-      if (nextCount >= fullPoints.length) { clearZoom(); return; }
-      const centerDate = current[Math.round(ratio * (current.length - 1))]?.date ?? current.at(-1)!.date;
-      const foundCenter = fullPoints.findIndex((point) => point.date >= centerDate);
-      const center = foundCenter < 0 ? fullPoints.length - 1 : foundCenter;
-      let start = Math.round(center - ratio * (nextCount - 1));
-      start = Math.max(0, Math.min(fullPoints.length - nextCount, start));
-      setVisibleWindow({ kind: "custom", from: fullPoints[start]!.date, to: fullPoints[start + nextCount - 1]!.date, baseRange });
-      setFocusIndex(null);
-    };
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [baseRange, clearZoom, fullPoints, points]);
-
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") { clearZoom(); return; }
-    const last = chartPoints.length - 1;
-    const current = focusIndex ?? last;
-    if (event.key === "ArrowRight") { setFocusIndex(Math.min(last, current + 1)); event.preventDefault(); }
-    if (event.key === "ArrowLeft") { setFocusIndex(Math.max(0, current - 1)); event.preventDefault(); }
-    if (event.key === "Home") { setFocusIndex(0); event.preventDefault(); }
-    if (event.key === "End") { setFocusIndex(last); event.preventDefault(); }
-  };
-
   const applyTypedDates = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!dateFrom || !dateTo || !minDate || !maxDate) { setDateError("Vul twee geldige datums in."); return; }
-    const [from, to] = dateFrom <= dateTo ? [dateFrom, dateTo] : [dateTo, dateFrom];
-    const clampedFrom = from < minDate ? minDate : from;
-    const clampedTo = to > maxDate ? maxDate : to;
-    if (fullPoints.filter((point) => point.date >= clampedFrom && point.date <= clampedTo).length < 2) { setDateError("Kies minimaal twee datapunten."); return; }
-    setVisibleWindow({ kind: "custom", from: clampedFrom, to: clampedTo, baseRange });
-    setFocusIndex(null);
-    setDateError(null);
+    chart.applyTypedDates();
   };
 
   return <Card>
     <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div><p className="relative h-5 text-sm font-medium text-muted-foreground"><span className={`axis-label absolute inset-0 ${mode === "euros" ? "opacity-100" : "opacity-0"}`}>Portefeuillewaarde</span><span className={`axis-label absolute inset-0 ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}>Geïndexeerd rendement</span></p><CardTitle>{mode === "euros" ? "Portefeuille" : "Vergelijking"}</CardTitle></div>
       <div role="group" aria-label="Periode kiezen" className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1">
-        {ranges.map((item) => <button key={item.value} type="button" aria-pressed={visibleWindow.kind === "preset" && visibleWindow.range === item.value} onClick={() => applyPreset(item.value)} className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${visibleWindow.kind === "preset" && visibleWindow.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</button>)}
+        {chartRanges.map((item) => <button key={item.value} type="button" aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value} onClick={() => chart.applyPreset(item.value)} className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "preset" && chart.window.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</button>)}
       </div>
     </CardHeader>
     <CardContent>
@@ -200,7 +128,7 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
           <label className="font-semibold text-muted-foreground">Van<input type="date" aria-label="Van datum" min={minDate} max={maxDate} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground" /></label>
           <label className="font-semibold text-muted-foreground">Tot<input type="date" aria-label="Tot datum" min={minDate} max={maxDate} value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground" /></label>
           <button type="submit" className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold">Toepassen</button>
-          {visibleWindow.kind === "custom" && <button type="button" onClick={clearZoom} aria-label="Zoom wissen" className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold">Zoom: {dateLabel(visibleWindow.from)} – {dateLabel(visibleWindow.to)} ×</button>}
+          {chart.window.kind === "custom" && <button type="button" onClick={chart.clearZoom} aria-label="Zoom wissen" className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold">Zoom: {dateLabel(chart.window.from)} – {dateLabel(chart.window.to)} ×</button>}
         </form>
         {dateError && <p role="alert" className="mb-3 text-xs text-negative">{dateError}</p>}
         <div
@@ -209,33 +137,16 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
           tabIndex={0}
           aria-label={`${label}. Gebruik pijltoetsen voor exacte waarden, Home en End voor begin en einde, Escape om zoom te wissen.`}
           className="touch-pan-y select-none rounded-[12px]"
-          onKeyDown={onKeyDown}
-          onPointerDown={(event) => {
-            if (event.button !== 0 || points.length < 2) return;
-            const index = indexForClientX(event.clientX);
-            if (index === null) return;
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            setDrag({ pointerId: event.pointerId, from: index, to: index, startX: event.clientX });
-          }}
+          onKeyDown={chart.onKeyDown}
+          onPointerDown={chart.onPointerDown}
           onPointerMove={(event) => {
-            const index = indexForClientX(event.clientX);
+            const index = chart.indexForClientX(event.clientX);
             if (index !== null) setFocusIndex(index);
             const rect = event.currentTarget.getBoundingClientRect();
             setPointerRatio(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))));
-            if (drag?.pointerId === event.pointerId && index !== null) setDrag({ ...drag, to: index });
+            chart.onPointerMove(event);
           }}
-          onPointerUp={(event) => {
-            if (!drag || drag.pointerId !== event.pointerId) return;
-            event.currentTarget.releasePointerCapture?.(event.pointerId);
-            if (Math.abs(event.clientX - drag.startX) >= 10 && Math.abs(drag.to - drag.from) >= 1) {
-              const fromIndex = Math.min(drag.from, drag.to);
-              const toIndex = Math.max(drag.from, drag.to);
-              setVisibleWindow({ kind: "custom", from: points[fromIndex]!.date, to: points[toIndex]!.date, baseRange });
-              setFocusIndex(null);
-            }
-            setDrag(null);
-          }}
-          onPointerCancel={() => setDrag(null)}
+          onPointerUp={chart.onPointerUp}
           onPointerLeave={() => { if (!drag) setFocusIndex(null); }}
         >
           <ChartContainer className="h-[320px]" aria-hidden="true">

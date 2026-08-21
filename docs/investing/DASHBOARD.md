@@ -290,7 +290,7 @@ Show current allocation by instrument and by entity. Keep it compact in the righ
 
 Use priced portfolio value as denominator. Make unpriced positions visible as incomplete data instead of silently treating them as zero.
 
-Omit unpriced positions from donut slices and percentage denominator. Show their symbols in an adjacent `Waarde onbekend` warning. Do not create a zero-sized or estimated `Onbekend` slice.
+Build slices from the same current EUR values as the positions table: use current closes, permit forward-fill through five business days, and reject prices after that cap. Omit unpriced positions from donut slices and percentage denominator. Show their symbols in an adjacent `Waarde onbekend` warning. Do not fall back to broker snapshot market values and do not create a zero-sized or estimated `Onbekend` slice.
 
 ## Positions table
 
@@ -328,6 +328,8 @@ Calculate each position in EUR with weighted-average cost ([Position return: ave
 - `totalReturn` is unrealized gain plus realized gain plus dividends received.
 
 Show `+€X (+Y%) totaal rendement`. Use `remainingCostBasis + realizedCostBasisRemoved` as percentage denominator. This equals cost assigned to all bought shares under the weighted-average model and remains defined after partial sells. Return percentage is unavailable when that denominator is zero. Keep `Sinds eerste aankoop: +Z% vanaf YYYY-MM-DD` separate because it answers a different question.
+
+Calculate `Sinds eerste aankoop` as cumulative money-weighted return. Use dated EUR cash flows: buys are negative gross value plus commission, sells are positive gross value minus commission, dividends are positive, and an open position's current value is the terminal positive flow. Solve XIRR, then convert the annual rate to the elapsed first-buy-to-valuation period with `(1 + xirr) ^ elapsedYears - 1`. Use the latest close as an open-position valuation date and the final activity date for a closed position. Show `Niet beschikbaar` when no valid root exists.
 
 For incomplete trade history, do not estimate. Show `Niet beschikbaar` and `Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.`
 
@@ -372,7 +374,7 @@ Keep broker sync, price sync, vault, cache, market-data, and incomplete-history 
 - Price backfill running: show progress and cached partial charts.
 - Unpriced or unknown cash: label affected values as unknown and expose symbols or broker-currency keys.
 - Failed request: show a concise Dutch problem message and keep any valid stale data visible.
-- Yahoo consent missing: request consent before the first search or price call, then persist the decision.
+- Yahoo consent missing: request consent before the first search or price call. Persist the tenant decision in local server storage, version it with the disclosure, and require a new decision when disclosure changes. Search and price endpoints return HTTP 428 until consent is accepted.
 
 Status changes must not depend on animation. Pressable controls respond immediately. Honor `prefers-reduced-motion`. Preserve visible focus, adequate touch targets, and keyboard equivalence for pointer actions.
 

@@ -1,6 +1,7 @@
 import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import { businessDateRange } from "./calendar.js";
 
 export type PortfolioValuePoint = {
   date: string;
@@ -32,18 +33,12 @@ function isoDate(date: Date): string {
 
 function businessCalendar(from: string, to: string, priceBars: readonly PriceBar[]): string[] {
   const dates = new Set(priceBars.filter((bar) => bar.date >= from && bar.date <= to).map((bar) => bar.date));
-  const cursor = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  while (cursor <= end) {
-    const day = cursor.getUTCDay();
-    if (day !== 0 && day !== 6) dates.add(isoDate(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
+  for (const date of businessDateRange(from, to)) dates.add(date);
   return [...dates].sort();
 }
 
 function businessDates(from: string, to: string): string[] {
-  return businessCalendar(from, to, []);
+  return businessDateRange(from, to);
 }
 
 function upperBound(sortedDates: readonly string[], date: string): number {

@@ -22,7 +22,7 @@ test("position return uses trade-date FX, average cost, sell fees, and dividends
   ];
   const dividends: Dividend[] = [{ id: "dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "USD" }];
 
-  expect(calculatePositionReturn(6, 120, trades, dividends, "EUR", rates)).toEqual({
+  expect(calculatePositionReturn(6, 120, trades, dividends, "EUR", rates, { valuationDate: "2027-01-02" })).toEqual({
     status: "available",
     remainingCostBasis: 38,
     realizedCostBasisRemoved: 38,
@@ -31,6 +31,7 @@ test("position return uses trade-date FX, average cost, sell fees, and dividends
     dividendsReceived: 5,
     totalReturn: 92.5,
     totalReturnPercentage: 92.5 / 76,
+    sinceFirstBuyPercentage: expect.any(Number),
     firstBuyDate: "2026-01-02",
   });
 });
@@ -40,6 +41,7 @@ test("position return stays unavailable for incomplete history and a zero denomi
   expect(calculatePositionReturn(10, 20, [trade({ commission: null })], [], "EUR", rates).status).toBe("missing-cost");
   const zero = calculatePositionReturn(0, 0, [trade({ amount: 0, price: 0, commission: 0 }), trade({ side: "sell", amount: 0, price: 0, commission: 0 })], [], "EUR", rates);
   expect(zero.totalReturnPercentage).toBeNull();
+  expect(zero.sinceFirstBuyPercentage).toBeNull();
 });
 
 test("unpriced open position retains known realized and dividend components", () => {
@@ -62,11 +64,14 @@ test("current positions omit closed holdings and expose price quality, EUR weigh
     { tenantId: "local", symbol: "ACME", date: "2026-01-05", close: 40, currency: "USD" },
     { tenantId: "local", symbol: "EURCO", date: "2026-01-09", close: 25, currency: "EUR" },
   ];
-  const result = buildCurrentPositions({ positions, trades, dividends: [], priceBars: bars, presentationCurrency: "EUR", fxRates: rates, today: "2026-01-09" });
+  const dividends: Dividend[] = [{ id: "acme-dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "EUR" }];
+  const result = buildCurrentPositions({ positions, trades, dividends, priceBars: bars, presentationCurrency: "EUR", fxRates: rates, today: "2026-01-09" });
 
   expect(result.map(({ symbol }) => symbol)).toEqual(["ACME", "EURCO"]);
   expect(result[0]).toMatchObject({ marketValue: 120, portfolioWeight: 120 / 170, priceStatus: "forward-filled" });
   expect(result[1]).toMatchObject({ marketValue: 50, portfolioWeight: 50 / 170, priceStatus: "priced" });
+  const expectedSinceFirstBuy = calculatePositionReturn(6, 120, [trades[0]!], dividends, "EUR", rates, { valuationDate: "2026-01-05" }).sinceFirstBuyPercentage;
+  expect(result[0]!.returns.sinceFirstBuyPercentage).toBeCloseTo(expectedSinceFirstBuy!);
 
   const missingFx = buildCurrentPositions({ positions: [positions[0]!], trades: [trades[0]!], dividends: [], priceBars: bars, presentationCurrency: "EUR", fxRates: { base: "EUR", date: "2026-01-01", rates: {} }, today: "2026-01-09" });
   expect(missingFx[0]).toMatchObject({ marketValue: null, portfolioWeight: null, priceStatus: "missing-fx", returns: { status: "missing-fx" } });

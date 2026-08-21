@@ -1,21 +1,10 @@
 import type { PortfolioRange, PortfolioValuePoint } from "@lavega/core";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo } from "react";
 import { Area, AreaChart, Line, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip } from "./ui/chart";
-
-const ranges: Array<{ value: PortfolioRange; label: string }> = [
-  { value: "1M", label: "1 maand" },
-  { value: "6M", label: "6 maanden" },
-  { value: "1Y", label: "1 jaar" },
-  { value: "YTD", label: "Dit jaar" },
-  { value: "All", label: "Alles" },
-];
-
-type NetWorthWindow =
-  | { kind: "preset"; range: PortfolioRange }
-  | { kind: "custom"; from: string; to: string; baseRange: PortfolioRange };
+import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 
 type Props = {
   data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>;
@@ -36,110 +25,42 @@ function allPoints(data: Props["data"]): PortfolioValuePoint[] {
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-export function netWorthPointsForWindow(data: Props["data"], window: NetWorthWindow): PortfolioValuePoint[] {
-  if (window.kind === "preset") return data[window.range] ?? (window.range === "All" ? allPoints(data) : []);
-  return allPoints(data).filter((point) => point.date >= window.from && point.date <= window.to);
+export function netWorthPointsForWindow(data: Props["data"], window: ChartWindow): PortfolioValuePoint[] {
+  return pointsInWindow(allPoints(data), window, (range) => data[range] ?? (range === "All" ? allPoints(data) : []));
 }
 
 export function toNetWorthChartPoint(point: PortfolioValuePoint): NetWorthChartPoint {
   return {
     ...point,
-    value: point.positionsValue === null || point.cashValue === null ? null : point.value,
     stalePositions: point.forwardFilled.length > 0 ? point.positionsValue : null,
   };
 }
 
 export function NetWorthChart({ data, currency = "EUR" }: Props) {
-  const [visibleWindow, setVisibleWindow] = useState<NetWorthWindow>({ kind: "preset", range: "1M" });
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
-  const [pointerRatio, setPointerRatio] = useState(0);
-  const [drag, setDrag] = useState<{ pointerId: number; from: number; to: number; startX: number } | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [dateError, setDateError] = useState<string | null>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
   const hatchId = `net-worth-hatch-${useId().replace(/:/g, "")}`;
 
   const fullPoints = useMemo(() => allPoints(data), [data]);
-  const points = useMemo(() => netWorthPointsForWindow(data, visibleWindow), [data, visibleWindow]);
+  const presetPoints = useCallback((range: PortfolioRange) => data[range] ?? (range === "All" ? fullPoints : []), [data, fullPoints]);
+  const chart = useChartWindow({ allPoints: fullPoints, presetPoints });
+  const { points, focusIndex, setFocusIndex, pointerRatio, setPointerRatio, drag, chartRef, dateFrom, setDateFrom, dateTo, setDateTo, dateError, minDate, maxDate } = chart;
   const chartPoints = useMemo(() => points.map(toNetWorthChartPoint), [points]);
   const activePoint = chartPoints[focusIndex ?? chartPoints.length - 1] ?? null;
-  const minDate = fullPoints[0]?.date;
-  const maxDate = fullPoints.at(-1)?.date;
-  const baseRange = visibleWindow.kind === "preset" ? visibleWindow.range : visibleWindow.baseRange;
   const warnings = useMemo(() => ({
     unpriced: [...new Set(points.flatMap((point) => point.unpriced))],
     cashUnknown: [...new Set(points.flatMap((point) => point.cashUnknown))],
     forwardFilled: [...new Set(points.flatMap((point) => point.forwardFilled))],
   }), [points]);
 
-  const applyPreset = useCallback((range: PortfolioRange) => {
-    setVisibleWindow({ kind: "preset", range });
-    setFocusIndex(null);
-    setDateError(null);
-  }, []);
-  const clearZoom = useCallback(() => {
-    setVisibleWindow((current) => current.kind === "custom" ? { kind: "preset", range: current.baseRange } : current);
-    setFocusIndex(null);
-    setDateError(null);
-  }, []);
-  const indexForClientX = useCallback((clientX: number, count = points.length) => {
-    const rect = chartRef.current?.getBoundingClientRect();
-    if (!rect || count === 0 || rect.width <= 0) return null;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left - 72) / Math.max(1, rect.width - 88)));
-    return Math.round(ratio * (count - 1));
-  }, [points.length]);
-
-  useEffect(() => {
-    const element = chartRef.current;
-    if (!element || fullPoints.length < 2) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      if (points.length < 2) return;
-      const ratio = Math.max(0, Math.min(1, (event.clientX - element.getBoundingClientRect().left) / Math.max(1, element.clientWidth)));
-      const step = Math.max(1, Math.round(points.length * 0.05));
-      const nextCount = Math.max(2, Math.min(fullPoints.length, points.length + (event.deltaY < 0 ? -step : step)));
-      if (nextCount >= fullPoints.length) { clearZoom(); return; }
-      const centerDate = points[Math.round(ratio * (points.length - 1))]?.date ?? points.at(-1)!.date;
-      const foundCenter = fullPoints.findIndex((point) => point.date >= centerDate);
-      const center = foundCenter < 0 ? fullPoints.length - 1 : foundCenter;
-      let start = Math.round(center - ratio * (nextCount - 1));
-      start = Math.max(0, Math.min(fullPoints.length - nextCount, start));
-      setVisibleWindow({ kind: "custom", from: fullPoints[start]!.date, to: fullPoints[start + nextCount - 1]!.date, baseRange });
-      setFocusIndex(null);
-    };
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [baseRange, clearZoom, fullPoints, points]);
-
   function applyTypedDates(event: React.FormEvent) {
     event.preventDefault();
-    if (!dateFrom || !dateTo || !minDate || !maxDate) { setDateError("Vul twee geldige datums in."); return; }
-    const [from, to] = dateFrom <= dateTo ? [dateFrom, dateTo] : [dateTo, dateFrom];
-    const clampedFrom = from < minDate ? minDate : from;
-    const clampedTo = to > maxDate ? maxDate : to;
-    if (fullPoints.filter((point) => point.date >= clampedFrom && point.date <= clampedTo).length < 2) { setDateError("Kies minimaal twee datapunten."); return; }
-    setVisibleWindow({ kind: "custom", from: clampedFrom, to: clampedTo, baseRange });
-    setFocusIndex(null);
-    setDateError(null);
-  }
-
-  function onKeyDown(event: React.KeyboardEvent) {
-    if (event.key === "Escape") { clearZoom(); return; }
-    const last = chartPoints.length - 1;
-    if (last < 0) return;
-    const current = focusIndex ?? last;
-    if (event.key === "ArrowRight") { setFocusIndex(Math.min(last, current + 1)); event.preventDefault(); }
-    if (event.key === "ArrowLeft") { setFocusIndex(Math.max(0, current - 1)); event.preventDefault(); }
-    if (event.key === "Home") { setFocusIndex(0); event.preventDefault(); }
-    if (event.key === "End") { setFocusIndex(last); event.preventDefault(); }
+    chart.applyTypedDates();
   }
 
   return <Card data-dashboard-section="net-worth">
     <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div><p className="text-sm font-medium text-muted-foreground">Nettovermogen</p><CardTitle>Beleggingen en cash</CardTitle></div>
       <div role="group" aria-label="Periode nettovermogen kiezen" className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1">
-        {ranges.map((item) => <button key={item.value} type="button" aria-pressed={visibleWindow.kind === "preset" && visibleWindow.range === item.value} onClick={() => applyPreset(item.value)} className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${visibleWindow.kind === "preset" && visibleWindow.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</button>)}
+        {chartRanges.map((item) => <button key={item.value} type="button" aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value} onClick={() => chart.applyPreset(item.value)} className={`pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold ${chart.window.kind === "preset" && chart.window.range === item.value ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</button>)}
       </div>
     </CardHeader>
     <CardContent>
@@ -149,7 +70,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
           <label className="font-semibold text-muted-foreground">Van<input type="date" aria-label="Nettovermogen van datum" min={minDate} max={maxDate} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground" /></label>
           <label className="font-semibold text-muted-foreground">Tot<input type="date" aria-label="Nettovermogen tot datum" min={minDate} max={maxDate} value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1 block rounded-[10px] border border-input bg-background px-2 py-1.5 font-normal text-foreground" /></label>
           <button type="submit" className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold">Toepassen</button>
-          {visibleWindow.kind === "custom" && <button type="button" onClick={clearZoom} aria-label="Zoom nettovermogen wissen" className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold">Zoom: {dateLabel(visibleWindow.from)} – {dateLabel(visibleWindow.to)} ×</button>}
+          {chart.window.kind === "custom" && <button type="button" onClick={chart.clearZoom} aria-label="Zoom nettovermogen wissen" className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold">Zoom: {dateLabel(chart.window.from)} – {dateLabel(chart.window.to)} ×</button>}
         </form>
         {dateError && <p role="alert" className="mb-3 text-xs text-negative">{dateError}</p>}
         <div
@@ -158,33 +79,16 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
           tabIndex={0}
           aria-label="Nettovermogen: Beleggingen, cash en totaal. Gebruik pijltoetsen voor exacte waarden, Home en End voor begin en einde, Escape om zoom te wissen."
           className="touch-pan-y select-none rounded-[12px]"
-          onKeyDown={onKeyDown}
-          onPointerDown={(event) => {
-            if (event.button !== 0 || points.length < 2) return;
-            const index = indexForClientX(event.clientX);
-            if (index === null) return;
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            setDrag({ pointerId: event.pointerId, from: index, to: index, startX: event.clientX });
-          }}
+          onKeyDown={chart.onKeyDown}
+          onPointerDown={chart.onPointerDown}
           onPointerMove={(event) => {
-            const index = indexForClientX(event.clientX);
+            const index = chart.indexForClientX(event.clientX);
             if (index !== null) setFocusIndex(index);
             const rect = event.currentTarget.getBoundingClientRect();
             setPointerRatio(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))));
-            if (drag?.pointerId === event.pointerId && index !== null) setDrag({ ...drag, to: index });
+            chart.onPointerMove(event);
           }}
-          onPointerUp={(event) => {
-            if (!drag || drag.pointerId !== event.pointerId) return;
-            event.currentTarget.releasePointerCapture?.(event.pointerId);
-            if (Math.abs(event.clientX - drag.startX) >= 10 && Math.abs(drag.to - drag.from) >= 1) {
-              const fromIndex = Math.min(drag.from, drag.to);
-              const toIndex = Math.max(drag.from, drag.to);
-              setVisibleWindow({ kind: "custom", from: points[fromIndex]!.date, to: points[toIndex]!.date, baseRange });
-              setFocusIndex(null);
-            }
-            setDrag(null);
-          }}
-          onPointerCancel={() => setDrag(null)}
+          onPointerUp={chart.onPointerUp}
           onPointerLeave={() => { if (!drag) setFocusIndex(null); }}
         >
           <ChartContainer className="h-[320px]" aria-hidden="true">

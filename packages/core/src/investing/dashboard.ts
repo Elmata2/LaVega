@@ -1,5 +1,5 @@
 import { convertCurrency, type FxRates } from "./portfolio.js";
-import { bucketAllocationByEntity, bucketAllocationByInstrument, type Allocation } from "./allocation.js";
+import { bucketPricedAllocation, type Allocation } from "./allocation.js";
 import {
   computePortfolioValueSeries,
   filterPortfolioValueRange,
@@ -187,8 +187,8 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     })),
     externalCashFlows: [...externalByDate].sort(([left], [right]) => left.localeCompare(right)).map(([date, amount]) => ({ date, amount })),
     allocation: {
-      instrument: bucketAllocationByInstrument([...input.positions], input.presentationCurrency, input.fxRates),
-      entity: bucketAllocationByEntity([...input.positions], input.presentationCurrency, input.fxRates),
+      instrument: bucketPricedAllocation(positions, "instrument"),
+      entity: bucketPricedAllocation(positions, "entity"),
     },
     positions,
     position,
@@ -242,7 +242,10 @@ function buildPositionDetail(input: {
       dailyChangePercentage = null;
     }
   }
-  const returns = calculatePositionReturn(quantity, status === "closed" ? 0 : currentValue, input.trades, input.dividends, input.presentationCurrency, input.fxRates);
+  const valuationDate = status === "open"
+    ? latest?.date
+    : [...input.trades.map((trade) => trade.date), ...input.dividends.map((dividend) => dividend.date)].sort().at(-1);
+  const returns = calculatePositionReturn(quantity, status === "closed" ? 0 : currentValue, input.trades, input.dividends, input.presentationCurrency, input.fxRates, { valuationDate });
   const averageCost = returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9 ? null : returns.remainingCostBasis / quantity;
   const activity: PositionActivity[] = [
     ...input.trades.flatMap((trade, sourceOrder): PositionActivity[] => trade.side === "other" ? [] : [{

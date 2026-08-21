@@ -41,6 +41,18 @@ test("dashboard builder returns finished chart series and selected position mark
   expect(dashboard.position?.currentValue).toBeCloseTo(1200 / 1.1);
 });
 
+test("allocation uses current price bars and omits values beyond the five-day cap", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: [{ tenantId: "local", entity: "personal", symbol: "STALE", quantity: 2, averagePrice: 8, marketPrice: 999, marketValue: 1998, currency: "EUR", asOf: "2026-01-13" }],
+    trades: [{ id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "STALE", side: "buy", quantity: 2, price: 8, amount: 16, currency: "EUR", commission: 0 }],
+    dividends: [],
+    priceBars: [{ tenantId: "local", symbol: "STALE", date: "2026-01-02", close: 10, currency: "EUR" }],
+    benchmarkBars: [], presentationCurrency: "EUR", fxRates: [], today: "2026-01-13",
+  });
+  expect(dashboard.positions[0]).toMatchObject({ marketValue: null, priceStatus: "unpriced" });
+  expect(dashboard.allocation.instrument).toEqual({ buckets: [{ key: "STALE", label: "STALE", value: null, unpriced: true }], unpriced: ["STALE"] });
+});
+
 test("dashboard resolves a closed historical symbol with return and stable activity", () => {
   const dashboard = buildInvestingDashboard({
     positions: [],

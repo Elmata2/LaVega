@@ -42,10 +42,14 @@ test("moves exact-value crosshair with keyboard and clears zoom with Escape", as
   const container = document.createElement("div"); const root = createRoot(container);
   await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={points} />); });
   const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+  const all = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Alles");
+  expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Dit jaar")).toBe(true);
+  await act(async () => { all?.click(); });
   await act(async () => { chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })); });
   expect(container.querySelector('[role="status"]')?.textContent).toContain("5 jan 2026");
-  const month = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "1 maand");
-  await act(async () => { month?.click(); });
+  Object.defineProperty(chart, "clientWidth", { configurable: true, value: 400 });
+  chart.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 320, width: 400, height: 320, toJSON: () => ({}) });
+  await act(async () => { chart.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 200, deltaY: -100 })); });
   expect(container.querySelector('button[aria-label="Zoom wissen"]')).not.toBeNull();
   await act(async () => { chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
   expect(container.querySelector('button[aria-label="Zoom wissen"]')).toBeNull();

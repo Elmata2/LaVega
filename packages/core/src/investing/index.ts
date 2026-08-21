@@ -3,6 +3,7 @@ export * from "./hash.js";
 export * from "./credentials.js";
 export * from "./portfolio.js";
 export * from "./allocation.js";
+export * from "./calendar.js";
 export * from "./dividend.js";
 export * from "./markers.js";
 export * from "./dashboard.js";

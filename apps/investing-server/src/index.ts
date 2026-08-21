@@ -15,6 +15,7 @@ import {
 } from "@lavega/adapters";
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
+import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
 import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
 
@@ -97,7 +98,7 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[] };
+export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore };
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
@@ -172,6 +173,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
   const priceStore = options.priceStore;
   const benchmarkSelectionStore = options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const marketDataConsentStore = options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
   const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
   let priceDataVersion = 0;
@@ -256,8 +258,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     },
   };
   const onPriceDataChanged = () => { priceDataVersion += 1; };
-  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, dashboardReader, onPriceDataChanged });
+  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged });
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
 }

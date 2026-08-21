@@ -20,12 +20,12 @@ const dashboard: InvestingDashboardData = {
   positions: [{
     symbol: "ASML", entity: "personal", description: "ASML", quantity: 1, marketValue: 120, portfolioWeight: 1,
     priceStatus: "priced", currency: "EUR", asOf: "2026-08-18",
-    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, firstBuyDate: "2026-01-02" },
+    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, sinceFirstBuyPercentage: 0.25, firstBuyDate: "2026-01-02" },
   }],
   position: {
     symbol: "ASML", description: "ASML", currency: "EUR", priceCurrency: "EUR", status: "open", quantity: 1,
     currentValue: 120, dailyChange: 2, dailyChangePercentage: 0.017, currentPrice: 120, averageCost: 100,
-    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, firstBuyDate: "2026-01-02" },
+    returns: { status: "available", remainingCostBasis: 100, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 5, totalReturn: 25, totalReturnPercentage: 0.25, sinceFirstBuyPercentage: 0.25, firstBuyDate: "2026-01-02" },
     returnStatus: "available", firstBuyDate: "2026-01-02",
     quantityHistory: [{ date: "2026-01-02", quantity: 1, delta: 1, reason: "buy", sourceOrder: 0 }],
     activity: [{ date: "2026-01-02", kind: "buy", quantity: 1, executionPrice: 100, amount: 100, commission: 0, currency: "EUR", sourceOrder: 0 }],
@@ -38,6 +38,7 @@ const emptyDashboard = emptyInvestingDashboard();
 function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
   if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
   if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
   return new Response(JSON.stringify({}));
@@ -46,6 +47,7 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
 function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
   if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
   if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
   return new Response(JSON.stringify({}));
@@ -272,6 +274,8 @@ test("position detail shows returns, quantity disclosure, and activity", async (
   expect(container.textContent).toContain("Open positie");
   expect(container.textContent).toContain("Huidige waarde");
   expect(container.textContent).toContain("Totaal rendement");
+  expect(container.textContent).toContain("Sinds eerste aankoop:");
+  expect(container.textContent).toContain("vanaf 2026-01-02");
   expect(container.textContent).toContain("Activiteit");
   const quantity = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Aantalhistorie"));
   expect(quantity?.getAttribute("aria-expanded")).toBe("false");
@@ -296,7 +300,7 @@ test("closed position omits current value and keeps realized history", async () 
 });
 
 test("position detail shows import prompt when return history is incomplete", async () => {
-  const incomplete: InvestingDashboardData = { ...dashboard, position: { ...dashboard.position!, returnStatus: "missing-cost", returns: { ...dashboard.position!.returns, status: "missing-cost", remainingCostBasis: null, realizedCostBasisRemoved: null, unrealizedGain: null, realizedGain: null, dividendsReceived: null, totalReturn: null, totalReturnPercentage: null } } };
+  const incomplete: InvestingDashboardData = { ...dashboard, position: { ...dashboard.position!, returnStatus: "missing-cost", returns: { ...dashboard.position!.returns, status: "missing-cost", remainingCostBasis: null, realizedCostBasisRemoved: null, unrealizedGain: null, realizedGain: null, dividendsReceived: null, totalReturn: null, totalReturnPercentage: null, sinceFirstBuyPercentage: null } } };
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response(JSON.stringify(incomplete))) : Promise.resolve(responseFor(input, init))));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => { root.render(<MemoryRouter initialEntries={["/positions/ASML"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
@@ -328,15 +332,23 @@ test("dashboard shows read error when route fails", async () => {
   root.unmount();
 });
 
-test("does not show Yahoo disclosure or build price sync requests in browser", async () => {
-  const requests: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard)); return new Response(JSON.stringify({ problems: [] })); }));
+test("requests and persists Yahoo consent before broker-triggered price sync", async () => {
+  const requests: Array<{ url: string; method?: string }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input); requests.push({ url, method: init?.method });
+    if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
+    if (url === "/api/market-data/consent" && init?.method === "PUT") return new Response(JSON.stringify({ accepted: true }));
+    if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: false }));
+    if (url === "/api/brokers/sync") return new Response(JSON.stringify({ problems: [] }));
+    return new Response(JSON.stringify({ problems: [] }));
+  }));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => { root.render(<MemoryRouter><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
-  expect(container.textContent).not.toContain("Yahoo Finance");
-  expect(requests).toContain("/api/prices/sync/status");
-  expect(requests).not.toContain("/api/prices/sync");
-  expect(requests).not.toContain("/api/market-data/consent");
+  expect(container.textContent).toContain("Yahoo Finance-toestemming");
+  expect(requests).not.toContainEqual({ url: "/api/brokers/sync", method: "POST" });
+  await act(async () => { Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Yahoo Finance toestaan"))?.click(); await Promise.resolve(); });
+  expect(requests).toContainEqual({ url: "/api/market-data/consent", method: "PUT" });
+  expect(requests).toContainEqual({ url: "/api/brokers/sync", method: "POST" });
   root.unmount();
 });
 
@@ -366,6 +378,7 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), method: init?.method });
+    if (String(input) === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
     if (String(input) === "/api/brokers/sync") return new Response(JSON.stringify({ problems: ["ibkr: niet beschikbaar"] }));
     if (String(input).startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
     return new Response(JSON.stringify({ ok: true, service: "investing-server" }));

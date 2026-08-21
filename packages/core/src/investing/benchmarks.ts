@@ -1,4 +1,5 @@
 import type { PortfolioValuePoint } from "./portfolio.js";
+import { businessDaysAfter } from "./calendar.js";
 
 export const MAX_BENCHMARKS = 3;
 
@@ -179,18 +180,6 @@ export function computeXirrSeries(
     dated.push({ date: point.date, amount: point.value });
     return { date: point.date, xirr: solveXirr(dated) };
   });
-}
-
-function businessDaysAfter(from: string, to: string): number {
-  const cursor = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  let count = 0;
-  while (cursor < end) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-    const day = cursor.getUTCDay();
-    if (day !== 0 && day !== 6) count += 1;
-  }
-  return count;
 }
 
 /** Align closes to requested dates with shared five-business-day fill limit. */

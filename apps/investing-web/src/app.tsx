@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { buildIndexedSeries, type InvestingDashboardData, type InvestingPositionDetail } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
@@ -212,20 +212,51 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
 
 function AppOpenSync() {
   const [problems, setProblems] = useState<string[]>([]);
+  const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
+  const [consentBusy, setConsentBusy] = useState(false);
+  const runSync = useCallback(async (current: () => boolean) => {
+    try {
+      const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
+      const brokerResult = await brokerResponse.json() as { problems?: string[] };
+      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+      if (current()) setProblems([...(brokerResult.problems ?? [])]);
+    } catch { if (current()) setProblems(["Brokersynchronisatie mislukt."]); }
+  }, []);
   useEffect(() => {
     let current = true;
-    const run = async () => {
+    const prepare = async () => {
       try {
-        const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
-        const brokerResult = await brokerResponse.json() as { problems?: string[] };
-        const nextProblems = [...(brokerResult.problems ?? [])];
-        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        if (current) setProblems(nextProblems);
-      } catch { if (current) setProblems(["Brokersynchronisatie mislukt."]); }
+        const response = await fetch("/api/market-data/consent");
+        const decision = await response.json() as { accepted?: boolean };
+        if (!response.ok) throw new Error("Toestemming kon niet worden gelezen.");
+        if (!current) return;
+        if (!decision.accepted) { setConsent("required"); return; }
+        setConsent("accepted");
+        await runSync(() => current);
+      } catch (error) {
+        if (current) setProblems([error instanceof Error ? error.message : "Toestemming kon niet worden gelezen."]);
+      }
     };
-    void run();
+    void prepare();
     return () => { current = false; };
-  }, []);
+  }, [runSync]);
+  async function acceptYahoo() {
+    setConsentBusy(true); setProblems([]);
+    try {
+      const response = await fetch("/api/market-data/consent", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
+      if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
+      setConsent("accepted");
+      await runSync(() => true);
+    } catch (error) { setProblems([error instanceof Error ? error.message : "Toestemming opslaan mislukt."]); }
+    finally { setConsentBusy(false); }
+  }
+  if (consent === "required") return <section aria-labelledby="yahoo-consent-title" className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm">
+    <h3 id="yahoo-consent-title" className="font-semibold">Yahoo Finance-toestemming</h3>
+    <p className="mt-2 leading-6 text-muted-foreground">LaVega stuurt tickers en zoektermen naar Yahoo Finance om koershistorie en benchmarks op te halen. Keuze blijft lokaal bewaard. Zonder toestemming blijven gecachete gegevens zichtbaar.</p>
+    <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>{consentBusy ? "Opslaan…" : "Yahoo Finance toestaan"}</Button>
+    {problems.length > 0 && <p role="alert" className="mt-3 text-negative">{problems[0]}</p>}
+  </section>;
+  if (consent === "checking" && problems.length === 0) return <div role="status" className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground">Marktdata-toestemming controleren…</div>;
   if (problems.length === 0) return null;
   return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
 }
@@ -515,6 +546,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       {position.status === "open" && <><div><dt className="text-muted-foreground">Gemiddelde kostprijs</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.averageCost).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Huidige koers</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.currentPrice).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Ongerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.unrealizedGain)}{position.returns.remainingCostBasis && position.returns.unrealizedGain !== null ? ` (${percent(position.returns.unrealizedGain / position.returns.remainingCostBasis)})` : ""}</dd></div></>}
       <div><dt className="text-muted-foreground">Gerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.realizedGain)}</dd></div><div><dt className="text-muted-foreground">Dividend ontvangen</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.dividendsReceived)}</dd></div><div><dt className="text-muted-foreground">Eerste aankoop</dt><dd className="mt-1 font-semibold">{position.firstBuyDate ? detailDate(position.firstBuyDate) : "Niet beschikbaar"}</dd></div>
     </dl>
+    {position.firstBuyDate && <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">Sinds eerste aankoop: <strong className={position.returns.sinceFirstBuyPercentage === null ? "text-muted-foreground" : position.returns.sinceFirstBuyPercentage >= 0 ? "text-positive" : "text-negative"}>{percent(position.returns.sinceFirstBuyPercentage)}</strong> vanaf {position.firstBuyDate}</p>}
     {quantityOpen && <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">{position.quantityHistory.length === 0 ? <li className="text-muted-foreground">Geen volledige aantalhistorie beschikbaar.</li> : position.quantityHistory.map((change) => <li key={`${change.date}-${change.sourceOrder}`} className="flex flex-wrap justify-between gap-2"><span>{detailDate(change.date)} · {change.reason === "buy" ? "Koop" : "Verkoop"}</span><span className="font-semibold tabular-nums">{change.delta > 0 ? "+" : ""}{change.delta.toLocaleString("nl-NL")} → {change.quantity.toLocaleString("nl-NL")}</span></li>)}</ol>}
   </section>;
 }

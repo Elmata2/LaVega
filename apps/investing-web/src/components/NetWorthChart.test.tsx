@@ -12,7 +12,7 @@ const points: PortfolioValuePoint[] = Array.from({ length: 10 }, (_, index) => (
   date: `2026-01-${String(index + 1).padStart(2, "0")}`,
   positionsValue: index === 6 ? null : 100 + index * 10,
   cashValue: index === 7 ? null : 20,
-  value: index === 6 || index === 7 ? null : 120 + index * 10,
+  value: index === 6 ? 20 : index === 7 ? 170 : 120 + index * 10,
   unpriced: index === 6 ? ["OLD"] : [],
   forwardFilled: index === 4 ? ["ASML"] : [],
   cashUnknown: index === 7 ? ["ibkr:USD"] : [],
@@ -31,8 +31,8 @@ function pointerEvent(type: string, clientX: number) {
 
 test("keeps unknown legs null and textures only forward-filled positions", () => {
   expect(toNetWorthChartPoint(points[4]!)).toMatchObject({ stalePositions: 140, forwardFilled: ["ASML"] });
-  expect(toNetWorthChartPoint(points[6]!)).toMatchObject({ positionsValue: null, value: null, stalePositions: null, unpriced: ["OLD"] });
-  expect(toNetWorthChartPoint(points[7]!)).toMatchObject({ cashValue: null, value: null, cashUnknown: ["ibkr:USD"] });
+  expect(toNetWorthChartPoint(points[6]!)).toMatchObject({ positionsValue: null, value: 20, stalePositions: null, unpriced: ["OLD"] });
+  expect(toNetWorthChartPoint(points[7]!)).toMatchObject({ cashValue: null, value: 170, cashUnknown: ["ibkr:USD"] });
 });
 
 test("uses independent typed range, keyboard crosshair, and zoom clearing", async () => {
