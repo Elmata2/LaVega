@@ -11,12 +11,6 @@ export type PortfolioValuePoint = {
   forwardFilled: string[];
   cashUnknown: string[];
 };
-export type BenchmarkPoint = { date: string; value: number };
-/** Temporary chart boundary. Later benchmark slices replace this legacy shape. */
-export type PortfolioBenchmarkPoint = PortfolioValuePoint & {
-  portfolioValue: number | null;
-  benchmarkValue: number | null;
-};
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
 export type FxRates = FxRate | FxRate[];
 
@@ -203,14 +197,6 @@ export function computePortfolioValueSeries(
   });
 }
 
-export function normalizeBenchmarkSeries(bars: PriceBar[], portfolio: PortfolioValuePoint[]): BenchmarkPoint[] {
-  const sortedBars = [...bars].sort((a, b) => a.date.localeCompare(b.date));
-  const firstPortfolio = portfolio.find((point) => point.unpriced.length === 0 && point.value !== null && point.value !== 0 && sortedBars.some((bar) => bar.date === point.date));
-  const firstBar = sortedBars.find((bar) => bar.date === firstPortfolio?.date);
-  if (!firstPortfolio || firstPortfolio.value === null || !firstBar || firstBar.close === 0) return [];
-  return sortedBars.filter((bar) => bar.date >= firstBar.date).map((bar) => ({ date: bar.date, value: firstPortfolio.value! * bar.close / firstBar.close }));
-}
-
 function subtractMonths(date: string, months: number): string {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCMonth(value.getUTCMonth() - months);
@@ -222,33 +208,4 @@ export function filterPortfolioValueRange<T extends { date: string }>(points: T[
   const latest = [...points].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date;
   const start = range === "YTD" ? `${latest.slice(0, 4)}-01-01` : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
   return points.filter((point) => point.date >= start);
-}
-
-export function buildPortfolioBenchmarkSeries(
-  portfolio: PortfolioValuePoint[],
-  benchmark: BenchmarkPoint[],
-  range: PortfolioRange,
-): PortfolioBenchmarkPoint[] {
-  const filteredPortfolio = filterPortfolioValueRange(portfolio, range);
-  if (filteredPortfolio.length === 0) return [];
-  const startDate = filteredPortfolio[0].date;
-  const endDate = filteredPortfolio.at(-1)!.date;
-  const dates = new Set([
-    ...filteredPortfolio.map((point) => point.date),
-    ...benchmark.filter((point) => point.date >= startDate && point.date <= endDate).map((point) => point.date),
-  ]);
-  const portfolioByDate = new Map(portfolio.map((point) => [point.date, point]));
-  const benchmarkByDate = new Map(benchmark.map((point) => [point.date, point]));
-  return [...dates].sort().map((date) => {
-    const point = portfolioByDate.get(date) ?? {
-      date,
-      positionsValue: null,
-      cashValue: null,
-      value: null,
-      unpriced: [],
-      forwardFilled: [],
-      cashUnknown: [],
-    };
-    return { ...point, portfolioValue: point.value, benchmarkValue: benchmarkByDate.get(date)?.value ?? null };
-  });
 }

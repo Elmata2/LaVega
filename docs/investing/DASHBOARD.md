@@ -219,6 +219,8 @@ If the visible window starts with unknown portfolio value, return `null` until t
 
 Allow zero to three benchmarks ([Benchmark selection](https://github.com/Elmata2/LaVega/issues/76)). Put a chip row under the portfolio-chart header. `+ Vergelijk` opens an inline combobox. Each selection becomes a removable chip. Hide `+ Vergelijk` when three benchmarks are selected and show it again after removal.
 
+Implementation status: selection store contract now has one-row-per-tenant IndexedDB storage plus file-backed Docker storage at `.lavega/benchmarks.json` (or `INVESTING_BENCHMARK_STORE_FILE`). Runtime exposes get and replace-whole APIs, searches Yahoo with curated European fallback, includes selected symbols in server price orchestration, and renders EUR or indexed chart mode from selection. Hosted database storage remains a hosted-runtime implementation of same contract.
+
 Search Yahoo through `GET https://query1.finance.yahoo.com/v1/finance/search`, using the existing `YahooHttpClient` crumb, cookie, retry, and backoff behavior ([Research: Yahoo Finance instrument search](https://github.com/Elmata2/LaVega/issues/69)). Use live search first and the curated European benchmark list as fallback. Search results do not include currency. Confirm EUR denomination with a quote or chart request when required. Update Yahoo consent disclosure to say that accepted use includes interactive search; do not add a second consent gate.
 
 Persist order-preserving selection in a dedicated seam:

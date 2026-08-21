@@ -1,9 +1,10 @@
 import { app } from "./app.js";
 import { createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "./app.js";
 import { createProblemReporter } from "./observability.js";
-import { buildInvestingDashboard, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
+import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
   createFrankfurterFxProvider,
+  createInMemoryBenchmarkSelectionStore,
   createIbkrFlexAdapter,
   createTrading212Adapter,
   syncScheduledBrokers,
@@ -96,7 +97,7 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[] };
+export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[] };
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
@@ -170,6 +171,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
   const priceStore = options.priceStore;
+  const benchmarkSelectionStore = options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
   const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
   let priceDataVersion = 0;
@@ -224,14 +226,17 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dashboardReader = async ({ symbol }: { symbol?: string }) => {
     const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } = brokerData.read();
     const version = dataVersion + priceDataVersion;
-    const cacheKey = symbol?.trim().toUpperCase() ?? "";
+    const selectedBenchmarks = options.benchmarkSymbols
+      ? await options.benchmarkSymbols(LOCAL_TENANT_ID)
+      : (await benchmarkSelectionStore.get(LOCAL_TENANT_ID)).symbols;
+    const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
     const cached = dashboardCache.get(cacheKey);
     if (cached?.version === version) return cached.data;
     const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
     const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(value, "0000-01-01", "9999-12-31")))).flat();
-    const benchmarkBars = await priceStore.getRange("SP500", "0000-01-01", "9999-12-31");
+    const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(benchmark, "0000-01-01", "9999-12-31")))).flat();
     const fxResult = await fxProvider.getLatestRate();
-    const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
+    const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benchmarkBars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
     dashboardCache.set(cacheKey, { version, data });
     return data;
   };
@@ -246,13 +251,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     brokerSyncStatus: () => ({ ...syncProgress }),
     priceSyncTargets: async (tenantId: string) => {
       const { positions, trades } = brokerData.read();
-      const benchmarkSymbols = await options.benchmarkSymbols?.(tenantId) ?? [];
+      const benchmarkSymbols = options.benchmarkSymbols ? await options.benchmarkSymbols(tenantId) : (await benchmarkSelectionStore.get(tenantId)).symbols;
       return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
     },
   };
   const onPriceDataChanged = () => { priceDataVersion += 1; };
-  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, dashboardReader, onPriceDataChanged });
+  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, dashboardReader, onPriceDataChanged });
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
 }

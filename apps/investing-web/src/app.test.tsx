@@ -12,7 +12,7 @@ afterEach(() => { vi.restoreAllMocks(); globalThis.localStorage?.clear(); });
 
 const dashboard: InvestingDashboardData = {
   ...emptyInvestingDashboard(),
-  portfolio: { ...emptyInvestingDashboard().portfolio, "1M": [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, portfolioValue: 120, benchmarkValue: 118, unpriced: [], forwardFilled: [], cashUnknown: [] }], All: [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, portfolioValue: 120, benchmarkValue: 118, unpriced: [], forwardFilled: [], cashUnknown: [] }] },
+  portfolio: { ...emptyInvestingDashboard().portfolio, "1M": [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, unpriced: [], forwardFilled: [], cashUnknown: [] }], All: [{ date: "2026-08-18", positionsValue: 100, cashValue: 20, value: 120, unpriced: [], forwardFilled: [], cashUnknown: [] }] },
   allocation: {
     instrument: { buckets: [{ key: "ASML", label: "ASML", value: 120, unpriced: false }], unpriced: [] },
     entity: { buckets: [{ key: "Privé", label: "Privé", value: 120, unpriced: false }], unpriced: [] },
@@ -171,7 +171,7 @@ test("overview separates positions, cash, and incomplete value states", async ()
     ...dashboard,
     portfolio: {
       ...dashboard.portfolio,
-      All: [{ date: "2026-08-18", positionsValue: 100, cashValue: null, value: 100, portfolioValue: 100, benchmarkValue: null, unpriced: ["MSFT"], forwardFilled: ["ASML"], cashUnknown: ["ibkr:USD"] }],
+      All: [{ date: "2026-08-18", positionsValue: 100, cashValue: null, value: 100, unpriced: ["MSFT"], forwardFilled: ["ASML"], cashUnknown: ["ibkr:USD"] }],
     },
   };
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).startsWith("/api/investing/dashboard")

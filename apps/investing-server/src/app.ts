@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
+import { emptyInvestingDashboard, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
-import { LocalKeySource, MarketDataRouter, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult } from "@lavega/adapters";
+import { LocalKeySource, MarketDataRouter, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, searchYahooBenchmarks, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
@@ -17,7 +17,7 @@ export type BrokerSyncProgress = {
   message: string | null;
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -27,6 +27,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const configureBroker = dependencies.configureBroker;
   const problemReporter = dependencies.problemReporter ?? createProblemReporter();
   const dashboardReader = dependencies.dashboardReader ?? (async () => emptyInvestingDashboard());
+  const benchmarkSelectionStore = dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const benchmarkSearch = dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
@@ -53,6 +55,24 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     } catch {
       return c.json({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] }, 503);
     }
+  });
+  investingApp.get("/api/investing/benchmarks", async (c) => c.json(await benchmarkSelectionStore.get("local")));
+  investingApp.put("/api/investing/benchmarks", async (c) => {
+    const body: { symbols?: unknown } = await c.req.json<{ symbols?: unknown }>().catch(() => ({}));
+    const symbols = body.symbols;
+    if (!Array.isArray(symbols) || !symbols.every((symbol: unknown) => typeof symbol === "string")) return c.json({ problems: ["symbols must be a string array"] }, 400);
+    try {
+      const selection = { tenantId: "local", symbols: validateBenchmarkSymbols(symbols as string[]) };
+      await benchmarkSelectionStore.set(selection);
+      void priceOrchestrator.run("local");
+      return c.json(selection);
+    } catch (error) {
+      return c.json({ problems: [error instanceof Error ? error.message : "Benchmark selection is invalid"] }, 400);
+    }
+  });
+  investingApp.get("/api/investing/benchmarks/search", async (c) => {
+    const query = c.req.query("q")?.trim() ?? "";
+    return c.json(await benchmarkSearch(query));
   });
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
   investingApp.get("/api/brokers/sync/status", (c) => {

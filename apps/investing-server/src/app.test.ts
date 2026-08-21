@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { app, createApp } from "./app.js";
-import { createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
+import { createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider } from "@lavega/adapters";
 import { createProblemReporter } from "./observability.js";
 import { emptyInvestingDashboard } from "@lavega/core";
 
@@ -35,6 +35,25 @@ test("dashboard route reports read-model failures without inventing values", asy
 
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
+});
+
+test("benchmark API persists ordered replace-whole selection and rejects invalid caps", async () => {
+  const benchmarkSelectionStore = createInMemoryBenchmarkSelectionStore();
+  const investingApp = createApp({ benchmarkSelectionStore, priceSyncTargets: () => [], priceSyncPaceMs: 0 });
+  const saved = await investingApp.request("/api/investing/benchmarks", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: ["^AEX", "^GDAXI"] }) });
+  expect(saved.status).toBe(200);
+  expect(await (await investingApp.request("/api/investing/benchmarks")).json()).toEqual({ tenantId: "local", symbols: ["^AEX", "^GDAXI"] });
+  const invalid = await investingApp.request("/api/investing/benchmarks", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ symbols: ["A", "B", "C", "D"] }) });
+  expect(invalid.status).toBe(400);
+});
+
+test("benchmark search route returns consent-aware adapter results", async () => {
+  const benchmarkSearch = vi.fn().mockResolvedValue({ results: [{ symbol: "^AEX", name: "AEX", exchange: "Amsterdam", currency: "EUR" }], fallback: false, problems: [] });
+  const investingApp = createApp({ benchmarkSearch });
+  const response = await investingApp.request("/api/investing/benchmarks/search?q=AEX");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ results: [{ symbol: "^AEX" }], fallback: false });
+  expect(benchmarkSearch).toHaveBeenCalledWith("AEX");
 });
 
 test("price sync uses Yahoo Finance without a browser consent gate", async () => {

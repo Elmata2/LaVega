@@ -29,6 +29,7 @@ function isDashboardData(value: unknown): value is InvestingDashboardData {
     && Boolean(data.portfolio && typeof data.portfolio === "object")
     && Boolean(data.allocation && typeof data.allocation === "object")
     && typeof data.dataVersion === "number"
+    && (data.benchmarks === undefined || Array.isArray(data.benchmarks))
     && Array.isArray(data.externalCashFlows)
     && Array.isArray(data.positions)
     && Array.isArray(data.problems)
@@ -466,7 +467,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync /><div className="grid gap-3 lg:grid-cols-2"><BrokerSyncProgressCard /><PriceSyncProgressCard /></div><div className="flex justify-end"><ClearPriceCache /></div>{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <><DashboardProblems problems={state.data.problems} /><div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /><div className="space-y-5"><PortfolioCashSummary data={state.data} /><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} /></div></div><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {

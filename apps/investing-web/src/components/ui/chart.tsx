@@ -12,14 +12,15 @@ export function ChartTooltip(props: ComponentProps<typeof Tooltip>) {
   return <Tooltip {...props} />;
 }
 
-type TooltipEntry = { dataKey?: string | number; name?: string | number; value?: string | number };
-export function ChartTooltipContent({ active, payload, label, labelFormatter, formatter }: {
+type TooltipEntry = { dataKey?: string | number; name?: string | number; value?: string | number; payload?: Record<string, unknown> };
+export function ChartTooltipContent({ active, payload, label, labelFormatter, formatter, supplementary }: {
   active?: boolean;
   payload?: TooltipEntry[];
   label?: string | number;
   labelFormatter?: (label: string | number) => ReactNode;
   formatter?: (value: string | number | undefined, name: string | number | undefined) => [ReactNode, ReactNode];
+  supplementary?: (payload: TooltipEntry[]) => ReactNode;
 }) {
   if (!active || !payload?.length) return null;
-  return <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-soft"><p className="mb-1 text-muted-foreground">{labelFormatter ? labelFormatter(label ?? "") : label}</p>{payload.map((entry) => { const formatted = formatter?.(entry.value, entry.name); return <p key={entry.dataKey} className="font-semibold">{formatted ? `${formatted[1]}: ${formatted[0]}` : `${entry.name}: ${entry.value}`}</p>; })}</div>;
+  return <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-soft"><p className="mb-1 text-muted-foreground">{labelFormatter ? labelFormatter(label ?? "") : label}</p>{payload.map((entry) => { const formatted = formatter?.(entry.value, entry.name); return <p key={entry.dataKey} className="font-semibold">{formatted ? `${formatted[1]}: ${formatted[0]}` : `${entry.name}: ${entry.value}`}</p>; })}{supplementary?.(payload)}</div>;
 }

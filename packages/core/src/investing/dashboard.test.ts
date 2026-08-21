@@ -6,6 +6,7 @@ test("empty dashboard has every range and no invented records", () => {
   expect(emptyInvestingDashboard()).toEqual({
     dataVersion: 0,
     presentationCurrency: "EUR",
+    benchmarks: [],
     portfolio: { "1M": [], "6M": [], "1Y": [], YTD: [], All: [] },
     externalCashFlows: [],
     allocation: { instrument: { buckets: [], unpriced: [] }, entity: { buckets: [], unpriced: [] } },

@@ -1,15 +1,15 @@
 import { convertCurrency, type FxRates } from "./portfolio.js";
 import { bucketAllocationByEntity, bucketAllocationByInstrument, type Allocation } from "./allocation.js";
 import {
-  buildPortfolioBenchmarkSeries,
   computePortfolioValueSeries,
-  normalizeBenchmarkSeries,
-  type PortfolioBenchmarkPoint,
+  filterPortfolioValueRange,
   type PortfolioRange,
+  type PortfolioValuePoint,
 } from "./portfolio.js";
 import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
+import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
 import { buildCurrentPositions, type CurrentPosition } from "./positions.js";
 
 export const PORTFOLIO_RANGES = ["1M", "6M", "1Y", "YTD", "All"] as const satisfies readonly PortfolioRange[];
@@ -27,7 +27,8 @@ export type InvestingPositionDetail = {
 export type InvestingDashboardData = {
   dataVersion: number;
   presentationCurrency: string;
-  portfolio: Record<PortfolioRange, PortfolioBenchmarkPoint[]>;
+  portfolio: Record<PortfolioRange, PortfolioValuePoint[]>;
+  benchmarks: BenchmarkSeries[];
   externalCashFlows: Array<{ date: string; amount: number | null }>;
   allocation: {
     instrument: Allocation;
@@ -46,6 +47,7 @@ export type InvestingDashboardInput = {
   cashFlows?: readonly CashFlow[];
   priceBars: readonly PriceBar[];
   benchmarkBars: readonly PriceBar[];
+  benchmarkInstruments?: readonly BenchmarkInstrument[];
   presentationCurrency: string;
   fxRates: FxRates;
   selectedSymbol?: string;
@@ -55,12 +57,13 @@ export type InvestingDashboardInput = {
 };
 
 export function emptyInvestingDashboard(presentationCurrency = "EUR"): InvestingDashboardData {
-  const portfolio = {} as Record<PortfolioRange, PortfolioBenchmarkPoint[]>;
+  const portfolio = {} as Record<PortfolioRange, PortfolioValuePoint[]>;
   for (const range of PORTFOLIO_RANGES) portfolio[range] = [];
   return {
     dataVersion: 0,
     presentationCurrency,
     portfolio,
+    benchmarks: [],
     externalCashFlows: [],
     allocation: {
       instrument: { buckets: [], unpriced: [] },
@@ -87,10 +90,9 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
       today: input.today,
     },
   );
-  const benchmark = normalizeBenchmarkSeries([...input.benchmarkBars], portfolioValues);
   const portfolio = Object.fromEntries(
-    PORTFOLIO_RANGES.map((range) => [range, buildPortfolioBenchmarkSeries(portfolioValues, benchmark, range)]),
-  ) as Record<PortfolioRange, PortfolioBenchmarkPoint[]>;
+    PORTFOLIO_RANGES.map((range) => [range, filterPortfolioValueRange(portfolioValues, range)]),
+  ) as Record<PortfolioRange, PortfolioValuePoint[]>;
   const positions = buildCurrentPositions({
     positions: input.positions,
     trades: input.trades,
@@ -138,6 +140,13 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     dataVersion: input.dataVersion ?? 0,
     presentationCurrency: input.presentationCurrency,
     portfolio,
+    benchmarks: (input.benchmarkInstruments ?? []).map((instrument) => ({
+      ...instrument,
+      points: input.benchmarkBars
+        .filter((bar) => bar.symbol.toUpperCase() === instrument.symbol.toUpperCase())
+        .sort((left, right) => left.date.localeCompare(right.date))
+        .map((bar) => ({ date: bar.date, value: bar.close })),
+    })),
     externalCashFlows: [...externalByDate].sort(([left], [right]) => left.localeCompare(right)).map(([date, amount]) => ({ date, amount })),
     allocation: {
       instrument: bucketAllocationByInstrument([...input.positions], input.presentationCurrency, input.fxRates),

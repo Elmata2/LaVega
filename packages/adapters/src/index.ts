@@ -24,3 +24,5 @@ export * from "./brokers/ibkr/flexAdapter.js";
 export * from "./brokers/ibkr/flexParser.js";
 export * from "./brokers/trading212/index.js";
 export * from "./market-data/yahoo/index.js";
+export * from "./benchmarks/inMemoryBenchmarkSelectionStore.js";
+export * from "./benchmarks/indexedDbBenchmarkSelectionStore.js";

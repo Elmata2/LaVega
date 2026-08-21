@@ -1,13 +1,7 @@
 import { expect, test } from "vitest";
 import type { CashBalance, CashFlow, PriceBar, Trade } from "./model.js";
-import {
-  buildPortfolioBenchmarkSeries,
-  computePortfolioValueSeries,
-  filterPortfolioValueRange,
-  normalizeBenchmarkSeries,
-  type PortfolioValuePoint,
-} from "./portfolio.js";
-import { BENCHMARK_BARS, FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
+import { computePortfolioValueSeries, filterPortfolioValueRange, type PortfolioValuePoint } from "./portfolio.js";
+import { FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
 
 const point = (date: string, value: number, unpriced: string[] = []): PortfolioValuePoint => ({
   date,
@@ -76,14 +70,6 @@ test("keeps unreachable and unconvertible cash legs unknown", () => {
   expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });
 });
 
-test("normalizes benchmark to first shared complete portfolio value", () => {
-  const portfolio = [point("2026-01-02", 2200), point("2026-01-05", 2310)];
-  expect(normalizeBenchmarkSeries(BENCHMARK_BARS, portfolio)).toEqual([
-    { date: "2026-01-02", value: 2200 },
-    { date: "2026-01-05", value: 2310 },
-  ]);
-});
-
 test.each([
   ["1M", "2026-01-02"],
   ["6M", "2025-08-02"],
@@ -93,13 +79,4 @@ test.each([
 ] as const)("filters %s from latest data date", (range, start) => {
   const points = [point("2025-01-01", 1), point("2026-01-01", 2), point("2026-02-02", 3)];
   expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(points.filter(({ date }) => date >= start).map(({ date }) => date));
-});
-
-test("joins portfolio and benchmark while preserving data-quality fields", () => {
-  const portfolio = [point("2025-12-31", 90), point("2026-01-02", 100), point("2026-02-02", 110, ["MSFT"])];
-  const result = buildPortfolioBenchmarkSeries(portfolio, [{ date: "2026-01-02", value: 100 }, { date: "2026-01-15", value: 105 }], "1M");
-
-  expect(result[0]).toMatchObject({ date: "2026-01-02", portfolioValue: 100, benchmarkValue: 100, positionsValue: 100 });
-  expect(result[1]).toMatchObject({ date: "2026-01-15", portfolioValue: null, benchmarkValue: 105, cashUnknown: [] });
-  expect(result[2]).toMatchObject({ date: "2026-02-02", portfolioValue: 110, benchmarkValue: null, unpriced: ["MSFT"] });
 });
