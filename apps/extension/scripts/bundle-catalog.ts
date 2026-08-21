@@ -91,7 +91,7 @@ function fee(v: RawValue | undefined): string | null {
 }
 
 const rows: string[] = [];
-let counts = { total: 0, fx: 0, cashback: 0, points: 0, fee: 0, feeDropped: 0 };
+let counts = { total: 0, fx: 0, cashback: 0, points: 0, fee: 0, feeDropped: 0, cashbackEnFee: 0 };
 
 for (const e of raw.entries) {
   if (!PAYABLE_KINDS.has(e.kind)) continue;
@@ -108,6 +108,7 @@ for (const e of raw.entries) {
   if (cb) counts.cashback++;
   if (pt) counts.points++;
   if (fe) counts.fee++;
+  if (cb && fe) counts.cashbackEnFee++;
 
   rows.push(
     `  {\n` +
@@ -132,9 +133,18 @@ const header = `/* GEGENEREERD — niet met de hand bijwerken.
  *   ${counts.fx} met een koersopslag-cijfer,
  *   ${counts.cashback} met een cashback-cijfer,
  *   ${counts.points} met een puntencijfer,
- *   ${counts.fee} met kaartkosten INCLUSIEF periode (maand of jaar).
+ *   ${counts.fee} met kaartkosten INCLUSIEF periode (maand of jaar),
+ *   ${counts.cashbackEnFee} met ALLEBEI een cashback-cijfer en kaartkosten.
  * ${counts.feeDropped} fee-cijfer(s) zijn overgeslagen omdat er geen leesbare
  * periode bij stond; een bedrag zonder periode is niet te verrekenen.
+ *
+ * DAT LAATSTE GETAL IS HET BELANGRIJKSTE VAN DEZE KOP. Een netto-uitkomst — de
+ * opbrengst van een aankoop min wat de kaart kost om te openen — vereist die
+ * twee cijfers samen op één kaart. Is het ${counts.cashbackEnFee}, dan wordt de
+ * netto-tak van rank.ts door deze data NOOIT bereikt, en dan mag geen enkel
+ * scherm beloven dat de kaartkosten "erin verrekend" zijn. Ze worden verrekend
+ * waar ze bekend zijn, en dat is hier ${counts.cashbackEnFee} keer.
+ * rank.test.ts legt dit getal vast, zodat het omvalt zodra de data verandert.
  *
  * Dat ${counts.total - counts.fee} van de ${counts.total} producten GEEN
  * kaartkosten in de catalogus hebben, is geen fout in dit bestand en ook geen

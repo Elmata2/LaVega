@@ -1,0 +1,16 @@
+<!-- KUNSTMATIG. Een Offer met een los bedrag (price 9.25) waarbij de munt niet
+     naast het bedrag staat maar in een KALE PriceSpecification ernaast. Dat is
+     dezelfde prijs, anders opgeschreven, dus de munt mag daarvandaan komen —
+     "er staat niet bij in welke munt" zou hier onwaar zijn.
+
+     Het verschil met de verzendkosten-fixture is het @type: van een
+     DeliveryChargeSpecification wordt de munt NIET overgenomen, want dat is een
+     bedrag van een andere soort en zijn munt hoeft niet die van het artikel te
+     zijn. -->
+<!doctype html><html lang="nl"><head><title>Artikel</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Q",
+ "offers":{"@type":"Offer","price":"9.25",
+   "priceSpecification":{"@type":"PriceSpecification","price":"9.25","priceCurrency":"EUR"}}}
+</script>
+</head><body><h1>Artikel</h1></body></html>

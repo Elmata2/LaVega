@@ -1,0 +1,13 @@
+<!-- KUNSTMATIG. Hetzelfde GETAL, twee verschillende munten: 49,99 EUR in het
+     JSON-LD en 49,99 USD in de meta. Dat is de keerzijde van
+     kunstmatig-zelfde-bedrag-zonder-munt.html: daar ontbreekt een munt en is de
+     lezing eenduidig, hier spreken twee munten elkaar tegen en is er geen
+     lezing. Weigeren, met de munt als reden en niet het bedrag. -->
+<!doctype html><html lang="nl"><head><title>Artikel</title>
+<meta property="product:price:amount" content="49.99">
+<meta property="product:price:currency" content="USD">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"M",
+ "offers":{"@type":"Offer","price":"49.99","priceCurrency":"EUR"}}
+</script>
+</head><body><h1>Artikel</h1></body></html>

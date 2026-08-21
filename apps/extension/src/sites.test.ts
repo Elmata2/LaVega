@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { SITES, SITE_MATCHES, siteForHost } from "./sites.js";
+import { SITES, SITE_MATCHES, siteForUrl, ontleedMatch, padIsSpecifiek } from "./sites.js";
 import { collectEvidence, readCheckout } from "./read.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
@@ -18,16 +18,50 @@ function lees(naam: string) {
   return readCheckout(collectEvidence(doc, "test"));
 }
 
+/** De poort waar elk matchpatroon doorheen moet. Staat hier als FUNCTIE en niet
+ *  als losse regels in een test, om één reden: zo kan de test hieronder hem op
+ *  patronen loslaten die NIET in SITES staan, en aantonen dat hij afgaat op wat
+ *  zijn naam belooft.
+ *
+ *  De vorige versie van dit bestand had die assertie-regels los in de test
+ *  staan, met de naam "en ook geen kaal domein zonder pad" erboven. Van de vier
+ *  regels controleerde er geen enkele het pad, dus `https://www.ikea.com/*`
+ *  kwam er zonder een kik doorheen — een test die de belangrijkste helft van
+ *  zijn eigen naam niet vasthield. */
+function keurPatroon(match: string): string[] {
+  const bezwaren: string[] = [];
+  if (match.includes("<all_urls>")) bezwaren.push("<all_urls>");
+  if (!match.startsWith("https://")) bezwaren.push("geen https");
+  if (match.includes("://*")) bezwaren.push("schema-wildcard");
+  if (/^https:\/\/\*/.test(match)) bezwaren.push("wildcard-subdomein");
+  if (ontleedMatch(match) === null) bezwaren.push("niet te ontleden in host + pad");
+  else if (!padIsSpecifiek(match)) bezwaren.push("kaal domein zonder pad");
+  return bezwaren;
+}
+
 describe("elke host moet te verantwoorden zijn", () => {
   it("staat nooit <all_urls> toe, en ook geen kaal domein zonder pad", () => {
     for (const s of SITES) {
-      expect(s.match, s.id).not.toContain("<all_urls>");
-      expect(s.match, s.id).toMatch(/^https:\/\//);
-      /* Geen schema-wildcard en geen wildcard-subdomein: het patroon moet één
-       * winkel aanwijzen en niet een categorie. */
-      expect(s.match, s.id).not.toContain("://*");
-      expect(s.match, s.id).not.toMatch(/^https:\/\/\*/);
+      expect(keurPatroon(s.match), s.id).toEqual([]);
     }
+  });
+
+  it("en die keuring gaat ook echt af op een kaal domein", () => {
+    /* Precies de vier patronen uit de tegenspraak. De eerste is degene die er
+     * eerder doorheen kwam; hij staat hier bovenaan zodat het omvalt als iemand
+     * de padcontrole weghaalt. */
+    expect(keurPatroon("https://www.ikea.com/*")).toEqual(["kaal domein zonder pad"]);
+    expect(keurPatroon("https://*.ikea.com/*")).toEqual([
+      "schema-wildcard",
+      "wildcard-subdomein",
+      "niet te ontleden in host + pad",
+    ]);
+    expect(keurPatroon("https://www.ikea.com/nl/nl/p/*")).toEqual([]);
+    expect(keurPatroon("http://x.nl/*")).toEqual([
+      "geen https",
+      "niet te ontleden in host + pad",
+    ]);
+    expect(keurPatroon("<all_urls>")).toContain("<all_urls>");
   });
 
   it("draagt bij elke site de meting waarop de toestemming rust", () => {
@@ -57,9 +91,43 @@ describe("IKEA staat erin omdat het aantoonbaar het juiste bedrag geeft", () => 
     expect(r.basis).toBe("artikel");
   });
 
-  it("herkent de host van de pagina", () => {
-    expect(siteForHost("www.ikea.com")?.id).toBe("ikea-nl");
-    expect(siteForHost("WWW.IKEA.COM")?.id).toBe("ikea-nl");
+  it("herkent een productpagina", () => {
+    expect(siteForUrl("https://www.ikea.com/nl/nl/p/billy-boekenkast-wit-00522047/")?.id).toBe("ikea-nl");
+    /* Een URL kent geen hoofdletters in de host; dit is de vorm waarin een
+     * afzender hem kan aanleveren. */
+    expect(siteForUrl("https://WWW.IKEA.COM/nl/nl/p/kallax-70351888/")?.id).toBe("ikea-nl");
+  });
+});
+
+describe("de belofte 'niet de winkelwagen, niet je account' wordt hier afgedwongen", () => {
+  /* Dit is de test die er niet was. De zin stond onder het vinkje en in
+   * sites.ts, en niets in de code controleerde hem: de opzoekfunctie keek alleen
+   * naar het hostdeel en schoof het pad door naar Chrome. Elk geval hieronder is
+   * een pagina op een host waar de gebruiker WEL ja tegen heeft gezegd. */
+  const buiten = [
+    ["de winkelwagen", "https://www.ikea.com/nl/nl/shoppingcart/"],
+    ["het bestelproces", "https://www.ikea.com/nl/nl/order/checkout/"],
+    ["je account", "https://www.ikea.com/nl/nl/profile/login/"],
+    ["de voorpagina", "https://www.ikea.com/nl/nl/"],
+    ["het kale domein", "https://www.ikea.com/"],
+    ["een origin zonder pad", "https://www.ikea.com"],
+    ["een pad dat er alleen op lijkt", "https://www.ikea.com/nl/nl/pizza/"],
+    ["een omweg via ..", "https://www.ikea.com/nl/nl/p/../shoppingcart/"],
+    ["een andere taalversie", "https://www.ikea.com/be/nl/p/billy-00522047/"],
+    ["http in plaats van https", "http://www.ikea.com/nl/nl/p/billy-00522047/"],
+    ["een afwijkende poort", "https://www.ikea.com:8443/nl/nl/p/billy-00522047/"],
+    ["een ander domein dat erop lijkt", "https://www.ikea.com.example.nl/nl/nl/p/billy/"],
+    ["geen URL", "ikea"],
+  ] as const;
+
+  for (const [wat, url] of buiten) {
+    it(`leest ${wat} niet (${url})`, () => {
+      expect(siteForUrl(url)).toBeNull();
+    });
+  }
+
+  it("en leest de productpagina wél, anders bewijst het bovenstaande niets", () => {
+    expect(siteForUrl("https://www.ikea.com/nl/nl/p/billy-boekenkast-wit-00522047/")?.id).toBe("ikea-nl");
   });
 });
 
@@ -80,7 +148,7 @@ describe("Coolblue staat er NIET in, en dit is de reden", () => {
   });
 
   it("en krijgt daarom geen leestoestemming", () => {
-    expect(siteForHost("www.coolblue.nl")).toBeNull();
+    expect(siteForUrl("https://www.coolblue.nl/product/949341/apple-airpods-pro-3.html")).toBeNull();
     expect(SITE_MATCHES.join(" ")).not.toContain("coolblue");
   });
 });
@@ -93,6 +161,6 @@ describe("bol.com staat er niet in omdat de toestemming niets zou opleveren", ()
     expect(r.reason).toBe("geen-prijsmarkup");
     /* Het handmatige veld in de popup doet ditzelfde op elke site zonder dat we
      * één pagina hoeven te lezen. */
-    expect(siteForHost("www.bol.com")).toBeNull();
+    expect(siteForUrl("https://www.bol.com/nl/nl/p/sonos-era-100/9300000123456789/")).toBeNull();
   });
 });

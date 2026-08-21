@@ -70,12 +70,31 @@
  * op elke site, zonder dat wij één pagina hoeven te lezen. Een toestemming die
  * niets oplevert, vraag je niet.
  *
- * ── WAAROM HET PAD ERIN ZIT EN NIET ALLEEN HET DOMEIN ──────────────────────
+ * ── WAAROM HET PAD ERIN ZIT, EN WIE HET AFDWINGT ───────────────────────────
  *
- * `/nl/nl/p/*` is de productpagina. De winkelwagen, het bestelproces, de
- * accountpagina's en het Nederlandse deel van de site dat geen product is,
- * vallen er buiten. Dat scheelt niet in wat de extensie DOET maar wel in wat ze
- * MAG, en dat is het verschil dat je aan iemand kunt uitleggen. */
+ * `/nl/nl/p/*` is de productpagina. De winkelwagen, het bestelproces en de
+ * accountpagina's vallen er buiten.
+ *
+ * DE EERSTE VERSIE VAN DIT BESTAND SCHOOF DAT DOOR NAAR CHROME. Onder het vinkje
+ * stond "niet de winkelwagen, niet je account" en de opzoekfunctie keek alleen
+ * naar het hostdeel; het pad zou Chrome wel afdwingen via het matchpatroon in de
+ * verleende toestemming. Dat is nooit gemeten, en het is precies de vorm van
+ * belofte die hier niet mag staan: waar op het scherm, alleen zolang een ander
+ * systeem zich gedraagt zoals wij aannemen. Chrome praat in zijn eigen
+ * toestemmingsdialoog bovendien over een DOMEIN, niet over een pad.
+ *
+ * Daarom staat het pad nu drie keer vast, en de eerste twee zijn van ons:
+ *
+ *   1. `siteForUrl` hieronder weigert elke URL waarvan het pad niet onder het
+ *      vaste stuk van het matchpatroon valt. De service worker leest een pagina
+ *      niet zonder dat die functie ja zegt (zie background.ts).
+ *   2. copy-static.mjs weigert een patroon dat alleen een domein aanwijst, zodat
+ *      `https://www.ikea.com/*` er niet ongemerkt in kan glijden.
+ *   3. `registerContentScripts` krijgt hetzelfde patroon mét pad, dus Chrome
+ *      draait het content script alleen daar. Dát deel van Chrome's afdwinging
+ *      is gedocumenteerd gedrag voor content scripts; de vraag of een verleende
+ *      HOST-toestemming het pad ook afdwingt, is hier niet meer relevant — wij
+ *      kijken zelf. */
 
 /** Eén ondersteunde winkel. `match` is een Chrome-matchpatroon en gaat
  *  onveranderd naar `chrome.permissions.request` én naar
@@ -100,7 +119,9 @@ export const SITES: readonly Site[] = [
     id: "ikea-nl",
     label: "IKEA Nederland",
     match: "https://www.ikea.com/nl/nl/p/*",
-    scope: "alleen productpagina's — niet de winkelwagen, niet je account",
+    scope:
+      "alleen productpagina's onder /nl/nl/p/ — de extensie slaat elk ander pad zelf over, " +
+      "ook als Chrome de toestemming voor het hele domein geeft",
     evidence:
       "Gemeten op 21 augustus 2026: twee van de twee productpagina's met prijsopmaak gaven het bedrag " +
       "van het artikel dat er ook echt stond (BILLY € 49,99, KALLAX € 69,99).",
@@ -114,14 +135,63 @@ export const SITES: readonly Site[] = [
  *  anders faalt `permissions.request` pas in de handen van de gebruiker. */
 export const SITE_MATCHES: readonly string[] = SITES.map((s) => s.match);
 
-/** Hoort deze host bij een ondersteunde site? Alleen op het HOSTDEEL, want het
- *  pad wordt door Chrome zelf afgedwongen via het matchpatroon; hier gaat het om
- *  de vraag "welk vinkje hoort bij deze pagina". */
-export function siteForHost(host: string): Site | null {
-  const h = host.trim().toLowerCase();
+/** Een matchpatroon uit elkaar getrokken: het hostdeel en het VASTE stuk pad dat
+ *  ervoor staat. `https://www.ikea.com/nl/nl/p/*` → host `www.ikea.com`,
+ *  padPrefix `/nl/nl/p/`.
+ *
+ *  Geeft `null` bij alles wat geen precies aanwijsbare plek is: een
+ *  wildcard-subdomein (`https://*.ikea.com/*`), een ander schema dan https, of
+ *  een patroon zonder `*` aan het eind. Een kaal domein (`https://www.ikea.com/*`)
+ *  komt er wél uit, maar met padPrefix `/` — en dat is precies waar
+ *  `padIsSpecifiek` op afgaat. Zo kan zowel de test als de build op dezelfde
+ *  ontleding controleren als de opzoekfunctie hieronder gebruikt, in plaats van
+ *  op een eigen regex die er nét naast zit. */
+export function ontleedMatch(match: string): { host: string; padPrefix: string } | null {
+  const m = /^https:\/\/([a-z0-9.-]+)(\/[^*]*)\*$/.exec(match);
+  if (!m) return null;
+  return { host: m[1].toLowerCase(), padPrefix: m[2] };
+}
+
+/** Wijst dit patroon een deel van een site aan, of de hele site? `/` is de hele
+ *  site en telt dus niet als pad. Gebruikt door sites.test.ts en door de build. */
+export function padIsSpecifiek(match: string): boolean {
+  const d = ontleedMatch(match);
+  return d !== null && d.padPrefix.length > 1;
+}
+
+/** Welke ondersteunde site is dit, gegeven de VOLLEDIGE URL van een pagina?
+ *
+ *  Dit is de plek waar "alleen productpagina's" waargemaakt wordt. Er wordt op
+ *  drie dingen gecontroleerd en alle drie moeten kloppen:
+ *
+ *    - het schema is https (een matchpatroon met https erin is geen belofte over
+ *      de pagina die ons aanspreekt, alleen over waar we toestemming voor
+ *      vroegen);
+ *    - de host is letterlijk gelijk, zonder poort. Chrome's matchpatronen negeren
+ *      de poort; wij weigeren er een, want een winkel op een afwijkende poort is
+ *      niet de winkel die we gemeten hebben en zwijgen is daar het goede
+ *      antwoord;
+ *    - het pad begint met het vaste stuk uit het patroon.
+ *
+ *  Geef hier `sender.origin` aan door en het antwoord is altijd `null`: een
+ *  origin heeft geen pad (`https://www.ikea.com` → pad `/`). Dat is met opzet —
+ *  de aanroeper hoort de volledige URL te hebben. */
+export function siteForUrl(url: string): Site | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:") return null;
+  if (u.port !== "") return null;
+  const host = u.hostname.toLowerCase();
   for (const s of SITES) {
-    const m = /^https:\/\/([^/]+)\//.exec(s.match);
-    if (m && m[1] === h) return s;
+    const d = ontleedMatch(s.match);
+    if (!d) continue;
+    if (d.host !== host) continue;
+    if (!u.pathname.startsWith(d.padPrefix)) continue;
+    return s;
   }
   return null;
 }

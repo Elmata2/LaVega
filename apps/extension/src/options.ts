@@ -30,7 +30,8 @@
 import { SITES, type Site } from "./sites.js";
 import { getHeldIds, setHeldIds, getEnabledSiteIds, setEnabledSiteIds } from "./store.js";
 import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
-import { pct, dateNL } from "./money.js";
+import { pct, dateNL, euro, eurosToCents } from "./money.js";
+import { leesVoorwaarden } from "./rank.js";
 import type { CheckoutCard } from "./types.js";
 
 function el(tag: string, klasse: string, tekst?: string): HTMLElement {
@@ -51,16 +52,47 @@ const telling = document.getElementById("kaarten-telling") as HTMLParagraphEleme
 
 let aangevinkteKaarten = new Set<string>();
 
+/** Of er bij een cijfer een voorwaarde hoort, en of het een voorwaardelijke NUL
+ *  is. Dat laatste apart, want dat is het geval waarin het cijfer op het scherm
+ *  precies het tegenovergestelde suggereert van wat er geldt: The Blue Card
+ *  staat in de catalogus op € 0 per jaar, met in de voorwaarde "de nul geldt
+ *  alleen bij een minimale besteding van € 3.000 per jaar; anders € 35". "Kosten
+ *  € 0,00 per jaar" zou daar een uitgesproken nul van maken, en dat is hij niet.
+ *
+ *  De peildatum is hier de datum van de catalogus zelf. Dit scherm gebruikt
+ *  alleen of er een voorwaarde IS, nooit of een einddatum verlopen is — dat
+ *  laatste hoort bij een aankoop en niet bij een lijst met producten. */
+function voorwaardeNoot(bron: { value: number; conditions: string | null } | null): string {
+  if (!bron) return "";
+  const vw = leesVoorwaarden(bron.conditions, "kaartkosten", bron.value, CATALOG_GENERATED_AT);
+  if (vw.length === 0) return "";
+  if (vw.some((v) => v.soort === "voorwaardelijke-nul")) return " (deze nul geldt alleen onder voorwaarden)";
+  /* Bewust zwak geformuleerd. Bij twintig van de zevenentwintig kaarten met een
+   * prijs is de voorwaardentekst een herkomstnotitie ("de datum is het
+   * versiestempel …") en geen beperking. "Er staat een voorwaarde bij" is dan
+   * nog steeds waar; "deze prijs geldt onder voorwaarden" zou dat niet zijn. Het
+   * paneel spelt de voorwaarde uit; dit scherm meldt alleen dat ze er is. */
+  return " (er staat een voorwaarde bij)";
+}
+
 /** Wat we van deze kaart weten, in gewone taal. Ontbrekende cijfers worden
  *  GENOEMD en niet weggelaten: een kaart waarvan we de cashback niet kennen, is
  *  iets anders dan een kaart met 0% cashback, en het verschil hoort te zien te
- *  zijn vóór hij hem aanvinkt. */
+ *  zijn vóór hij hem aanvinkt.
+ *
+ *  De bedragen lopen door money.ts. Hier stond eerst `€ ${c.fee.value}`, en dat
+ *  gaf op een Nederlands scherm "kosten € 37.5 per jaar" — met een Engelse punt,
+ *  en niet te onderscheiden van € 37,05. */
 function watWeWeten(c: CheckoutCard): string {
   const bits: string[] = [];
-  bits.push(c.fxFeePct ? `koersopslag ${pct(c.fxFeePct.value)}` : "koersopslag onbekend");
-  bits.push(c.cashbackPct ? `cashback ${pct(c.cashbackPct.value)}` : "cashback onbekend");
+  bits.push(c.fxFeePct ? `koersopslag ${pct(c.fxFeePct.value)}${voorwaardeNoot(c.fxFeePct)}` : "koersopslag onbekend");
+  bits.push(c.cashbackPct ? `cashback ${pct(c.cashbackPct.value)}${voorwaardeNoot(c.cashbackPct)}` : "cashback onbekend");
   if (c.pointsPerEuro) bits.push(`${c.pointsPerEuro.value} punt(en) per euro`);
-  bits.push(c.fee ? `kosten € ${c.fee.value} per ${c.fee.period}` : "kaartkosten onbekend");
+  bits.push(
+    c.fee
+      ? `kosten ${euro(eurosToCents(c.fee.value))} per ${c.fee.period}${voorwaardeNoot(c.fee)}`
+      : "kaartkosten onbekend",
+  );
   return bits.join(" · ");
 }
 

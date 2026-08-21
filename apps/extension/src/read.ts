@@ -27,6 +27,25 @@
  * kofferset op een AirPods-URL, een boek op een LEGO-URL. Twee van de vier
  * leesbare pagina's logen dus over hun eigen inhoud.
  *
+ * ── DE TWEEDE MEETRONDE, 21 augustus 2026 ───────────────────────────────────
+ *
+ * De toestemming voor ikea.com rustte op twee metingen (BILLY € 49,99 en KALLAX
+ * € 69,99) en die hadden allebei GEEN actieprijs. Dat geval is nu wél gemeten:
+ * via https://www.ikea.com/nl/nl/offers/family-offers/ (200) is een pagina met
+ * een IKEA Family-actieprijs opgehaald (200, gewone browser-UA, geen
+ * botdetectie omzeild). Uitkomst, vastgelegd in
+ * __fixtures__/ikea-slakt-actieprijs.html:
+ *
+ *   op het scherm : € 96,99, "15% korting", "Prijs voor niet IKEA Family
+ *                   leden: €114.99"
+ *   in de opmaak  : AggregateOffer met lowPrice 96,99 en highPrice 114,99
+ *   de lezer las  : {"ok":true,"amountCents":9699,...}
+ *
+ * Dus de laagste van de twee, met ok:true en zonder twijfel in beeld — aan een
+ * gebruiker die misschien geen Family-lid is en dan € 114,99 afrekent. Niet de
+ * oude prijs zoals verwacht, maar de nieuwe. Op de enige winkel die deze
+ * extensie mag lezen. Vandaar de tak "prijsbereik" hieronder.
+ *
  * ── WAT DAT BETEKENT ────────────────────────────────────────────────────────
  *
  * Een gelezen bedrag is hier geen feit maar een VOORSTEL dat de gebruiker
@@ -40,15 +59,33 @@
  *                  De UI zegt dat erbij in plaats van het stil als totaal te
  *                  gebruiken.
  *
- * En er zijn vier redenen om te weigeren. Alle vier noemen de echte oorzaak, en
- * bij alle vier is het handmatige veld het antwoord dat in die toestand wél
- * werkt. */
+ * ── DE REGEL WAAR ALLES OP RUST ─────────────────────────────────────────────
+ *
+ * BIJ TWIJFEL LEEST DE LEZER NIETS EN ZEGT WAAROM. De gebruiker kan het bedrag
+ * altijd zelf invullen; een bedrag dat er verkeerd naast staat kan hij niet
+ * corrigeren, want hij ziet niet dat het fout is. Er zijn zeven redenen om te
+ * weigeren, en alle zeven noemen de ECHTE oorzaak:
+ *
+ *   geen-prijsmarkup     er staat niets machineleesbaars op de pagina
+ *   geen-artikelprijs    er staat wel een bedrag, maar het is er een van een
+ *                        andere soort: een prijs per kilo, of verzendkosten
+ *   prijsbereik          er staat een reeks (laagste én hoogste), geen prijs
+ *   prijs-zonder-valuta  een bedrag zonder munt, of met alleen een dollarteken
+ *   munt-spreekt-tegen   twee bronnen op de pagina zijn het oneens over de munt
+ *   meerdere-prijzen     twee echt verschillende bedragen, geen totaal ertussen
+ *   bedrag-onduidelijk   het scheidingsteken kan twee dingen betekenen
+ *
+ * Bij alle zeven is het handmatige veld het antwoord dat in die toestand wél
+ * werkt, en dat staat in de tekst. */
 
 export type Basis = "bestelling" | "artikel";
 
 export type ReadReason =
   | "geen-prijsmarkup"
+  | "geen-artikelprijs"
+  | "prijsbereik"
   | "prijs-zonder-valuta"
+  | "munt-spreekt-tegen"
   | "meerdere-prijzen"
   | "bedrag-onduidelijk";
 
@@ -65,6 +102,29 @@ export type PriceCandidate = {
   basis: Basis;
   via: string;
 };
+
+/* ── DE VIA-ETIKETTEN ────────────────────────────────────────────────────────
+ *
+ * `via` is niet alleen een mededeling aan de gebruiker, het is ook waarop
+ * readCheckout een kandidaat HERKENT. Een bedrag dat uit een AggregateOffer
+ * komt, is een uiteinde van een reeks en geen prijs; een bedrag uit een
+ * eenheids- of verzendtarief is een ander soort bedrag dan de artikelprijs. Dat
+ * onderscheid kan niet in `basis` (die zegt iets anders: artikel tegenover
+ * bestelling) en er mag geen veld bij, want dan verschuift de redactiegrens die
+ * read.test.ts bewaakt.
+ *
+ * collectEvidence kan deze constanten NIET gebruiken — zie de kop van die
+ * functie: ze wordt als tekst in de pagina geïnjecteerd en heeft daar niets
+ * buiten haar eigen body. De literals staan daar dus nog een keer, en
+ * read.test.ts vergelijkt de twee zodat ze niet uit elkaar kunnen lopen. */
+export const VIA_ORDER = "JSON-LD Order";
+export const VIA_OFFER = "JSON-LD Offer";
+export const VIA_MICRODATA = 'microdata itemprop="price"';
+export const VIA_META = "meta product:price";
+export const VIA_REEKS_LAAG = "JSON-LD AggregateOffer lowPrice";
+export const VIA_REEKS_HOOG = "JSON-LD AggregateOffer highPrice";
+export const VIA_REEKS_PRIJS = "JSON-LD AggregateOffer price";
+export const VIA_GEEN_ARTIKELPRIJS = "JSON-LD prijsopgave, geen artikelprijs";
 
 /** WAT DE EXTENSIE VAN EEN PAGINA MEENEEMT, en dit is de hele lijst: de host en
  *  de bedragen die er machineleesbaar op staan.
@@ -89,19 +149,25 @@ export type Evidence = {
  * iets buiten haar eigen body. Chrome injecteert haar namelijk in de pagina via
  * `chrome.scripting.executeScript({ func })`, en dat gebeurt door de functie als
  * TEKST te versturen. Alles wat ze van buiten zou gebruiken, bestaat daar niet.
+ * Ook de VIA_*-constanten hierboven niet; die staan hieronder als literal.
  *
  * Vandaar ook de twee nullable parameters. De `args` van executeScript moeten
  * JSON-serialiseerbaar zijn en een Document is dat niet, dus de injectie roept
  * haar aan met (null, null) en de functie pakt de globals van de pagina zelf.
  * In de test gaat er een jsdom-Document in. Zo is er één implementatie in plaats
- * van twee die uiteen kunnen lopen. */
+ * van twee die uiteen kunnen lopen.
+ *
+ * DEZE FUNCTIE KIEST NIET. Ze verzamelt, etiketteert en laat readCheckout
+ * beslissen — ook bij een AggregateOffer, waar ze allebei de uiteinden meegeeft
+ * in plaats van er één te pakken. */
 export function collectEvidence(doc?: Document | null, host?: string | null): Evidence {
   const d: Document = doc ?? document;
   const h: string = host ?? location.host;
   const candidates: PriceCandidate[] = [];
 
   const isOrder = (t: string) => /(^|\/|:)(Order|Invoice)$/i.test(t);
-  const isOffer = (t: string) => /(^|\/|:)(Offer|AggregateOffer)$/i.test(t);
+  const isOffer = (t: string) => /(^|\/|:)Offer$/i.test(t);
+  const isReeks = (t: string) => /(^|\/|:)AggregateOffer$/i.test(t);
 
   const types = (o: Record<string, unknown>): string[] => {
     const t = o["@type"];
@@ -110,22 +176,87 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
     return [];
   };
 
-  const pick = (o: Record<string, unknown>, keys: string[]): string | number | null => {
-    for (const k of keys) {
-      const v = o[k];
-      if (typeof v === "number" || (typeof v === "string" && v.trim())) return v;
-      /* schema.org staat ook een PriceSpecification toe waar een getal mag
-       * staan. Eén niveau diep volgen is genoeg; dieper wordt het raden welk van
-       * meerdere geneste bedragen bedoeld is, en dan is weigeren beter. */
-      if (v && typeof v === "object" && !Array.isArray(v)) {
-        const inner = v as Record<string, unknown>;
-        const p = inner["price"] ?? inner["value"];
-        if (typeof p === "number" || (typeof p === "string" && p.trim())) return p;
-      }
-    }
+  const scalar = (v: unknown): string | number | null => {
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim()) return v;
     return null;
   };
 
+  /* EEN GENEST BEDRAG IS NIET VANZELF DE PRIJS. schema.org staat een
+   * PriceSpecification toe waar een getal mag staan, maar onder diezelfde
+   * sleutel hangen ook een UnitPriceSpecification (€ 18,50 per kilo, terwijl
+   * het pak van 500 gram € 9,25 kost) en een DeliveryChargeSpecification
+   * (€ 4,95 verzendkosten). De vorige versie dook één niveau en pakte daar
+   * `price` zonder naar @type of referenceQuantity te kijken; dat las een
+   * kiloprijs en een verzendtarief als artikelprijs, allebei met ok:true.
+   *
+   * Daarom wordt er nu gekeken WAT er hangt:
+   *   - een kale PriceSpecification (of helemaal geen @type) zonder eenheid en
+   *     zonder referentiehoeveelheid = de prijs;
+   *   - alles met een eenheid, een referentiehoeveelheid of een ander @type =
+   *     een bedrag van een andere soort. Dat wordt niet weggegooid maar apart
+   *     gezet: het is de reden dat de pagina geen artikelprijs heeft, en die
+   *     reden hoort de gebruiker te horen. */
+  const genest = (
+    v: unknown,
+  ): { raw: string | number; munt: string; artikelprijs: boolean } | null => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+    const inner = v as Record<string, unknown>;
+    const raw = scalar(inner["price"]) ?? scalar(inner["value"]);
+    if (raw === null) return null;
+    const m = inner["priceCurrency"];
+    const munt = typeof m === "string" ? m.trim() : "";
+    const ts = types(inner);
+    const kaal =
+      ts.length === 0 ||
+      ts.every((t) => /(^|\/|:)(Compound)?PriceSpecification$/i.test(t));
+    const eenheid =
+      inner["referenceQuantity"] !== undefined ||
+      inner["unitCode"] !== undefined ||
+      inner["unitText"] !== undefined ||
+      inner["billingIncrement"] !== undefined ||
+      inner["billingDuration"] !== undefined;
+    return { raw, munt, artikelprijs: kaal && !eenheid };
+  };
+
+  /* De volgorde van voorkeur: een bedrag dat er los staat, dan een kale
+   * prijsopgave, en pas als geen van beide er is het bedrag van een andere
+   * soort — dat laatste niet om het te gebruiken maar om te kunnen zeggen
+   * waarom er geen artikelprijs is.
+   *
+   * Alle sleutels worden bekeken, ook als de eerste al raak is, want een kale
+   * prijsopgave ernaast kan de MUNT dragen die bij het losse bedrag ontbreekt.
+   * Die munt overnemen van een verzendtarief zou fout zijn; van een kale
+   * prijsopgave is het dezelfde prijs, anders opgeschreven. */
+  const pick = (
+    o: Record<string, unknown>,
+    keys: string[],
+  ): { raw: string | number; munt: string; artikelprijs: boolean } | null => {
+    let direct: string | number | null = null;
+    let kaal: { raw: string | number; munt: string; artikelprijs: boolean } | null = null;
+    let anders: { raw: string | number; munt: string; artikelprijs: boolean } | null = null;
+    for (const k of keys) {
+      const s = scalar(o[k]);
+      if (s !== null) {
+        if (direct === null) direct = s;
+        continue;
+      }
+      const g = genest(o[k]);
+      if (!g) continue;
+      if (g.artikelprijs) {
+        if (!kaal) kaal = g;
+      } else if (!anders) {
+        anders = g;
+      }
+    }
+    if (direct !== null) return { raw: direct, munt: kaal ? kaal.munt : "", artikelprijs: true };
+    return kaal ?? anders;
+  };
+
+  /* De munt hoort bij het bedrag dat we hebben gepakt. Vandaar dat een geneste
+   * prijsopgave zijn EIGEN priceCurrency meebrengt en die hier voorgaat: de
+   * priceCurrency van een verzendtarief bij een artikelprijs leggen is dezelfde
+   * fout als een dollarbedrag als euro's rangschikken, alleen kleiner. */
   const currencyOf = (
     o: Record<string, unknown>,
     parent: Record<string, unknown> | null,
@@ -134,11 +265,6 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
       if (!src) continue;
       for (const k of ["priceCurrency", "currency"]) {
         const v = src[k];
-        if (typeof v === "string" && v.trim()) return v.trim();
-      }
-      const spec = src["priceSpecification"];
-      if (spec && typeof spec === "object" && !Array.isArray(spec)) {
-        const v = (spec as Record<string, unknown>)["priceCurrency"];
         if (typeof v === "string" && v.trim()) return v.trim();
       }
     }
@@ -173,14 +299,66 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
       const o = node as Record<string, unknown>;
       const ts = types(o);
       if (ts.some(isOrder)) {
-        const raw = pick(o, ["total", "totalPaymentDue", "price", "priceSpecification"]);
-        if (raw !== null) {
-          candidates.push({ raw, currency: currencyOf(o, parent), basis: "bestelling", via: "JSON-LD Order" });
+        const g = pick(o, ["total", "totalPaymentDue", "price", "priceSpecification"]);
+        if (g) {
+          candidates.push({
+            raw: g.raw,
+            currency: g.munt || currencyOf(o, parent),
+            basis: "bestelling",
+            via: g.artikelprijs ? "JSON-LD Order" : "JSON-LD prijsopgave, geen artikelprijs",
+          });
+        }
+      } else if (ts.some(isReeks)) {
+        /* EEN AggregateOffer IS GEEN PRIJS MAAR EEN REEKS: laagste en hoogste,
+         * over meerdere aanbiedingen. Wat de vorige versie deed was lowPrice
+         * pakken en highPrice en offerCount negeren — dan staat er "de prijs van
+         * dit artikel: € 219,00" onder een pagina waar dat het bedrag bij een
+         * ANDERE verkoper is, en op IKEA de Family-actieprijs onder een
+         * gebruiker die misschien geen Family-lid is.
+         *
+         * Allebei de uiteinden gaan mee, elk met hun eigen etiket. readCheckout
+         * leest ze alleen als ze hetzelfde bedrag noemen; dan is de reeks één
+         * prijs en valt er niets te kiezen. In alle andere gevallen weigert hij
+         * met reden "prijsbereik". Ontbreekt een van de twee uiteinden, dan is
+         * het een "vanaf"-prijs en is de bovenkant ONBEKEND — en onbekend is
+         * geen nul en ook niet gelijk aan de onderkant. */
+        const munt = currencyOf(o, parent);
+        const laag = scalar(o["lowPrice"]);
+        const hoog = scalar(o["highPrice"]);
+        const eigen = scalar(o["price"]);
+        if (laag !== null) {
+          candidates.push({
+            raw: laag,
+            currency: munt,
+            basis: "artikel",
+            via: "JSON-LD AggregateOffer lowPrice",
+          });
+        }
+        if (hoog !== null) {
+          candidates.push({
+            raw: hoog,
+            currency: munt,
+            basis: "artikel",
+            via: "JSON-LD AggregateOffer highPrice",
+          });
+        }
+        if (eigen !== null) {
+          candidates.push({
+            raw: eigen,
+            currency: munt,
+            basis: "artikel",
+            via: "JSON-LD AggregateOffer price",
+          });
         }
       } else if (ts.some(isOffer)) {
-        const raw = pick(o, ["price", "lowPrice", "priceSpecification"]);
-        if (raw !== null) {
-          candidates.push({ raw, currency: currencyOf(o, parent), basis: "artikel", via: "JSON-LD Offer" });
+        const g = pick(o, ["price", "priceSpecification"]);
+        if (g) {
+          candidates.push({
+            raw: g.raw,
+            currency: g.munt || currencyOf(o, parent),
+            basis: "artikel",
+            via: g.artikelprijs ? "JSON-LD Offer" : "JSON-LD prijsopgave, geen artikelprijs",
+          });
         }
       }
       for (const v of Object.values(o)) {
@@ -259,7 +437,11 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
  *    plaats van € 1,23 — waarna er een percentage over wordt uitgerekend en het
  *    verschil netjes meegroeit.
  *  - Meer dan één keer hetzelfde teken ("1.234.567") kan alleen duizendtallen
- *    zijn, dus dat is weer eenduidig. */
+ *    zijn, dus dat is weer eenduidig.
+ *
+ * Het valutateken gaat er hier af omdat het geen cijfer is. Dat het ergens
+ * GELEZEN wordt voordat het verdwijnt, gebeurt in currencySignal hieronder —
+ * niet hier, want deze functie gaat over het getal en niet over de munt. */
 export function parseAmountToCents(
   raw: string | number,
 ): { ok: true; cents: number } | { ok: false; reason: ReadReason } {
@@ -300,13 +482,71 @@ export function parseAmountToCents(
   return { ok: true, cents: Math.round(n * 100) };
 }
 
+/* ─────────────────────────────── de munt ─────────────────────────────────── */
+
+/** Wat het bedrag ZELF over zijn munt zegt, los van wat de opmaak beweert.
+ *
+ * "$1,299.00" met priceCurrency EUR is geen euro-bedrag met een vlekje: het zijn
+ * twee bronnen op dezelfde pagina die elkaar tegenspreken. De vorige versie
+ * streepte het teken weg voordat er iets mee gebeurde en toonde € 1.299,00.
+ *
+ * Het dollarteken krijgt hier geen muntcode maar "DOLLAR", en dat is het punt:
+ * $ hoort bij een familie (USD, CAD, AUD, SGD …) en wijst er geen van aan. Wat
+ * het WEL uitsluit is de euro en het pond, want die schrijven zich anders. Meer
+ * dan dat beweren zou raden zijn. */
+export type CurrencySignal = "EUR" | "GBP" | "DOLLAR";
+
+export function currencySignal(raw: string | number): CurrencySignal | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.replace(/\s| /g, "");
+  if (s.includes("€")) return "EUR";
+  if (s.includes("£")) return "GBP";
+  if (s.includes("$")) return "DOLLAR";
+  const m = /^(EUR|USD|GBP)|(EUR|USD|GBP)$/i.exec(s);
+  if (m) {
+    const code = (m[1] ?? m[2] ?? "").toUpperCase();
+    if (code === "EUR") return "EUR";
+    if (code === "GBP") return "GBP";
+    return "DOLLAR";
+  }
+  return null;
+}
+
+/** Spreken het teken bij het bedrag en de opgegeven munt elkaar tegen? Alleen
+ *  wat te bewijzen is telt: een dollarteken sluit euro en pond uit, maar zegt
+ *  niet welke dollar het is, dus "$" bij "CAD" is geen tegenspraak. */
+function muntSpreektTegen(teken: CurrencySignal | null, opgegeven: string): boolean {
+  if (!teken || !opgegeven.trim()) return false;
+  const m = opgegeven.trim().toUpperCase();
+  if (teken === "EUR") return m !== "EUR";
+  if (teken === "GBP") return m !== "GBP";
+  return m === "EUR" || m === "GBP";
+}
+
+/** De munt van een kandidaat: wat de opmaak zegt, en anders wat het teken zegt.
+ *
+ *  Een pagina die "€ 89,95" schrijft zonder priceCurrency NOEMT de munt — hem
+ *  daar "er staat geen munt bij" tegen zeggen zou een oorzaak noemen die er niet
+ *  is. Een dollarteken levert géén munt op: dan is inderdaad onbekend welke. */
+function muntVan(c: PriceCandidate): string {
+  if (c.currency.trim()) return c.currency.trim().toUpperCase();
+  const teken = currencySignal(c.raw);
+  return teken === "EUR" || teken === "GBP" ? teken : "";
+}
+
 /* ─────────────── van bewijsmateriaal naar één bedrag, of niets ───────────── */
 
 const REASON_TEXT: Record<ReadReason, string> = {
   "geen-prijsmarkup":
     "Deze pagina zet het bedrag nergens machineleesbaar neer. Er is dus niets te lezen — vul het bedrag zelf in.",
+  "geen-artikelprijs":
+    "Er staat wel een bedrag in de opmaak van deze pagina, maar het is niet de prijs van dit artikel: het is een bedrag van een andere soort, zoals een prijs per kilo of de verzendkosten. Wat het artikel zelf kost, staat er niet machineleesbaar bij. Vul het bedrag zelf in.",
+  "prijsbereik":
+    "Deze pagina noemt geen prijs maar een bereik — een laagste en een hoogste bedrag, bijvoorbeeld van meerdere aanbieders of van een actieprijs naast de gewone prijs. Welke van de twee jij betaalt, staat er niet bij. Vul het bedrag zelf in.",
   "prijs-zonder-valuta":
-    "Er staat wel een bedrag op de pagina, maar geen munt. Zonder munt is niet te zeggen of dit euro's of dollars zijn, en dat verandert het antwoord volledig. Vul het bedrag en de munt zelf in.",
+    "Er staat wel een bedrag op de pagina, maar er staat niet bij in welke munt. Zonder munt is niet te zeggen of dit euro's of dollars zijn, en dat verandert het antwoord volledig. Een dollarteken alleen is niet genoeg: dat schrijven de Amerikaanse, de Canadese en de Australische dollar allemaal zo. Vul het bedrag en de munt zelf in.",
+  "munt-spreekt-tegen":
+    "Deze pagina is het met zichzelf oneens over de munt. Dat kan op twee manieren: het teken bij het bedrag hoort bij een andere munt dan de opmaak noemt, of hetzelfde bedrag staat er twee keer met een andere munt erbij. Twee bronnen die elkaar tegenspreken zijn geen bedrag, en welke van de twee klopt staat er niet bij. Vul het bedrag en de munt zelf in.",
   "meerdere-prijzen":
     "De pagina noemt meer dan één bedrag, en welke bij jouw bestelling hoort staat er niet bij. Vul het bedrag zelf in.",
   "bedrag-onduidelijk":
@@ -317,18 +557,61 @@ export function reasonText(reason: ReadReason): string {
   return REASON_TEXT[reason];
 }
 
-export function readCheckout(ev: Evidence): Reading {
-  if (ev.candidates.length === 0) {
-    return { ok: false, reason: "geen-prijsmarkup", detail: REASON_TEXT["geen-prijsmarkup"] };
+function weiger(reason: ReadReason): Reading {
+  return { ok: false, reason, detail: REASON_TEXT[reason] };
+}
+
+/** Is dit bedrag een uiteinde van een AggregateOffer-reeks? */
+function isReeks(c: PriceCandidate): boolean {
+  return c.via === VIA_REEKS_LAAG || c.via === VIA_REEKS_HOOG || c.via === VIA_REEKS_PRIJS;
+}
+
+/** Een reeks is alleen leesbaar als hij één bedrag noemt: laagste én hoogste
+ *  aanwezig, en allebei hetzelfde. Dan valt er niets te kiezen. Ontbreekt een
+ *  uiteinde, of verschillen ze, dan is de prijs van DEZE pagina onbekend — en
+ *  onbekend is nooit "de laagste". */
+function reeksIsEenBedrag(reeks: PriceCandidate[]): boolean {
+  if (!reeks.some((c) => c.via === VIA_REEKS_LAAG)) return false;
+  if (!reeks.some((c) => c.via === VIA_REEKS_HOOG)) return false;
+  const bedragen = new Set<number>();
+  for (const c of reeks) {
+    const p = parseAmountToCents(c.raw);
+    if (!p.ok) return false;
+    bedragen.add(p.cents);
   }
+  return bedragen.size === 1;
+}
+
+export function readCheckout(ev: Evidence): Reading {
+  if (ev.candidates.length === 0) return weiger("geen-prijsmarkup");
+
+  /* Bedragen van een andere soort (kiloprijs, verzendtarief) zijn geen
+   * kandidaten. Blijft er daarna niets over, dan is DAT de oorzaak, en niet
+   * "er staat niets machineleesbaar op de pagina" — want er staat wel iets, het
+   * is alleen niet de prijs. */
+  const bruikbaar = ev.candidates.filter((c) => c.via !== VIA_GEEN_ARTIKELPRIJS);
+  if (bruikbaar.length === 0) return weiger("geen-artikelprijs");
 
   /* Een ordertotaal slaat een artikelprijs altijd. Zijn er ordertotalen, dan
    * worden de artikelprijzen niet eens bekeken: dat zijn de regels ÓNDER dat
    * totaal, en die ernaast leggen zou "meerdere prijzen" opleveren waar er in
    * werkelijkheid één antwoord is. Gemeten in de Order-fixture: totaal 312,45
    * met regels van 149,00 en 163,45 eronder. */
-  const orders = ev.candidates.filter((c) => c.basis === "bestelling");
-  const tier = orders.length > 0 ? orders : ev.candidates;
+  const orders = bruikbaar.filter((c) => c.basis === "bestelling");
+  const tier = orders.length > 0 ? orders : bruikbaar;
+
+  /* Een reeks vergiftigt de hele lezing, ook als er een losse Offer naast
+   * staat. Gemeten op IKEA: de AggregateOffer zegt 96,99 tot 114,99 en de Offer
+   * eronder zegt 96,99 — dat is niet "twee keer hetzelfde", dat is de
+   * Family-prijs die zichzelf herhaalt terwijl de andere kant van de reeks is
+   * wat een niet-lid afrekent. Welke van de twee deze gebruiker betaalt, weet
+   * de pagina niet en wij dus ook niet. */
+  const reeks = tier.filter(isReeks);
+  if (reeks.length > 0 && !reeksIsEenBedrag(reeks)) return weiger("prijsbereik");
+
+  for (const c of tier) {
+    if (muntSpreektTegen(currencySignal(c.raw), c.currency)) return weiger("munt-spreekt-tegen");
+  }
 
   const parsed: { cents: number; currency: string; basis: Basis; via: string }[] = [];
   let softReason: ReadReason | null = null;
@@ -338,26 +621,32 @@ export function readCheckout(ev: Evidence): Reading {
       softReason = p.reason;
       continue;
     }
-    parsed.push({ cents: p.cents, currency: c.currency.toUpperCase(), basis: c.basis, via: c.via });
+    parsed.push({ cents: p.cents, currency: muntVan(c), basis: c.basis, via: c.via });
   }
 
-  if (parsed.length === 0) {
-    const reason = softReason ?? "geen-prijsmarkup";
-    return { ok: false, reason, detail: REASON_TEXT[reason] };
-  }
+  if (parsed.length === 0) return weiger(softReason ?? "geen-prijsmarkup");
 
-  const distinct = new Set(parsed.map((p) => `${p.cents}|${p.currency}`));
-  if (distinct.size > 1) {
-    return { ok: false, reason: "meerdere-prijzen", detail: REASON_TEXT["meerdere-prijzen"] };
-  }
+  /* ONTDUBBELEN OP HET BEDRAG, NIET OP BEDRAG-PLUS-MUNT. Dat laatste deed de
+   * vorige versie, en dan telt een JSON-LD Offer van 49,99 EUR naast een
+   * og-meta van 49,99 zonder munt — een doodgewone combinatie — als twee
+   * prijzen. De gebruiker las dan "De pagina noemt meer dan één bedrag" terwijl
+   * de pagina één bedrag noemt en het twee keer opschrijft. Verkeerde oorzaak,
+   * en een eenduidige lezing die werd weggegooid.
+   *
+   * Verschillende bedragen blijven weigeren. Hetzelfde bedrag met twee
+   * VERSCHILLENDE munten ook, maar dan met de munt als oorzaak: dat is een
+   * tegenspraak en geen tweede prijs. */
+  const bedragen = new Set(parsed.map((p) => p.cents));
+  if (bedragen.size > 1) return weiger("meerdere-prijzen");
 
-  const winner = parsed[0];
-  if (!winner) {
-    return { ok: false, reason: "geen-prijsmarkup", detail: REASON_TEXT["geen-prijsmarkup"] };
-  }
-  if (!winner.currency) {
-    return { ok: false, reason: "prijs-zonder-valuta", detail: REASON_TEXT["prijs-zonder-valuta"] };
-  }
+  const munten = new Set(parsed.map((p) => p.currency).filter((m) => m !== ""));
+  if (munten.size > 1) return weiger("munt-spreekt-tegen");
+
+  /* De kopie mét munt wint van de kopie zonder: allebei noemen ze hetzelfde
+   * bedrag, dus de enige vraag is welke van de twee de munt draagt. */
+  const winner = parsed.find((p) => p.currency !== "") ?? parsed[0];
+  if (!winner) return weiger("geen-prijsmarkup");
+  if (!winner.currency) return weiger("prijs-zonder-valuta");
   return {
     ok: true,
     amountCents: winner.cents,

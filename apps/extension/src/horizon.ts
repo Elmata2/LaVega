@@ -26,21 +26,49 @@
  * bedrag betaal je nergens. Een kost te laag inschatten maakt van een verlies
  * een aanbeveling, en dat is de enige fout in dit bestand die echt geld kost.
  *
- * De ondergrens staat daarom niet alleen in de code maar ook in `label`, zodat
- * het scherm de periode kan noemen waarover gerekend is. Dat is de hele reden
- * dat deze functie een label teruggeeft en niet alleen een getal. */
+ * ── WAAROM DE VERGELEKEN PERIODE EEN HEEL AANTAL JAREN IS ───────────────────
+ *
+ * Die ondergrens per kaart was nog niet genoeg, en dat is gebleken. Met een
+ * horizon van één maand kostte een maandkaart van € 9 één maand (€ 9) en een
+ * jaarkaart van € 60 een heel jaar (€ 60). Allebei waar, allebei "het minimum",
+ * maar ze meten niet hetzelfde: de eerste koopt één maand kaart, de tweede een
+ * jaar. rank.ts zette die twee uitkomsten daarna in ÉÉN gesorteerde lijst, en
+ * een positie in zo'n lijst is de uitspraak "deze is beter". € 91 over een maand
+ * boven € 40 over een jaar zetten is precies de fout uit de kop hierboven, één
+ * laag hoger: niet in de som, maar in de volgorde. Over een heel jaar kost die
+ * maandkaart € 108 en de jaarkaart € 60, en dan draait de orde om.
+ *
+ * De vergeleken periode wordt daarom naar boven afgerond op HELE JAREN. Twaalf
+ * maanden is het kleinste bestek waarin allebei de tariefvormen exact passen —
+ * twaalf maandtermijnen, één jaartermijn — zonder dat er ergens een jaarprijs
+ * door twaalf wordt gedeeld. De richting van die afronding is met opzet de dure
+ * kant: liever een kaart te duur inschatten en een aanbeveling missen, dan een
+ * verlies als aanbeveling afdrukken.
+ *
+ * En "minstens" blijft waar. `cents` is wat je minstens betaalt om deze kaart
+ * de VERGELEKEN PERIODE te kunnen gebruiken, niet om hem één dag te hebben. Het
+ * scherm noemt die periode erbij (`spanLabel`) én de termijnen waarin je hem
+ * betaalt (`label`), zodat er geen bedrag op het scherm staat waar geen periode
+ * bij hoort. Dat is de hele reden dat deze functie meer teruggeeft dan een
+ * getal. */
 
 import type { CardFee } from "./types.js";
 import { eurosToCents } from "./money.js";
 
 export type MinimumCharge = {
-  /** Wat je minstens betaalt om deze kaart voor deze aankoop te kunnen
+  /** Wat je minstens betaalt om deze kaart de vergeleken periode te kunnen
    *  gebruiken, in centen. */
   cents: number;
-  /** Hoeveel hele periodes dat zijn. */
+  /** Hoeveel hele termijnen dat zijn. */
   periods: number;
-  /** De periode zelf, zodat de UI hem kan noemen: "1 maand", "2 jaar". */
+  /** De termijnen zelf: "12 maanden", "1 jaar". Dat is HOE je betaalt. */
   label: string;
+  /** De vergeleken periode in maanden. Voor elke kaart in dezelfde
+   *  rangschikking hetzelfde getal — daar staat of valt de vergelijking mee. */
+  spanMonths: number;
+  /** Diezelfde periode in woorden: "1 jaar", "2 jaar". Dat is WAAROVER
+   *  gerekend is, en dat is bij elke kaart dezelfde eenheid. */
+  spanLabel: string;
 };
 
 /** De ondergrens uit de opdracht, hier expliciet: minstens één periode. Staat
@@ -48,32 +76,51 @@ export type MinimumCharge = {
  *  hoeven vermoeden uit een uitkomst. */
 export const MINIMUM_PERIODS = 1;
 
-/** De standaardhorizon van een afrekening: hij koopt nu, één keer. Wie langer
- *  vooruit wil kijken geeft een grotere `horizonMonths` mee — de functie rekent
- *  dan met meer periodes, niet met een ander soort getal. */
-export const DEFAULT_HORIZON_MONTHS = 1;
-
 const MONTHS_PER_YEAR = 12;
 
+/** De standaardhorizon: één heel jaar. Niet één maand — zie de kop. Wie verder
+ *  vooruit wil kijken geeft een grotere `horizonMonths` mee; die wordt naar
+ *  boven afgerond op hele jaren, zodat een maandkaart en een jaarkaart altijd
+ *  over exact dezelfde periode worden gemeten. */
+export const DEFAULT_HORIZON_MONTHS = MONTHS_PER_YEAR;
+
+/** De gevraagde horizon naar de eerstvolgende hele jaren. Dit is de functie die
+ *  garandeert dat `spanMonths` bij elke kaart gelijk is: zonder deze afronding
+ *  krijgt een maandkaart bij een horizon van zes maanden een half jaar en een
+ *  jaarkaart een heel jaar, en dan vergelijkt de sortering weer twee eenheden. */
+export function comparableHorizonMonths(horizonMonths = DEFAULT_HORIZON_MONTHS): number {
+  const gevraagd = Math.max(1, Math.ceil(horizonMonths));
+  return Math.ceil(gevraagd / MONTHS_PER_YEAR) * MONTHS_PER_YEAR;
+}
+
+function jaarLabel(jaren: number): string {
+  return jaren === 1 ? "1 jaar" : `${jaren} jaar`;
+}
+
 export function minimumCharge(fee: CardFee, horizonMonths = DEFAULT_HORIZON_MONTHS): MinimumCharge {
-  const months = Math.max(MINIMUM_PERIODS, Math.ceil(horizonMonths));
+  const spanMonths = comparableHorizonMonths(horizonMonths);
+  const spanLabel = jaarLabel(spanMonths / MONTHS_PER_YEAR);
 
   if (fee.period === "maand") {
-    const periods = months;
+    const periods = Math.max(MINIMUM_PERIODS, spanMonths);
     return {
       cents: eurosToCents(fee.value) * periods,
       periods,
       label: periods === 1 ? "1 maand" : `${periods} maanden`,
+      spanMonths,
+      spanLabel,
     };
   }
 
   /* Naar boven afronden, niet delen. Elf maanden op een jaarkaart is één keer
    * de jaarprijs; dertien maanden is twee keer. Er bestaat geen tarief voor een
    * deel van een jaar, dus we doen niet alsof. */
-  const periods = Math.max(MINIMUM_PERIODS, Math.ceil(months / MONTHS_PER_YEAR));
+  const periods = Math.max(MINIMUM_PERIODS, Math.ceil(spanMonths / MONTHS_PER_YEAR));
   return {
     cents: eurosToCents(fee.value) * periods,
     periods,
-    label: periods === 1 ? "1 jaar" : `${periods} jaar`,
+    label: jaarLabel(periods),
+    spanMonths,
+    spanLabel,
   };
 }

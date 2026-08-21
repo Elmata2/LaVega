@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LaVega — aan de kassa",
   "version": "0.1.0",
-  "description": "Laat bij het afrekenen zien met welke van jouw kaarten je het meeste overhoudt. Rekent in je browser, stuurt niets door.",
+  "description": "Laat bij het afrekenen zien wat jouw kaarten op die aankoop opleveren, met bron en datum. Rekent in je browser, stuurt niets door.",
   "minimum_chrome_version": "102",
 
   "icons": {
@@ -40,6 +40,6 @@
   "optional_host_permissions": ["https://www.ikea.com/nl/nl/p/*"],
 
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'none'"
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'none'; font-src 'none'; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'self'; form-action 'none'; base-uri 'none'"
   }
 }

@@ -9,7 +9,14 @@ export type FeePeriod = "maand" | "jaar";
 /** Een cijfer uit de catalogus met zijn herkomst eraan vast. `conditions` mag
  *  null zijn (dan stond er geen voorwaarde bij), maar sourceUrl en checkedAt
  *  horen er altijd te zijn — een cijfer zonder bron is aan een kassa niets
- *  waard, want de datum is het enige waarop de gebruiker kan afgaan. */
+ *  waard, want de datum is het enige waarop de gebruiker kan afgaan.
+ *
+ *  `conditions` WORDT GELEZEN, en dat is geen detail: `leesVoorwaarden` in
+ *  rank.ts bepaalt eraan of dit cijfer een kaal bedrag mag dragen. Een cijfer
+ *  van 2% met "PAID IN CRO, not euro" in dit veld is geen euro-opbrengst. Toen
+ *  dit veld alleen werd meegedragen en nergens gelezen, stond er "Dat levert
+ *  € 80,00 op" boven precies zo'n cijfer. Vul het dus voluit of laat het null;
+ *  een afgekapte voorwaarde is een andere voorwaarde. */
 export type Sourced = {
   value: number;
   sourceUrl: string;

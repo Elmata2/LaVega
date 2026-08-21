@@ -31,7 +31,7 @@
  * worker die alleen leeft als er iets gevraagd wordt, is er ook niet als er
  * niets gevraagd wordt. */
 
-import { SITES, siteForHost, type Site } from "./sites.js";
+import { SITES, siteForUrl, ontleedMatch, type Site } from "./sites.js";
 import { collectEvidence, readCheckout, type Evidence } from "./read.js";
 import { rankCheckout } from "./rank.js";
 import { buildPanel, PANEEL_CAPS } from "./panel.js";
@@ -137,18 +137,59 @@ chrome.storage.onChanged.addListener((changes, area) => {
  *
  *  DIT IS EEN CONTROLE EN GEEN GEMAK. Een bericht kan van elke pagina komen
  *  waar ooit een content script van ons heeft gedraaid, en `sendMessage` is niet
- *  te vertrouwen op zijn woord. `sender.origin` wordt door Chrome gezet en niet
- *  door de pagina, dus dat is het enige veld waarop dit mag rusten. */
+ *  te vertrouwen op zijn woord. `sender.url` en `sender.origin` worden door
+ *  Chrome gezet en niet door de pagina, dus dat zijn de enige velden waarop dit
+ *  mag rusten.
+ *
+ *  ── WAAROM HET PAD HIER WORDT GECONTROLEERD EN NIET ALLEEN DE HOST ─────────
+ *
+ *  Onder het vinkje in de opties staat dat de extensie alleen productpagina's
+ *  leest. Deze functie is de plek waar die zin waar wordt gemaakt. Eerder keek
+ *  ze alleen naar `sender.origin`, en een origin HEEFT geen pad: `winkelwagen`
+ *  en `p/billy-boekenkast` zijn er allebei `https://www.ikea.com`. Wat de zin
+ *  beloofde, werd dus nergens in deze code gecontroleerd.
+ *
+ *  Vandaar drie eisen, en ze moeten alle drie kloppen:
+ *
+ *    - `sender.url` — de volledige URL van het frame dat ons aanspreekt — valt
+ *      binnen host én pad van een ondersteunde site (`siteForUrl`);
+ *    - is er ook een `sender.origin`, dan hoort die bij diezelfde URL. Twee
+ *      velden die elkaar tegenspreken is geen afzender;
+ *    - is de URL van het TABBLAD bekend, dan moet die het ook halen, en bij
+ *      dezelfde site uitkomen. Dat laatste is geen dubbelop: we lezen zo meteen
+ *      het tabblad, niet het frame dat de vraag stelde. Vraagt een frame binnen
+ *      een productpagina iets terwijl het tabblad ergens anders staat, dan zou
+ *      de lezing over een andere pagina gaan dan de controle.
+ *
+ *  Wat hiermee NIET is dichtgezet: het tabblad kan tussen dit bericht en de
+ *  injectie hieronder navigeren. Daar is `documentIds` van executeScript voor,
+ *  en dat staat niet in chrome.d.ts — dat bestand is met opzet de complete lijst
+ *  van wat de extensie mag aanroepen, en er langs casten om een race van
+ *  milliseconden te sluiten is de verkeerde ruil. De schade blijft ook beperkt:
+ *  na de injectie wordt de host uit het bewijsmateriaal nog een keer tegen de
+ *  site gelegd (zie `beantwoord`), dus wat er overblijft is een navigatie binnen
+ *  dezelfde host, precies tussen twee opeenvolgende regels. */
 function siteVanAfzender(sender: chrome.runtime.MessageSender): Site | null {
-  const bron = sender.origin ?? sender.url;
-  if (!bron) return null;
-  let host: string;
-  try {
-    host = new URL(bron).host;
-  } catch {
-    return null;
+  const url = sender.url;
+  if (!url) return null;
+
+  const site = siteForUrl(url);
+  if (!site) return null;
+
+  if (sender.origin) {
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return null;
+    }
+    if (sender.origin !== origin) return null;
   }
-  return siteForHost(host);
+
+  const tabUrl = sender.tab?.url;
+  if (tabUrl !== undefined && siteForUrl(tabUrl)?.id !== site.id) return null;
+
+  return site;
 }
 
 async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelAntwoord> {
@@ -179,6 +220,16 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
     return { soort: "zwijg", reden: "injectie mislukt" };
   }
   if (!evidence) return { soort: "zwijg", reden: "geen bewijsmateriaal" };
+
+  /* De laatste controle op de herkomst, en de enige die NA de injectie kan. Het
+   * bewijsmateriaal draagt de host van de pagina waar het vandaan komt; komt die
+   * niet overeen met de site die de vraag stelde, dan is het tabblad onderweg
+   * ergens anders heen gegaan en gaat deze lezing over een pagina waar niemand
+   * ja tegen heeft gezegd. */
+  const verwachteHost = ontleedMatch(site.match)?.host;
+  if (!verwachteHost || evidence.host.toLowerCase() !== verwachteHost) {
+    return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
+  }
 
   const reading = readCheckout(evidence);
   const heldIds = await getHeldIds();
