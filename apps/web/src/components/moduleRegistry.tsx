@@ -22,7 +22,15 @@ import type { View } from "../App";
  *  rather than a dead nav item if a View is ever renamed. */
 export type ModuleId = Extract<
   View,
-  "overview" | "accounts" | "forecast" | "optimalisatie" | "valuta" | "punten" | "belasting" | "facturen"
+  | "overview"
+  | "transactions"
+  | "accounts"
+  | "forecast"
+  | "optimalisatie"
+  | "valuta"
+  | "punten"
+  | "belasting"
+  | "facturen"
 >;
 
 export type ModuleDef = {
@@ -35,6 +43,17 @@ export type ModuleDef = {
   icon: ReactNode;
   /** Static thumbnail built from the design system (no screenshots). */
   preview: ReactNode;
+  /** IN DE NAV ZODRA ER NOG NIETS GEKOZEN IS? Standaard ja — zie
+   *  DEFAULT_MODULES, waar staat waarom "alles aan" het juiste beginpunt is.
+   *
+   *  Eén module zegt hier nee, en dat is geen uitzondering maar het gevolg van
+   *  een eerder besluit: Transacties is in augustus BEWUST uit de navigatie
+   *  gehaald (commit a52da45 — importeren hoort op de startpagina en transacties
+   *  bereik je via een rekening). Review 4 punt 6 vraagt hem terug als iets dat
+   *  je kunt AANZETTEN, niet als iets dat er weer standaard staat. Hem in de
+   *  gewone lijst zetten zou die verwijdering stilletjes terugdraaien bij
+   *  iedereen die nooit iets koos. */
+  defaultOn?: boolean;
 };
 
 /** The home module. An app with no home is a broken app, so this one is always
@@ -127,6 +146,35 @@ export const MODULES: ModuleDef[] = [
     ),
   },
   {
+    id: "transactions",
+    /* Review 4, punt 6. De route bestaat al en is bereikbaar via een rekening;
+     * wat ontbrak was een eigen ingang. Uit tenzij hij hem aanzet — zie
+     * `defaultOn` hierboven. */
+    label: "Transacties",
+    what: "Al je transacties in één lijst, met filters op periode, rekening en categorie.",
+    defaultOn: false,
+    icon: (
+      <Icon>
+        <path d="M4 6h16M4 12h16M4 18h10" />
+        <path d="M17 15v6M17 21l-2.5-2.5M17 21l2.5-2.5" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Line x={8} y={8} w={26} strong />
+        <Tile x={8} y={18} w={80} h={10} />
+        <Line x={13} y={21.5} w={30} />
+        <Line x={72} y={22} w={10} strong />
+        <Tile x={8} y={31} w={80} h={10} />
+        <Line x={13} y={34.5} w={22} />
+        <Line x={72} y={35} w={10} strong />
+        <Tile x={8} y={44} w={80} h={10} />
+        <Line x={13} y={47.5} w={34} />
+        <Line x={72} y={48} w={10} strong />
+      </Thumb>
+    ),
+  },
+  {
     id: "forecast",
     label: "Forecast",
     what: "Wat er de komende 30, 60 en 90 dagen binnenkomt en uitgaat.",
@@ -193,7 +241,11 @@ export const MODULES: ModuleDef[] = [
   {
     id: "punten",
     label: "Punten",
-    what: "Je spaarpunten en airmiles op één plek, met wat ze waard zijn.",
+    /* NIET MEER "met wat ze waard zijn": die euro-schatting is er bewust uit.
+     * Een saldo in punten is een feit, een euro-waarde was altijd een gok — en
+     * een moduletekst die iets belooft wat het scherm niet toont, is precies het
+     * soort onwaarheid dat hier nergens mag staan. */
+    what: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
     icon: (
       <Icon>
         <circle cx="12" cy="12" r="8" />
@@ -261,15 +313,21 @@ export const MODULES: ModuleDef[] = [
   },
 ];
 
-/** What the nav holds before the owner has picked anything: everything.
+/** What the nav holds before the owner has picked anything: everything that was
+ *  already there.
  *
  *  Starting with only Overzicht + Forecast matched his sentence literally, but
  *  it emptied the nav of an EXISTING install on the next load, which reads as
  *  the app having lost its tabs rather than as an invitation to choose.
  *  Decluttering by switching OFF what you do not want reaches the same end state
  *  and never looks like a fault. Declared after MODULES because it is derived
- *  from it — the registry stays the single list. */
-export const DEFAULT_MODULES: ModuleId[] = MODULES.map((m) => m.id);
+ *  from it — the registry stays the single list.
+ *
+ *  `defaultOn: false` is de andere kant van diezelfde redenering. "Alles aan"
+ *  betekent hier "de nav blijft zoals hij was", en dat is precies waarom een
+ *  module die eerder WEGGEHAALD is er niet vanzelf weer bij komt: dat zou net zo
+ *  goed een verandering zijn die niemand vroeg. */
+export const DEFAULT_MODULES: ModuleId[] = MODULES.filter((m) => m.defaultOn !== false).map((m) => m.id);
 
 const KNOWN = new Set<string>(MODULES.map((m) => m.id));
 
@@ -311,14 +369,15 @@ export function navModules(enabled: ModuleId[]): ModuleDef[] {
  * written straight into the Overzicht view, which is exactly why the profile
  * had nothing to offer for them. They are declared here now, next to the
  * modules, for the same reason the modules are: one list, no second catalogue.
+ * Betaalagenda kwam er in review 4 (punt 8) bij, langs dezelfde weg.
  *
  * They are deliberately NOT ModuleIds. A ModuleId is a route (`Extract<View>`),
- * and neither of these is a route — folding them into MODULES would put a card
+ * and none of these is a route — folding them into MODULES would put a card
  * in the top navigation and break that type's promise.
  * ====================================================================== */
 
 /** A widget id is not a route, so it is its own union — see above. */
-export type WidgetId = "aandacht" | "positie";
+export type WidgetId = "aandacht" | "positie" | "betaalagenda";
 
 export type WidgetDef = {
   id: WidgetId;
@@ -329,6 +388,17 @@ export type WidgetDef = {
   what: string;
   /** Static thumbnail built from the design system (no screenshots). */
   preview: ReactNode;
+  /** OP DE STARTPAGINA ZOLANG HIJ ER NIETS OVER GEZEGD HEEFT?
+   *
+   *  Aandacht en Positie staan uit: die zijn er als KEUZE bijgekomen ("instead
+   *  of it always being default there"), dus ze mogen niet ongevraagd
+   *  verschijnen. Betaalagenda staat aan, en dat is dezelfde regel en niet de
+   *  omgekeerde: die kaart staat er al sinds hij bestaat, en review 4 punt 8
+   *  vraagt om een schakelaar — niet om hem kwijt te raken. Een widget
+   *  schakelbaar maken mag nooit hetzelfde zijn als hem weghalen. */
+  defaultOn?: boolean;
+  /** Eén regel extra onder `what`, voor het geval dat uitleg nodig heeft. */
+  note?: string;
 };
 
 /** In the order they appear on the homescreen, top down. */
@@ -367,44 +437,104 @@ export const WIDGETS: WidgetDef[] = [
       </Thumb>
     ),
   },
+  {
+    id: "betaalagenda",
+    label: "Betaalagenda",
+    what: "Wat er als eerste af moet: geplande bedragen en herkende vaste lasten, met hun datum.",
+    note: "Deze stond al op je overzicht — hier zet je hem uit.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <rect x="8" y="10" width="14" height="14" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <Line x={11} y={14} w={8} strong />
+        <Line x={28} y={13} w={34} strong />
+        <Line x={28} y={20} w={22} />
+        <Line x={74} y={16} w={14} />
+        <rect x="8" y="30" width="14" height="14" rx="3" fill="rgba(176, 120, 30, 0.18)" stroke="var(--warn)" />
+        <Line x={11} y={34} w={8} strong />
+        <Line x={28} y={33} w={28} strong />
+        <Line x={28} y={40} w={18} />
+        <Line x={74} y={36} w={14} />
+      </Thumb>
+    ),
+  },
 ];
 
-/** NOTHING, and that asymmetry with DEFAULT_MODULES is deliberate.
+/** Wat er op de startpagina staat zolang hij niets gekozen heeft: per widget wat
+ *  `defaultOn` zegt, en niet één lijst voor alledrie.
  *
- *  An unset NAV preference means "everything", because emptying the navigation
- *  of an install someone already uses reads as the app having lost its tabs.
- *  An unset WIDGET preference means neither of these cards: he asked for a
- *  widget he can click on "instead of it always being default there", so a
- *  fresh install must not show them.
- *
- *  The same answer covers the install that predates this commit. Its stored
- *  list cannot contain an id that did not exist yet, and ABSENT IS OFF — the
- *  one reading that never puts a card on his homescreen that he did not ask
- *  for. The cost is honest and small: the two cards he had are gone until he
- *  switches them on in Profiel, which is the control he asked for. */
-export const DEFAULT_WIDGETS: WidgetId[] = [];
+ *  De asymmetrie met DEFAULT_MODULES blijft: een ongekozen NAV betekent "alles",
+ *  want een navigatie leegmaken leest als een storing. Een ongekozen WIDGET
+ *  betekent per kaart iets anders, en dat is geen slordigheid maar het enige
+ *  antwoord dat allebei zijn zinnen respecteert — Aandacht en Positie mogen niet
+ *  ongevraagd verschijnen, Betaalagenda mag niet ongevraagd verdwijnen. */
+export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter((w) => w.defaultOn).map((w) => w.id);
 
 const KNOWN_WIDGETS = new Set<string>(WIDGETS.map((w) => w.id));
 
+/** ALLE ids, en dat is wat er als "gezien" wordt weggeschreven.
+ *
+ *  Verantwoord omdat de picker de hele lijst tegelijk toont: wie één schakelaar
+ *  omzet, heeft de rest óók voor zich gehad en er (door hem te laten staan) een
+ *  antwoord op gegeven. */
+const ALL_WIDGETS: WidgetId[] = WIDGETS.map((w) => w.id);
+
+/** De twee die bestonden toen de voorkeur nog een KALE LIJST was.
+ *
+ *  Deze constante is de migratie. Een opgeslagen array kan alleen geschreven
+ *  zijn in de periode dat dit de enige twee widgets waren, dus over precies die
+ *  twee heeft hij zich uitgesproken en over al het latere niet. Zonder dit zou
+ *  een lijst als `["aandacht"]` betekenen dat hij de Betaalagenda heeft
+ *  uitgezet, terwijl hij die vraag nooit gesteld heeft gekregen. */
+const LEGACY_ARRAY_WIDGETS: WidgetId[] = ["aandacht", "positie"];
+
+/** De opgeslagen voorkeur: wat AAN staat, en waar hij zich over UITGESPROKEN
+ *  heeft. Twee lijsten, omdat één lijst het verschil niet kan dragen tussen
+ *  "uitgezet" en "nooit gevraagd" — en dat verschil is precies waar een nieuwe
+ *  widget in valt. */
+export type StoredWidgets = { on: string[]; seen: string[] };
+
+/** Een kale lijst is de oude vorm; die krijgt zijn gezien-verzameling erbij. */
+function asStored(stored: string[] | StoredWidgets | null): StoredWidgets | null {
+  if (stored === null) return null;
+  if (Array.isArray(stored)) return { on: stored, seen: LEGACY_ARRAY_WIDGETS };
+  return stored;
+}
+
 /** Resolve the STORED widget preference into the cards the homescreen shows.
  *
- *  Unlike `enabledModules`, `null` and `[]` mean the same thing here — off —
- *  because there is no widget the homescreen breaks without. Unknown ids are
- *  dropped and the result is always in registry order, so the page never
- *  reshuffles because of the order things were toggled in. */
-export function enabledWidgets(stored: string[] | null): WidgetId[] {
-  const chosen = stored === null ? DEFAULT_WIDGETS : stored.filter((id): id is WidgetId => KNOWN_WIDGETS.has(id));
-  const set = new Set<WidgetId>(chosen);
+ *  ONBEKEND IS GEEN NUL, ook niet voor een voorkeur. Een widget die niet in
+ *  `seen` staat is er nooit aan voorgelegd, dus telt zijn eigen `defaultOn` en
+ *  niet zijn afwezigheid. Voor een widget die er wél in staat is afwezigheid een
+ *  echt antwoord: uit.
+ *
+ *  Unknown ids are dropped and the result is always in registry order, so the
+ *  page never reshuffles because of the order things were toggled in. */
+export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetId[] {
+  const pref = asStored(stored);
+  if (pref === null) return [...DEFAULT_WIDGETS];
+  const on = new Set(pref.on);
+  const seen = new Set(pref.seen);
+  return WIDGETS.filter((w) => (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true)).map((w) => w.id);
+}
+
+/** Een lijst ids opschonen: alleen bestaande widgets, ontdubbeld, in
+ *  registervolgorde. Los van `enabledWidgets` omdat dit géén opgeslagen voorkeur
+ *  leest — hier is een ontbrekende id een uitgezette widget en niets anders. Die
+ *  twee door elkaar halen betekende dat uitzetten niet werkte: de lijst kwam
+ *  terug door de deur van "nooit gevraagd". */
+export function normaliseWidgets(ids: readonly string[]): WidgetId[] {
+  const set = new Set(ids.filter((id): id is WidgetId => KNOWN_WIDGETS.has(id)));
   return WIDGETS.filter((w) => set.has(w.id)).map((w) => w.id);
 }
 
-/** Switch one widget on or off. No widget is locked: a homescreen with neither
- *  of these on it is still a homescreen. */
+/** Switch one widget on or off. No widget is locked: a homescreen with none of
+ *  these on it is still a homescreen. */
 export function toggleWidget(enabled: WidgetId[], id: WidgetId, on: boolean): WidgetId[] {
   const set = new Set<WidgetId>(enabled);
   if (on) set.add(id);
   else set.delete(id);
-  return enabledWidgets([...set]);
+  return normaliseWidgets([...set]);
 }
 
 /* ---------------------------------------------------------------------- *
@@ -423,15 +553,32 @@ export function toggleWidget(enabled: WidgetId[], id: WidgetId, on: boolean): Wi
 
 const WIDGETS_KEY = "lavega.overviewWidgets";
 
-/** The raw stored list, or `null` for "never chosen". Garbage counts as never
- *  chosen — which for widgets lands on the same place as an empty list, off. */
-export function getEnabledWidgets(): string[] | null {
+/** Alleen de strings uit een onbekende waarde. */
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/** De ruwe opgeslagen voorkeur, of `null` voor "nooit gekozen".
+ *
+ *  Twee vormen komen hier binnen en allebei zijn echt: de huidige `{on, seen}`,
+ *  en de KALE LIJST die installaties van vóór deze widget nog hebben staan. Die
+ *  lijst wordt niet stilzwijgend als de nieuwe vorm gelezen — `asStored` plakt er
+ *  de gezien-verzameling van dat tijdperk aan, want anders zou "staat er niet in"
+ *  gaan betekenen "uitgezet".
+ *
+ *  Onleesbare rommel telt als nooit gekozen: dan beslist `defaultOn` per kaart,
+ *  wat hetzelfde is als een verse installatie. */
+export function getEnabledWidgets(): string[] | StoredWidgets | null {
   try {
     const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(WIDGETS_KEY);
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    return parsed.filter((v): v is string => typeof v === "string");
+    if (Array.isArray(parsed)) return strings(parsed);
+    if (parsed !== null && typeof parsed === "object" && "on" in parsed) {
+      const rec = parsed as { on?: unknown; seen?: unknown };
+      return { on: strings(rec.on), seen: strings(rec.seen) };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -456,11 +603,17 @@ function subscribeWidgets(onChange: () => void): () => void {
   return () => widgetListeners.delete(onChange);
 }
 
-/** Persist the choice and tell every card and switch about it. */
+/** Persist the choice and tell every card and switch about it.
+ *
+ *  Wat er wordt weggeschreven is de keuze ÉN het feit dat hij hem gemaakt heeft:
+ *  `seen` is de hele registerlijst, want de picker toont ze allemaal tegelijk.
+ *  Vanaf dat moment is een ontbrekende id een uitgezette kaart en geen open
+ *  vraag meer — en een widget die er later bij komt begint weer als open vraag. */
 export function setEnabledWidgets(ids: WidgetId[]): void {
-  const next = enabledWidgets(ids);
+  const next = normaliseWidgets(ids);
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(WIDGETS_KEY, JSON.stringify(next));
+    const value: StoredWidgets = { on: next, seen: ALL_WIDGETS };
+    if (typeof localStorage !== "undefined") localStorage.setItem(WIDGETS_KEY, JSON.stringify(value));
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }

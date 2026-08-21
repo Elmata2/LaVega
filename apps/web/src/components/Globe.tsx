@@ -86,11 +86,11 @@ import {
  *    antwoord in plaats van twee die op een dag uit elkaar lopen.
  * 3. EEN CANVAS BESTAAT NIET VOOR EEN SCHERMLEZER. De platte kaart had 236
  *    aanklikbare paden met een verschuivende focus; op een doek is daar niets van
- *    over. Daarom staat de LANDENLIJST ernaast en is die niet de terugval maar de
- *    tweede volwaardige besturing: één tabstop, alle 250 landen (ook de dertien
- *    zonder vlak), pijltjes lopen erdoor, Enter kiest, en typen filtert. Het doek
- *    heeft een beschrijving en is met de pijltjes te draaien, maar wie hem niet
- *    ziet mist niets: alles wat de bol kan, kan de lijst ook.
+ *    over. Daarom is de LANDENLIJST niet de terugval maar de tweede volwaardige
+ *    besturing: één tabstop, alle 250 landen (ook de dertien zonder vlak),
+ *    pijltjes lopen erdoor, Enter kiest, en typen filtert. Het doek heeft een
+ *    beschrijving en is met de pijltjes te draaien, maar wie hem niet ziet mist
+ *    niets: alles wat de bol kan, kan de lijst ook.
  * 4. NAAR EEN LAND TOEDRAAIEN gebeurt in één sprong. Er zit geen tussenstand in
  *    en dat is geen bezuiniging: bewegen loopt in dit project via een eigen laag,
  *    dus een bol die naar Japan toe glijdt is een besluit dat daar hoort. Slepen
@@ -105,6 +105,22 @@ import {
  *    `countryAtPoint`, dat `WORLD_LATLON_BOUNDS` leest in plaats van een
  *    breedtegraad in een zin over te typen. Zo'n overgetypt getal is precies wat
  *    er de vorige keer verouderde.
+ *
+ * 6. ÉÉN KOLOM: BOL → LEGENDA → ANTWOORD → ZOEKVELD (21 augustus). De lijst stond
+ *    NAAST de bol in een tweede kolom. De eigenaar wil de bol rechts van de
+ *    rekenmachine, en dan is die tweede kolom er niet meer: een lijst van 240 px
+ *    naast een bol van 240 px maakt allebei onbruikbaar. Zijn volgorde was "onder
+ *    de bol de legenda, en daaronder het zoekveld".
+ *    HET ANTWOORDPANEEL NOEMDE HIJ NIET, en dat staat nu tussen de legenda en het
+ *    zoekveld. Dat is een keuze en geen slordigheid: dat paneel is het antwoord op
+ *    de klik die je net op de bol deed, en achter de lijst van 250 regels zou het
+ *    een halve pagina onder je klik verschijnen. Een melding die je niet ziet is
+ *    geen melding (regel 3). De legenda is twee regels hoog, dus hij staat nog
+ *    steeds onder de bol zoals gevraagd.
+ *    WAT HET KOST, eerlijk: de lijst is de enige besturing voor wie het doek niet
+ *    ziet, en die begint nu lager op de pagina. Hij is nog steeds één tabstop en
+ *    nog steeds volledig, maar wie hem nodig heeft scrollt er verder naartoe dan
+ *    in de tweekolomsopstelling.
  *
  * ER WORDT NIETS OPGEHAALD. De grenzen staan in de bundel (assets/GEODATA.md).
  * Een tile-request zou die server vertellen naar welk land iemand kijkt, en in
@@ -729,126 +745,75 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   const dpr = pixelRatio();
 
   return (
+    /* Eén kolom: de bol, de legenda eronder, dan het antwoord op de laatste keuze,
+     * en onderaan het zoekveld met de landenlijst. Punt 6 in de kop legt uit waarom
+     * het antwoord tussen de legenda en het zoekveld staat. */
     <div className="lv-globe">
-      <div className="lv-globe-stage">
-        <div className="lv-globe-figure" ref={figureRef}>
-          <p className="lv-globe-readout" data-testid="bol-readout">
-            {readoutId ? (
-              <>
-                <span className="lv-globe-readout-name">{countryLabel(readoutId) || readoutId}</span>
-                {/* Niet `currencies.length ? codes : "onbekend"`: een leeg lijstje is
-                    hier twee verschillende antwoorden, en `kind` is het enige dat
-                    weet welke. Zie moneyLine. */}
-                <span className="lv-globe-readout-ccy">
-                  {readout ? moneyLine(readout.currencies, readout.kind === "noTender") : "valuta onbekend"}
-                </span>
-              </>
-            ) : (
-              <span className="lv-globe-readout-empty">Draai de bol en wijs een land aan, of kies er een uit de lijst.</span>
-            )}
-          </p>
+      <div className="lv-globe-figure" ref={figureRef}>
+        <p className="lv-globe-readout" data-testid="bol-readout">
+          {readoutId ? (
+            <>
+              <span className="lv-globe-readout-name">{countryLabel(readoutId) || readoutId}</span>
+              {/* Niet `currencies.length ? codes : "onbekend"`: een leeg lijstje is
+                  hier twee verschillende antwoorden, en `kind` is het enige dat
+                  weet welke. Zie moneyLine. */}
+              <span className="lv-globe-readout-ccy">
+                {readout ? moneyLine(readout.currencies, readout.kind === "noTender") : "valuta onbekend"}
+              </span>
+            </>
+          ) : (
+            <span className="lv-globe-readout-empty">
+              Draai de bol en wijs een land aan, of kies er een uit de lijst eronder.
+            </span>
+          )}
+        </p>
 
-          <canvas
-            ref={canvasRef}
-            className="lv-globe-canvas"
-            data-testid="bol-canvas"
-            data-dragging={dragging ? "1" : undefined}
-            width={Math.round(size * dpr)}
-            height={Math.round(size * dpr)}
-            style={{ width: `${size}px`, height: `${size}px` }}
-            role="img"
-            tabIndex={0}
-            aria-label="Wereldbol met de bestemmingen. Slepen of de pijltjestoetsen draaien de bol; klikken kiest het land eronder. Elk land is ook te kiezen in de landenlijst hiernaast."
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={(e) => endDrag(e, true)}
-            onPointerCancel={(e) => endDrag(e, false)}
-            onPointerLeave={() => setHoverId(null)}
-            onKeyDown={onCanvasKeyDown}
-          />
+        <canvas
+          ref={canvasRef}
+          className="lv-globe-canvas"
+          data-testid="bol-canvas"
+          data-dragging={dragging ? "1" : undefined}
+          width={Math.round(size * dpr)}
+          height={Math.round(size * dpr)}
+          style={{ width: `${size}px`, height: `${size}px` }}
+          role="img"
+          tabIndex={0}
+          /* "eronder" en niet "hiernaast": de lijst is verhuisd, en een
+             beschrijving die naar de verkeerde kant wijst helpt precies degene
+             niet die het doek niet ziet. */
+          aria-label="Wereldbol met de bestemmingen. Slepen of de pijltjestoetsen draaien de bol; klikken kiest het land eronder. Elk land is ook te kiezen in de landenlijst onder aan dit blok."
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={(e) => endDrag(e, true)}
+          onPointerCancel={(e) => endDrag(e, false)}
+          onPointerLeave={() => setHoverId(null)}
+          onKeyDown={onCanvasKeyDown}
+        />
 
-          <ul className="lv-globe-legend">
-            <li>
-              <span className="lv-globe-swatch" data-tone="euro" aria-hidden="true" /> euro — niets te wisselen
-            </li>
-            <li>
-              <span className="lv-globe-swatch" data-tone="rate" aria-hidden="true" /> LaVega heeft een koers
-            </li>
-            <li>
-              <span className="lv-globe-swatch" data-tone="norate" aria-hidden="true" /> geen koers bij LaVega
-            </li>
-            <li>
-              <span className="lv-globe-swatch" data-tone="notender" aria-hidden="true" /> geen wettig betaalmiddel
-            </li>
-            <li>
-              <span className="lv-globe-swatch" data-tone="selected" aria-hidden="true" /> gekozen
-            </li>
-          </ul>
+        <ul className="lv-globe-legend">
+          <li>
+            <span className="lv-globe-swatch" data-tone="euro" aria-hidden="true" /> euro — niets te wisselen
+          </li>
+          <li>
+            <span className="lv-globe-swatch" data-tone="rate" aria-hidden="true" /> LaVega heeft een koers
+          </li>
+          <li>
+            <span className="lv-globe-swatch" data-tone="norate" aria-hidden="true" /> geen koers bij LaVega
+          </li>
+          <li>
+            <span className="lv-globe-swatch" data-tone="notender" aria-hidden="true" /> geen wettig betaalmiddel
+          </li>
+          <li>
+            <span className="lv-globe-swatch" data-tone="selected" aria-hidden="true" /> gekozen
+          </li>
+        </ul>
 
-          {/* De kleuren van het doek, als tekst leesbaar gemaakt. Zie readPalette. */}
-          <span className="lv-globe-inks" aria-hidden="true">
-            {INK_ROLES.map((role) => (
-              <span key={role} data-ink={role} />
-            ))}
-          </span>
-        </div>
-
-        <div className="lv-globe-side">
-          <div className="lv-globe-search">
-            <label htmlFor="lv-globe-q">Zoek of kies een land</label>
-            <input
-              id="lv-globe-q"
-              type="search"
-              autoComplete="off"
-              role="combobox"
-              aria-expanded="true"
-              aria-controls="lv-globe-list"
-              aria-activedescendant={activeIndex >= 0 && results[activeIndex] ? optionId(results[activeIndex].id) : undefined}
-              value={query}
-              placeholder="Nederland, Japan, Singapore…"
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setActiveIndex(-1);
-              }}
-              onKeyDown={onSearchKeyDown}
-            />
-            <ul
-              id="lv-globe-list"
-              ref={listRef}
-              className="lv-globe-results"
-              role="listbox"
-              aria-label="Landen"
-              data-testid="bol-landen"
-            >
-              {results.length === 0 ? (
-                <li className="lv-globe-results-empty">Geen land met die naam of code in de gebundelde lijst.</li>
-              ) : (
-                results.map((c, i) => (
-                  <li
-                    key={c.id}
-                    id={optionId(c.id)}
-                    role="option"
-                    aria-selected={c.id === selectedId}
-                    data-country={c.id}
-                    data-active={i === activeIndex ? "1" : undefined}
-                    onClick={() => select(c.id, true)}
-                  >
-                    <span>{countryLabel(c.id) || c.name}</span>
-                    {/* Twee verschillende dingen en dus twee verschillende teksten. Een
-                        land zonder vlak MET een speld kan de bol wel vinden — daar staat
-                        straks een stip. Een land zonder speld kan hij niet vinden, en dan
-                        hoort dat hier al te staan en niet pas nadat je erop hebt geklikt
-                        en er niets gebeurde. */}
-                    <span className="cell-sub">
-                      {moneyLine(c.currencies, c.noTender === true)}
-                      {c.rings !== null ? "" : c.pin ? " · geen vlak, wel een plek" : " · geen vlak, plek onbekend"}
-                    </span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </div>
+        {/* De kleuren van het doek, als tekst leesbaar gemaakt. Zie readPalette. */}
+        <span className="lv-globe-inks" aria-hidden="true">
+          {INK_ROLES.map((role) => (
+            <span key={role} data-ink={role} />
+          ))}
+        </span>
       </div>
 
       <div className="lv-globe-answer" data-testid="bol-antwoord" aria-live="polite">
@@ -887,9 +852,12 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             <p className="lv-globe-answer-lead">
               {label} — {currencyLabel(effect.code)}
             </p>
+            {/* "de rekenmachine" en niet "hierboven": de bol staat op een breed
+                scherm naast het rekenblok en op een smal scherm eronder, dus een
+                richting in de zin is de helft van de tijd onwaar. */}
             <p>
               De doelvaluta staat nu op <strong>{effect.code}</strong>. LaVega heeft daar een koers van, dus de
-              berekening hierboven rekent er verder mee.
+              rekenmachine rekent er verder mee.
             </p>
           </>
         ) : effect.kind === "noRate" ? (
@@ -982,6 +950,64 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             het enige wat je er ziet.
           </p>
         ) : null}
+      </div>
+
+      {/* Het zoekveld met de landenlijst, onderaan zoals gevraagd. Geen eigen
+          kolomwikkel meer: er is nog maar één kolom, en een <div> die niets doet
+          is een <div> die iemand later gaat stylen. */}
+      <div className="lv-globe-search">
+        <label htmlFor="lv-globe-q">Zoek of kies een land</label>
+        <input
+          id="lv-globe-q"
+          type="search"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="lv-globe-list"
+          aria-activedescendant={activeIndex >= 0 && results[activeIndex] ? optionId(results[activeIndex].id) : undefined}
+          value={query}
+          placeholder="Nederland, Japan, Singapore…"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActiveIndex(-1);
+          }}
+          onKeyDown={onSearchKeyDown}
+        />
+        <ul
+          id="lv-globe-list"
+          ref={listRef}
+          className="lv-globe-results"
+          role="listbox"
+          aria-label="Landen"
+          data-testid="bol-landen"
+        >
+          {results.length === 0 ? (
+            <li className="lv-globe-results-empty">Geen land met die naam of code in de gebundelde lijst.</li>
+          ) : (
+            results.map((c, i) => (
+              <li
+                key={c.id}
+                id={optionId(c.id)}
+                role="option"
+                aria-selected={c.id === selectedId}
+                data-country={c.id}
+                data-active={i === activeIndex ? "1" : undefined}
+                onClick={() => select(c.id, true)}
+              >
+                <span>{countryLabel(c.id) || c.name}</span>
+                {/* Twee verschillende dingen en dus twee verschillende teksten. Een
+                    land zonder vlak MET een speld kan de bol wel vinden — daar staat
+                    straks een stip. Een land zonder speld kan hij niet vinden, en dan
+                    hoort dat hier al te staan en niet pas nadat je erop hebt geklikt
+                    en er niets gebeurde. */}
+                <span className="cell-sub">
+                  {moneyLine(c.currencies, c.noTender === true)}
+                  {c.rings !== null ? "" : c.pin ? " · geen vlak, wel een plek" : " · geen vlak, plek onbekend"}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
       </div>
 
       <p className="lv-globe-source">

@@ -339,6 +339,7 @@ function AccountPanel({
 } & Pick<RekeningenProps, "onEntityChange" | "onAccountCommit" | "onAccountFieldChange" | "onSaldoCommit" | "onTypeCommit" | "onSelectAccount" | "onDeleteAccount">) {
   const { account, txCount } = row;
   const age = saldoAge(account, latestTx);
+  const linked = linkedMoment(account);
   return (
     <div className="bank-panel" role="tabpanel" aria-labelledby={labelledBy}>
       <div className="bank-fields">
@@ -380,9 +381,18 @@ function AccountPanel({
           </div>
           <span className="cell-sub">{saldoAgeShort(age)}</span>
         </div>
+        {/* NA het saldoveld, en dat is geen volgorde-toeval: het bedrag is waar
+            hij voor komt, het koppelmoment is de context eromheen. Een veld met
+            een datum vóór het saldo zou als de datum van dat saldo lezen — de
+            verwisseling die dit veld juist moet opheffen. */}
+        <div className="bank-field">
+          <span className="eyebrow">Gekoppeld</span>
+          <div className="cell-sub">{linkedShort(linked)}</div>
+        </div>
       </div>
 
       <SaldoAgeNote age={age} />
+      <LinkedNote moment={linked} />
 
       {account.iban ? <p className="bank-panel-iban">{account.iban}</p> : null}
 
@@ -475,16 +485,23 @@ export function latestTxDates(txs: readonly Tx[]): Map<string, string> {
 
 /** De drie toestanden waarin een saldo kan staan. `laterTx` is alleen gezet als
  *  er transacties NA de saldodatum liggen — dan is de stand aantoonbaar niet de
- *  huidige positie. `latestTx` is de nieuwste transactie die we hebben, of null. */
+ *  huidige positie. `latestTx` is de nieuwste transactie die we hebben, of null.
+ *
+ *  `linkedAt` hangt aan de ONGEDATEERDE tak en nergens anders, want daar zei de
+ *  uitleg tot vandaag: "wat hier staat is de stand van het moment waarop je
+ *  autoriseerde. Welk moment dat was, weet LaVega niet." Dat was waar zolang
+ *  niemand het opschreef; sinds `Account.linkedAt` bestaat kan het pertinent
+ *  onwaar zijn, en dan staat de app zichzelf twee regels verder tegen te
+ *  spreken. De tekst moet dus weten of dat moment bekend is. */
 export type SaldoAge =
   | { kind: "dated"; date: string; laterTx: string | null }
-  | { kind: "undated"; latestTx: string | null }
+  | { kind: "undated"; latestTx: string | null; linkedAt: string | null }
   | { kind: "none"; latestTx: string | null };
 
 export function saldoAge(account: Account, latestTx: string | null): SaldoAge {
   if (account.balance === null) return { kind: "none", latestTx };
   const date = account.balanceDate;
-  if (!date) return { kind: "undated", latestTx };
+  if (!date) return { kind: "undated", latestTx, linkedAt: account.linkedAt ?? null };
   return { kind: "dated", date, laterTx: latestTx !== null && latestTx > date ? latestTx : null };
 }
 
@@ -514,12 +531,39 @@ export function saldoAgeNote(age: SaldoAge): string {
     const tx = age.latestTx
       ? ` De nieuwste transactie die LaVega van deze rekening heeft, is van ${dayNL(age.latestTx)} — dat zegt iets over de transacties, niet over dit bedrag.`
       : "";
+    const invite = ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu laat zien; dan staat de dag er wel bij.`;
+    /* IS HET KOPPELMOMENT BEKEND, dan mag de oude zin hier niet meer staan.
+     *
+     * Die zin luidde: "wat hier staat is de stand van het moment waarop je
+     * autoriseerde. Welk moment dat was, weet LaVega niet." Met `linkedAt` op de
+     * rekening staat dat moment een regel verderop op ditzelfde scherm — de
+     * uitleg zou dus ontkennen wat er naast staat, en van de twee zinnen is er
+     * dan altijd één fout.
+     *
+     * Wat er in plaats daarvan NIET staat, is een uitspraak over de ouderdom van
+     * het bedrag. De verleiding is groot: "het bedrag is opgehaald op of ná de
+     * koppeling, dus ouder is het niet." Voor een bankkoppeling klopt dat, maar
+     * dit veld staat ook op geïmporteerde rekeningen, en een afschrift van juni
+     * dat in augustus wordt ingelezen heeft een saldo dat wél ouder is dan het
+     * koppelmoment. Eén regel die voor beide bronnen waar moet zijn, kan die
+     * grens dus niet trekken — dus trekt hij hem niet, en wijst hij naar de
+     * regel eronder die over de koppeling gaat en over niets anders. */
+    if (age.linkedAt) {
+      return (
+        `Bij dit bedrag staat geen dag: de bron stuurde er geen mee, en LaVega vult er zelf geen in.` +
+        ` De koppeling vernieuwt zichzelf niet — er loopt niets op de achtergrond, dus dit cijfer beweegt niet mee.` +
+        ` Wanneer deze rekening binnenkwam, staat in de regel hieronder; dat is de ouderdom van de koppeling en` +
+        ` niet die van dit bedrag.` +
+        tx +
+        invite
+      );
+    }
     return (
-      `Bij dit bedrag staat geen dag. Bij een bankkoppeling legt LaVega niet vast wanneer de gegevens binnenkwamen,` +
-      ` en de koppeling vernieuwt zichzelf niet: wat hier staat is de stand van het moment waarop je autoriseerde.` +
+      `Bij dit bedrag staat geen dag, en van deze rekening is ook geen koppelmoment vastgelegd (zie de regel hieronder).` +
+      ` De koppeling vernieuwt zichzelf niet: wat hier staat is de stand van het moment waarop je autoriseerde.` +
       ` Welk moment dat was, weet LaVega niet, en daarom staat er hier geen datum.` +
       tx +
-      ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu laat zien; dan staat de dag er wel bij.`
+      invite
     );
   }
   const tx = age.latestTx
@@ -539,6 +583,80 @@ function SaldoAgeNote({ age }: { age: SaldoAge }) {
   return (
     <p className="field-note bank-panel-age">
       <strong>{saldoAgeShort(age)}</strong> — {saldoAgeNote(age)}
+    </p>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * HOE OUD IS DE KOPPELING — de tweede vraag, en niet dezelfde als hierboven.
+ *
+ * Het blok hiervoor gaat over de ouderdom van het BEDRAG. Dit gaat over de
+ * ouderdom van de KOPPELING: wanneer deze rekening in LaVega kwam. Dat waren
+ * altijd twee vragen, maar er was maar één antwoord — `balanceDate` — en dus
+ * werd dat antwoord voor allebei gelezen. Bij een bankkoppeling stuurt de bank
+ * vaak geen saldodag mee; er stond dan "datum onbekend", en de bovenstaande
+ * uitleg moest schrijven "wat hier staat is de stand van het moment waarop je
+ * autoriseerde. Welk moment dat was, weet LaVega niet." Dat laatste hoeft nu
+ * niet meer waar te zijn: `Account.linkedAt` legt dat moment vast bij het
+ * aanmaken van de rekening.
+ *
+ * De twee blijven WEL uit elkaar op het scherm, in twee zinnen en twee labels.
+ * Ze samenvoegen tot één "bijgewerkt op" is precies hoe ze eerder door elkaar
+ * gingen lopen: een koppelmoment van vandaag zegt niets over een saldo van
+ * vorige maand, en andersom net zo min.
+ *
+ * En voor rekeningen die er al stonden blijft het antwoord "onbekend". Zie
+ * `withLinkedAt` in core: niet met terugwerkende kracht invullen. Er staat hier
+ * dus geen datum en ook geen advies om iets opnieuw te importeren — dat zou een
+ * advies zijn dat niet werkt, want een her-import van een rekening die er al is
+ * verschuift het koppelmoment niet en máákt er ook geen.
+ *
+ * ALLEEN IN HET PANEEL, niet in de platte tabel. Die tabel heeft één saldokolom
+ * met één regel eronder; daar een tweede datum bij zetten levert twee datums in
+ * één cel op, en dan staan ze weer naast elkaar te lijken op hetzelfde ding. Een
+ * eigen kolom zou het wel scheiden maar maakt de rij op een telefoon onleesbaar.
+ * Het paneel is de plek waar één rekening wordt uitgelegd; daar hoort dit thuis.
+ * ------------------------------------------------------------------------- */
+
+export type LinkedMoment = { kind: "known"; date: string } | { kind: "unknown" };
+
+export function linkedMoment(account: Account): LinkedMoment {
+  const at = account.linkedAt;
+  return at ? { kind: "known", date: at } : { kind: "unknown" };
+}
+
+/** Het korte label. Bij onbekend staat er geen cijfer — geen jaartal, geen
+ *  streepje op een datumplek — om dezelfde reden als bij `saldoAgeShort`: alles
+ *  wat op een datum lijkt, wordt als de datum gelezen. */
+export function linkedShort(m: LinkedMoment): string {
+  return m.kind === "known" ? `gekoppeld op ${dayNL(m.date)}` : "koppelmoment onbekend";
+}
+
+/** De uitleg eronder. Bij een bekend moment één zin die zegt wat het WEL en wat
+ *  het NIET is; bij een onbekend moment de echte oorzaak, zonder handeling
+ *  erbij, want er is er geen die dit gat vult. */
+export function linkedNote(m: LinkedMoment): string {
+  if (m.kind === "known") {
+    return (
+      `Deze rekening staat sinds ${dayNL(m.date)} in LaVega — de dag van de koppeling of de import.` +
+      ` Dat is iets anders dan de dag waarop het saldo hierboven gold: dit zegt hoe oud de koppeling is,` +
+      ` niet hoe oud het bedrag is.`
+    );
+  }
+  return (
+    `Wanneer deze rekening in LaVega kwam, is niet vastgelegd: hij stond er al voordat LaVega het` +
+    ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
+    ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
+    ` koppelt of importeert krijgen hun moment wel.`
+  );
+}
+
+/** Eén regel plus uitleg, in dezelfde vorm als `SaldoAgeNote` en er bewust naast
+ *  in plaats van erin: twee vragen, twee alinea's. */
+function LinkedNote({ moment }: { moment: LinkedMoment }) {
+  return (
+    <p className="field-note bank-panel-linked">
+      <strong>{linkedShort(moment)}</strong> — {linkedNote(moment)}
     </p>
   );
 }

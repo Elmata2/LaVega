@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cashbackSwitchGain, fxSwitchGain, issuerConsensus, marketCashbackOptions, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import { assumptionDueForReview, cashbackKnowledgeOfEntry, cashbackSwitchGain, cashbackTierCounts, describeCashback, fxSwitchGain, issuerConsensus, marketCashbackOptions, mayAssumeNoCashback, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
 import { bestRate, keptRate } from "./interest.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
@@ -317,5 +317,215 @@ describe("cashbackSwitchGain", () => {
 
   test("says nothing when his own rate is UNKNOWN", () => {
     expect(cashbackSwitchGain(null, best, 2_000_000)).toBeNull();
+  });
+});
+
+/* ══════ AANGENOMEN: GEEN CASHBACK ═══════════════════════════════════════════
+ *
+ * App review 4, punt 22. Zijn woorden: "for most cards — ING, ABN, most normal
+ * ones — they don't have cashback… if there's no case then it's zero."
+ *
+ * Dit is de gevoeligste wijziging van de ronde, want hij bijt op "onbekend is
+ * nooit nul". De uitvoering is daarom een EIGEN tier: geen `?? 0`, maar een
+ * derde toestand die op het scherm ook zo heet. Deze suite bewaakt allebei de
+ * kanten — dat de aanname er komt waar hij hoort, en dat hij nergens anders
+ * komt.
+ */
+
+describe("cashbackKnowledgeOfEntry", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas",
+    fields: {}, ...over,
+  });
+
+  test("een gedekt cijfer is GEMETEN, met bron en peildatum", () => {
+    const k = cashbackKnowledgeOfEntry(row({
+      fields: { cashbackPct: { value: 2, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-08-01", conditions: null, conditionsKnown: true } },
+    }));
+    expect(k.tier).toBe("gemeten");
+    if (k.tier !== "gemeten") throw new Error("onbereikbaar");
+    expect(k.pct).toBe(2);
+    expect(k.asOf).toBe("2026-08-01");
+  });
+
+  test("een gedekte NUL is gemeten, niet aangenomen — de keerzijde van de regel", () => {
+    // "Een uitgesproken 'gratis' IS een bekende nul." Zegt het tarievenblad het
+    // zelf, dan is dat een feit met een bron, en het mag niet op één hoop met een
+    // nul die wij invullen: dan is het verschil na één sweep niet meer te zien.
+    const k = cashbackKnowledgeOfEntry(row({
+      fields: { cashbackPct: { value: 0, route: "provider-pdf" as const, sourceUrl: "https://ing/tarieven.pdf", checkedAt: "2026-06-15", conditions: "Geen cashback op de betaalpas.", conditionsKnown: true } },
+    }));
+    expect(k.tier).toBe("gemeten");
+    expect(describeCashback(k)).toContain("gemeten: geen cashback");
+    expect(describeCashback(k)).toContain("2026-06-15");
+  });
+
+  test("een gewone ING-betaalpas zonder cijfer is AANGENOMEN nul", () => {
+    const k = cashbackKnowledgeOfEntry(row());
+    expect(k.tier).toBe("aangenomen");
+    if (k.tier !== "aangenomen") throw new Error("onbereikbaar");
+    expect(k.pct).toBe(0);
+    expect(k.issuerFamily).toBe("ING");
+    // En het staat er letterlijk zo op het scherm, met het woord erbij.
+    expect(describeCashback(k)).toBe("aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product");
+  });
+
+  test("een cijfer waarvan de voorwaarden niet vaststaan valt terug op de aanname, niet op het cijfer", () => {
+    // Niet gedekt = geen gemeten cijfer. Dat het er staat maakt het niet bruikbaar,
+    // en het mag hier zeker geen 2% worden zonder dat iemand de voorwaarden kent.
+    const k = cashbackKnowledgeOfEntry(row({
+      fields: { cashbackPct: { value: 2, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-08-01", conditions: null, conditionsKnown: false } },
+    }));
+    expect(k.tier).toBe("aangenomen");
+    expect(k).not.toHaveProperty("sourceUrl");
+  });
+
+  test("de peildatum van de aanname is de LAATSTE keer dat iemand dit product las", () => {
+    const k = cashbackKnowledgeOfEntry(row({
+      fields: {
+        fxFeePct: { value: 1.4, route: "provider-pdf" as const, sourceUrl: "https://ing", checkedAt: "2025-01-10", conditions: "geen", conditionsKnown: true },
+        accountFee: { value: 0, route: "provider-pdf" as const, sourceUrl: "https://ing", checkedAt: "2026-06-15", conditions: "gratis", conditionsKnown: true },
+      },
+    }));
+    if (k.tier !== "aangenomen") throw new Error("verwachtte een aanname");
+    expect(k.lastCheckedAt).toBe("2026-06-15");
+  });
+
+  test("zonder één gedekt veld noemt de aanname geen datum in plaats van er een te kiezen", () => {
+    const k = cashbackKnowledgeOfEntry(row());
+    if (k.tier !== "aangenomen") throw new Error("verwachtte een aanname");
+    expect(k.lastCheckedAt).toBeNull();
+  });
+});
+
+describe("de afbakening van de aanname", () => {
+  /* Dit is het deel dat de regel overeind houdt. Elke rij hieronder is een
+     product waar nul aannemen ONJUIST zou zijn, en de reden staat erbij zodat een
+     melding zijn eigen oorzaak kan noemen. */
+
+  test("een cryptokaart nooit — daar is cashback het verkoopargument", () => {
+    const k = cashbackKnowledgeOfEntry({ id: "bleap-card", product: "Bleap Card", issuer: "Bleap SIA (Latvia)", kind: "crypto", fields: {} });
+    expect(k).toEqual({ tier: "onbekend", reason: "verkoopargument" });
+  });
+
+  test("een prepaidkaart nooit — alle acht aantoonbare cijfers in de catalogus staan op zo'n kaart", () => {
+    const k = cashbackKnowledgeOfEntry({ id: "cdc", product: "Crypto.com Prepaid Card", issuer: "Crypto.com", kind: "prepaid", fields: {} });
+    expect(k).toEqual({ tier: "onbekend", reason: "verkoopargument" });
+  });
+
+  test("American Express nooit — die kaarten worden verkocht op wat je ermee verdient", () => {
+    const k = cashbackKnowledgeOfEntry({ id: "amex-gold", product: "American Express Gold Card", issuer: "American Express (self-issued in NL; NOT ICS)", kind: "creditcard", fields: {} });
+    expect(k).toEqual({ tier: "onbekend", reason: "beloningsuitgever" });
+  });
+
+  test("een co-brandkaart glipt niet binnen via de uitgever van iemand anders", () => {
+    // De valstrik: "Flying Blue - American Express Entry Card" met een
+    // uitgeversregel waar een naam van de lijst in voorkomt. De beloningskant
+    // wint, altijd.
+    const k = cashbackKnowledgeOfEntry({
+      id: "fb-entry", product: "Flying Blue - American Express Entry Card",
+      issuer: "International Card Services B.V. (ICS)", kind: "creditcard", fields: {},
+    });
+    expect(k).toEqual({ tier: "onbekend", reason: "beloningsuitgever" });
+  });
+
+  test("een neobank met betaalde niveaus nooit — die niveaus worden op hun extraatjes verkocht", () => {
+    for (const [product, issuer] of [
+      ["Revolut Metal betaalpas", "Revolut Bank UAB"],
+      ["N26 Metal betaalpas", "N26 Bank AG; metal Mastercard Debit"],
+      ["bunq Elite betaalpas", "bunq B.V.; Mastercard"],
+      ["Wise betaalpas", "Wise Europe SA (Belgium)"],
+      ["212 Card", "Paynetics (card issuer); NL customers under Trading 212"],
+    ]) {
+      const k = cashbackKnowledgeOfEntry({ id: product, product, issuer, kind: "betaalpas", fields: {} });
+      expect(k, product).toEqual({ tier: "onbekend", reason: "uitgever-buiten-de-aanname" });
+    }
+  });
+
+  test("een spaarrekening nooit — daar hoort geen kaart bij, dus ook geen vraag", () => {
+    const k = cashbackKnowledgeOfEntry({ id: "abn-sparen", product: "ABN AMRO Direct Sparen", issuer: "ABN AMRO Bank N.V.", kind: "spaarrekening", fields: {} });
+    expect(k).toEqual({ tier: "onbekend", reason: "geen-betaalproduct" });
+  });
+
+  test("zonder soort nooit — dan weten we niet of het een pas of een cryptokaart is", () => {
+    const k = cashbackKnowledgeOfEntry({ id: "x", product: "Iets", issuer: "ING Bank N.V.", fields: {} });
+    expect(k).toEqual({ tier: "onbekend", reason: "soort-onbekend" });
+  });
+
+  test("de grootbanken en hun ICS-creditcards vallen er wél onder — dat is de hele vraag", () => {
+    const rows: [string, string, string][] = [
+      ["ING betaalpas", "ING Bank N.V.", "ING"],
+      ["ABN AMRO betaalpas", "ABN AMRO Bank N.V.", "ABN AMRO"],
+      ["Rabobank betaalpas", "Coöperatieve Rabobank U.A.", "Rabobank"],
+      ["Triodos betaalpas", "Triodos Bank N.V.", "Triodos Bank"],
+      ["Knab betaalpas", "Knab (Aegon Bank N.V.)", "Knab"],
+      // De creditcards van ING, ABN, Rabo, SNS, ASN en RegioBank worden állemaal
+      // door ICS uitgegeven. Zonder die regel valt de helft van zijn eigen kaarten
+      // buiten de aanname die juist over hen gaat — en de melding noemt dan de
+      // bank die op de kaart staat, niet de verwerker erachter.
+      ["ING creditcard", "International Card Services (ICS)", "ING"],
+      ["ABN AMRO Gold Card", "International Card Services (ICS)", "ABN AMRO"],
+      // ICS' eigen kaart valt er ook onder. Dat hij hier als ABN AMRO uitkomt is
+      // geen fout maar de uitgeversregel van de catalogus zelf, die ICS "an ABN
+      // AMRO subsidiary" noemt — en het is de naam die de lezer herkent.
+      ["ICS Visa World Card", "International Card Services B.V. (ICS, an ABN AMRO subsidiary)", "ABN AMRO"],
+    ];
+    for (const [product, issuer, family] of rows) {
+      const k = cashbackKnowledgeOfEntry({ id: product, product, issuer, kind: product.includes("creditcard") || product.includes("Card") ? "creditcard" : "betaalpas", fields: {} });
+      expect(k.tier, product).toBe("aangenomen");
+      if (k.tier !== "aangenomen") throw new Error("onbereikbaar");
+      expect(k.issuerFamily, product).toBe(family);
+    }
+  });
+
+  test("de RegioBank-pas heet RegioBank, ook al staat ASN in zijn uitgeversregel", () => {
+    // "ASN Bank N.V. (formerly RegioBank N.V.)" — specifieker eerst, anders noemt
+    // de melding de verkeerde bank en is hij niet na te kijken.
+    const k = cashbackKnowledgeOfEntry({ id: "regiobank-betaalpas", product: "RegioBank betaalpas", issuer: "ASN Bank N.V. (formerly RegioBank N.V.)", kind: "betaalpas", fields: {} });
+    if (k.tier !== "aangenomen") throw new Error("verwachtte een aanname");
+    expect(k.issuerFamily).toBe("RegioBank");
+  });
+
+  test("'Trading' bevat de letters ing en is toch geen ING", () => {
+    // Een woordgrens en geen substring: zonder die grens zou elke Trading
+    // 212-rekening als ING doorgaan en de aanname van de verkeerde bank erven.
+    expect(mayAssumeNoCashback("Trading 212", "betaalpas").ok).toBe(false);
+  });
+});
+
+describe("cashbackTierCounts", () => {
+  test("telt de drie hardheden apart, zodat het scherm er een controleerbare zin van kan maken", () => {
+    const counts = cashbackTierCounts([
+      { id: "a", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas", fields: {} },
+      { id: "b", product: "ABN AMRO betaalpas", issuer: "ABN AMRO Bank N.V.", kind: "betaalpas", fields: {} },
+      { id: "c", product: "Bleap Card", issuer: "Bleap SIA", kind: "crypto", fields: { cashbackPct: { value: 1, route: "agent" as const, sourceUrl: "https://b", checkedAt: "2026-08-01", conditions: null, conditionsKnown: true } } },
+      { id: "d", product: "Wirex Card", issuer: "Wirex", kind: "crypto", fields: {} },
+    ]);
+    expect(counts).toEqual({ gemeten: 1, aangenomen: 2, onbekend: 1 });
+  });
+});
+
+describe("assumptionDueForReview", () => {
+  /* Zijn eigen vraag: een jaarlijkse sweep voor als er tóch cashback verschijnt.
+     Die cadans staat in de code en niet alleen in een agenda, zodat het scherm
+     kan zeggen dat een aanname oud is in plaats van hem stil te herhalen. */
+
+  test("een aanname van elf maanden oud mag blijven staan", () => {
+    expect(assumptionDueForReview("2025-10-01", "2026-08-21")).toBe(false);
+  });
+
+  test("twaalf maanden is toe aan een nieuwe blik", () => {
+    expect(assumptionDueForReview("2025-08-15", "2026-08-21")).toBe(true);
+  });
+
+  test("zonder peildatum is hij per definitie toe — niemand weet wanneer er gekeken is", () => {
+    expect(assumptionDueForReview(null, "2026-08-21")).toBe(true);
+  });
+
+  test("een peildatum op maandniveau werkt net zo goed als een hele datum", () => {
+    // De catalogus schrijft sommige data als "2026-01". Een vergelijking die van
+    // de schrijfwijze afhangt in plaats van van de tijd is geen vergelijking.
+    expect(assumptionDueForReview("2026-01", "2026-08-21")).toBe(false);
+    expect(assumptionDueForReview("2025-01", "2026-08-21")).toBe(true);
   });
 });

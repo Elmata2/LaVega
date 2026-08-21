@@ -226,3 +226,155 @@
     row-gap: var(--sp-2);
   }
 }
+
+/* ---------- "Toon meer" — de onderbouwing opgevouwen ----------
+ *
+ * Hoort bij components/ToonMeer.tsx; dat bestand legt de vorm uit, dit legt de
+ * opmaak uit. Twee verschijningsvormen op één element: `.toonmeer-regel` is de
+ * volle regel onder een blok, `.toonmeer-info` het kleine ⓘ naast een kop.
+ *
+ * GEEN @media-blok in deze sectie, en dat is geen luiheid. module-grid.test.ts
+ * leest dit stylesheet en zet elk @media-blok in een Map met de breedte als
+ * sleutel; een tweede `@media (max-width: 900px)` overschrijft daar het
+ * bestaande blok en laat de gridtests slagen op de verkeerde regels. Het
+ * onderdeel is vloeiend, dus het heeft er ook geen nodig — heb je er tóch een
+ * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1200, 900).
+ *
+ * En geen transition, geen animation, geen keyframes: open en dicht mogen
+ * gewoon gebeuren. */
+
+.toonmeer {
+  min-width: 0;
+}
+
+/* De <summary> is het klikvlak. Het driehoekje van de browser gaat eraf omdat
+ * het teken rechts (regel) of het ⓘ (info) de stand al draagt; `list-style` doet
+ * dat in Chrome en Firefox, de ::-webkit-regel in Safari. Beide zijn nodig. */
+.toonmeer-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  list-style: none;
+  cursor: pointer;
+}
+.toonmeer-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* base.css geeft een focusring aan `button:focus-visible`, en een <summary> is
+ * geen button. Zonder deze regel is het onderdeel met het toetsenbord wel te
+ * bedienen maar niet te zíen — dan valt de hele onderbouwing weg voor wie
+ * tabt. */
+.toonmeer-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Het paneel is bewust rustiger dan de inhoud erboven: het cijfer is waarvoor
+ * je kwam, dit is wat je erbij vraagt. */
+.toonmeer-panel {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.toonmeer-panel > :first-child {
+  margin-top: 0;
+}
+.toonmeer-panel > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- variant "regel": de volle regel onder een blok ---------- */
+
+.toonmeer-regel {
+  margin-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.toonmeer-regel > .toonmeer-summary {
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.toonmeer-regel > .toonmeer-summary:hover {
+  color: var(--ink);
+}
+.toonmeer-regel > .toonmeer-panel {
+  padding-bottom: var(--sp-3);
+}
+
+/* Het teken komt uit CSS en niet uit de JSX, want alleen het stylesheet weet of
+ * de <details> openstaat; React houdt die stand juist met opzet niet bij. Een
+ * vaste breedte zodat de regel niet verspringt als + een − wordt. */
+.toonmeer-regel .toonmeer-mark {
+  flex: none;
+  width: 1em;
+  text-align: center;
+  line-height: 1;
+}
+.toonmeer-regel .toonmeer-mark::after {
+  content: "+";
+}
+.toonmeer-regel[open] .toonmeer-mark::after {
+  content: "\2212"; /* een echt minteken, niet een koppelteken */
+}
+
+/* ---------- variant "info": het kleine ⓘ naast een kop ---------- */
+
+/* De kop staat ín de <summary> (zie ToonMeer.tsx), dus zijn eigen marge zou hier
+ * een gat slaan tussen kop en paneel. */
+.toonmeer-info > .toonmeer-summary > h2,
+.toonmeer-info > .toonmeer-summary > h3,
+.toonmeer-info > .toonmeer-summary > h4 {
+  margin: 0;
+}
+
+/* Zelfde vorm als .module-info en .field-info in views.css: één rond, stil
+ * teken, zodat de drie plekken als één idee lezen op drie formaten. */
+.toonmeer-info .toonmeer-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.toonmeer-info > .toonmeer-summary:hover .toonmeer-mark,
+.toonmeer-info[open] > .toonmeer-summary .toonmeer-mark {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* De belofte staat er wel, maar niet in beeld: naast een kop is een hele zin te
+ * veel, terwijl een schermlezer anders alleen "i" te horen krijgt en niemand
+ * weet waar hij op klikt. Vandaar deze klassieke verbergtruc in plaats van
+ * display:none — dat laatste haalt hem ook uit de schermlezer. */
+.toonmeer-info > .toonmeer-summary > .toonmeer-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.toonmeer-info > .toonmeer-panel {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}

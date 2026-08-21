@@ -11,6 +11,7 @@ import catalogueFile from "../../../../../docs/catalog/catalog.json";
 import { formatEuro } from "../../format.js";
 import { dayLabelYearNL } from "./dates.js";
 import Module from "../Module.js";
+import ToonMeer from "../ToonMeer.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
@@ -19,7 +20,35 @@ import Module from "../Module.js";
  * It leads with ONE answer — `plan.headline`, priced in euros — because three
  * sections (Bewaren / Wisselen / Betalen) were three answers the owner had to
  * reconcile himself. The ranked JOURNEYS and those three sections are still all
- * here; they just sit behind "waarom", as the reasoning under the answer. */
+ * here; they just sit behind "waarom", as the reasoning under the answer.
+ *
+ * ── HET OVERZICHT IS EXACT EEN SAMENVATTING (app review 4, punten 12 t/m 16) ──
+ *
+ * Zijn woorden: "this overview should be exactly a summary." Wat vooraan staat is
+ * daarmee een gesloten lijst van twee antwoorden — WAARMEE BETAAL JE en WAAR KUN
+ * JE PINNEN — plus wat die twee kosten. Al het andere staat in één <ToonMeer>
+ * eronder: de bronregel, de uitleg over de catalogus, "vandaag", de afgevallen
+ * kaart, alle routes, de drie stappen, de opnamedetails en de knop
+ * "voorwaarden verversen".
+ *
+ * Wat er NIET is opgevouwen, en waarom niet:
+ *  · DE KAARTPRIJS (`Kaartkosten`). Een kaart die hij moet openen brengt zijn
+ *    eigen maandnota mee; "Betaal met X" zonder die nota is geen samenvatting
+ *    maar een half advies. De prijs hoort bij het antwoord, niet bij de
+ *    onderbouwing.
+ *  · DE VOORWAARDE BIJ HET TARIEF dat de kop noemt (`plan.pay.note`, een door
+ *    `fxCaveat` HERKENDE limiet). Revolut is waarom: zijn 0% geldt alleen binnen
+ *    € 1.000 per maand, en "dat kost je niets op € 1.000" is zonder die zin een
+ *    voorwaardelijk tarief dat als absoluut op het scherm staat.
+ *  · DE OORZAAK als er niets te vergelijken valt (`termsHeadline`). Die is één
+ *    zin en hij begrenst het antwoord; de hele melding mét knop zit wel in de
+ *    uitklap.
+ * De vrije tekst van een geleerd feit (`bestJourney.note`) gaat WEL naar achteren,
+ * en dat is precies het verschil: dat veld draagt de bronregel die hij aanwees
+ * ("1,4% koersopslag Bron: bank.nl-vergelijking, laatst gecontroleerd …"). Er is
+ * geen manier om daar met zekerheid een voorwaarde uit een citaat te vissen — dus
+ * wordt er niet op de tekst gesplitst maar op het VELD: herkende limiet vooraan,
+ * vrije brontekst in de uitklap. Zie ook de opmerking bij die regel. */
 
 /* THE PRODUCT CATALOGUE, BUNDLED AT BUILD TIME.
  *
@@ -527,6 +556,12 @@ function nameList(providers: string[]): string {
   return providers.join(", ");
 }
 
+/** De kop van de routelijst in de uitklap — het enige plekje op dit scherm waar
+ *  je een percentage zelf kunt intypen. Drie meldingen wijzen ernaar, dus de
+ *  naam staat hier één keer: anders wijst de tekst na een hernoeming naar een
+ *  kopje dat niet meer bestaat, en dat is precies wat er met “Waarom?” gebeurde. */
+export const ROUTES_HEADING = "Alle routes";
+
 /** The block's one visible control for the terms, sitting directly under the
  *  answer it explains.
  *
@@ -552,6 +587,22 @@ export function TermsNotice({
 }) {
   if (state.kind === "euro") return null;
 
+  /* WAAR "VUL HET ZELF IN" NAAR WIJST, en waarom het niet meer "Waarom?" is.
+   *
+   * Drie meldingen hieronder eindigen met dezelfde uitweg: typ het percentage
+   * zelf, want wat jij invult overschrijft geen enkele agent. Die zin noemde de
+   * knop "Waarom?" — en die knop bestaat niet meer sinds het blok op de gedeelde
+   * <ToonMeer> staat. Daarmee was het een advies dat in de toestand waarin het
+   * verschijnt niet uit te voeren is — dezelfde fout als core's "ververs eerst
+   * de voorwaarden" op een server zonder sleutel, en die kostte een middag. Het invulveld zelf is niet weg — het
+   * staat per route onder "Alle routes", in ditzelfde uitgeklapte deel, direct
+   * onder deze melding. Dus wijst de zin daarheen.
+   *
+   * Eén kopje, drie keer genoemd, dus de naam komt uit `ROUTES_HEADING` en niet
+   * uit drie overgetikte strings: een verwijzing die naar een kop wijst die
+   * anders heet is dezelfde dode aanwijzing, alleen moeilijker te vinden. */
+  const zelfInvullen = `bij “${ROUTES_HEADING}” hieronder`;
+
   const searchButton = (primary: boolean, label: string) => (
     <button
       type="button"
@@ -573,8 +624,8 @@ export function TermsNotice({
     <>
       <p className="cell-sub">
         Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken kan hier niet —
-        verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de percentages zelf in onder
-        “Waarom?”. Wat jij invult wordt nooit door een agent overschreven.
+        verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de percentages zelf in{" "}
+        {zelfInvullen}. Wat jij invult wordt nooit door een agent overschreven.
       </p>
       <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
         Sleutel net ingesteld? Opnieuw controleren
@@ -652,7 +703,7 @@ export function TermsNotice({
         </p>
         {termsGaveUp && (
           <p className="cell-sub text-warn">
-            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in onder “Waarom?” —
+            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in {zelfInvullen} —
             wat jij invult wordt nooit overschreven.
           </p>
         )}
@@ -677,7 +728,7 @@ export function TermsNotice({
     <div className="travel-terms travel-terms-blocked" role="status">
       <p className="cell-sub">
         We hebben gezocht, maar voor {nameList(state.unknown)} kwam er geen bruikbaar tarief terug. Vul de
-        wisselkosten zelf in onder “Waarom?” — jouw invoer blijft staan en wordt nooit overschreven. Zoeken kan
+        wisselkosten zelf in {zelfInvullen} — jouw invoer blijft staan en wordt nooit overschreven. Zoeken kan
         opnieuw; de server haalt sommige tarieven op de achtergrond op.
       </p>
       {searchButton(false, "Opnieuw zoeken")}
@@ -912,9 +963,12 @@ export default function TravelBlock({
   catalogue = BUNDLED_CATALOGUE,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
-  // One disclosure for the whole block. The answer is the product; everything
-  // that argues for it is a click away, not a wall of caveats next to it.
-  const [showWhy, setShowWhy] = useState(false);
+  /* Eén uitklap voor het hele blok, en die staat in `ToonMeer` — geen `useState`
+   * meer hier. Dat is niet alleen minder code: de stand zat in React en dus
+   * NERGENS anders, waardoor de opmaak niets van open of dicht wist en elk blok
+   * dat hetzelfde wilde zijn eigen knop met eigen `aria-expanded` naschreef. Een
+   * <details> levert Tab-focus, Enter/Space en het uitspreken van de stand van de
+   * browser zelf. Zie components/ToonMeer.tsx; bouw hier geen tweede variant. */
 
   // Destinations a lookup actually WENT OUT for in this session. The only way
   // to tell "asked and found nothing" from "never asked": a fruitless lookup
@@ -993,9 +1047,38 @@ export default function TravelBlock({
       : plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
         ? payHeadline({ ...plan.pay, holdingCost: null, benefit: null }, plan.journeys, plan.currency)
         : plan.headline;
-  // Core's headline advises a refresh whenever no route is priced; when the
-  // refresh cannot work, or was never the missing piece, we say what is.
-  const headline = (terms && termsHeadline(terms)) ?? answer;
+
+  /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
+   *
+   * `termsHeadline` VERVING de kop volledig zodra er geen beprijsde eigen route
+   * was. Dat is de begintoestand van iedere nieuwe gebruiker, en daar viel de
+   * kaartprijs al een keer door weg; de vorige ronde heeft die prijs gered door
+   * hem in `Kaartkosten` te zetten. Nu de uitleg naar de uitklap gaat, valt langs
+   * dezelfde weg iets ergers weg: de naam van de kaart stond in die toestand
+   * ALLEEN nog in de catalogusregel ("… staat in de catalogus, niet bij je
+   * rekeningen"), en die vouwt op. Dan blijft er "Kaartkosten: € 1,00 per maand"
+   * over onder een kop over ontbrekende voorwaarden — een prijs zonder product.
+   *
+   * Dus wordt de swallow bij de wortel aangepakt in plaats van er een tweede
+   * pleister op te plakken: is er een aanbeveling, dan staat DIE in de kop, in
+   * elke toestand, en de oorzaak eronder als eigen zin. Is er geen aanbeveling
+   * (geen kaart in de catalogus die past, geen beprijsde route), dan is de
+   * oorzaak het enige wat er te zeggen valt en neemt zij de kop — nooit core's
+   * eigen "ververs eerst de voorwaarden", want die opdracht kan op een server
+   * zonder sleutel niet worden uitgevoerd.
+   *
+   * De oorzaak staat daarmee precies één keer: als kop óf als regel eronder. */
+  const cause = (terms && termsHeadline(terms)) ?? null;
+  const headline = plan?.pay ? answer : (cause ?? answer);
+  const causeLine = plan?.pay ? cause : null;
+
+  /* Het label van de uitklap is een BELOFTE en geen "meer informatie", anders
+   * klikt niemand en is de onderbouwing niet opgevouwen maar zoek. Twee vormen,
+   * omdat er twee soorten inhoud achter zitten: normaal de onderbouwing van een
+   * bedrag, en in een toestand met een gat de reden plus de knop die hem dicht. */
+  const foldLabel = cause
+    ? "Wat er ontbreekt, en wat je eraan kunt doen"
+    : "Alle routes, de bronnen en de voorwaarden";
 
   return (
     <Module title="Travel Agent" span={3} height="tall">
@@ -1016,34 +1099,47 @@ export default function TravelBlock({
         <p className="block-empty">Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.</p>
       ) : (
         <>
-          {/* THE ANSWER. One sentence, in euros, on the reference spend — or,
-              when nothing can be priced, the reason nothing can be. */}
+          {/* DE SAMENVATTING. Twee antwoorden — waarmee betaal je, waar kun je
+              pinnen — en wat die twee kosten. Verder niets: alles wat een van die
+              twee onderbouwt staat in de <ToonMeer> hieronder. */}
           <div className={`travel-winner${bestJourney ? "" : " travel-winner-unpriced"}`}>
-            <div className="travel-winner-name">{headline}</div>
-            {/* The winner's own caveat, next to the answer rather than behind a
-                disclosure. Revolut is why: its 0% holds only inside a €1.000
-                monthly limit, and "dat kost je niets op € 1.000" was being said
-                without it — a conditional rate stated as absolute. If a provider
-                attached a condition to its rate, the recommendation carries it. */}
-            {bestJourney?.note && (
+            <div className="travel-winner-name">
+              {/* HET MERKTEKEN BLIJFT VOORAAN, de uitleg erachter niet. De kop
+                  zegt zelf al "die heb je nog niet", maar een woord alleen is niet
+                  genoeg gebleken: de aanbeveling mag een kaart uit de catalogus
+                  zijn (review 3, punt 2) en dan moet zichtbaar anders zijn dat je
+                  hem morgenochtend niet kunt pinnen. Vóór de zin, zodat je het
+                  advies niet kunt lezen zonder het merkteken. */}
+              {plan.pay && !plan.pay.held && <><NotYours /> </>}
+              {/* De zin in een eigen span, want de kop moet los te lezen zijn: een
+                  test pint dat wat hier staat het BEGIN van core's eigen zin is,
+                  en met het merkteken erin gemengd zou die vergelijking op de
+                  chip stuklopen in plaats van op een gewijzigde formulering. */}
+              <span className="travel-winner-headline">{headline}</span>
+            </div>
+            {/* DE VOORWAARDE BIJ HET TARIEF DAT DE KOP NOEMT. Dit is `capNote`,
+                door `fxCaveat` HERKEND uit de voorwaarden — geen vrije tekst. Een
+                gedekte 0% kaal tonen is de Revolut-fout: "dat kost je niets op
+                € 1.000" terwijl die 0% alleen binnen € 1.000 per maand geldt.
+                Daarom staat deze wél vooraan en de brontekst van een geleerd feit
+                niet: die twee zijn niet dezelfde soort zin. */}
+            {plan.pay && !plan.pay.held && plan.pay.note && (
               <p className="cell-sub travel-winner-caveat">
-                <strong>Let op:</strong> {bestJourney.note}
+                <strong>Let op:</strong> {plan.pay.note}
               </p>
             )}
-            {/* The recommendation is allowed to be a card he does not carry —
-                that is the point of review item 2 — so the moment it is, the
-                block says so and shows the figure's provenance. */}
-            {plan.pay && !plan.pay.held && (
-              <p className="cell-sub travel-winner-switch">
-                <NotYours /> {plan.pay.product} staat in de catalogus, niet bij je rekeningen
-                {plan.pay.asOf && <> · tarief {figureAge(plan.pay.asOf, asOf)}</>}.
-              </p>
-            )}
+            {/* WAT ER ONTBREEKT, in één zin. De hele melding met de knop staat in
+                de uitklap (punt 16), maar een aanbeveling die is gedaan zonder dat
+                we zijn eigen kaarten konden beprijzen mag dat niet verzwijgen —
+                anders draagt een afwezigheid een conclusie die ze niet kan dragen. */}
+            {causeLine && <p className="cell-sub travel-winner-cause">{causeLine}</p>}
             {/* WAT DIE KAART ZELF KOST. Een kaart die hij moet openen brengt zijn
                 eigen maandnota mee, en die hoort naast het voordeel te staan en
                 niet in een voetnoot: € 14 winst op € 1.000 tegen € 16,90 per maand
-                is achteruit. Bij zijn EIGEN kaart is `holdingCost` null en rendert
-                dit niets — die prijs loopt toch al door. */}
+                is achteruit. Dat maakt de prijs deel van het antwoord en niet van
+                de onderbouwing — vandaar dat dit blok níét opvouwt. Bij zijn EIGEN
+                kaart is `holdingCost` null en rendert dit niets: die prijs loopt
+                toch al door. */}
             {plan.pay && !plan.pay.held && (
               <Kaartkosten
                 product={plan.pay.product}
@@ -1052,43 +1148,12 @@ export default function TravelBlock({
                 testId="travel-pay-kosten"
               />
             )}
-            {/* ...and what he can pay with TODAY stays on screen. He still has to
-                be able to pay for lunch tomorrow; it is simply no longer the
-                headline, which is what he asked for in so many words. */}
-            {plan.pay && !plan.pay.held && plan.pay.ownProduct && (
-              <p className="cell-sub travel-winner-today">
-                <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met {plan.pay.ownProduct} —{" "}
-                {formatEuro(plan.pay.ownCostOnReference ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}.
-              </p>
-            )}
-            {/* The recommendation's own caveat, when it is a catalogue card: a
-                capped 0% shown bare is the Revolut mistake all over again. */}
-            {plan.pay && !plan.pay.held && plan.pay.note && (
-              <p className="cell-sub travel-winner-caveat">
-                <strong>Let op:</strong> {plan.pay.note}
-              </p>
-            )}
-            {/* WAAROM DE GOEDKOPERE KAART HET NIET WERD. Zijn eigen route wint
-                hier op de HELE reis, en soms alleen omdat de andere kaart geld
-                kost. Zonder deze regel verdwijnt die kaart zonder uitleg en moet
-                hij de aftrek zelf maken; dat is precies wat hij niet wil. */}
-            {plan.pay?.held && rejected && ownPct !== null && (
-              <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
-                <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag (
-                {pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
-                {feeLabel(rejected.net.cost.amount)} om aan te houden:{" "}
-                {formatEuro(rejected.net.grossCents / 100)} lagere opslag tegen{" "}
-                {formatEuro(rejected.net.costCents / 100)} kaartkosten {spanWords(rejected.net.basis)}, dus{" "}
-                {rejected.net.netCents === 0
-                  ? "even duur als"
-                  : `${formatEuro(-rejected.net.netCents / 100)} duurder dan`}{" "}
-                {plan.pay.product}.{floorNote(rejected.net.basis)}
-              </p>
-            )}
             {/* CASH. He asked for it in so many words — "also include taking
                 money, physical cash. Which card can you take out money?" — and
                 it is a different, worse price than paying, so it gets its own
-                sentence rather than a footnote under the card advice. */}
+                sentence rather than a footnote under the card advice. Het is ook
+                de tweede helft van wat vooraan mag blijven staan: waarmee betaal
+                je, en waar kun je pinnen. */}
             <p className="cell-sub travel-winner-cash">
               <strong>Pinnen:</strong>{" "}
               {plan.withdrawAdvice && !plan.withdrawAdvice.held && <><NotYours /> </>}
@@ -1104,30 +1169,84 @@ export default function TravelBlock({
                 testId="travel-pin-kosten"
               />
             )}
-            {bestJourney && (
-              <div className="cell-sub">
-                Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst
-                zelf niets — dit is een stap die jij zet.
-              </div>
-            )}
           </div>
 
-          {/* Why, and the one control that changes it — under the answer, not
-              hidden in the header. */}
-          {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} termsAsked={termsAsked} termsGaveUp={termsGaveUp} onSearch={search} onRecheckAi={onRecheckAi} />}
-
-          <button
-            type="button"
-            className="card-link"
-            aria-expanded={showWhy}
-            onClick={() => setShowWhy(!showWhy)}
-          >
-            {showWhy ? "Verberg waarom" : "Waarom?"}
-          </button>
-
-          {showWhy && (
+          <ToonMeer summary={foldLabel}>
             <div className="travel-why">
-              <h3 className="travel-step-title">Alle routes</h3>
+              {/* DE BRONREGEL. Dit is de vrije tekst van het geleerde feit, en bij
+                  bank.nl is dat "1,4% koersopslag Bron: bank.nl-vergelijking,
+                  laatst gecontroleerd 15-1-2026" — een citaat, met "Let op:" ervoor
+                  omdat hetzelfde veld soms een voorwaarde draagt. Precies deze
+                  regel wees hij aan (punt 12). Hij verdwijnt niet: een cijfer
+                  zonder herkomst is in deze app een gerucht, dus hij staat hier,
+                  bovenaan de onderbouwing.
+                  DE PRIJS VAN DIT VELD, eerlijk: draagt het bij een kaart die hij
+                  AL heeft een limiet in plaats van een citaat, dan vouwt die limiet
+                  mee op. Uit de tekst is dat niet betrouwbaar te scheiden, en gokken
+                  op woorden is hoe je de ene keer een bron verstopt en de andere
+                  keer een voorwaarde. De herkende limiet van een catalogus­kaart
+                  loopt daarom langs `plan.pay.note` en staat wél vooraan. */}
+              {bestJourney?.note && (
+                <p className="cell-sub travel-winner-caveat">
+                  <strong>Let op:</strong> {bestJourney.note}
+                </p>
+              )}
+              {/* Waar de aanbevolen kaart vandaan komt en hoe oud dat tarief is.
+                  De kop zegt al dát hij hem nog niet heeft; dit zegt waar hij dan
+                  wél staat, en dat is onderbouwing (punt 13). */}
+              {plan.pay && !plan.pay.held && (
+                <p className="cell-sub travel-winner-switch">
+                  <NotYours /> {plan.pay.product} staat in de catalogus, niet bij je rekeningen
+                  {plan.pay.asOf && <> · tarief {figureAge(plan.pay.asOf, asOf)}</>}.
+                </p>
+              )}
+              {/* ...and what he can pay with TODAY. He still has to be able to pay
+                  for lunch tomorrow, so de regel blijft bestaan — maar het woord
+                  "vandaag" hoefde van hem weg van de voorgrond (punt 14), en dit is
+                  ook letterlijk niet de aanbeveling maar het alternatief. */}
+              {plan.pay && !plan.pay.held && plan.pay.ownProduct && (
+                <p className="cell-sub travel-winner-today">
+                  <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met {plan.pay.ownProduct} —{" "}
+                  {formatEuro(plan.pay.ownCostOnReference ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}.
+                </p>
+              )}
+              {/* WAAROM DE GOEDKOPERE KAART HET NIET WERD. Zijn eigen route wint
+                  hier op de HELE reis, en soms alleen omdat de andere kaart geld
+                  kost. Zonder deze regel verdwijnt die kaart zonder uitleg en moet
+                  hij de aftrek zelf maken; dat is precies wat hij niet wil. Het is
+                  wel uitleg over een kaart die NIET de aanbeveling is, dus ze hoort
+                  hier en niet vooraan: vooraan beweert niets dat deze regel moet
+                  rechtzetten. */}
+              {plan.pay?.held && rejected && ownPct !== null && (
+                <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
+                  <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag (
+                  {pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
+                  {feeLabel(rejected.net.cost.amount)} om aan te houden:{" "}
+                  {formatEuro(rejected.net.grossCents / 100)} lagere opslag tegen{" "}
+                  {formatEuro(rejected.net.costCents / 100)} kaartkosten {spanWords(rejected.net.basis)}, dus{" "}
+                  {rejected.net.netCents === 0
+                    ? "even duur als"
+                    : `${formatEuro(-rejected.net.netCents / 100)} duurder dan`}{" "}
+                  {plan.pay.product}.{floorNote(rejected.net.basis)}
+                </p>
+              )}
+              {/* De maatstaf onder alle bedragen. Vooraan noemt de kop zijn eigen
+                  referentie al ("op € 1.000"); hier staat hij één keer voor de hele
+                  lijst, met de zin die zegt dat LaVega zelf niets verplaatst. */}
+              {bestJourney && (
+                <div className="cell-sub">
+                  Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst
+                  zelf niets — dit is een stap die jij zet.
+                </div>
+              )}
+
+              {/* De melding met de echte oorzaak, en de knop die eraan te doen is
+                  — inclusief "Ververs voorwaarden", die van hem in dit uitgeklapte
+                  deel hoort (punt 16). De zin die de oorzaak NOEMT staat vooraan;
+                  wat je eraan kunt doen staat hier, bij de rest van de details. */}
+              {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} termsAsked={termsAsked} termsGaveUp={termsGaveUp} onSearch={search} onRecheckAi={onRecheckAi} />}
+
+              <h3 className="travel-step-title">{ROUTES_HEADING}</h3>
               {plan.journeys.length === 0 ? (
                 <p className="cell-sub">
                   {plan.currency === "EUR"
@@ -1261,7 +1380,7 @@ export default function TravelBlock({
                 </p>
               )}
             </div>
-          )}
+          </ToonMeer>
         </>
       )}
     </Module>

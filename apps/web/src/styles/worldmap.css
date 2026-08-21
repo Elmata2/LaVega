@@ -14,18 +14,43 @@
  * spannetje van nul bij nul met `color:` op het token. `color` is een echte
  * eigenschap, dus dáár komt een echte rgb() uit. Eén keer gelezen per doek.
  *
- * DE ZEE IS GEBLEVEN WAT HIJ WAS (--surface-2) EN DE LANDEN ZIJN DONKERDER
- * GEWORDEN. De platte kaart had euro op 20%, koers op 40% en "geen koers" op 20%
- * grijs; die waren daar op een gerasterde kaart gemeten. Op een bol hield dat geen
- * stand: op de eerste schermafdruk was Afrika bijna niet van de oceaan te
- * onderscheiden. Nagerekend op de tokens is dat ook geen kwestie van smaak — grijs
- * 20% op wit tegen --surface-2 is een contrast van 1,10, en dat is niets. Nu staat
- * "geen koers" op 34% (contrast 1,34) en zijn euro, koers en hover meegeschoven
- * naar 24 / 48 / 68% zodat de reeks van licht naar donker blijft lopen: hoe meer
- * wij van een land weten, hoe steviger de kleur, met het gekozen land als --accent
- * en dus het donkerst. Een blauwere oceaan is geprobeerd en weer weggehaald: dan
- * botst de zee met de eurokleur, want dat is dezelfde hue. Dat een bol als bol
- * leest komt van de rand en de graticule, niet van blauw water.
+ * HET BLAUW IS TEAL GEWORDEN (21 augustus, op zijn verzoek: "het blauw mag iets
+ * anders"), en dat was de gelegenheid om een gemeten probleem op te lossen dat
+ * groter was dan het probleem dat hij noemde.
+ *
+ * De landen liepen in één reeks van --accent: euro 24%, koers 48%, hover 68%,
+ * gekozen 100%, met twee grijstinten ertussendoor. Doorgerekend op de tokens
+ * botsten daar drie paren die op de kaart tégen elkaar aan liggen:
+ *
+ *     euro / geen koers   1,07   ← Kroatië–Servië, Griekenland–Albanië, Finland–Rusland
+ *     koers / geen koers  1,50
+ *     euro / koers        1,61
+ *
+ * 1,07 is geen grens meer. Er wordt namelijk geen landsgrens getekend: elk land
+ * krijgt een stroke in zijn EIGEN vulkleur (zie Globe.tsx — dat dicht de haarlijn
+ * tussen twee vereenvoudigde vlakken), dus het kleurverschil is het enige verschil.
+ * Twee landen met contrast 1,07 zijn op het scherm één land.
+ *
+ * Nu doet de HUE het werk in plaats van de helderheid. Wat LaVega kan beantwoorden
+ * is teal (--chart-teal: euro licht, "wij hebben een koers" vol), wat LaVega mist
+ * is neutraal grijs (--muted), en de bediening blijft de kleur van de app zelf
+ * (--ink-soft aangewezen, --accent gekozen). Diezelfde drie paren staan daarmee op
+ * 1,63 / 1,58 / 2,59, en tegen de zee: euro 1,30, koers 3,37, geen koers 2,13.
+ *
+ * ELK GETAL IN DEZE KOP WORDT NAGEREKEND, en dat is niet voor de sier: de vorige
+ * versie van dit blad noemde er ook een stel, en toen de kleuren veranderden bleven
+ * de zinnen staan. Globe.test.tsx leest dit blad plus tokens.css, lost de
+ * color-mix() op en meet de paren opnieuw; staat er hier straks een kleur die de
+ * grens niet haalt, dan valt die test om in plaats van dat deze alinea stil onwaar
+ * wordt.
+ *
+ * Euro tegen de zee blijft 1,30 en dat is krap. Donkerder kan niet: euro moet
+ * lichter blijven dan "geen koers", anders vallen die twee samen — en dat is het
+ * paar dat wél een grens deelt, terwijl de eurozone vooral aan zichzelf en aan
+ * water grenst. Een donkerdere zee is nagerekend en maakt het erger (1,18 bij
+ * --muted 8%): de zee schuift dan naar euro toe. Vandaar --surface-2, ongewijzigd.
+ * Dat een bol als bol leest komt van de rand en de graticule, niet van gekleurd
+ * water.
  *
  * GEEN TRANSITION EN GEEN KEYFRAMES. Bewust: bewegen loopt in dit project via een
  * eigen laag. Slepen is geen animatie — daar beweegt de vinger — maar een bol die
@@ -40,50 +65,73 @@
   --lv-globe-sea: var(--surface-2);
   --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
   --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
-  --lv-globe-euro: color-mix(in srgb, var(--accent) 24%, var(--surface));
-  --lv-globe-rate: color-mix(in srgb, var(--accent) 48%, var(--surface));
-  --lv-globe-norate: color-mix(in srgb, var(--muted) 34%, var(--surface));
+
+  /* WAT LAVEGA KAN BEANTWOORDEN: teal, in twee stappen. Dezelfde hue voor euro en
+   * "wij hebben een koers", want dat zijn allebei antwoorden; het verschil tussen
+   * de twee staat in het paneel eronder en niet in een kleur. */
+  --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 34%, var(--surface));
+  --lv-globe-rate: var(--chart-teal);
+
+  /* WAT LAVEGA MIST OF WAT ER NIET IS: neutraal grijs, ook in twee stappen. Geen
+   * teal erin, want dan zou een leemte eruitzien als een half antwoord. */
+  --lv-globe-norate: color-mix(in srgb, var(--muted) 60%, var(--surface));
   /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
    * dezelfde als "geen koers" zou beweren dat het aan ONS ligt dat daar niets te
    * wisselen valt, en dat is precies het onderscheid waar deze tab over gaat.
    *
-   * Waarom donkerder grijs en niet lichter: gemeten op deze tokens is lichter dan
-   * de zee onbruikbaar (grijs 18% haalt contrast 1,09 tegen --surface-2 en dat is
-   * niets — zie de rekensom over Afrika hierboven). Op 46% is het 1,68 tegen de
-   * zee, 1,21 tegen "geen koers" en 1,25 tegen "koers". Die laatste twee zijn
-   * krap, en dat is een bewuste grens: de grijstinten liggen dicht bij elkaar
-   * omdat de blauwreeks de ruimte erboven al gebruikt. Wat het draagbaar maakt is
-   * dat deze tint op precies één land valt en dat dat land alleen aan oceaan
-   * grenst — er is nergens een naad waar twee van deze drie tinten tegen elkaar
-   * aan liggen. Komt er ooit een tweede land bij, dan is dit de eerste regel die
+   * Hij stond op --muted 46% en haalde 1,21 tegen "geen koers" en 1,24 tegen
+   * "koers" — de eigenaar noemde die twee getallen zelf (1,21 en 1,25) en ze zijn
+   * hier nagerekend; op 100% zijn ze 2,23 en 1,41. Tegen de ZEE, en dat is het paar
+   * dat er voor Antarctica echt toe doet, gaat het van 1,68 naar 4,75.
+   *
+   * Die 1,41 tegen "koers" is het krapste paar dat overblijft en het blijft staan,
+   * om drie redenen. Het is vol teal tegen vol grijs, dus het verschil zit in de
+   * hue en niet in de helderheid die dít getal meet. De twee raken elkaar nergens:
+   * Antarctica grenst alleen aan oceaan, en in de legenda heeft elk vlakje een
+   * --line-rand en zijn eigen tekst. En donkerder is nagerekend en maakt het per
+   * saldo erger: --muted 70% op --ink haalt 2,03 tegen "koers", maar dan is
+   * aangewezen (--ink-soft) op Antarctica nog maar 1,62 — nu 2,34, en dat is al het
+   * zwakste hoverpaar op de bol. Een land dat niet oplicht als je het aanwijst is
+   * een land dat niet meedoet.
+   * Komt er ooit een tweede land met deze tint bij, dan is dit de eerste regel die
    * opnieuw gemeten moet worden. */
-  --lv-globe-notender: color-mix(in srgb, var(--muted) 46%, var(--surface));
-  --lv-globe-hover: color-mix(in srgb, var(--accent) 68%, var(--surface));
+  --lv-globe-notender: var(--muted);
+
+  /* DE BEDIENING: niet teal en niet grijs, zodat aanwijzen en kiezen nooit voor
+   * een antwoord kunnen doorgaan. Aangewezen is bijna-zwart, en dat is met opzet
+   * het zwaarste dat er los van de selectie op het doek verschijnt: tegen de vier
+   * vullingen haalt --ink-soft 8,51 / 3,29 / 5,21 / 2,34, en die laagste bepaalt
+   * of een hover op de hele wereld te zien is — een hover die je op de halve
+   * wereld niet ziet, is geen hover.
+   *
+   * Alle tokens uit tokens.css zijn hierop nagerekend en er is er precies één die
+   * het beter doet: --ink zelf (laagste 3,17). Die is bezet — de speld is --ink,
+   * en een hover in de kleur van de speld laat juist op het gekozen land niets
+   * meer zien. Daarna houdt het op: --accent is "gekozen" (laagste 1,62), en elke
+   * overgebleven kleur zakt tegen minstens één vulling naar 1,0 à 1,1
+   * (--chart-blue 1,04, --chart-purple 1,12, --pos 1,09, --neg 1,03, --warn 1,03).
+   * Vandaar deze twee, en niet iets vrolijkers. */
+  --lv-globe-hover: var(--ink-soft);
   --lv-globe-selected: var(--accent);
   --lv-globe-pin: var(--ink);
 }
 
-/* ---------- De opstelling: bol links, besturing rechts ---------- */
+/* ---------- De opstelling: één kolom ---------- */
 
-/* De lijst staat NAAST de bol en niet eronder. Dat is geen smaak: een canvas is
- * voor een schermlezer leeg, dus de lijst is de tweede volwaardige besturing en
- * hoort niet onder de plooi te beginnen. Onder 760 px wordt het één kolom, met de
- * bol eerst — daar is de bol het snelst en de lijst het volledigst. */
-.lv-globe-stage {
-  display: grid;
-  grid-template-columns: minmax(220px, 460px) minmax(240px, 1fr);
-  gap: var(--sp-5);
-  align-items: start;
-  min-width: 0;
-}
-@media (max-width: 760px) {
-  .lv-globe-stage {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.lv-globe-figure,
-.lv-globe-side {
+/* De lijst stond NAAST de bol, in een tweede kolom van minstens 240 px. Dat kan
+ * niet meer: de bol staat sinds 21 augustus zelf in de rechterkolom naast de
+ * rekenmachine, en twee kolommen in één kolom is twee keer te smal. De volgorde
+ * is nu bol, legenda, antwoord, zoekveld met de lijst — zie punt 6 in Globe.tsx.
+ *
+ * Er is dus GEEN grid meer en geen breekpunt op 760 px: .lv-globe is al een
+ * flexkolom, dus de kinderen staan vanzelf onder elkaar, op elke breedte
+ * hetzelfde. Dat scheelt de enige plek in dit blad waar de opstelling van de
+ * viewport afhing.
+ *
+ * Wat het kost staat in Globe.tsx en herhaal ik hier omdat het een echte
+ * achteruitgang is: de landenlijst is de enige besturing voor wie het doek niet
+ * ziet, en die begint nu lager op de pagina. */
+.lv-globe-figure {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
@@ -221,7 +269,12 @@
  * altijd — ook met een leeg zoekveld, en dan staan alle 250 landen erin. Een
  * lijst die pas iets laat zien als je het juiste woord al weet, helpt precies
  * degene niet die de bol niet kan zien. Vandaar de vaste hoogte met eigen
- * scroll: 250 regels mogen de pagina niet uitrekken. */
+ * scroll: 250 regels mogen de pagina niet uitrekken.
+ *
+ * Van 22rem naar 18rem sinds de lijst ONDER de bol staat in plaats van ernaast:
+ * naast een bol van 420 px mocht hij die hoogte vullen, eronder telt hij op bij
+ * alles erboven. Acht regels plus de scrollbalk is genoeg om te zien dat het een
+ * lijst is en dat hij verder loopt. */
 .lv-globe-results {
   display: flex;
   flex-direction: column;
@@ -229,7 +282,7 @@
   margin: 0;
   padding: var(--sp-1);
   list-style: none;
-  max-height: 22rem;
+  max-height: 18rem;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);

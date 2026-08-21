@@ -1,466 +1,436 @@
 # De kassa-extensie — implementatieplan
 
-Review-3 item **13**: *"make already an implementation plan on how you would make that extension, also
-based on all the learns we've had."*
+Review-3 item **13** vroeg om dit plan. **Review-4 item 34 heeft het product omgedraaid**, en dit
+bestand is op **21 augustus 2026** om die omkering heen herschreven.
 
-Dit bouwt voort op **`docs/BACKLOG.md` § 7.1 — "De houding van de extensie"** (tot 21-08 het kopje
-*"Idea 2026-08-19 — a browser extension that spends the points you already have"*), waar de vier
-houdingsregels al vastliggen. Ik herhaal ze hier niet; ik neem ze als gegeven en schrijf op wat er
-sindsdien is veranderd, wat ik heb gemeten, en wat elke route kost.
+Zijn woorden, letterlijk:
+
+> *"The idea is that if in my case I have Amex points which I never use, and I go to a webshop and it
+> says I have 35% that I can use with my points — that would be very, very useful."*
+
+Dat is een ander product dan wat hier stond. De vorige versie rangschikte **kaarten op cashback**;
+dit gaat over **punten die hij al heeft, zichtbaar op het moment dat hij afrekent**.
+
+Dit bouwt nog steeds voort op **`docs/BACKLOG.md` § 7.1 — "De houding van de extensie"**. Die vier
+houdingsregels blijven staan en worden hier niet herhaald.
 
 Niets hiervan is gebouwd. Er is geen productiebestand aangeraakt.
 
-Bijgewerkt **21 augustus 2026**: zijn browserkeuze is binnen (§4), en de puntendekking van de
-catalogus is geteld (§3.4).
-
 ---
 
-## 0. De vraag die dit plan maakt of breekt
+## 0. Waarom de omkering een verbetering is, en niet alleen een andere smaak
 
-**Zou hij een gevulde winkelwagen echt verlaten voor 8,5%?**
+Niet omdat het idee leuker klinkt, maar omdat de **data ergens vandaan komt**.
 
-Deze vraag staat bovenaan omdat hij de waarde van het geheel beslist, en hij staat hier **onbeantwoord**.
+**De oude kop hing aan cijfers die niemand publiceert.** Vandaag opnieuw geteld in
+`docs/catalog/catalog.json` (185 regels, `generatedAt: 2026-08-21`):
 
-Klarna's percentages zijn echt en ik heb ze zelf gemeten (§3.2). Maar ze zijn alleen te verdienen bij
-afrekenen **in de Klarna-app**, met een Klarna-saldo, en de winkel moet het goedkeuren. De extensie
-staat op de afrekenpagina in zijn browser — precies de plek waar dat voordeel niet bestaat.
+| | aantal |
+|---|---|
+| kaartachtige regels (betaalpas, creditcard, prepaid, crypto) | 86 |
+| daarvan met een **cashbackcijfer** | **8** |
+| daarvan met **cashbackcijfer én een prijs** | **0** |
+| daarvan met een **puntenkoers > 0** | 14 |
+| daarvan met een **FX-opslag** | 73 |
 
-De vraag is dus niet of het percentage klopt. De vraag is of hij, met een winkelwagen van € 400 bij
-Zalando, die pagina verlaat en opnieuw begint in een telefoon-app voor € 34.
+*(De opdracht noemde 77 kaarten; ik tel er 86 omdat ik `betaalpas`, `creditcard`, `prepaid` en
+`crypto` allemaal meetel. Welke telling je ook neemt, de twee cijfers die het besluit dragen — 8
+cashbackregels, 0 daarvan met een prijs — veranderen er niet van.)*
 
-- **Zegt hij ja**, dan zijn winkelaanbiedingen de kop van de extensie. Dit wordt dan een
-  koopjesproduct, de Klarna-tabel verdient een eigen slice, en Optie B (§5) wordt serieuzer dan ik
-  hem hier maak. Dan is mijn aanbeveling verkeerd.
-- **Zegt hij nee**, dan is de extensie wat §5 Optie A beschrijft: de logica van de Travel Agent op het
-  moment van een echte aankoop. Klarna blijft dan één gelabelde regel eronder.
+De acht cashbackregels zijn **alle acht** crypto- of crypto-prepaidkaarten: vier Crypto.com-passen,
+Bleap, twee Gnosis Pay-varianten en Wirex. Geen van de acht draagt een jaarprijs, dus een
+rangschikking op cashback is niet eens **netto** te maken: je zou een opbrengst vergelijken zonder
+de kosten die eronder horen. Dat is precies het soort som dat `netBenefit.ts` bestaat om te
+weigeren.
+
+**De nieuwe kop hangt aan een cijfer dat per definitie bestaat: zijn eigen saldo.** Hij voert dat
+zelf in op de Punten-tab, en review-4 item 31 bevestigt dat dat de bedoeling is — *"zodra de
+gebruiker zijn punten invoert kunnen we ze later met de extensie gebruiken, en hem van tijd tot tijd
+om een verversing vragen."* Er is geen bron te scrapen, geen login, geen dekkingsprobleem. Het staat
+er of het staat er niet, en als het er niet staat zegt de extensie dat.
+
+**En het lost een echt probleem op.** Ongebruikte punten zijn onzichtbaar op het enige moment dat ze
+ertoe doen. Zijn eigen zin is "*Amex points which I never use*" — dat is geen rekenprobleem maar een
+herinneringsprobleem, en een herinnering hoort te vallen waar de beslissing valt.
+
+### De vraag die dit plan nu maakt of breekt
+
+De oude §0 vroeg of hij een gevulde winkelwagen zou verlaten voor 8,5% Klarna-cashback. Die vraag is
+niet meer de beslisser. De nieuwe staat hieronder, en hij staat **onbeantwoord**:
+
+> **Is een percentage dat hij pas ACHTERAF kan verzilveren nog steeds "very, very useful"?**
+
+Want dat is wat Amex publiceert. *"Gebruik uw punten om uw aankopen te betalen via de Amex App of uw
+online account"* — de inwisseling gebeurt tegen een afschrijving die er al staat, niet als
+betaalmethode in de kassa van de winkel. De extensie kan dus eerlijk zeggen *"je punten dekken € 126
+van deze € 360"*, maar de handeling is: betaal met de Amex-kaart, boek de punten daarna af in de
+Amex App.
+
+- **Is dat genoeg**, dan is dit plan compleet zoals het hier staat.
+- **Verwachtte hij "klik hier en betaal met punten"**, dan bestaat dat product niet zonder dat een
+  winkel het zelf aanbiedt, en dan is de eerlijke levering een *herinnering met een bedrag* in
+  plaats van een knop.
 
 Ik kan dit niet meten en ik ga het niet raden. *Een feit van de gebruiker gaat boven elke agent.*
+
+### En één ongemakkelijke consequentie, meteen maar
+
+Punten inwisselen bij Amex levert **overal dezelfde koers** op: € 0,003 per punt, tegen welke
+afschrijving dan ook. Daaruit volgt iets dat de verkoopkant van dit idee tegenspreekt en dat er toch
+in hoort: **er is aan deze kassa geen voordeel te halen dat er morgen niet ook is.** De punten gaan
+niet verloren door hier met een andere kaart te betalen; ze blijven staan.
+
+Sterker: aan een kassa in vreemde valuta is "gebruik je punten" een **verliesgevend** advies. Van de
+14 Amex-regels in de catalogus dragen er **13** een koersopslag van **2,5%** (de veertiende, de
+Corporate Card, heeft geen FX-cijfer en blijft dus onbekend). Met de Amex-kaart betalen om hier punten te
+kunnen inwisselen kost dan 2,5% van het hele bedrag, terwijl die punten volgende week op een
+euro-aankoop precies evenveel waard zijn. De extensie mag dat dus niet als arbitrage verkopen.
+
+**Wat overblijft is de herinnering, en die is het waard.** "Je hebt hier € 126 aan punten liggen" op
+het moment van kopen is iets dat vandaag niemand hem vertelt, en het is de reden dat hij ze nooit
+gebruikt. Dat is de kop. De som eronder is de onderbouwing, geen belofte van winst.
 
 ---
 
 ## 1. De aanbeveling
 
-**Bouw Optie A — alleen publieke data, geen login — als één Manifest V3-extensie voor Chrome én
-Edge.** Lever hem als *"Aan de kassa"*: op een afrekenpagina rangschikt hij **zijn eigen kaarten** naar
-wat deze aankoop op elk daarvan werkelijk kost, uit de gebundelde catalogus. Winkelaanbiedingen zijn
-een gelabelde tweede regel, geen kop.
+**Bouw "Aan de kassa" als één Manifest V3-extensie voor Chrome én Edge, met PUNTEN als kop en de
+kaartrangschikking als tweede regel.**
 
-Drie dingen dragen dat, en het tweede en derde zijn nieuw sinds de notitie van 19 augustus.
+Op een afrekenpagina leest hij het bedrag en de valuta, vraagt de open LaVega-tab om een berekening,
+en toont:
 
-1. **De reden om te wachten is vervallen.** De notitie zei *"de eerlijke stand vandaag is 20 van de
-   124 gedekt"* en concludeerde dat de extensie moest wachten op dekking. Gemeten in
-   `docs/catalog/catalog.json` (122 producten, gegenereerd 19-08): **73** FX-percentages, **51**
-   puntencijfers, **32** spaarrentes, **8** cashbackcijfers. Zes extra FX-pins liggen klaar in
-   `2026-08-20-catalog-fx-gaps-and-ing-punten-data.md` en brengen kaart-FX naar 79 van 82 — die merge
-   is nog niet gedaan, de vastgelegde catalogus staat nog op 73. Het wachten is voorbij; "onbekend" is
-   de uitzondering geworden en niet meer de regel.
+1. **per puntenprogramma met een saldo**: wat dat saldo hier dekt — in euro's en als percentage —
+   maar **alleen als er een gepubliceerde koers is**. Is die er niet, dan alleen dat het saldo er is;
+2. **bij een aankoop in vreemde valuta**: welke van zijn kaarten deze aankoop het goedkoopst maakt,
+   uit dezelfde catalogus en met dezelfde bron-en-datumregel als de Travel Agent;
+3. **wat er niet gelezen kon worden**, met de reden — als eersteklas uitkomst, niet als randgeval.
 
-2. **Klarna houdt geen stand als premisse.** De opdracht zei dat publieke data het alleen voor Klarna
-   draagt. De percentages zijn echt en ik heb ze gereproduceerd — maar Klarna's eigen voetnoot zegt
-   dat de cashback alleen wordt verdiend bij aankopen **in de Klarna-app**. Een extensie die in zijn
-   browser afgaat, kan hem niet leveren. Details en citaten in §3.2. Dit is de meting die het plan
-   beslist: de enige publieke aanbiedingenset die we hebben, beschrijft een voordeel dat **niet
-   bestaat op de pagina waar de extensie op staat**.
-
-3. **Punten zijn buiten American Express nergens te bewijzen.** Van de 51 puntencijfers zijn er 37 een
-   bewezen nul en 14 groter dan nul, en die 14 zijn állemaal Amex (§3.4). Een puntenkop is dus een
-   Amex-kop, voor hem en voor bijna niemand anders.
-
-Wat overblijft is dus geen kortingszoeker. Het is de *"pay with Revolut, that saves you € 14 on a
-thousand"*-logica van de Travel Agent, verplaatst naar het moment van een echte aankoop — en dat is
-ook precies wat hij vroeg, en de enige versie waarvan we de getallen kunnen bewijzen.
+Optie B (achter zijn eigen login inloggen bij Amex of een kaartportaal) blijft **afgewezen**, en de
+omkering geeft er een reden bij die er eerst niet was: **voor dit product is een login overbodig.**
+Het saldo komt van hem. De enige reden om in te loggen was het ophalen van persoonlijke
+aanbiedingen, en dat is niet meer waar dit over gaat. Zie §7.
 
 ---
 
-## 2. Wat er al staat, zodat dit een oppervlak is en geen herbouw
+## 2. Het gat, eerlijk opgeschreven — want dit bepaalt of het kan
 
-Gemeten, niet aangenomen — elk pad hieronder is gelezen.
+**Wij weten zijn saldo. Wij weten niet wat een specifieke webwinkel accepteert.**
 
-| Onderdeel | Waar | Wat het al doet |
+"35% van deze aankoop met je punten" veronderstelt een inwisselkoers **bij die winkel**. Zo'n koers
+is er voor geen enkel Nederlands programma publiek te lezen. Wat er wél is, is per programma
+verschillend, en dat verschil bepaalt letterlijk welke zin op het scherm mag komen.
+
+Alles hieronder is op **21 augustus 2026** zelf opgehaald, met plain curl en een browser-UA, geen
+sleutels, en zonder één botcontrole te omzeilen.
+
+| Programma | Saldo | Koers naar euro's | Zonder sleutel te lezen? | Wat de extensie mag zeggen |
+|---|---|---|---|---|
+| **Amex Membership Rewards** | hij voert in | **1.000 punten = € 3** (€ 0,003/punt) | **ja** — `americanexpress.com/nl-nl/rewards/membership-rewards/`, HTTP 200 op plain curl, 604.291 bytes | bedrag én percentage van deze aankoop, met bron, datum en Amex' eigen voorbehoud |
+| **ING Punten** | hij voert in | **geen** — en voor geld een *uitgesproken nul* | spaartabel ja (pagemodel-API, 200); de ING Winkel **nee**, die zit achter login | alleen dát hij ze heeft, plus wat ING zelf zegt |
+| **Revolut RevPoints** | hij voert in | verdienkoers ja, **inwisselwaarde niet vast** (Revolut zegt dat zelf) | via `r.jina.ai`; directe curl gaf eerder 403 | alleen het saldo |
+| **Flying Blue Miles** | hij voert in | award-prijzen zijn per vlucht, geen koers | **nee** — zie hieronder | alleen het saldo |
+| **Air Miles NL** | hij voert in | niet vastgesteld | **nee** — `airmiles.nl` levert 3.131 bytes shell, geen inhoud zonder browser | alleen het saldo |
+
+### Wat Amex letterlijk zegt
+
+> Betalen met punten via de Amex App in drie stappen. **1.000 Membership Rewards punten zijn gelijk
+> aan € 3.** Deze verhouding kan naar goeddunken van American Express en zonder voorafgaande
+> kennisgeving gewijzigd worden.
+
+en, over de route:
+
+> Gebruik uw punten om uw aankopen te betalen via de Amex App of uw online account.
+
+Twee dingen volgen daaruit, en ze zijn allebei goed nieuws voor de bouw:
+
+- **De koers is niet winkelafhankelijk.** Wat zijn punten hier dekken is rekenwerk op zijn eigen
+  saldo maal een gepubliceerd getal. De webwinkel hoeft nergens aan mee te werken. Dat is precies de
+  reden dat dit product kán en het oude niet kon.
+- **Amex zegt er zelf bij dat de verhouding zonder aankondiging kan wijzigen.** Dat cijfer heeft dus
+  een korte houdbaarheid en hoort **nooit zonder datum** in beeld — dezelfde regel als bij de
+  kaartvoorwaarden (`2026-08-17-card-terms-freshness-design.md`).
+
+**Wat er níet uit volgt**: dat een Nederlandse webwinkel "Betalen met Punten" in zijn eigen kassa
+aanbiedt. Amex publiceert daar geen lijst van, en wij kunnen aan een afrekenpagina niet zien of een
+winkel Amex überhaupt accepteert. De extensie beweert dat dus niet — hij noemt de route en laat de
+voorwaarde staan.
+
+Ook gemeten: de **Amex Rewards Shop** (`rewardsshop.touchincentive.com/nl/catalogue/`) is publiek
+leesbaar, HTTP 200, 88.814 bytes — maar alle prijzen staan er in **euro's** en het woord "punten"
+komt er geen enkele keer in voor. De puntenprijs zit achter de login. Er valt daar dus geen tweede
+koers vandaan te halen.
+
+### Wat ING letterlijk zegt
+
+> Nee, ING Punten hebben geen monetaire waarde en kunnen niet worden ingewisseld voor geld.
+
+Dat is een **bekende nul**, en precies de keerzijde die de huisregel toestaat: een uitgesproken
+"nul" is een feit, geen ontbrekend cijfer. Maar hij geldt alleen voor **geld**. Wat een punt aan
+korting oplevert in de ING Winkel is een ander getal, en dat is niet openbaar — ING's eigen zin is
+opzettelijk vaag ("250 Punten, in te wisselen voor een paar euro korting op je bioscoopkaartjes"),
+en de winkel zelf begint met *"Log in in de ING Winkel"*. Meer dan 1.000 deals, allemaal achter de
+login.
+
+**Dus voor ING is het antwoord: alleen dat hij punten HEEFT.** En dat is nog steeds nuttig. "Je hebt
+hier 8.400 ING Punten liggen" op een afrekenpagina is een herinnering die vandaag niemand geeft. Er
+mag alleen geen percentage bij, want dat percentage kennen we niet — en een verzonnen percentage is
+erger dan geen.
+
+### Wat er dicht bleef, en dat is ook een antwoord
+
+`www.klm.nl`, `www.flyingblue.com` en `www.airfrance.nl` weigeren een gewone curl: **curl-fout 92,
+`HTTP/2 stream 1 was not closed cleanly: INTERNAL_ERROR`**, binnen een tiende seconde, terwijl DNS
+gewoon naar Akamai wijst. Via `r.jina.ai` komt er wel een 200 binnen, maar met een lege body — de
+site rendert zijn inhoud in de browser. `airmiles.nl` geeft 200 met 3.131 bytes: een shell zonder
+inhoud, op elke URL dezelfde.
+
+**Dat is niet omzeild en dat wordt het ook niet.** Een 403 of een gesloten stream is een antwoord.
+Het praktische gevolg is klein: Flying Blue-award-prijzen verschillen per vlucht, dus er zou ook met
+een browser geen koers uit komen. Voor deze twee programma's blijft het bij het saldo.
+
+---
+
+## 3. Wat er van het oude plan BLIJFT en wat VERVALT
+
+Expliciet, zodat niemand hoeft te raden welk stuk werk nog geldt.
+
+### Blijft, ongewijzigd
+
+| Onderdeel | Waar het stond | Waarom het blijft |
 |---|---|---|
-| De gebundelde catalogus | `docs/catalog/catalog.json`, als statische module geïmporteerd door `apps/web/src/catalogue-rates.ts`, `views/Valuta.tsx`, `components/blocks/TravelBlock.tsx` | 122 producten, elk cijfer met `value` + `sourceUrl` + `checkedAt` + `conditions` |
-| Rangschikken op FX-kosten | `packages/core/src/catalogRates.ts` → `marketFxOptions`, `fxSwitchGain` | goedkoopste eerst; `fxSwitchGain` geeft **null** als zijn eigen tarief onbekend is, met opzet |
-| Rangschikken op cashback | zelfde bestand → `marketCashbackOptions`, `cashbackSwitchGain` | beste eerst; een bewezen 0% blijft een *feit* maar telt niet als *aanbod* |
-| Dubbelzinnigheid zonder vraag | zelfde bestand → `issuerConsensus` | "American Express / activity" → 2,5% omdat alle 13 Amex-producten het eens zijn; geeft null zodra ze dat niet zijn |
-| Eén aankoop prijzen | `packages/core/src/travel.ts` → `bestPayAdvice`, `rankSpendOptions`, `payHeadline`, `costOnReferenceSpend` | prijst een betaling al over koersopslag en cashback en maakt er de zin bij |
-| Wat een kaart oplevert op een uitgave | `packages/core/src/returns.ts` → `annualSpendCents`, `accountReturns`, `optimiseReturns` | met `SpendKind` al gemodelleerd als `exact` / `upper-bound` / `unknown` |
-| Bundelen tijdens de sweep, draait al | `scripts/bundle-bank-logos.ts` → `apps/web/src/assets/bank-logos.generated.ts` (44 kB data-URI's) + `TRADEMARKS.md` | het patroon dat review-3 item 12 goedkeurt: opgehaald tijdens de sweep, ingebed, **in de browser niets opgehaald** |
+| **Het lezen van de afrekenpagina** (bedrag + valuta + host) | oude §8 plakje 2 | Zonder bedrag geen percentage. Dit onderdeel wordt door de omkering **belangrijker**, niet minder belangrijk. Ongewijzigd overgenomen, inclusief de regel dat een onleesbaar bedrag een `reason` geeft en nooit een gok. |
+| **De posture-regels van MV3** (`activeTab` + `optional_host_permissions`, nooit een statische matchlijst) | oude §3a | Onaangeraakt. De klik op het icoon ís de toestemming, en dat wordt door de browser afgedwongen in plaats van door onze code beloofd. |
+| **Het kanaal en de redactiegrens** | oude §3b | Blijft, met **één benoemde wijziging** — zie §5. |
+| **`packages/core` blijft puur; `asOf` komt van de aanroeper** | oude §3c | Onaangeraakt. |
+| **Chrome + Edge, één MV3-bundel; geen Firefox, geen Safari** | oude §4 | Beslist, blijft beslist. |
+| **Niets ophalen tijdens runtime; bundelen tijdens de sweep** | oude §2 / plakje 5 | Onaangeraakt, en het patroon van `bundle-bank-logos.ts` wordt nu gebruikt voor de puntenkoersen in plaats van voor de Klarna-tabel. |
+| **De lege en de onbekende toestand als eersteklas uitkomst** | oude §8 plakje 6 | Onaangeraakt. |
+| **De rangschikking op FX-kosten** (`marketFxOptions`, `fxSwitchGain`, `issuerConsensus`, `bestPayAdvice`) | oude §2 | 73 van de 86 kaartregels dragen een FX-cijfer. Dat is echte dekking. Het zakt van kop naar tweede regel en verschijnt alleen bij een aankoop in vreemde valuta. |
+| **`RewardsBalance` + `isStale`** (`packages/core/src/rewards.ts`) | bestond al, stond niet in het plan | Een saldo draagt al `updatedAt`, en `isStale(b, asOf, 90)` bestaat al. De verversingsvraag uit review-4 item 31 hoeft dus niet gebouwd te worden — alleen aangeroepen. |
 
-**De extensie schrijft geen rangschiklogica.** Hij schrijft een content script, een kanaal en een
-popup. Alles wat rekent is een aanroep in `@lavega/core`. Dat is de belangrijkste reden om de kleine
-versie te kiezen: het dure, geteste, eerlijke deel is klaar.
+### Vervalt
 
-`bank-logos.generated.ts` verdient een aparte vermelding, want het is het antwoord op het bezwaar dat
-hij in review-3 item 12 terecht heeft weggestreept, en het staat al in de boom. De kop van dat bestand
-zegt de regel in de woorden van de repo zelf: *"Elk logo is tijdens een SWEEP bij de aanbieder zelf
-opgehaald en hier als data-URI neergelegd. In de browser wordt er dus niets opgehaald."* Wat de
-extensie ook nodig heeft om te tonen — een kaartvlak, een winkelmerk, een vlag — dat gaat door die
-deur of het gaat niet mee.
-
----
-
-## 3. Wat de houding toevoegt, specifiek voor een extensie
-
-De vier regels uit de backlog blijven staan. Drie extra beperkingen volgen uit het feit dat dit een
-*extensie* is en geen tab, en die stonden niet in de notitie van 19 augustus:
-
-**3a. Een MV3 host permission is een staande bevoegdheid, geen eenmalige leesbeurt.** `activeTab`
-wordt per gebruikersgebaar gegeven en sterft met de tab; een `host_permissions`-patroon is permanent
-en stil. De extensie gebruikt daarom **`activeTab` + `optional_host_permissions`**, en nooit een
-statische matchlijst. Hij klikt op het icoon op een afrekenpagina; die klik ís de toestemming. Daarmee
-is "opt-in per site, standaard uit" een eigenschap die de **browser afdwingt**, en niet een belofte
-die onze code nakomt.
-
-**3b. De extensie mag de kluis niet kunnen lezen, ook niet als hij het zou willen.** Het kanaal is
-`window.postMessage` naar een open LaVega-tab (of `externally_connectable` naar de app-origin), en de
-vorm van vraag en antwoord ligt vast en is klein:
-
-```
-extensie → LaVega-tab : { kind: "quote", merchant: string, currency: string, amountCents: number }
-LaVega-tab → extensie : { rows: [ { product, costCents, netPct, sourceUrl, asOf, note } ],
-                          unknowns: [ { product, why } ] }
-```
-
-De tab rekent; de extensie toont. Geen saldi, geen IBAN's, geen transactietekst, geen rekeningsleutels
-over die grens — dezelfde redactiediscipline als bij de LLM-proxy, toegepast op ons eigen oppervlak.
-De extensie bewaart niets tussen twee pagina's.
-
-**3c. `packages/core` blijft puur, dus het bedrag én de datum komen van de aanroeper.** De extensie
-leest nergens een datum; de tab geeft `asOf` mee. Geen `Date.now()`, geen `new Date()`, geen fetch in
-de nieuwe core-code — net als de rest van het pakket.
-
----
-
-## 4. Chrome en Edge — besloten
-
-Zijn keuze, review 3 (avond): **één Manifest V3-extensie voor Chrome en Edge.** Firefox valt af, want
-dat zou een tweede kanaal vragen voor de verbinding met de LaVega-tab.
-
-Wat die keuze concreet betekent voor de bouw:
-
-- **Eén codebase, één manifest.** Edge draait op Chromium en leest hetzelfde MV3-manifest; de
-  `chrome.*`-API's bestaan er onder dezelfde naam. Er is geen tweede build-target, geen
-  `browser.*`-wrapper en geen polyfill.
-- **Het kanaal uit §3b werkt in beide.** `externally_connectable` naar de app-origin is een
-  Chromium-mechanisme. Firefox ondersteunt het niet op dezelfde manier: daar zou het via een content
-  script en `window.postMessage` moeten, of via een eigen transport. Dat is letterlijk het tweede
-  kanaal dat hij niet wil, en het is een tweede plek waar de redactiegrens (§3b) getest en bewaakt
-  moet worden. Dat is de echte kost, niet het manifest.
-- **Twee winkels, twee inzendingen.** Chrome Web Store en Microsoft Partner Center. Dezelfde bundel,
-  twee beoordelingen, twee wachttijden — en twee keer dezelfde vraag over machtigingen, waarop
-  `activeTab` het beste antwoord is dat er is (§3a).
-- **Wat er niet mee komt:** Safari. Dat is geen Chromium en geen kleine stap; het staat hier alleen
-  zodat niemand denkt dat "Chrome en Edge" per ongeluk "alle browsers behalve Firefox" betekende.
-
----
-
-## 5. Wat ik heb gemeten
-
-### 5.1 Amex Offers — schoon negatief, opnieuw bevestigd
-
-Vier NL-paden, browser-UA, redirects gevolgd:
-
-```
-https://www.americanexpress.com/nl-nl/aanbiedingen/           → 404
-https://www.americanexpress.com/nl-nl/benefits/amex-offers/    → 404
-https://www.americanexpress.com/nl-nl/offers/                  → 404
-https://www.americanexpress.com/nl-nl/kaarten/aanbiedingen/    → 404
-```
-
-Amex Offers is geen publiek NL-oppervlak. Het zit achter de kaarthouderslogin, of het bestaat niet in
-deze markt — welke van de twee, zeggen deze 404's niet, en dat verschil hoort niet weggeschreven te
-worden. Wat het wel vaststelt: er is **niets publieks om tegenaan te bouwen**. Dat is het sterkste
-argument dat Optie B de enige route naar aanbiedingen op winkelniveau is, en meteen de reden dat
-Optie B duur is (§6).
-
-### 5.2 Klarna — de percentages zijn echt, en ze zijn **niet uitgeefbaar in de browser**
-
-`https://www.klarna.com/nl/cashback/` → **200, plain curl, browser-UA, 802.909 bytes, zonder render**.
-De percentages per winkel staan in de geserveerde HTML in `data-slot`-spans. Er met een gewone regex
-uit gehaald, op de dag van meten:
-
-| winkel | tag, letterlijk |
+| Wat | Waarom |
 |---|---|
-| Zalando | `8,5% cashback in de app` |
-| About You | `10,5% cashback in de app` |
-| H&M | `7% cashback in de app` |
-| Temu | `7% cashback in de app` |
-| ICI PARIS XL | `7% cashback in de app` |
-| Startselect | `7% cashback in de app` |
-| JD Sports | `5% cashback in de app` |
-| Adidas | `5% cashback in de app` |
-| Nike | `3,5% cashback in de app` |
-| MediaMarkt | `3% cashback in de app` |
-| Aliexpress | `3% cashback in de app` |
-| Samsung | `2% cashback in de app` |
+| **Cashback als kop van de extensie** | 8 cijfers op 185 regels, alle acht crypto/prepaid-crypto, en **nul** ervan draagt een prijs. Een netto rangschikking is er niet uit te maken. Gemeten vandaag, niet aangenomen. |
+| **De oude §0** (zou hij een winkelwagen verlaten voor 8,5%?) | Was de beslisser omdat winkelaanbiedingen de kop hadden kunnen worden. Met punten als kop beslist die vraag niets meer. Vervangen door de nieuwe §0. |
+| **Klarna als kop, en `bundle-merchant-offers.ts` als plakje 5** | Klarna's cashback wordt verdiend *in de Klarna-app*, met een Klarna-saldo, na goedkeuring van de winkel. Die meting staat en verandert niet. Wat ervan overblijft mag hooguit een gelabelde bijregel zijn, en het is **geen v1**. |
+| **De puntenkolom "zodra er een tweede uitgever met een koers is"** als bouwtrigger | Vervalt als *trigger* omdat punten nu de kop zijn. Blijft staan als reden om §2 uit te breiden (zie §8). |
 
-12 winkels, 12 `store-name`-slots, 12 `store-tag`-slots — exact, geen steekproef. **De opdracht noemt
-29 direct en 218 met een render; op deze URL kreeg ik er 12.** Ik rapporteer wat ik heb gemeten in
-plaats van de opdracht na te zeggen. Die 29 kunnen van een ander Klarna-oppervlak komen; als dat zo
-is, hoort iemand te zeggen welk, want het is deze niet.
+### Bestond al en verandert van rol
 
-**En dan het deel dat het plan beslist.** Elke tag eindigt op *"in de app"*, en Klarna's eigen voetnoot
-zegt waarom, letterlijk:
-
-> Verdien cashback op aankopen via de Klarna App. Een Klarna-saldo account is vereist om cashback te
-> ontvangen. De uitgifte van cashback is afhankelijk van goedkeuring door de winkel en kan worden
-> beïnvloed door cookie-instellingen, het combineren van aanbiedingen, productuitsluitingen of andere
-> factoren waar wij geen invloed op hebben.
-
-en, van dezelfde pagina:
-
-> Cashback verdien je als punten wanneer je shopt met Klarna. Je kunt cashback verdienen op
-> geselecteerde aankopen in de Klarna-app, en met een lidmaatschap kun je ook cashback verdienen op
-> alle betaalpasaankopen met de Klarna Card of wanneer je Betaal nu gebruikt met je Klarna-saldo.
-
-Dus: verdiend in de Klarna-app, niet in de browser. Vereist een actief Klarna-saldo. Het bedrag hangt
-af van goedkeuring door de winkel, van cookies en van het stapelen van aanbiedingen. Sommige tarieven
-alleen met een betaald lidmaatschap. En het landt als **punten**, in te wisselen voor Klarna-saldo —
-niet als geld op zijn rekening.
-
-Drie huisregels bijten tegelijk. *Beweer geen conclusie die een afwezigheid niet kan dragen* — een kop
-"8,5% terug bij Zalando" op een Zalando-afrekenpagina is een bewering die die pagina niet waarmaakt.
-*Een melding geeft nooit advies dat niet kan werken in de toestand waarin het verschijnt* — iemand
-vertellen dat hij een gevulde winkelwagen moet verlaten en opnieuw beginnen in een telefoon-app, is
-advies dat niet werkt waar het staat. En *onbekend is nooit een vergelijking* — een aanbieding die
-afhangt van goedkeuring door de winkel is geen getal dat je naast een bewezen 2,5% koersopslag legt om
-er vervolgens van af te trekken.
-
-**Waar Klarna wél goed voor is:** een gelabelde, eerlijke tweede regel. *"Klarna geeft hier 8,5% — maar
-alleen als je in de Klarna-app afrekent, met een Klarna-saldo, en de winkel moet het goedkeuren."* Dat
-is waar, het heeft een bron, het heeft een datum, en het doet niet alsof het onderdeel is van de som.
-
-Of die regel een kop wordt, hangt aan §0.
-
-### 5.3 Trading 212 winkelaanbiedingen — onbruikbaar, zoals genoteerd
-
-Overgenomen uit de opdracht zonder eigen meting: T212 heeft winkelaanbiedingen die voor hem
-onbruikbaar zijn. Gemarkeerd als **niet door mij geverifieerd**; het verandert de aanbeveling in geen
-van beide richtingen, want beide opties behandelen winkelaanbiedingen als tweede regel.
-
-### 5.4 Welke producten in de catalogus een aantoonbaar puntenprogramma hebben
-
-Geteld in `docs/catalog/catalog.json`, 122 producten:
-
-| | aantal |
-|---|---|
-| producten met een `pointsPerEuro`-cijfer | **51** |
-| daarvan een **bewezen nul** | **37** |
-| daarvan **groter dan nul** | **14** |
-| producten zonder enig puntencijfer | 71 |
-
-**Alle 14 positieve cijfers zijn American Express:**
-
-| product | punten per euro |
-|---|---|
-| Amex Blue Card | 0,5 |
-| Amex Green Card | 1,0 |
-| Amex Gold Card | 1,0 |
-| Amex Platinum Card | 1,0 |
-| Flying Blue Amex Entry | 0,5 |
-| Flying Blue Amex Silver | 0,8 |
-| Flying Blue Amex Gold | 1,0 |
-| Flying Blue Amex Platinum | 1,5 |
-| Amex Business Entry Card | 1,0 |
-| Amex Business Green Card | 1,0 |
-| Amex Business Gold Card | 1,0 |
-| Amex Corporate Card | 1,0 |
-| Amex Corporate Gold Card | 1,0 |
-| KLM Amex Corporate Card | 1,0 |
-
-**Wat dat betekent voor de extensie.** Buiten Amex is er in de catalogus geen enkel product waarvan de
-puntenopbrengst per bestede euro te bewijzen valt. Een puntenkop is dus een Amex-kop. Voor hém werkt
-dat toevallig — hij heeft de Business Gold, 1,0 punt per euro, 2,5% koersopslag — maar voor de meeste
-gebruikers zou de extensie op dit onderdeel niets te zeggen hebben, en dan hoort hij te zwijgen in
-plaats van iets te schatten.
-
-**Twee toevoegingen liggen klaar en zijn nog niet samengevoegd** (`docs/catalog/staging-points.json`,
-uit de ronde van 21 augustus). Beide raken dit plan direct:
-
-- **ING Punten bestaan, en er is geen koers per bestede euro.** De verdientabel is inmiddels leesbaar
-  via ING's eigen payload-API, maar ING beloont **drempels**: *"Meer dan € 100 uitgeven met je ING
-  Creditcard Extra of Max → 250 punten per maand"* — bij € 100 en bij € 4.000 evenveel. Er valt dus
-  niets te vermenigvuldigen met een winkelwagenbedrag. Dit is geen ontbrekend cijfer maar een
-  ontbrekende *vorm*, en dat is een sterker soort onbekend: geen latere zoekronde lost het op. Over
-  inwisselen is ING wél expliciet, en dat is een bekende nul: *"ING Punten hebben geen geldwaarde."*
-- **RevPoints hebben wél een koers**: 0,1 / 0,1 / 0,25 / 0,5 punt per euro voor Standard / Plus /
-  Premium / Metal. De inwisselwaarde niet, en Revolut zegt dat zelf: *"RevPoints hebben geen vaste
-  geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."*
-
-**Gevolg voor §8's regel "geen euro-waardering van punten":** die rust nu op drie onafhankelijke
-uitspraken van uitgevers en niet meer op één principe van ons.
-
-En het spiegelbeeld, want het is de andere helft van de ranglijst: **cashback staat op 8 van de 122
-producten.** De cashback-kant van de rangschikking rust dus op een smalle basis, en dat hoort de UI te
-laten zien in plaats van te verbergen.
+De vraag *"voor welke kaarten mag hij rangschikken — alleen die hij heeft, of alles?"* (oude §9.3)
+wordt bij punten **eenvoudiger**: een puntensaldo dat hij niet heeft, bestaat niet. De extensie toont
+alleen programma's met een ingevoerd saldo. Voor de FX-tweede-regel blijft de vraag open en staat
+hij in §9.
 
 ---
 
-## 6. De twee opties
+## 4. Wat er op het scherm komt — drie zinsvormen, en niet meer dan drie
 
-### Optie A — alleen publieke data
+De regel erachter is huisregel 2: *beweer nooit een conclusie die een afwezigheid niet kan dragen.*
+Welke vorm er verschijnt, hangt alleen af van wat er bewezen is.
 
-**Wat het is.** MV3-extensie voor Chrome en Edge. Het content script leest **merchant-host + totaal +
-valuta** van de afrekenpagina en verder niets. Het stuurt dat naar de open LaVega-tab. De popup toont
-zijn kaarten, gerangschikt naar wat deze aankoop op elk kost, uit de gebundelde catalogus, elke regel
-met zijn brondatum. Gebundelde Klarna-percentages verschijnen als gelabelde bijregel waar de host
-overeenkomt.
+**Vorm 1 — saldo én gepubliceerde koers.** De enige vorm waarin een percentage mag vallen.
 
-**Wat hij eraan heeft.** Bij een afrekening van € 300 in USD een gerangschikte lijst: *"Revolut Metal
-— € 300,00, 0% (revolut.com, 9 juli 2026). ING betaalpas — € 304,20, 1,40% koersopslag
-(assets.ing.com, 15 juni 2026). Verschil: € 4,20."* Binnenlandse aankopen in euro's rangschikken op
-cashback, via `marketCashbackOptions`. Waar het cijfer van een kaart niet bewezen is, zegt de regel
-**onbekend** en wordt hij niet gerangschikt — nooit een nul, nooit een default.
+> **American Express — je punten dekken € 126 van deze € 360 (35%).**
+> 42.000 punten, door jou ingevoerd op 12 augustus.
+> Bij 1.000 punten = € 3. Je betaalt met de Amex-kaart en boekt de punten daarna af in de Amex App.
+> Bron: americanexpress.com/nl-nl, gelezen 21-08-2026. Amex kan die verhouding zonder aankondiging
+> wijzigen.
 
-**Kosten.** Klein. Zes plakjes, §8. Geen nieuwe rangschiklogica: `bestPayAdvice`, `marketFxOptions`,
-`fxSwitchGain`, `issuerConsensus` en `marketCashbackOptions` bestaan en zijn getest. Nieuw is een
-lezer voor merchant en bedrag, een kanaal, een popup, en één buildscript dat de Klarna-tabel bundelt
-zoals `bundle-bank-logos.ts` de logo's bundelt.
+**Vorm 2 — saldo, geen koers.** Een herinnering zonder getal, en dat is het punt.
 
-**Risico's, eerlijk.**
-- *Het bedrag van een willekeurige afrekenpagina lezen is het moeilijke deel, niet het rekenwerk.* Er
-  is geen standaard. Realistische eerste slag: `<meta itemprop="price">`, JSON-LD `Offer.price` /
-  `Order.total`, plus de valuta uit hetzelfde blok. Op een pagina die niets daarvan biedt, moet de
-  extensie zeggen *"ik kan het bedrag hier niet lezen"* en een handmatig invoerveld geven — hij mag
-  nooit gokken op de grootste eurotekst op de pagina. Een verkeerd bedrag levert stilletjes een
-  verkeerde aanbeveling, en dat is erger dan geen aanbeveling.
-- *De winkeldekking is dun.* 12 Klarna-winkels, allemaal consumentenretail. Op de meeste
-  afrekenpagina's ontbreekt de bijregel gewoon, en dat is prima — de kaartrangschikking is het
-  product.
-- *Verouderde catalogusdata valt op een slechter moment op.* Een tarief van drie jaar oud is te
-  verdragen in een tab en ongemakkelijk aan de kassa. Verzachting: elke regel toont zijn datum al, en
-  `2026-08-17-card-terms-freshness-design.md` bestaat precies hiervoor. Voorbehoud: bij `ing-betaalpas`
-  is die datum zelf verdacht — het bronbestand heet `…_2023.pdf` en de regel draagt `2026-06-15`
-  (`docs/BACKLOG.md` §2.3). Aan de kassa is een verkeerde datum erger dan in een tab, want daar is de
-  datum het enige dat de gebruiker over de betrouwbaarheid vertelt.
+> **ING Punten — je hebt er 8.400 liggen.**
+> Ingevoerd op 3 augustus. ING publiceert geen koers voor wat een punt in de ING Winkel waard is, en
+> zegt zelf dat Punten niet in geld inwisselbaar zijn. Er staat hier dus geen percentage.
 
-### Optie B — achter zijn eigen login
+**Vorm 3 — niets bewezen.** Zeggen wat er niet gelezen kon worden, en waarom.
 
-**Wat het is.** De extensie, of een metgezel, logt als hem in bij Amex / Klarna / kaartportalen en
-leest zijn persoonlijke aanbiedingenlijst — de enige plek waar NL-winkelaanbiedingen aantoonbaar staan
-(§5.1).
+> **Het bedrag op deze pagina is niet te lezen.**
+> Er staat geen prijs in de pagina-opmaak die LaVega kan vertrouwen. Vul het bedrag hieronder in, dan
+> rekent hij het uit. Er wordt niets geraden.
 
-**Wat hij eraan heeft.** Echte, op hem gerichte aanbiedingen. Inhoudelijk beter dan Optie A ooit kan
-tonen.
+En de tweede regel bij een aankoop in vreemde valuta, alleen dan:
 
-**Kosten.** Groot, en het meeste ervan is geen code.
-- Brede `host_permissions` op zijn bank- en kaartdomeinen, permanent. Dat is het omgekeerde van §3a.
-- De extensie zit dan binnen een ingelogde banksessie. Elke bug erin is een bug met zijn ingelogde
-  Amex-account. Een portaal scrapen is bovendien bij de meeste uitgevers in strijd met de
-  voorwaarden — en de read-only-houding in `docs/CONTEXT.md` bestaat juist om buiten die categorie
-  vragen te blijven.
-- Selectors tegen een ingelogd portaal breken stil en vaak, en elke breuk is onzichtbaar totdat een
-  aanbeveling zachtjes fout is.
-- Het vernietigt de eigenschap die hem is beloofd: er wordt tijdens runtime niets opgehaald. Een
-  aanbiedingenlijst lezen aan de kassa **ís** een runtime-fetch, en hij vertelt die server waar hij
-  naar kijkt.
+> Deze winkel rekent in dollars. Met je Amex-kaart betaal je 2,5% koersopslag — € 9 op dit bedrag.
+> Je punten zijn volgende week op een euro-aankoop precies evenveel waard.
 
-**Risico's.** Sessiecompromittering, schending van voorwaarden, stille breuk, en het verlies van de
-ene claim die LaVega anders maakt. Plus: Amex' vier 404's betekenen dat er geen stabiel publiek
-contract is om tegenaan te bouwen, dus dit is voor altijd een bewegend doel scrapen.
+**Vier dingen die er nooit mogen staan**, elk met de fout die eronder ligt:
 
-### De vergelijking, één regel per rij
-
-| | Optie A | Optie B |
-|---|---|---|
-| Data | gebundelde catalogus (73/82 FX nu, 79/82 na de merge) + 12 Klarna-winkels | zijn persoonlijke aanbiedingenlijsten |
-| Netwerk tijdens runtime | **geen** | vereist, per afrekening |
-| Machtigingen | `activeTab` + optionele hosts | staande host permissions op bankdomeinen |
-| Raakt zijn sessies | nee | ja |
-| Breekt bij een herontwerp van een site | de bedraglezer | alles |
-| Kwaliteit van het antwoord | bewezen, gedateerd, smal | rijk, niet te verifiëren, broos |
-| Omvang van de bouw | klein | groot, en nooit af |
-
-**Aanbevolen: A.** B is geen latere fase van A — het is een ander product met een andere risicohouding,
-en er mag niet per ongeluk aan begonnen worden.
+1. **een percentage bij een programma zonder gepubliceerde koers** — dat is een verzonnen getal;
+2. **"deze winkel accepteert je punten"** — dat kunnen we niet zien;
+3. **een saldo zonder de datum waarop hij het invoerde** — een saldo van vier maanden oud
+   gepresenteerd als nu is een stille onwaarheid, en `isStale` bestaat al om dat te vangen;
+4. **"gebruik je punten hier en bespaar X"** bij een aankoop in vreemde valuta — dat is advies dat in
+   de toestand waarin het verschijnt geld kost (huisregel 3).
 
 ---
 
-## 7. Wat de aanbeveling zou veranderen
+## 5. De houding, en de ene grens die verschuift
 
-Opgeschreven zodat het besluit omkeerbaar is op bewijs en niet op stemming.
+§3a (`activeTab` + `optional_host_permissions`) en §3c (`packages/core` puur, `asOf` van de
+aanroeper) staan onaangeroerd. Wat verandert is §3b, en het verdient een eigen alinea omdat het een
+**redactiegrens** is.
 
-- **Zijn antwoord op §0.** Zegt hij dat hij voor 8,5% echt overstapt naar de Klarna-app, dan wordt de
-  bijregel een kop en heb ik het mis. Dat is de invoer die ik niet kan meten en die boven mijn lezing
-  gaat.
-- **Een publieke, gedateerde aanbiedingenfeed per winkel voor een kaart die hij écht heeft.** Niet
-  Klarna's alleen-in-de-app-tabel, maar iets dat in een browser uitgeefbaar is.
-- **De Klarna-cijfers "29 direct / 218 gerenderd" gereproduceerd op een genoemde URL** waar de
-  aanbieding *niet* app-only is. Dan wordt de winkelhelft van Optie A echt en een eigen slice waard.
-- **Een tweede uitgever met een bewijsbare puntenkoers.** Vandaag is dat alleen Amex (§5.4). Komt daar
-  een tweede bij die publiek een koers per euro noemt, dan wordt een puntenkolom in de popup
-  verdedigbaar; nu is het één merk.
+**Wat er stond:** *"Geen saldi, geen IBAN's, geen transactietekst, geen rekeningsleutels over die
+grens."*
+
+**Wat er moet komen:** een **puntensaldo passeert die grens wel, en niets anders is eraan
+toegevoegd.** De reden dat "geen saldi" er stond, was dat een bankbalans niets met een afrekenpagina
+te maken heeft. Een puntensaldo is het product. Die twee moeten dus uit elkaar gehouden worden op
+**naam**, niet op gevoel:
+
+```
+extensie → LaVega-tab : { kind: "quote", merchant, currency, amountCents }
+LaVega-tab → extensie : { points: [ { program, points, updatedAt, stale,
+                                      coverageCents | null, pct | null,
+                                      why, sourceUrl, rateAsOf } ],
+                          rows:   [ { product, costCents, netPct, sourceUrl, asOf, note } ],
+                          unknowns: [ { what, why } ] }
+```
+
+- `points` mag alleen programma's bevatten waarvoor hij zelf een saldo heeft ingevoerd;
+- `coverageCents` en `pct` zijn **null** zodra er geen gepubliceerde koers is — nooit 0, en de UI
+  toont dan vorm 2;
+- **geen** `accountBalance`, geen IBAN, geen transactietekst, geen rekeningsleutel, geen
+  entiteitsnaam. De schematest uit plakje 3 is de plek waar dat wordt afgedwongen, en die test hoort
+  te lezen als die van de LLM-proxy.
+
+En één regel erbij die eerst niet nodig was: **de extensie bewaart het saldo niet.** Geen
+`storage.sync`, geen `localStorage`, niets tussen twee pagina's. Zodra de tab dicht is, is er niets.
+Dat is ook het antwoord op de vraag "moet de popup werken met de LaVega-tab dicht?" — nee, en dat is
+geen beperking maar de grens zelf (§9).
 
 ---
 
-## 8. Optie A, in plakjes — TDD, kleinste eerst
+## 6. Chrome en Edge — onveranderd besloten
+
+Zijn keuze uit review 3: **één Manifest V3-extensie voor Chrome en Edge.** Eén codebase, één
+manifest, geen `browser.*`-wrapper, geen polyfill. Firefox valt af omdat
+`externally_connectable` daar een tweede kanaal zou vragen — en een tweede kanaal is een tweede plek
+waar de redactiegrens van §5 bewaakt moet worden. Dat is de echte kost, niet het manifest.
+
+Twee winkels, twee inzendingen (Chrome Web Store, Microsoft Partner Center), twee keer dezelfde vraag
+over machtigingen — waarop `activeTab` het beste antwoord is dat er is.
+
+Safari komt niet mee. Dat staat hier alleen zodat niemand denkt dat "Chrome en Edge" per ongeluk
+"alles behalve Firefox" betekende.
+
+---
+
+## 7. Optie B blijft afgewezen, en nu met een reden erbij
+
+**Optie B** was: inloggen als hem bij Amex of een kaartportaal en zijn persoonlijke
+aanbiedingenlijst lezen. De bezwaren van 20 augustus staan nog steeds — brede staande
+`host_permissions` op bankdomeinen, code binnen een ingelogde banksessie, scrapen tegen de
+voorwaarden in, stil brekende selectors, en het verlies van de enige claim die LaVega anders maakt:
+tijdens runtime wordt er niets opgehaald.
+
+Wat de omkering toevoegt: **voor dit product is die login overbodig.** Het saldo komt van hem, de
+koers staat op een publieke pagina die met plain curl 200 geeft. Optie B kocht toegang tot
+*aanbiedingen*, en aanbiedingen zijn niet meer waar dit over gaat.
+
+Blijft staan: B is geen latere fase van A. Het is een ander product met een andere risicohouding, en
+er mag niet per ongeluk aan begonnen worden.
+
+---
+
+## 8. In plakjes — TDD, kleinste eerst
 
 Elk plakje begint met een falende test en eindigt groen op `pnpm turbo run typecheck --force` **en**
 `pnpm turbo run test --force`.
 
 **Plakje 1 — `packages/core/src/checkout.ts`, puur.**
-`quoteCheckout({ entries, held, merchantHost, currency, amountCents, asOf })` → gerangschikte rijen +
-`unknowns`. Hergebruikt `marketFxOptions` / `issuerConsensus` / `marketCashbackOptions`; voegt geen
-nieuw rekenwerk toe. Tests die eerst moeten falen:
-- een kaart die hij heeft met een onbewezen `fxFeePct` belandt in `unknowns` met een reden en **nooit**
-  op 0;
-- een aankoop in euro's rangschikt op cashback, een aankoop in dollars op koersopslag, en die twee
-  worden niet gemengd;
-- `issuerConsensus` lost "American Express / activity" op naar 2,5% en weigert zodra de kandidaten het
-  oneens zijn;
-- elke teruggegeven rij draagt `sourceUrl` en `asOf`; een rij zonder allebei is een gefaalde test;
-- een lege catalogus geeft `rows: []` en **geen** kop — de fout *"je saldi staan al op de beste plek"*,
-  overgezet naar dit oppervlak en hier getest.
+`pointsCoverage({ balances, rates, amountCents, currency, asOf })` → één rij per programma waarvoor
+hij een saldo heeft. Tests die eerst moeten falen:
 
-**Plakje 2 — de bedraglezer, puur.**
-`readCheckout(html) → { currency, amountCents } | { reason }`. Op fixtures: JSON-LD `Offer`, microdata
-`itemprop="price"`, `<meta property="product:price:amount">`, en — belangrijk — drie fixtures die een
-`reason` moeten geven in plaats van een getal. Geen DOM, geen netwerk; het content script geeft er een
-string aan.
+- een programma **zonder gepubliceerde koers** geeft `coverageCents: null` en `pct: null` met een
+  reden — en **nooit** 0. Dit is de test die het hele product eerlijk houdt;
+- **ING is een andere soort onbekend dan Flying Blue**, en dat moet in de uitkomst te zien zijn: bij
+  ING is "geen geldwaarde" een *uitgesproken* uitspraak van de uitgever, bij Flying Blue hebben we
+  simpelweg niets kunnen lezen. Twee verschillende `why`-waarden, want de zin op het scherm verschilt;
+- een saldo ouder dan 90 dagen komt terug met `stale: true` (via `isStale`), het percentage blijft
+  staan, en de datum staat erbij;
+- `coverageCents` wordt **afgetopt op het aankoopbedrag**: 200.000 punten op een aankoop van € 30 is
+  100%, niet 2000%;
+- een leeg saldo levert **geen rij** op, en geen kop — dezelfde fout als *"je saldi staan al op de
+  beste plek"*, overgezet naar dit oppervlak;
+- de koers komt uit een gebundeld bestand mét `sourceUrl` en `checkedAt`; een rij zonder allebei is
+  een gefaalde test.
 
-**Plakje 3 — het kanaal.**
-De vaste vraag-en-antwoordvorm uit §3b, met een schematest die bewijst dat de vraag **alleen**
-merchant/valuta/bedrag draagt en het antwoord geen saldo, IBAN, rekeningsleutel of transactietekst.
-Deze test is de redactiegrens; hij hoort te lezen als die van de LLM-proxy.
+**Plakje 2 — de bedraglezer, puur.** Ongewijzigd overgenomen uit het oude plan.
+`readCheckout(html) → { currency, amountCents } | { reason }`. Fixtures: JSON-LD `Offer`, microdata
+`itemprop="price"`, `<meta property="product:price:amount">`, en drie fixtures die een `reason`
+moeten geven in plaats van een getal. Geen DOM, geen netwerk.
 
-**Plakje 4 — de schil van de extensie.**
-`apps/extension/`: manifest (MV3, `activeTab`, `optional_host_permissions`, geen statische matchlijst),
-content script, popup. Nederlandse UI. Eén bundel voor Chrome en Edge (§4). Kan het bedrag niet gelezen
-worden, dan zegt de popup dat gewoon en biedt een handmatig veld — hij gokt nooit.
+**Plakje 3 — het kanaal.** De vorm uit §5, met een schematest die bewijst dat de vraag alleen
+merchant/valuta/bedrag draagt, dat het antwoord **wel** een puntensaldo mag dragen, en **geen**
+bankbalans, IBAN, rekeningsleutel, transactietekst of entiteitsnaam. Deze test is de redactiegrens.
 
-**Plakje 5 — de Klarna-bijregel, gebundeld.**
-`scripts/bundle-merchant-offers.ts` → `apps/extension/src/merchant-offers.generated.ts`, in exact de
-vorm van `bundle-bank-logos.ts`: opgehaald tijdens de sweep, ingebed, `sourceUrl` + `fetchedAt` per
-regel, in de browser niets opgehaald. Elke regel draagt de app-only-voorwaarde als tekst, en de UI
-toont die als voorbehoud naast het percentage — niet als term in de som.
+**Plakje 4 — `scripts/bundle-points-rates.ts` → `apps/extension/src/points-rates.generated.ts`.**
+In exact de vorm van `bundle-bank-logos.ts`: opgehaald tijdens de sweep, ingebed, per regel
+`sourceUrl` + `checkedAt` + de letterlijke voorwaarde. **Vandaag is dat één regel** — Amex,
+1.000 = € 3 — en dat is genoeg om het patroon te bouwen. Het bestand groeit als er een tweede komt;
+tot die tijd zegt het aantal regels de waarheid over de dekking.
 
-**Plakje 6 — de lege en de onbekende toestand.**
-Een afrekening waar niets bewezen is, moet een bruikbaar en eerlijk scherm opleveren: wat hij niet kon
-lezen, waarom, en geen ranglijst. Getest als eersteklas uitkomst, niet als randgeval.
+**Plakje 5 — de schil.** `apps/extension/`: manifest (MV3, `activeTab`,
+`optional_host_permissions`, geen statische matchlijst), content script, popup. Nederlandse UI, de
+drie zinsvormen uit §4. Eén bundel voor Chrome en Edge. Kan het bedrag niet gelezen worden, dan zegt
+de popup dat en biedt een handmatig veld.
+
+**Plakje 6 — de FX-tweede-regel.** Alleen bij een niet-euro valuta. Hergebruikt
+`marketFxOptions` / `issuerConsensus` / `bestPayAdvice`; voegt geen rekenwerk toe. Eén test die
+vastlegt dat bij een euro-aankoop deze regel **helemaal niet verschijnt** — anders staat er op elke
+Nederlandse afrekenpagina een zin over koersopslag die nergens over gaat.
+
+**Plakje 7 — de lege en de onbekende toestand.** Een afrekening waar niets bewezen is, moet een
+bruikbaar en eerlijk scherm opleveren: wat hij niet kon lezen, waarom, en geen ranglijst. Getest als
+eersteklas uitkomst.
 
 **Expliciet buiten v1**, elk met een reden:
-- **geen euro-waardering van punten** — de Punten-tab liet "indicatief" op principe vallen, en er zijn
-  nu drie uitspraken van uitgevers die het dragen: ING (*"Nee, ING Punten hebben geen monetaire waarde
-  en kunnen niet worden ingewisseld voor geld."*), Revolut (*"RevPoints hebben geen vaste
-  geldwaarde"*), en Amex, dat zijn verhouding van 1.000 punten = € 3 zelf "zonder voorafgaande
-  kennisgeving" kan wijzigen;
+
+- **geen euro-waardering van punten waar geen koers is** — drie uitgevers zeggen het zelf: ING
+  (*"geen monetaire waarde"*), Revolut (*"RevPoints hebben geen vaste geldwaarde"*), en Amex, dat
+  zijn eigen verhouding "zonder voorafgaande kennisgeving" kan wijzigen;
+- **geen bewering dat een winkel punten accepteert** — niet te lezen, dus niet te zeggen;
+- geen Klarna-bijregel (§3, vervalt uit v1);
 - geen autofill, geen onderschepping van de afrekening, geen kaartkeuze namens hem;
 - nergens inloggen;
 - geen enkele fetch tijdens runtime — geen logo, geen tile, geen font;
-- geen Firefox en geen Safari (§4).
+- geen Firefox en geen Safari.
 
 ---
 
-## 9. Openstaande vragen
+## 9. Wat de aanbeveling zou veranderen
 
-1. **De vraag in §0** — zou hij een gevulde winkelwagen echt verlaten voor 8,5%? Hij beslist of
-   winkelaanbiedingen de kop zijn of een voetnoot, en daarmee waar dit plan over gaat.
-2. **Moet de popup werken met de LaVega-tab dicht?** Het huidige ontwerp zegt nee, en dat is precies wat
-   de kluis buiten de extensie houdt. Ja zeggen betekent dat de extensie zelf data gaat bewaren, en dat
-   is een ander plan.
-3. **Voor welke kaarten mag hij rangschikken — alleen die hij heeft, of alles?** De Travel Agent is in
-   review 3 juist de andere kant op gegaan: aanbevelen wat het beste is, ook een kaart die hij niet
-   heeft, met het verschil in euro's ernaast. Aan de kassa is dat advies minder bruikbaar (hij kan die
-   kaart nú niet gebruiken), maar het is wel eerlijker. Niet zelf besluiten.
+Opgeschreven zodat het besluit omkeerbaar is op bewijs en niet op stemming.
 
-**Beslist en niet meer open:** de browser (§4 — Chrome en Edge, één MV3-bundel).
+- **Zijn antwoord op §0.** Verwacht hij een knop in de kassa in plaats van een herinnering met een
+  bedrag, dan levert dit plan niet wat hij vroeg en moet het gesprek daarover gaan, niet over de
+  bouw.
+- **Een tweede programma met een gepubliceerde, zonder login leesbare inwisselkoers.** Vandaag is dat
+  er precies één (Amex). Komt er een tweede, dan groeit `points-rates.generated.ts` met één regel en
+  verandert er verder niets — dat is met opzet zo ontworpen.
+- **ING die publiceert wat een punt in de ING Winkel waard is.** Dan gaat ING van vorm 2 naar vorm 1.
+- **Een winkel die publiek en dateerbaar zegt dat hij een puntenprogramma accepteert.** Dan mag er
+  voor het eerst iets winkelspecifieks op het scherm.
+- **Een saldo dat we niet van hem hoeven te krijgen.** Dat zou Optie B zijn, en dan gelden alle
+  bezwaren van §7 opnieuw. Niet stilletjes binnenlaten via een "handige koppeling".
+
+---
+
+## 10. Openstaande vragen
+
+1. **De vraag in §0** — is een percentage dat hij achteraf in de Amex App verzilvert nog steeds wat
+   hij bedoelde? Dit beslist de kop en dus de hele copy.
+2. **Moet de popup werken met de LaVega-tab dicht?** Het ontwerp zegt nee, en met §5 erbij is dat nu
+   een sterkere nee: ja zeggen betekent dat het puntensaldo in de extensie gaat wonen.
+3. **Wil hij de FX-tweede-regel aan de kassa überhaupt?** De meeste Nederlandse afrekenpagina's staan
+   in euro's, dus die regel zwijgt daar per definitie. Plakje 6 kan zonder gevolgen wachten.
+4. **Hoe vaak vraagt de extensie om een verse saldo-invoer?** `isStale` staat nu op 90 dagen. Review-4
+   item 31 zegt "van tijd tot tijd", en dat is geen getal. Zijn keuze, niet die van ons.
+
+**Beslist en niet meer open:** de browser (§6 — Chrome en Edge, één MV3-bundel), en dat punten de kop
+zijn en cashback niet (§0, §3).

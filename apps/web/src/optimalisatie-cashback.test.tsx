@@ -112,17 +112,20 @@ test("with no card in the vault it says there is nothing to compare, not that yo
   expect(html).not.toContain("Je betaalt al met de kaart");
 });
 
-test("the gap names a way to close it that actually exists", () => {
-  // The reisblok has an "aanpassen" field for wisselkosten and omwisselkosten
-  // and for NOTHING else — there is no cashback input anywhere in the app, and
-  // even those two only appear once a bestemming has been chosen.
+test("de openstaande vraag gaat alleen nog over de kaarten waar niets mag worden aangenomen", () => {
+  // Was: beide kaarten stonden hier, want beide misten een cijfer. Sinds review 4
+  // is de ING-betaalpas geen open vraag meer — daar is het antwoord nul — en zou
+  // om een opzoeking vragen advies zijn dat niets kan veranderen. Trading 212 valt
+  // buiten de aanname en blijft dus wél een vraag.
   const html = render({ facts: [] });
-  expect(html).toContain("Cashback onbekend voor");
-  expect(html).toContain("ING betaalpas, Trading 212 betaalpas");
-  expect(html).not.toContain("Vul het zelf in");
-  expect(html).toContain("reisblok op Overzicht");
-  expect(html).toContain("bestemming");
-  expect(html).toContain("Zoek voorwaarden");
+  const open = row(html, "cashback-open");
+  expect(open).toContain("Cashback onbekend voor");
+  expect(open).toContain("Trading 212 betaalpas");
+  expect(open).not.toContain("ING betaalpas");
+  // Twee wegen die allebei bestaan, en de tweede is nieuw: het veld in Profiel.
+  expect(open).toContain("reisblok op Overzicht");
+  expect(open).toContain("Zoek voorwaarden");
+  expect(open).toContain("Profiel");
 });
 
 /* --- The reshape: what you get now, what the best card gives, the difference */
@@ -169,8 +172,15 @@ test("last month is shown as a check on the average, never as the base for the c
 /* --- Never a euro figure when either half is unknown -------------------- */
 
 test("no euro figure when his own cashback is unknown, and it says which half is missing", () => {
-  const html = render({ facts: [] });
-  expect(html).toContain("de cashback van je eigen kaarten is onbekend");
+  // Alleen kaarten waar niets mag worden aangenomen: één Trading 212-pas, geen
+  // feiten. Dan is er geen eigen percentage en dus geen verschil — de tak die
+  // vóór review 4 ook voor de ING-pas gold, en die nu precies overblijft voor de
+  // gevallen waar hij hoort.
+  const html = render({
+    accounts: [acc({ key: "t212", bank: "Trading 212", balance: 0 })],
+    facts: [],
+  });
+  expect(html).toContain("bij deze kaarten mag er geen nul worden aangenomen");
   expect(html).not.toContain("Op je beste eigen kaart");
   // The euro row by its own testid, because the Rente module prints euros per
   // month too — a bare "per maand" would pass or fail for the wrong reason.

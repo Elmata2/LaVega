@@ -92,6 +92,49 @@ export function setAiCategorizeEnabled(on: boolean): void {
   }
 }
 
+/* --- De cashback-aanname (app review 4, punt 22; packages/core/src/
+ * assumedCashback.ts).
+ *
+ * Zijn woorden: "for most cards — ING, ABN, most normal ones — they don't have
+ * cashback… if there's no case then it's zero." Dat is de enige plek waar LaVega
+ * een nul invult die geen enkel document noemt, en daarom is het een SCHAKELAAR
+ * en geen vaste keuze in de code.
+ *
+ * DE STANDAARD IS AAN, en dat is de afwijking van elke andere opt-in hierboven:
+ * AI-extractie, chat en AI-categorisatie staan uit tot hij ze aanzet omdat ze
+ * gegevens de deur uit sturen. Hier gaat er niets de deur uit; hier wordt een
+ * regel gebogen die hij zelf gebogen wil hebben. Aan zetten wat hij vroeg is dan
+ * de eerlijke stand.
+ *
+ * WAAROM DE SCHAKELAAR ER TÓCH IS: de regel die gebogen wordt ("onbekend is nooit
+ * nul") heeft deze app meerdere keren voor een verkeerd cijfer behoed. Wie ooit
+ * twijfelt aan een nul op zijn scherm moet in één klik terug kunnen naar
+ * "onbekend" en zien wat er dan overblijft. Een aanname die je niet kunt uitzetten
+ * is niet te controleren. --- */
+
+const CASHBACK_ASSUMPTION_KEY = "lavega.cashbackAssumption";
+
+/** Mag LaVega bij een gewone Nederlandse betaalpas of grootbankcreditcard nul
+ *  cashback aannemen? Standaard ja (hij vroeg erom); alleen een expliciet
+ *  opgeslagen "0" zet hem uit. Let op de vergelijking: `!== "0"` en niet
+ *  `=== "1"`, want "nooit ingesteld" moet hier AAN betekenen en niet uit. */
+export function getCashbackAssumptionEnabled(): boolean {
+  try {
+    if (typeof localStorage === "undefined") return true;
+    return localStorage.getItem(CASHBACK_ASSUMPTION_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setCashbackAssumptionEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 /* --- The owner's own n8n invoice webhook (see docs/n8n/FACTUREN.md).
  * URL and token are HIS, for HIS n8n: they live in this browser only — never in
  * the vault-synced data (a back-up file would then carry a live token), never

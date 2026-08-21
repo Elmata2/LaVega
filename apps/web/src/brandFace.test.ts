@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import {
+  CARD_TEXT,
   WHITE_MIN_CONTRAST,
   cardRamp,
+  contrastOnCard,
   contrastWithWhite,
   dominantColor,
   luminance,
@@ -41,37 +43,78 @@ test("doorzichtige pixels tellen niet mee", () => {
   expect(dominantColor(transparent)).toBeNull();
 });
 
-test("wit blijft leesbaar op elk merk, ook op geel", () => {
-  // Geel is het ergste geval: bijna wit van luminantie.
+/** Een stop uit de ramp terug naar RGB. */
+function rgbOf(hex: string) {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
+test("de tekst blijft leesbaar op ELKE stop van elk merk, ook op geel", () => {
+  // Geel is het ergste geval: bijna wit van luminantie. Het verloop is breder
+  // geworden (vier stops in plaats van drie), dus de toets loopt over `stops` —
+  // de hele reeks — en niet meer over drie met de naam erbij. Een verloop
+  // verbreden mag nooit betekenen dat er een stop bijkomt die niemand nakijkt.
   for (const brand of [
     { r: 255, g: 98, b: 0 }, // ING oranje
     { r: 255, g: 214, b: 0 }, // knalgeel
+    { r: 0, g: 145, b: 100 }, // ABN-groen — stond gemeten op 4,27:1
     { r: 0, g: 82, b: 155 }, // donkerblauw
     { r: 255, g: 255, b: 255 }, // extreem: puur wit
   ]) {
     const ramp = cardRamp(brand);
-    for (const stop of [ramp.from, ramp.mid, ramp.to]) {
-      const rgb = {
-        r: parseInt(stop.slice(1, 3), 16),
-        g: parseInt(stop.slice(3, 5), 16),
-        b: parseInt(stop.slice(5, 7), 16),
-      };
-      expect(contrastWithWhite(rgb)).toBeGreaterThanOrEqual(WHITE_MIN_CONTRAST);
+    expect(ramp.stops.length).toBeGreaterThanOrEqual(4);
+    expect(ramp.stops).toContain(ramp.from);
+    expect(ramp.stops).toContain(ramp.mid);
+    expect(ramp.stops).toContain(ramp.to);
+    for (const stop of ramp.stops) {
+      // Tegen de kleur die de kaart ECHT print (--on-ink), niet tegen een puur
+      // wit dat nergens op het vlak staat...
+      expect(contrastOnCard(rgbOf(stop))).toBeGreaterThanOrEqual(WHITE_MIN_CONTRAST);
+      // ...en daarmee automatisch ook tegen puur wit, dat lichter is.
+      expect(contrastWithWhite(rgbOf(stop))).toBeGreaterThanOrEqual(WHITE_MIN_CONTRAST);
     }
   }
 });
 
+test("de toets rekent met de tekstkleur die de kaart echt draagt", () => {
+  // .bank-card { color: var(--on-ink) } en die token is #f7f5f0, geen #ffffff.
+  expect(toHex(CARD_TEXT)).toBe("#f7f5f0");
+  // Gemeten: 8,2% lager dan tegen puur wit. Dat is het gat waardoor het oranje
+  // van ING op 4,32:1 uitkwam terwijl de test 4,71 tegen wit zag en slaagde.
+  const grens = { r: 199, g: 76, b: 0 };
+  expect(contrastOnCard(grens)).toBeLessThan(contrastWithWhite(grens));
+  expect(contrastOnCard(rgbOf(cardRamp({ r: 255, g: 98, b: 0 }).to))).toBeGreaterThanOrEqual(
+    WHITE_MIN_CONTRAST,
+  );
+});
+
 test("de ramp loopt van donker naar licht, niet omgekeerd", () => {
   const ramp = cardRamp({ r: 255, g: 98, b: 0 });
-  const lum = (h: string) =>
-    luminance({
-      r: parseInt(h.slice(1, 3), 16),
-      g: parseInt(h.slice(3, 5), 16),
-      b: parseInt(h.slice(5, 7), 16),
-    });
-  expect(lum(ramp.from)).toBeLessThan(lum(ramp.mid));
-  expect(lum(ramp.mid)).toBeLessThan(lum(ramp.to));
+  const lum = (h: string) => luminance(rgbOf(h));
+  for (let i = 1; i < ramp.stops.length; i++) {
+    expect(lum(ramp.stops[i - 1])).toBeLessThan(lum(ramp.stops[i]));
+  }
+  expect(ramp.from).toBe(ramp.stops[0]);
+  expect(ramp.to).toBe(ramp.stops[ramp.stops.length - 1]);
   expect(ramp.gradient).toContain("135deg");
+  // De stops staan in het verloop in dezelfde volgorde, elk met zijn positie.
+  expect(ramp.gradient.indexOf(ramp.from)).toBeLessThan(ramp.gradient.indexOf(ramp.to));
+  expect(ramp.gradient).toContain(`${ramp.to} 100%`);
+});
+
+test("het verloop is breder geworden, niet alleen anders verdeeld", () => {
+  /* "Make it like a bit more gradient" is meetbaar: het bereik tussen de
+   * donkerste en de lichtste stop. De oude donkerste stop stond op −50% van de
+   * lichtste, de nieuwe op −72%; dat is het hele verschil, en het zit aan de
+   * kant waar het niets kost. */
+  const ramp = cardRamp({ r: 31, g: 78, b: 107 });
+  const donkerst = rgbOf(ramp.stops[0]);
+  const lichtst = rgbOf(ramp.to);
+  const oudDonkerst = { r: lichtst.r * 0.5, g: lichtst.g * 0.5, b: lichtst.b * 0.5 };
+  expect(luminance(donkerst)).toBeLessThan(luminance(oudDonkerst));
 });
 
 test("een donker merk wordt niet onnodig verder verdonkerd", () => {

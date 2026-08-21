@@ -18,8 +18,8 @@
  *
  * WIT MOET LEESBAAR BLIJVEN, en dat is geen smaak maar een regel. Een logo mag
  * zo licht zijn als het wil (geel, lichtblauw); de ramp wordt daarom net zo lang
- * verdonkerd tot wit erop 4,5:1 haalt. Zo is er nooit een kaart waar het saldo
- * wegvalt in zijn eigen huisstijl. */
+ * verdonkerd tot de tekst erop 4,5:1 haalt. Zo is er nooit een kaart waar het
+ * saldo wegvalt in zijn eigen huisstijl. */
 
 export type Rgb = { r: number; g: number; b: number };
 
@@ -35,6 +35,20 @@ const NEAR_WHITE = 240;
 const MIN_BRIGHTNESS = 48;
 /** WCAG AA voor normale tekst. Het saldo staat op 0,85rem — dus 4,5, niet 3. */
 export const WHITE_MIN_CONTRAST = 4.5;
+
+/** DE KLEUR DIE DE KAART ECHT OP HET VLAK ZET, en dat is geen puur wit:
+ *  `.bank-card` krijgt `color: var(--on-ink)` en die token is #f7f5f0.
+ *
+ *  Gemeten verschil, en het is niet nul: #f7f5f0 heeft luminantie 0,914, dus elk
+ *  contrast dat je tegen puur wit uitrekent valt op de kaart 8,2% lager uit. Op
+ *  de grens betekent dat een ramp die de toets tegen wit nét haalt (4,5) in het
+ *  echt op 4,13 uitkomt. Twee merken uit de bundel stonden daar: het oranje van
+ *  ING kwam uit op 4,32:1 en een ABN-groen op 4,27:1 — allebei onder de regel die
+ *  dit bestand belooft, en allebei precies het geval waarvoor de regel bestaat.
+ *
+ *  Rekenen tegen de tekst die er ECHT staat is dus geen strengere norm; het is
+ *  dezelfde norm, eerlijk gemeten. Het kost hooguit één verdonkeringsstap extra. */
+export const CARD_TEXT: Rgb = { r: 247, g: 245, b: 240 };
 
 function clamp255(n: number): number {
   return n < 0 ? 0 : n > 255 ? 255 : Math.round(n);
@@ -66,6 +80,14 @@ export function luminance({ r, g, b }: Rgb): number {
 /** Contrast tussen wit en deze kleur. */
 export function contrastWithWhite(rgb: Rgb): number {
   return 1.05 / (luminance(rgb) + 0.05);
+}
+
+/** Contrast tussen de tekst die de kaart écht draagt (`CARD_TEXT`) en deze
+ *  kleur. Dit is de toets waar de ramp op gebouwd wordt; `contrastWithWhite`
+ *  blijft bestaan omdat het de bovengrens is — wat hier slaagt, slaagt daar per
+ *  definitie ook, want puur wit is lichter. */
+export function contrastOnCard(rgb: Rgb): number {
+  return (luminance(CARD_TEXT) + 0.05) / (luminance(rgb) + 0.05);
 }
 
 /** Vermenigvuldigen naar donkerder (f<0) of lichter (f>0). */
@@ -140,26 +162,55 @@ export function dominantColor(pixels: ArrayLike<number>): Rgb | null {
   return { r: Math.round(best.r), g: Math.round(best.g), b: Math.round(best.b) };
 }
 
-export type CardRamp = { from: string; mid: string; to: string; gradient: string };
+export type CardRamp = {
+  from: string;
+  mid: string;
+  to: string;
+  /** ELKE stop, donker → licht, in de volgorde waarin ze in `gradient` staan.
+   *  `from`/`mid`/`to` blijven de drie die er altijd al waren, zodat een lezer
+   *  van deze ramp niet hoeft te weten hoeveel stops het er vandaag zijn; wie de
+   *  hele reeks wil nakijken (de contrasttoets) leest `stops`. */
+  stops: string[];
+  gradient: string;
+};
+
+/** HOE DIEP HET VERLOOP LOOPT, als vermenigvuldiging op de lichtste stop, plus
+ *  waar elke stop staat.
+ *
+ *  Vier stops en niet drie, en de donkerste gaat van −50% naar −72%. Zijn vraag
+ *  was letterlijk "make it like a bit more gradient": een verloop wordt sterker
+ *  door zijn BEREIK, niet door meer kleuren — er is maar één huisstijlkleur en
+ *  een tweede erbij verzinnen zou een merk kleuren geven die het niet heeft.
+ *
+ *  De extra diepte zit bewust aan de DONKERE kant. Naar boven is er geen ruimte:
+ *  de lichtste stop staat al op de grens waar de tekst 4,5:1 haalt, dus lichter
+ *  maken kost precies datgene wat niet mag wijken. Naar beneden is elke stap
+ *  gratis — donkerder is meer contrast — en het is ook de kant die diepte geeft.
+ *
+ *  De middelste stops schuiven mee naar 38% en 72%: met vier stops op gelijke
+ *  afstand ligt het zwaartepunt te licht en oogt de kaart vlak in de bovenhoek. */
+const RAMP_STEPS = [-0.72, -0.45, -0.18, 0] as const;
+const RAMP_POSITIONS = [0, 38, 72, 100] as const;
 
 /** Het kaartvlak voor een huisstijlkleur.
  *
- *  De LICHTSTE stop wordt eerst verdonkerd tot wit erop 4,5:1 haalt; de andere
- *  twee zijn daar afgeleiden van en dus per definitie donkerder. Zo hoeft de
+ *  De LICHTSTE stop wordt eerst verdonkerd tot de tekst erop 4,5:1 haalt; alle
+ *  andere zijn daar afgeleiden van en dus per definitie donkerder. Zo hoeft de
  *  tekstkleur nooit per kaart te wisselen. */
 export function cardRamp(brand: Rgb): CardRamp {
   let top = brand;
   // Ruim genoeg om vanaf puur wit onder de grens te komen; stopt zodra het klopt.
-  for (let i = 0; i < 40 && contrastWithWhite(top) < WHITE_MIN_CONTRAST; i++) {
+  for (let i = 0; i < 40 && contrastOnCard(top) < WHITE_MIN_CONTRAST; i++) {
     top = shade(top, -0.08);
   }
-  const from = toHex(shade(top, -0.5));
-  const mid = toHex(shade(top, -0.2));
-  const to = toHex(top);
+  const stops = RAMP_STEPS.map((f) => toHex(f === 0 ? top : shade(top, f)));
   return {
-    from,
-    mid,
-    to,
-    gradient: `linear-gradient(135deg, ${from} 0%, ${mid} 55%, ${to} 100%)`,
+    from: stops[0],
+    mid: stops[stops.length - 2],
+    to: stops[stops.length - 1],
+    stops,
+    gradient: `linear-gradient(135deg, ${stops
+      .map((hex, i) => `${hex} ${RAMP_POSITIONS[i]}%`)
+      .join(", ")})`,
   };
 }

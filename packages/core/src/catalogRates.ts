@@ -17,6 +17,13 @@
 import type { CatalogValue } from "./catalog.js";
 import { isCovered } from "./catalog.js";
 import type { RateBenchmark } from "./interest.js";
+import { assumeNoCashback, type CashbackKnowledge } from "./assumedCashback.js";
+
+/* De aanname-laag hangt aan DEZE barrel en niet aan een eigen regel in index.ts,
+ * en dat is een keuze: wie `marketCashbackOptions` importeert is precies degene
+ * die moet weten wat een ONTBREKENDE cashbackPct betekent. Twee imports voor één
+ * vraag is hoe de twee antwoorden op een dag uit elkaar lopen. */
+export * from "./assumedCashback.js";
 
 export type CatalogueEntryLike = {
   id: string;
@@ -327,6 +334,91 @@ export function marketCashbackOptions(entries: readonly CatalogueEntryLike[]): S
     });
   }
   return out.sort((a, b) => b.cashbackPct - a.cashbackPct);
+}
+
+/* ───────────────────────────── wat een ONTBREKENDE cashbackPct betekent ─────
+ *
+ * `marketCashbackOptions` hierboven levert alleen wat te bewijzen valt. Voor de
+ * 177 catalogusrijen zonder cashbackveld gaf de app tot nu toe één antwoord —
+ * "onbekend" — en dat is bij een ING-betaalpas een nodeloos vaag antwoord op een
+ * vraag waarvan iedereen het antwoord kent. `assumedCashback.ts` bevat de
+ * afbakening; deze twee functies passen hem toe op een catalogusrij.
+ */
+
+/** Wanneer iemand voor het LAATST een document over dit product heeft gelezen.
+ *
+ *  De nieuwste peildatum van alle gedekte velden van de rij, want dat is precies
+ *  de vraag: is er recent naar de voorwaarden gekeken? (Bewust niet de oudste,
+ *  zoals `issuerConsensus` doet — daar gaat het om de zwakste schakel onder
+ *  cijfers die het eens zijn, hier om het laatste moment van kijken.) Null als de
+ *  rij geen enkel gedekt veld heeft; dan kan niemand een datum noemen en wordt er
+ *  geen gekozen. */
+export function lastTermsCheckedAt(entry: CatalogueEntryLike): string | null {
+  let newest: string | null = null;
+  for (const v of Object.values(entry.fields ?? {})) {
+    if (!isCovered(v) || !v) continue;
+    if (newest === null || v.checkedAt > newest) newest = v.checkedAt;
+  }
+  return newest;
+}
+
+/** Wanneer iemand voor het laatst een document over DEZE AANBIEDER las, voor de
+ *  soorten product die er hier toe doen.
+ *
+ *  Bestaat voor de eigen kaarten van de gebruiker: die komen uit een import en
+ *  hebben geen catalogusrij, dus een aanname over "de ING-betaalpas" kan alleen
+ *  aan een datum komen via de ING-rijen die de catalogus wél heeft. Zonder die
+ *  datum zou elke aanname over zijn eigen kaarten voor altijd "nog nooit
+ *  nagekeken" heten, en dan zegt de jaarlijkse herzieningsmelding niets meer.
+ *
+ *  Null als de catalogus deze aanbieder in deze soorten helemaal niet kent —
+ *  dat is een echt antwoord en geen reden om een datum te kiezen. */
+export function lastTermsCheckedForIssuer(
+  entries: readonly CatalogueEntryLike[],
+  issuerSubstring: string,
+  kinds: readonly string[],
+): string | null {
+  const needle = issuerSubstring.trim().toLowerCase();
+  if (!needle) return null;
+  const want = new Set(kinds.map((k) => k.toLowerCase()));
+  let newest: string | null = null;
+  for (const e of entries) {
+    if (!want.has(String(e.kind ?? "").toLowerCase())) continue;
+    if (!`${e.issuer ?? ""} ${e.product}`.toLowerCase().includes(needle)) continue;
+    const d = lastTermsCheckedAt(e);
+    if (d !== null && (newest === null || d > newest)) newest = d;
+  }
+  return newest;
+}
+
+/** Wat we van de cashback van één catalogusproduct weten, in de drie toestanden
+ *  die er echt zijn. Een gedekt veld is GEMETEN — ook als het nul zegt; anders
+ *  beslist de afbakening in `assumedCashback.ts`. */
+export function cashbackKnowledgeOfEntry(entry: CatalogueEntryLike): CashbackKnowledge {
+  const v = entry.fields?.cashbackPct;
+  if (isCovered(v) && v) {
+    return { tier: "gemeten", pct: v.value, sourceUrl: v.sourceUrl, asOf: v.checkedAt, conditions: v.conditions };
+  }
+  return assumeNoCashback({
+    issuer: entry.issuer ?? "",
+    kind: entry.kind ?? "",
+    productName: entry.product,
+    lastCheckedAt: lastTermsCheckedAt(entry),
+  });
+}
+
+/** Hoe de catalogus er op dit veld voor staat, per hardheid. Het scherm gebruikt
+ *  het om te kunnen zeggen HOEVEEL gewone kaarten onder de aanname vallen — "van
+ *  de 104 gewone betaalproducten noemt geen enkele bron een cashbackpercentage"
+ *  is een controleerbare zin, "wij nemen aan dat het nul is" niet. */
+export function cashbackTierCounts(entries: readonly CatalogueEntryLike[]): {
+  gemeten: number;
+  aangenomen: number;
+  onbekend: number;
+} {
+  const counts = { gemeten: 0, aangenomen: 0, onbekend: 0 };
+  for (const e of entries) counts[cashbackKnowledgeOfEntry(e).tier]++;
+  return counts;
 }
 
 /** What a year of this spend would earn on the best card he does NOT have, over

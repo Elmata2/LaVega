@@ -223,7 +223,12 @@ test("with nothing tracked the screen explains what to do, and claims nothing", 
   render([]);
   expect(container!.querySelector(".empty-guide")!.textContent).toContain("Nog geen punten- of cashback-saldi");
   expect(container!.querySelectorAll(".punt-card")).toHaveLength(0);
-  expect(container!.querySelector(".view-head .eyebrow")!.textContent).toBe("0 programma's");
+  /* "0 SALDI" EN NIET "0 PROGRAMMA'S", en dat is een correctie en geen
+   * naamswijziging. Sinds hij vroeg om ALLE programma's te tonen — ook ING, ook
+   * die waar hij niets heeft staan — is de lijst eronder nooit meer leeg. "0
+   * programma's" zou dus onwaar zijn boven een scherm dat er een stuk of tien
+   * opsomt. Wat er nul is, is het aantal saldi dat hij heeft ingevuld. */
+  expect(container!.querySelector(".view-head .eyebrow")!.textContent).toBe("0 saldi");
 });
 
 test("busy disables every control that would write", () => {

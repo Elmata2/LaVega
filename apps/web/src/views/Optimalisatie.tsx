@@ -4,9 +4,19 @@ import {
   accountCosts,
   accountLabel,
   accountReturns,
+  assumptionDueForReview,
+  cashbackPctOf,
+  CATALOGUE_KINDS_FOR,
+  describeCashback,
+  describeHeldCashback,
+  factEntry,
   hasCostsToShow,
+  heldCashbackOf,
   isSpendable,
+  lastTermsCheckedForIssuer,
   optimiseReturns,
+  productOf,
+  TRAVEL_AGENT,
   MIN_SPEND_DAYS,
   detectSubscriptions,
   subscriptionPriceIncreases,
@@ -29,6 +39,7 @@ import {
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
+import { getCashbackAssumptionEnabled } from "../settings";
 import { formatEuro, monthLabelNL } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
@@ -200,6 +211,21 @@ function lastFullMonthSpend(
  *  printed a bank's name and a percentage would quietly pass one off as an
  *  ordinary bank card. Valuta labels the same two kinds for the same reason. */
 const ALT_KIND_LABEL: Record<string, string> = { prepaid: "prepaidkaart", crypto: "cryptokaart" };
+
+/* ── WAT WE VAN ZIJN EIGEN KAARTEN WETEN, en hoe hard ──────────────────────
+ *
+ * App review 4, punt 22. Zijn woorden: "for most cards — ING, ABN, most normal
+ * ones — they don't have cashback… if there's no case then it's zero." Terecht,
+ * en de module bleef juist bij die kaarten op "onbekend" hangen.
+ *
+ * DE UITVOERING IS EEN ZICHTBARE TIER EN GEEN STILLE NUL, en die woont in
+ * packages/core/src/assumedCashback.ts: `HeldCashback` draagt de vier toestanden,
+ * `heldCashbackOf` de volgorde waarin ze elkaar verslaan, `describeHeldCashback`
+ * de zin die erbij hoort. Dat stond eerst hier, tot de feedbackmodule in Profiel
+ * dezelfde vraag moest beantwoorden en er twee versies van dezelfde beslissing
+ * naast elkaar stonden. Wat dit scherm er nog aan toevoegt is één ding: het kiest
+ * de BESTE eigen kaart, en houdt de hardheid aan dat getal vast — zie `bestHeld`.
+ */
 
 /* ── Vaste rekeningkosten: de kant die doorloopt ───────────────────────────
  *
@@ -488,28 +514,103 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   );
   const { actions, gaps } = useMemo(() => optimiseReturns(returns), [returns]);
   const routing = actions.filter((a) => a.kind === "route-spending");
+  /* Core vraagt naar ELKE ontbrekende cashbackPct — het weet niets van de
+     aanname, en dat hoort ook zo: `optimiseReturns` rangschikt en stelt vragen,
+     het beslist niet wat een afwezigheid betekent. De filter staat hieronder bij
+     `openCashbackGaps`, zodra bekend is over welke producten nog een echte vraag
+     openstaat. Zonder die filter zou het scherm om een opzoeking vragen voor een
+     kaart waarvan het net zelf heeft opgeschreven dat het antwoord nul is. */
   const cashbackGaps = gaps.filter((g) => g.missing === "cashbackPct");
   // Why the module can be empty, in the order the reasons actually apply. "Je
   // betaalt al met de beste kaart" is only true when there IS a card and there
   // IS measured spending; printed over an empty vault it is advice that cannot
   // be true in the state it appears in.
   const spendable = returns.filter((r) => isSpendable(r.account));
-  const rankable = spendable.filter((r) => r.cashbackPct !== null);
+
+  /* ── DE AANNAME, ÉÉN KEER GELEZEN ──────────────────────────────────────────
+     Een voorkeur, dus localStorage en geen kluisgegeven; met lege deps zodat één
+     render niet halverwege van antwoord verandert. De schakelaar staat in Profiel
+     en dit scherm wordt bij tabwissel opnieuw opgebouwd, dus een omzetting is
+     meteen te zien. */
+  const assumptionOn = useMemo(() => getCashbackAssumptionEnabled(), []);
+
+  /* WAT WE VAN ELKE EIGEN KAART WETEN, met de hardheid erbij (review 4, punt 22).
+     Dit vervangt de oude `r.cashbackPct !== null`-filter, en dat is precies de
+     wijziging: een gewone ING-betaalpas kwam daar niet doorheen, terwijl het
+     antwoord op de vraag "hoeveel cashback?" bij die kaart gewoon nul is. Wat er
+     NIET verandert: de nul draagt overal zijn label mee — zie `HeldCashback`. */
+  const heldCashback = useMemo(
+    () =>
+      spendable.map((r) => {
+        const product = productOf(r.account);
+        const fact = factEntry(facts, TRAVEL_AGENT, product, "cashbackPct");
+        // Een gesteld cijfer wint altijd van een aanname, of het nu van hem komt
+        // of van de reisagent. Dat is dezelfde rangorde als `upsertFacts`, en het
+        // is ook de reden dat de feedbackmodule in Profiel werkt: één correctie
+        // daar zet deze regel om.
+        const kind = accountType(r.account) === "Creditcard" ? "creditcard" : "betaalpas";
+        const k = heldCashbackOf({
+          issuer: r.account.bank ?? "",
+          kind,
+          productName: product,
+          fact: r.cashbackPct !== null && fact ? { pct: r.cashbackPct, source: fact.source, updatedAt: fact.updatedAt } : null,
+          assumptionOn,
+          // De peildatum komt van de catalogusrijen van DEZE bank in DIT soort
+          // product. Zijn eigen kaart heeft geen rij, dus zonder deze omweg heet
+          // elke aanname over zijn eigen kaarten voor altijd "nog nooit
+          // nagekeken" en zegt de jaarlijkse herzieningsmelding niets meer.
+          lastCheckedAt: lastTermsCheckedForIssuer(entries, r.account.bank ?? "", CATALOGUE_KINDS_FOR[kind]),
+        });
+        return { account: r.account, product, spend: r.spend, k };
+      }),
+    [spendable, facts, assumptionOn, entries],
+  );
+
+  /* Kaarten waarop een vergelijking mag rusten: gemeten of aangenomen. De
+     uitgaven van een kaart waarvan we het percentage niet kennen horen NIET in de
+     basis, want dan zou een bedrag worden vermenigvuldigd met een getal dat er
+     niet is. */
+  const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
   /* WHAT HE COULD OPEN, not only what he holds. Valuta ranks every bank and the
      travel agent already offers alternatives; this module was the last one asking
      "which of YOUR accounts is best", which is a fair question and not the one
      that finds the four percent he described — Trading 212 at 1,5% cashback and
      3,5% savings against an ING at 0% and 1,5%. */
   const cashbackOffers = useMemo(() => marketCashbackOptions(entries), [entries]);
-  const bestHeldCashback = useMemo(() => {
-    const known = rankable.map((r) => r.cashbackPct).filter((p): p is number => p !== null);
-    return known.length ? Math.max(...known) : null;
-  }, [rankable]);
+  /* DE BESTE EIGEN KAART, MET ZIJN HARDHEID ERAAN VAST. Niet los een getal, want
+     dan is de nul op het scherm niet meer van een gemeten nul te onderscheiden en
+     is de hele voorzorg weg.
+
+     GELIJKSPEL GAAT NAAR HET GEMETEN CIJFER. Twee kaarten op 0% waarvan er één
+     een bron heeft en één een aanname: dan hoort de bron op het scherm. Het
+     bedrag is hetzelfde; het verhaal erachter niet. */
+  const bestHeld = useMemo(() => {
+    let best: (typeof heldCashback)[number] | null = null;
+    let bestPct = -1;
+    for (const h of heldCashback) {
+      const p = cashbackPctOf(h.k);
+      if (p === null) continue;
+      const harder = p === bestPct && h.k.tier === "gemeten" && best?.k.tier !== "gemeten";
+      if (best === null || p > bestPct || harder) {
+        best = h;
+        bestPct = p;
+      }
+    }
+    return best;
+  }, [heldCashback]);
+  const bestHeldCashback = bestHeld === null ? null : cashbackPctOf(bestHeld.k);
+  /* De vragen die ECHT nog openstaan: alleen de producten waarover we niets
+     mogen invullen. Een aangenomen nul is geen open vraag meer, en er blijven om
+     een opzoeking vragen zou advies zijn dat niets kan veranderen. */
+  const openCashbackGaps = useMemo(() => {
+    const open = new Set(heldCashback.filter((h) => cashbackPctOf(h.k) === null).map((h) => h.product));
+    return cashbackGaps.filter((g) => open.has(g.product));
+  }, [heldCashback, cashbackGaps]);
   const yearlySpendCents = useMemo(
-    () => rankable.reduce((sum, r) => sum + (r.spend?.perYearCents ?? 0), 0),
+    () => rankable.reduce((sum, h) => sum + (h.spend?.perYearCents ?? 0), 0),
     [rankable],
   );
-  const measured = rankable.filter((r) => r.spend.perYearCents !== null);
+  const measured = rankable.filter((h) => h.spend.perYearCents !== null);
 
   /* THE SPEND BASE — the one decision in this module, and he left it open:
      "use average expenditure per month, or average expenditures of last month".
@@ -606,6 +707,46 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
       cost: holdingCostOfProduct(fee),
     });
   }, [cashbackUpgrade, fees]);
+
+  /* ── ÉÉN ECHTE MAAND, ZIJN DRIE VRAGEN (review 4, punt 23) ─────────────────
+   *
+   * "Cashback vergelijken met vorige maand. Voorbeeld juli: wat gaf je uit, wat
+   * had je met cashback bespaard, en wat kost die kaart." Drie vragen, en het
+   * blok geeft ze in die volgorde.
+   *
+   * WAAROM DIT NAAST HET GEMIDDELDE STAAT EN HET NIET VERVANGT: één maand is één
+   * steekproef, en de laatste maand van een export is bijna altijd een halve
+   * maand (zie `monthlyBaseCents`). Daarom is dit de laatste maand die de import
+   * VOLLEDIG dekt, en blijft het gemiddelde de basis van de aanbeveling. Dit is
+   * de controle: een getal dat hij tegen zijn eigen herinnering kan houden.
+   *
+   * DE OPBRENGST IS HIER EENMALIG EN DE KAARTPRIJS NIET, en dat is het verschil
+   * met het blok hierboven. Vandaar `one-off` met een horizon van één maand:
+   * `netBenefit` rekent dan een HELE factureringsperiode, want je kunt geen
+   * twaalfde jaarkaart kopen — wie een kaart opent voor één maand betaalt die
+   * maand volledig, en bij een jaarkaart het hele jaar. Dat staat er zichtbaar
+   * bij via `spanWords`, zodat het bedrag na te rekenen is.
+   *
+   * GEEN TWEEDE REKENWIJZE: dezelfde `productFeesById`, dezelfde
+   * `holdingCostOfProduct`, dezelfde `netBenefit` en dezelfde `Productkosten` als
+   * het jaarblok hierboven. Twee rekenwijzen over hetzelfde gat zeggen op een dag
+   * iets anders. */
+  const lastMonthCompare = useMemo(() => {
+    if (lastFull === null || cashbackUpgrade === null || bestHeldCashback === null) return null;
+    const ownCents = Math.round((lastFull.cents * bestHeldCashback) / 100);
+    const bestCents = Math.round((lastFull.cents * cashbackUpgrade.best.cashbackPct) / 100);
+    return {
+      ym: lastFull.ym,
+      spentCents: lastFull.cents,
+      ownCents,
+      bestCents,
+      net: netBenefit({
+        benefit: { kind: "one-off", cents: bestCents - ownCents },
+        cost: holdingCostOfProduct(fees.get(cashbackUpgrade.best.productId) ?? null),
+        horizonMonths: 1,
+      }),
+    };
+  }, [lastFull, cashbackUpgrade, bestHeldCashback, fees]);
 
   return (
     <>
@@ -1123,9 +1264,30 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               <div className="position-row" data-testid="cashback-nu">
                 <span>
                   <strong>Op je beste eigen kaart</strong> — {pct(bestHeldCashback)}
+                  {/* DE HARDHEID STAAT OP DEZELFDE REGEL ALS HET GETAL, niet in
+                      een voetnoot en niet in een comment. Dit is de hele
+                      voorzorg: een aangenomen nul die er precies zo uitziet als
+                      een gemeten nul is de valse nul waar dit project al een keer
+                      op stukliep. */}
+                  {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
                 </span>
                 <span>{euro(Math.round((monthlyBaseCents * bestHeldCashback) / 100))} per maand</span>
               </div>
+              {bestHeld?.k.tier === "aangenomen" && (
+                <p className="cell-sub" data-testid="cashback-aanname">
+                  <strong>{describeCashback(bestHeld.k)}.</strong> Een gewone Nederlandse betaalpas of
+                  grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met
+                  “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document
+                  van {bestHeld.account.bank || bestHeld.product}.{" "}
+                  {bestHeld.k.lastCheckedAt
+                    ? `De voorwaarden van ${bestHeld.k.issuerFamily} zijn voor het laatst gelezen op ${bestHeld.k.lastCheckedAt}.`
+                    : `Van ${bestHeld.k.issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`}
+                  {assumptionDueForReview(bestHeld.k.lastCheckedAt, asOf) &&
+                    " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik."}{" "}
+                  Klopt het niet? Zet het juiste percentage bij <strong>Profiel → Cashback corrigeren</strong>; wat
+                  jij invult gaat vóór alles wat LaVega zelf vindt.
+                </p>
+              )}
               <div className="position-row" data-testid="cashback-beste">
                 <span>
                   <strong>Op de beste kaart die we kunnen aantonen</strong> —{" "}
@@ -1169,8 +1331,60 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                 Gerekend over {baseIsUpperBound ? "maximaal " : ""}
                 {euro(monthlyBaseCents)} aan kaartuitgaven <strong>gemiddeld per maand</strong>, gemeten over{" "}
                 {baseObservedDays} dagen afschrift.
-                {lastFull ? ` Vorige volle maand (${monthLabelNL(lastFull.ym)}) was dat ${euro(lastFull.cents)}.` : ""}
               </p>
+
+              {/* ── ÉÉN ECHTE MAAND, met zijn drie vragen erin (punt 23) ────────
+                  Samenvatting in de kop, onderbouwing eronder — dat is het thema
+                  van deze hele review: "the usual should be just the graphs and
+                  the numbers, and all the text below it should be a show more."
+                  Zijn antwoord staat dus al in de samenvattingsregel; wie het wil
+                  nakijken klapt hem open. */}
+              {lastMonthCompare && (
+                <details className="cell-sub" data-testid="cashback-vorige-maand">
+                  <summary>
+                    <strong>Vorige volle maand ({monthLabelNL(lastMonthCompare.ym)})</strong> —{" "}
+                    {euro(lastMonthCompare.spentCents)} uitgegeven,{" "}
+                    {euro(lastMonthCompare.bestCents - lastMonthCompare.ownCents)} meer cashback op{" "}
+                    {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}
+                  </summary>
+                  <div className="reason-list" style={{ marginTop: ".35rem" }}>
+                    <div className="position-row">
+                      <span>Wat je die maand uitgaf</span>
+                      <span>{euro(lastMonthCompare.spentCents)}</span>
+                    </div>
+                    <div className="position-row">
+                      <span>
+                        Wat je eigen kaart daarop teruggaf — {pct(bestHeldCashback)}
+                        {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
+                      </span>
+                      <span>{euro(lastMonthCompare.ownCents)}</span>
+                    </div>
+                    <div className="position-row">
+                      <span>
+                        Wat {cashbackUpgrade.best.product} had teruggegeven — {pct(cashbackUpgrade.best.cashbackPct)}
+                      </span>
+                      <span>{euro(lastMonthCompare.bestCents)}</span>
+                    </div>
+                    {/* Dezelfde component, dezelfde zinnen en dezelfde rekenwijze
+                        als het jaarblok hierboven. Het verschil zit alleen in de
+                        BASIS: hier staat een eenmalige opbrengst tegen een prijs
+                        die doorloopt, dus rekent `netBenefit` een hele
+                        factureringsperiode en zegt `spanWords` erbij welke. */}
+                    <Productkosten
+                      net={lastMonthCompare.net}
+                      id="cashback-maand"
+                      noun="kaart"
+                      gainWord="meer cashback in die maand"
+                      costWord="kaartkosten"
+                    />
+                  </div>
+                  <p style={{ margin: ".35rem 0 0" }}>
+                    Dit is de laatste maand die je import van begin tot eind dekt. Eén maand is één steekproef, dus
+                    de aanbeveling hierboven staat op het maandgemiddelde en niet op deze maand — dit getal is de
+                    controle die je tegen je eigen herinnering kunt houden.
+                  </p>
+                </details>
+              )}
               <p className="cell-sub">
                 Beide regels hierboven zijn dezelfde uitgaven op een andere kaart — een vergelijking van tarieven, niet
                 wat er vandaag op je rekening komt. Het verschil is daarom minstens dit: wat nu op een kaart met minder
@@ -1209,13 +1423,41 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               {spendable.length === 0
                 ? "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken."
                 : bestHeldCashback === null
-                  ? "Wat dit jou zou opleveren weet LaVega nog niet: de cashback van je eigen kaarten is onbekend, en zonder die helft is er geen verschil te berekenen."
+                  ? /* WAAROM DE AANNAME HIER NIET GELDT, en niet alleen dat er iets
+                       ontbreekt. Deze tak haalt het sinds review 4 alleen nog bij
+                       kaarten die buiten de aanname vallen — een prepaidkaart, een
+                       Amex, een neobank — of als hij de aanname zelf heeft
+                       uitgezet. De lijst eronder noemt per kaart welke van die
+                       redenen het is. */
+                    "Wat dit jou zou opleveren weet LaVega nog niet: bij deze kaarten mag er geen nul worden aangenomen, en zonder die helft is er geen verschil te berekenen. Hieronder staat per kaart waarom."
                   : monthlyBaseCents === null
                     ? `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${MIN_SPEND_DAYS} dagen). Zonder die basis is er een percentage, maar geen bedrag.`
                     : cashbackOffers.length === 0
                       ? "Geen enkele kaart in de catalogus heeft een aantoonbaar cashbackpercentage — er is dus niets om je eigen kaart tegen af te zetten."
                       : "Je beste kaart nu doet het even goed of beter — er is niets te winnen."}
             </p>
+          )}
+
+          {/* ── WAT WE VAN ELKE EIGEN KAART WETEN, en hoe hard ─────────────────
+              Achter "toon meer", want de samenvatting hierboven is het antwoord
+              en dit is de onderbouwing (review 4, het thema van de hele ronde).
+              Maar het STAAT er, per kaart, met het woord "aangenomen" voluit —
+              dat is de prijs van een aanname: hij mag, mits hij overal te vinden
+              is. */}
+          {heldCashback.length > 0 && (
+            <details className="cell-sub" data-testid="cashback-kaarten" style={{ marginTop: ".75rem" }}>
+              <summary>Waar het percentage van elk van je {heldCashback.length === 1 ? "kaart" : "kaarten"} vandaan komt</summary>
+              <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                {heldCashback.map((h) => (
+                  <li key={h.account.key}>
+                    {/* Eén zin, uit core. De vier takken stonden hier ooit als
+                        vier stukjes JSX, en Profiel zei bijna dezelfde vier
+                        dingen net iets anders — zie `describeHeldCashback`. */}
+                    <strong>{h.product}</strong> — {describeHeldCashback(h.k)}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {/* The rest of the field, without repeating the card named above — four
@@ -1238,18 +1480,23 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             </div>
           )}
 
-          {cashbackGaps.length > 0 && (
-            <p className="cell-sub">
-              {/* Name a way to close the gap that EXISTS. There is no cashback
-                  input anywhere in the app: the reisblok offers "aanpassen" for
-                  fxFeePct and convertFeePct and nothing else, and even those
-                  appear only once a destination is chosen. The travel agent is
-                  what writes a cashbackPct, and it needs that destination before
-                  it will look anything up — so that is what the sentence asks
-                  for. "Vul het zelf in" asked for a field he does not have. */}
-              Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Niemand heeft ze nog
-              opgezocht: kies een bestemming in het reisblok op Overzicht en klik{" "}
-              <strong>Zoek voorwaarden</strong> — dan vult LaVega ze hier in.
+          {openCashbackGaps.length > 0 && (
+            <p className="cell-sub" data-testid="cashback-open">
+              {/* Name a way to close the gap that EXISTS. Sinds review 4 zijn er
+                  TWEE die bestaan, en de tweede is nieuw: het percentage is nu
+                  ook zelf in te vullen, bij Profiel → Cashback corrigeren. Dat
+                  veld bestond niet toen deze zin geschreven werd — daarom vroeg
+                  hij alleen om de reisagent, die een bestemming nodig heeft
+                  voordat hij iets opzoekt. Wat jij invult is een LearnedFact met
+                  bron "user", en die verslaat elke agent.
+
+                  De opsomming gaat over `openCashbackGaps` en niet over alle
+                  gaten: over een kaart waarvan LaVega net zelf heeft opgeschreven
+                  dat het antwoord nul is, staat hier geen vraag meer. */}
+              Cashback onbekend voor {openCashbackGaps.map((g) => g.product).join(", ")}, en aannemen mag hier
+              niet. Twee manieren om dat te sluiten: kies een bestemming in het reisblok op Overzicht en klik{" "}
+              <strong>Zoek voorwaarden</strong>, of vul het percentage zelf in bij{" "}
+              <strong>Profiel → Cashback corrigeren</strong>.
             </p>
           )}
         </Module>
@@ -1345,12 +1592,30 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                               <div>
                                 {sourceHost(c.sourceUrl)} · peildatum {c.asOf}
                               </div>
-                              {c.conditions && (
-                                <details>
-                                  <summary>voorwaarden</summary>
-                                  <p style={{ margin: ".35rem 0 0" }}>{c.conditions}</p>
-                                </details>
-                              )}
+                              {/* EEN NUL DRAAGT ZIJN EIS IN DE OPEN LUCHT (review 4,
+                                  punt 24). Zijn ING is een studentenrekening en die
+                                  is gratis — maar "€ 0,00 per maand" met de
+                                  leeftijdseis achter een dichtgeklapte
+                                  "voorwaarden" is een gratis-melding zonder de eis
+                                  erbij, en dat is misleidend zodra hij dertig
+                                  wordt. Elke studentenrekening in dit land staat
+                                  letterlijk op € 0,00 in het wettelijk verplichte
+                                  kostendocument, mét een leeftijds- of
+                                  studievoorwaarde ernaast; die twee horen bij
+                                  elkaar. Bij een bedrag dat wél geld kost blijft de
+                                  voorwaarde opgevouwen — daar is de prijs het
+                                  nieuws en de voorwaarde de onderbouwing. */}
+                              {c.conditions &&
+                                (c.amount.cents === 0 ? (
+                                  <div data-testid={`kosten-gratis-${row.account.key}`}>
+                                    <strong>Gratis, mits:</strong> {c.conditions}
+                                  </div>
+                                ) : (
+                                  <details>
+                                    <summary>voorwaarden</summary>
+                                    <p style={{ margin: ".35rem 0 0" }}>{c.conditions}</p>
+                                  </details>
+                                ))}
                             </>
                           ) : (
                             <>
@@ -1369,6 +1634,47 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                                       ? `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`
                                       : `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`}
                               </div>
+                              {/* ── DE GRATIS PRODUCTEN, VOORAAN EN MET HUN EIS ────
+                                  Review 4, punt 24: "ING is bij hem een
+                                  studentenrekening — hij betaalt niets. Dat moet
+                                  vindbaar zijn." Vindbaar betekent niet "staat in
+                                  de lijst van negen ING-pakketten achter een
+                                  dichtgeklapt driehoekje"; het betekent dat je het
+                                  ziet zonder te zoeken. Dus komt de nul naar
+                                  voren.
+
+                                  EN NOOIT ZONDER DE EIS. Elke studentenrekening in
+                                  dit land staat op € 0,00 in het wettelijk
+                                  verplichte kostendocument, met een leeftijds- of
+                                  studievoorwaarde erbij ("Alleen voor
+                                  rekeninghouders van 18 tot 30 jaar"). Zonder die
+                                  zin is dit een gratis-melding die over twee jaar
+                                  niet meer klopt en die LaVega hem nooit heeft
+                                  verteld. Noemt de bron geen voorwaarde, dan staat
+                                  DAT er — een leeg veld zou als "geldt voor
+                                  iedereen" lezen. */}
+                              {row.candidates.some((f) => f.amount.cents === 0) && (
+                                <div data-testid={`gratis-bij-${row.account.key}`} style={{ marginTop: ".35rem" }}>
+                                  <strong>Gratis bij {bank}:</strong>
+                                  <ul style={{ margin: ".2rem 0 0", paddingLeft: "1.1rem" }}>
+                                    {row.candidates
+                                      .filter((f) => f.amount.cents === 0)
+                                      .map((f) => (
+                                        <li key={f.productId}>
+                                          {f.product} — {feeLabel(f.amount)}.{" "}
+                                          {f.conditions ?? "De bron noemt hierbij geen voorwaarde."}{" "}
+                                          <span style={{ opacity: 0.7 }}>
+                                            ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
+                                          </span>
+                                        </li>
+                                      ))}
+                                  </ul>
+                                  <p style={{ margin: ".2rem 0 0" }}>
+                                    Is dit jouw rekening? Zet die naam bij Rekeningen in het veld <strong>Naam</strong>,
+                                    dan rekent LaVega er met € 0,00 voor.
+                                  </p>
+                                </div>
+                              )}
                               {/* Wat er WEL is, en de enige stap die dit echt
                                   oplost: de naam van een rekening bepaalt of
                                   LaVega het pakket herkent, en die naam is bij

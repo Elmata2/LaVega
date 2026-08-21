@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
 import { formatEuro, monthShortNL } from "../../format.js";
 import Module from "../Module.js";
+import { useWidgetEnabled } from "../moduleRegistry";
 import { daysBetween, shiftDate } from "./dates.js";
 
 /* Betaalagenda — the reference's "Payment schedule": what is due next, with a
@@ -120,10 +121,42 @@ type BetaalschemaBlockProps = {
   asOf: string;
 };
 
-export default function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
+export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
   const upcoming = useMemo(() => agendaRows(scheduledFlows, txs, asOf), [scheduledFlows, txs, asOf]);
   const overdueCount = upcoming.filter((r) => r.date < asOf).length;
   const predictedCount = upcoming.filter((r) => r.predicted).length;
+  /* De rij die OPEN staat, en waarom dat een toestand is en geen tooltip.
+   *
+   * REVIEW 4, PUNT 7 — EERST GEMETEN, EN DE UITKOMST IS DEELS EEN NEE. Hij noemde
+   * zelf drie mogelijke oorzaken van "V…"; alle drie zijn nagerekend:
+   *
+   *  - Een verkeerde AFKAPFUNCTIE: nee. Er wordt in code niets afgekapt. De test
+   *    hiernaast rendert zijn eigen voorbeeld en vindt de hele naam letterlijk
+   *    terug, zonder ellips.
+   *  - Een verkeerd VELD: nee, niet voor dit geval. `scheduleParty` geeft de
+   *    tegenpartij verbatim terug (of de naam van een herkende instantie), en
+   *    "B Steunenberg en/of mevr. A L Dimitrova" komt er ook zo uit.
+   *  - Een te SMALLE KOLOM: ja, maar niet zó smal. De Betaalagenda is één kolom
+   *    in een raster van drie, en dan blijft er op 1280 px ±196 px over voor de
+   *    naam — ongeveer 27 tekens, op een telefoon (één kolom, 375 px) een stuk of
+   *    twintig. Het afkappen is dus echt, en het is CSS.
+   *
+   * Eén letter volgt uit geen van de drie, en dat wordt hier niet weggeschreven
+   * als "waarschijnlijk toch de kolom". Wat er precies op zijn scherm stond is uit
+   * deze code niet te reproduceren; wat er WEL reproduceerbaar misgaat is een
+   * lange naam die afkapt zonder dat je de rest ooit te zien krijgt, plus de pil
+   * hieronder. Daarvoor is dit gebouwd. Blijft er een naam over die na deze
+   * ingreep nog steeds onleesbaar is, dan is de meting hierboven het beginpunt en
+   * niet een afgesloten zaak.
+   *
+   * Een breder blok is daarom wél een oorzaak maar niet de oplossing: elke naam
+   * kan langer zijn dan elke kolom. De volle naam moet BEREIKBAAR zijn, en op
+   * drie manieren, want op een telefoon bestaat hover niet — dat heeft hij in
+   * review 3 punt 8 al gezegd en het is daar op dezelfde manier opgelost
+   * (`.spend-pie-name` in charts.css): muis (:hover), toetsenbord
+   * (:focus-visible) en tik (data-open). Een title-attribuut blijft eronder
+   * liggen voor wie met de muis wacht, maar draagt de belofte niet alleen. */
+  const [open, setOpen] = useState<string | null>(null);
 
   return (
     <Module
@@ -148,24 +181,47 @@ export default function BetaalschemaBlock({ scheduledFlows, txs, asOf }: Betaals
         <div className="pay-list">
           {upcoming.map((r) => {
             const overdue = r.date < asOf;
+            const isOpen = open === r.id;
             return (
-              <div className="pay-row" key={r.id}>
-                <div className={`pay-date ${overdue ? "pay-date-overdue" : ""}`} aria-hidden="true">
+              /* De hele rij is de knop, niet alleen de naam: hij vroeg om te
+                 kunnen hoveren "boven op die transactie", en een naam van drie
+                 tekens is een doel dat je op een telefoon niet raakt. Elke rij
+                 is een knop, ook een korte naam die nergens afgekapt wordt —
+                 welke naam past hangt van de vensterbreedte af en die kan dit
+                 component niet meten, dus één gedrag voor alle rijen is het
+                 enige dat niet soms liegt. */
+              <button
+                type="button"
+                className="pay-row"
+                key={r.id}
+                data-open={isOpen ? "on" : "off"}
+                aria-expanded={isOpen}
+                onClick={() => setOpen((cur) => (cur === r.id ? null : r.id))}
+              >
+                <span className={`pay-date ${overdue ? "pay-date-overdue" : ""}`} aria-hidden="true">
                   <span className="pay-date-day">{r.date.slice(8, 10)}</span>
                   <span className="pay-date-month">{monthShortNL(r.date)}</span>
-                </div>
-                <div className="pay-info">
-                  <div className="pay-label">
-                    {r.label}
+                </span>
+                <span className="pay-info">
+                  <span className="pay-label">
+                    {/* De naam staat in een eigen span, en dat is niet
+                        cosmetisch: het afkappen zat op hetzelfde vakje als de
+                        "voorspeld"-pil, dus bij een lange naam viel die pil
+                        buiten het zichtbare deel en zag een voorspelde regel
+                        eruit als een bevestigde. Nu kapt alleen de naam af en
+                        houdt de pil zijn eigen plek. */}
+                    <span className="pay-name" title={r.label}>
+                      {r.label}
+                    </span>
                     {r.predicted && <span className="pay-tag">voorspeld</span>}
-                  </div>
-                  <div className="eyebrow">
+                  </span>
+                  <span className="eyebrow pay-meta">
                     {r.date} · {r.note}
                     {overdue ? " · te laat" : ""}
-                  </div>
-                </div>
+                  </span>
+                </span>
                 <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>{formatEuro(r.amount)}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -173,3 +229,21 @@ export default function BetaalschemaBlock({ scheduledFlows, txs, asOf }: Betaals
     </Module>
   );
 }
+
+/** De Betaalagenda als SCHAKELBARE kaart (review 4, punt 8) — zelfde patroon als
+ *  `AandachtWidget` en `PositieWidget`: het blok weet niets van de voorkeur, de
+ *  wrapper leest hem en laat de kaart weg. */
+export function BetaalschemaWidget(props: BetaalschemaBlockProps) {
+  return useWidgetEnabled("betaalagenda") ? <BetaalschemaBlock {...props} /> : null;
+}
+
+/** ...en die wrapper is hier ook de DEFAULT export, anders dan bij Aandacht en
+ *  Positie. Dat is geen slordigheid maar de les van commit f4ee5fb: die twee
+ *  kregen hun schakelaar in één lane en hun wrapper werd in een ANDERE lane in
+ *  Overzicht gezet, dus tussendoor stond er een schakelaar in Profiel die niets
+ *  deed en een zin eronder die niet waar was. Overzicht.tsx hoort bij geen enkele
+ *  lane; de import daar is `import BetaalschemaBlock from "./BetaalschemaBlock"`,
+ *  en door de gesloten variant op die naam te zetten schakelt de schakelaar vanaf
+ *  de eerste render echt iets. Wie Overzicht later omzet naar de expliciete
+ *  `BetaalschemaWidget` krijgt precies hetzelfde component. */
+export default BetaalschemaWidget;

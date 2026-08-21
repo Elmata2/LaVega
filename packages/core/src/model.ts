@@ -8,7 +8,62 @@ export type Account = { key: string; iban: string; name: string; bank: string;
   /** The owner typed this account's bank/name himself. Set by the rename action
    *  in Rekeningen so a re-import can't undo it — while a name that only ever
    *  came from an old parser stays replaceable by a better one. */
-  renamed?: boolean };
+  renamed?: boolean;
+  /** WANNEER DEZE REKENING IS GEKOPPELD — en dat is nadrukkelijk iets anders dan
+   *  `balanceDate` hierboven.
+   *
+   *  `balanceDate` zegt hoe oud het BEDRAG is: de dag waarop het saldo gold,
+   *  zoals het afschrift of de bank hem meestuurt. Dit veld zegt hoe oud de
+   *  KOPPELING is: de dag waarop deze rekening voor het eerst in LaVega kwam.
+   *  Die twee liepen op het scherm door elkaar. Bij een bankkoppeling stuurt de
+   *  bank vaak geen dag mee, en dan stond er alleen "datum onbekend" — wat leest
+   *  als "van deze rekening weten we niets", terwijl we het moment van
+   *  binnenkomen prima kenden en gewoon nergens vastlegden. Nu leggen we dat vast,
+   *  en blijven het twee aparte zinnen: hoe oud is het bedrag, hoe oud is de
+   *  koppeling.
+   *
+   *  AFWEZIG IS ONBEKEND, NOOIT VANDAAG. Elke rekening die er al stond voordat dit
+   *  veld bestond heeft geen koppelmoment. Dat met terugwerkende kracht op de dag
+   *  van vandaag zetten zou van een rekening van vorig jaar een verse koppeling
+   *  maken — dezelfde verkeerde zekerheid die `balanceDate` ooit gaf toen de dag
+   *  van ophalen werd ingevuld voor een saldo van drie weken oud. `withLinkedAt`
+   *  stempelt daarom alleen wat aantoonbaar nieuw is; de rest blijft leeg en het
+   *  scherm zegt dat het onbekend is. */
+  linkedAt?: string };
+
+/** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.
+ *
+ *  Aanroepen NA het samenvoegen van een import, met de lijst zoals hij VÓÓR die
+ *  import was als `existing`. Drie gevallen, en het middelste is het hele punt:
+ *
+ *  · de rekening kende `existing` niet → hij komt nu binnen, dus `asOf` is het
+ *    koppelmoment. Bij een import is dat het moment van importeren, bij een
+ *    bankkoppeling het moment van koppelen; voor dit veld is dat hetzelfde feit.
+ *  · de rekening stond er al MET een koppelmoment → dat moment blijft staan. Dit
+ *    is de reden dat deze functie bestaat en niet één regel in de aanroeper is:
+ *    `mergeImportedAccounts` bouwt zijn resultaat op de VERSE rekening
+ *    (`{ ...imp }`), en die komt van een parser die geen koppelmoment kent. Zonder
+ *    deze overname zou elke her-import het koppelmoment wissen, en de rekening die
+ *    hij het vaakst opnieuw inleest zou de rekening zijn die het minst over
+ *    zichzelf weet.
+ *  · de rekening stond er al ZONDER koppelmoment → hij blijft leeg. Die rekening
+ *    is ooit gekoppeld en wij hebben het niet opgeschreven; `asOf` invullen zou
+ *    dat gat vullen met een datum die niets meet. Onbekend is geen vandaag.
+ *
+ *  Puur: `asOf` komt als parameter binnen, er wordt niets geklokt. */
+export function withLinkedAt(
+  existing: readonly Account[],
+  incoming: readonly Account[],
+  asOf: string,
+): Account[] {
+  const before = new Map(existing.map((a) => [a.key, a]));
+  return incoming.map((a) => {
+    if (a.linkedAt) return a; // al gestempeld: een koppelmoment verschuift nooit
+    const prev = before.get(a.key);
+    if (!prev) return { ...a, linkedAt: asOf };
+    return prev.linkedAt ? { ...a, linkedAt: prev.linkedAt } : a;
+  });
+}
 export type Tx = { id: string; accountKey: string; date: string; amount: number;
   currency: string; counterparty: string; description: string; category: string; manual: boolean };
 export type Rule = { id: string; match: string; category: string };

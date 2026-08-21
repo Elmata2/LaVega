@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import type { Account, CatalogueEntryLike, LearnedFact } from "@lavega/core";
 import { FX_RATE_FALLBACK, TRAVEL_AGENT, makeFact, productOf } from "@lavega/core";
 import Valuta from "./views/Valuta";
+import { TOONMEER_CLASS } from "./components/ToonMeer";
 
 /* Valuta as the 20 August review asked for it.
  *
@@ -241,27 +242,155 @@ test("a cheapest row that is not a bank account says what it is", () => {
   expect(c.querySelector('[data-testid="goedkoper"]')!.textContent).toContain("Crypto.com");
 });
 
-test("the info button explains the ranking and what a collapsed row does not claim", () => {
+/* ════════════════ DE INDELING VAN 21 AUGUSTUS ════════════════
+ *
+ * Zijn woorden: rekenmachine links, bol rechts, de informatie die rechts stond
+ * naar onder de rekenmachine achter "toon meer". Wat hieronder vastligt is de
+ * PLAATS van die dingen; de betekenis ervan wordt bewaakt door de tests erboven
+ * en eronder, en die zijn niet aangeraakt.
+ *
+ * Waarom er op `open` getest wordt en niet op afwezige tekst: bij <details>
+ * blijven de kinderen in de DOM als hij dicht is (zie ToonMeer.tsx). Een
+ * `not.toContain("…")` zou hier falen terwijl het scherm precies goed staat. */
+
+/** De <details> van een van de twee uitklappers. De klasse is er als
+ *  aanknopingspunt: het opschrift van de bankenlijst bevat het aantal banken en
+ *  is dus geen stabiele sleutel. */
+function toonmeer(klasse: string): HTMLDetailsElement {
+  const el = container!.querySelector<HTMLDetailsElement>(`details.${TOONMEER_CLASS.root}.${klasse}`);
+  if (!el) throw new Error(`geen toon meer met klasse ${klasse}`);
+  return el;
+}
+const opschrift = (d: HTMLDetailsElement) => d.querySelector(`.${TOONMEER_CLASS.label}`)?.textContent ?? "";
+const paneel = (d: HTMLDetailsElement) => d.querySelector(`.${TOONMEER_CLASS.panel}`)?.textContent ?? "";
+
+test("twee kolommen: de rekenmachine links, de bol rechts", () => {
   const c = render();
-  expect(c.querySelector(".info-panel")).toBeNull();
+  const modules = [...c.querySelectorAll<HTMLElement>(".module-grid > .module")];
+  expect(modules.map((m) => m.getAttribute("aria-label"))).toEqual(["Overzetten", "Waar ga je heen?"]);
+  // Allebei één kolom breed in een raster van twee: de bol stond over de volle
+  // breedte onder de kolommen (span 2) en is nu zelf de rechterkolom.
+  expect(modules.every((m) => m.classList.contains("module-span-1"))).toBe(true);
+  expect(c.querySelector(".module-grid")!.className).toContain("grid-2");
+  expect(modules[1].querySelector(".lv-globe")).not.toBeNull();
+  // En de bol staat in geen enkel opzicht in de linkerkolom.
+  expect(modules[0].querySelector(".lv-globe")).toBeNull();
+});
 
-  click(c.querySelector('[aria-label="Uitleg bij dit bedrag"]')!);
-  const panel = c.querySelector(".info-panel")!;
-  expect(panel.textContent).toContain("alle banken die LaVega kan onderbouwen");
-  expect(panel.textContent).toContain("Eén regel per bank");
-  expect(panel.textContent).toContain('"ING 0%" geldt alleen voor de Platinumcard');
-  expect(panel.textContent).toContain("Elke bank die minder rekent");
+test("de bankenlijst staat onder de rekenmachine, achter een dichte 'toon meer'", () => {
+  const c = render();
+  const calc = c.querySelector<HTMLElement>('.module[aria-label="Overzetten"]')!;
+  const banken = toonmeer("valuta-banken");
 
-  click(c.querySelector('[aria-label="Uitleg bij dit bedrag"]')!);
+  // In de módule van de rekenmachine, niet in een eigen module ernaast.
+  expect(calc.contains(banken)).toBe(true);
+  expect(banken.open).toBe(false);
+  // Dicht is niet weg: de rijen staan er, ze zijn alleen niet in beeld.
+  expect(banken.querySelectorAll(".travel-journeys .travel-journey").length).toBe(rows().length);
+  // Het opschrift is een belofte mét het aantal, zodat je weet of openklikken
+  // de moeite is. "Toon meer" alleen is geen belofte.
+  expect(opschrift(banken)).toBe(`Alle ${rows().length} banken, goedkoopste eerst`);
+
+  // En hij gaat open op een klik op de samenvattingsregel.
+  click(banken.querySelector(`.${TOONMEER_CLASS.summary}`)!);
+  expect(banken.open).toBe(true);
+});
+
+test("wat er vóór de plooi blijft staan is het antwoord, niet de onderbouwing", () => {
+  const c = render();
+  const banken = toonmeer("valuta-banken");
+  const bronnen = toonmeer("valuta-bronnen");
+  // Het bedrag dat aankomt, de gekozen route en de aanbeveling staan buiten de
+  // uitklappers: dat is waarvoor je op dit scherm komt.
+  for (const id of ["arrives", "uitleg", "gekozen-route", "goedkoper"]) {
+    const el = c.querySelector(`[data-testid="${id}"]`)!;
+    expect(el).not.toBeNull();
+    expect(banken.contains(el)).toBe(false);
+    expect(bronnen.contains(el)).toBe(false);
+  }
+});
+
+test("de uitleg bij de rangschikking zit achter dezelfde 'toon meer' als de lijst", () => {
+  const c = render();
+  const tekst = paneel(toonmeer("valuta-banken"));
+  expect(tekst).toContain("alle banken die LaVega kan onderbouwen");
+  expect(tekst).toContain("Eén regel per bank");
+  expect(tekst).toContain('"ING 0%" geldt alleen voor de Platinumcard');
+  expect(tekst).toContain("Elke bank die minder rekent");
+  // Waartegen het verschil per rij gemeten is stond in de voettekst van de module
+  // die hier stond. Die module is weg; de zin niet.
+  expect(tekst).toContain("gerekend tegen ING");
+  // Het losse ⓘ-knopje en zijn paneel bestaan niet meer — één manier om iets uit
+  // te klappen op dit scherm, niet twee.
+  expect(c.querySelector(".module-info")).toBeNull();
   expect(c.querySelector(".info-panel")).toBeNull();
 });
 
-test("with nothing known the info panel refuses to say whether switching pays", () => {
-  const c = render({ entries: [] });
-  click(c.querySelector('[aria-label="Uitleg bij dit bedrag"]')!);
-  const panel = c.querySelector(".info-panel")!;
-  expect(panel.textContent).toContain("Een onbekend tarief is geen 0%");
-  expect(panel.textContent).not.toContain("Elke bank die minder rekent");
+test("met niets bekend weigert die uitleg te zeggen of overstappen loont", () => {
+  render({ entries: [] });
+  const tekst = paneel(toonmeer("valuta-banken"));
+  expect(tekst).toContain("Een onbekend tarief is geen 0%");
+  expect(tekst).not.toContain("Elke bank die minder rekent");
+});
+
+test("zonder ook maar één bank belooft het opschrift geen lijst", () => {
+  render({ accounts: [], entries: [] });
+  const banken = toonmeer("valuta-banken");
+  expect(opschrift(banken)).toBe("Waarom er nog geen bank te rangschikken is");
+  expect(paneel(banken)).toContain("Nog geen bank om te rangschikken");
+});
+
+test("de bronregel staat achter 'toon meer' en is compleet gebleven", () => {
+  render();
+  const bronnen = toonmeer("valuta-bronnen");
+  expect(bronnen.open).toBe(false);
+  expect(opschrift(bronnen)).toBe("Waar de koers en de tarieven vandaan komen");
+  const tekst = paneel(bronnen);
+  expect(tekst).toContain("middenkoers");
+  expect(tekst).toContain("tarievenoverzicht");
+  expect(tekst).toContain("Er wordt niets over je rekeningen verstuurd");
+});
+
+/* De koersaanroep mislukt in deze hele test (zie beforeEach), dus alles hieronder
+ * gaat over de stand waarin de tab met de MEEGEBUNDELDE koers rekent. Dat is de
+ * stand waarin de twee zinnen over de koers het makkelijkst gaan liegen. */
+
+test("zonder live koers zegt de bronregel wat het dan wél is, zonder een oorzaak te verzinnen", () => {
+  render();
+  const tekst = paneel(toonmeer("valuta-bronnen"));
+  // Waarvan het een momentopname is stond er niet in: "offline momentopname van
+  // 2026-08-04" laat de lezer raden of dat een ECB-koers is of iets van de bank.
+  expect(tekst).toContain("meegebundelde ECB-middenkoers");
+  expect(tekst).toContain(FX_RATE_FALLBACK.date);
+  // En er wordt GEEN oorzaak genoemd. Deze stand is ook de stand vlak na het
+  // openen, terwijl de aanroep nog loopt; "was niet op te halen" zou dan een
+  // bewering zijn die de toestand niet kan dragen.
+  expect(tekst).not.toContain("niet op te halen");
+  expect(tekst).not.toContain("mislukt");
+  // Het woord "live" mag hier alleen staan als de koers het ook is.
+  expect(tekst).not.toContain("live ECB-middenkoers");
+});
+
+test("de kop belooft geen live koers als die er niet is", () => {
+  const c = render();
+  const eyebrow = c.querySelector(".view-head .eyebrow")!.textContent ?? "";
+  expect(eyebrow).toContain(`ECB-middenkoers van ${FX_RATE_FALLBACK.date} uit de app`);
+  expect(eyebrow).not.toContain("live");
+  // De rest van de regel blijft staan: waar de koersopslag vandaan komt verandert
+  // niet met het al dan niet ophalen van de koers.
+  expect(eyebrow).toContain("koersopslag per bank uit de catalogus");
+});
+
+test("de voettekst onder de bol wijst geen richting aan", () => {
+  const c = render();
+  const bol = [...c.querySelectorAll<HTMLElement>(".module")].find((m) => m.getAttribute("aria-label") === "Waar ga je heen?")!;
+  const foot = bol.querySelector(".module-foot")!.textContent ?? "";
+  expect(foot).toContain("De bol zet alleen de doelvaluta");
+  // "hierboven" klopte toen de bol ónder de kolommen stond. Nu staat hij op een
+  // breed scherm ernaast en op een smal scherm eronder, dus elke richting in die
+  // zin is de helft van de tijd onwaar.
+  expect(foot).not.toContain("hierboven");
+  expect(foot).not.toContain("hiernaast");
 });
 
 /* ════════════════ DE HORIZONREGEL OP HET SCHERM (21 augustus) ════════════════

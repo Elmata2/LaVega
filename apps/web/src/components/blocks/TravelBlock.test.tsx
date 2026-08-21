@@ -5,14 +5,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, CatalogValue, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
-import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice } from "./TravelBlock";
+import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice, ROUTES_HEADING } from "./TravelBlock";
+// De klassenamen van de uitklap uit hun eigen bestand, niet overgetikt: een
+// hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
+// slagen op een klasse die niet meer bestaat.
+import { TOONMEER_CLASS } from "../ToonMeer";
 import type { CatalogueEntryLike } from "@lavega/core";
 import { formatEuro } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
- * how the BLOCK presents it: one answer first, the priced routes behind
- * "waarom", and an unknown route that says so instead of reading as free. */
+ * how the BLOCK presents it: one answer first, the priced routes behind the
+ * shared "toon meer" fold, and an unknown route that says so instead of reading
+ * as free. (De knop heette "Waarom?" tot review 4; zie DE UITKLAP hieronder.) */
 
 const props: TravelBlockProps = {
   accounts,
@@ -41,7 +46,7 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
 });
 
 /* --- The block with a destination. Needs a real DOM because the destination,
- * the "waarom" disclosure and the corrections are all interactions. --- */
+ * the fold and the corrections are all interactions. --- */
 
 // The same shape as core's journey fixtures: two banks, so "move it first" is a
 // route that actually exists.
@@ -98,7 +103,38 @@ function byText(selector: string, text: string): HTMLElement {
   return hit as HTMLElement;
 }
 
-/** Render the block, pick the United States, and open "waarom". */
+/* ── DE UITKLAP ───────────────────────────────────────────────────────────────
+ *
+ * De knop "Waarom?" is weg; het blok gebruikt het gedeelde <ToonMeer>
+ * (components/ToonMeer.tsx) en dat staat op <details>/<summary>. Twee dingen
+ * zijn daardoor anders, en ze hebben allebei een test hier laten omvallen:
+ *
+ * 1. DICHT IS NIET WEG. De kinderen van een <details> blijven in de DOM; de
+ *    browser verbergt ze en houdt ze uit de schermlezer. `not.toContain(...)`
+ *    faalt dus terwijl het onderdeel precies goed werkt. Getest wordt de STAND
+ *    (`details.open`) en de PLAATS (staat het in het paneel of ervoor).
+ * 2. HET FRONTPANEEL IS `.travel-winner`, en de uitklap staat er bewust naast in
+ *    plaats van erin. Anders telt `winnerText` de hele onderbouwing mee en meldt
+ *    een telling "één keer" over een scherm waar het bedrag vier keer staat —
+ *    precies de dubbeling wegtoetsen die de test moest vinden.
+ */
+const fold = (c: HTMLElement = container!): HTMLDetailsElement =>
+  c.querySelector<HTMLDetailsElement>(`details.${TOONMEER_CLASS.root}`)!;
+const foldPanel = (c: HTMLElement = container!): HTMLElement =>
+  c.querySelector<HTMLElement>(`.${TOONMEER_CLASS.panel}`)!;
+const foldText = (c: HTMLElement = container!): string => foldPanel(c).textContent ?? "";
+
+/** Klik de samenvatting open. jsdom voert de KLIK-activering van een <summary>
+ *  wel uit; de toetsactivering niet, dus een Enter-test hier zou niets bewijzen
+ *  (zie de waarschuwingen boven in ToonMeer.tsx). */
+function openFold(c: HTMLElement = container!): HTMLElement {
+  click(fold(c).querySelector("summary")!);
+  return foldPanel(c);
+}
+
+/** Render the block and pick the United States. De uitklap blijft DICHT: dat is
+ *  de begintoestand van het scherm, en een test die hem meteen opent kan niet
+ *  meer zien wat er vooraan stond. Openen doe je met `openFold()`. */
 function renderWithDestination(overrides: Partial<TravelBlockProps> = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -134,15 +170,18 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
   expect(expected).toContain("Revolut betaalpas"); // the cheapest whole route, not the cheapest card
   expect(expected).toContain("iDEAL");
 
-  // The routes and the three sections are detail, not a rival answer: they only
-  // appear once "waarom" is opened.
-  expect(c.querySelector(".travel-journeys")).toBeNull();
-  expect(c.textContent).not.toContain("Bewaren");
+  // The routes and the three sections are detail, not a rival answer: ze staan
+  // in het paneel van de uitklap, en die is dicht. Ze staan wél in de DOM — zo
+  // werkt <details> — dus getoetst wordt de stand en de plaats, niet afwezigheid.
+  expect(fold(c).open).toBe(false);
+  expect(c.querySelector(".travel-winner .travel-journeys")).toBeNull();
+  expect(foldText(c)).toContain("Bewaren");
+  expect(c.querySelector(".travel-winner")!.textContent).not.toContain("Bewaren");
 });
 
-test("waarom reveals the ranked routes, each with its three legs", () => {
+test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () => {
   const c = renderWithDestination();
-  click(byText("button", "Waarom?"));
+  openFold();
 
   const journeys = [...c.querySelectorAll(".travel-journey")];
   expect(journeys.length).toBeGreaterThan(1);
@@ -169,7 +208,7 @@ test("waarom reveals the ranked routes, each with its three legs", () => {
 
 test("a route with an unknown leg says so and never renders as free", () => {
   const c = renderWithDestination();
-  click(byText("button", "Waarom?"));
+  openFold();
 
   const unknown = c.querySelector(".travel-journey-unknown");
   expect(unknown).not.toBeNull();
@@ -189,7 +228,7 @@ test("a route with an unknown leg says so and never renders as free", () => {
 test("convertFeePct is correctable inline and fires the same callback shape as fxFeePct", () => {
   const learned: LearnedFact[] = [];
   const c = renderWithDestination({ onCorrectFact: (f: LearnedFact) => learned.push(f) });
-  click(byText("button", "Waarom?"));
+  openFold();
 
   const correct = (buttonText: string, inputLabel: string, value: string) => {
     click(byText("button", buttonText));
@@ -311,13 +350,19 @@ test("an unpriced answer card is not marked as a winning route", () => {
   expect(c.querySelector(".travel-journey-best")).toBeNull();
 
   // ...and the "Wisselen" step does not repeat the impossible advice either.
-  click(byText("button", "Waarom?"));
+  openFold();
   expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
 });
 
-/* --- B3: the control has to be findable. --------------------------------- */
+/* --- B3: the control has to be findable. ---------------------------------
+ *
+ * Vindbaar is niet hetzelfde als vooraan. B3 ging erover dat de knop in de "…"
+ * van de module stond, waar niets erbij zei waarom je hem zou indrukken; review
+ * 4 punt 16 zet hem in de uitklap, bij de rest van de onderbouwing. Wat vooraan
+ * bleef is de ZIN die de oorzaak noemt — anders staat er een aanbeveling zonder
+ * dat het scherm zegt wat er ontbrak toen we hem deden. */
 
-test("the terms control sits in the body under the answer, not in the module header", () => {
+test("de melding met de knop staat in de uitklap, de oorzaak zelf vooraan", () => {
   const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
 
   const controls = c.querySelector(".module-controls");
@@ -328,10 +373,16 @@ test("the terms control sits in the body under the answer, not in the module hea
   expect(notice.querySelector("button")).not.toBeNull();
   // The notice explains itself: the button never stands on its own.
   expect((notice.textContent ?? "").length).toBeGreaterThan(40);
+  expect(foldPanel(c).contains(notice)).toBe(true);
 
-  // It follows the answer directly, so it is read in the same glance.
+  // De uitklap volgt de samenvatting direct, dus hij wordt in dezelfde blik
+  // gelezen — en vooraan staat geen enkele knop meer.
   const winner = c.querySelector(".travel-winner")!;
-  expect(winner.nextElementSibling).toBe(notice);
+  expect(winner.nextElementSibling).toBe(fold(c));
+  expect(winner.querySelector("button")).toBeNull();
+
+  // De oorzaak wél: één zin, vooraan, zonder de hele melding eromheen.
+  expect(c.querySelector(".travel-winner-cause")).not.toBeNull();
 });
 
 test("a card whose direct leg is priced but whose route is not is reported as a gap, not as known", () => {
@@ -527,7 +578,7 @@ test("the block answers the cash question too, in euros, with the small-withdraw
 
 test("a card whose document prices no withdrawal says so, and never reads as free", () => {
   const el = renderWithCatalogue();
-  click(byText("button", "Waarom?"));
+  openFold();
   const cash = el.querySelector(".travel-cash")!;
   expect(cash.textContent).toContain("Revolut betaalpas");
   // Revolut's fee row says nothing about cash, so the price is missing.
@@ -537,7 +588,7 @@ test("a card whose document prices no withdrawal says so, and never reads as fre
 
 test("cards he does not hold sit in their own section and are never offered to pay with", () => {
   const el = renderWithCatalogue();
-  click(byText("button", "Waarom?"));
+  openFold();
   const offers = el.querySelector(".travel-offers")!;
   expect(offers.textContent).toContain("212 Card");
   expect(offers.textContent).toContain("geen kaarten van jou");
@@ -568,12 +619,19 @@ test("a cheaper card he does not hold LEADS the answer, and is marked as not his
   expect(winner.querySelector(".badge")).not.toBeNull();
 });
 
-test("what he can pay with today stays on screen, just no longer as the headline", () => {
+test("wat hij vandaag kan betalen blijft bestaan, maar staat in de uitklap", () => {
   const el = renderWithCatalogue({ facts: DEARER_OWN });
+  // Het woord "vandaag" mocht van hem weg van de voorgrond (review 4, punt 14),
+  // en dit is ook letterlijk niet de aanbeveling maar het alternatief.
   const winner = el.querySelector(".travel-winner")!;
-  expect(winner.textContent).toContain("Revolut betaalpas"); // his own cheapest
-  expect(winner.textContent).toMatch(/vandaag/i);
-  expect(winner.textContent).toContain("€ 10,00");
+  expect(winner.textContent).not.toMatch(/vandaag/i);
+
+  // Verdwijnen doet het niet: hij moet morgenochtend nog steeds kunnen betalen.
+  const vandaag = el.querySelector(".travel-winner-today")!;
+  expect(vandaag).not.toBeNull();
+  expect(foldPanel(el).contains(vandaag)).toBe(true);
+  expect(vandaag.textContent).toContain("Revolut betaalpas"); // his own cheapest
+  expect(flat(vandaag.textContent ?? "")).toContain("€ 10,00");
 });
 
 test("a tie never crowns a card he has to open first", () => {
@@ -602,7 +660,7 @@ test("the cash line recommends the proven cheapest and names the card it cannot 
 
 test("catalogue cashback is shown with its gate, never subtracted from the price", () => {
   const el = renderWithCatalogue();
-  click(byText("button", "Waarom?"));
+  openFold();
   const offers = el.querySelector(".travel-offers")!;
   expect(offers.textContent).toContain("0,5% cashback");
   expect(offers.textContent).toMatch(/crypto/i);
@@ -613,7 +671,7 @@ test("catalogue cashback is shown with its gate, never subtracted from the price
 
 test("with no catalogue there is no market section and no invented cash price", () => {
   const el = renderWithCatalogue({ catalogue: [] });
-  click(byText("button", "Waarom?"));
+  openFold();
   expect(el.querySelector(".travel-offers")).toBeNull();
   expect(el.querySelector(".travel-cash")!.textContent).toContain("onbekend");
 });
@@ -632,7 +690,7 @@ test("for a euro destination the cash line does not quote a foreign-currency tar
   const winner = container!.querySelector(".travel-winner")!;
   expect(winner.textContent).toContain("Pinnen:");
   expect(winner.textContent).not.toContain("€ 6,30");
-  click(byText("button", "Waarom?"));
+  openFold();
   // Nothing to switch to either — there is no conversion to be cheaper at.
   expect(container.querySelector(".travel-offers")).toBeNull();
 });
@@ -712,9 +770,11 @@ test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto ove
 test("een kaart waarvan de prijs nergens staat komt BRUTO op het scherm, en het woord netto valt niet", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GEEN_PRIJS });
   const winner = el.querySelector(".travel-winner")!;
-  // De kaart wordt niet verzwegen: het brutovoordeel staat er.
+  // De kaart wordt niet verzwegen: het brutovoordeel staat er. Het komt sinds
+  // review 4 uit core's eigen kopzin (gewone spatie) in plaats van uit de
+  // "Vandaag"-regel (`Intl`, vaste spatie) — vandaar `flat` aan beide kanten.
   expect(winner.textContent).toContain("Testkaart Stil");
-  expect(winner.textContent).toContain(formatEuro(10));
+  expect(flat(winner.textContent ?? "")).toContain(flat(formatEuro(10)));
 
   const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
   expect(kosten.textContent).toContain("Kaartkosten: onbekend");
@@ -773,7 +833,7 @@ test("de lijst met kaarten om te openen zegt per kaart wat ze zelf kost, en waar
     facts: DEARER_OWN,
     catalogue: [...GOEDKOOP, ...GEEN_PRIJS],
   });
-  click(byText("button", "Waarom?"));
+  openFold();
   const offers = el.querySelector(".travel-offers")!;
   expect(offers.textContent).toContain("De volgorde is wat een kaart je op deze reis kost");
   // Een kaart zonder bekende prijs staat met alleen de opslag in de rangschikking;
@@ -789,7 +849,7 @@ test("de lijst met kaarten om te openen zegt per kaart wat ze zelf kost, en waar
 
 test("een te dure kaart in de lijst zegt per rij dat ze niets oplevert", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: TE_DUUR });
-  click(byText("button", "Waarom?"));
+  openFold();
   const geen = el.querySelector('[data-testid="travel-offer-kosten-zwaar-geen"]')!;
   expect(geen).not.toBeNull();
   expect(geen.textContent).toContain("Geen aanbeveling");
@@ -835,8 +895,14 @@ const flat = (s: string): string => s.replace(/\u00a0/g, " ");
 const times = (haystack: string, needle: string): number =>
   flat(haystack).split(flat(needle)).length - 1;
 
+/** Alles wat VOORAAN staat — de samenvatting, zonder de uitklap. Die staat naast
+ *  `.travel-winner` en niet erin, juist zodat deze telling iets betekent. */
 const winnerText = (el: HTMLElement): string => el.querySelector(".travel-winner")!.textContent ?? "";
-const headlineText = (el: HTMLElement): string => el.querySelector(".travel-winner-name")!.textContent ?? "";
+/** Alleen de KOPZIN. `.travel-winner-name` draagt sinds review 4 ook het chipje
+ *  "nog niet van jou", en dat woord zou de prefix-vergelijking met core's eigen
+ *  zin op het merkteken laten stuklopen in plaats van op een echte herformulering. */
+const headlineText = (el: HTMLElement): string =>
+  el.querySelector(".travel-winner-headline")!.textContent ?? "";
 
 test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de velden", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
@@ -882,16 +948,23 @@ test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen z
 
 test("in de begintoestand van een nieuwe gebruiker staat de prijs er nog steeds, en ook één keer", () => {
   // Geen enkele opslag van hemzelf bekend: dan is er geen beprijsde route, en
-  // `termsHeadline` vervangt de hele kop — inclusief de staart die core erin had
-  // gezet. Dat was de bug: € 1,00 per maand stond dan nergens meer. Nu komt het
-  // uit de velden, en uit niets anders.
+  // `termsHeadline` verving vroeger de hele kop — inclusief de staart die core
+  // erin had gezet. Dat was de bug: € 1,00 per maand stond dan nergens meer. Nu
+  // komt het uit de velden, en uit niets anders.
   const el = renderWithDestination({ facts: [], catalogue: GOEDKOOP });
   expect(times(winnerText(el), formatEuro(1))).toBe(1);
   expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(`${formatEuro(1)} per maand`);
 
+  // En sinds review 4 draagt de kop de AANBEVELING, ook in deze toestand. Die
+  // stond hier eerder alleen nog in de catalogusregel eronder — en die vouwt nu
+  // op, dus zonder deze omkering blijft er "Kaartkosten: € 1,00 per maand" over
+  // zonder dat er ergens staat van welke kaart.
   const kop = headlineText(el);
-  expect(kop).toMatch(/voorwaarden/i); // de kop gaat over wat er ontbreekt
+  expect(kop).toContain("Testkaart Licht");
   expect(times(kop, formatEuro(1))).toBe(0);
+  // Wat er ontbreekt staat als eigen zin eronder, niet meer op de plek van het
+  // antwoord.
+  expect(el.querySelector(".travel-winner-cause")!.textContent).toMatch(/voorwaarden/i);
 });
 
 test("een onbekende kaartprijs wordt ook één keer gemeld — en blijft 'geen nul'", () => {
@@ -915,3 +988,273 @@ test("een onbekende kaartprijs wordt ook één keer gemeld — en blijft 'geen n
   expect(kosten).toContain("bruto");
 });
 
+
+/* ═════════ HET OVERZICHT IS EXACT EEN SAMENVATTING (app review 4) ═══════════
+ *
+ * Zijn woorden: "this overview should be exactly a summary." Wat vooraan mag
+ * blijven staan is een GESLOTEN lijst: waarmee betaal je, en waar kun je pinnen
+ * — plus wat die twee kosten, want een kaart die je moet openen brengt zijn eigen
+ * maandnota mee en dat is deel van het antwoord, niet van de onderbouwing.
+ *
+ * Al het andere zit in één uitklap: de bronregel (punt 12), de uitleg over de
+ * catalogus (13), "vandaag" (14), alle routes en de opnamedetails (15) en de knop
+ * "voorwaarden verversen" (16).
+ *
+ * DE VAL DIE HIER AL EEN KEER IS DICHTGEKLAPT, en die deze keer langs een andere
+ * weg terugkwam: `termsHeadline` verving core's hele kopzin, en daarmee viel de
+ * kostenstaart weg in precies de begintoestand van een nieuwe gebruiker. De
+ * vorige ronde redde de PRIJS door hem in eigen velden te zetten. Maar in diezelfde
+ * toestand stond de NAAM van de aanbevolen kaart alleen nog in de catalogusregel —
+ * en die vouwt nu op. Dan blijft er "Kaartkosten: € 1,00 per maand" over zonder dat
+ * ergens staat waarvan. Vandaar dat de aanbeveling de kop wint zodra er één is, en
+ * dat de drie kostentoestanden hieronder allemaal dezelfde twee vragen krijgen. */
+
+/** De vrije notitie van een geleerd feit, zoals de bank.nl-parser hem schrijft:
+ *  een herhaling van het cijfer plus de bron. Dit is letterlijk de regel die hij
+ *  aanwees, en hij komt op het scherm via `Journey.note` — hetzelfde veld dat soms
+ *  een voorwaarde draagt. Splitsen op de tekst kan niet, dus wordt er gesplitst op
+ *  het veld; zie de opmerkingen in TravelBlock.tsx. */
+const BRONREGEL = "1,4% koersopslag Bron: bank.nl-vergelijking, laatst gecontroleerd 15-1-2026.";
+const MET_BRON: LearnedFact[] = [
+  makeFact({
+    agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "fxFeePct", value: "1.4",
+    source: "agent", updatedAt: "2026-01-15", note: BRONREGEL,
+  }),
+];
+
+/** Een catalogus­kaart met een HERKENDE grens aan haar tarief. Dit is de Revolut-
+ *  fout in fixture-vorm: 0% dat alleen binnen een maandlimiet geldt. */
+const GEDEKT = [
+  marketCard("grens", "Testkaart Grens", "Grensbank N.V.", 0, { value: 1, period: "maand" },
+    "Tot € 1.000 per maand geen koersopslag, daarna 1%."),
+];
+
+test("vooraan staan alleen de twee antwoorden en wat ze kosten", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const voor = winnerText(el);
+
+  // Waarmee betaal je — met de prijs van die kaart, want zonder die prijs is het
+  // een half advies.
+  expect(el.querySelector(".travel-winner .travel-winner-name")).not.toBeNull();
+  expect(voor).toContain("212 Card");
+  // Waar kun je pinnen.
+  expect(el.querySelector(".travel-winner .travel-winner-cash")).not.toBeNull();
+
+  // En verder niets. Elk van deze punten wees hij één voor één aan.
+  expect(voor).not.toMatch(/vandaag/i);              // punt 14
+  expect(voor).not.toContain("staat in de catalogus"); // punt 13
+  expect(voor).not.toContain("Alle routes");           // punt 15
+  expect(voor).not.toContain("Bewaren");
+  expect(voor).not.toContain("Alle bedragen gelden op");
+  expect(el.querySelector(".travel-winner .travel-terms")).toBeNull(); // punt 16
+  expect(el.querySelector(".travel-winner button")).toBeNull();
+
+  // ...en het staat er allemaal wél, één klik verder. "Weg van de voorgrond" is
+  // niet hetzelfde als weg: de details vindt hij goed.
+  const paneel = openFold(el);
+  expect(paneel.textContent).toMatch(/vandaag/i);
+  expect(paneel.textContent).toContain("staat in de catalogus");
+  expect(paneel.textContent).toContain("Alle routes");
+  expect(paneel.textContent).toContain("Bewaren");
+  expect(paneel.querySelector(".travel-terms")).not.toBeNull();
+  expect(paneel.textContent).toContain("Alle bedragen gelden op");
+});
+
+test("de uitklap is het gedeelde onderdeel, staat dicht, en opent op een klik", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const d = fold(el);
+
+  // Geen tweede variant naast components/ToonMeer.tsx: dit is <details>/<summary>,
+  // waar de browser Tab-focus, Enter/Space en het uitspreken van de stand levert.
+  expect(d.tagName).toBe("DETAILS");
+  expect(d.classList.contains(TOONMEER_CLASS.root)).toBe(true);
+  const summary = d.querySelector("summary")!;
+  expect(summary.classList.contains(TOONMEER_CLASS.summary)).toBe(true);
+
+  // Standaard dicht — dat is de hele bedoeling. Dicht is niet weg: de inhoud
+  // staat in de DOM, de browser verbergt hem.
+  expect(d.open).toBe(false);
+  expect(d.hasAttribute("open")).toBe(false);
+  expect(foldText(el).length).toBeGreaterThan(100);
+
+  // Het label belooft iets. "Meer informatie" belooft niets, en dan is de
+  // onderbouwing niet opgevouwen maar zoek.
+  const label = d.querySelector(`.${TOONMEER_CLASS.label}`)!.textContent ?? "";
+  expect(label).toContain("Alle routes, de bronnen en de voorwaarden");
+
+  openFold(el);
+  expect(d.open).toBe(true);
+});
+
+test("de bronregel staat niet meer vooraan, maar is wel te vinden", () => {
+  const el = renderWithDestination({ facts: MET_BRON, catalogue: GOEDKOOP });
+
+  // Punt 12: "1,4% koersopslag, bron bank.nl-vergelijking" stond direct onder de
+  // aanbeveling. Daar staat hij niet meer.
+  expect(winnerText(el)).not.toContain("bank.nl-vergelijking");
+  expect(el.querySelector(".travel-winner .travel-winner-caveat")).toBeNull();
+
+  // Maar hij is niet weggegooid: een cijfer zonder herkomst is in deze app een
+  // gerucht, dus hij staat bovenaan de onderbouwing.
+  expect(foldText(el)).toContain(BRONREGEL);
+  const caveat = el.querySelector(".travel-winner-caveat")!;
+  expect(foldPanel(el).contains(caveat)).toBe(true);
+});
+
+test("een voorwaarde bij het tarief dat de kop noemt blijft wél vooraan staan", () => {
+  // De Revolut-fout: 0% dat alleen binnen € 1.000 per maand geldt, en een kop die
+  // "dat kost je niets op € 1.000" zegt. Dit is een door `fxCaveat` HERKENDE
+  // grens en geen vrije brontekst — daarom hoort ze naast het cijfer dat ze
+  // begrenst en niet achter de uitklap.
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GEDEKT });
+  expect(headlineText(el)).toContain("Testkaart Grens");
+
+  const caveat = el.querySelector(".travel-winner > .travel-winner-caveat")!;
+  expect(caveat).not.toBeNull();
+  expect(caveat.textContent).toContain("Let op");
+  expect(caveat.textContent).toMatch(/grens|limiet/i);
+  expect(foldPanel(el).contains(caveat)).toBe(false);
+});
+
+test("de knop 'voorwaarden verversen' zit in de uitklap, niet in de samenvatting", () => {
+  // Punt 16. Alles beprijsd, dus de melding is puur een verversknop met zijn datum.
+  const compleet = [
+    ...travelFacts,
+    fact("ING betaalpas", "convertFeePct", "1.2"),
+    fact("ING betaalpas", "transferFreeViaIdeal", "1"),
+  ];
+  const el = renderWithDestination({ aiAvailable: true, facts: compleet, catalogue: [] });
+
+  expect(el.querySelector(".travel-winner button")).toBeNull();
+  const knop = byText("button", "Ververs voorwaarden");
+  expect(foldPanel(el).contains(knop)).toBe(true);
+  expect(foldText(el)).toContain("Cijfers laatst gecontroleerd op 1 aug 2026");
+});
+
+test("zonder aanbeveling neemt de oorzaak de kop, en nooit 'ververs eerst de voorwaarden'", () => {
+  // Geen catalogus en geen beprijsde eigen route: er is niets aan te raden, dus is
+  // de reden het enige wat er te zeggen valt. Dan staat ze in de kop en NIET ook
+  // nog als eigen regel eronder — één keer, of het leest als twee problemen.
+  const el = renderWithDestination({ facts: [], catalogue: [], aiAvailable: true });
+  const zin = "De voorwaarden van je kaarten zijn nog niet opgezocht.";
+
+  expect(headlineText(el)).toBe(zin);
+  expect(el.querySelector(".travel-winner-cause")).toBeNull();
+  expect(times(winnerText(el), zin)).toBe(1);
+  // Core's eigen zin adviseert een verversing die op een server zonder sleutel
+  // niets doet. Die komt hier nooit op het scherm.
+  expect(winnerText(el)).not.toContain("ververs eerst de voorwaarden");
+});
+
+test("mét een aanbeveling staat die in de kop en de oorzaak als eigen regel eronder", () => {
+  const el = renderWithDestination({ facts: [], catalogue: GOEDKOOP, aiAvailable: true });
+  const zin = "De voorwaarden van je kaarten zijn nog niet opgezocht.";
+
+  expect(headlineText(el)).toContain("Betaal met Testkaart Licht");
+  expect(el.querySelector(".travel-winner-cause")!.textContent).toBe(zin);
+  expect(times(winnerText(el), zin)).toBe(1); // niet ook in de kop
+});
+
+/* De drie kostentoestanden uit de vorige ronde, nu met de vraag die na het
+ * opvouwen bij alle drie hetzelfde moet worden beantwoord: staat de AANBEVELING
+ * vooraan, en staat de KAARTPRIJS vooraan — allebei precies één keer? */
+const TOESTANDEN = [
+  {
+    naam: "geen eigen route beprijsd",
+    facts: [] as LearnedFact[], catalogue: GOEDKOOP,
+    product: "Testkaart Licht", prijs: `${formatEuro(1)} per maand`,
+  },
+  {
+    naam: "wel beprijsd",
+    facts: DEARER_OWN, catalogue: GOEDKOOP,
+    product: "Testkaart Licht", prijs: `${formatEuro(1)} per maand`,
+  },
+  {
+    naam: "kosten onbekend",
+    facts: DEARER_OWN, catalogue: GEEN_PRIJS,
+    product: "Testkaart Stil", prijs: "Kaartkosten: onbekend",
+  },
+];
+
+for (const t of TOESTANDEN) {
+  test(`de aanbeveling en de kaartprijs staan allebei precies één keer vooraan — ${t.naam}`, () => {
+    const el = renderWithDestination({ facts: t.facts, catalogue: t.catalogue });
+    const voor = winnerText(el);
+
+    // DE AANBEVELING, in core's eigen formulering. Wegvallen deed ze toen
+    // `termsHeadline` de hele zin verving; twee keer staan deed ze toen de
+    // catalogusregel haar eronder herhaalde. Nu: de kop, en verder nergens.
+    expect(headlineText(el)).toContain(`Betaal met ${t.product}`);
+    expect(times(voor, `Betaal met ${t.product}`)).toBe(1);
+
+    // DE KAARTPRIJS, in de velden van `Kaartkosten` en verder nergens vooraan.
+    expect(times(voor, t.prijs)).toBe(1);
+    expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(t.prijs);
+
+    // Het merkteken blijft vooraan: geen van deze drie kaarten heeft hij, en dat
+    // moet zichtbaar anders zijn dan een kaart die hij morgen kan pinnen.
+    expect(el.querySelector(".travel-winner-name .badge")).not.toBeNull();
+
+    // En de herkomst is verplaatst, niet weggegooid.
+    expect(foldText(el)).toContain("staat in de catalogus");
+  });
+}
+
+/* ── DE UITWEG MOET BESTAAN WAAR DE MELDING HEM BELOOFT ───────────────────────
+ *
+ * Drie meldingen eindigen met dezelfde uitweg: typ het percentage zelf, want
+ * jouw invoer wordt nooit door een agent overschreven. Ze wezen naar de knop
+ * "Waarom?" — en die knop is met deze ronde vervangen door de gedeelde uitklap.
+ * Daarmee was het advies een aanwijzing naar iets dat nergens meer op het scherm
+ * staat, precies wat een melding niet mag doen: de gebruiker zoekt zich suf naar
+ * een knop die is opgeheven, en concludeert dat de app kapot is.
+ *
+ * Getoetst wordt daarom niet de zin maar de VERWIJZING: staat de genoemde kop
+ * er echt, staat hij ONDER de melding (de zin zegt "hieronder"), en staat onder
+ * die kop ook echt een invulveld. Alleen de tekst lezen zou opnieuw groen zijn
+ * op het moment dat de kop wordt hernoemd. */
+function keurDeUitweg(c: HTMLElement) {
+  const paneel = foldPanel(c);
+  const melding = paneel.querySelector(".travel-terms")!;
+  expect(melding).not.toBeNull();
+  const tekst = melding.textContent ?? "";
+
+  // De uitweg wordt genoemd, en niet meer met de naam van een knop die weg is.
+  expect(tekst).toMatch(/zelf in/);
+  expect(tekst).not.toContain("Waarom?");
+  expect(tekst).toContain(`“${ROUTES_HEADING}” hieronder`);
+
+  // De kop bestaat, en staat waar de zin zegt dat hij staat.
+  const kop = [...paneel.querySelectorAll("h3")].find((h) => h.textContent === ROUTES_HEADING);
+  expect(kop).toBeDefined();
+  expect(melding.compareDocumentPosition(kop!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  // En eronder staat het veld waar de zin over gaat. Een verwijzing naar een kop
+  // zonder invoerveld is nog steeds een advies dat niet uit te voeren is.
+  const aanpassen = [...paneel.querySelectorAll("button")].filter((b) =>
+    (b.textContent ?? "").includes("aanpassen"),
+  );
+  expect(aanpassen.length).toBeGreaterThan(0);
+  expect(kop!.compareDocumentPosition(aanpassen[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+}
+
+test("zonder sleutel wijst de melding naar de routelijst, niet naar de verdwenen knop", () => {
+  keurDeUitweg(renderWithDestination({ facts: noFacts, aiAvailable: false }));
+});
+
+test("een zoekopdracht die niets opleverde wijst naar dezelfde bestaande plek", () => {
+  const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
+  click(byText("button", "Zoek voorwaarden"));
+  rerender({ facts: noFacts, aiAvailable: true, busy: true });
+  rerender({ facts: noFacts, aiAvailable: true, busy: false });
+  expect(foldText(c)).toContain("geen bruikbaar tarief terug");
+  keurDeUitweg(c);
+});
+
+test("een zoekopdracht die vastliep wijst naar dezelfde bestaande plek", () => {
+  const c = renderWithDestination({
+    facts: noFacts, aiAvailable: true, pendingTerms: ["ING betaalpas"], termsAsked: 2, termsGaveUp: true,
+  });
+  expect(foldText(c)).toContain("Er kwam niets meer binnen");
+  keurDeUitweg(c);
+});

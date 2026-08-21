@@ -4,11 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, RewardsBalance, Tx } from "@lavega/core";
-import { makeRewardsBalance } from "@lavega/core";
-import Punten, { ALL_PROGRAMS, programCategory, programFacts, programUnit, worthLine } from "./Punten";
-import Rekeningen, { dayNL, groupAccountsByBank, latestTxDates, saldoAge, saldoAgeNote, saldoAgeShort } from "./Rekeningen";
+import { makeRewardsBalance, withLinkedAt } from "@lavega/core";
+import Punten, {
+  ALL_PROGRAMS, PICK_PROGRAMS, programCategory, programFacts, programRoster, programUnit, rosterFigure, worthLine,
+} from "./Punten";
+import Rekeningen, {
+  dayNL, groupAccountsByBank, latestTxDates, linkedMoment, linkedNote, linkedShort, saldoAge, saldoAgeNote, saldoAgeShort,
+} from "./Rekeningen";
 
-/* Twee gaten die de eigenaar noemde, en de invarianten die ze dichthouden.
+/* Drie gaten die de eigenaar noemde, en de invarianten die ze dichthouden.
  *
  * A. "Bijgewerkt op" in Rekeningen. Een bankkoppeling ververst niet — er is geen
  *    refresh-route en geen interval. Een stand van het koppelmoment las daardoor
@@ -22,7 +26,13 @@ import Rekeningen, { dayNL, groupAccountsByBank, latestTxDates, saldoAge, saldoA
  *    hier vastligt: geen verzonnen koers, geen euro-waarde van een punt, wél de
  *    echte verdienregels en de geen-geldwaarde-regel met bron en datum.
  *
- * Beide staan in één bestand omdat deze lane alleen views/Punten.tsx,
+ * C. Twee nieuwe vragen uit app review 4. "Waarom staan de ING-punten er niet?"
+ *    (punt 29/30/31) en "wanneer is deze rekening gekoppeld?" (punt 18). Wat
+ *    hier vastligt: een programma zonder saldo is ZICHTBAAR en kiesbaar, elk
+ *    saldo draagt een datum, en het koppelmoment is een ander gegeven dan de dag
+ *    waarop het saldo gold — met "onbekend" als er geen is, nooit vandaag.
+ *
+ * Alle drie in één bestand omdat deze lane alleen views/Punten.tsx,
  * views/Rekeningen.tsx en dit bestand bezit; rekeningen-ui.test.tsx is van een
  * andere lane en blijft ongemoeid. Hoort de A-helft later bij dat bestand, dan
  * kan ze er in één verplaatsing heen.
@@ -203,7 +213,12 @@ test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen 
   // Er staat geen dag bij het bedrag. De enige datum in het blok is die van de
   // nieuwste transactie, en die zin gaat ook over de transacties.
   const age = panel.querySelector(".bank-panel-age")!;
-  expect(panel.querySelector(".bank-field .cell-sub")!.textContent).not.toMatch(/\d/);
+  // Het veld van het SALDO, opgezocht aan het invoerveld dat erin staat en niet
+  // aan zijn plek in de rij: er staat nu ook een veld "Gekoppeld" met een datum
+  // erin, en dat is een ander gegeven. Op volgorde selecteren zou deze test op
+  // een dag stilletjes het verkeerde veld gaan keuren.
+  const saldoField = [...panel.querySelectorAll<HTMLElement>(".bank-field")].find((f) => f.querySelector(".saldo-input"))!;
+  expect(saldoField.querySelector(".cell-sub")!.textContent).not.toMatch(/\d/);
   const dated = datedSentences(age.textContent ?? "");
   expect(dated).toHaveLength(1);
   expect(dated[0]).toContain("nieuwste transactie");
@@ -436,4 +451,220 @@ test("een ander programma blijft precies zoals het was", () => {
   expect(card.querySelector(".punt-facts")).toBeNull();
   expect(card.querySelector(".punt-worth")!.textContent).toContain("niet vast te stellen");
   expect(card.textContent).not.toContain("€");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * C1. Punten — "waarom staan de ING-punten er niet?" (review 4, punt 29-31)
+ *
+ * DE METING DIE HIERAAN VOORAFGING, want zonder die meting is elke fix een gok.
+ * Op 21 augustus, met een lege puntenlijst gerenderd: het woord ING kwam op dit
+ * scherm NERGENS voor. Niet omdat het programma ontbrak — het stond zelfs twee
+ * keer in de keuzelijst ("ING" uit core en "ING Punten" uit deze view) — maar
+ * omdat die keuzelijst een <datalist> is die pas verschijnt als je typt, en het
+ * scherm verder alleen kaarten toonde van saldi die hij al had ingevoerd. Een
+ * programma zonder saldo bestond visueel niet. Zijn waarneming klopte dus.
+ *
+ * De twee oorzaken uit de opdracht waren allebei waar, en ze zijn allebei apart
+ * dichtgezet: het programma viel weg zonder saldo (nu staat het in de lijst
+ * hieronder) én er stonden twee ING's naast elkaar (nu nog één te kiezen).
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const AMEX = "American Express Membership Rewards";
+
+/** De regel uit de programmalijst waar deze naam in staat. */
+const rosterRowFor = (name: string): HTMLElement =>
+  [...container!.querySelectorAll<HTMLElement>(".punt-roster-row")].find((li) =>
+    (li.textContent ?? "").includes(name),
+  )!;
+
+test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg", () => {
+  const pickable = PICK_PROGRAMS.map((p) => p.name).filter((n) => /^ING/i.test(n));
+  expect(pickable).toEqual([ING]);
+  // De opzoeklijst blijft wél compleet: een saldo dat ooit onder "ING" is
+  // opgeslagen houdt zijn categorie in plaats van "eigen programma" te worden.
+  expect(ALL_PROGRAMS.some((p) => p.name === "ING")).toBe(true);
+  expect(programCategory("ING")).toBe("Bank");
+});
+
+test("ING staat op het scherm zonder dat er één saldo is ingevoerd", () => {
+  mount(<Punten {...puntenProps([])} />);
+  // De klacht letterlijk: hij zag ING nergens. Nu wel, en met de reden erbij
+  // waarom er geen koers per bestede euro staat.
+  const row = rosterRowFor(ING);
+  expect(row).toBeTruthy();
+  expect(row.textContent).toContain("nog geen saldo");
+  expect(row.textContent).toContain("Geen koers per bestede euro");
+  // En hij kan hem kiezen zonder de naam over te typen.
+  expect([...row.querySelectorAll("button")].map((b) => b.textContent)).toContain("Saldo invullen");
+});
+
+test("Amex en alle andere programma's staan er ook, zonder verzonnen nul", () => {
+  mount(<Punten {...puntenProps([])} />);
+  const names = [...container!.querySelectorAll<HTMLElement>(".punt-roster-row")].length;
+  expect(names).toBe(PICK_PROGRAMS.length);
+  const amex = rosterRowFor(AMEX);
+  // "nog geen saldo" is een lege plek. "0 punten" zou een bewering zijn over een
+  // rekening die LaVega nooit heeft gezien.
+  expect(amex.textContent).toContain("nog geen saldo");
+  expect(amex.textContent).not.toContain("0 punten");
+  expect(amex.textContent).not.toContain("€");
+});
+
+test("de kop telt saldi en spreekt de lijst eronder niet tegen", () => {
+  mount(<Punten {...puntenProps([])} />);
+  const head = container!.querySelector(".view-head .eyebrow")!;
+  // Vóór de programmalijst bestond stond hier "0 programma's", en dat was toen
+  // waar: er stond niets anders op het scherm. Boven een lijst die er tien
+  // opsomt is het pertinent onwaar, en van twee getallen die elkaar tegenspreken
+  // gelooft niemand er nog een. Deze kop telt wat hij telt.
+  expect(head.textContent).toContain("0 saldi");
+  expect(head.textContent).not.toContain("programma");
+  expect(container!.querySelectorAll(".punt-roster-row").length).toBe(PICK_PROGRAMS.length);
+});
+
+test("een saldo in de lijst draagt altijd zijn datum", () => {
+  mount(<Punten {...puntenProps([makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" })])} />);
+  const amex = rosterRowFor(AMEX);
+  expect(amex.textContent).toContain("245.000 punten");
+  expect(amex.textContent).toContain("van 12 mei 2026");
+  // Dit is de reden dat de datum niet optioneel is: de extensie gaat deze
+  // getallen gebruiken en moet kunnen zien hoe oud ze zijn.
+  expect(rosterFigure(programRoster([makeRewardsBalance({ program: AMEX, points: 1, updatedAt: "2026-05-12" })])[0]))
+    .toBe("1 punt — van 12 mei 2026");
+});
+
+test("de knop richt het formulier op dat programma, met zijn regels erbij", () => {
+  mount(<Punten {...puntenProps([])} />);
+  click([...rosterRowFor(ING).querySelectorAll<HTMLElement>("button")].find((b) => b.textContent === "Saldo invullen")!);
+  expect(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!.value).toBe(ING);
+  expect(container!.querySelector(".punt-facts")!.textContent).toContain("drempel, geen tarief");
+});
+
+test("de lijst zet de programma's met een saldo bovenaan en verzint er geen bij", () => {
+  const rows = programRoster([makeRewardsBalance({ program: "Spaarzegels van de bakker", points: 12, updatedAt: "2026-08-01" })]);
+  // Zijn eigen programma staat erbij (anders zou "alle programma's" zijn eigen
+  // invoer weglaten) en het staat vooraan, want daar is een saldo van.
+  expect(rows[0].name).toBe("Spaarzegels van de bakker");
+  expect(rows[0].category).toBe("eigen programma");
+  expect(rows.filter((r) => r.balance !== null)).toHaveLength(1);
+  expect(rows.slice(1).every((r) => r.balance === null)).toBe(true);
+  // Een programma zonder saldo heeft er GEEN — geen nul die daarvoor doorgaat.
+  expect(rows.find((r) => r.name === AMEX)!.balance).toBeNull();
+  expect(rosterFigure(rows.find((r) => r.name === AMEX)!)).toBe("nog geen saldo");
+});
+
+test("de euro-uitleg staat opgevouwen, maar de mededeling zelf staat er open", () => {
+  mount(<Punten {...puntenProps([])} />);
+  const fold = container!.querySelector<HTMLDetailsElement>(".punt-waarom")!;
+  expect(fold.open).toBe(false);
+  // Wat er DICHT te lezen is, is de conclusie; de onderbouwing zit erachter en
+  // blijft volledig in de DOM staan.
+  expect(fold.querySelector("summary")!.textContent).toContain("Geen euro-waarde bij punten");
+  expect(fold.textContent).toContain("transfer naar een luchtvaartprogramma");
+});
+
+test("de lijst zet geen euroteken bij punten, en wél bij cashback in euro's", () => {
+  mount(<Punten {...puntenProps([
+    makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-08-01" }),
+    makeRewardsBalance({ program: "bunq", points: 42, updatedAt: "2026-08-01" }),
+  ])} />);
+  expect(rosterRowFor(AMEX).textContent).not.toContain("€");
+  // bunq is de uitzondering en blijft dat: dit ís euro's, er zit geen omrekening
+  // tussen. Precies het onderscheid dat "geen euro-waarde" niet raakt.
+  expect(rosterRowFor("bunq").textContent).toContain("42,00");
+  expect(rosterRowFor("bunq").textContent).toContain("Keert uit in euro's");
+});
+
+test("busy zet ook de knoppen in de programmalijst uit", () => {
+  mount(<Punten {...puntenProps([])} busy />);
+  const buttons = [...container!.querySelectorAll<HTMLButtonElement>(".punt-roster-row button")];
+  expect(buttons.length).toBeGreaterThan(0);
+  expect(buttons.every((b) => b.disabled)).toBe(true);
+});
+
+test("de programmalijst haalt niets op: geen link, geen afbeelding, geen remote adres", () => {
+  const html = renderToStaticMarkup(<Punten {...puntenProps([])} />);
+  expect(html).not.toContain("<a ");
+  expect(html).not.toContain("<img");
+  expect(html).not.toContain("http://");
+  expect(html).not.toContain("https://");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * C2. Rekeningen — het koppelmoment (review 4, punt 18)
+ *
+ * Twee data die niet door elkaar mogen lopen: `balanceDate` zegt hoe oud het
+ * BEDRAG is, `linkedAt` hoe oud de KOPPELING is. En een rekening die er al stond
+ * heeft geen koppelmoment — dat is een eerlijk antwoord, en vandaag invullen zou
+ * dat niet zijn.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const IMPORT_DAY = "2026-08-21";
+
+test("een nieuwe rekening krijgt het moment van importeren, een bestaande niet", () => {
+  const bestaand = acc({ key: "A", balance: 10 });
+  const stamped = withLinkedAt([bestaand], [bestaand, acc({ key: "B", balance: 20 })], IMPORT_DAY);
+  // Nieuw: dit IS het koppelmoment, dus het staat er.
+  expect(stamped.find((a) => a.key === "B")!.linkedAt).toBe(IMPORT_DAY);
+  // Stond er al zonder koppelmoment: blijft leeg. Vandaag invullen zou van een
+  // rekening van vorig jaar een verse koppeling maken.
+  expect(stamped.find((a) => a.key === "A")!.linkedAt).toBeUndefined();
+});
+
+test("een her-import verschuift een bestaand koppelmoment niet en wist het niet", () => {
+  const eerder = acc({ key: "A", balance: 10, linkedAt: "2026-03-04" });
+  // Zoals mergeImportedAccounts het aanlevert: een VERSE rekening van de parser,
+  // die geen koppelmoment kent. Zonder overname zou elke her-import het wissen.
+  const vers = acc({ key: "A", balance: 99 });
+  expect(withLinkedAt([eerder], [vers], IMPORT_DAY)[0].linkedAt).toBe("2026-03-04");
+});
+
+test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () => {
+  const a = acc({ key: "A", balance: 1000, balanceDate: "2026-07-31", linkedAt: "2026-08-21" });
+  expect(saldoAgeShort(saldoAge(a, null))).toBe("stand van 31 juli 2026");
+  expect(linkedShort(linkedMoment(a))).toBe("gekoppeld op 21 augustus 2026");
+  // De zin over de koppeling doet geen enkele uitspraak over het bedrag.
+  const note = linkedNote(linkedMoment(a));
+  expect(note).toContain("hoe oud de koppeling is");
+  expect(note).toContain("niet hoe oud het bedrag is");
+});
+
+test("geen koppelmoment leest als onbekend — geen cijfer, geen vandaag", () => {
+  const m = linkedMoment(acc({ key: "A", balance: 10 }));
+  expect(m).toEqual({ kind: "unknown" });
+  expect(linkedShort(m)).toBe("koppelmoment onbekend");
+  expect(linkedShort(m)).not.toMatch(/\d/);
+  const note = linkedNote(m);
+  expect(note).toContain("niet vastgelegd");
+  expect(note).not.toMatch(/\d{4}/);
+});
+
+test("de melding bij een onbekend koppelmoment stelt geen handeling voor die het niet oplost", () => {
+  // Opnieuw importeren MAAKT geen koppelmoment voor een rekening die er al is —
+  // withLinkedAt vult niet met terugwerkende kracht. Dat als advies geven zou
+  // dus een advies zijn dat in deze toestand niet werkt.
+  const note = linkedNote({ kind: "unknown" });
+  expect(note).not.toMatch(/opnieuw import|importeer opnieuw|koppel opnieuw|opnieuw koppelen/i);
+  expect(note).not.toMatch(/ververs/i);
+});
+
+test("het paneel toont beide data, uit elkaar gehouden", () => {
+  const gekoppeld = acc({ key: "NL03INGB", name: "Nieuwe rekening", bank: "ING", balance: 500, linkedAt: "2026-08-21" });
+  mount(<Rekeningen {...rekProps()} accounts={[IMPORTED, gekoppeld]} />);
+  click(byText(".bank-group-head", "ING"));
+  click(byText('[role="tab"]', "Nieuwe rekening"));
+  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
+  expect(panel.querySelector(".bank-panel-linked")!.textContent).toContain("gekoppeld op 21 augustus 2026");
+  // Twee aparte alinea's, niet één zin met twee datums erin.
+  expect(panel.querySelector(".bank-panel-age")!.textContent).not.toContain("gekoppeld op");
+  expect(panel.querySelector(".bank-panel-linked")!.textContent).not.toContain("stand van");
+});
+
+test("een rekening van vóór dit veld zegt het eerlijk in het paneel", () => {
+  mount(<Rekeningen {...rekProps()} />);
+  click(byText(".bank-group-head", "ING"));
+  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
+  const linked = panel.querySelector(".bank-panel-linked")!;
+  expect(linked.textContent).toContain("koppelmoment onbekend");
+  expect(linked.textContent).not.toMatch(/\d{4}/);
 });

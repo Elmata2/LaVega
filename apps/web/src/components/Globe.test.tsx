@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -605,4 +608,229 @@ test("een land zonder koers verandert de berekening niet", () => {
   expect(naar().value).toBe(before);
   expect(answer(el)).toContain("CUP");
   expect(answer(el)).toContain("geen koers");
+});
+
+// ------------------------------------------------- de indeling van 21 augustus
+
+/* "Onder de bol de legenda, en daaronder het zoekveld." De bol staat sinds deze
+ * ronde in de RECHTERkolom naast de rekenmachine, dus de tweede kolom waar de
+ * lijst in stond bestaat niet meer.
+ *
+ * Waarom dit als volgorde getest wordt en niet als opmaak: jsdom heeft geen
+ * layout-engine, dus "staat eronder" is hier niet te meten. Wat wél te meten is,
+ * is de bronvolgorde — en dat is precies wat een flexkolom (.lv-globe in
+ * worldmap.css) op het scherm oplevert, op elke breedte hetzelfde. */
+
+/** De ankers van de opstelling, in de volgorde waarin ze in het blok staan. */
+const ANKERS: Record<string, string> = {
+  bol: ".lv-globe-canvas",
+  legenda: ".lv-globe-legend",
+  antwoord: ".lv-globe-answer",
+  zoekveld: ".lv-globe-search input",
+  lijst: "#lv-globe-list",
+  bron: ".lv-globe-source",
+};
+
+function volgorde(el: HTMLElement): string[] {
+  const namen = Object.keys(ANKERS);
+  // querySelectorAll levert documentvolgorde; dat is hier de hele meting.
+  return [...el.querySelectorAll(Object.values(ANKERS).join(","))].map(
+    (n) => namen.find((k) => n.matches(ANKERS[k])) ?? "?",
+  );
+}
+
+test("de bol, dan de legenda, dan het antwoord, dan het zoekveld met de lijst", () => {
+  const el = mount(<Globe value="USD" from="EUR" onPick={vi.fn()} supported={SUPPORTED} />);
+
+  expect(volgorde(el)).toEqual(["bol", "legenda", "antwoord", "zoekveld", "lijst", "bron"]);
+
+  // De legenda hoort BIJ de bol: hij staat in hetzelfde blok als het doek, zodat
+  // er niets tussen kan schuiven dat de kleuren van hun uitleg wegduwt.
+  const figure = el.querySelector(".lv-globe-figure")!;
+  expect(figure.contains(el.querySelector(".lv-globe-canvas")!)).toBe(true);
+  expect(figure.contains(el.querySelector(".lv-globe-legend")!)).toBe(true);
+  expect(figure.contains(el.querySelector(".lv-globe-search")!)).toBe(false);
+
+  // De vijf vlakjes van de legenda, met de kleurrol die het doek ook gebruikt.
+  const tonen = [...el.querySelectorAll(".lv-globe-legend .lv-globe-swatch")].map((s) => s.getAttribute("data-tone"));
+  expect(tonen).toEqual(["euro", "rate", "norate", "notender", "selected"]);
+});
+
+test("het antwoord op de klik staat vóór de lijst van 250 regels", () => {
+  const el = mount(<Globe value="USD" from="EUR" onPick={vi.fn()} supported={SUPPORTED} />);
+  click(option(el, "JP"));
+
+  /* Dit is de enige plek waar deze lane van zijn woorden afwijkt: hij noemde de
+   * legenda en het zoekveld, en niet het antwoordpaneel. Het staat ertussen omdat
+   * het het antwoord is op de klik die je net op de bol deed; achter een lijst van
+   * 250 regels verschijnt dat een halve pagina onder je vinger, en een melding die
+   * je niet ziet is geen melding. */
+  const antwoord = el.querySelector('[data-testid="bol-antwoord"]')!;
+  const lijst = el.querySelector("#lv-globe-list")!;
+  expect(antwoord.compareDocumentPosition(lijst) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(antwoord.textContent).toContain("JPY");
+});
+
+// --------------------------------------------------- de kleuren van het doek
+
+/* HET BLAUW MOEST ANDERS, en de vorige ronde leverde een gemeten probleem op dat
+ * groter was dan de vraag: "geen wettig betaalmiddel" stond op 1,21 contrast tegen
+ * "geen koers" en 1,24 tegen "koers". Op een bol waar elk land een stroke in zijn
+ * EIGEN vulkleur krijgt (dat dicht de haarlijn tussen twee vereenvoudigde vlakken,
+ * zie Globe.tsx) is er geen landsgrens getekend — het kleurverschil is het enige
+ * verschil, en twee tinten op 1,07 zijn op het scherm één land.
+ *
+ * Waarom dit hier gemeten wordt en niet in een zin in het stijlblad staat: die zin
+ * stond er, en toen de kleuren veranderden bleef hij staan. Deze test leest
+ * worldmap.css en tokens.css, lost de color-mix() op en rekent het na. Zet iemand
+ * er een kleur in die de grens niet haalt, dan valt dit om.
+ *
+ * WAT DIT NIET IS: een oordeel over hoe het eruitziet. Contrast is een getal over
+ * helderheid; het verschil tussen teal en grijs zit voor een groot deel in de hue
+ * en dat meet deze formule niet mee. De grenzen hieronder liggen daarom laag —
+ * ruim boven wat er stond, ruim onder wat er nu is — en ze bewaken de bodem, niet
+ * de smaak. Met eigen ogen in een browser is er niets van gezien; dat staat als
+ * open punt bij deze lane. */
+
+/** Een stijlblad uit src/styles, als tekst.
+ *
+ *  Het pad wordt uit een STRING opgebouwd en niet met `new URL(pad,
+ *  import.meta.url)`. In de jsdom-omgeving is de globale `URL` die van jsdom, en
+ *  die lost een relatief pad op tegen het document (http://localhost:3000/…) in
+ *  plaats van tegen dit bestand — dan leest readFileSync stilletjes iets anders
+ *  in, en dat is precies wat hier gebeurde: `CSS` bevatte de bron van deze test
+ *  en de eerste assertie viel over een "@keyframes" die in dit commentaar staat.
+ *  Dezelfde valkuil staat in ToonMeer.test.tsx en CategoryBars.test.tsx. */
+const here = dirname(fileURLToPath(import.meta.url));
+const blad = (naam: string) => readFileSync(resolve(here, "../styles", naam), "utf8");
+
+const CSS = blad("worldmap.css");
+const TOKENS_CSS = blad("tokens.css");
+
+/** Elke `--naam: #hex` uit tokens.css. Alleen hex: alles wat de bol gebruikt is
+ *  daar een hex, en een token dat het niet is hoort hier niet stil als zwart
+ *  binnen te komen. */
+const TOKENS: Record<string, string> = Object.fromEntries(
+  [...TOKENS_CSS.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((m) => [m[1], m[2].toLowerCase()]),
+);
+
+/** De kleurrollen van de bol, zoals ze in .lv-globe staan. */
+const ROLLEN: Record<string, string> = Object.fromEntries(
+  [...CSS.matchAll(/(--lv-globe-[a-z]+):\s*([^;]+);/g)].map((m) => [m[1].replace("--lv-globe-", ""), m[2].trim()]),
+);
+
+type RGB = [number, number, number];
+
+function hexNaarRgb(h: string): RGB {
+  return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as RGB;
+}
+
+/** Eén kleurwaarde uit het stijlblad naar echte kanalen.
+ *
+ *  Alleen `var(--token)` en `color-mix(in srgb, var(--a) N%, var(--b))` worden
+ *  begrepen, en dat is met opzet de hele grammatica: een losse hex in dit blad
+ *  komt hier als een fout naar buiten in plaats van als een kleur die het thema
+ *  niet volgt. color-mix in srgb interpoleert de gamma-gecodeerde kanalen recht
+ *  toe recht aan — dat is wat de browser doet en dus wat hier staat. */
+function kleur(waarde: string): RGB {
+  const token = /^var\((--[a-z0-9-]+)\)$/.exec(waarde);
+  if (token) {
+    const hex = TOKENS[token[1]];
+    if (!hex) throw new Error(`onbekend token: ${token[1]}`);
+    return hexNaarRgb(hex);
+  }
+  const gemengd = /^color-mix\(in srgb,\s*var\((--[a-z0-9-]+)\)\s*([\d.]+)%,\s*var\((--[a-z0-9-]+)\)\s*\)$/.exec(waarde);
+  if (gemengd) {
+    const a = kleur(`var(${gemengd[1]})`);
+    const b = kleur(`var(${gemengd[3]})`);
+    const p = Number(gemengd[2]) / 100;
+    return a.map((v, i) => v * p + b[i] * (1 - p)) as RGB;
+  }
+  throw new Error(`kleur niet op te lossen uit tokens: ${waarde}`);
+}
+
+/** WCAG-contrast. De formule meet helderheid en niets anders; zie de kop. */
+function contrast(a: RGB, b: RGB): number {
+  const lum = (c: RGB) => {
+    const [r, g, bl] = c.map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hoog, laag] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hoog + 0.05) / (laag + 0.05);
+}
+
+const paar = (a: string, b: string) => contrast(kleur(ROLLEN[a]), kleur(ROLLEN[b]));
+
+test("elke kleur van de bol komt uit een token, en er staat geen hex in het blad", () => {
+  // Alle tien de rollen die readPalette() opvraagt, en geen ervan met een eigen
+  // kleurwaarde: een canvas kan geen var() lezen, dus de verleiding om hier een
+  // hex neer te zetten is echt en dit is wat haar tegenhoudt.
+  expect(Object.keys(ROLLEN).sort()).toEqual(
+    ["euro", "grid", "hover", "norate", "notender", "pin", "rate", "rim", "sea", "selected"].sort(),
+  );
+  for (const [rol, waarde] of Object.entries(ROLLEN)) {
+    expect(() => kleur(waarde), `${rol}: ${waarde}`).not.toThrow();
+  }
+  const zonderCommentaar = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+  expect(zonderCommentaar).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  expect(zonderCommentaar).not.toMatch(/\brgba?\(/);
+});
+
+test("de tint voor 'geen wettig betaalmiddel' ligt los van de twee waar hij tegenaan lag", () => {
+  /* Dit is de meting die de eigenaar zelf noemde. Zijn getallen golden voor het
+   * palet dat er stond: --muted 46% naast --muted 34% en naast --accent 48%. */
+  expect(paar("notender", "norate")).toBeGreaterThan(2);
+  expect(paar("notender", "rate")).toBeGreaterThan(1.35);
+  /* En het paar dat er voor Antarctica echt toe doet, want dat land grenst
+   * nergens aan een ander land: de tint tegen de zee. Dat was 1,68 — een werelddeel
+   * dat in het water oploste. */
+  expect(paar("notender", "sea")).toBeGreaterThan(4);
+});
+
+test("twee landen die aan elkaar grenzen zijn uit elkaar te houden", () => {
+  /* De drie paren die op de kaart tegen elkaar aan liggen: Kroatië–Servië,
+   * Griekenland–Albanië, Finland–Rusland. Ze stonden op 1,07 / 1,50 / 1,61 en dat
+   * eerste getal is geen grens maar één vlak. */
+  expect(paar("euro", "norate")).toBeGreaterThan(1.5);
+  expect(paar("rate", "norate")).toBeGreaterThan(1.5);
+  expect(paar("euro", "rate")).toBeGreaterThan(2);
+  // En elke vulling moet van het water af te lezen zijn. Euro is hier het krapste
+  // paar (het staat op 1,30) en dat is een bewuste ondergrens: donkerder zou euro
+  // tegen "geen koers" aan duwen, en dát paar deelt wél een grens.
+  for (const rol of ["euro", "rate", "norate", "notender"]) {
+    expect(paar(rol, "sea"), `${rol} tegen de zee`).toBeGreaterThan(1.25);
+  }
+});
+
+test("aanwijzen en kiezen vallen op tegen elk van de vier vullingen", () => {
+  // Een hover die op de halve wereld onzichtbaar is, is geen hover. Dit is de
+  // reden dat "geen wettig betaalmiddel" niet nóg donkerder is gemaakt: dan wint
+  // die vulling van de hover erbovenop.
+  for (const rol of ["euro", "rate", "norate", "notender"]) {
+    expect(paar("hover", rol), `aangewezen op ${rol}`).toBeGreaterThan(2.2);
+  }
+  expect(paar("selected", "sea")).toBeGreaterThan(4);
+  // En geen twee rollen zijn dezelfde kleur: dan zou een van de zes antwoorden op
+  // het doek verdwijnen in een ander.
+  const gebruikt = ["euro", "rate", "norate", "notender", "hover", "selected"].map((r) => kleur(ROLLEN[r]).join(","));
+  expect(new Set(gebruikt).size).toBe(gebruikt.length);
+});
+
+test("het stijlblad van de bol beweegt niet en hangt niet aan de breedte van het venster", () => {
+  const zonderCommentaar = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+  // Regel 12: geen animaties, transitions of keyframes.
+  expect(zonderCommentaar).not.toMatch(/\btransition\b/);
+  expect(zonderCommentaar).not.toMatch(/\banimation\b/);
+  expect(zonderCommentaar).not.toMatch(/@keyframes/);
+  /* En geen breekpunt meer. De bol stond in twee kolommen met een @media op 760 px;
+   * nu is het één flexkolom die op elke breedte hetzelfde staat, en de enige
+   * opstelling die nog van de breedte afhangt is die van de tab zelf
+   * (.module-grid.grid-2 in views.css, één kolom onder 900 px). Twee plekken die
+   * allebei een beetje aan de indeling doen is hoe die indeling gaat verschillen. */
+  expect(zonderCommentaar).not.toContain("@media");
+  expect(zonderCommentaar).not.toContain("lv-globe-stage");
+  expect(zonderCommentaar).not.toContain("lv-globe-side");
 });

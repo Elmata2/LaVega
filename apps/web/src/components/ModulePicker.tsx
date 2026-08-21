@@ -19,10 +19,16 @@ import {
  * it. Reached from the profile, and from "Widget toevoegen" in the header —
  * the same idea from the other end.
  *
- * Below it, the same picker for the two homescreen WIDGETS (Aandacht, Positie
- * per bedrijf). Same list, same switch, same wording — a card you switch on and
- * a tab you switch on are the same gesture, so they must not look like two
- * different mechanisms. */
+ * Below it, the same picker for the homescreen WIDGETS (Aandacht, Positie per
+ * bedrijf, Betaalagenda). Same list, same switch, same wording — a card you
+ * switch on and a tab you switch on are the same gesture, so they must not look
+ * like two different mechanisms.
+ *
+ * Eén verschil dat wél zichtbaar moet zijn: niet elke kaart begint uit. De
+ * Betaalagenda stond er al voordat er een schakelaar was, dus die begint aan
+ * (moduleRegistry, `defaultOn`). Dat staat als `note` op de rij zelf, want een
+ * schakelaar die aan staat terwijl de tekst erboven zegt dat alles uit begint,
+ * laat de lezer aan zichzelf twijfelen in plaats van aan de tekst. */
 
 /** One row: preview, label, one line, switch. Shared by both pickers so the
  *  two never drift apart visually. */
@@ -107,9 +113,9 @@ type WidgetPickerProps = {
   onChange: (next: WidgetId[]) => void;
 };
 
-/** The two cards on the homescreen that are a choice rather than a fixture.
- *  Nothing is locked here: a homescreen without either of them is still a
- *  homescreen, so both switches are always usable. */
+/** The cards on the homescreen that are a choice rather than a fixture.
+ *  Nothing is locked here: a homescreen without any of them is still a
+ *  homescreen, so every switch is always usable. */
 export function WidgetPicker({ enabled, onChange }: WidgetPickerProps) {
   const on = new Set<WidgetId>(enabled);
 
@@ -123,6 +129,7 @@ export function WidgetPicker({ enabled, onChange }: WidgetPickerProps) {
             preview={w.preview}
             label={w.label}
             what={w.what}
+            note={w.note}
             on={isOn}
             switchLabel={`${w.label} op je overzicht`}
             onToggle={() => onChange(toggleWidget(enabled, w.id, !isOn))}

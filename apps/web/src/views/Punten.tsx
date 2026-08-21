@@ -90,6 +90,10 @@ export type ProgramFacts = {
   packages: readonly string[];
   /** Waarom er geen koers per euro staat. */
   noRate: string;
+  /** Dezelfde mededeling in één regel, voor de plek waar de uitleg nog dicht
+   *  staat. Apart veld en geen afkapping van `noRate`: een halve zin over een
+   *  koers die niet bestaat is precies de zin die verkeerd wordt gelezen. */
+  noRateShort: string;
   /** De geldkant. `stated-none` = de aanbieder zegt zélf dat er geen geldwaarde
    *  is; dat is een bekende nul, met bron en datum, en geen "onbekend". */
   cash: { kind: "stated-none"; quote: string; source: string; validFrom: string };
@@ -122,6 +126,11 @@ const ING_PUNTEN: ProgramFacts = {
   ],
   noRate:
     "Er is geen aantal punten per bestede euro. “Meer dan € 100 uitgeven” levert bij € 100 evenveel punten op als bij € 4.000: het is een drempel, geen tarief. Door die drempel delen zou een koers opleveren die niet bestaat, dus die staat hier niet.",
+  // "per bestede euro" en niet "per euro": de test hieronder verbiedt die twee
+  // woorden naast elkaar in dit hele object, ook in een ontkenning. Bot, maar
+  // terecht — de regex kan geen ontkenning lezen, en één ontsnapping erin maakt
+  // hem waardeloos voor de zin die er ooit wél een koers van maakt.
+  noRateShort: "Geen koers per bestede euro: ING beloont drempels per maand, niet wat je uitgeeft.",
   cash: {
     kind: "stated-none",
     quote: "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
@@ -142,12 +151,44 @@ const ING_PUNTEN: ProgramFacts = {
 /** Programma's die deze view kent en core (nog) niet. Zie de kop hierboven. */
 export const EXTRA_PROGRAMS: readonly RewardProgram[] = [{ name: ING_PUNTEN.program, category: "Bank" }];
 
-/** De keuzelijst: core eerst, daarna wat deze view zelf kent, zonder dubbele
- *  namen. Zo blijft de bestaande lijst intact en komt ING Punten erbij. */
+/** Alles wat deze view over programma's weet: core eerst, daarna wat deze view
+ *  zelf kent, zonder dubbele namen. Dit is de OPZOEKLIJST — categorie, eenheid,
+ *  de note van core — en hij blijft compleet, ook voor namen die niet meer te
+ *  kiezen zijn (zie `PICK_PROGRAMS`). Een saldo dat ooit onder "ING" is
+ *  opgeslagen houdt zo zijn categorie in plaats van als "eigen programma" te
+ *  gaan lezen. */
 export const ALL_PROGRAMS: readonly RewardProgram[] = [
   ...REWARD_PROGRAMS,
   ...EXTRA_PROGRAMS.filter((e) => !REWARD_PROGRAMS.some((r) => norm(r.name) === norm(e.name))),
 ];
+
+/** TWEE KEER ING IN ÉÉN KEUZELIJST, en dat is wat hij zag.
+ *
+ *  Gemeten op 21 augustus, met een lege puntenlijst: de keuzelijst bood zowel
+ *  "ING" (de losse regel uit core) als "ING Punten" (de regel met de
+ *  gepubliceerde verdienregels) aan. Wie de eerste koos, kreeg een rij zonder
+ *  regels en zonder bron — dezelfde naam, het slechtere antwoord. De note die
+ *  core sinds 20 augustus bij "ING" draagt lost dat niet op, want die note wordt
+ *  nergens afgedrukt: `programUnit` leest hem alleen om te zien of er "cashback
+ *  in euro" in staat.
+ *
+ *  Waarom de core-regel hier wegvalt en niet in core zelf: die note gáát sinds
+ *  gisteren over ING Punten — hij noemt de drempels en citeert de voorwaarden —
+ *  dus de twee regels beschrijven aantoonbaar hetzelfde programma. Dat is de
+ *  toets die hieronder staat, en het is een toets op de INHOUD en niet alleen op
+ *  de naam: zodra core's "ING" ooit weer over iets anders gaat (een
+ *  cashbackactie), verandert die note en komt de regel vanzelf terug in de
+ *  keuzelijst. `rewards.ts` is deze run van een andere lane, dus opruimen doen we
+ *  hier; verdwijnt de dubbele regel daar, dan valt dit filter droog en kan het
+ *  weg zonder dat er iets aan het scherm verandert. */
+function describesFacts(p: RewardProgram): boolean {
+  return EXTRA_PROGRAMS.some(
+    (e) => norm(e.name) !== norm(p.name) && (p.note ?? "").includes(e.name),
+  );
+}
+
+/** De lijst waaruit hij KIEST: elk programma één keer. */
+export const PICK_PROGRAMS: readonly RewardProgram[] = ALL_PROGRAMS.filter((p) => !describesFacts(p));
 
 /** De gepubliceerde regels van dit programma, of null als we ze niet hebben.
  *  Matcht alleen op de canonieke naam: de losse core-regel "ING" kan iets anders
@@ -175,13 +216,23 @@ export function worthLine(program: string, unit: "eur" | "points"): string {
 }
 
 /** De gepubliceerde regels, uitgeschreven. Alles wat hier een euroteken heeft is
- *  een DREMPEL van de aanbieder; er staat nergens wat een punt waard is. */
+ *  een DREMPEL van de aanbieder; er staat nergens wat een punt waard is.
+ *
+ *  OPGEVOUWEN, met het antwoord op de vouw. Negen verdienregels, vier pakketten,
+ *  twee onbekenden en twee bronnen: als dat allemaal openstaat leest de kaart als
+ *  een voorwaardendocument in plaats van als een saldo (app review 4, het thema
+ *  boven alle punten). Wat NIET meevouwt is de mededeling zelf — "geen koers per
+ *  euro" staat in de samenvatting, want dat is het antwoord op zijn vraag en niet
+ *  de onderbouwing ervan. De onderbouwing blijft volledig en één klik weg; dicht
+ *  staat ze nog steeds in de DOM, dus ctrl-F en een schermlezer vinden haar. */
 function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
   return (
-    <div className="field-note punt-facts">
-      <p className="punt-facts-lead">
-        <strong>Zo spaar je {facts.program}.</strong> {facts.noRate}
-      </p>
+    <details className="field-note punt-facts">
+      <summary className="punt-facts-lead" style={{ cursor: "pointer" }}>
+        <strong>Zo spaar je {facts.program}.</strong> {facts.noRateShort}{" "}
+        <span className="eyebrow">Toon de regels</span>
+      </summary>
+      <p style={{ margin: "0.5rem 0 0" }}>{facts.noRate}</p>
       <ul className="punt-facts-earn" style={{ margin: "0.5rem 0", paddingLeft: "1.1rem" }}>
         {facts.earn.map((r) => (
           <li key={r.what}>
@@ -200,7 +251,7 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
       <p className="eyebrow" style={{ margin: "0.5rem 0 0" }}>
         Bron: {facts.sources.join(" — ")}
       </p>
-    </div>
+    </details>
   );
 }
 
@@ -218,6 +269,92 @@ export function programUnit(program: string): "eur" | "points" {
  *  programme the owner typed himself — we don't invent one for it. */
 export function programCategory(program: string): string | null {
   return ALL_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
+}
+
+/* ---------------------------------------------------------------------------
+ * ALLE PROGRAMMA'S OP HET SCHERM — waarom dit blok er is.
+ *
+ * "Waarom staan de ING-punten er niet?" (app review 4, punt 29 — en het is de
+ * derde keer dat ING terugkomt). Gemeten voordat er iets veranderde: met een
+ * lege puntenlijst kwam het woord ING op dit scherm NERGENS voor. Niet omdat het
+ * programma ontbrak — het stond in de keuzelijst, zelfs twee keer — maar omdat
+ * de keuzelijst een <datalist> is. Die is onzichtbaar tot je in het veld begint
+ * te typen, en dit scherm toonde verder alleen kaarten voor saldi die hij al had
+ * ingevoerd. Een programma zonder saldo bestond dus visueel niet, en "ik zie het
+ * niet" is dan een juiste waarneming en geen vergissing van hem.
+ *
+ * Dit blok zet die lijst op het scherm: elk programma dat LaVega kent, met zijn
+ * saldo als hij er een heeft en met "nog geen saldo" als hij er geen heeft. Dat
+ * antwoordt in één keer op punt 29 (ING is er, en je kunt hem hier kiezen) en op
+ * punt 30 (toon Amex en alle andere punten).
+ *
+ * WAT ER NIET STAAT IS EEN NUL. "Nog geen saldo" is een lege plek, geen 0
+ * punten; de eerste is waar en de tweede zou een bewering zijn over een rekening
+ * die we nooit hebben gezien.
+ * ------------------------------------------------------------------------- */
+
+export type RosterRow = {
+  name: string;
+  /** "Bank", "Airline", … of "eigen programma" voor iets dat hij zelf typte. */
+  category: string;
+  unit: "eur" | "points";
+  /** Zijn eigen ingevoerde saldo, of null — nooit een nul die daarvoor doorgaat. */
+  balance: RewardsBalance | null;
+  /** Eén regel over de koers, alleen waar we er een hebben. Null = we hebben
+   *  hier niets te melden, en dan staat er ook niets. */
+  rateNote: string | null;
+};
+
+/** Wat er over de koers van dit programma te zeggen valt in één regel.
+ *
+ *  Drie uitkomsten en niet meer: gepubliceerde regels (dan staat er waarom er
+ *  geen koers per euro is), een programma dat in euro's uitkeert (dan is het
+ *  saldo de waarde), en verder niets. Die laatste is bewust leeg: dezelfde zin
+ *  ("wat een punt waard is hangt af van hoe je hem inwisselt") acht keer onder
+ *  elkaar is geen informatie meer, en hij staat één keer boven de lijst. */
+function rateNoteFor(program: string, unit: "eur" | "points"): string | null {
+  const facts = programFacts(program);
+  if (facts) return facts.noRateShort;
+  return unit === "eur" ? "Keert uit in euro's; het saldo is de waarde." : null;
+}
+
+/** De lijst zoals hij op het scherm komt: eerst de programma's waar hij een
+ *  saldo van heeft, dan de rest in de volgorde van de referentielijst. Programma's
+ *  die hij zelf heeft getypt staan er ook bij — anders zou "alle programma's" een
+ *  lijst zijn die zijn eigen invoer weglaat.
+ *
+ *  Geen `asOf` en geen statusberekening hier: dit blok zegt WAT er is en van
+ *  wanneer, de kaarten hierboven zeggen wat er moet gebeuren. Twee keer dezelfde
+ *  aanmaning op één scherm maakt geen van beide dringender. */
+export function programRoster(balances: readonly RewardsBalance[]): RosterRow[] {
+  const byId = new Map(balances.map((b) => [b.id, b]));
+  const row = (name: string, category: string, balance: RewardsBalance | null): RosterRow => {
+    const unit = programUnit(name);
+    return { name, category, unit, balance, rateNote: rateNoteFor(name, unit) };
+  };
+  const listed = PICK_PROGRAMS.map((p) => row(p.name, p.category, byId.get(norm(p.name)) ?? null));
+  const listedIds = new Set(PICK_PROGRAMS.map((p) => norm(p.name)));
+  const own = balances
+    .filter((b) => !listedIds.has(b.id))
+    .map((b) => row(b.program, programCategory(b.program) ?? "eigen programma", b));
+  const all = [...listed, ...own];
+  return [...all.filter((r) => r.balance !== null), ...all.filter((r) => r.balance === null)];
+}
+
+/** Het cijfer in de regel, met de DATUM eraan vast.
+ *
+ *  Een saldo zonder datum is niet half zo goed als een saldo met datum, het is
+ *  iets anders: niemand kan zien of het van gisteren of van vorig jaar is. Dat
+ *  wordt straks nog belangrijker — het idee is dat de extensie deze getallen
+ *  gebruikt en af en toe om een verversing vraagt, en "af en toe" heeft een
+ *  ijkpunt nodig. */
+export function rosterFigure(r: RosterRow): string {
+  if (r.balance === null) return "nog geen saldo";
+  const amount =
+    r.unit === "eur"
+      ? `${formatEuro(r.balance.points)} cashback`
+      : `${r.balance.points.toLocaleString("nl-NL")} ${r.balance.points === 1 ? "punt" : "punten"}`;
+  return `${amount} — van ${dateNL(r.balance.updatedAt)}`;
 }
 
 /** A programme id (a normalised name, so it carries spaces) turned into
@@ -280,6 +417,59 @@ const INTERVALS: { days: number; label: string }[] = [
   { days: 180, label: "elk half jaar" },
   { days: 365, label: "elk jaar" },
 ];
+
+/** De lijst met alle programma's. Eén regel per programma, en de knop richt het
+ *  formulier onderaan op dat programma — hij hoeft de naam dus niet over te
+ *  typen, en een typefout kan geen tweede rij voor hetzelfde programma maken.
+ *
+ *  Geen eigen CSS: dit blok leunt op klassen die er al zijn (`field-note`,
+ *  `eyebrow`, `cell-sub`, `card-link`) plus wat plaatsing inline, want
+ *  styles/views.css is deze run van een andere lane. Komt er ooit een eigen
+ *  regel in dat bestand, dan kunnen deze inline-stijlen weg. */
+function ProgramRoster({
+  rows, busy, onPick,
+}: { rows: RosterRow[]; busy: boolean; onPick: (program: string) => void }) {
+  return (
+    <div className="punt-roster">
+      <div className="view-head">
+        <h3>Alle programma's</h3>
+        <span className="eyebrow">
+          {rows.filter((r) => r.balance !== null).length} van {rows.length} met een saldo
+        </span>
+      </div>
+      <ul className="punt-roster-list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {rows.map((r) => (
+          <li
+            key={r.name}
+            className="punt-roster-row"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "baseline",
+              gap: "0.6rem",
+              padding: "0.45rem 0",
+              borderTop: "1px solid var(--line)",
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>{r.name}</span>
+            <span className="eyebrow">{r.category}</span>
+            <span className="cell-sub" style={{ marginLeft: "auto" }}>
+              {rosterFigure(r)}
+            </span>
+            <button type="button" className="card-link" disabled={busy} onClick={() => onPick(r.name)}>
+              {r.balance === null ? "Saldo invullen" : "Bijwerken"}
+            </button>
+            {r.rateNote ? (
+              <span className="cell-sub" style={{ flexBasis: "100%" }}>
+                {r.rateNote}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function Punten({
   balances, asOf, busy, onSave,
@@ -364,12 +554,33 @@ export default function Punten({
     onSave(balances.map((b) => (b.id === id ? { ...b, intervalDays: days } : b)));
   }
 
+  /** De knop uit de programmalijst richt het formulier hieronder op dat
+   *  programma. Hij typt de naam dus niet over, en een typefout kan geen tweede
+   *  rij voor hetzelfde programma maken — de rij-id is de genormaliseerde naam,
+   *  dus "Marriot Bonvoy" zou een eigen rij worden naast "Marriott Bonvoy".
+   *
+   *  Het getalveld gaat leeg: een getal dat er nog van een ander programma stond
+   *  hoort niet mee te verhuizen. De datum blijft staan zoals hij hem heeft gezet
+   *  — die heeft hij zelf ingevuld, en zijn invoer overschrijven omdat hij een
+   *  knop indrukt is precies het soort stille wijziging dat hier niet mag. */
+  function pick(name: string) {
+    setProgram(name);
+    setPoints("");
+    setAddError("");
+  }
+
   return (
     <section className="card" aria-label="Punten">
       <div className="view-head">
         <h2>Punten</h2>
+        {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
+            cijfer van heeft ingevoerd, en zolang dat de enige lijst op het scherm
+            was, was "programma's" daar het goede woord voor. Sinds de
+            programmalijst eronder staat is het dat niet meer: "0 programma's"
+            stond boven een scherm dat er tien opsomde, en dan is een van de twee
+            fout. Wat er wordt geteld, staat er nu ook. */}
         <span className="eyebrow">
-          {rows.length} {rows.length === 1 ? "programma" : "programma's"}
+          {rows.length} {rows.length === 1 ? "saldo" : "saldi"}
           {attention > 0 ? ` · ${attention} te bevestigen` : ""}
         </span>
       </div>
@@ -378,13 +589,25 @@ export default function Punten({
         niets op bij het programma — er is geen koppeling — en telt programma's niet bij elkaar op:
         een Avios en een Bonvoy-punt zijn niet hetzelfde ding.
       </p>
-      <p className="field-note">
-        <strong>Geen puntenwaarde in euro's.</strong> Wat één punt waard is, hangt af van hoe je hem
-        inwisselt — als tegoed op je rekening is dat een fractie van wat een transfer naar een
-        luchtvaartprogramma kan opleveren. Eén bedrag zou dus een verzonnen bedrag zijn. Cashback is de
-        uitzondering: die staat al in euro's. Vraag de assistent rechtsonder naar actuele inwissel- en
-        transferwaardes.
-      </p>
+      {/* De onderbouwing staat er nog helemaal, maar opgevouwen. Het scherm moet
+          met een saldo beginnen en niet met een alinea over wat er níét staat —
+          dezelfde reden waarom hij dit voor de categorielijst en de grafieken
+          vroeg. Native <details>: dicht blijft de tekst in de DOM (dus vindbaar
+          met ctrl-F en voor een schermlezer), en er komt geen component uit een
+          ander bestand aan te pas. */}
+      <details className="field-note punt-waarom">
+        <summary style={{ cursor: "pointer" }}>
+          <strong>Geen euro-waarde bij punten.</strong> Een saldo in punten is een feit; een bedrag in
+          euro's zou een schatting zijn. <span className="eyebrow">Toon waarom</span>
+        </summary>
+        <p style={{ margin: "0.5rem 0 0" }}>
+          Wat één punt waard is, hangt af van hoe je hem inwisselt — als tegoed op je rekening is dat een
+          fractie van wat een transfer naar een luchtvaartprogramma kan opleveren. Eén bedrag zou dus een
+          verzonnen bedrag zijn. Cashback is de uitzondering: die staat al in euro's, want dat ís de
+          eenheid — er zit geen omrekening tussen. Vraag de assistent rechtsonder naar actuele inwissel-
+          en transferwaardes.
+        </p>
+      </details>
 
       {rows.length === 0 ? (
         <div className="empty-guide">
@@ -506,6 +729,8 @@ export default function Punten({
         </p>
       ) : null}
 
+      <ProgramRoster rows={programRoster(balances)} busy={busy} onPick={pick} />
+
       <div className="view-head">
         <h3>Saldo toevoegen</h3>
         <span className="eyebrow">of een bestaand programma overschrijven</span>
@@ -517,8 +742,10 @@ export default function Punten({
             <input list="reward-programs" value={program} disabled={busy} aria-label="Programma"
               placeholder="bijv. Marriott Bonvoy"
               onChange={(e) => setProgram(e.target.value)} />
+            {/* PICK_PROGRAMS en niet ALL_PROGRAMS: elk programma één keer. Zie
+                daar waarom core's losse "ING" hier niet meer bij staat. */}
             <datalist id="reward-programs">
-              {ALL_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
+              {PICK_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
             </datalist>
           </label>
           <label>
@@ -535,10 +762,11 @@ export default function Punten({
           </label>
         </div>
         {addFacts ? <ProgramFactsBlock facts={addFacts} /> : null}
-        {/* De keuzelijst kent ook een losse regel "ING", en die kan iets anders
-            zijn (een cashbackactie). Wie ING Punten bedoelt en "ING" kiest,
-            krijgt een rij zonder verdienregels. Deze wijzer kan hier wél werken:
-            de optie staat in dezelfde lijst, één veld hoger. */}
+        {/* "ING" is uit de keuzelijst verdwenen (zie PICK_PROGRAMS), maar hij kan
+            het nog steeds typen — en het is precies wat je typt als je ING Punten
+            zoekt. Dan levert opslaan een rij zonder verdienregels op, met een
+            eigen id, náást ING Punten. Deze wijzer kan hier wél werken: de optie
+            staat één veld hoger in dezelfde lijst. */}
         {norm(program) === "ing" ? (
           <p className="field-note">
             Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar staan de

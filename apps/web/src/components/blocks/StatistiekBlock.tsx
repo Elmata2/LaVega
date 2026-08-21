@@ -8,6 +8,7 @@ import WeekdayBars from "./WeekdayBars.js";
 import { dayLabelYearNL, rangeLabelNL } from "./dates.js";
 import { monthLabelNL } from "../../format.js";
 import SpendPie from "../SpendPie.js";
+import ToonMeer from "../ToonMeer.js";
 import {
   categoryGrowth,
   categoryShare,
@@ -61,6 +62,47 @@ import {
  * line under the chart names the amount, the category and the reason, in every
  * view, because a diagram that quietly drops € 20.000 is worse than one that
  * mis-sorts it. */
+
+/* SAMENVATTING VOORAAN, ONDERBOUWING OPGEVOUWEN (review 4, punten 2 en 3).
+ * "The usual should be just the graphs and the numbers, and all the text below
+ * it should be a show more." Dat is hier uitgevoerd met ToonMeer, en de
+ * scheidslijn ligt niet bij "lange tekst" maar bij WAT DE ZIN IS:
+ *
+ *   BLIJFT STAAN  de uitkomst zelf. De piekdagzin, de grootste stijger, de
+ *                 percentiellijst ("hoger dan 8 van je laatste 10 maanden"), de
+ *                 twee totalen — en elke WEIGERING ("te weinig maanden om dit
+ *                 te kunnen zeggen", "nog geen uitgaven in deze periode"). Een
+ *                 weigering opvouwen laat het scherm leeg lijken terwijl er
+ *                 iets te zeggen valt; dat is een leugen met minder letters.
+ *   VOUWT OP      de onderbouwing: waartegen vergeleken is, welke dagen naast
+ *                 welke liggen, waarom een categorie niet in de grafiek staat.
+ *
+ * En wat opgevouwen wordt, wordt niet gewist: het label van elke regel draagt
+ * de FEITEN mee die je zonder hem zou missen — hoeveel categorieën weggelaten
+ * zijn, hoeveel maanden zonder afschrift, welk bedrag buiten de cijfers is
+ * gehouden. Zo staat het cijfer op de voorgrond en is de herkomst één klik weg
+ * in plaats van zoek. Vandaar ook dat geen enkel label "meer informatie" heet:
+ * een regel die niets belooft is een regel waar niemand op klikt, en dan is de
+ * onderbouwing niet opgevouwen maar kwijt. */
+
+/** Het label van de opgevouwen regel onder de categoriegrafiek: wat er buiten
+ *  de grafiek is gebleven, geteld, met de uitleg erachter.
+ *
+ *  De TELLINGEN staan met opzet in het label en niet in het paneel. Drie
+ *  weggelaten categorieën en twee maanden zonder afschrift zijn geen
+ *  onderbouwing maar een gat in het beeld; wie de regel dichtlaat moet nog
+ *  steeds weten dát het er is. Puur en geëxporteerd, zodat de telling los van
+ *  een render te controleren is.
+ *
+ *  Geeft `null` terug als er niets weggelaten is — dan hoort er ook geen regel
+ *  te staan die belooft dat er iets te zien valt. */
+export function weggelatenLabelNL(counts: { maanden: number; klein: number; gecapt: number }): string | null {
+  const delen: string[] = [];
+  if (counts.maanden > 0) delen.push(`${counts.maanden} maand${counts.maanden === 1 ? "" : "en"} zonder afschrift`);
+  if (counts.klein > 0) delen.push(`${counts.klein} kleinere categorie${counts.klein === 1 ? "" : "ën"}`);
+  if (counts.gecapt > 0) delen.push(`${counts.gecapt} categorie${counts.gecapt === 1 ? "" : "ën"} buiten de grafiek`);
+  return delen.length === 0 ? null : `Wat hier niet in staat: ${delen.join(" · ")}`;
+}
 
 export type StatPeriod = StatPreset | "aangepast";
 
@@ -204,14 +246,26 @@ function PercentielLijst({ result, categories }: { result: SpendPercentiles; cat
 
   return (
     <div className="lv-percentiel">
-      <p className="lv-percentiel-basis">
-        <strong>{month} tegenover je eerdere maanden.</strong>{" "}
-        {result.comparedDays === null
-          ? `De hele maand, naast de ${n} volledige maanden ervoor.`
-          : `Deze maand loopt nog: ${rangeLabelNL(result.current.start, through)} is ${result.comparedDays} dagen, en daar liggen dezelfde eerste ${result.comparedDays} dagen van de ${n} maanden ervoor naast.`}
-        {result.shortPeriods > 0 &&
-          ` ${result.shortPeriods} ${result.shortPeriods === 1 ? "maand telt" : "maanden tellen"} niet mee — korter dan ${result.comparedDays} dagen.`}
-      </p>
+      {/* De KOP blijft staan, de telling gaat achter het ⓘ. Welke maand met
+          welke maanden vergeleken wordt, mag niet opvouwen — "hoger dan 8 van
+          je laatste 10 maanden" is zonder die noemer een zwevende bewering, en
+          stil vergelijken was hier vanaf het begin verboden. Wát er precies
+          naast gelegd is (de eerste 14 dagen van elke maand, welke maanden
+          afvielen) is de onderbouwing daarvan en die vouwt wel op. */}
+      <ToonMeer
+        variant="info"
+        className="lv-percentiel-basis"
+        heading={<strong>{month} tegenover je eerdere maanden.</strong>}
+        summary="Welke dagen naast welke zijn gelegd"
+      >
+        <p>
+          {result.comparedDays === null
+            ? `De hele maand, naast de ${n} volledige maanden ervoor.`
+            : `Deze maand loopt nog: ${rangeLabelNL(result.current.start, through)} is ${result.comparedDays} dagen, en daar liggen dezelfde eerste ${result.comparedDays} dagen van de ${n} maanden ervoor naast.`}
+          {result.shortPeriods > 0 &&
+            ` ${result.shortPeriods} ${result.shortPeriods === 1 ? "maand telt" : "maanden tellen"} niet mee — korter dan ${result.comparedDays} dagen.`}
+        </p>
+      </ToonMeer>
       <ul className="lv-percentiel-lijst">
         {rows.map((r) => (
           <li key={r.category} className="lv-percentiel-rij">
@@ -410,6 +464,24 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   const capped = hidden.filter((h) => !h.belowThreshold);
   const smallOut = small.reduce((s, h) => s + h.out, 0);
 
+  /* Het label van de opgevouwen regel onder de categoriegrafiek. De telling van
+     de kleine categorieën staat er alleen in als de zin eronder ook echt komt:
+     die zin noemt het venster waarvoor de grens geldt, en zonder `covered` is er
+     geen venster om te noemen — dan zou het label iets beloven wat het paneel
+     niet levert. Dezelfde voorwaarde dus als bij de <p> zelf. */
+  const weggelaten = weggelatenLabelNL({
+    maanden: emptyMonths.length,
+    klein: perCategory?.covered ? small.length : 0,
+    gecapt: capped.length,
+  });
+
+  /* Wat er in totaal buiten elk cijfer in dit blok is gebleven. Dit bedrag hoort
+     op de voorgrond en niet in het paneel: de reden dat deze regel bestaat is
+     dat een ring die stil € 20.000 laat vallen erger is dan een die het
+     verkeerd sorteert, en dat blijft waar als je de reden opvouwt. Opgevouwen
+     wordt dus alleen het WAAROM, niet het HOEVEEL. */
+  const movedOut = moved.reduce((sum, m) => sum + m.outCents, 0);
+
   return (
     <Module
       title="Statistieken"
@@ -519,29 +591,38 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     height={196}
                   />
                 </div>
-                {emptyMonths.length > 0 && (
-                  <p className="cell-sub">
-                    Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} — daar is geen afschrift van
-                    geïmporteerd. Een lege maand is geen maand zonder uitgaven.
-                  </p>
-                )}
-                {/* What was folded away, split the way core splits it: too
-                    small against THIS window (the floor scales with the window,
-                    so the sentence names the window and the floor), or simply
-                    past the chart's cap. Two different facts, two sentences. */}
-                {small.length > 0 && perCategory.covered && (
-                  <p className="cell-sub">
-                    {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet getoond in{" "}
-                    {rangeLabelNL(perCategory.covered.start, perCategory.covered.end)}: samen {formatEuro(smallOut)},
-                    elk onder {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over deze{" "}
-                    {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
-                  </p>
-                )}
-                {capped.length > 0 && (
-                  <p className="cell-sub">
-                    Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de grafiek:{" "}
-                    {capped.map((h) => h.category).join(", ")}.
-                  </p>
+                {/* Drie notities die alle drie hetzelfde zeggen — "dit zie je
+                    niet in de grafiek" — dus één regel, met de telling in het
+                    label en de reden erachter. Los van elkaar opvouwen zou drie
+                    regels onder de grafiek zetten en dat is precies de drukte
+                    waar dit vanaf moest. In het paneel houden ze wél hun eigen
+                    zin: te klein tegen DIT venster (de grens schaalt mee, dus de
+                    zin noemt het venster en de grens), voorbij de cap van de
+                    grafiek, en een maand waar geen afschrift van is — drie
+                    verschillende feiten, drie zinnen, één regel. */}
+                {weggelaten !== null && (
+                  <ToonMeer summary={weggelaten}>
+                    {emptyMonths.length > 0 && (
+                      <p className="cell-sub">
+                        Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} — daar is geen afschrift
+                        van geïmporteerd. Een lege maand is geen maand zonder uitgaven.
+                      </p>
+                    )}
+                    {small.length > 0 && perCategory.covered && (
+                      <p className="cell-sub">
+                        {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet getoond in{" "}
+                        {rangeLabelNL(perCategory.covered.start, perCategory.covered.end)}: samen{" "}
+                        {formatEuro(smallOut)}, elk onder {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over
+                        deze {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
+                      </p>
+                    )}
+                    {capped.length > 0 && (
+                      <p className="cell-sub">
+                        Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de grafiek:{" "}
+                        {capped.map((h) => h.category).join(", ")}.
+                      </p>
+                    )}
+                  </ToonMeer>
                 )}
                 {/* Waar deze maand ligt in zijn eigen eerdere maanden. Alleen in
                     deze weergave: hier staan de maanden al als staven, dus de
@@ -585,10 +666,16 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   format={formatEuro}
                   ariaLabel={`Verschil per categorie tegenover de ${windowDays} dagen ervoor`}
                 />
-                <p className="cell-sub">
-                  Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
-                  dezelfde lengte als de gekozen periode. Alleen uitgaven.
-                </p>
+                {/* De zin boven de staven zegt WAT er gestegen is en met
+                    hoeveel; dit zegt welke dagen dat "ervoor" precies zijn en
+                    dat alleen uitgaven meetellen. Dat tweede is de onderbouwing
+                    van het eerste, dus het staat eronder en het staat dicht. */}
+                <ToonMeer summary="Welke periode ernaast ligt, en wat er meetelt">
+                  <p className="cell-sub">
+                    Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
+                    dezelfde lengte als de gekozen periode. Alleen uitgaven.
+                  </p>
+                </ToonMeer>
               </>
             )
           ) : !enoughWeekdayHistory ? (
@@ -611,15 +698,7 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                         {Math.round(peak.pctVsAverage)}% meer dan een gewone dag
                       </>
                     )}
-                    {". "}
-                    {/* What "gemiddeld" means, in the sentence itself rather
-                        than in a footnote: per OCCURRENCE of that weekday, so
-                        the day that happened most often does not win by
-                        happening. */}
-                    <span className="stat-insight-basis">
-                      Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt mee, ook de dagen
-                      zonder transactie.
-                    </span>
+                    {"."}
                   </>
                 )}
               </p>
@@ -639,6 +718,22 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                 averageLabel="gewone dag"
                 height={196}
               />
+              {/* Wat "gemiddeld" hier betekent: per VOORKOMEN van die weekdag,
+                  zodat de dag die het vaakst langskwam niet wint door langs te
+                  komen. Dat is de definitie van het getal en niet het getal
+                  zelf, dus het zakt achter de regel — met het aantal dagen in
+                  het label, want dat is waar de betrouwbaarheid van het
+                  gemiddelde aan af te lezen is. Alleen als er een piek IS: bij
+                  "geen enkele weekdag springt eruit" valt er niets te
+                  onderbouwen. */}
+              {peak !== null && (
+                <ToonMeer summary={`Waarop dit gemiddelde rust: ${weekdays?.spanDays} dagen`}>
+                  <p className="stat-insight-basis">
+                    Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt mee, ook de dagen
+                    zonder transactie.
+                  </p>
+                </ToonMeer>
+              )}
             </>
           )}
 
@@ -648,17 +743,27 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
               money as neither spending nor income. Amount first — it is the
               number he was looking for — then the reason. */}
           {moved.length > 0 && (
-            <p className="cell-sub stat-moved">
-              <strong>Buiten deze cijfers gehouden:</strong>{" "}
-              {moved.map((m, i) => (
-                <span key={m.category}>
-                  {i > 0 && " · "}
-                  {euroFromCents(m.outCents)} aan {m.category} — {m.why}
-                  {m.inCents > 0 && <> (waarvan {euroFromCents(m.inCents)} weer terugkwam)</>}
-                </span>
-              ))}
-              . Dat is geen uitgave: het is dezelfde euro op een andere plek.
-            </p>
+            <ToonMeer
+              className="stat-moved"
+              /* Het BEDRAG staat in het label en niet in het paneel. Dit is de
+                 regel die bestaat omdat € 20.000 ooit stil uit de ring viel; als
+                 het bedrag mee naar binnen zou vouwen, valt het opnieuw stil weg
+                 en is er niets gewonnen behalve rust. Wat wél opvouwt is de
+                 verdeling over de categorieën, de reden per categorie en het
+                 deel dat weer terugkwam. */
+              summary={`Buiten deze cijfers gehouden: ${euroFromCents(movedOut)}`}
+            >
+              <p className="cell-sub">
+                {moved.map((m, i) => (
+                  <span key={m.category}>
+                    {i > 0 && " · "}
+                    {euroFromCents(m.outCents)} aan {m.category} — {m.why}
+                    {m.inCents > 0 && <> (waarvan {euroFromCents(m.inCents)} weer terugkwam)</>}
+                  </span>
+                ))}
+                . Dat is geen uitgave: het is dezelfde euro op een andere plek.
+              </p>
+            </ToonMeer>
           )}
 
           {/* Totals over the window, not a monthly average: with a one-week

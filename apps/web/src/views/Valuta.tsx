@@ -11,9 +11,10 @@ import {
   rankFxRoutes,
 } from "@lavega/core";
 import { API_BASE } from "../api";
-import Module, { ModuleMenu } from "../components/Module";
+import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import Globe from "../components/Globe";
+import ToonMeer from "../components/ToonMeer";
 // DEZELFDE WOORDEN ALS OP OVERZICHT, met opzet en niet uit gemak. Wat een kaart
 // kost en wat er netto overblijft wordt daar al in drie toestanden verteld, en
 // twee schermen die hetzelfde zeggen in andere woorden is een fout op zichzelf:
@@ -225,8 +226,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
   const [toKey, setToKey] = useState(NO_ACCOUNT);
   const [pickedBank, setPickedBank] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
-  const [showSource, setShowSource] = useState(false);
+  /* Er stond hier ook `showInfo` en `showSource`: twee useState-vlaggen met elk
+   * een eigen knop in de modulekop. Die zijn weg — het uitklappen zit nu in
+   * <ToonMeer>, en dat houdt zijn stand in de <details> zelf. Scheelt twee
+   * toestanden die niets met de berekening te maken hadden. */
 
   useEffect(() => {
     let ok = true;
@@ -343,33 +346,51 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
   const available = (a: Account | null) =>
     a === null ? "—" : a.balance === null ? "onbekend" : fmt(a.balance, a.currency || "EUR");
 
+  /** Het opschrift van de uitgeklapte bankenlijst. Het moet een belofte zijn en
+   *  geen "meer informatie" — met het aantal erin weet je meteen of het de moeite
+   *  is om open te klikken. Zonder banken belooft hij iets anders, want dan zit er
+   *  geen lijst achter maar een uitleg waarom die er niet is. */
+  const bankenLabel =
+    routes.length === 0
+      ? "Waarom er nog geen bank te rangschikken is"
+      : `Alle ${routes.length} banken, goedkoopste eerst`;
+
   return (
     <>
       <div className="view-head">
         <h2>Geld overzetten</h2>
-        <span className="eyebrow">live ECB-middenkoers · koersopslag per bank uit de catalogus</span>
+        {/* De kop volgt de koers die er ECHT ligt. Hier stond "live ECB-middenkoers"
+            als vaste tekst, en dat is de eerste regel van het scherm die onwaar is
+            zodra de aanroep niet aankomt: dan rekent de tab met de meegebundelde
+            momentopname van begin augustus terwijl er "live" boven staat. */}
+        <span className="eyebrow">
+          {source === "live" ? "live ECB-middenkoers" : `ECB-middenkoers van ${rate.date} uit de app`} · koersopslag
+          per bank uit de catalogus
+        </span>
       </div>
 
+      {/* DE INDELING VAN 21 AUGUSTUS. Zijn woorden: rekenmachine links, bol rechts,
+          de informatie die rechts stond naar onder de rekenmachine achter "toon
+          meer", en onder de bol de legenda met het zoekveld eronder. "Keep it very
+          simple."
+
+          Wat er vóór stond: twee even zware kolommen — overzetten links, de
+          bankenlijst rechts — en de bol op de volle breedte eronder. Daarmee stond
+          de lijst met 73 banken naast het bedrag alsof je die eerst moest lezen,
+          terwijl het antwoord (wat komt er aan, en via welke bank) al links stond.
+          De lijst is de onderbouwing van dat antwoord, dus hij hoort eronder en
+          opgevouwen.
+
+          OP EEN SMAL SCHERM bestaat links en rechts niet. `grid-2` valt onder
+          900 px terug op één kolom, en dan staat de rekenmachine bovenaan en de bol
+          eronder. Dat is de goede volgorde en geen toeval van de bronvolgorde: de
+          rekenmachine is waarmee je werkt — bedrag, van, naar, wat er aankomt — en
+          de bol is één van de drie manieren om de doelvaluta te kiezen, naast het
+          dropdown en het kiezen van een rekening. Wie de code van de valuta al weet
+          hoeft de bol nooit te zien; wie hem niet weet scrollt één scherm. Andersom
+          zou iedereen langs een bol van 420 px moeten om bij het bedrag te komen. */}
       <ModuleGrid className="grid-2" label="Valuta">
-        <Module
-          title="Overzetten"
-          height="tall"
-          menu={
-            <>
-              <button
-                type="button"
-                className="module-info"
-                aria-label="Uitleg bij dit bedrag"
-                aria-expanded={showInfo}
-                title="Uitleg bij dit bedrag"
-                onClick={() => setShowInfo((v) => !v)}
-              >
-                <span aria-hidden="true">i</span>
-              </button>
-              <ModuleMenu label="Koersbron" onClick={() => setShowSource((v) => !v)} />
-            </>
-          }
-        >
+        <Module title="Overzetten" height="tall">
           <div className="xfer">
             <div className="xfer-leg">
               <div className="xfer-leg-head">
@@ -430,6 +451,11 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             </div>
           </div>
 
+          {/* WAT ER VOOR DE PLOOI BLIJFT STAAN, en waarom het geen onderbouwing is:
+              dit zijn de twee antwoorden van dit scherm. Wat komt er aan (met de
+              route waarmee dat gerekend is, want een bedrag zonder route is niet na
+              te rekenen), en of overstappen loont. Alles wat uitlegt HOE we daaraan
+              komen — de hele rangschikking, de bronnen — staat hieronder opgevouwen. */}
           <p className="reason" style={{ marginTop: "var(--sp-4)" }} data-testid="uitleg">
             {netReceived === null ? (
               <>
@@ -518,115 +544,138 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             </>
           )}
 
-          {showSource && (
-            <div className="info-panel">
-              <p>
-                <strong>Koers:</strong> {source === "live" ? `live ECB-middenkoers via Frankfurter, peildatum ${rate.date}` : `offline momentopname van ${rate.date}`}.
-              </p>
-              <p>
-                <strong>Kosten:</strong> de koersopslag zoals de bank die zelf in haar tarievenoverzicht noemt.
-                Elke regel draagt de bron en de datum die dat document noemt.
-              </p>
-              <p>Er wordt niets over je rekeningen verstuurd om die koers of die tarieven op te halen.</p>
-            </div>
-          )}
-
-          {showInfo && (
-            <div className="info-panel">
-              <p>
-                <strong>De lijst gaat over alle banken die LaVega kan onderbouwen</strong> — niet alleen die van
-                jou. Standaard rekent LaVega met de goedkoopste route die je vandaag echt kunt gebruiken; een bank
-                die je niet hebt staat erbij, met het verschil in euro's, maar wordt nooit stilzwijgend gekozen.
-              </p>
-              <p>
-                Eén regel per bank: bij overzetten maakt het product niet uit, dus dezelfde bank staat niet
-                driemaal in de lijst. Welk product achter het tarief zit, staat er wel bij — "ING 0%" geldt alleen
-                voor de Platinumcard.
-              </p>
-              {costPct === null ? (
-                <p>{noRouteReason()} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een onbekend tarief is geen 0%.</p>
-              ) : (
-                <p>
-                  <strong>Waar overstappen je zou verslaan:</strong> je huidige keuze kost {pctText(costPct)}.
-                  Elke bank die minder rekent, houdt op dit bedrag meer dan {fmt(costInFrom ?? 0, from)} voor je
-                  over — aan koersopslag. Wat die rekening kost om te openen gaat daar nog vanaf, en dat is
-                  precies waarom de volgorde niet op het percentage gaat.
-                </p>
-              )}
-              {heldUnknown.length > 0 && (
+          {/* DE BANKENLIJST, opgevouwen. Dit was de rechterkolom.
+              De klasse is een aanknopingspunt voor de test en niet voor de vorm —
+              er staat geen enkele CSS-regel op — want de twee panelen hieronder
+              zijn alleen uit elkaar te houden aan hun opschrift, en dat opschrift
+              verandert met het aantal banken. */}
+          <ToonMeer className="valuta-banken" summary={bankenLabel}>
+            {routes.length === 0 ? (
+              <div className="empty-guide">
+                <p>Nog geen bank om te rangschikken.</p>
+                <ul>
+                  <li>De catalogus levert de tarieven; die zit in de app en wordt niet opgehaald.</li>
+                  <li>Een tarief telt alleen mee met waarde, bron, datum én voorwaarden — anders wordt het geweigerd.</li>
+                  <li>Rekeningen zonder bank kunnen niet opgezocht worden; vul de bank in bij Rekeningen.</li>
+                </ul>
+              </div>
+            ) : (
+              <>
+                {/* WAAROM DE VOLGORDE IS WAT ZE IS, de periode waarover gerekend
+                    wordt, en waartegen het verschil per rij gemeten is. Dat laatste
+                    stond in de voettekst van de module die hier stond; die voettekst
+                    bestaat niet meer, dus de zin is hier ingevoegd in plaats van
+                    weggevallen. Zonder deze regel staat een bank met 0% opslag onder
+                    een bank met 1,4% en is er niets op het scherm dat dat verklaart —
+                    dezelfde regel die de kaartenlijst op Overzicht draagt, want het
+                    is dezelfde rekensom. De periode hoort er hardop bij: een netto
+                    bedrag zonder periode is niet na te rekenen. */}
                 <p className="cell-sub">
-                  Zonder bekend tarief, dus onderaan: {heldUnknown.join(", ")}.
+                  De volgorde is wat deze conversie je bij die bank kost: de koersopslag op {fmt(amt, from)} plus wat
+                  de rekening kost om te openen. Dat laatste telt voor minstens één hele factureringsperiode — een
+                  maand, of een jaar bij een jaarproduct — want je kunt geen rekening voor een dag openen. Een bank
+                  die je al hebt kost je niets extra: die prijs loopt toch al. Staat er “kaartkosten onbekend”, dan
+                  zit alleen de opslag in het bedrag; dat is een ondergrens, geen bewijs dat de rekening gratis is.
+                  Het verschil achter elke bank is gerekend tegen {chosen ? chosen.bank : "de gekozen route"}.
                 </p>
-              )}
-            </div>
-          )}
+                {/* Terug naar de standaardkeuze. Stond als "···"-menu in de kop van
+                    de module die hier stond; die kop is weg, en een knop hoort toch
+                    bij de lijst waarin je de andere keuze maakte. */}
+                {pickedBank && auto && pickedBank !== auto.key && (
+                  <button type="button" className="btn" style={{ marginBottom: "var(--sp-3)" }} onClick={() => setPickedBank(null)}>
+                    Terug naar beste
+                  </button>
+                )}
+                <ul className="travel-journeys">
+                  {visible.map((r) => (
+                    <RouteRow
+                      key={r.key}
+                      route={r}
+                      chosen={chosen?.key === r.key}
+                      against={chosen ?? null}
+                      onPick={() => setPickedBank(r.key)}
+                    />
+                  ))}
+                </ul>
+                {hidden > 0 && (
+                  <button type="button" className="btn" style={{ marginTop: "var(--sp-3)" }} onClick={() => setShowAll(true)}>
+                    Nog {hidden} {hidden === 1 ? "bank" : "banken"} tonen
+                  </button>
+                )}
+                {/* Wat de lijst wél en niet beweert. Stond achter een eigen ⓘ in de
+                    modulekop; dat was een tweede uitklapper voor tekst die over deze
+                    lijst gaat, dus hij staat nu onder de lijst zelf. */}
+                <p>
+                  <strong>De lijst gaat over alle banken die LaVega kan onderbouwen</strong> — niet alleen die van
+                  jou. Standaard rekent LaVega met de goedkoopste route die je vandaag echt kunt gebruiken; een bank
+                  die je niet hebt staat erbij, met het verschil in euro's, maar wordt nooit stilzwijgend gekozen.
+                </p>
+                <p>
+                  Eén regel per bank: bij overzetten maakt het product niet uit, dus dezelfde bank staat niet
+                  driemaal in de lijst. Welk product achter het tarief zit, staat er wel bij — "ING 0%" geldt alleen
+                  voor de Platinumcard.
+                </p>
+                {costPct === null ? (
+                  <p>{noRouteReason()} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een onbekend tarief is geen 0%.</p>
+                ) : (
+                  <p>
+                    <strong>Waar overstappen je zou verslaan:</strong> je huidige keuze kost {pctText(costPct)}.
+                    Elke bank die minder rekent, houdt op dit bedrag meer dan {fmt(costInFrom ?? 0, from)} voor je
+                    over — aan koersopslag. Wat die rekening kost om te openen gaat daar nog vanaf, en dat is
+                    precies waarom de volgorde niet op het percentage gaat.
+                  </p>
+                )}
+                {heldUnknown.length > 0 && (
+                  <p className="cell-sub">
+                    Zonder bekend tarief, dus onderaan: {heldUnknown.join(", ")}.
+                  </p>
+                )}
+              </>
+            )}
+          </ToonMeer>
+
+          {/* DE BRONREGEL, opgevouwen. Hetzelfde punt als bij de Travel Agent in
+              dezelfde review: een bron hoort niet op de voorgrond, maar hij hoort
+              er wel te zijn. */}
+          <ToonMeer className="valuta-bronnen" summary="Waar de koers en de tarieven vandaan komen">
+            {/* WAT DE KOERS IS, in beide standen, en let op wat er NIET staat.
+                Er stond "offline momentopname van 2026-08-04" en dat zei niet
+                waarvan het een momentopname was — terwijl het gewoon dezelfde
+                ECB-middenkoers is, alleen meegebundeld (packages/core/src/fx.ts,
+                nagekeken op 4 augustus). Een bron die zijn eigen herkomst niet
+                noemt is geen bron.
+                En er staat niet "de live koers was niet op te halen", hoe graag een
+                melding ook de oorzaak noemt: `source` staat op "offline" zodra dit
+                scherm opengaat en blijft daar staan tot het antwoord binnen is, dus
+                deze stand dekt óók de seconde waarin de aanroep nog gewoon loopt.
+                Een oorzaak die je niet uit elkaar kunt houden, mag je niet noemen.
+                Een derde stand ("laden") zou dat wél kunnen; die is niet gebouwd
+                omdat de overgang dan in een microtask valt en elke test die dit
+                scherm monteert — twee bestanden, ruim veertig tests — daarop zou
+                moeten wachten. Dat staat als open punt bij deze lane. */}
+            <p>
+              <strong>Koers:</strong>{" "}
+              {source === "live"
+                ? `live ECB-middenkoers via Frankfurter, peildatum ${rate.date}`
+                : `de meegebundelde ECB-middenkoers van ${rate.date}, want er staat nu geen live koers in dit scherm`}
+              .
+            </p>
+            <p>
+              <strong>Kosten:</strong> de koersopslag zoals de bank die zelf in haar tarievenoverzicht noemt.
+              Elke regel draagt de bron en de datum die dat document noemt.
+            </p>
+            <p>Er wordt niets over je rekeningen verstuurd om die koers of die tarieven op te halen.</p>
+          </ToonMeer>
         </Module>
 
-        <Module
-          title="Alle banken, goedkoopste eerst"
-          height="tall"
-          footer={
-            <span>
-              {routes.length === 0
-                ? "Nog geen bank met een onderbouwd tarief."
-                : `${routes.length} banken · verschil ten opzichte van ${chosen ? chosen.bank : "de gekozen route"} op ${fmt(amt, from)}, opslag én wat de rekening kost, in euro's`}
-            </span>
-          }
-          menu={
-            pickedBank && auto && pickedBank !== auto.key ? (
-              <ModuleMenu label="Terug naar beste" onClick={() => setPickedBank(null)} />
-            ) : undefined
-          }
-        >
-          {routes.length === 0 ? (
-            <div className="empty-guide">
-              <p>Nog geen bank om te rangschikken.</p>
-              <ul>
-                <li>De catalogus levert de tarieven; die zit in de app en wordt niet opgehaald.</li>
-                <li>Een tarief telt alleen mee met waarde, bron, datum én voorwaarden — anders wordt het geweigerd.</li>
-                <li>Rekeningen zonder bank kunnen niet opgezocht worden; vul de bank in bij Rekeningen.</li>
-              </ul>
-            </div>
-          ) : (
-            <>
-              {/* WAAROM DE VOLGORDE IS WAT ZE IS, en de periode waarover gerekend
-                  wordt. Zonder deze regel staat een bank met 0% opslag onder een
-                  bank met 1,4% en is er niets op het scherm dat dat verklaart —
-                  dezelfde regel die de kaartenlijst op Overzicht draagt, want het
-                  is dezelfde rekensom. De periode hoort er hardop bij: een netto
-                  bedrag zonder periode is niet na te rekenen. */}
-              <p className="cell-sub">
-                De volgorde is wat deze conversie je bij die bank kost: de koersopslag op {fmt(amt, from)} plus wat
-                de rekening kost om te openen. Dat laatste telt voor minstens één hele factureringsperiode — een
-                maand, of een jaar bij een jaarproduct — want je kunt geen rekening voor een dag openen. Een bank
-                die je al hebt kost je niets extra: die prijs loopt toch al. Staat er “kaartkosten onbekend”, dan
-                zit alleen de opslag in het bedrag; dat is een ondergrens, geen bewijs dat de rekening gratis is.
-              </p>
-              <ul className="travel-journeys">
-                {visible.map((r) => (
-                  <RouteRow
-                    key={r.key}
-                    route={r}
-                    chosen={chosen?.key === r.key}
-                    against={chosen ?? null}
-                    onPick={() => setPickedBank(r.key)}
-                  />
-                ))}
-              </ul>
-              {hidden > 0 && (
-                <button type="button" className="btn" style={{ marginTop: "var(--sp-3)" }} onClick={() => setShowAll(true)}>
-                  Nog {hidden} {hidden === 1 ? "bank" : "banken"} tonen
-                </button>
-              )}
-            </>
-          )}
-        </Module>
-
+        {/* DE BOL, rechts. Geen `span={2}` meer: hij stond over de volle breedte
+            onder de twee kolommen en is nu zelf de rechterkolom.
+            De voettekst zegt met opzet geen richting ("hierboven"): op een breed
+            scherm staat de rekenmachine links van de bol en op een smal scherm
+            erboven, dus elke richting in die zin is de helft van de tijd onwaar. */}
         <Module
           title="Waar ga je heen?"
-          span={2}
-          className="module-hug"
-          footer={<span>De bol zet alleen de doelvaluta hierboven — er komt geen tweede berekening bij.</span>}
+          footer={<span>De bol zet alleen de doelvaluta in de rekenmachine — er komt geen tweede berekening bij.</span>}
         >
           <Globe value={to} from={from} onPick={setTo} supported={currencies} />
         </Module>

@@ -43,17 +43,32 @@ import Module from "../Module.js";
  *
  * Een logo zonder kleur — zwart-wit, of een logo dat we niet konden lezen —
  * houdt het tokenvlak uit FACES. Dat is geen tijdelijke staat maar het antwoord
- * voor die kaart: er is geen huisstijlkleur om te tonen. */
+ * voor die kaart: er is geen huisstijlkleur om te tonen.
+ *
+ * REVIEW 4, PUNT 10: "make it like a bit more gradient, and that I can hover
+ * over it." Allebei gedaan, en allebei met dezelfde ondergrens: het saldo moet
+ * leesbaar blijven. Het verloop is dieper geworden aan de DONKERE kant (vier
+ * stops, `cardRamp` in brandFace.ts, en drie in FACES hieronder), want de lichte
+ * kant staat al precies op de 4,5:1 die de tekst nodig heeft. De hover-toestand
+ * staat in blocks.css en verandert dáárom geen kleur maar diepte. Geen
+ * transition: een toestand mag, een overgang is motion en die gaat apart. */
 
 /** Cards first — that is what the block is called and what he wants to see. */
 const TYPE_ORDER = ["Creditcard", "Betaalrekening", "Spaarrekening", "Beleggingsrekening", "Overig"];
 
-/** Four faces, cycled by position. Every stop is an existing token. */
+/** Four faces, cycled by position. Every stop is an existing token.
+ *
+ *  DRIE STOPS, NIET TWEE, en alledrie beginnen ze donker. Dat is dezelfde
+ *  ingreep als in `cardRamp` (brandFace.ts) en om dezelfde reden: een verloop
+ *  wordt sterker door zijn bereik, en het bereik kan alleen naar de donkere kant
+ *  groeien omdat de lichte kant de leesbaarheid van het saldo draagt. Twee van
+ *  deze vier liepen van accent naar chart-blue en van teal naar accent — dat zijn
+ *  kleuren die dicht bij elkaar liggen, dus het verloop was er nauwelijks. */
 const FACES = [
-  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 55%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--accent) 0%, var(--chart-blue) 100%)",
-  "linear-gradient(135deg, var(--chart-teal) 0%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--ink-soft) 0%, var(--chart-purple) 100%)",
+  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--accent) 100%)",
+  "linear-gradient(135deg, var(--ink) 0%, var(--accent) 45%, var(--chart-blue) 100%)",
+  "linear-gradient(135deg, var(--ink) 0%, var(--chart-teal) 45%, var(--accent) 100%)",
+  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--chart-purple) 100%)",
 ];
 
 /* Corporate-form words, dropped before matching. `account.bank` arrives as "ING"
@@ -182,9 +197,11 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                 </div>
 
                 <footer className="bank-card-bottom">
-                  <div>
+                  <div className="bank-card-who">
                     <div className="bank-card-caption">Op naam van</div>
-                    <div className="bank-card-holder">{account.entity || "geen entiteit ingesteld"}</div>
+                    <div className="bank-card-holder" title={account.entity || undefined}>
+                      {account.entity || "geen entiteit ingesteld"}
+                    </div>
                   </div>
                   <div className="bank-card-saldo">
                     <div className="bank-card-caption">Saldo</div>

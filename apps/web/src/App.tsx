@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
@@ -360,7 +360,13 @@ export default function App() {
           for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
         }
         const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        const mergedAccounts = mergeImportedAccounts(curAccounts, newAccounts);
+        /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
+         * waarop de rekening binnenkomt, dus dit is de enige plek waar het
+         * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
+         * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
+         * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
+         * was) — zie `withLinkedAt`. */
+        const mergedAccounts = withLinkedAt(curAccounts, mergeImportedAccounts(curAccounts, newAccounts), asOf);
         const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
         await storage.putAccounts(mergedAccounts);
         await storage.putTxs(mergedTxs);
@@ -596,7 +602,11 @@ export default function App() {
       // Re-importing a statement for an account you already have must not wipe
       // the Type/Entiteit/manual saldo you set in Rekeningen — merge those
       // forward. A fresh statement balance (MT940/.STA) still wins.
-      const mergedAccounts = mergeImportedAccounts(accounts, result.accounts);
+      // Bij een import is het koppelmoment het moment van importeren, en `accounts`
+      // is de stand van vlak daarvoor — dus precies wat `withLinkedAt` nodig heeft
+      // om "nieuw" van "stond er al" te onderscheiden. Een her-import van hetzelfde
+      // afschrift verschuift het moment niet: dat is de tweede tak daar.
+      const mergedAccounts = withLinkedAt(accounts, mergeImportedAccounts(accounts, result.accounts), asOf);
       await storage.putAccounts(mergedAccounts);
       await storage.putTxs(mergedTxs);
 

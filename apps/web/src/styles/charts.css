@@ -58,12 +58,33 @@
   inset: 0 0 0 var(--lv-axis-w);
 }
 
+/* De tekening zelf, en NIETS anders: `pointer-events: none` is hier geen
+ * netheid maar de reparatie van een grafiek die drie reviews lang niet te
+ * bedienen was.
+ *
+ * Een <svg> is voor het aanwijzen een gewoon vervangen element: zijn hele vak
+ * vangt de muis op, ook waar de tekening leeg is. In WeekdayBars ligt deze svg
+ * (de stippellijn door de staven) NA `.lv-bars-groups` in de DOM, allebei
+ * `position: absolute; inset: 0`, allebei zonder z-index — dus de svg ligt
+ * bovenop en ving elke aanwijzer die op een staaf gericht was. Gemeten in
+ * Chrome op het echte onderdeel met de echte stylesheets: alle zeven staven
+ * gaven `document.elementFromPoint` → `svg.lv-chart-svg`, in het midden van de
+ * staaf én erboven. Niet één balk was met de muis of met een tik te bereiken;
+ * alleen het toetsenbord kwam erbij, want focus doorloopt geen raakvlaktest.
+ * Dat is waarom de tooltip er wél stond, in de tests wél groen was (jsdom doet
+ * geen raakvlaktest: `.click()` gaat rechtstreeks naar de knop) en op het
+ * scherm nooit verscheen.
+ *
+ * TrendChart merkt hier niets van: daar ligt `.lv-chart-hit` ná de svg en die
+ * vangt sowieso alles. De peak-chip en de gemiddelde-lijn in blocks.css hadden
+ * deze regel al — de svg was de enige laag die hem miste. */
 .lv-chart-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
+  pointer-events: none;
 }
 
 /* Quiet dashed gridlines, the reference's register. */
@@ -317,6 +338,70 @@
 .lv-bar:focus > .lv-tip,
 .lv-bar:focus-visible > .lv-tip,
 .lv-bar[data-tip="on"] > .lv-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- De weekdagkolom als trefvlak ----------
+ *
+ * De knop is hier de hele kolom en niet de staaf, en dat is geen ruimhartigheid
+ * maar het antwoord op de meting. Gemeten in Chromium op WeekdayBars met deze
+ * stylesheets: de goedkoopste dag is een staafje van 42 bij 6 pixels. Met de
+ * muis is dat te raken zodra de laag erboven de aanwijzer doorlaat (zie
+ * `.lv-chart-svg` bovenaan), maar op een telefoon bestaat hover niet en blijft
+ * alleen de tik over — en 6 pixels hoog is geen tikdoel. Vandaar een knop van de
+ * volle plothoogte en de volle breedte van één dag; de gekleurde staaf is een
+ * <span> erbinnen die alleen nog tekent.
+ *
+ * EERDERE POGING, en waarom die niet volstond: `.lv-bars-group:hover .lv-tip`
+ * maakte de kolom aanwijsbaar met de MUIS, terwijl de tik en de focus via de
+ * knop liepen. Twee mechanismen voor hetzelfde, en de telefoon zat aan de
+ * verkeerde kant van de scheiding. Nu is er één element, dus geen scheiding
+ * meer om aan de verkeerde kant van te vallen.
+ *
+ * Bewust alleen hier en niet op `.lv-bar` in het algemeen: in CategoryBars staan
+ * twee of drie staven in één groep, en een kolombreed trefvlak zou daar alle
+ * chips van die groep tegelijk over elkaar heen openen. WeekdayBars tekent er
+ * per constructie precies één per kolom. */
+.weekday-column {
+  /* Een knop met alle knoppenopmaak eraf: hij is een trefvlak, geen bedieningselement met een rand. */
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  /* Er wordt nergens heen genavigeerd; de chip is de hele beloning. */
+  cursor: default;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+/* De ring om de STAAF en niet om de kolom: een kader van de volle plothoogte
+ * zegt niet welke dag de focus heeft, en dat is precies wat een focusring moet
+ * zeggen. `outline: none` op de knop zelf mag hier omdat de ring een regel
+ * verderop terugkomt — zonder die tweede regel zou dit het toetsenbord blind
+ * maken. */
+.weekday-column:focus-visible {
+  outline: none;
+}
+.weekday-column:focus-visible > .lv-bar {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+/* Dezelfde drie wegen als bij `.lv-bar` hierboven, nu op de kolom: de muis,
+ * het toetsenbord (`:focus` erbij voor de telefoons die op een tik wél
+ * focussen) en de tik die React in [data-tip] zet voor de telefoons die dat
+ * niet doen. */
+.weekday-column:hover .lv-tip,
+.weekday-column:focus .lv-tip,
+.weekday-column:focus-visible .lv-tip,
+.weekday-column[data-tip="on"] .lv-tip {
   opacity: 1;
   visibility: visible;
 }

@@ -366,3 +366,60 @@ test("zonder rentewinst komt er geen leeg kostenblok", () => {
   expect(html).not.toContain('data-testid="rente-kosten"');
   expect(html).not.toContain("vóór rekeningkosten");
 });
+
+/* ══════ DE GRATIS REKENING, MET DE EIS ERBIJ ════════════════════════════════
+ *
+ * App review 4, punt 24: "ING is bij hem een studentenrekening — hij betaalt
+ * niets. Dat moet vindbaar zijn."
+ *
+ * Vindbaar betekent niet "staat in de lijst van twaalf ING-tarieven achter een
+ * dichtgeklapt driehoekje". Het betekent dat je het ziet zonder te zoeken. En
+ * nooit zonder de eis: elke studentenrekening in dit land staat op € 0,00 in het
+ * wettelijk verplichte kostendocument, mét een leeftijds- of studievoorwaarde.
+ * Een gratis-melding zonder die zin klopt over twee jaar niet meer en heeft hem
+ * dat nooit verteld.
+ *
+ * Deze twee tests draaien op de ECHTE catalogus (de standaardwaarde van
+ * `entries`), want de vraag is niet of de component een lijst kan renderen maar
+ * of ING Student er met zijn voorwaarde in staat.
+ */
+
+/** Zijn eigen geval: een ING-betaalrekening waarvan de naam niet zegt wélk
+ *  pakket het is. Dan zijn de kosten onbekend — en juist dán moet de gratis
+ *  optie in beeld komen. */
+const ING_NAAMLOOS: Account[] = [
+  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+];
+
+test("een onherkende ING-rekening ziet de gratis pakketten staan, elk met zijn eis", () => {
+  const html = render([], ING_NAAMLOOS);
+  const gratis = row(html, "gratis-bij-B1");
+  expect(gratis).toContain("Gratis bij ING");
+  expect(gratis).toContain("ING Student");
+  expect(gratis).toContain("€ 0,00 per maand");
+  // De eis staat op dezelfde regel als de nul. Dit is de assertie die de hele
+  // punt 24 draagt: zonder haar is dit een gratis-melding die over twee jaar
+  // niet meer klopt.
+  expect(gratis).toContain("18 tot 30 jaar");
+  // En met de bron erbij, want een nul zonder herkomst is precies de valse nul
+  // waar dit project al een keer op struikelde.
+  expect(gratis).toContain("assets.ing.com");
+  expect(gratis).toContain("peildatum");
+  // De weg naar het juiste bedrag staat erbij, en het is een weg die bestaat:
+  // Rekeningen heeft dat naamveld.
+  expect(gratis).toContain("Rekeningen");
+});
+
+test("heet de rekening ING Student, dan staat de eis náást de nul en niet erachter", () => {
+  // Nu is het bedrag wél gematcht: € 0,00 per maand. De voorwaarde zat toen in
+  // een dichtgeklapte <details>, en dat is bij een NUL misleidend — bij een
+  // bedrag dat geld kost is de prijs het nieuws en mag de voorwaarde opgevouwen
+  // blijven.
+  const html = render([], [{ ...ING_NAAMLOOS[0], name: "ING Student" }]);
+  const eis = row(html, "kosten-gratis-B1");
+  expect(eis).toContain("Gratis, mits");
+  expect(eis).toContain("18 tot 30 jaar");
+  // Geen tweede lijst met gratis pakketten: de kosten zijn bekend, dus er valt
+  // niets meer te kiezen.
+  expect(html).not.toContain('data-testid="gratis-bij-B1"');
+});
