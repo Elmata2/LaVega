@@ -812,3 +812,106 @@ test("de pinaanbeveling noemt de kaartprijs ook als er geen voordeel is om hem t
   expect(kosten.textContent).toContain(`${formatEuro(2.55)} per maand`);
   expect(kosten.textContent).not.toMatch(/netto/i);
 });
+
+/* ════════════ HET BEDRAG STAAT PRECIES ÉÉN KEER OP HET SCHERM ═══════════════
+ *
+ * Core's kopzin droeg zijn eigen kostenstaart ("… kost zelf € 1,00 per maand en
+ * dat betaal je minstens één maand, dus je houdt € 9,00 over") en de velden
+ * hierboven zetten dezelfde bedragen er nóg een keer onder. Eén bedrag in twee
+ * formuleringen leest als twee bedragen.
+ *
+ * De velden houden het, de kop laat het vallen — omdat `termsHeadline` de kop
+ * volledig vervangt zodra er geen beprijsde eigen route is, en dat is de
+ * begintoestand van iedere nieuwe gebruiker. Vandaar dat allebei die toestanden
+ * hieronder geteld worden en niet alleen de makkelijke.
+ */
+
+/** Beide lagen schrijven euro's, maar niet met dezelfde spatie: core met de hand
+ *  (gewone spatie) en de UI via `Intl` (vaste spatie, U+00A0). Op het scherm zijn
+ *  het twee identieke bedragen. Zonder deze normalisatie ziet een telling ze als
+ *  twee verschillende teksten en meldt ze "één keer" terwijl er twee staan — dan
+ *  toetst de test precies de dubbeling weg die hij moest vinden. */
+const flat = (s: string): string => s.replace(/\u00a0/g, " ");
+const times = (haystack: string, needle: string): number =>
+  flat(haystack).split(flat(needle)).length - 1;
+
+const winnerText = (el: HTMLElement): string => el.querySelector(".travel-winner")!.textContent ?? "";
+const headlineText = (el: HTMLElement): string => el.querySelector(".travel-winner-name")!.textContent ?? "";
+
+test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de velden", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const winner = winnerText(el);
+  // Geprijsd wordt de kaart precies één keer, en het nettobedrag valt één keer.
+  // (€ 1,00 zélf komt daarna nog terug in "€ 10,00 voordeel min € 1,00
+  // kaartkosten" — dat is geen tweede bewering maar de aftrek erbij, en zonder
+  // die regel kan hij ons niet nakijken.)
+  expect(times(winner, `${formatEuro(1)} per maand`)).toBe(1);
+  expect(times(winner, formatEuro(9))).toBe(1);
+  expect(winner).not.toContain("kost zelf");
+
+  // En het is de KOP die loslaat, niet het veld: de kop zegt wat je moet doen,
+  // het veld laat zien hoe het bedrag is opgebouwd.
+  const kop = headlineText(el);
+  expect(times(kop, formatEuro(1))).toBe(0);
+  expect(times(kop, formatEuro(9))).toBe(0);
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(`${formatEuro(1)} per maand`);
+  expect(el.querySelector('[data-testid="travel-pay-kosten-netto"]')!.textContent).toContain(formatEuro(9));
+});
+
+test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen zin", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const full = planTravel({
+    accounts: travelAccounts, txs: [], rates: [], facts: DEARER_OWN, destination: "US", asOf: ASOF,
+    catalogue: GOEDKOOP,
+  }).headline;
+  const shown = headlineText(el);
+
+  // PREFIX, en dat is de hele bewaking: er mag een staart af, er mag niets aan
+  // veranderen. Zou de web-laag de zin zelf opnieuw formuleren, dan lopen twee
+  // formuleringen van dezelfde aanbeveling uiteen zonder dat iemand het merkt.
+  expect(full.startsWith(shown)).toBe(true);
+  expect(shown.length).toBeLessThan(full.length);
+
+  // En wat eraf gaat is precies het stuk dat de velden overnemen.
+  const dropped = full.slice(shown.length);
+  expect(dropped).toContain("kost zelf");
+  expect(dropped).toContain("€ 1,00");
+  expect(dropped).toContain("€ 9,00");
+  expect(dropped).toContain("minstens één maand");
+});
+
+test("in de begintoestand van een nieuwe gebruiker staat de prijs er nog steeds, en ook één keer", () => {
+  // Geen enkele opslag van hemzelf bekend: dan is er geen beprijsde route, en
+  // `termsHeadline` vervangt de hele kop — inclusief de staart die core erin had
+  // gezet. Dat was de bug: € 1,00 per maand stond dan nergens meer. Nu komt het
+  // uit de velden, en uit niets anders.
+  const el = renderWithDestination({ facts: [], catalogue: GOEDKOOP });
+  expect(times(winnerText(el), formatEuro(1))).toBe(1);
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(`${formatEuro(1)} per maand`);
+
+  const kop = headlineText(el);
+  expect(kop).toMatch(/voorwaarden/i); // de kop gaat over wat er ontbreekt
+  expect(times(kop, formatEuro(1))).toBe(0);
+});
+
+test("een onbekende kaartprijs wordt ook één keer gemeld — en blijft 'geen nul'", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GEEN_PRIJS });
+  const winner = winnerText(el);
+  // Core's staart zei "Wat X zelf kost, staat niet in onze bronnen — dat is geen
+  // nul" en het veld zei het er nog eens onder. Eén keer is genoeg; twee keer
+  // leest als twee verschillende gaten. Geteld wordt de zin over DEZE kaart, niet
+  // het losse "geen nul": de pinregel eronder gebruikt dezelfde woorden voor een
+  // ander gat (zijn eigen kaarten, opnemen) en die hoort daar te blijven staan.
+  expect(times(winner, "staat niet in onze bronnen")).toBe(1);
+  const kop = headlineText(el);
+  expect(kop).not.toContain("staat niet in onze bronnen");
+  expect(kop).not.toContain("geen nul");
+
+  // Het gat zelf verdwijnt niet: het veld noemt het, en zegt erbij dat het bedrag
+  // in de kop dus bruto is.
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent ?? "";
+  expect(kosten).toContain("Kaartkosten: onbekend");
+  expect(kosten).toContain("geen nul");
+  expect(kosten).toContain("bruto");
+});
+

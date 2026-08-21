@@ -11,8 +11,10 @@ import Rekeningen, { dayNL, groupAccountsByBank, latestTxDates, saldoAge, saldoA
 /* Twee gaten die de eigenaar noemde, en de invarianten die ze dichthouden.
  *
  * A. "Bijgewerkt op" in Rekeningen. Een bankkoppeling ververst niet — er is geen
- *    refresh-route en geen interval, en mapEbAccount levert geen balanceDate af.
- *    Een stand van het koppelmoment las daardoor als een stand van nu. Wat hier
+ *    refresh-route en geen interval. Een stand van het koppelmoment las daardoor
+ *    als een stand van nu. (mapEbAccount neemt inmiddels wél de reference_date
+ *    van Enable Banking over, en App.tsx geeft hem door — maar alleen waar de
+ *    bank hem meestuurt, dus de onbekende blijft bestaan.) Wat hier
  *    vastligt: een onbekende dag leest als ONBEKEND en niet als een datum, en de
  *    melding stelt niets voor wat op die pagina niet kan.
  *

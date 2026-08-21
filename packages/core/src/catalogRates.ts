@@ -139,6 +139,15 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
 
     out.push({
       bank,
+      // DE ID GAAT MEE, en dat is de hele koppeling waar de kostenkant op hangt.
+      // Een benchmark wordt hier van een catalogusrij GEMAAKT, dus op dit punt is
+      // bekend welke rij het is; twee regels verderop is die wetenschap weg en
+      // resteren twee vrij geschreven strings (bank + product) die drie bronnen
+      // op drie manieren spellen. Zonder dit veld kon `analyzeInterest` de prijs
+      // van de rekening waar het advies heen wijst nergens aan ophangen — en de
+      // koppeling later terugrekenen uit die twee strings is precies het soort
+      // gok dat een VERKEERDE prijs oplevert, en een verkeerde prijs rekent door.
+      productId: e.id,
       product: productWithoutBank(e.product, bank),
       ratePct: rate,
       freeWithdrawal: !restricted,

@@ -4,7 +4,7 @@ import type {
   WithdrawOption, CardOffer, WithdrawAdvice, FeeAmount, HoldingCost, NetBasis, NetBenefit,
 } from "@lavega/core";
 import {
-  planTravel, makeFact, costOnReferenceSpend, netBenefit, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
+  planTravel, makeFact, costOnReferenceSpend, netBenefit, payHeadline, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
   describeWithdrawalFee, TRAVEL_REFERENCE_WITHDRAWAL, TRAVEL_SMALL_WITHDRAWAL,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
@@ -177,6 +177,11 @@ function NotYours() {
  * `marginalHoldingCost` een BEKENDE nul van. Hier wordt geen tweede regel naast
  * gezet — er wordt alleen niets over gezegd, want "kaartkosten € 0,00" zou
  * suggereren dat de kaart gratis is in plaats van al betaald.
+ *
+ * EN SINDSDIEN ZEI HET SCHERM HET TWEE KEER: core's kopzin hield zijn eigen
+ * kostenstaart en deze velden zetten dezelfde bedragen er nog eens onder. Waar
+ * die staart nu wegvalt en waarom juist daar en niet in core, staat bij `answer`
+ * onderin dit bestand.
  */
 
 /** Het bedrag in de eenheid van zijn eigen document. NOOIT omgerekend: een
@@ -219,6 +224,24 @@ function floorNote(basis: NetBasis): string {
     : " Minder dan één maand kun je niet afnemen, dus daar rekenen we mee.";
 }
 
+/** OF DEZE VELDEN IETS AFDRUKKEN — en dus of de kop het rekenwerk mag laten vallen.
+ *
+ *  Twee plekken moeten het over precies dezelfde vraag eens zijn: `Kaartkosten`
+ *  hieronder, dat niets rendert als er niets te melden is, en de kopzin, die zijn
+ *  kostenstaart alleen mag laten vallen als deze velden hem overnemen. Stond die
+ *  voorwaarde twee keer uitgeschreven, dan zou één van de twee ooit meebewegen
+ *  zonder de ander — en dan staat het bedrag nul keer op het scherm, wat erger is
+ *  dan twee keer.
+ *
+ *  Een kaart die hij AL HEEFT valt hier af: die maandprijs loopt door of hij hem
+ *  meeneemt of niet, dus ze is geen gevolg van deze keuze. Core doet aan zijn kant
+ *  hetzelfde — `bareHoldingCostClause` zwijgt bij `already-held` — dus in die tak
+ *  is er ook geen staart om te laten vallen. */
+export function hasVisibleHoldingCost(cost: HoldingCost | null): cost is HoldingCost {
+  if (!cost) return false;
+  return !(cost.kind === "known" && cost.why === "already-held");
+}
+
 export function Kaartkosten({ product, cost, benefit, testId }: {
   product: string;
   /** Null bij zijn eigen kaart: die kosten zijn geen gevolg van deze keuze. */
@@ -230,8 +253,7 @@ export function Kaartkosten({ product, cost, benefit, testId }: {
   benefit: NetBenefit | null;
   testId: string;
 }) {
-  if (!cost) return null;
-  if (cost.kind === "known" && cost.why === "already-held") return null;
+  if (!hasVisibleHoldingCost(cost)) return null;
 
   if (cost.kind === "unknown") {
     const why =
@@ -933,9 +955,47 @@ export default function TravelBlock({
   const ownPct = ownRoute?.totalCostPct ?? null;
   const rejected = plan && plan.pay?.held && ownPct !== null ? rejectedByPrice(plan.offers, ownPct) : null;
   const terms = plan ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms) : null;
+
+  /* HET BEDRAG STOND ER TWEE KEER, en hier valt de ene weg.
+   *
+   * Core's `payHeadline` sluit af met de kostenstaart: "… Testkaart Licht kost
+   * zelf € 1,00 per maand en dat betaal je minstens één maand, dus je houdt
+   * € 9,00 over." Direct daaronder staan diezelfde € 1,00, dezelfde ondergrens en
+   * dezelfde € 9,00 nog een keer, uit elkaar getrokken in de velden van
+   * `Kaartkosten`. Twee formuleringen van één bedrag lezen als twee bedragen, en
+   * dan gaat de lezer het verschil zoeken dat er niet is.
+   *
+   * DE VELDEN WINNEN, NIET DE KOP, en niet omdat ze mooier zijn. De kop is de
+   * zwakkere drager: `termsHeadline` hierboven VERVANGT hem volledig zodra er geen
+   * beprijsde eigen route is, en dat is de begintoestand van iedere nieuwe
+   * gebruiker. Precies daar viel die staart al een keer weg en stond er "dat kost
+   * je niets op € 1.000" boven een kaart van € 16,90 per maand. Wie andersom kiest
+   * — staart houden, velden schrappen — bouwt die fout opnieuw. Dat de kop zegt
+   * wát je moet doen en de velden laten zien hoe het bedrag is opgebouwd, is de
+   * tweede reden; de eerste is dat de velden er altijd staan en de kop niet.
+   *
+   * DE STAART WORDT NIET UIT CORE GESLOOPT. Daar is `payHeadline` de enige plek
+   * waar die zin bestaat, en core weet niet of zijn lezer velden heeft — de
+   * core-tests lezen `plan.headline` kaal. Dus wordt dezelfde functie om dezelfde
+   * zin gevraagd zonder het stuk dat hieronder al staat: een advies zonder
+   * `holdingCost` en zonder `benefit` heeft geen kosten om over te praten en core
+   * laat de staart dan zelf weg. Eén bron voor de kop, minus één stuk — geen
+   * tweede zinsbouw hier, en geen knipwerk op een string dat bij de volgende
+   * formulering stilletjes de verkeerde helft pakt. De test pint het als PREFIX:
+   * wat op het scherm staat moet het begin van core's eigen zin zijn.
+   *
+   * Alleen als die velden ook echt renderen (`hasVisibleHoldingCost`). Bij zijn
+   * eigen kaart staat er geen veld en heeft core ook geen staart, en dan is er
+   * niets te kiezen. */
+  const answer =
+    plan === null
+      ? ""
+      : plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
+        ? payHeadline({ ...plan.pay, holdingCost: null, benefit: null }, plan.journeys, plan.currency)
+        : plan.headline;
   // Core's headline advises a refresh whenever no route is priced; when the
   // refresh cannot work, or was never the missing piece, we say what is.
-  const headline = (terms && termsHeadline(terms)) ?? plan?.headline ?? "";
+  const headline = (terms && termsHeadline(terms)) ?? answer;
 
   return (
     <Module title="Travel Agent" span={3} height="tall">

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, Rule, Tx } from "@lavega/core";
+import type { Account, CatalogueEntryLike, CatalogValue, RateBenchmark, Rule, Tx } from "@lavega/core";
 import { ownAccounts } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 
@@ -22,7 +22,11 @@ function tx(id: string, date: string, amount: number, counterparty: string): Tx 
 
 const RULES: Rule[] = [];
 
-function render(txs: Tx[], accounts: Account[] = ACCOUNTS) {
+function render(
+  txs: Tx[],
+  accounts: Account[] = ACCOUNTS,
+  extra: Partial<Parameters<typeof Optimalisatie>[0]> = {},
+) {
   return renderToStaticMarkup(
     <Optimalisatie
       txs={txs}
@@ -33,6 +37,7 @@ function render(txs: Tx[], accounts: Account[] = ACCOUNTS) {
       busy={false}
       facts={[]}
       onRateCommit={() => {}}
+      {...extra}
     />,
   );
 }
@@ -241,4 +246,123 @@ test("the comparison table separates what you get now from what you keep", () =>
   const html = render([]);
   expect(html).toContain("Wat je houdt");
   expect(html).toContain("Rente nu");
+});
+
+
+/* ══════ WAT DE REKENING WAAR HET ADVIES HEEN WIJST ZELF KOST ════════════════
+ *
+ * Zijn zin, 21 augustus: "als een kaart 5 euro per maand kost en ons 3 oplevert
+ * gaan we er op achteruit." Dat geldt net zo hard voor een spaarrekening. De
+ * rentemodule rekende alleen aan de OPBRENGST — een hoger percentage, dus zoveel
+ * euro per jaar — en zei nergens wat die nieuwe rekening kost.
+ *
+ * DE RENTES WORDEN HIER GESTELD, en dat moet ook: alleen catalogusrentes dragen
+ * een `productId` en kunnen dus aan een prijs gekoppeld worden, en die komen in
+ * de app pas binnen via een effect dat een statische render niet draait. Zonder
+ * `initialRates` zou dit blok testen tegen de ingebakken tabel, waar geen enkele
+ * rij een prijs heeft.
+ *
+ * VANDAAG IS DAT OOK DE LIVE-TOESTAND, en dat hoort in het rapport: van de 32
+ * spaarrijen in docs/catalog/catalog.json prijst er geen enkele zichzelf, dus op
+ * het echte scherm staat "kosten onbekend". Dat is de eerlijke uitkomst en geen
+ * bug — de machinerie licht op zodra de catalogus een spaarproduct prijst.
+ */
+
+/** Eén regel uit de gerenderde HTML, op zijn testid. Faalt hard als de regel er
+ *  niet is, zodat een verdwenen regel de test breekt in plaats van een assertie
+ *  stil te laten slagen op tekst die elders op het scherm staat. */
+const row = (html: string, testid: string): string => {
+  const m = html.match(new RegExp(`data-testid="${testid}"[\\s\\S]*?</(?:div|p)>`));
+  if (!m) throw new Error(`geen regel met data-testid="${testid}"`);
+  return m[0];
+};
+
+/** € 1.000 op een betaalrekening van 0%. Klein met opzet: tegen 2,5% is dat
+ *  € 25,00 per jaar, en dan eet een pakket van € 4,50 per maand (€ 54,00 per
+ *  jaar) de winst op. Zo hangt de uitkomst aan de KOSTEN en niet aan het saldo. */
+const IDLE: Account[] = [
+  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+];
+
+const TESTBANK: RateBenchmark = {
+  bank: "Testbank", product: "Spaarrekening", ratePct: 2.5, freeWithdrawal: true, productId: "test-spaar",
+};
+
+/** De catalogusrij achter die rente, met of zonder prijs. De periode staat er
+ *  expliciet in: een bedrag zonder eenheid stilzwijgend maandelijks noemen scheelt
+ *  een factor twaalf, en dat is precies wat hieronder getoetst wordt. */
+const spaar = (fee?: { value: number; period: "maand" | "jaar" }): CatalogueEntryLike[] => [
+  {
+    id: "test-spaar", product: "Testbank Spaarrekening", issuer: "Testbank N.V.", kind: "betaalrekening",
+    fields: fee
+      ? {
+          accountFee: {
+            value: fee.value, period: fee.period, route: "provider-pdf",
+            sourceUrl: "https://example.test/kosten", checkedAt: "2026-08-01",
+            conditions: null, conditionsKnown: true,
+          } as unknown as CatalogValue,
+        }
+      : {},
+  },
+];
+
+test("een renteadvies dat door de rekeningkosten netto negatief wordt is GEEN aanbeveling", () => {
+  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  // Het brutobedrag blijft staan — de kaart wordt niet verzwegen — maar het heet
+  // nu ook bruto.
+  expect(html).toContain("<strong>€\u00a025,00</strong> per jaar op, vóór wat die rekening zelf kost");
+  // 12 × € 4,50 = € 54,00 per jaar, dus € 29,00 achteruit. Hij moet dat kunnen
+  // ZIEN staan in plaats van het zelf uit te rekenen.
+  expect(row(html, "rente-kosten")).toContain("4,50 per maand");
+  expect(row(html, "rente-kosten")).toContain("54,00 per jaar");
+  const geen = row(html, "rente-geen");
+  expect(geen).toContain("Geen aanbeveling");
+  expect(geen).toContain("29,00");
+  expect(geen).toContain("achteruit");
+  // Er is geen netto om te tonen, dus er staat ook geen nettoregel.
+  expect(html).not.toContain('data-testid="rente-netto"');
+});
+
+test("jaar tegen maand: hetzelfde getal, een ander advies", () => {
+  // € 4,50 per maand eet € 25 rente op; € 4,50 per jaar laat € 20,50 staan. Geven
+  // deze twee ooit hetzelfde antwoord, dan wordt er ergens een eenheid genegeerd.
+  const perJaar = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "jaar" }) });
+  expect(row(perJaar, "rente-kosten")).toContain("4,50 per jaar");
+  // Geen "12 ×": dit bedrag staat zo in het document.
+  expect(row(perJaar, "rente-kosten")).not.toContain("12 × ");
+  expect(row(perJaar, "rente-netto")).toContain("20,50");
+  expect(perJaar).not.toContain("54,00");
+  expect(perJaar).not.toContain('data-testid="rente-geen"');
+});
+
+test("onbekende rekeningkosten zijn geen nul, en het woord netto valt daar niet", () => {
+  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar() });
+  const kosten = row(html, "rente-kosten");
+  expect(kosten).toContain("Wat deze rekening zelf kost, weten we niet");
+  expect(kosten).toContain("geen nul");
+  // Het woord "netto" komt in deze tak NIET voor: er ís geen netto zolang de ene
+  // helft ontbreekt. Op de regel zelf getoetst, want de Cashback-module verderop
+  // op dit scherm mag het woord wél gebruiken.
+  expect(kosten.toLowerCase()).not.toContain("netto");
+  expect(html).not.toContain('data-testid="rente-netto"');
+  // ...en het brutobedrag blijft staan, dus de aanbeveling verdwijnt niet.
+  expect(html).toContain("<strong>€\u00a025,00</strong> per jaar op");
+});
+
+test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () => {
+  // De keerzijde van "onbekend is geen nul". Openbank zegt letterlijk dat openen,
+  // aanhouden en opzeggen gratis is; dat is een gemeten feit.
+  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 0, period: "maand" }) });
+  expect(row(html, "rente-kosten")).toContain("0,00 per maand");
+  expect(row(html, "rente-netto")).toContain("25,00");
+  expect(html).not.toContain("weten we niet");
+});
+
+test("zonder rentewinst komt er geen leeg kostenblok", () => {
+  // "Render geen leeg blok." Is er niets te verplaatsen, dan is er ook niets te
+  // verrekenen — en dan hoort er geen zin over rekeningkosten te staan.
+  const html = render([], [{ ...IDLE[0], balance: 0 }], { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  expect(html).toContain("Nog geen rentewinst berekend");
+  expect(html).not.toContain('data-testid="rente-kosten"');
+  expect(html).not.toContain("vóór rekeningkosten");
 });

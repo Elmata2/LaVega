@@ -31,13 +31,65 @@
  * deliberately NOT folded in here: a column whose meaning changes per row cannot
  * be ranked honestly, and every tariff document we read states the koersopslag.
  *
+ * WAT DE RANGSCHIKKING TOT 21 AUGUSTUS NEGEERDE: WAT DE REKENING KOST.
+ *
+ * Dit scherm was de vierde plek met een aanbeveling en de laatste die alleen aan
+ * de opslag rekende. Op een conversie van € 1.000 scheelt 1,4% tegen 0% veertien
+ * euro — en een kaart die daarvoor € 16,90 per maand vraagt is niet veertien euro
+ * goedkoper maar bijna drie euro DUURDER. Zolang alleen het percentage in de
+ * volgorde zat, stond die kaart bovenaan met "€ 14,00 minder" ernaast: een getal
+ * dat klopt over de helft van de rekening waar de lezer niet naar kon kijken.
+ *
+ * Dat is precies het geval waarvoor `netBenefit.ts` bestaat, en het is er ook het
+ * zuiverste geval van. Een conversie is EENMALIG en een maandprijs is
+ * TERUGKEREND, dus ze mogen niet van elkaar af zonder periode; de horizon staat
+ * in `FX_CONVERSION_HORIZON_MONTHS` en het antwoord draagt hem terug mee in
+ * `holdingBasis`, zodat het scherm hem kan noemen en de lezer ons kan nakijken.
+ *
+ * De drie toestanden komen ook hier uit het TYPE en niet uit een boolean ernaast:
+ * `FxRouteDelta` en `FxRouteSwitch.net` hebben allebei een variant zonder
+ * nettobedrag voor de rijen waarvan we de prijs niet kennen. Onbekend is geen nul
+ * — het is ook geen reden om de rij te verzwijgen, dus hij komt bruto door met de
+ * reden erbij, en het woord "netto" valt daar niet.
+ *
+ * EN EEN BANK DIE HIJ AL HEEFT KOST HEM NIETS EXTRA: die prijs loopt toch al, of
+ * hij er nu doorheen wisselt of niet. `marginalHoldingCost` maakt daar een
+ * BEKENDE nul van, en dat is wat de gelijkspelregel onderaan overeind houdt (zie
+ * `rankFxRoutes`) in plaats van hem te breken.
+ *
  * Pure: catalogue entries, accounts and facts in, rows out. No clock, no I/O.
  */
 import type { Account } from "./model.js";
 import { isCovered } from "./catalog.js";
+import { productFeesById } from "./accountCosts.js";
 import { issuerToBank, type CatalogueEntryLike } from "./catalogRates.js";
 import { factNumber, factEntry, type FactSource, type LearnedFact } from "./facts.js";
+import {
+  holdingCostOfProduct,
+  marginalHoldingCost,
+  netBenefit,
+  type HoldingCost,
+  type HoldingCostUnknownReason,
+  type NetBasis,
+  type NetBenefit,
+} from "./netBenefit.js";
 import { TRAVEL_AGENT, isSpendable, productOf, providerOf } from "./travel.js";
+
+/** OVER HOEVEEL MAANDEN EEN CONVERSIE DE PRODUCTPRIJS DRAAGT: nul, en dat is geen
+ *  typefout maar het hele punt.
+ *
+ *  Een reis duurt weken, een conversie duurt een moment. De eerlijke horizon van
+ *  "zet vandaag € 1.000 om" is dus nul maanden — en juist dan doet de ONDERGRENS
+ *  van `netBenefit` zijn werk: er wordt één hele factureringsperiode gerekend,
+ *  want je kunt geen rekening voor een dag openen. Nul doorgeven in plaats van
+ *  één is wat `basis.flooredToMinimum` op true zet, en dát is het verschil tussen
+ *  een scherm dat "over 1 maand" zegt en een scherm dat er ook bij zegt waarom.
+ *
+ *  Toen hier eerst één stond, was de rekensom identiek en de zin verdwenen: het
+ *  bedrag klopte, maar de lezer kon nergens zien dat een conversie van vijf
+ *  seconden een hele maand kaart kost. Dezelfde fout die netBenefit.ts in zijn
+ *  eigen kop beschrijft, een laag hoger. */
+export const FX_CONVERSION_HORIZON_MONTHS = 0;
 
 /** Words that name the KIND of card. A trailing run of these (with its tier
  *  words) is packaging, not the bank. */
@@ -132,6 +184,11 @@ function sameBank(a: string, b: string): boolean {
 type Candidate = {
   pct: number;
   product: string;
+  /** De catalogusrij waar dit tarief vandaan komt, of null voor een figuur uit de
+   *  kluis. De id is wat de PRIJS van dit product vindt (`productFeesById`); een
+   *  productnaam is daar niet genoeg voor, want de prijs staat vaak op de rij van
+   *  het pakket en niet op die van de kaart. */
+  productId: string | null;
   brand: string;
   origin: "user" | "agent" | "catalog";
   asOf: string | null;
@@ -181,8 +238,36 @@ export type FxRouteOption = {
   asOf: string | null;
   sourceUrl: string | null;
   conditions: string | null;
-  /** One Dutch line saying where the figure comes from and what it does not say. */
+  /** One Dutch line saying where the figure comes from and what it does not say.
+   *  Over de KOERSOPSLAG, en alleen daarover — wat het product kost om te hebben
+   *  staat in `holdingCost` en wordt door het scherm met dezelfde woorden gerend
+   *  als op Overzicht. Twee zinnen die hetzelfde zeggen in andere woorden zijn
+   *  een fout op zichzelf, dus deze zin blijft van één ding. */
   why: string;
+  /** WAT DIT PRODUCT KOST OM TE HEBBEN, marginaal.
+   *
+   *  Een BEKENDE nul zodra hij de bank al heeft: die prijs loopt toch al door, dus
+   *  hij is geen gevolg van deze conversie. Zie `marginalHoldingCost` — dat is de
+   *  val waar dit veld voor bestaat, en het is ook wat de gelijkspelregel in de
+   *  sortering veilig maakt. */
+  holdingCost: HoldingCost;
+  /** Over welke periode `totalCostCents` de productprijs telt, en of daarvoor een
+   *  hele factureringsperiode is gerekend. Null als er geen prijs bekend is: dan
+   *  is er ook geen periode om te noemen, en een periode zonder bedrag suggereert
+   *  een bedrag. */
+  holdingBasis: NetBasis | null;
+  /** De koersopslag op het bedrag waarmee gerangschikt is, in EUROCENTEN. Null
+   *  als er geen tarief is — nooit 0. */
+  conversionCostCents: number | null;
+  /** Wat deze route deze conversie kost: de opslag hierboven plus de productprijs
+   *  over `FX_CONVERSION_HORIZON_MONTHS`. Dit is waarop gerangschikt wordt, want
+   *  het is de enige noemer waarop een percentage en een maandprijs samen kunnen
+   *  komen. Null als er geen tarief is. */
+  totalCostCents: number | null;
+  /** false als de productprijs onbekend is. `totalCostCents` is dan alleen de
+   *  opslag en dus een ONDERGRENS van wat deze route kost — geen volledig bedrag,
+   *  en zeker geen bewijs dat de rekening gratis is. */
+  totalCostKnown: boolean;
 };
 
 const pctText = (n: number): string => `${n.toFixed(2).replace(/0+$/, "").replace(/[.,]$/, "").replace(".", ",")}%`;
@@ -235,13 +320,46 @@ function whyLine(o: Omit<FxRouteOption, "why">): string {
   return `${head} — deze bank heb je niet.`;
 }
 
-/** Every bank you could convert through, cheapest first, one row each. */
+/** Every bank you could convert through, cheapest first, one row each.
+ *
+ *  HET BEDRAG IS VERPLICHT, en dat is een besluit en geen omissie. Een percentage
+ *  en een maandprijs kunnen alleen bij elkaar komen op een bedrag; zonder bedrag
+ *  valt er geen volgorde te maken die de kosten van de rekening meeneemt, en de
+ *  vorige versie liet dat merken door ze weg te laten. Een standaardbedrag
+ *  verzinnen zou erger zijn: dan rangschikt het scherm op een som die niemand
+ *  gevraagd heeft.
+ *
+ *  EN HET BEDRAG IS IN EURO'S, wat de reden is dat het veld zo heet.
+ *  Koersopslag is een PERCENTAGE en past zich aan elke valuta aan; een
+ *  productprijs is een BEDRAG uit een Nederlands tarievendocument en staat in
+ *  euro's. Wie duizend dollar omzet en daar € 16,90 kaartkosten bij optelt, telt
+ *  twee valuta's bij elkaar op en noemt de uitkomst een totaal — dezelfde soort
+ *  fout als maand tegen jaar, alleen minder zichtbaar omdat er geen factor twaalf
+ *  uit komt maar een factor die per dag verandert. De aanroeper rekent het bedrag
+ *  dus eerst naar euro's om (hij heeft de middenkoers al op het scherm) en krijgt
+ *  alles in eurocenten terug. Andersom kan niet: de kaartprijs naar dollars
+ *  omrekenen zou een bedrag verzinnen dat in geen enkel document staat. */
 export function rankFxRoutes(input: {
   accounts: readonly Account[];
   facts: readonly LearnedFact[];
   entries: readonly CatalogueEntryLike[];
+  /** Wat er wordt omgezet, in EURO'S. Zie hierboven waarom niet in de verstuurde
+   *  valuta. */
+  amountEur: number;
 }): FxRouteOption[] {
   const { accounts, facts, entries } = input;
+  // Een leeg of onzinnig invoerveld is geen bedrag. Dat telt als nul in plaats van
+  // als NaN de rangschikking in te sturen: bij nul euro overzetten kost de opslag
+  // niets en blijft alleen over wat een rekening kost om te openen — wat het
+  // juiste antwoord is op die vraag, en niet een lijst in willekeurige volgorde.
+  const amountEur = Number.isFinite(input.amountEur) && input.amountEur > 0 ? input.amountEur : 0;
+  // Wat elk catalogusproduct kost om te hebben. Gedeeld met de reisagent via
+  // accountCosts.ts en hier NIET nagebouwd: de koppeling tussen een kaartrij en de
+  // pakketrij waar haar prijs op staat (de € 16,90 van N26 Metal staat op
+  // `n26-metal`, niet op `n26-metal-betaalpas`) is subtiel genoeg dat een tweede
+  // kopie uit elkaar loopt — en dan zegt Overzicht € 16,90 waar Valuta "onbekend"
+  // zegt over hetzelfde product.
+  const fees = productFeesById(entries);
 
   // His own payment products, keyed by bank. Savings and investment accounts are
   // not conversion routes on their own — `isSpendable` is the same filter the
@@ -271,6 +389,7 @@ export function rankFxRoutes(input: {
     candidates.push({
       pct: v.value,
       product: e.product,
+      productId: e.id,
       brand,
       origin: "catalog",
       asOf: v.checkedAt,
@@ -293,6 +412,11 @@ export function rankFxRoutes(input: {
       candidates.push({
         pct,
         product,
+        // Een figuur uit de kluis hangt aan een product van HEM, niet aan een
+        // catalogusrij. Er is dus geen id om een prijs mee op te zoeken — en er
+        // hoeft er ook geen te zijn: bij een bank die hij heeft zijn de marginale
+        // kosten nul, wat de rij hieronder als BEKENDE nul invult.
+        productId: null,
         brand: h.bank,
         origin: source,
         asOf: entry?.updatedAt ?? null,
@@ -335,6 +459,35 @@ export function rankFxRoutes(input: {
     const fromCatalogue = g.items.filter((c) => c.fromCatalogue);
     const uniform =
       fromCatalogue.length > 1 && fromCatalogue.every((c) => Math.abs(c.pct - fromCatalogue[0].pct) < 0.0001);
+
+    // WAT DEZE ROUTE KOST OM TE OPENEN, marginaal. Bij een bank die hij heeft is
+    // dat een BEKENDE nul — die prijs loopt toch al door — en bij een bank die hij
+    // moet openen de prijs van het product waar dit tarief bij hoort. Staat die
+    // prijs nergens, dan blijft hij onbekend en wordt hij hieronder als zodanig
+    // gedragen, niet als nul.
+    const isHeld = held !== undefined;
+    const holdingCost = marginalHoldingCost(
+      holdingCostOfProduct(chosen?.productId ? fees.get(chosen.productId) : null),
+      isHeld,
+    );
+    // Nul voordeel: hier wordt niets vergeleken, alleen de PRIJS van dit product
+    // over de horizon uitgerekend. Langs `netBenefit` en niet met de hand, zodat de
+    // horizonregel (naar boven afronden, ondergrens één hele periode) op één plek
+    // staat en dit scherm er geen tweede van maakt — dezelfde route die
+    // `marketCardOffers` neemt, en om dezelfde reden.
+    const over = netBenefit({
+      benefit: { kind: "one-off", cents: 0 },
+      cost: holdingCost,
+      horizonMonths: FX_CONVERSION_HORIZON_MONTHS,
+    });
+    // Onbekende kosten tellen als NIETS IN DIT GETAL — niet omdat ze nul zijn, maar
+    // omdat er niets is om op te tellen. Daarom reist `totalCostKnown` mee: dit
+    // bedrag is dan een ondergrens. Ze op oneindig zetten zou de andere fout maken
+    // en driekwart van de catalogus onderaan gooien, inclusief de 0%-kaarten die de
+    // vergelijking de moeite waard maken.
+    const holdingCents = over.kind === "gross-cost-unknown" ? 0 : over.costCents;
+    const conversionCostCents = chosen ? Math.round((chosen.pct / 100) * amountEur * 100) : null;
+
     const base: Omit<FxRouteOption, "why"> = {
       bank: g.bank,
       key: g.key,
@@ -342,7 +495,7 @@ export function rankFxRoutes(input: {
       product: chosen?.product ?? null,
       mine: chosen?.mine ?? false,
       kind: chosen?.kind ?? null,
-      held: held !== undefined,
+      held: isHeld,
       heldProducts: held ? [...held[1].products] : [],
       cheaperAtSameBank: cheaper,
       uniformAcrossBank: uniform,
@@ -351,15 +504,36 @@ export function rankFxRoutes(input: {
       asOf: chosen?.asOf ?? null,
       sourceUrl: chosen?.sourceUrl ?? null,
       conditions: chosen?.conditions ?? null,
+      holdingCost,
+      holdingBasis: over.kind === "gross-cost-unknown" ? null : over.basis,
+      conversionCostCents,
+      totalCostCents: conversionCostCents === null ? null : conversionCostCents + holdingCents,
+      totalCostKnown: holdingCost.kind === "known",
     };
     return { ...base, why: whyLine(base) };
   });
 
   return rows.sort((a, b) => {
-    // Unknown never outranks a figure: it is a risk, not a cheap route.
-    if ((a.pct === null) !== (b.pct === null)) return a.pct === null ? 1 : -1;
-    if (a.pct !== null && b.pct !== null && a.pct !== b.pct) return a.pct - b.pct;
-    // Same price: a route he can actually use beats one he would have to open.
+    // 1. GEEN TARIEF IS GEEN GOEDKOPE ROUTE. Onbekend gaat onderaan; het is een
+    //    risico, niet een aanbieding.
+    if ((a.totalCostCents === null) !== (b.totalCostCents === null)) return a.totalCostCents === null ? 1 : -1;
+    // 2. HET GOEDKOOPST OVER DE HELE CONVERSIE: de opslag op dit bedrag plus wat de
+    //    rekening kost om te openen. Op de opslag alleen won een kaart van 0% met
+    //    € 16,90 per maand van een kaart van 1,4% die hij al heeft, terwijl die
+    //    eerste hem bijna drie euro kost.
+    if (a.totalCostCents !== null && b.totalCostCents !== null && a.totalCostCents !== b.totalCostCents) {
+      return a.totalCostCents - b.totalCostCents;
+    }
+    // 3. WAT WE KUNNEN AANTONEN, boven wat we niet weten. Bij hetzelfde bedrag wint
+    //    de route waarvan de prijs vaststaat: van de ander weten we alleen dat er
+    //    nog iets bij kan komen.
+    if (a.totalCostKnown !== b.totalCostKnown) return a.totalCostKnown ? -1 : 1;
+    // 4. EEN ROUTE DIE HIJ VANDAAG KAN GEBRUIKEN. Zijn eigen gelijkspelregel, en
+    //    regel 3 kan hem niet meer in de weg zitten: een bank die hij heeft kost
+    //    marginaal niets en die nul is BEKEND, dus zo'n rij is nooit degene die op
+    //    regel 3 zakt. Zouden de kosten ook bij zijn eigen banken meegeteld worden,
+    //    dan vochten die twee regels wél — en dan stuurde de app hem een rekening
+    //    openen om kosten te ontlopen die hij toch al maakt.
     if (a.held !== b.held) return a.held ? -1 : 1;
     return a.bank.localeCompare(b.bank);
   });
@@ -388,14 +562,99 @@ export function fxRouteDefault(options: readonly FxRouteOption[]): FxRouteOption
   );
 }
 
-/** What an alternative costs against the chosen route, in the currency being
- *  sent. Negative means it saves that much. Null when either side is unknown — a
- *  difference against an unknown is a guess with a euro sign on it. */
-export function fxExtraCost(
-  option: FxRouteOption,
-  base: FxRouteOption | null,
-  amount: number,
-): number | null {
-  if (!base || option.pct === null || base.pct === null) return null;
-  return Math.round(((option.pct - base.pct) / 100) * amount * 100) / 100;
+/* ─────────────────────────────────────────── wat een andere route zou schelen */
+
+/** WAT EEN ALTERNATIEF MEER KOST DAN DE GEKOZEN ROUTE, in EUROCENTEN. Positief is
+ *  duurder, negatief is goedkoper.
+ *
+ *  Drie toestanden, uit het TYPE en niet uit een vlag ernaast — hetzelfde besluit
+ *  als in netBenefit.ts, want het is hetzelfde probleem:
+ *
+ *   · `net` — van beide routes weten we wat de rekening kost, dus het verschil is
+ *     het HELE verschil: opslag plus wat er aan maand- of jaarprijs bij komt.
+ *   · `gross-cost-unknown` — van minstens één van de twee kennen we die prijs niet.
+ *     Dan is het verschil alleen dat in KOERSOPSLAG, met de reden erbij, en het
+ *     woord netto valt er niet. Bruto is hier geen bovengrens maar een ONDERGRENS
+ *     van wat het gaat kosten: de onbekende prijs kan er alleen bij komen.
+ *   · `unknown` — aan minstens één kant is er geen tarief. Een verschil tegen een
+ *     onbekende is een gok met een euroteken ervoor.
+ *
+ *  Er gaat GEEN bedrag in: beide rijen zijn door dezelfde `rankFxRoutes`-aanroep
+ *  op hetzelfde bedrag geprijsd. Dat is met opzet — een verschil uitrekenen op een
+ *  ander bedrag dan waarop de lijst gerangschikt is, geeft een rij die lager staat
+ *  met een lager bedrag ernaast, en dat leest als een fout in de app. */
+export type FxRouteDelta =
+  | { kind: "net"; cents: number }
+  | { kind: "gross-cost-unknown"; cents: number; reason: HoldingCostUnknownReason }
+  | { kind: "unknown" };
+
+export function fxRouteDelta(option: FxRouteOption, base: FxRouteOption | null): FxRouteDelta {
+  if (base === null) return { kind: "unknown" };
+  // Welke van de twee het gat heeft doet er voor de UITKOMST niet toe — één
+  // onbekende prijs maakt het totaal aan die kant onvolledig — maar wel voor de
+  // MELDING: "geen bron noemt de prijs" en "de prijs geldt bovenop een ander
+  // product" vragen iets anders van de lezer.
+  const gap =
+    option.holdingCost.kind === "unknown"
+      ? option.holdingCost
+      : base.holdingCost.kind === "unknown"
+        ? base.holdingCost
+        : null;
+  if (gap === null) {
+    const mine = option.totalCostCents;
+    const theirs = base.totalCostCents;
+    return mine === null || theirs === null ? { kind: "unknown" } : { kind: "net", cents: mine - theirs };
+  }
+  const mine = option.conversionCostCents;
+  const theirs = base.conversionCostCents;
+  return mine === null || theirs === null
+    ? { kind: "unknown" }
+    : { kind: "gross-cost-unknown", cents: mine - theirs, reason: gap.reason };
+}
+
+/** WAT OVERSTAPPEN OPLEVERT, met de prijs van de rekening erin verrekend.
+ *
+ *  Hetzelfde antwoord als `offerSwitchGain` voor kaarten geeft, en met opzet
+ *  dezelfde vorm: `savingCents` blijft BRUTO — het verschil in koersopslag, want
+ *  dat is wat een percentage zegt — en `net` draagt de drie toestanden. De twee
+ *  naast elkaar in plaats van één samengevoegd getal, omdat een rekening met
+ *  onbekende prijs geen netto HEEFT en een brutobedrag dat "netto" heet precies de
+ *  fout is die netBenefit.ts bestaat om te voorkomen.
+ *
+ *  Het alternatief is de EERSTE andere rij, en dat is geen willekeurige keuze: de
+ *  lijst staat al op totale kosten gesorteerd, dus de eerste die niet de gekozen
+ *  route is, is de beste die er is. Een alternatief dat alleen op de opslag wint
+ *  komt zo nooit meer bovendrijven — dat is namelijk exact de kaart waar deze hele
+ *  ronde over gaat.
+ *
+ *  Null als er niets te melden valt: geen route, geen tarief, of geen lagere
+ *  opslag. Een "voordeel" van nul of minder is geen bericht maar ruis — en let op
+ *  dat null iets ANDERS is dan een netto dat op nul uitkomt: dat laatste komt er
+ *  wél doorheen, met `kind: "no-recommendation"`, want dat is juist het geval dat
+ *  hij wil kunnen zien in plaats van zelf uitrekenen. */
+export type FxRouteSwitch = {
+  option: FxRouteOption;
+  /** Wat je op dit bedrag minder aan KOERSOPSLAG betaalt, in centen. Bruto. */
+  savingCents: number;
+  /** Datzelfde voordeel met de prijs van de rekening ertegenover, over
+   *  `FX_CONVERSION_HORIZON_MONTHS` — dus met de ondergrens van één hele
+   *  factureringsperiode erin, en de periode zit in `net.basis`. */
+  net: NetBenefit;
+};
+
+export function fxRouteSwitch(base: FxRouteOption | null, options: readonly FxRouteOption[]): FxRouteSwitch | null {
+  if (base === null || base.conversionCostCents === null) return null;
+  const option = options.find((o) => o.key !== base.key && o.conversionCostCents !== null);
+  if (!option || option.conversionCostCents === null) return null;
+  const savingCents = base.conversionCostCents - option.conversionCostCents;
+  if (savingCents <= 0) return null;
+  return {
+    option,
+    savingCents,
+    net: netBenefit({
+      benefit: { kind: "one-off", cents: savingCents },
+      cost: option.holdingCost,
+      horizonMonths: FX_CONVERSION_HORIZON_MONTHS,
+    }),
+  };
 }

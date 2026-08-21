@@ -322,6 +322,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 37.5,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260421225556id_/https://www.icscards.nl/ics-info/faq-jaarbijdrage-verhoging-asn",
+          "checkedAt": "2025-11-01",
+          "conditions": "\"... de jaarbijdrage van uw ASN Creditcard vanaf 1 november 2025\", met \"Waarom wordt de jaarbijdrage voor mijn ASN Creditcard € 37,50?\". De kaart wordt uitgegeven door ICS en de ASN-tarievenwijzer noemt hem niet, daarom is dit een ICS-pagina; asnbank.nl noemt op zijn eigen kostenpagina op 21 augustus 2026 hetzelfde bedrag, maar zonder datum. De live ICS-URL geeft 404, dus gelezen is de Wayback-kopie van 21 april 2026.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1013,6 +1022,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0.0,
+          "period": "jaar",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"The Blue Card € 0 per jaar\" met voetnoot 1: \"Bij een minimale besteding van € 3.000 per jaar. Anders kost de kaart € 35 per jaar.\" De nul geldt dus alleen bij een minimale besteding van € 3.000 per jaar; wie die niet haalt betaalt € 35 per jaar. Inclusief 2 extra kaarten, daarna € 15 per jaar per extra kaart. De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1037,6 +1055,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 6.5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"The Green Card € 6,50 per maand\", inclusief 2 extra kaarten; daarna € 30 per jaar per extra kaart. De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag. De productpagina noemt op 21 augustus 2026 hetzelfde bedrag, maar draagt geen datum.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1060,6 +1087,15 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 20.0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"The Gold Card € 20,00 per maand\", inclusief 4 extra Green Cards; daarna € 85 per jaar per extra kaart. De aanvraagbrochure van dezelfde kaart zegt hetzelfde in jaarvorm: \"De jaarbijdrage die u betaalt is € 240 per jaar (€ 20 per maand)\". De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
           "conditionsKnown": true
         }
       }
@@ -1109,6 +1145,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 0,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 3.0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"De Flying Blue - American Express Entry Card € 3,00 per maand\", inclusief 2 extra kaarten; een extra kaarthouder is voor deze kaart \"niet van toepassing\". De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1132,6 +1177,15 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 6.25,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"De Flying Blue - American Express Silver Card € 6,25 per maand\", inclusief 2 extra kaarten; een extra kaarthouder is voor deze kaart \"niet van toepassing\". De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
           "conditionsKnown": true
         }
       }
@@ -1157,6 +1211,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 16.5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"De Flying Blue - American Express Gold Card € 16,50 per maand\", inclusief 2 extra kaarten; een extra kaarthouder is voor deze kaart \"niet van toepassing\". De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1180,6 +1243,15 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 2 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 55.0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"De Flying Blue - American Express Platinum Card € 55,00 per maand\", inclusief 1 extra Platinum Card en 4 extra Gold Cards. De datum is het versiestempel FEE_CONS_V7_240704_NL dat in het document zelf staat, boven de titel en in de voettekst. Dat 240704 een datum is en geen volgnummer blijkt uit de voorganger V6, die op dezelfde legal-pagina staat, hetzelfde stempel draagt en 4 juli 2024 als aanmaakdatum heeft; V6 en V7 noemen voor deze kaart hetzelfde bedrag.",
           "conditionsKnown": true
         }
       }
@@ -1350,6 +1422,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 42.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260519164655id_/https://www.icscards.nl/info/visa-world-card-jaarbijdrage",
+          "checkedAt": "2025-06-01",
+          "conditions": "Wijzigingspagina \"Wijziging jaarbijdrage van de Visa World Card (Panda)\": \"de jaarbijdrage van uw World Card (Panda) vanaf 1 juni 2025\" en \"Waarom wordt de jaarbijdrage voor de World Card € 42,95?\". Een Extra Card kost € 21,95 per jaar. ICS heeft die pagina van de site gehaald (de live URL geeft 404), dus gelezen is de Wayback-kopie van 19 mei 2026; het bedrag staat op 21 augustus 2026 nog steeds zo op icscards.nl/creditcards-vergelijken.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1373,6 +1454,15 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 57.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260415092101id_/https://www.icscards.nl/info/visa-world-card-gold-jaarbijdrage-extra-card",
+          "checkedAt": "2025-04-01",
+          "conditions": "Tabel op de wijzigingspagina van de Extra Card: kolommen \"Huidige jaarbijdrage\" en \"Vanaf 1 april 2025\", rij \"Hoofd Card\" € 57,95 in allebei; alleen de Extra Card gaat van € 5 naar € 15. Per 15 september 2026 gaat de jaarbijdrage naar € 59,50 — de aparte ICS-pagina daarover staat live en noemt dat bedrag. De pagina met de tabel geeft live een 404, dus gelezen is de Wayback-kopie van 15 april 2026.",
           "conditionsKnown": true
         }
       }
@@ -1398,6 +1488,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 175.0,
+          "period": "jaar",
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/tips/wat-kost-een-creditcard",
+          "checkedAt": "2026-04-30",
+          "conditions": "Tarieventabel op \"Wat kost een creditcard?\", die zichzelf dateert met \"Gepubliceerd op 3 mrt 2025, laatst bijgewerkt op 30 apr 2026\". Dat is een bijwerkdatum en geen ingangsdatum; die is er voor deze kaart niet, want de eigen wijzigingspagina van ICS noemt alleen een jaartal (\"vanaf 2025\", Hoofd Card van € 164,95 naar € 175). Een Extra Card kost € 25 per jaar.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1421,6 +1520,15 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 42.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260519164655id_/https://www.icscards.nl/info/visa-world-card-jaarbijdrage",
+          "checkedAt": "2025-06-01",
+          "conditions": "Dezelfde wijzigingspagina als de gewone World Card, en die noemt de Panda in zijn eigen titel: \"Wijziging jaarbijdrage van de Visa World Card (Panda)\", \"vanaf 1 juni 2025\", \"€ 42,95\". Een Extra Card kost € 21,95 per jaar. De live URL geeft 404, dus gelezen is de Wayback-kopie van 19 mei 2026; icscards.nl/creditcards-vergelijken noemt de Panda op 21 augustus 2026 nog los, met hetzelfde bedrag.",
           "conditionsKnown": true
         }
       }
@@ -1446,6 +1554,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 38.95,
+          "period": "jaar",
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/info/mastercard-classic-jaarbijdrage",
+          "checkedAt": "2026-06-01",
+          "conditions": "\"Bekijk op deze pagina de antwoorden op vragen over de jaarbijdrage van uw Mastercard Classic vanaf 1 juni 2026\", met \"Waarom wordt de jaarbijdrage voor de Mastercard Classic € 38,95?\". Een Extra Card blijft € 21,95 per jaar.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1470,6 +1587,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 45.0,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260210001645id_/https://www.icscards.nl/info/ics-mastercard-gold-jaarbijdrage",
+          "checkedAt": "2025-04-01",
+          "conditions": "\"... de jaarbijdrage van uw Mastercard Gold vanaf 1 april 2025\", met \"Gewijzigde jaarbijdrages Mastercard Gold Hoofd Card: € 42,95 naar € 45\". Een Extra Card kost € 15 per jaar. Per 15 september 2026 gaat de jaarbijdrage naar € 46,50: dezelfde URL is live inmiddels herschreven naar dat nieuwe bedrag, en daarom is hier de Wayback-kopie van 10 februari 2026 gelezen. Dat de € 45 vandaag nog geldt staat op icscards.nl/creditcards-vergelijken-mastercard.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1493,6 +1619,15 @@
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma. ‘Sparen’ betekent bij ICS spaarRENTE op een creditsaldo op de kaart, niet punten; en ‘ICS Specials’ zijn winkelkortingen. De Algemene Voorwaarden van ICS bevatten geen enkel loyaliteits- of puntenartikel (gecontroleerd met pdftotext op de AV-PDF's van 2026).",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 225.0,
+          "period": "jaar",
+          "route": "provider-page",
+          "sourceUrl": "https://www.icscards.nl/nieuwe-reisservices-en-jaarbijdrage-mastercard-black",
+          "checkedAt": "2025-07-01",
+          "conditions": "\"Toename van kosten zorgt ervoor dat we de jaarbijdrage van de Mastercard Black vanaf 1 juli 2025 verhogen van € 204 naar € 225, en bij de Extra Card van € 124 naar € 135.\" Dezelfde pagina beschrijft de reisservices die per die datum wijzigden.",
           "conditionsKnown": true
         }
       }
@@ -1582,6 +1717,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 29.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260305072213id_/https://www.icscards.nl/anwb/anwb-info/faq-jaarbijdrage-verhoging-anwb",
+          "checkedAt": "2025-11-01",
+          "conditions": "\"... de jaarbijdrage van uw ANWB Creditcard vanaf 1 november 2025\", rij \"ANWB Visa Card of ANWB Mastercard\": \"De bijdrage wijzigt van € 24,95 in € 29,95 per jaar\"; Extra Card € 29,95 per jaar. Bovenop de kaartprijs komt een verplicht ANWB-lidmaatschap: anwb.nl/creditcard/informatie/kosten zet bij deze drie bedragen \"De hierboven aangegeven prijzen zijn exclusief de kosten van een ANWB lidmaatschap\", en wat dat lidmaatschap kost staat in geen van beide documenten. Per 1 november 2026 gaat de bijdrage naar € 31,70. De live pagina gaat al over die verhoging, dus gelezen is de Wayback-kopie van 5 maart 2026.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1606,6 +1750,15 @@
           "checkedAt": "2026-08-20",
           "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 39.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260305072213id_/https://www.icscards.nl/anwb/anwb-info/faq-jaarbijdrage-verhoging-anwb",
+          "checkedAt": "2025-11-01",
+          "conditions": "\"... de jaarbijdrage van uw ANWB Creditcard vanaf 1 november 2025\", rij \"ANWB Visa Silver Card\": \"De bijdrage wijzigt van € 34,95 in € 39,95 per jaar\"; Extra Card € 19,95 per jaar. Bovenop de kaartprijs komt een verplicht ANWB-lidmaatschap: anwb.nl/creditcard/informatie/kosten zet bij deze drie bedragen \"De hierboven aangegeven prijzen zijn exclusief de kosten van een ANWB lidmaatschap\", en wat dat lidmaatschap kost staat in geen van beide documenten. Per 1 november 2026 gaat de bijdrage naar € 41,70. De live pagina gaat al over die verhoging, dus gelezen is de Wayback-kopie van 5 maart 2026.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1629,6 +1782,15 @@
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
           "checkedAt": "2026-08-20",
           "conditions": "Er bestaan GÉÉN ANWB-punten op deze kaarten. ‘Sparen met je ANWB Creditcard’ betekent op ANWB's eigen pagina uitsluitend spaargeld/spaarrente op de kaart: ‘Vergroot je bestedingsruimte [...] De limiet vormt samen met je spaarsaldo de totale bestedingsruimte van je creditcard.’ De ANWB-AV bij ICS (webdocument 633) bevat geen puntenartikel.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 51.95,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260305072213id_/https://www.icscards.nl/anwb/anwb-info/faq-jaarbijdrage-verhoging-anwb",
+          "checkedAt": "2025-11-01",
+          "conditions": "\"... de jaarbijdrage van uw ANWB Creditcard vanaf 1 november 2025\", rij \"ANWB Visa Gold Card\": \"De bijdrage wijzigt van € 46,95 in € 51,95 per jaar\"; Extra Card € 19,95 per jaar. Bovenop de kaartprijs komt een verplicht ANWB-lidmaatschap: anwb.nl/creditcard/informatie/kosten zet bij deze drie bedragen \"De hierboven aangegeven prijzen zijn exclusief de kosten van een ANWB lidmaatschap\", en wat dat lidmaatschap kost staat in geen van beide documenten. Per 1 november 2026 gaat de bijdrage naar € 53,70. De live pagina gaat al over die verhoging, dus gelezen is de Wayback-kopie van 5 maart 2026.",
           "conditionsKnown": true
         }
       }
@@ -3192,7 +3354,7 @@
     },
     {
       "id": "n26-standard",
-      "product": "N26 Account (Standard)",
+      "product": "N26 Standard",
       "issuer": "N26 Bank AG",
       "kind": "betaalrekening",
       "fields": {
@@ -3328,7 +3490,7 @@
     },
     {
       "id": "revolut-standard",
-      "product": "Revolut Standaard",
+      "product": "Revolut Standard",
       "issuer": "Revolut Bank UAB",
       "kind": "betaalrekening",
       "fields": {

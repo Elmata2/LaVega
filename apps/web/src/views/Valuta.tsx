@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, CatalogueEntryLike, FxRate, FxRouteOption, LearnedFact } from "@lavega/core";
+import type { Account, CatalogueEntryLike, FxRate, FxRouteDelta, FxRouteOption, LearnedFact } from "@lavega/core";
 import {
   FX_RATE_FALLBACK,
   accountLabel,
   crossRate,
-  fxExtraCost,
   fxRouteDefault,
+  fxRouteDelta,
+  fxRouteSwitch,
   parseFxRatePayload,
   rankFxRoutes,
 } from "@lavega/core";
@@ -13,6 +14,15 @@ import { API_BASE } from "../api";
 import Module, { ModuleMenu } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import Globe from "../components/Globe";
+// DEZELFDE WOORDEN ALS OP OVERZICHT, met opzet en niet uit gemak. Wat een kaart
+// kost en wat er netto overblijft wordt daar al in drie toestanden verteld, en
+// twee schermen die hetzelfde zeggen in andere woorden is een fout op zichzelf:
+// dan gaat de lezer zoeken naar het verschil tussen de twee zinnen, en dat is er
+// niet. Vandaar de component en niet een kopie ervan. (Hij hoort op termijn in
+// components/ te staan in plaats van in een blok van Overzicht — zie het open
+// punt bij deze lane; verplaatsen kan pas als één lane beide bestanden bezit.)
+import { Kaartkosten } from "../components/blocks/TravelBlock";
+import { formatEuro } from "../format";
 import catalogue from "../../../../docs/catalog/catalog.json";
 import "../styles/views.css";
 
@@ -37,6 +47,23 @@ import "../styles/views.css";
  * travel block on Overzicht. That answers "which card do I pay with abroad"; this
  * screen answers "where do I convert", and one number per bank is the answer to
  * the second question.
+ *
+ * 3. WAT DE REKENING KOST TELT MEE (21 augustus). Dit was de vierde plek met een
+ *    aanbeveling en de laatste die alleen naar de koersopslag keek. Op € 1.000
+ *    scheelt 1,4% tegen 0% veertien euro — maar een kaart die daarvoor € 16,90 per
+ *    maand vraagt is bijna drie euro DUURDER, niet veertien euro goedkoper. De
+ *    rekensom staat in `rankFxRoutes`/`fxRouteDelta`/`fxRouteSwitch`; dit scherm
+ *    toont hem, in de drie toestanden die het TYPE draagt en niet in een boolean
+ *    van hier:
+ *
+ *      kosten bekend, netto positief  → het nettobedrag, met de aftrek erbij
+ *      kosten bekend, netto nul of −  → geen aanbeveling, met de reden in euro's
+ *      kosten onbekend                → alleen bruto; het woord "netto" valt niet
+ *
+ *    Een bank die hij AL heeft rendert daar niets: die prijs loopt toch al door,
+ *    dus hij hoort niet bij DEZE keuze. En de PERIODE staat op het scherm — één
+ *    hele factureringsperiode, want je kunt geen rekening voor een dag openen —
+ *    omdat een nettobedrag zonder periode niet na te rekenen is.
  *
  * The rule that still shapes the whole screen: an unknown cost is NOT zero. When
  * the chosen route has no established figure, "wat er aankomt" stays "onbekend"
@@ -99,30 +126,47 @@ const KIND_LABEL: Record<string, string> = {
   beleggingsrekening: "beleggingsrekening",
 };
 
+/** HET VERSCHIL MET DE GEKOZEN ROUTE, IN WOORDEN, en de twee zinnen zijn met opzet
+ *  niet inwisselbaar.
+ *
+ *  "In totaal" mag alleen als van beide kanten de prijs van de rekening bekend is:
+ *  dan is het verschil het HELE verschil. Kennen we er één niet, dan gaat het
+ *  alleen over de opslag en zegt de regel dat ook — anders leest een bedrag als
+ *  compleet terwijl er nog een maandnota bij kan komen. Het woord "netto" komt in
+ *  geen van beide voor; dat woord hoort bij het bedrag zelf en niet bij een
+ *  verschil.
+ *
+ *  Bedragen in euro's: de opslag is een percentage en past zich aan elke valuta
+ *  aan, maar de prijs van een rekening staat in euro's in een Nederlands
+ *  tarievendocument. Zie `rankFxRoutes` — daar staat waarom die twee niet in
+ *  dezelfde som mogen zonder dezelfde eenheid. */
+function deltaWords(delta: FxRouteDelta): string | null {
+  if (delta.kind === "unknown") return null;
+  const money = formatEuro(Math.abs(delta.cents) / 100);
+  if (delta.kind === "net") {
+    return delta.cents === 0 ? "even duur" : `${money} ${delta.cents < 0 ? "minder" : "meer"} in totaal`;
+  }
+  return delta.cents === 0 ? "dezelfde opslag" : `${money} ${delta.cents < 0 ? "minder" : "meer"} aan opslag`;
+}
+
 /** One bank, once. Selectable, because the whole point is that he can overrule
  *  the default — and priced against the route currently chosen, in money. */
 function RouteRow({
   route,
   chosen,
   against,
-  amount,
-  currency,
   onPick,
 }: {
   route: FxRouteOption;
   chosen: boolean;
   against: FxRouteOption | null;
-  amount: number;
-  currency: string;
   onPick: () => void;
 }) {
-  const delta = fxExtraCost(route, against, amount);
-  const diff =
-    chosen || delta === null
-      ? null
-      : delta === 0
-        ? "even duur"
-        : `${fmt(Math.abs(delta), currency)} ${delta < 0 ? "minder" : "meer"}`;
+  // Geen bedrag als argument: beide rijen zijn door dezelfde `rankFxRoutes`-aanroep
+  // op hetzelfde bedrag geprijsd. Zou het verschil hier op een ander bedrag
+  // uitgerekend worden, dan kan een rij lager staan met een lager bedrag ernaast —
+  // en dat leest als een fout in de app in plaats van als een rangschikking.
+  const diff = chosen ? null : deltaWords(fxRouteDelta(route, against));
   return (
     <li>
       <button
@@ -152,6 +196,20 @@ function RouteRow({
           {route.why}
           {route.asOf ? ` (bron: ${route.asOf})` : ""}
         </p>
+        {/* WAT DE REKENING ZELF KOST — de helft van het criterium die tot 21
+            augustus niet op het scherm stond. Zonder deze regel staat een rij met
+            0% opslag onder een rij met 1,4% zonder dat er iets te zien is dat die
+            volgorde verklaart, en dan leest de lijst als willekeur. Zonder
+            `benefit`: het verschil dat deze rij zou opleveren staat al in de kop
+            hierboven, en er is maar één rij waar het netto-verhaal thuishoort —
+            de aanbeveling, hieronder in het overzetblok. Bij een bank die hij al
+            heeft rendert dit niets. */}
+        <Kaartkosten
+          product={route.product ?? route.bank}
+          cost={route.pct === null ? null : route.holdingCost}
+          benefit={null}
+          testId={`valuta-kosten-${route.key}`}
+        />
       </button>
     </li>
   );
@@ -204,19 +262,39 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
     }
   }, [from, to, rate]);
 
+  /** HET BEDRAG IN EURO'S, want daarin staan de prijzen van de rekeningen.
+   *
+   *  De koersopslag is een percentage en past zich aan elke valuta aan; wat een
+   *  kaart per maand kost is een bedrag uit een Nederlands tarievendocument en
+   *  staat in euro's. Die twee bij elkaar optellen mag alleen in één eenheid — zie
+   *  `rankFxRoutes`, dat het bedrag daarom in euro's vraagt. Lukt de omrekening
+   *  niet, dan gaat er nul in: dan rangschikt de lijst op wat een rekening kost om
+   *  te openen in plaats van op een som die twee valuta's door elkaar haalt. */
+  const amountEur = useMemo(() => {
+    try {
+      return amt * crossRate(from, "EUR", rate);
+    } catch {
+      return 0;
+    }
+  }, [amt, from, rate]);
+
   // THE ranking: one row per bank, over the whole catalogue plus what the vault
-  // knows about his own cards.
-  const routes = useMemo(() => rankFxRoutes({ accounts, facts, entries }), [accounts, facts, entries]);
+  // knows about his own cards — en sinds 21 augustus op wat de conversie in TOTAAL
+  // kost, dus met de prijs van de rekening erin. Vandaar dat het bedrag meegaat:
+  // een percentage en een maandprijs komen alleen op een bedrag bij elkaar.
+  const routes = useMemo(
+    () => rankFxRoutes({ accounts, facts, entries, amountEur }),
+    [accounts, facts, entries, amountEur],
+  );
   const auto = useMemo(() => fxRouteDefault(routes), [routes]);
   const chosen = useMemo(
     () => (pickedBank ? routes.find((r) => r.key === pickedBank) ?? auto : auto),
     [routes, pickedBank, auto],
   );
-  const cheapest = routes.find((r) => r.pct !== null) ?? null;
-  const beats =
-    chosen && cheapest && chosen.pct !== null && cheapest.pct !== null && cheapest.pct < chosen.pct
-      ? cheapest
-      : null;
+  /** Het beste alternatief voor de gekozen route, met de prijs van de rekening
+   *  erin verrekend. Niet meer "de laagste opslag": dat was precies de vergelijking
+   *  die een kaart van € 16,90 per maand als besparing van € 14 presenteerde. */
+  const beats = useMemo(() => fxRouteSwitch(chosen ?? null, routes), [chosen, routes]);
 
   const sameCurrency = from === to;
   // No conversion means no conversion cost — that is a fact, not an assumption.
@@ -382,21 +460,62 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
           </p>
 
           {chosen && chosen.pct !== null && !sameCurrency && (
-            <p className="cell-sub" data-testid="gekozen-route">
-              {chosen.mine
-                ? `Gerekend met ${chosen.product}, het product dat je hier hebt.`
-                : `Gerekend met ${chosen.product}${chosen.held ? " — controleer of dat jouw pakket is" : " — deze bank heb je nog niet"}.`}
-            </p>
+            <>
+              <p className="cell-sub" data-testid="gekozen-route">
+                {chosen.mine
+                  ? `Gerekend met ${chosen.product}, het product dat je hier hebt.`
+                  : `Gerekend met ${chosen.product}${chosen.held ? " — controleer of dat jouw pakket is" : " — deze bank heb je nog niet"}.`}
+              </p>
+              {/* Wat de gekozen rekening kost om te HEBBEN. Bij een bank die hij al
+                  heeft rendert dit niets: die prijs loopt toch al door en is dus
+                  geen gevolg van deze conversie. Bij een bank die hij zou moeten
+                  openen staat de prijs er kaal — het voordeel dat er tegenover
+                  staat hoort bij de aanbeveling hieronder, niet twee keer. */}
+              <Kaartkosten
+                product={chosen.product ?? chosen.bank}
+                cost={chosen.holdingCost}
+                benefit={null}
+                testId="valuta-gekozen-kosten"
+              />
+            </>
           )}
 
+          {/* DE AANBEVELING, en de enige plek op dit scherm waar het woord "netto"
+              mag vallen. `savingCents` is en blijft BRUTO — het verschil in
+              koersopslag, want dat is wat een percentage zegt — en `net` draagt de
+              drie toestanden waarin dat voordeel kan eindigen. Ze staan naast
+              elkaar in plaats van samengevoegd, omdat een rekening met onbekende
+              prijs geen netto HEEFT en een brutobedrag dat "netto" heet de fout is
+              die deze hele ronde moest wegnemen. */}
           {beats && !sameCurrency && (
-            <p className="reason" data-testid="goedkoper">
-              <strong>Goedkoper kan.</strong> {beats.bank} rekent {pctText(beats.pct ?? 0)} — dat is{" "}
-              {fmt(Math.abs(fxExtraCost(beats, chosen ?? null, amt) ?? 0), from)} minder op dit bedrag.{" "}
-              {beats.held
-                ? "Die bank heb je al; kies hem in de lijst."
-                : "Die bank heb je niet — je zou er eerst rekening bij moeten openen."}
-            </p>
+            <>
+              <p className="reason" data-testid="goedkoper">
+                {/* DE KOP VOLGT DE UITKOMST, en niet andersom. "Goedkoper kan"
+                    boven een regel die eindigt op "je gaat er € 2,90 op achteruit"
+                    is een kop die zijn eigen alinea tegenspreekt — en het is precies
+                    de kop die er stond toen alleen de opslag meetelde. Drie
+                    toestanden, drie koppen, uit `net.kind` en niet uit een boolean
+                    van hier. */}
+                <strong>
+                  {beats.net.kind === "net"
+                    ? "Goedkoper kan."
+                    : beats.net.kind === "no-recommendation"
+                      ? "Lagere opslag, maar niet goedkoper."
+                      : "Lagere opslag — of dat goedkoper uitpakt, weet LaVega niet."}
+                </strong>{" "}
+                {beats.option.bank} rekent {pctText(beats.option.pct ?? 0)} — dat is{" "}
+                {formatEuro(beats.savingCents / 100)} minder aan koersopslag op dit bedrag.{" "}
+                {beats.option.held
+                  ? "Die bank heb je al; kies hem in de lijst."
+                  : "Die bank heb je niet — je zou er eerst rekening bij moeten openen."}
+              </p>
+              <Kaartkosten
+                product={beats.option.product ?? beats.option.bank}
+                cost={beats.option.holdingCost}
+                benefit={beats.net}
+                testId="valuta-goedkoper-kosten"
+              />
+            </>
           )}
 
           {showSource && (
@@ -430,7 +549,8 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                 <p>
                   <strong>Waar overstappen je zou verslaan:</strong> je huidige keuze kost {pctText(costPct)}.
                   Elke bank die minder rekent, houdt op dit bedrag meer dan {fmt(costInFrom ?? 0, from)} voor je
-                  over — precies het verschil dat achter elke regel staat.
+                  over — aan koersopslag. Wat die rekening kost om te openen gaat daar nog vanaf, en dat is
+                  precies waarom de volgorde niet op het percentage gaat.
                 </p>
               )}
               {heldUnknown.length > 0 && (
@@ -449,7 +569,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             <span>
               {routes.length === 0
                 ? "Nog geen bank met een onderbouwd tarief."
-                : `${routes.length} banken · verschil ten opzichte van ${chosen ? chosen.bank : "de gekozen route"} op ${fmt(amt, from)}`}
+                : `${routes.length} banken · verschil ten opzichte van ${chosen ? chosen.bank : "de gekozen route"} op ${fmt(amt, from)}, opslag én wat de rekening kost, in euro's`}
             </span>
           }
           menu={
@@ -469,6 +589,19 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             </div>
           ) : (
             <>
+              {/* WAAROM DE VOLGORDE IS WAT ZE IS, en de periode waarover gerekend
+                  wordt. Zonder deze regel staat een bank met 0% opslag onder een
+                  bank met 1,4% en is er niets op het scherm dat dat verklaart —
+                  dezelfde regel die de kaartenlijst op Overzicht draagt, want het
+                  is dezelfde rekensom. De periode hoort er hardop bij: een netto
+                  bedrag zonder periode is niet na te rekenen. */}
+              <p className="cell-sub">
+                De volgorde is wat deze conversie je bij die bank kost: de koersopslag op {fmt(amt, from)} plus wat
+                de rekening kost om te openen. Dat laatste telt voor minstens één hele factureringsperiode — een
+                maand, of een jaar bij een jaarproduct — want je kunt geen rekening voor een dag openen. Een bank
+                die je al hebt kost je niets extra: die prijs loopt toch al. Staat er “kaartkosten onbekend”, dan
+                zit alleen de opslag in het bedrag; dat is een ondergrens, geen bewijs dat de rekening gratis is.
+              </p>
               <ul className="travel-journeys">
                 {visible.map((r) => (
                   <RouteRow
@@ -476,8 +609,6 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     route={r}
                     chosen={chosen?.key === r.key}
                     against={chosen ?? null}
-                    amount={amt}
-                    currency={from}
                     onPick={() => setPickedBank(r.key)}
                   />
                 ))}

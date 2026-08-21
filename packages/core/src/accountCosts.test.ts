@@ -8,6 +8,8 @@ import {
   readAccountFee,
   feeCostOverMonths,
   FEE_PERIOD_MONTHS,
+  productFeesById,
+  accountNamesProduct,
   type AccountFeeEntryLike,
 } from "./accountCosts.js";
 
@@ -467,4 +469,105 @@ describe("feeCostOverMonths", () => {
   test("FEE_PERIOD_MONTHS is de enige plek waar staat dat een jaar twaalf maanden is", () => {
     expect(FEE_PERIOD_MONTHS).toEqual({ maand: 1, jaar: 12 });
   });
+});
+
+
+/* ═════════ DE PAKKETMATCHER, want de prijs staat vaak op een ANDERE rij ══════
+ *
+ * De rijen hieronder staan LETTERLIJK zo in docs/catalog/catalog.json, en dat is
+ * geen stijlkeuze maar de kern van de zaak: de fout die deze matcher wegneemt zit
+ * juist in de MANIER waarop dat bestand een kaart van zijn pakket scheidt. Een
+ * verzonnen catalogus met de prijs netjes op de kaartrij zou bewijzen dat de code
+ * werkt op een bestand dat niet bestaat.
+ *
+ * Hij stond privé in travel.ts. Optimalisatie kon er dus niet bij, matchte op
+ * gelijk id en miste precies deze paren — waaronder de € 16,90 per maand van N26
+ * Metal, die daar als "kosten onbekend" bovenaan de cashbackvergelijking kwam.
+ */
+describe("productFeesById: de prijs van de kaart staat op de pakketrij", () => {
+  const N26_METAL_CARD: AccountFeeEntryLike = {
+    id: "n26-metal-betaalpas",
+    product: "N26 Metal betaalpas",
+    issuer: "N26 Bank AG; metal Mastercard Debit",
+    kind: "betaalpas",
+    fields: {},
+  };
+  const N26_METAL_PLAN: AccountFeeEntryLike = {
+    id: "n26-metal",
+    product: "N26 Metal",
+    issuer: "N26 Bank AG",
+    kind: "betaalrekening",
+    fields: { accountFee: fee({ value: 16.9, period: "maand", conditions: "Membership fee." }) },
+  };
+  const ING_BETAALPAS: AccountFeeEntryLike = {
+    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas", fields: {},
+  };
+  const ING_PAKKET: AccountFeeEntryLike = {
+    id: "ing-betaalpakket", product: "ING BetaalPakket", issuer: "ING Bank N.V.", kind: "betaalpakket",
+    fields: { accountFee: fee({ value: 6.85 }) },
+  };
+
+  test("het echte N26-geval: de kaartrij erft de € 16,90 van de pakketrij", () => {
+    const fees = productFeesById([N26_METAL_CARD, N26_METAL_PLAN]);
+    const card = fees.get("n26-metal-betaalpas");
+    // De EENHEID blijft die van het document. Er een jaarbedrag van maken is een
+    // factor twaalf, en dat is precies wat dit bestand bewaakt.
+    expect(card?.amount).toMatchObject({ cents: 1690, period: "maand" });
+    expect(card?.productId).toBe("n26-metal"); // de rij waar het bedrag vandaan komt
+  });
+
+  test("een pakketnaam die alleen de BANK noemt wordt geweigerd", () => {
+    // "ING betaalpas" ontdaan van zijn soortwoord is "ING", en dat is geen pakket
+    // maar een bank. Zou dat matchen, dan kreeg de generieke ING-betaalpas de
+    // € 6,85 van één van de zeven pakketten waarin ING hem verkoopt — een prijs
+    // die voor de meeste ING-klanten niet klopt.
+    expect(productFeesById([ING_BETAALPAS, ING_PAKKET]).get("ing-betaalpas")).toBeUndefined();
+  });
+
+  test("een creditcardbijdrage landt nooit op een betaalpas", () => {
+    // Het pakket moet een REKENING zijn. ABN's creditcardbijdrage van € 2,55 hoort
+    // bij de creditcard en niet bij de betaalpas van dezelfde bank.
+    const CARD_FEE: AccountFeeEntryLike = {
+      id: "abn-amro-creditcard", product: "ABN AMRO creditcard", issuer: "International Card Services B.V.",
+      kind: "creditcard", fields: { accountFee: fee({ value: 2.55, conditions: "Maandelijkse bijdrage." }) },
+    };
+    const PAS: AccountFeeEntryLike = {
+      id: "abn-amro-betaalpas", product: "ABN AMRO betaalpas", issuer: "ABN AMRO Bank N.V.", kind: "betaalpas", fields: {},
+    };
+    const fees = productFeesById([PAS, CARD_FEE]);
+    expect(fees.get("abn-amro-betaalpas")).toBeUndefined();
+    expect(fees.get("abn-amro-creditcard")?.amount.cents).toBe(255);
+  });
+
+  test("de eigen rij gaat voor de pakketrij", () => {
+    // Anders besliste de leesvolgorde de prijs.
+    const OWN: AccountFeeEntryLike = { ...N26_METAL_CARD, fields: { accountFee: fee({ value: 0, conditions: "Uitgesproken nul." }) } };
+    expect(productFeesById([OWN, N26_METAL_PLAN]).get("n26-metal-betaalpas")?.amount.cents).toBe(0);
+  });
+
+  test("twee pakketten met dezelfde naam is geen keuze die wij mogen maken", () => {
+    const TWIN: AccountFeeEntryLike = { ...N26_METAL_PLAN, id: "n26-metal-2", fields: { accountFee: fee({ value: 9.9 }) } };
+    expect(productFeesById([N26_METAL_CARD, N26_METAL_PLAN, TWIN]).get("n26-metal-betaalpas")).toBeUndefined();
+  });
+
+  test("een spaarrekening vindt hier niets, en dat hoort zo", () => {
+    // "ING Oranje Spaarrekening" is geen "<bank> betaalpas" of "<bank> creditcard",
+    // dus splitProductName weigert hem. De koppeling "voor deze rente heb je eerst
+    // een betaalpakket nodig" staat in de catalogus alleen in proza, en die zin
+    // machinaal tot een prijs promoveren zou een bedrag verzinnen.
+    const SPAAR: AccountFeeEntryLike = {
+      id: "ing-oranje-spaarrekening", product: "ING Oranje Spaarrekening", issuer: "ING Bank N.V.",
+      kind: "spaarrekening", fields: {},
+    };
+    expect(productFeesById([SPAAR, ING_PAKKET]).get("ing-oranje-spaarrekening")).toBeUndefined();
+  });
+});
+
+test("accountNamesProduct: op hele woorden, en minstens twee", () => {
+  // Geëxporteerd voor de rentelane, die moet weten of de rekening waar het advies
+  // heen wijst er al één van hem is. Eén woord is te weinig — "Go" en "Max" komen
+  // los in een rekeningnaam voor — en "ING Go" mag niet aanslaan op "ING Gouden".
+  const [ingGo] = accountFees([entry()]);
+  expect(accountNamesProduct(account({ bank: "ING", name: "ING Go" }), ingGo)).toBe(true);
+  expect(accountNamesProduct(account({ bank: "ING", name: "Betaalrekening" }), ingGo)).toBe(false);
 });

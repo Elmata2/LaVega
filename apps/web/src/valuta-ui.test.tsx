@@ -263,3 +263,152 @@ test("with nothing known the info panel refuses to say whether switching pays", 
   expect(panel.textContent).toContain("Een onbekend tarief is geen 0%");
   expect(panel.textContent).not.toContain("Elke bank die minder rekent");
 });
+
+/* ════════════════ DE HORIZONREGEL OP HET SCHERM (21 augustus) ════════════════
+ *
+ * Valuta was de vierde plek met een aanbeveling en de laatste die de kosten van de
+ * rekening negeerde. Zijn zin: een bank die drie euro goedkoper is maar vijf euro
+ * per maand kost, is voor één conversie duurder.
+ *
+ * De drie gevallen hieronder zijn de drie toestanden uit het type, en ze worden
+ * met dezelfde woorden verteld als op Overzicht — de component `Kaartkosten` komt
+ * daar letterlijk vandaan. Twee schermen die hetzelfde zeggen in andere woorden is
+ * een fout op zichzelf. */
+
+/** Dezelfde kaart, plus de maand- of jaarprijs die zijn eigen document noemt. */
+function pricedCard(
+  id: string,
+  product: string,
+  issuer: string,
+  pct: number,
+  fee: { value: number; period: "maand" | "jaar" },
+): CatalogueEntryLike {
+  const base = card(id, product, issuer, pct);
+  return {
+    ...base,
+    fields: {
+      ...base.fields,
+      // `period` hoort bij een bedrag en niet bij een percentage, dus het staat
+      // niet in het gedeelde veldtype; accountCosts.ts leest het los uit de JSON.
+      accountFee: {
+        value: fee.value,
+        period: fee.period,
+        route: "provider-pdf",
+        sourceUrl: `https://example.test/${id}-tarieven`,
+        checkedAt: "2026-08-01",
+        conditions: "vaste bijdrage per periode",
+        conditionsKnown: true,
+      } as never,
+    },
+  };
+}
+
+/** Zijn eigen ING-pas op 1,4%, en de goedkoopste kaart van de markt: N26 Metal met
+ *  0% opslag en € 16,90 per maand. Op € 1.000 scheelt de opslag € 14 en kost de
+ *  kaart € 16,90 — dus overstappen is € 2,90 achteruit. */
+const PRICED: CatalogueEntryLike[] = [
+  card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
+  pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, { value: 16.9, period: "maand" }),
+];
+const ONLY_ING: Account[] = [ACCOUNTS[0]];
+
+/** Het bedrag in het invoerveld wijzigen zoals hij dat doet. Via de native setter,
+ *  anders ziet React de wijziging van een gecontroleerd veld niet. */
+function typeAmount(value: string) {
+  const input = container!.querySelector('[aria-label="Bedrag"]') as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function text(testId: string): string {
+  return (container!.querySelector(`[data-testid="${testId}"]`) as HTMLElement | null)?.textContent ?? "";
+}
+
+test("een goedkopere bank die door zijn maandprijs duurder wordt, staat niet bovenaan", () => {
+  const c = render({ accounts: ONLY_ING, entries: PRICED });
+
+  // 0% opslag, en tóch tweede: € 16,90 per maand is meer dan de € 14 die de
+  // lagere opslag oplevert. Op het percentage alleen stond deze kaart bovenaan.
+  const order = rows().map((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0]);
+  expect(order).toEqual(["ING", "N26"]);
+  // En de rij zegt zelf waarom ze daar staat, in plaats van de lezer te laten
+  // raden waarom 0% onder 1,4% hangt.
+  expect(rowNamed("N26").textContent).toContain(`Kaartkosten: ${eur(16.9)} per maand`);
+  expect(rowNamed("N26").textContent).toContain(`${eur(2.9)} meer in totaal`);
+
+  // De aanbeveling: bruto blijft bruto, en netto is hier geen aanbeveling. De KOP
+  // zegt dat ook — "Goedkoper kan" boven een regel die op achteruitgang eindigt is
+  // een kop die zijn eigen alinea tegenspreekt.
+  expect(text("goedkoper")).toContain("Lagere opslag, maar niet goedkoper");
+  expect(text("goedkoper")).not.toContain("Goedkoper kan");
+  expect(text("goedkoper")).toContain(`${eur(14)} minder aan koersopslag`);
+  const kosten = text("valuta-goedkoper-kosten") + text("valuta-goedkoper-kosten-geen");
+  expect(kosten).toContain("Geen aanbeveling");
+  expect(kosten).toContain(`je gaat er ${eur(2.9)} op achteruit`);
+  // DE PERIODE STAAT OP HET SCHERM, met de reden dat er een hele maand gerekend
+  // wordt: zonder die twee is het bedrag niet na te rekenen.
+  expect(kosten).toContain("gerekend over 1 maand");
+  expect(kosten).toContain("Minder dan één maand kun je niet afnemen");
+  // Er wordt geen netto beloofd waar er geen is.
+  expect(c.querySelector('[data-testid="valuta-goedkoper-kosten-netto"]')).toBeNull();
+});
+
+test("op een groter bedrag verdient diezelfde maandprijs zich terug, en dan pas heet het netto", () => {
+  render({ accounts: ONLY_ING, entries: PRICED });
+  // € 5.000 tegen 1,4% is € 70 opslag; daar gaat € 16,90 vanaf en blijft € 53,10.
+  typeAmount("5000");
+
+  const order = rows().map((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0]);
+  expect(order).toEqual(["N26", "ING"]);
+  expect(text("goedkoper")).toContain("Goedkoper kan");
+  expect(text("valuta-goedkoper-kosten-netto")).toContain(eur(53.1));
+  expect(text("valuta-goedkoper-kosten-netto")).toContain(`${eur(70)} voordeel min ${eur(16.9)} kaartkosten`);
+  expect(container!.querySelector('[data-testid="valuta-goedkoper-kosten-geen"]')).toBeNull();
+});
+
+test("een bank die hij al heeft kost hem niets extra, en daar staat geen prijs bij", () => {
+  const withN26: Account[] = [
+    ...ONLY_ING,
+    { key: "N26A", iban: "", name: "N26", bank: "N26", entity: "Prive", currency: "EUR", balance: 300 },
+  ];
+  render({ accounts: withN26, entries: PRICED });
+
+  const n26 = rowNamed("N26");
+  expect(n26.textContent).toContain("van jou");
+  // Die € 16,90 loopt toch al door, of hij er nu doorheen wisselt of niet. Er
+  // staat dus niets over — en zeker geen "kaartkosten € 0,00", want dat zou
+  // suggereren dat de kaart gratis is in plaats van al betaald.
+  expect(n26.textContent).not.toContain("Kaartkosten");
+  // En nu wint hij wél: geen opslag, geen extra kosten.
+  expect(rows().indexOf(n26)).toBe(0);
+
+  // Ter contrast: exact dezelfde kaart die hij NIET heeft draagt de prijs wel.
+  act(() => root!.unmount());
+  container!.remove();
+  render({ accounts: ONLY_ING, entries: PRICED });
+  expect(rowNamed("N26").textContent).toContain(`Kaartkosten: ${eur(16.9)} per maand`);
+});
+
+test("een bank met onbekende kosten blijft bruto, met de reden, en zonder het woord netto", () => {
+  const c = render();
+  const t212 = rowNamed("Trading 212");
+  expect(t212.textContent).toContain("Kaartkosten: onbekend");
+  expect(t212.textContent).toContain("Dat is geen nul");
+
+  // De aanbeveling noemt het voordeel, en belooft niet dat het goedkoper is: de
+  // andere helft van de rekening ontbreekt, en dat staat in de kop én eronder.
+  expect(text("goedkoper")).toContain("of dat goedkoper uitpakt, weet LaVega niet");
+  expect(text("goedkoper")).toContain(`${eur(14)} minder aan koersopslag`);
+  const kosten = text("valuta-goedkoper-kosten");
+  expect(kosten).toContain("staat niet in onze bronnen");
+  expect(kosten).toContain("Dat is geen nul");
+  expect(kosten).toContain("Het bedrag hierboven is dus bruto");
+  // Het woord "netto" valt hier NOOIT: er is geen netto zolang de ene helft
+  // ontbreekt, en een brutobedrag dat netto heet is de fout die dit moest wegnemen.
+  expect(kosten.toLowerCase()).not.toContain("netto");
+  expect(c.querySelector('[data-testid="valuta-goedkoper-kosten-netto"]')).toBeNull();
+  expect(c.querySelector('[data-testid="valuta-goedkoper-kosten-geen"]')).toBeNull();
+});

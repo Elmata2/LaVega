@@ -69,7 +69,19 @@ test("elke accountFee in het artefact komt door de toelatingseis", () => {
   const withFee = catalog.entries.filter((e) => e.fields?.accountFee !== undefined);
   const refused = withFee.filter((e) => readAccountFee(e) === null).map((e) => e.id);
   expect(refused).toEqual([]);
-  expect(withFee).toHaveLength(71);
+
+  /* EEN ONDERGRENS EN GEEN MOMENTOPNAME, en dat verschil is de hele waarde van
+   * deze regel. Hier stond `toHaveLength(71)`, en die brak dezelfde dag nog: een
+   * lane haalde er achttien rijen bij met een gedateerd tariefdocument, alles
+   * netjes door de toelatingseis, en de test viel om op een terechte verbetering.
+   * Zo'n test leert de volgende alleen om het getal op te hogen zonder te kijken.
+   *
+   * Wat WEL de moeite waard is om te bewaken is de andere kant op: het aantal mag
+   * niet DALEN. Precies die fout stond klaar - een volledige sweep vraagt alleen
+   * fxFeePct en interestPct en schreef zijn resultaat integraal weg, wat 68
+   * velden zou hebben gewist. Deze ondergrens vangt dat, en gaat nooit af op
+   * iemand die zijn werk goed doet. */
+  expect(withFee.length).toBeGreaterThanOrEqual(89);
 });
 
 test("geen enkele accountFee draagt de dag waarop hij is toegevoegd als datum", () => {

@@ -70,13 +70,36 @@ describe("de gebundelde bol", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("laat Antarctica weg — het enige bewuste gat, en op een bol een open punt", () => {
-    // Zie GEODATA.md: op de platte kaart was dit opruimen, op een bol kun je naar
-    // de zuidpool draaien en is daar niets. De keuze staat bij de eigenaar; deze
-    // test legt alleen vast wat er NU in de bundel zit, zodat het terugzetten
-    // ervan een zichtbare wijziging is en geen sluipende.
-    expect(countryById("AQ")).toBeNull();
-    expect(WORLD_LATLON_BOUNDS[1]).toBeGreaterThan(-90);
+  it("tekent Antarctica, zodat de bol onderaan niet ophoudt", () => {
+    // Hier stond het omgekeerde: AQ was er niet en de onderkant lag op −55,6°. Op
+    // een platte kaart was dat opruimen, op een bol een gat waar je naartoe kunt
+    // draaien. Nu staat het erin, en deze test bewaakt de twee dingen die dan
+    // waar moeten zijn: er is een vlak om te tekenen, en de omhullende loopt tot
+    // de pool. Zakt die grens ooit weer boven −90, dan is dat een zichtbare
+    // wijziging en geen sluipende.
+    const aq = countryById("AQ");
+    expect(aq).not.toBeNull();
+    expect(aq!.rings?.length ?? 0).toBeGreaterThan(0);
+    expect(aq!.bbox).not.toBeNull();
+    expect(aq!.pin).not.toBeNull();
+    expect(WORLD_LATLON_BOUNDS[1]).toBe(-90);
+    // En het is echt een kap om de pool en niet een streepje aan de onderrand: de
+    // ringen strekken zich over de hele lengtegraad uit.
+    const lons = aq!.rings!.flat().map(([lon]) => lon);
+    expect(Math.min(...lons)).toBe(-180);
+    expect(Math.max(...lons)).toBe(180);
+  });
+
+  it("laat de zuidpool aanklikbaar zijn en de noordpool eerlijk leeg", () => {
+    // De zuidpool is nu land: wie daarheen draait en klikt, kiest Antarctica.
+    expect(countryAtLonLat(0, -90)?.id).toBe("AQ");
+    expect(countryAtLonLat(0, -85)?.id).toBe("AQ");
+    expect(countryAtLonLat(90, -75)?.id).toBe("AQ");
+    // De noordpool niet: daar houdt de tabel op bij de noordpunt van Groenland.
+    // Dat is een leemte in ONZE data en geen uitspraak over wat daar ligt — de UI
+    // hoort dat verschil te noemen, en leest daarvoor deze grens.
+    expect(WORLD_LATLON_BOUNDS[3]).toBeLessThan(90);
+    expect(countryAtLonLat(0, 89)).toBeNull();
   });
 
   it("bewaart geen geprojecteerde paden meer naast de graden", () => {
@@ -222,9 +245,11 @@ describe("van een punt op de bol naar een land", () => {
   it("zegt 'geen land' waar geen land is, in plaats van het dichtstbijzijnde te gokken", () => {
     expect(countryAtLonLat(-30, 0)).toBeNull();
     expect(countryAtLonLat(3.5, 54)).toBeNull();
-    // De zuidpool: hier hoort Antarctica, en daar staat nu niets. Dat is precies
-    // het open punt uit GEODATA.md en het antwoord is eerlijk null.
-    expect(countryAtLonLat(0, -89)).toBeNull();
+    // Hier stond de zuidpool als voorbeeld van "geen land". Dat is hij niet meer:
+    // Antarctica staat in de bundel. De Zuidelijke Oceaan tussen Kaap Hoorn en
+    // het continent is nu het geval dat hetzelfde bewijst — water, en niet het
+    // dichtstbijzijnde land erbij gegokt.
+    expect(countryAtLonLat(0, -60)).toBeNull();
   });
 
   it("laat een enclave voorgaan op het land eromheen", () => {
@@ -237,6 +262,37 @@ describe("van een punt op de bol naar een land", () => {
     // En het land eromheen blijft gewoon het land eromheen.
     expect(countryAtLonLat(12.5, 41.8)?.id).toBe("IT");
     expect(countryAtLonLat(2.35, 48.85)?.id).toBe("FR");
+  });
+
+  it("geeft pal op een grens altijd hetzelfde land, en dat is het kleinste", () => {
+    /* Elk land is LOS vereenvoudigd, dus twee buurlanden houden niet exact
+     * dezelfde grenspunten over en er is een strook van een fractie van een graad
+     * waar een punt volgens de tabel in ALLEBEI ligt. Gemeten op deze bundel is
+     * [5.7, 50.96] zo'n punt: het ligt binnen België én binnen Nederland.
+     *
+     * Welke van de twee je dan teruggeeft is willekeurig — maar de UITKOMST mag
+     * dat niet zijn. Deze test legt vast dat het altijd het kleinste land is en
+     * altijd hetzelfde, en hij staat er zodat een volgende lezer die dit voor een
+     * bug aanziet ziet dat het een besluit is. De redenering (en waarom "dichtste
+     * middelpunt" en "topologisch vereenvoudigen" het niet oplossen) staat in
+     * worldMap.ts bij EXTENTS. */
+    const beide = [countryById("BE")!, countryById("NL")!];
+    const opDeGrens: [number, number] = [5.7, 50.96];
+    for (const c of beide) {
+      let inside = false;
+      for (const ring of c.rings!) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const [xi, yi] = ring[i];
+          const [xj, yj] = ring[j];
+          if (yi > opDeGrens[1] !== yj > opDeGrens[1] && opDeGrens[0] < ((xj - xi) * (opDeGrens[1] - yi)) / (yj - yi) + xi)
+            inside = !inside;
+        }
+      }
+      expect(inside, `${c.id} bevat het grenspunt niet meer — kies een nieuw punt`).toBe(true);
+    }
+    // Tien keer hetzelfde antwoord, en het is het kleinste van de twee.
+    const antwoorden = new Set(Array.from({ length: 10 }, () => countryAtLonLat(opDeGrens[0], opDeGrens[1])?.id));
+    expect([...antwoorden]).toEqual(["BE"]);
   });
 
   it("houdt een gat een gat", () => {
@@ -327,6 +383,30 @@ describe("waar de bol naartoe draait", () => {
     expect(countryById("GI")!.rings).toBeNull();
   });
 
+  it("laat de acht landen zonder vlak en zonder speld herkenbaar zijn voor de UI", () => {
+    /* BV, CC, CX, GF, RE, SJ, UM en YT hebben in de bron geen eigen vlak en ook
+     * geen labelpunt. `countryFocus()` geeft daar null, en dat is het signaal
+     * waarop de UI hoort te zeggen dat wij niet weten waar het ligt — in plaats
+     * van ergens heen te draaien of stil niets te doen.
+     *
+     * Deze test legt de drie dingen vast waar die mededeling op steunt: het zijn
+     * precies deze acht, ze zijn te vinden in de zoekbalk, en ze hebben wél een
+     * valuta-antwoord. Dat laatste is de reden dat ze in de lijst mogen blijven
+     * staan: niet weten waar iets ligt is geen reden om ook niet te weten waarmee
+     * er betaald wordt. */
+    const zonderPlek = allCountries().filter((c) => countryFocus(c.id) === null);
+    expect(zonderPlek.map((c) => c.id).sort()).toEqual(["BV", "CC", "CX", "GF", "RE", "SJ", "UM", "YT"]);
+    for (const c of zonderPlek) {
+      expect(c.rings, `${c.id} heeft wel ringen`).toBeNull();
+      expect(c.pin, `${c.id} heeft wel een speld`).toBeNull();
+      // Wél een antwoord over geld, en niet "unknown": dat zou een leemte
+      // suggereren die er niet is.
+      expect(conversionFor(c.id).kind, c.id).not.toBe("unknown");
+      // En te vinden op naam, anders is de eerlijke mededeling onbereikbaar.
+      expect(searchCountries(countryLabel(c.id), 20).map((x) => x.id), c.id).toContain(c.id);
+    }
+  });
+
   it("verzint geen middelpunt voor een land waarvan wij de plek niet kennen", () => {
     // Geen [0, 0]: dat is een plek in de Golf van Guinee, en een bol die
     // daarheen draait beweert dat Frans-Guyana daar ligt. Null is het antwoord,
@@ -397,16 +477,39 @@ describe("van land naar valuta", () => {
     expect(conversionFor("GI").kind).toBe("noRate");
   });
 
+  it("noemt Antarctica geen leemte: er is daar geen munt, en dat weten wij", () => {
+    // Dit is de zesde soort antwoord, en hij bestaat om precies één verwarring te
+    // voorkomen. Antarctica heeft een leeg valutalijstje, net als een land waar de
+    // bron niets over zegt — maar hier ZEGT de bron iets (CLDR: XXX, geen wettig
+    // betaalmiddel). Zou dit "unknown" zijn, dan meldde de bol een leemte bij ons
+    // op de enige plek waar de bron juist wél antwoord geeft.
+    const aq = conversionFor("AQ");
+    expect(aq.kind).toBe("noTender");
+    expect(aq.currencies).toEqual([]);
+    expect(countryById("AQ")!.noTender).toBe(true);
+    // En het is niet noRate: daar is een munt waar wij de koers van missen.
+    expect(conversionFor("MA").kind).toBe("noRate");
+    // Vandaag is Antarctica het enige land met deze vlag. Komen er meer bij, dan
+    // valt deze test om — en dan hoort de tekst in de UI ("er is daar geen munt")
+    // opnieuw gelezen te worden, want die is nu op één continent geschreven.
+    const metVlag = allCountries().filter((c) => conversionFor(c.id).kind === "noTender");
+    expect(metVlag.map((c) => c.id)).toEqual(["AQ"]);
+  });
+
   it("laat geen land zonder antwoord achter", () => {
     const kinds = new Set(allCountries().map((c) => conversionFor(c.id).kind));
-    // Alle vier de antwoorden komen voor, en "unknown" komt bij een land dat in
-    // de tabel staat NIET voor: de valutabron dekt ze alle 249. Zou dat ooit
-    // veranderen, dan valt deze test om in plaats van dat er ergens een leeg
+    // Alle vijf de antwoorden die over een echt land kunnen gaan komen voor, en
+    // "unknown" komt bij een land dat in de tabel staat NIET voor: de valutabron
+    // dekt ze alle 250, en waar hij geen valuta noemt zegt hij waarom. Zou dat
+    // ooit veranderen, dan valt deze test om in plaats van dat er ergens een leeg
     // vakje verschijnt.
-    expect([...kinds].sort()).toEqual(["choice", "euro", "noRate", "priceable"]);
+    expect([...kinds].sort()).toEqual(["choice", "euro", "noRate", "noTender", "priceable"]);
     for (const c of allCountries()) {
       const a = conversionFor(c.id);
-      expect(c.currencies.length, `${c.id} heeft geen valuta`).toBeGreaterThan(0);
+      // Geen valuta mag, maar dan moet de bron gezegd hebben dat er geen is. Een
+      // leeg lijstje zonder die vlag is een land waarover niemand iets weet, en
+      // dat hoort op te vallen.
+      if (c.currencies.length === 0) expect(c.noTender, `${c.id} heeft geen valuta en geen reden`).toBe(true);
       expect(a.currencies.map((x) => x.code)).toEqual(c.currencies.map((x) => x.code));
     }
   });

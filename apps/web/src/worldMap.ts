@@ -22,10 +22,13 @@
  * graden. Dat is `countryFocus()`. Een zoekveld zonder dat antwoord is een
  * zoekveld dat een land vindt en er niets mee doet — je typt "Singapore" en het
  * blijft aan de achterkant van de bol zitten. De soorten antwoorden over valuta
- * hieronder zijn niet veranderd; die waren af.
+ * hieronder waren daarbij niet veranderd; die waren af. Er is er sindsdien één
+ * bijgekomen, en niet omdat de tabel rijker werd maar omdat er een LAND bijkwam:
+ * Antarctica staat nu op de bol, en dat is het eerste land waar geen munt is.
+ * Zie `noTender` hieronder.
  *
  * HET ANTWOORD IS EEN SOORT, GEEN GETAL. Dat is de hele reden dat dit bestand
- * bestaat in plaats van een `Record<string, string>` in de view. Er zijn vier
+ * bestaat in plaats van een `Record<string, string>` in de view. Er zijn ZES
  * manieren waarop "wat kost omwisselen daarheen" kan eindigen en ze zien er in
  * een tabel bedrieglijk hetzelfde uit:
  *
@@ -40,10 +43,21 @@
  *   noRate    — wij weten waarmee er betaald wordt, maar wij hebben geen koers.
  *               Dat is een leemte bij ONS. Het mag nooit als 0%, "gratis" of
  *               een streepje-dat-op-nul-lijkt op het scherm komen.
+ *   noTender  — er is daar geen wettig betaalmiddel. Vandaag is dat Antarctica
+ *               en alleen Antarctica (CLDR zet er XXX neer). Er valt niets te
+ *               wisselen omdat er geen munt is — het gat zit niet bij ons.
  *   unknown   — de bron kent voor dit land geen valuta, of het land bestaat
  *               niet in de tabel. Ook dit is niet nul.
  *
- * Dertien van de 249 landen hebben `rings: null`: de bron heeft op deze schaal geen
+ * DE LAATSTE TWEE ZIJN HET PAAR DAT ER TOE DOET, en dat is de reden dat de zesde
+ * er is. Ze hebben allebei een leeg valutalijstje en ze betekenen het
+ * tegenovergestelde: bij `noTender` heeft de bron gekeken en is er niets, bij
+ * `unknown` heeft de bron niets gezegd. Zonder dat onderscheid zou de bol op
+ * Antarctica "valuta onbekend" melden — een leemte aan onze kant verzinnen waar
+ * de bron een antwoord geeft. Precies andersom als de valkuil aan de andere kant
+ * (een leemte als 0% tonen), en even fout.
+ *
+ * Dertien van de 250 landen hebben `rings: null`: de bron heeft op deze schaal geen
  * eigen vlak voor ze (Gibraltar, Caribisch Nederland, de Franse overzeese
  * departementen). Ze staan
  * er wél in, met valuta, want een land dat je niet kunt aanklikken is nog steeds
@@ -146,30 +160,45 @@ export function searchCountries(query: string, limit = 8): WorldCountry[] {
 }
 
 /** Waarmee er in dit land betaald wordt, met per valuta of wij er een koers van
- *  hebben. Leeg betekent: de bron zegt er niets over. Dat is niet "geen
- *  valuta" en het is zeker geen nul. */
+ *  hebben. Leeg is hier NIET één antwoord: het kan "de bron zegt er niets over"
+ *  zijn of "de bron zegt dat er geen betaalmiddel is". Wie dat onderscheid nodig
+ *  heeft — en dat is iedereen die er een zin over op het scherm zet — moet
+ *  `conversionFor()` gebruiken. Nul is het in geen van beide gevallen. */
 export function currenciesFor(id: string): readonly WorldCurrency[] {
   return countryById(id)?.currencies ?? [];
 }
 
 /** Wat er met omwisselen naar dit land gebeurt. Zie de kop van dit bestand voor
- *  waarom dit vijf soorten zijn en niet één getal.
+ *  waarom dit zes soorten zijn en niet één getal.
  *
  *  `currencies` staat in ELKE variant, ook als er maar één is: de UI die het
  *  antwoord toont wil bijna altijd ook de code kunnen noemen, en een tweede
  *  aanroep om die op te halen is een tweede plek waar iemand een andere valuta
- *  kan kiezen dan waar het antwoord over ging. */
+ *  kan kiezen dan waar het antwoord over ging. Bij `noTender` en `unknown` is die
+ *  lijst leeg — en de UI mag dat lege lijstje dus NIET zelf interpreteren, want
+ *  de twee betekenen niet hetzelfde. Daar is `kind` voor. */
 export type ConversionAnswer =
   | { kind: "euro"; currencies: readonly WorldCurrency[] }
   | { kind: "priceable"; currency: WorldCurrency; currencies: readonly WorldCurrency[] }
   | { kind: "choice"; currencies: readonly WorldCurrency[] }
   | { kind: "noRate"; currency: WorldCurrency; currencies: readonly WorldCurrency[] }
+  | { kind: "noTender"; currencies: readonly WorldCurrency[] }
   | { kind: "unknown"; currencies: readonly WorldCurrency[] };
 
 export function conversionFor(id: string): ConversionAnswer {
   const c = countryById(id);
   const currencies = c?.currencies ?? [];
-  if (!c || currencies.length === 0) return { kind: "unknown", currencies: [] };
+  if (!c) return { kind: "unknown", currencies: [] };
+  /* Geen valuta in de tabel — en dan hangt alles aan wie dat zegt. `noTender`
+   * staat er alleen als de BRON meldt dat er geen wettig betaalmiddel is (CLDR:
+   * XXX; vandaag alleen Antarctica). Ontbreekt die vlag, dan weten wij het niet,
+   * en dan is `unknown` het enige eerlijke antwoord. Dit was tot voor kort één
+   * tak — met alleen `unknown` — en dat was precies goed zolang Antarctica niet
+   * op de bol stond. Met Antarctica erop zou het betekenen dat de bol een leemte
+   * bij ONS meldt op de enige plek waar de bron juist wél iets zegt. */
+  if (currencies.length === 0) {
+    return c.noTender ? { kind: "noTender", currencies: [] } : { kind: "unknown", currencies: [] };
+  }
   /* Alle valuta's de euro? Dan is er niets om te wisselen, hoeveel regels de
    * bron er ook van maakt. Let op wat hier NIET staat: "eurozone". Monaco,
    * Montenegro en Kosovo zijn geen lid en betalen wel in euro's — voor de vraag
@@ -236,6 +265,32 @@ const EXTENTS: Extent[] = (() => {
    * kleinste, en dat is willekeurig maar wél altijd hetzelfde — een klik die de
    * ene keer België en de andere keer Nederland geeft is erger dan een klik die
    * er consequent naast zit.
+   *
+   * DAT IS EEN KEUZE EN GEEN BUG; NIET REPAREREN. Het ziet er bij het lezen uit
+   * als slordigheid ("waarom het kleinste? dat slaat nergens op"), en de twee
+   * voor de hand liggende verbeteringen zijn allebei slechter:
+   *
+   *   - HET DICHTSTBIJZIJNDE MIDDELPUNT PAKKEN. Dan verliest de enclave: het
+   *     middelpunt van Italië ligt dichter bij Vaticaanstad dan het middelpunt
+   *     van Vaticaanstad bij een klik aan de rand ervan, en San Marino en Monaco
+   *     worden onaanklikbaar. De overlap bij de enclaves is groot (het hele
+   *     landje); die bij een grens is een haartje. Eén regel moet allebei
+   *     bedienen, en "het kleinste wint" is de enige die dat doet.
+   *   - DE OVERLAP OPLOSSEN BIJ DE BRON (topologisch vereenvoudigen, gedeelde
+   *     grenzen één keer). Dat is de echte oplossing en hij staat als volgende
+   *     stap in GEODATA.md. Maar hij haalt de enclave-overlap NIET weg — die
+   *     komt van de drempel voor kleine vlakken, niet van het vereenvoudigen —
+   *     dus deze regel blijft daarna even hard nodig.
+   *
+   * Wat er níét onder valt is willekeur bij de UITKOMST: dezelfde klik geeft
+   * altijd hetzelfde land, want deze lijst wordt één keer gesorteerd en de
+   * volgorde hangt nergens van af. Dat is het enige dat hier beloofd wordt, en
+   * het is meer waard dan gelijk hebben op een haartje.
+   *
+   * Sinds Antarctica erbij staat, is dat meteen het grootste vak in deze lijst:
+   * zijn omhullende is de hele wereld onder −63°. Het komt dus als laatste aan
+   * de beurt en kan niets overstemmen — precies de bedoeling van "kleinste
+   * eerst", nu met een land dat er echt op uitkomt.
    *
    * Lesotho hoeft dit niet: dat is groot genoeg om als gat in Zuid-Afrika te
    * blijven staan, en de even-odd-regel doet daar de rest. */
@@ -327,7 +382,14 @@ export function countryFocus(id: string): CountryFocus | null {
     /* Het gemiddelde van de twee grenzen mag hier zonder omweg, omdat geen enkel
      * vlak de datumgrens oversteekt: de bron knipt daar op ±180 en `bbox` is van
      * één vlak. Was dat niet zo, dan zou dit gemiddelde bij Fiji op 0° uitkomen —
-     * in de Golf van Guinee, weer. */
+     * in de Golf van Guinee, weer.
+     *
+     * ANTARCTICA IS DE ENE UITZONDERING, en hij bewijst de regel niet, hij past
+     * er toevallig in. Zijn vlak loopt wél van −180 tot 180, want het is een kap
+     * om de pool en niet een vlak dat in tweeën is geknipt. Het gemiddelde is dus
+     * 0° — en dat is hier geen Golf van Guinee maar Koningin Maudland, midden op
+     * het continent. Nagemeten op de gebundelde tabel: draaien naar [0, −76,6]
+     * zet Antarctica in het midden van de schijf. */
     return {
       center: [Math.round((lonMin + lonMax) * 50) / 100, Math.round((latMin + latMax) * 50) / 100],
       span: [Math.round((lonMax - lonMin) * 100) / 100, Math.round((latMax - latMin) * 100) / 100],

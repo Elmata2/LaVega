@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, NetBasis, NetBenefit, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
 import {
   accountCosts,
   accountLabel,
@@ -25,6 +25,7 @@ import {
   categorize,
   holdingCostOfProduct,
   netBenefit,
+  productFeesById,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
@@ -91,6 +92,15 @@ type OptimalisatieProps = {
    *  catalogue happened to hold that morning; the bundled one is the default and
    *  App.tsx passes nothing. */
   entries?: readonly CatalogueEntryLike[];
+  /** De vergelijkingsrentes waar het scherm mee BEGINT, injecteerbaar om dezelfde
+   *  reden als `entries`: een test moet zijn eigen markt kunnen stellen in plaats
+   *  van te beweren tegen wat de ingebakken tabel die ochtend toevallig bevatte.
+   *  Hier is er nog een reden bij, en die is bindend: alleen catalogusrentes
+   *  dragen een `productId`, en dus alleen zij kunnen aan een PRIJS gekoppeld
+   *  worden — en die komen in de app pas binnen via het effect hieronder, dat een
+   *  statische render niet draait. Zonder dit haakje was de nettoberekening van de
+   *  rentemodule op dit scherm niet te testen. App.tsx geeft niets mee. */
+  initialRates?: readonly RateBenchmark[];
   onRateCommit: (key: string, value: string) => void;
 };
 
@@ -208,6 +218,128 @@ const ALT_KIND_LABEL: Record<string, string> = { prepaid: "prepaidkaart", crypto
 /** Het bedrag zoals de bron het noemt: "€ 4,00 per maand", "€ 42,95 per jaar". */
 const feeLabel = (a: FeeAmount) => `${euro(a.cents)} per ${a.period}`;
 
+/* ── WAT HET PRODUCT ZELF KOST, in de drie toestanden die er echt zijn ───────
+ *
+ * De rentemodule rekende alleen aan de OPBRENGST: een hoger percentage, dus
+ * zoveel euro per jaar, en geen woord over wat die nieuwe rekening kost. De helft
+ * die je niet ziet is degene die je pakt — een kaart die € 16,90 per maand kost
+ * en € 13,66 oplevert is achteruit. `netBenefit` doet de aftrek in core; dit blok
+ * print hem.
+ *
+ * ÉÉN COMPONENT VOOR BEIDE MODULES, en dat is de hele reden dat hij bestaat.
+ * Cashback had deze drie toestanden al, rente had er nul, en de makkelijke weg
+ * was ze bij rente over te schrijven. Dan staan er twee teksten over hetzelfde
+ * gat en zeggen ze op een dag iets anders. Het reisblok spreekt dezelfde taal
+ * (zie `Kaartkosten` in TravelBlock.tsx): eerst de prijs, dan wat er overblijft,
+ * en in de derde tak valt het woord "netto" niet.
+ *
+ * WAAROM HIJ NIET UIT TravelBlock KOMT: die versie zet "Kaartkosten:" hard in de
+ * kop en is om één kaart heen geschreven, terwijl het hier ook over een
+ * spaarrekening gaat. De ZINNEN zijn er letterlijk uit overgenomen, want de twee
+ * schermen mogen niet twee verschillende dingen beweren over hetzelfde gat.
+ *
+ * ALLEEN TERUGKEREND, en dat is geen weglating. Op dit scherm staat een
+ * terugkerende opbrengst (cashback per maand, rente per jaar) tegenover een
+ * terugkerende prijs, dus ze gaan schoon van elkaar af. De eenmalige vorm — een
+ * winst van één reis tegen een prijs die doorloopt — heeft een horizon nodig en
+ * hoort bij het reisblok. Komt er hier ooit toch een eenmalige benefit langs,
+ * dan zegt `spanWords` over hoeveel periodes gerekend is in plaats van te doen
+ * alsof er niets aan de hand is.
+ */
+
+/** Over welke periode er gerekend is, in woorden. Dezelfde woorden als core's
+ *  `describeNetBenefit` en als het reisblok, zodat een lezer die beide schermen
+ *  ziet niet twee rekenwijzen hoeft te vergelijken. */
+function spanWords(basis: NetBasis): string {
+  if (basis.kind === "recurring") return `per ${basis.period}`;
+  const n = basis.periodsCharged;
+  return basis.costPeriod === "jaar" ? `over ${n} jaar` : `over ${n} ${n === 1 ? "maand" : "maanden"}`;
+}
+
+function Productkosten({ net, id, noun, gainWord, costWord, unknownTail }: {
+  net: NetBenefit;
+  /** Voorvoegsel voor de testids: "cashback" → cashback-kosten / -netto / -geen. */
+  id: string;
+  /** "kaart" of "rekening" — het ding waar de prijs bij hoort. */
+  noun: string;
+  /** Wat de opbrengst ís, in de zin die zegt waarom het geen aanbeveling is:
+   *  "meer cashback", "meer rente". */
+  gainWord: string;
+  /** Hoe de kosten heten in diezelfde zin: "kaartkosten", "rekeningkosten". */
+  costWord: string;
+  /** Eén zin extra bij onbekende kosten, als er iets nuttigs bij te zeggen valt
+   *  — bijvoorbeeld waar de prijzen die we WEL kennen te vinden zijn. */
+  unknownTail?: string;
+}) {
+  // KOSTEN ONBEKEND. Het woord "netto" komt hier NIET voor, en dat is de hele
+  // reden dat deze tak apart staat: er is geen netto zolang de ene helft
+  // ontbreekt. Wel wordt gezegd dat het bedrag hierboven bruto is — anders leest
+  // een onbekende prijs als nul, en dat is precies de fout.
+  if (net.kind === "gross-cost-unknown") {
+    return (
+      <p className="cell-sub" data-testid={`${id}-kosten`}>
+        <strong>Wat deze {noun} zelf kost, weten we niet.</strong>{" "}
+        {net.cost.reason === "needs-another-product"
+          ? `De prijs die onze bron noemt geldt bovenop een ander product, dus wat deze ${noun} los kost staat er niet.`
+          : "Geen van onze bronnen noemt een maand- of jaarprijs voor dit product."}{" "}
+        Dat is geen nul, en het gaat van het bedrag hierboven af — daarom staat er bruto en geen ander woord.
+        {unknownTail ? ` ${unknownTail}` : ""}
+      </p>
+    );
+  }
+
+  const per = spanWords(net.basis);
+  // Een jaarbedrag ook per maand tonen, want dat is de eenheid waarin hij zijn
+  // eigen afschrift leest. Alleen bij een jaar: "€ 5,00 per maand · € 0,42 per
+  // maand" zou een deling zijn die nergens op slaat.
+  const alsoMonthly = net.basis.kind === "recurring" && net.basis.period === "jaar";
+  return (
+    <>
+      <div className="position-row" data-testid={`${id}-kosten`}>
+        <span>
+          <strong>Wat de {noun} zelf kost</strong> — {feeLabel(net.cost.amount)}
+          {/* De rekensom alleen als er iets te rekenen valt. "12 × € 0,00" is waar
+              en is ruis; een uitgesproken nul is al een compleet antwoord. */}
+          {net.cost.amount.perYearDerived && net.cost.amount.cents > 0 && (
+            <span className="cell-sub"> (12 × {euro(net.cost.amount.cents)})</span>
+          )}
+        </span>
+        <span className={net.costCents > 0 ? "text-warn" : undefined}>
+          {euro(net.costCents)} {per}
+        </span>
+      </div>
+      {net.kind === "net" ? (
+        <div className="position-row" data-testid={`${id}-netto`}>
+          <span>
+            <strong>Netto</strong> — wat er overblijft als die kosten eraf zijn
+          </span>
+          <span className="text-pos">
+            {alsoMonthly ? `${euro(Math.round(net.netCents / 12))} per maand · ` : ""}
+            {euro(net.netCents)} {per}
+          </span>
+        </div>
+      ) : (
+        /* GEEN AANBEVELING, en zichtbaar waarom niet. Zijn beslissing, en de reden
+           dat het bedrag erbij staat: hij moet kunnen zien dat iets afvalt omdat
+           het te duur is, in plaats van het zelf te moeten uitrekenen. */
+        <p className="reason" data-testid={`${id}-geen`}>
+          <strong>Geen aanbeveling.</strong> {euro(net.grossCents)} {per} {gainWord} tegen{" "}
+          {euro(net.costCents)} {per} {costWord}:{" "}
+          {net.netCents === 0 ? (
+            "dat levert niets op."
+          ) : (
+            <>
+              je gaat er <span className="reason-figure text-warn">{euro(-net.netCents)}</span> {per} op achteruit.
+            </>
+          )}{" "}
+          Overstappen kost werk en levert hier niets op, dus LaVega raadt deze {noun} niet aan — de cijfers staan er
+          zodat je het kunt nakijken.
+        </p>
+      )}
+    </>
+  );
+}
+
 /** De bron in één woord. De volledige URL staat onder de tabel, zodat de kolom
  *  leesbaar blijft zonder dat de vindplaats verdwijnt. */
 function sourceHost(url: string): string {
@@ -260,7 +392,7 @@ function outflowFacts(txs: Tx[]) {
   return { outflows, merchants: byMerchant.size, repeated, first, last };
 }
 
-export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, facts, entries = CATALOGUE_ENTRIES, onRateCommit }: OptimalisatieProps) {
+export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, facts, entries = CATALOGUE_ENTRIES, initialRates, onRateCommit }: OptimalisatieProps) {
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
@@ -284,7 +416,11 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   // Fetch the public rate benchmark (live -> cache -> bundled). Starts from the
   // bundled snapshot so the tab renders instantly, then upgrades to live/cache.
   const provider = useMemo(() => createRatesProvider({ url: RATES_URL, catalogueRates: CATALOGUE_RATES }), []);
-  const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
+  const [rates, setRates] = useState<RatesResult>({
+    rates: [...(initialRates ?? NL_SAVINGS_RATES)],
+    asOf: RATES_AS_OF,
+    source: "bundled",
+  });
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -302,7 +438,22 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
     }
   }
 
-  const interest = useMemo(() => analyzeInterest(accounts, txs, rates.rates, asOf), [accounts, txs, rates, asOf]);
+  /* DE GEPRIJSDE CATALOGUS, één keer opgebouwd en door alle drie de modules
+     gedeeld. `productFeesById` is dezelfde matcher die het reisblok gebruikt: hij
+     koppelt de KAARTrij aan de PAKKETrij waar de prijs op staat (n26-metal-betaalpas
+     draagt de 0% opslag, n26-metal de € 16,90 per maand). Op gelijk id matchen —
+     wat dit scherm deed — miste precies die veertien paren, en dan zei het scherm
+     "kosten onbekend" over een bedrag dat één rij verderop in de catalogus staat.
+     Eén matcher en geen tweede kopie: twee kopieën lopen op een dag uit elkaar. */
+  const fees = useMemo(() => productFeesById(entries), [entries]);
+
+  // `fees` gaat mee naar core: de rente-aanbeveling wijst naar een REKENING, en
+  // die kan zelf geld kosten. Zonder deze kaart komt `interest.net` terug als
+  // "kosten onbekend" — zichtbaar, en niet als een stille nul.
+  const interest = useMemo(
+    () => analyzeInterest(accounts, txs, rates.rates, asOf, undefined, fees),
+    [accounts, txs, rates, asOf, fees],
+  );
   // The rate the winner still pays once its action ends: what every euro figure on
   // this screen is measured against. Never null while `best` exists — bestRate only
   // ranks rows whose kept rate is known.
@@ -435,25 +586,26 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
    * nooit naar de fijnste: van een jaarprijs een maandprijs maken is een bedrag
    * verzinnen dat in geen enkel document staat.
    *
-   * DE MATCH IS OP ID EN VERDER NIETS. `costs.fees` is de hele geprijsde markt uit
-   * dezelfde catalogus; staat de prijs van een kaart op de rij van het PAKKET
-   * waarin ze zit (zoals N26 Metal), dan vinden we hem hier niet en blijft het
-   * "onbekend". Dat is de veilige kant — er wordt nooit een verkeerde prijs
-   * geclaimd — maar het is wel minder dan travel.ts kan: die heeft een strikte
-   * pakketmatcher, en die staat daar privé. Zolang dat zo is hoort die kennis niet
-   * hier nagebouwd te worden; dan verlopen er twee kopieën apart. */
+   * DE MATCH LOOPT VIA `productFeesById` EN NIET OP GELIJK ID. Hij matchte hier
+   * eerst alleen op een rij met dezelfde id, en dat was de veilige kant maar niet
+   * de goede: staat de prijs van een kaart op de rij van het PAKKET waarin ze zit
+   * (N26 Metal, alle bunq- en Revolut-plannen), dan vonden we hem niet en bleef
+   * het "onbekend" — terwijl het bedrag één rij verderop in dezelfde catalogus
+   * staat en het reisblok het wél las. Twee schermen die hetzelfde beweren over
+   * dezelfde catalogus en het niet eens zijn. De matcher is daarom uit travel.ts
+   * naar accountCosts.ts verhuisd en wordt hier gebruikt in plaats van nagebouwd. */
   const cashbackNet = useMemo(() => {
     if (cashbackUpgrade === null) return null;
     // De prijs van de kaart die de vergelijking hierboven NOEMT, en niet die van
     // de eerste rij van de ranglijst: dat zijn vandaag dezelfde kaart, maar als
     // dat ooit uit elkaar loopt hoort de prijs bij de kaart in de zin te staan en
     // niet bij een andere.
-    const fee = costs.fees.find((f) => f.productId === cashbackUpgrade.best.productId) ?? null;
+    const fee = fees.get(cashbackUpgrade.best.productId) ?? null;
     return netBenefit({
       benefit: { kind: "recurring", cents: cashbackUpgrade.extraPerYearCents, period: "jaar" },
       cost: holdingCostOfProduct(fee),
     });
-  }, [cashbackUpgrade, costs]);
+  }, [cashbackUpgrade, fees]);
 
   return (
     <>
@@ -492,7 +644,11 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           <div className={`kpi-value ${interest.totalExtraPerYearCents > 0 ? "text-warn" : "text-pos"}`}>
             {euro(interest.totalExtraPerYearCents)}
           </div>
-          <div className="eyebrow">per jaar</div>
+          {/* Dit getal is RENTE en alleen rente. Zodra er een overstap achter zit
+              kan de nieuwe rekening zelf geld kosten, en dan is dit een brutobedrag
+              — dat hoort in de tegel te staan en niet alleen in de module eronder.
+              Zonder overstap is er niets om vóór te zijn. */}
+          <div className="eyebrow">{interest.net === null ? "per jaar" : "per jaar, vóór rekeningkosten"}</div>
         </div>
       </div>
 
@@ -675,8 +831,13 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
         >
           {interest.suggestions.length > 0 && interest.best ? (
             <>
+              {/* BRUTO, en dat staat er nu bij. Zonder dat woord las deze regel als
+                  wat je erop overhoudt, terwijl de rekening waar je heen gaat zelf
+                  ook geld kan kosten: € 50 rente meer op een pakket van € 4,50 per
+                  maand is € 4,00 achteruit. De aftrek staat onderaan dit blok. */}
               <p className="reason-lead">
-                Verplaatsen levert je <strong>{euro(interest.totalExtraPerYearCents)}</strong> per jaar op.
+                Verplaatsen levert je <strong>{euro(interest.totalExtraPerYearCents)}</strong> per jaar op
+                {interest.net === null ? "" : ", vóór wat die rekening zelf kost"}.
               </p>
               <div className="reason-list">
                 {interest.suggestions.map((s) => (
@@ -687,6 +848,23 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                     <span className="reason-figure text-warn">{euro(s.extraPerYearCents)}</span> per jaar.
                   </p>
                 ))}
+                {/* WAT DIE REKENING ZELF KOST. Op het TOTAAL en niet per suggestie:
+                    het advies is één rekening openen en daar alles heen brengen,
+                    dus die pakketprijs betaal je één keer. Per rij aftrekken zou hem
+                    bij drie rekeningen drie keer in rekening brengen. Core rekent
+                    het uit (`analyzeInterest`); hier wordt het alleen geprint, in
+                    dezelfde component en met dezelfde woorden als bij Cashback en in
+                    het reisblok. Is er niets te verrekenen, dan komt hier ook geen
+                    leeg blok — `interest.net` is dan null. */}
+                {interest.net !== null && (
+                  <Productkosten
+                    net={interest.net}
+                    id="rente"
+                    noun="rekening"
+                    gainWord="meer rente"
+                    costWord="rekeningkosten"
+                  />
+                )}
               </div>
             </>
           ) : (
@@ -973,69 +1151,16 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </div>
 
               {/* WAT DE KAART ZELF KOST, in de drie toestanden die er echt zijn.
-                  Onbekend is geen nul: een kaart waarvan geen bron de prijs noemt
-                  wordt niet stilzwijgend als gratis behandeld (dan wint hij elke
-                  vergelijking) en ook niet verzwegen (dan zie je hem nooit). In die
-                  tak valt het woord "netto" niet — er IS geen netto. */}
-              {cashbackNet.kind === "gross-cost-unknown" ? (
-                <p className="cell-sub" data-testid="cashback-kosten">
-                  <strong>Wat deze kaart zelf kost, weten we niet.</strong>{" "}
-                  {cashbackNet.cost.reason === "needs-another-product"
-                    ? "De prijs die onze bron noemt geldt bovenop een ander product, dus wat deze kaart los kost staat er niet."
-                    : "Geen van onze bronnen noemt een maand- of jaarprijs voor dit product."}{" "}
-                  Dat is geen nul, en het gaat van het bedrag hierboven af — daarom staat er bruto en geen ander
-                  woord. Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Wat je rekeningen
-                  kosten”.
-                </p>
-              ) : (
-                <>
-                  <div className="position-row" data-testid="cashback-kosten">
-                    <span>
-                      <strong>Wat de kaart zelf kost</strong> — {feeLabel(cashbackNet.cost.amount)}
-                      {/* De rekensom alleen als er iets te rekenen valt. "12 ×
-                          € 0,00" is waar en is ruis; een uitgesproken nul is al
-                          een compleet antwoord. */}
-                      {cashbackNet.cost.amount.perYearDerived && cashbackNet.cost.amount.cents > 0 && (
-                        <span className="cell-sub"> (12 × {euro(cashbackNet.cost.amount.cents)})</span>
-                      )}
-                    </span>
-                    <span className={cashbackNet.costCents > 0 ? "text-warn" : undefined}>
-                      {euro(cashbackNet.costCents)} per jaar
-                    </span>
-                  </div>
-                  {cashbackNet.kind === "net" ? (
-                    <div className="position-row" data-testid="cashback-netto">
-                      <span>
-                        <strong>Netto</strong> — wat er overblijft als die kosten eraf zijn
-                      </span>
-                      <span className="text-pos">
-                        {euro(Math.round(cashbackNet.netCents / 12))} per maand · {euro(cashbackNet.netCents)} per
-                        jaar
-                      </span>
-                    </div>
-                  ) : (
-                    /* GEEN AANBEVELING, en zichtbaar waarom niet. Zijn beslissing,
-                       en de reden dat het bedrag erbij staat: hij moet kunnen zien
-                       dat een kaart afvalt omdat hij te duur is, in plaats van het
-                       zelf te moeten uitrekenen. */
-                    <p className="reason" data-testid="cashback-geen">
-                      <strong>Geen aanbeveling.</strong> {euro(cashbackNet.grossCents)} per jaar meer cashback tegen{" "}
-                      {euro(cashbackNet.costCents)} per jaar kaartkosten:{" "}
-                      {cashbackNet.netCents === 0 ? (
-                        "dat levert niets op."
-                      ) : (
-                        <>
-                          je gaat er{" "}
-                          <span className="reason-figure text-warn">{euro(-cashbackNet.netCents)}</span> per jaar op
-                          achteruit.
-                        </>
-                      )}{" "}
-                      Overstappen kost werk en levert hier niets op, dus LaVega raadt deze kaart niet aan — de
-                      cijfers staan er zodat je het kunt nakijken.
-                    </p>
-                  )}
-                </>
-              )}
+                  Dezelfde component en dezelfde zinnen als de Rente-module
+                  hieronder en als het reisblok — één gat, één verhaal. */}
+              <Productkosten
+                net={cashbackNet}
+                id="cashback"
+                noun="kaart"
+                gainWord="meer cashback"
+                costWord="kaartkosten"
+                unknownTail="Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Wat je rekeningen kosten”."
+              />
               {/* The base, and how it was measured, so the figure can be redone
                   against the same afschrift instead of taken on trust. Two
                   paragraphs: the number first, then what it does and does not

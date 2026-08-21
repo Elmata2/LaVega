@@ -26,17 +26,30 @@
  * DE PRESTATIE ZIT IN `prepareRing()`, en dat is nagemeten en niet aangenomen.
  * Sin en cos van een punt hangen NIET van de stand van de bol af, alleen van het
  * punt zelf. Ze worden dus één keer uitgerekend en in een Float64Array gelegd, en
- * daarna is een beeld alleen nog optellen en vermenigvuldigen. Wat dat scheelt:
+ * daarna is een beeld alleen nog optellen en vermenigvuldigen.
+ *
+ * Opnieuw gemeten toen Antarctica erbij kwam (237 landen, 710 ringen, 12.440
+ * punten, r = 208; Node 22, 400 standen achter elkaar):
+ *
+ *   voorbereiden   1,3 ms de eerste keer, 0,4 ms als de JIT warm is — eenmalig
+ *   een heel beeld 0,31 ms, alle ringen afkappen en de bogen erbij
+ *   zonder voorkauwen 1,33 ms per beeld
+ *
  * `traceRing` raakt elk punt twee keer (één keer om te weten of het voor of
- * achter zit, één keer voor x/y), dus zonder voorkauwen zijn dat 11.580 × 8 =
- * 92.640 trigonometrische aanroepen per beeld, gemeten 0,63 ms. Een heel beeld —
- * alle 649 ringen afkappen, bogen en al — kost nu 0,34 ms. Zonder voorkauwen zou
- * een beeld dus ongeveer drie keer zo duur zijn.
+ * achter zit, één keer voor x/y), dus zonder voorkauwen zijn dat 12.440 × 8 =
+ * 99.520 sin/cos per beeld. Die 1,33 ms is de eerlijke variant van "hetzelfde
+ * werk met `project()` per punt", dus inclusief het object dat die functie per
+ * punt teruggeeft; puur de trigonometrie is een stuk daarvan. Zo of zo: ruim vier
+ * keer zo duur.
+ *
+ * Wat de vorige meting zei (11.580 punten, 0,34 ms per beeld, 2,1 ms
+ * voorbereiden) klopt daar redelijk mee: 7% meer punten, en de 2,1 ms was een
+ * koude eerste run. De volgorde van grootte is niet veranderd door Antarctica.
  *
  * Eerlijk over wat dat NIET zegt: 1 ms past ook in een beeld van 16 ms, dus het
- * was zonder dit niet stuk. Het kost eenmalig 2,1 ms en 370 kB om drie keer
- * goedkoper te zijn, en het VULLEN van 236 paden komt bij die 0,34 ms nog
- * bovenop — die ruimte is dus niet over.
+ * was zonder dit niet stuk. Het kost eenmalig ruim een milliseconde en 389 kB om
+ * vier keer goedkoper te zijn, en het VULLEN van 237 paden komt bij die 0,31 ms
+ * nog bovenop — die ruimte is dus niet over.
  */
 import type { LonLat, Ring } from "./assets/world-map.generated.js";
 

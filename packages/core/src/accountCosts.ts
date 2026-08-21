@@ -36,9 +36,10 @@
  */
 import type { Account } from "./model.js";
 import { accountType } from "./balance.js";
-import { bankNameMatches } from "./bankNl.js";
+import { bankNameMatches, splitProductName } from "./bankNl.js";
 import type { CatalogRoute, CatalogValue } from "./catalog.js";
 import { isCovered } from "./catalog.js";
+import { issuerToBank } from "./catalogRates.js";
 
 /** De eenheid die het document zelf hanteert. Nooit omgerekend achter de rug van
  *  de lezer om; zie de kop van dit bestand. */
@@ -318,6 +319,102 @@ export function accountFees(entries: readonly AccountFeeEntryLike[]): ProductFee
   return out.sort((a, b) => a.amount.perYearCents - b.amount.perYearCents);
 }
 
+/* ─────────────────────────────────────── de prijs bij het CATALOGUSPRODUCT */
+
+/** Namen vergelijken zoals een mens ze leest: kleine letters, zonder accenten,
+ *  losse woorden. De catalogus schrijft "Privérekening" en "priverekening" door
+ *  elkaar, en dat mag geen twee producten worden. */
+function normProduct(s: string): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** DE PRIJS PER CATALOGUSRIJ, óók als die prijs op een ANDERE rij staat.
+ *
+ *  `accountFees` levert de rijen die zichzelf prijzen. Deze functie legt daar de
+ *  koppeling overheen die de catalogus zelf niet legt, en dat is waar deze hele
+ *  kostenlane in stilte op stukliep: het bestand splitst een KAART (kind
+ *  `betaalpas`, die `fxFeePct` draagt) van het PAKKET waarin hij zit (kind
+ *  `betaalrekening` of `betaalpakket`, dat `accountFee` draagt).
+ *  `n26-metal-betaalpas` heeft de 0% opslag, `n26-metal` heeft de € 16,90 per
+ *  maand. Op `id` alleen matchen vond die prijs dus nooit, en N26 Metal kwam als
+ *  gedeeld goedkoopste kaart uit de rangschikking met "kosten onbekend" — een
+ *  kaart van € 16,90 per maand bovenaan, precies het advies dat deze lane moet
+ *  voorkomen. Erger nog: de melding zei dat onze bronnen de prijs niet noemen,
+ *  terwijl hij er wél in staat, één rij verderop.
+ *
+ *  HIJ STAAT HIER EN NIET IN travel.ts, en dat is de reden dat hij verhuisd is.
+ *  Hij was daar privé, dus Optimalisatie matchte op GELIJK id en miste precies
+ *  de twaalf paren die deze functie koppelt — twee schermen die hetzelfde
+ *  beweren over dezelfde catalogus en het niet eens zijn. Een tweede kopie
+ *  ernaast zetten was de andere uitweg, en die loopt op een dag uit elkaar.
+ *
+ *  DE MATCH IS OPZETTELIJK STRIKT, want een verkeerde prijs rekent door en is
+ *  erger dan geen prijs:
+ *   · alleen de kaartnaam wordt van zijn soortwoord ontdaan ("N26 Metal
+ *     betaalpas" → "N26 Metal"). De pakketnaam blijft VOLLEDIG. Toen die ook
+ *     werd ingekort viel "ING BetaalPakket" terug op "ing" en trok dan de
+ *     € 6,85 van dat pakket naar de generieke "ING betaalpas" — terwijl ING die
+ *     kaart in zeven pakketten van € 4 tot € 44,99 verkoopt. Om dezelfde reden
+ *     kwam de creditcardbijdrage van ABN, Rabo, SNS en RegioBank op hun
+ *     BETAALPAS terecht. Op de catalogus van 19 augustus 2026 koppelt hij
+ *     veertien rijen (acht bunq-plannen, drie Revolut, drie N26), en alle
+ *     veertien zijn een kaart die alleen binnen dat ene pakket bestaat;
+ *   · het pakket moet een REKENING of PAKKET zijn (`group === "betaalrekening"`,
+ *     wat betaalpakket meedekt). Zo kan een creditcardbijdrage nooit op een
+ *     betaalpas landen, ook niet als de catalogus ooit een rij omdoopt;
+ *   · precies één kandidaat, anders niets. Twee pakketten met dezelfde naam is
+ *     geen keuze die wij mogen maken;
+ *   · dezelfde bank aan beide kanten, als extra slot op een naam die toevallig
+ *     tweemaal voorkomt.
+ *
+ *  Een SPAARREKENING vindt hier niets, en dat hoort zo: `splitProductName`
+ *  herkent alleen "<bank> betaalpas" en "<bank> creditcard", dus "ING Oranje
+ *  Spaarrekening" valt er meteen uit. De koppeling "voor deze spaarrente heb je
+ *  eerst een betaalpakket nodig" staat in de catalogus alleen in proza (N26 zegt
+ *  het letterlijk over Instant Savings en Metal) en die zin machinaal tot een
+ *  prijs promoveren zou een bedrag verzinnen. Onbekend is daar het eerlijke
+ *  antwoord — zichtbaar, niet stil.
+ *
+ *  Zijn EIGEN rij gaat altijd voor: een rij die zelf geprijsd is, is geprijsd.
+ *
+ *  Eén keer opbouwen en dan delen: dit loopt de hele catalogus tweemaal door, en
+ *  de aanroepers (het reisblok per rangschikking, Optimalisatie per render)
+ *  memoïseren hem daarom. */
+export function productFeesById(entries: readonly AccountFeeEntryLike[]): Map<string, ProductFee> {
+  const fees = accountFees(entries);
+  const out = new Map<string, ProductFee>(fees.map((f) => [f.productId, f]));
+
+  const plans = new Map<string, ProductFee[]>();
+  for (const f of fees) {
+    if (f.group !== "betaalrekening") continue;
+    const key = normProduct(f.product);
+    const list = plans.get(key);
+    if (list) list.push(f);
+    else plans.set(key, [f]);
+  }
+
+  for (const e of entries) {
+    if (out.has(e.id)) continue; // eigen prijs gaat voor
+    const split = splitProductName(e.product);
+    if (!split) continue;
+    const candidates = plans.get(normProduct(split.bank));
+    if (!candidates || candidates.length !== 1) continue;
+    const plan = candidates[0];
+    // Beide kanten dezelfde bank. `issuerToBank` haalt de merknaam uit de
+    // juridische uitgever ("N26 Bank AG; Mastercard Debit" → "N26"), zodat de
+    // kaartrij en de pakketrij op hun bank vergeleken kunnen worden en niet op
+    // hun uitgeverstekst.
+    if (e.issuer && plan.issuer && !bankNameMatches(issuerToBank(e.issuer), issuerToBank(plan.issuer))) continue;
+    out.set(e.id, plan);
+  }
+  return out;
+}
+
 /* ─────────────────────────────────────────── de rekening bij het product */
 
 function words(s: string): string[] {
@@ -377,8 +474,15 @@ function containsSequence(hay: readonly string[], needle: readonly string[]): bo
  *  Op woordniveau, niet op tekst: "ING Go" mag niet aanslaan op "ING Gouden…".
  *  De haakjes gaan eruit ("Triodos Internet Betaalrekening (18 t/m 22 jaar)"),
  *  want dat is de leeftijdstrap en niet de naam die iemand intikt — en één woord
- *  is te weinig: "Free", "Go" en "Max" komen los in een rekeningnaam voor. */
-function productNamedByAccount(account: Account, fee: ProductFee): boolean {
+ *  is te weinig: "Free", "Go" en "Max" komen los in een rekeningnaam voor.
+ *
+ *  Geëxporteerd sinds de rentelane, en om dezelfde reden als `productFeesById`:
+ *  `analyzeInterest` moet weten of de rekening waar het advies heen wijst er al
+ *  ÉÉN VAN HEM is, want dan zijn de marginale kosten nul (`marginalHoldingCost`)
+ *  en niet de pakketprijs. Die vraag hier nog een keer beantwoorden zou een
+ *  tweede, lossere matcher opleveren, en dan zegt het ene scherm dat je die
+ *  rekening al hebt terwijl het andere je hem laat openen. */
+export function accountNamesProduct(account: Account, fee: ProductFee): boolean {
   const needle = words(fee.product.replace(/\([^)]*\)/g, " "));
   if (needle.length < 2) return false;
   return containsSequence(words(`${account.bank} ${account.name}`), needle);
@@ -549,7 +653,7 @@ function resolveCost(
   if (providerFees.length === 0) return { kind: "unknown", reason: "provider-unknown" };
   if (candidates.length === 0) return { kind: "unknown", reason: "product-unknown" };
 
-  const named = candidates.filter((f) => productNamedByAccount(account, f));
+  const named = candidates.filter((f) => accountNamesProduct(account, f));
   if (named.length === 1) {
     const fee = named[0];
     return {

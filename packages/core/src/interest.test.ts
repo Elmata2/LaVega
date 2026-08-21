@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
 import { bestRate, bestPromoRate, keptRate, matchBankBenchmark, detectInterestRate, resolveAccountRate, analyzeInterest, NL_SAVINGS_RATES, mergeRateSources, benchmarkFromCatalogue, type RateBenchmark } from "./interest.js";
+import { productFeesById, type AccountFeeEntryLike } from "./accountCosts.js";
+import { describeNetBenefit } from "./netBenefit.js";
 
 const acc = (over: Partial<Account>): Account =>
   ({ key: "A1", iban: "A1", name: "x", bank: "ING", entity: "BV1", currency: "EUR", balance: 10000, ...over });
@@ -303,5 +305,153 @@ describe("capitalAtRisk", () => {
     const r = analyzeInterest(accounts, [], [{ ...fund, ratePct: 9 }], "2026-08-01");
     expect(r.best).toBeNull();
     expect(r.suggestions).toHaveLength(0);
+  });
+});
+
+
+/* ══════════════ WAT DE REKENING ZELF KOST, in het renteadvies ═══════════════
+ *
+ * Zijn zin, 21 augustus: "als een kaart 5 euro per maand kost en ons 3 oplevert
+ * gaan we er op achteruit." Dat geldt net zo hard voor een spaarrekening. Deze
+ * module rekende alleen aan de OPBRENGST — een hogere rente, dus zoveel euro per
+ * jaar — en niet aan wat het product kost om te hebben.
+ *
+ * DE VALKUIL IS DE EENHEID. Rente is per JAAR, een pakketprijs vaak per MAAND, en
+ * € 4,00 naast € 50,00 zetten scheelt een factor twaalf. Er wordt daarom nergens
+ * met de hand omgerekend: beide bedragen gaan als terugkerend met hun eigen
+ * periode naar `netBenefit`.
+ */
+
+/** Een spaarproduct uit de catalogus, met of zonder prijs erop. De prijs draagt
+ *  zijn PERIODE, want een bedrag zonder eenheid stilzwijgend maandelijks noemen
+ *  is de factor twaalf waar het hier om gaat. `readAccountFee` valideert dat veld
+ *  zelf en leest het als `unknown`; vandaar de vorm en niet een opgerekt type. */
+const savings = (over: {
+  id: string;
+  product: string;
+  issuer?: string;
+  fee?: { value: number; period: "maand" | "jaar" };
+}): AccountFeeEntryLike => ({
+  id: over.id,
+  product: over.product,
+  issuer: over.issuer ?? "Testbank N.V.",
+  kind: "betaalrekening",
+  fields: over.fee
+    ? {
+        accountFee: {
+          value: over.fee.value, period: over.fee.period, route: "provider-pdf",
+          sourceUrl: "https://example.test/kosten", checkedAt: "2026-08-01",
+          conditions: null, conditionsKnown: true,
+        },
+      }
+    : {},
+});
+
+/** € 20.000 op een betaalrekening van 0%, tegenover een spaarrente van 0,25%:
+ *  precies € 50,00 per jaar. Een rond bedrag, zodat elk verschil hieronder van de
+ *  KOSTEN komt en niet van een afronding. */
+const IDLE = [acc({ key: "B", type: "Betaalrekening", balance: 20000 })];
+const TARGET: RateBenchmark = {
+  bank: "Testbank", product: "Spaarrekening", ratePct: 0.25, freeWithdrawal: true, productId: "test-spaar",
+};
+
+describe("de rekening waar het advies heen wijst kost zelf ook geld", () => {
+  test("KOSTEN BEKEND en netto negatief: geen aanbeveling, met het bedrag erbij", () => {
+    // € 50 rente extra per jaar op een rekening van € 4,00 per maand = € 48,00 per
+    // jaar. Dat is € 2,00 vooruit... en bij € 4,50 per maand € 4,00 achteruit.
+    const fees = productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 4.5, period: "maand" } })]);
+    const r = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined, fees);
+    expect(r.totalExtraPerYearCents).toBe(5000); // bruto blijft staan
+    expect(r.net?.kind).toBe("no-recommendation");
+    expect(r.net!.kind !== "gross-cost-unknown" && r.net!.netCents).toBe(-400);
+    // Hij moet het kunnen ZIEN staan in plaats van het uit te rekenen.
+    expect(describeNetBenefit(r.net!)).toContain("Geen aanbeveling");
+    expect(describeNetBenefit(r.net!)).toContain("achteruit");
+  });
+
+  test("MAAND TEGEN JAAR: dezelfde prijs, twaalf keer zo groot als de eenheid wegvalt", () => {
+    // € 4,50 per maand en € 4,50 per jaar zijn hetzelfde getal en een heel ander
+    // advies: het eerste eet € 50 rente op, het tweede laat € 45,50 staan. Als
+    // deze twee ooit hetzelfde antwoord geven, wordt er ergens een eenheid
+    // genegeerd.
+    const perMaand = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined,
+      productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 4.5, period: "maand" } })]));
+    const perJaar = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined,
+      productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 4.5, period: "jaar" } })]));
+    expect(perMaand.net!.kind !== "gross-cost-unknown" && perMaand.net!.costCents).toBe(5400);
+    expect(perJaar.net!.kind !== "gross-cost-unknown" && perJaar.net!.costCents).toBe(450);
+    expect(perJaar.net!.kind).toBe("net");
+    expect(perJaar.net!.kind === "net" && perJaar.net!.netCents).toBe(4550);
+    // En beide rekenen in dezelfde eenheid als de rente: per jaar. Een netto per
+    // maand naast een rente per jaar is de factorfout in zijn zuiverste vorm.
+    expect(perJaar.net!.kind !== "gross-cost-unknown" && perJaar.net!.basis.kind === "recurring" && perJaar.net!.basis.period).toBe("jaar");
+  });
+
+  test("KOSTEN ONBEKEND: het brutobedrag blijft staan en het woord netto valt NIET", () => {
+    // De catalogus prijst dit spaarproduct niet — augustus 2026 is dat het geval
+    // voor alle 32 spaarrijen. Onbekend is geen nul: de aanbeveling verdwijnt niet,
+    // maar er staat ook geen netto onder dat er niet is.
+    const fees = productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening" })]);
+    const r = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined, fees);
+    expect(r.net?.kind).toBe("gross-cost-unknown");
+    expect(r.net!.kind === "gross-cost-unknown" && r.net!.grossCents).toBe(5000);
+    const words = describeNetBenefit(r.net!);
+    expect(words).not.toContain("netto");
+    expect(words).toContain("geen nul");
+  });
+
+  test("een benchmark ZONDER catalogusrij is óók 'kosten onbekend', niet gratis", () => {
+    // De ingebakken tabel en de geld.nl-scrape dragen geen productId. Dat mag niet
+    // stilzwijgend als "deze rekening is gratis" doorgaan: dan wint elke rente
+    // waarvan we de prijs niet kennen van een rente waarvan we hem wél kennen.
+    const { productId: _drop, ...noId } = TARGET;
+    const fees = productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 4.5, period: "maand" } })]);
+    const r = analyzeInterest(IDLE, [], [noId], "2026-08-01", undefined, fees);
+    expect(r.net?.kind).toBe("gross-cost-unknown");
+  });
+
+  test("een UITGESPROKEN nul is een bekende nul, en dan is bruto ook netto", () => {
+    // De keerzijde van "onbekend is geen nul". Openbank zegt letterlijk "het
+    // openen, aanhouden en opzeggen is gratis"; dat is een gemeten feit.
+    const fees = productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 0, period: "maand" } })]);
+    const r = analyzeInterest(IDLE, [], [TARGET], "2026-08-01", undefined, fees);
+    expect(r.net?.kind).toBe("net");
+    expect(r.net!.kind === "net" && r.net!.netCents).toBe(5000);
+  });
+
+  test("een rekening die hij AL HEEFT kost hem marginaal niets", () => {
+    // Die prijs loopt door of hij het geld verplaatst of niet. Zonder dit
+    // onderscheid raadt de app hem af om geld naar zijn eigen spaarrekening te
+    // brengen, om kosten te vermijden die hij toch al maakt.
+    const fees = productFeesById([savings({ id: "test-spaar", product: "Testbank Spaarrekening", fee: { value: 4.5, period: "maand" } })]);
+    const his = [...IDLE, acc({ key: "S", bank: "Testbank", name: "Testbank Spaarrekening", type: "Spaarrekening", balance: 1, interestRate: 0.25 })];
+    const r = analyzeInterest(his, [], [TARGET], "2026-08-01", undefined, fees);
+    expect(r.net?.kind).toBe("net");
+    expect(r.net!.kind === "net" && r.net!.netCents).toBe(5000);
+    expect(r.net!.kind !== "gross-cost-unknown" && r.net!.cost.why).toBe("already-held");
+  });
+
+  test("zonder winst is er niets te verrekenen, en dan is er geen net", () => {
+    // Een netto van nul over een voordeel van nul is geen antwoord. Zonder deze
+    // regel zou een leeg scherm een "geen aanbeveling" tonen over een overstap die
+    // niemand overwoog.
+    const r = analyzeInterest([acc({ key: "B", type: "Betaalrekening", balance: 0 })], [], [TARGET], "2026-08-01");
+    expect(r.totalExtraPerYearCents).toBe(0);
+    expect(r.net).toBeNull();
+  });
+
+  test("de prijs mag op de PAKKETRIJ staan — dezelfde matcher als het reisblok", () => {
+    // Het N26-geval, één laag hoger: de rente hangt aan een rij die zelf geen
+    // prijs draagt, terwijl het pakket ernaast er wel een heeft. Op gelijk id
+    // matchen zou hier "onbekend" opleveren terwijl het bedrag in de catalogus
+    // staat.
+    const fees = productFeesById([
+      savings({ id: "testbank-plus-betaalpas", product: "Testbank Plus betaalpas", issuer: "Testbank N.V.; Mastercard Debit" }),
+      savings({ id: "testbank-plus", product: "Testbank Plus", fee: { value: 4.5, period: "maand" } }),
+    ]);
+    const viaPlan: RateBenchmark = { ...TARGET, productId: "testbank-plus-betaalpas" };
+    const r = analyzeInterest(IDLE, [], [viaPlan], "2026-08-01", undefined, fees);
+    expect(r.net?.kind).toBe("no-recommendation");
+    expect(r.net!.kind !== "gross-cost-unknown" && r.net!.costCents).toBe(5400);
   });
 });

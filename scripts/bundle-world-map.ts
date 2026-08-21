@@ -35,17 +35,24 @@
  * past na vereenvoudiging ruim onder de 250 kB, dus die wint. 110m blijft in de
  * ketting staan als terugval, en de world-atlas-TopoJSON daaronder.
  *
+ * ANTARCTICA ZIT ER NU IN, EN DAT WAS EEN OMMEZWAAI. Twee versies lang liet dit
+ * script AQ weg (er stond een `DROP_CODES` voor). Op de platte kaart was dat te
+ * verdedigen: Antarctica beslaat daar de hele onderrand, uitgesmeerd door de
+ * projectie, en er valt niets te wisselen. OP EEN BOL IS HET WEGLATEN ZICHTBAAR.
+ * Alles hield op bij 55,6° zuiderbreedte, dus wie naar de zuidpool draaide zag
+ * water waar land hoort — en dat is geen leemte die zichzelf meldt, dat is een
+ * bol die iets beweert wat niet waar is. Gemeten kosten van het terugzetten:
+ * ±1.500 punten en ±15 kB, ruim binnen de 250 kB. Wat het WEL vraagt is een
+ * ZESDE soort antwoord in de datalaag (zie `noTender` hieronder), want
+ * "er is hier geen wettig betaalmiddel" is iets anders dan "wij kennen de koers
+ * niet" en iets anders dan "wij weten het niet".
+ *
  * WAT ER BEWUST AF GAAT (en in GEODATA.md komt te staan):
- *  - Antarctica. Er is geen valuta (CLDR: XXX, geen wettig betaalmiddel), en op
- *    de platte kaart beslaat het de hele onderrand. OP EEN BOL IS DAT EEN ANDERE
- *    AFWEGING: je kunt naar de zuidpool draaien en dan is daar niets — geen land,
- *    geen ijs, alleen de kleur van de oceaan. Op de kaart was het een afgesneden
- *    strook onderin, op de bol is het een gat waar je naartoe kunt draaien. Dit
- *    script laat het er nog steeds uit, maar dat is nu een keuze die de eigenaar
- *    hoort te maken; hij staat als open punt in GEODATA.md met de kosten erbij.
  *  - Eilandjes onder MIN_AREA. NOOIT het grootste vlak van een land: dan zou
  *    Malta van de kaart vallen omdat Malta klein is, en dat is geen kaart maar
  *    een mening.
+ *  - Gebieden zonder ISO-code. Zonder code is er geen valuta aan te koppelen.
+ *  Verder niets: er is geen lijst met landen die dit script overslaat.
  *
  * WAT HET NOOIT DOET. Een valuta invullen die de bron niet geeft, of een land
  * waarvan wij de koers niet kennen laten doorgaan voor "0%" of "gratis". Een
@@ -54,6 +61,10 @@
  * niemand heeft gemeten. Lukt de ECB-lijst niet, dan schrijft dit script niets:
  * dan zou elk land `priceable: false` krijgen en dat is een bewering over de
  * wereld op grond van onze eigen storing.
+ *
+ * En het omgekeerde net zo goed: een leeg valutalijstje mag niet stilzwijgend
+ * "er is daar geen geld" gaan betekenen. Daarvoor is `noTender` er — die vlag
+ * staat alleen aan als de BRON het zegt, en alleen CLDR kan dat zeggen.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 /* De ISO-lijst en de Nederlandse namen komen uit de app zelf, niet uit een
@@ -144,8 +155,13 @@ if (!Number.isFinite(eps) || eps < 0) {
  * het ligt wel op de kaart en er wordt in euro's betaald. Weglaten zou een gat
  * in de Balkan opleveren dat op niets klikt. */
 const EXTRA_CODES = ["XK"];
-/* Antarctica: wel een ISO-code, geen valuta, en het beslaat de hele onderrand. */
-const DROP_CODES = new Set(["AQ"]);
+
+/* Hier stond `DROP_CODES = new Set(["AQ"])`. Die lijst is weg en komt niet
+ * terug: een land dat de bron kent en dat wij op naam overslaan, is precies het
+ * soort stille weglating dat dit bestand probeert te vermijden. Antarctica had
+ * er een reden voor die op een platte kaart klopte en op een bol niet meer — zie
+ * de kop. Wat er nu nog wegvalt, valt weg op een MEETBARE grond (te klein, geen
+ * ISO-code) en staat geteld in GEODATA.md. */
 
 /** Wat er per bron is geprobeerd, in volgorde. Ook de bronnen die niet meer
  *  nodig waren staan erin: "we hebben hem niet geprobeerd" is iets anders dan
@@ -331,37 +347,76 @@ async function fetchLabelPoints(): Promise<{ byCountry: Map<string, Lonlat>; url
 
 /* --- 2. valuta per land ---------------------------------------------------- */
 
-type Currencies = { byCountry: Map<string, string[]>; source: string; license: string; note: string };
+type Currencies = {
+  byCountry: Map<string, string[]>;
+  /** De landen waarvan de BRON zegt dat er vandaag geen wettig betaalmiddel is.
+   *
+   *  Dit is met opzet een aparte verzameling en niet "byCountry heeft niets voor
+   *  dit land". Die twee zien er in code hetzelfde uit en betekenen het
+   *  tegenovergestelde: hier staat "de bron heeft gekeken en er is niets" en daar
+   *  staat "de bron zegt er niets over". Antarctica is het eerste, en zonder dit
+   *  onderscheid zou de bol daar "valuta onbekend" zeggen — een leemte bij ons
+   *  verzinnen waar de bron een antwoord geeft.
+   *
+   *  Alleen CLDR kan deze uitspraak dragen. De terugvalbronnen kennen het
+   *  verschil tussen "geen regel" en "een regel die zegt: niets" niet, dus die
+   *  laten deze verzameling leeg — en dan is Antarctica "onbekend", wat dan ook
+   *  precies klopt. */
+  noTender: Set<string>;
+  source: string;
+  license: string;
+  note: string;
+};
 
 /** CLDR zegt per land welke valuta wanneer gold. "Nu" is dus een peildatum en
  *  geen aanname: een regel met `_to` in het verleden is geschiedenis (de gulden
  *  staat er nog in), `_tender: false` is geen betaalmiddel maar een rekenmunt
  *  (USN, XDR, goud). Wat overblijft zijn de valuta's waarmee je er vandaag
- *  betaalt — meestal één, soms twee, en die twee blijven allebei staan. */
+ *  betaalt — meestal één, soms twee, en die twee blijven allebei staan.
+ *
+ *  EN ÉÉN GEVAL WAARIN ER NIETS OVERBLIJFT EN DAT HET ANTWOORD IS. Antarctica
+ *  staat in CLDR als `{"XXX": {"_tender": "false"}}`: één regel, geldig vandaag,
+ *  en die regel zegt dat er geen betaalmiddel is (XXX is de ISO-code voor "geen
+ *  valuta"). Dat is een uitspraak, geen leegte. Vandaar de tweede uitkomst: een
+ *  land waar vandaag WEL regels voor gelden maar geen enkele een betaalmiddel is,
+ *  komt in `noTender`. Gemeten op de bron van 2026-08-21 zijn dat er precies drie
+ *  — AQ, CP (Clipperton) en ZZ (de "onbekend"-regio) — waarvan alleen AQ een land
+ *  in onze lijst is. Landen waar helemaal geen regel meer geldt (BU, DD, SU, YU:
+ *  staten die niet meer bestaan) komen hier NIET in: daar zegt de bron niets, en
+ *  dat is onbekend. */
 function fromCldr(raw: string, url: string, asOf: string): Currencies {
   const doc = JSON.parse(raw) as {
     supplemental: { currencyData: { region: Record<string, Record<string, Record<string, string>>[]> } };
   };
   const region = doc.supplemental.currencyData.region;
   const byCountry = new Map<string, string[]>();
+  const noTender = new Set<string>();
   for (const [code, list] of Object.entries(region)) {
     if (!/^[A-Z]{2}$/.test(code)) continue;
     const live: string[] = [];
+    let saidNoTender = false;
     for (const entry of list) {
       for (const [ccy, meta] of Object.entries(entry)) {
-        if (meta._tender === "false") continue;
         if (meta._to && meta._to.slice(0, 10) <= asOf) continue;
         if (meta._from && meta._from.slice(0, 10) > asOf) continue;
+        if (meta._tender === "false") {
+          saidNoTender = true;
+          continue;
+        }
         live.push(ccy);
       }
     }
     if (live.length) byCountry.set(code, live);
+    else if (saidNoTender) noTender.add(code);
   }
   return {
+    noTender,
     byCountry,
     source: url,
     license: "Unicode-ICU licentie (CLDR)",
-    note: `${byCountry.size} landen met een geldige valuta op ${asOf}`,
+    note:
+      `${byCountry.size} landen met een geldige valuta op ${asOf}` +
+      `, ${noTender.size} waar de bron zegt dat er geen wettig betaalmiddel is`,
   };
 }
 
@@ -377,9 +432,15 @@ function fromMledoze(raw: string, url: string): Currencies {
   }
   return {
     byCountry,
+    /* Deze bron kent alleen "welke valuta staan hier" en niet "wat zegt de bron
+     * over een land waar er geen zijn". Leeg laten is dus het eerlijke antwoord:
+     * draait de sweep op deze terugval, dan is Antarctica `unknown` en niet
+     * `noTender`. Een leeg lijstje hier tot "geen betaalmiddel" verheffen zou een
+     * bewering zijn die deze bron niet kan dragen. */
+    noTender: new Set<string>(),
     source: url,
     license: "ODbL v1.0 (mledoze/countries)",
-    note: `${byCountry.size} landen, zonder einddatum per valuta — grover dan CLDR`,
+    note: `${byCountry.size} landen, zonder einddatum per valuta — grover dan CLDR; geen uitspraak over landen zonder betaalmiddel`,
   };
 }
 
@@ -402,6 +463,9 @@ function fromRestCountries(raw: string, url: string): Currencies {
   }
   return {
     byCountry,
+    /* Zie fromMledoze: deze bron kan het verschil tussen "geen valuta" en "geen
+     * uitspraak" niet maken, dus doet hij er geen. */
+    noTender: new Set<string>(),
     source: url,
     license: "Mozilla Public License 2.0 (restcountries)",
     note: `${byCountry.size} landen`,
@@ -826,6 +890,10 @@ type Row = {
    *  draaien. Zie labelOnly in main(). */
   labelOnly: Lonlat | null;
   currencies: { code: string; priceable: boolean }[];
+  /** De bron zegt: hier is vandaag geen wettig betaalmiddel. Staat NAAST een leeg
+   *  `currencies`, want leeg alleen zegt niet of dat een uitspraak of een leemte
+   *  is. Zie fromCldr. */
+  noTender: boolean;
 };
 
 type Sources = {
@@ -851,6 +919,13 @@ function tsFile(
   const body = rows
     .map((r) => {
       const cur = r.currencies.map((c) => `{ code: ${JSON.stringify(c.code)}, priceable: ${c.priceable} }`).join(", ");
+      /* Alleen uitschrijven waar hij AAN staat. Dat is geen bytes sparen (het zijn
+       * er 249 × 19) maar leesbaarheid van de diff: staat er ergens
+       * `noTender: true` bij, dan is dat één regel die opvalt in plaats van één
+       * `false` die van 249 andere niet te onderscheiden is. De consument leest
+       * hem via `?? false`, en dat mag omdat "de vlag ontbreekt" en "de bron zegt
+       * niet dat er geen betaalmiddel is" hetzelfde betekenen. */
+      const tender = r.noTender ? `    noTender: true,\n` : "";
       const geom = r.shape
         ? `    bbox: [${r.shape.bbox.join(", ")}],\n` +
           `    pin: [${r.shape.pin.join(", ")}],\n` +
@@ -864,6 +939,7 @@ function tsFile(
         `    name: ${JSON.stringify(r.name)},\n` +
         `    nameEn: ${JSON.stringify(r.nameEn)},\n` +
         `    currencies: [${cur}],\n` +
+        tender +
         geom +
         `  },`
       );
@@ -958,8 +1034,20 @@ export type WorldCountry = {
   /** Zoals de geometriebron het land noemt — voor zoeken en voor herkomst. */
   nameEn: string;
   /** Waarmee je er vandaag betaalt. Meer dan één is geen fout: dan is het aan de
-   *  gebruiker, niet aan ons. */
+   *  gebruiker, niet aan ons. LEEG betekent op zichzelf niets meer dan "hier staat
+   *  geen valuta"; of dat een uitspraak of een leemte is, staat in \`noTender\`. */
   currencies: WorldCurrency[];
+  /** De bron zegt: hier is geen wettig betaalmiddel (CLDR zet er XXX neer, de
+   *  ISO-code voor "geen valuta"). Vandaag is Antarctica het enige land met deze
+   *  vlag.
+   *
+   *  Dit is NIET hetzelfde als een leeg \`currencies\` zonder deze vlag. Zonder de
+   *  vlag weet de bron het niet en weten wij het dus ook niet; met de vlag is er
+   *  niets om te wisselen omdat er geen munt is. Dat verschil hoort in de UI
+   *  terecht te komen als twee verschillende zinnen — en geen van beide mag een
+   *  0% of een streepje worden. De vlag staat alleen in de rijen waar hij aan
+   *  staat; ontbreekt hij, dan is hij vals. */
+  noTender?: true;
   /** Ruwe ringen in graden, het grootste vlak eerst, of null als de bron op deze
    *  schaal geen vlak voor dit land heeft. Nooit een lege lijst: leeg zou
    *  "getekend, maar nergens" betekenen. */
@@ -973,8 +1061,14 @@ export type WorldCountry = {
 };
 
 /** De omhullende van alles wat er echt getekend wordt, in graden.
- *  [lonMin, latMin, lonMax, latMax]. De onderkant is niet −90: Antarctica is
- *  weggelaten, dus wie naar de zuidpool draait ziet water. Zie GEODATA.md. */
+ *  [lonMin, latMin, lonMax, latMax].
+ *
+ *  De onderkant is −90: Antarctica zit erin, dus de bol houdt onderaan niet op.
+ *  Dat was twee versies lang anders (−55,6: Kaap Hoorn, de zuidpunt van Chili) en
+ *  die waarde stond toen in een UI-tekst overgetypt — vandaar dat deze grens hier
+ *  staat en niet in een component. Wie naar de zuidpool draait ziet nu land.
+ *  Bovenaan houdt het wél op, op de noordpunt van Groenland: boven die
+ *  breedtegraad staat er in deze tabel niets, en dat is een leemte en geen zee. */
 export const WORLD_LATLON_BOUNDS: readonly [number, number, number, number] = [${bounds.join(", ")}];
 
 /** Zonder dit vullen de gaten zich. Zie de kop van dit bestand. */
@@ -1013,6 +1107,12 @@ function noticeFile(
     noIso: string[];
     bytes: number;
     priceableCount: number;
+    noTender: Row[];
+    noStatement: Row[];
+    /** Wat Antarctica in deze bundel kost, gemeten. `null` als de bron het niet
+     *  (meer) heeft — dan hoort er geen getal te staan maar de mededeling dat het
+     *  er niet in zit. */
+    antarctica: { rings: number; points: number; bytes: number } | null;
   },
 ): string {
   const table = attempts
@@ -1032,6 +1132,11 @@ function noticeFile(
   /* Nederlandse komma. Anders staat er "0.15° (was 0,144°)" in één tabelregel en
    * dat leest als een typefout in plaats van als hetzelfde getal. */
   const nl = (n: number): string => String(n).replace(".", ",");
+  /* Een breedtegraad in een LOPENDE ZIN: Nederlandse komma en een echt minteken.
+   * Een ASCII-koppelteken naast een "−55,6" verderop in dezelfde zin leest als
+   * twee verschillende soorten getallen. In de tabellen hierboven blijft het ruwe
+   * getal staan — dat is een coördinaat en geen zin. */
+  const deg = (n: number): string => `${nl(n).replace("-", "\u2212")}°`;
   return `# Kaartgegevens en valuta per land
 
 _Gegenereerd door \`scripts/bundle-world-map.ts\` op ${sources.fetchedAt}. Niet met de hand aanpassen._
@@ -1145,8 +1250,6 @@ ${table}
 
 ## Wat er is weggelaten, en waarom
 
-- **Antarctica.** Geen wettig betaalmiddel volgens CLDR (XXX), dus geen valuta om
-  te wisselen. **Dit is een open punt geworden** — zie hieronder.
 - **Losse eilanden onder ±400 km².** Vlakken kleiner dan ${nl(MIN_AREA)}°² gaan eruit
   (${stats.droppedIslands} in totaal): Corsica blijft, Ibiza en Texel niet. Het **grootste vlak van
   een land gaat er nooit uit** — anders zou Malta van de kaart vallen omdat Malta
@@ -1198,39 +1301,53 @@ ${table}
   minstens de helft van zijn oppervlakte overhouden; lukt dat niet, dan gaat de
   afronding voor dat ene land fijner: ${finerText || "geen"}.
 
-## Open punt: Antarctica
+## Antarctica: opgelost, en hoe
 
-Antarctica staat **niet** in de bundel. Op de platte kaart was dat vooral
-opruimen: het beslaat daar de hele onderrand, uitgesmeerd door de projectie, en er
-is geen valuta.
+Antarctica stond twee versies lang **niet** in de bundel. Op de platte kaart was
+dat te verdedigen — het beslaat daar de hele onderrand, uitgesmeerd door de
+projectie, en er valt niets te wisselen. Op een bol niet: je kunt naar de
+zuidpool **toe draaien**, en dan hield alles op bij 55,6° zuiderbreedte. Wie
+daarheen draaide zag water waar land hoort. Dat is geen leemte die zichzelf
+meldt; dat is een bol die iets beweert.
 
-Op een bol is die afweging anders. Je kunt naar de zuidpool **toe draaien**, en
-dan is daar niets — geen land, geen ijs, alleen de kleur van de oceaan. De
-onderkant van wat er wél staat ligt op ${bounds[1]}° NB; daaronder is de bol leeg.
+Er lagen drie mogelijkheden (laten zoals het was / wel tekenen maar niet
+aanklikbaar / wel tekenen én aanklikbaar met een eigen antwoord). Het is de derde
+geworden — Antarctica is getekend, aanklikbaar, en heeft een **eigen soort
+antwoord**: _geen wettig betaalmiddel_. Dat is precies wat CLDR zegt (XXX), en het
+is met opzet niet één van de twee antwoorden die erop lijken:
 
-Wat het kost om het terug te zetten: de kustlijn van Antarctica is met deze
-drempels ongeveer 1.500 punten, dus ±15 kB — er is ruimte. Wat het kost om het
-weg te laten: één zichtbaar gat, precies op de plek waar iemand die met een bol
-speelt vroeg of laat naartoe draait.
+- **niet \`unknown\`** — daar weten wij het niet; hier weten wij het wél.
+- **niet \`noRate\`** — daar hebben wij de koers niet; hier is er geen koers omdat
+  er geen munt is. Het gat zit niet bij ons.
 
-Drie mogelijkheden, met wat elk betekent:
+${
+    stats.antarctica
+      ? `Wat het gekost heeft, nagemeten en niet geschat: ${stats.antarctica.points} punten in ${stats.antarctica.rings} ringen, ${nl(Math.round((stats.antarctica.bytes / 1024) * 10) / 10)} kB van de ${Math.round(stats.bytes / 1024)} kB in dit bestand. De onderkant van de omhullende is daarmee ${deg(bounds[1])} in plaats van −55,6° (Kaap Hoorn): de bol houdt onderaan niet meer op.`
+      : `**Deze sweep heeft geen vlak voor Antarctica gevonden.** De onderkant van de omhullende is ${deg(bounds[1])}. Dat is geen keuze van dit script maar een leemte in de bron van vandaag, en de bol heeft dus weer een gat op de zuidpool.`
+  }
 
-1. **Laten zoals het is.** Goedkoopst, en de vraag "wat kost omwisselen" is er
-   niet — maar de bol liegt over de wereld.
-2. **Wel tekenen, niet aanklikbaar, zonder valuta-antwoord.** Eerlijk: het land is
-   er, er is niets te wisselen. Vraagt van de UI dat een klik daar "hier valt
-   niets te wisselen" zegt en niet stil niets doet, en niet "0%" — daar zit de
-   valkuil.
-3. **Wel tekenen en aanklikbaar met het antwoord "geen wettig betaalmiddel".**
-   Netter dan 2 en het is precies wat CLDR zegt (XXX). Vraagt een zesde soort
-   antwoord in \`conversionFor()\`, want dit is niet \`unknown\` (wij weten het) en
-   niet \`noRate\` (er is geen koers omdat er geen valuta is, niet omdat wij hem
-   missen).
+Wat er niet mee is opgelost: **bovenaan** houdt de tabel nog steeds op, op
+${deg(bounds[3])} — de noordpunt van Groenland. Daarboven ligt alleen zee, maar dat is een
+uitspraak die deze tabel niet doet; de UI hoort daar te zeggen dat ONZE grenzen
+ophouden en niet dat daar water is.
 
-Advies: **3**, als er tijd is voor dat zesde antwoord, anders **2**. Beide zijn
-beter dan een bol met een gat erin, en 1 is alleen goed te praten zolang de bol
-niet naar de zuidpool kan draaien. De keuze is aan de eigenaar; dit script hoeft
-er alleen \`DROP_CODES\` voor te verliezen.
+## Geen valuta in de tabel: twee verschillende antwoorden
+
+Een leeg \`currencies\`-lijstje kan twee dingen betekenen, en de tabel houdt ze uit
+elkaar met de vlag \`noTender\`.
+
+| Wat de bron zegt | In de tabel | Landen |
+| --- | --- | --- |
+| er is hier geen wettig betaalmiddel (CLDR: XXX) | \`currencies: []\` **met** \`noTender: true\` | ${list(stats.noTender)} |
+| niets — de bron noemt voor dit land geen valuta | \`currencies: []\` zonder die vlag | ${list(stats.noStatement)} |
+
+Het verschil is de reden dat er in \`conversionFor()\` een **zesde** soort antwoord
+staat. "Er is niets om te wisselen omdat er geen munt is" mag niet op één hoop met
+"wij weten niet waarmee daar betaald wordt", en al helemaal niet met "0%".
+
+Alleen CLDR kan de eerste uitspraak dragen. Draait de sweep op een terugvalbron,
+dan blijft die kolom leeg en is Antarctica gewoon **onbekend** — ook eerlijk, maar
+minder precies.
 
 ## Landen met meer dan één valuta
 
@@ -1374,9 +1491,9 @@ async function main() {
 
   const priceable = new Set(price.codes);
   const shapes = new Map(geo.countries.map((c) => [c.code, c]));
-  const codes = [...new Set([...COUNTRY_CODES, ...EXTRA_CODES, ...shapes.keys()])]
-    .filter((c) => !DROP_CODES.has(c))
-    .sort();
+  /* Alles wat de ISO-lijst, de Kosovo-uitzondering of de geometriebron noemt.
+   * Er wordt hier niets meer afgehaald: zie de kop over `DROP_CODES`. */
+  const codes = [...new Set([...COUNTRY_CODES, ...EXTRA_CODES, ...shapes.keys()])].sort();
 
   const rows: Row[] = [];
   let droppedIslands = 0;
@@ -1402,6 +1519,11 @@ async function main() {
        * labellaag — die staat waar een naam moet passen, niet waar het land is. */
       labelOnly: shape ? null : (labels?.byCountry.get(id) ?? null),
       currencies,
+      /* Alleen als de bron het zegt, en alleen als er dan ook echt geen valuta
+       * overblijft. Die tweede eis is geen formaliteit: bijna elk land heeft in
+       * CLDR wel een niet-tender regel staan (XDR, goud), en zonder de eis zou
+       * half de wereld "geen betaalmiddel" krijgen. */
+      noTender: currencies.length === 0 && cur.noTender.has(id),
     });
   }
 
@@ -1410,7 +1532,12 @@ async function main() {
   const pinnedOnly = noShape.filter((r) => r.labelOnly);
   const finer = drawn.filter((r) => (r.shape?.decimals ?? RING_DECIMALS) > RING_DECIMALS);
   const pinOutside = drawn.filter((r) => r.shape && !r.shape.pinInside);
-  const noCurrency = rows.filter((r) => !r.currencies.length);
+  /* Twee posten en niet één, want ze betekenen het tegenovergestelde: `noTender`
+   * is "de bron zegt dat er niets is" en `noStatement` is "de bron zegt niets".
+   * Ze bij elkaar optellen tot "landen zonder valuta" is precies de fout die de
+   * zesde soort antwoord moet voorkomen. */
+  const noTender = rows.filter((r) => r.noTender);
+  const noStatement = rows.filter((r) => !r.currencies.length && !r.noTender);
   const allRings = drawn.flatMap((r) => r.shape!.rings);
   const points = allRings.reduce((n, ring) => n + ring.length, 0);
   const addedPoints = drawn.reduce((n, r) => n + r.shape!.added, 0);
@@ -1418,8 +1545,10 @@ async function main() {
   /* De omhullende van ALLES wat er getekend wordt, over alle ringen — niet over
    * de bbox'en, want die zijn per land van het grootste vlak. Dit is de enige
    * plek waar de datumgrens-knip juist niet stoort: hier hoort −180…180 te staan,
-   * want daar staat ook echt land. De onderkant is wat telt: die vertelt hoe groot
-   * het gat is waar Antarctica hoorde. */
+   * want daar staat ook echt land. De onderkant is wat telt: die was −55,6 zolang
+   * Antarctica ontbrak en hoort nu −90 te zijn. Een UI die zegt "onder deze
+   * breedtegraad hebben wij niets" leest dit getal, dus zolang het klopt kan die
+   * tekst niet verouderen. */
   const bounds: [number, number, number, number] = [
     Math.min(...allRings.flat().map((p) => p[0])),
     Math.min(...allRings.flat().map((p) => p[1])),
@@ -1435,6 +1564,20 @@ async function main() {
     fetchedAt: today,
   };
 
+  /* Wat Antarctica kost, gemeten in plaats van geschat. Het stond als "±15 kB,
+   * er is ruimte" in de afweging, en zo'n getal hoort na het besluit nagerekend
+   * in GEODATA.md te staan. `null` als de bron er geen vlak voor heeft: dan is
+   * er niets te meten en hoort er geen 0 te staan, want 0 kB leest als "het
+   * kostte niets" in plaats van "het zit er niet in". */
+  const aq = rows.find((r) => r.id === "AQ")?.shape ?? null;
+  const antarctica = aq
+    ? {
+        rings: aq.rings.length,
+        points: aq.rings.reduce((n, ring) => n + ring.length, 0),
+        bytes: Buffer.byteLength(aq.rings.map(ringText).join(",")),
+      }
+    : null;
+
   const ts = tsFile(rows, sources, bounds, points);
   const anyPriceable = rows.filter((r) => r.currencies.some((c) => c.priceable)).length;
   const multi = rows.filter((r) => r.currencies.length > 1);
@@ -1446,7 +1589,8 @@ async function main() {
   );
   console.log(`${points} punten in ${allRings.length} ringen, waarvan ${addedPoints} bijgezet om stukken onder ${MAX_SEG}° te houden.`);
   console.log(`Omhullende: ${bounds.join(", ")} (lonMin, latMin, lonMax, latMax).`);
-  if (noCurrency.length) console.log(`Zonder valuta in de bron: ${noCurrency.map((r) => r.id).join(", ")}`);
+  if (noTender.length) console.log(`Geen wettig betaalmiddel volgens de bron: ${noTender.map((r) => r.id).join(", ")}`);
+  if (noStatement.length) console.log(`De bron zegt niets over de valuta (dus onbekend): ${noStatement.map((r) => r.id).join(", ")}`);
   if (finer.length) console.log(`Fijner afgerond om niet te verdwijnen: ${finer.map((r) => r.id).join(", ")}`);
   if (pinOutside.length) console.log(`Speld niet binnen het vlak te krijgen: ${pinOutside.map((r) => r.id).join(", ")}`);
   console.log(
@@ -1481,6 +1625,9 @@ async function main() {
       noIso: geo.noIso,
       bytes: Buffer.byteLength(ts),
       priceableCount: price.codes.length,
+      noTender,
+      noStatement,
+      antarctica,
     }),
   );
   console.log(`Geschreven: ${OUT_TS} en ${OUT_NOTICE}`);

@@ -335,5 +335,91 @@ test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () =>
   const html = render({ entries: [withFee(CARD, 0, "maand")] });
   expect(row(html, "cashback-kosten")).toContain("0,00 per maand");
   expect(row(html, "cashback-netto")).toContain("163,92");
-  expect(html).not.toContain("weten we niet");
+  // Op de KAARTREGEL, niet op de hele pagina. De Rente-module zegt sinds deze
+  // ronde dezelfde zin over de spaarrekening waar zijn advies heen wijst — en dat
+  // is daar terecht, want de catalogus prijst geen enkele spaarrekening. Een
+  // assertie op de hele HTML zou hier dus falen om een reden die niets met
+  // cashback te maken heeft, precies waar de kop van dit bestand voor waarschuwt.
+  expect(row(html, "cashback-kosten")).not.toContain("weten we niet");
+});
+
+
+/* ═══ DE PRIJS STAAT VAAK OP EEN ANDERE CATALOGUSRIJ DAN DE KAART ════════════
+ *
+ * Hier zat het echte gat, en het was stil. De catalogus splitst een KAART (kind
+ * `betaalpas`, die de cashback en de opslag draagt) van het PAKKET waarin ze zit
+ * (kind `betaalrekening`, dat de `accountFee` draagt): n26-metal-betaalpas heeft
+ * de 0% opslag, n26-metal heeft de € 16,90 per maand. Deze module matchte op
+ * GELIJK id en vond die prijs dus nooit — dan stond er "kosten onbekend" over een
+ * bedrag dat één rij verderop in dezelfde catalogus staat, terwijl het reisblok
+ * hem wél las. Twee schermen, dezelfde catalogus, twee antwoorden.
+ *
+ * De matcher stond privé in travel.ts en is nu `productFeesById` in
+ * accountCosts.ts, gedeeld door beide schermen. De rijen hieronder staan
+ * letterlijk zo in docs/catalog/catalog.json: een verzonnen catalogus met de
+ * prijs netjes op de kaartrij zou bewijzen dat de code werkt op een bestand dat
+ * niet bestaat.
+ */
+
+const N26_METAL_CARD: CatalogueEntryLike = {
+  id: "n26-metal-betaalpas",
+  product: "N26 Metal betaalpas",
+  issuer: "N26 Bank AG; metal Mastercard Debit",
+  kind: "betaalpas",
+  fields: {
+    cashbackPct: {
+      value: 2, route: "provider-pdf", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26", conditions: null, conditionsKnown: true,
+    },
+  },
+};
+
+const N26_METAL_PLAN: CatalogueEntryLike = {
+  id: "n26-metal",
+  product: "N26 Metal",
+  issuer: "N26 Bank AG",
+  kind: "betaalrekening",
+  fields: {
+    accountFee: {
+      value: 16.9, period: "maand", route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      conditions: "Membership fee.", conditionsKnown: true,
+    } as unknown as CatalogValue,
+  },
+};
+
+test("de kaartprijs van de PAKKETRIJ wordt gevonden — anders is € 16,90 per maand een nul", () => {
+  const html = render({ entries: [N26_METAL_CARD, N26_METAL_PLAN] });
+  // Dezelfde uitkomst als wanneer het bedrag op de kaartrij zelf had gestaan:
+  // € 163,92 bruto per jaar tegen 12 × € 16,90 = € 202,80, dus € 38,88 achteruit.
+  const kosten = row(html, "cashback-kosten");
+  expect(kosten).toContain("16,90 per maand");
+  expect(kosten).toContain("202,80 per jaar");
+  const geen = row(html, "cashback-geen");
+  expect(geen).toContain("Geen aanbeveling");
+  expect(geen).toContain("38,88");
+  // En NIET meer de melding dat onze bronnen de prijs niet noemen — hij staat er
+  // wel in, één rij verderop.
+  expect(kosten).not.toContain("weten we niet");
+  expect(html).not.toContain('data-testid="cashback-netto"');
+});
+
+test("de pakketmatcher blijft strikt: een pakketnaam die alleen de BANK noemt telt niet", () => {
+  // "ING betaalpas" ontdaan van zijn soortwoord is "ING", en dat is een bank en
+  // geen pakket. Zou dat matchen, dan kreeg de generieke ING-betaalpas de prijs
+  // van één van de zeven pakketten waarin ING hem verkoopt. Onbekend is dan het
+  // eerlijke antwoord, ook al voelt het als een gemiste kans.
+  const ingPas: CatalogueEntryLike = { ...N26_METAL_CARD, id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V." };
+  const ingPakket: CatalogueEntryLike = { ...N26_METAL_PLAN, id: "ing-betaalpakket", product: "ING BetaalPakket", issuer: "ING Bank N.V." };
+  const html = render({ entries: [ingPas, ingPakket] });
+  const kosten = row(html, "cashback-kosten");
+  expect(kosten).toContain("weten we niet");
+  // Op de KAARTREGEL en niet op de hele pagina: de module "Wat je rekeningen
+  // kosten" noemt dit pakket verderop wél, als kandidaat bij zijn eigen
+  // ING-rekening. Dat is een ander verhaal op een andere plek — daar staat het
+  // als "dit zijn de pakketten die er bij deze bank zijn", niet als de prijs van
+  // deze kaart.
+  expect(kosten).not.toContain("16,90");
+  expect(html).not.toContain('data-testid="cashback-netto"');
+  expect(html).not.toContain('data-testid="cashback-geen"');
 });

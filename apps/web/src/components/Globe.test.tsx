@@ -227,20 +227,55 @@ test("de lijst bereikt elk land, ook de landen die niet op de bol staan", () => 
   const onPick = vi.fn();
   const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
 
-  // Alle 249 landen staan er bij een leeg zoekveld in: de lijst is de tweede
-  // besturing en niet een suggestiedoosje dat pas iets doet als je het goede
-  // woord al weet.
-  expect(el.querySelectorAll("#lv-globe-list [data-country]").length).toBe(249);
+  // Alle 250 landen staan er bij een leeg zoekveld in (249 ISO-codes plus XK voor
+  // Kosovo): de lijst is de tweede besturing en niet een suggestiedoosje dat pas
+  // iets doet als je het goede woord al weet.
+  expect(el.querySelectorAll("#lv-globe-list [data-country]").length).toBe(250);
 
   type(el, "Gibraltar");
   const list = el.querySelector('[data-testid="bol-landen"]')!;
-  expect(list.textContent).toContain("niet op de bol"); // Gibraltar heeft geen vlak
+  // Gibraltar heeft geen vlak maar wél een labelpunt: de bol kan er dus wel
+  // naartoe, er staat alleen niets getekend. Dat is iets anders dan de acht
+  // landen hieronder, en de lijst zegt het ook anders.
+  expect(list.textContent).toContain("geen vlak, wel een plek");
   click(list.querySelector("[data-country]")!);
 
   expect(answer(el)).toContain("GIP");
   // En het paneel zegt waarom er niets op de bol te zien is, in plaats van een
   // bol te laten zien waarop niets gebeurde.
   expect(answer(el)).toContain("niet getekend");
+});
+
+test("een land waarvan wij de plek niet kennen zegt dat, en draait de bol niet", () => {
+  /* De acht landen met vlak noch labelpunt (BV, CC, CX, GF, RE, SJ, UM, YT). Hun
+   * valuta-antwoord bestaat wél, dus ze mogen in de lijst blijven staan en
+   * gevonden worden — maar dan moet er ook staan dat de kaart ze niet kent. De
+   * fout die dit voorkomt is de stille: klikken, en er gebeurt niets. */
+  const onPick = vi.fn();
+  const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
+
+  // Eerst een land met een bekende plek, zodat er een stand van de bol is om mee
+  // te vergelijken.
+  click(option(el, "FR"));
+  const canvas = el.querySelector('[data-testid="bol-canvas"]')!;
+  const fr = countryFocus("FR")!.center;
+  const voor = screenAt(2.35, 48.85, { lon: fr[0], lat: fr[1] });
+
+  type(el, "Bouvet");
+  const list = el.querySelector('[data-testid="bol-landen"]')!;
+  expect(list.textContent).toContain("geen vlak, plek onbekend");
+  click(list.querySelector('[data-country="BV"]')!);
+
+  // Het valuta-antwoord staat er gewoon — Bouveteiland betaalt in Noorse kronen.
+  expect(answer(el)).toContain("NOK");
+  // En de mededeling over de kaart: wij weten niet waar het ligt.
+  expect(answer(el)).toContain("Waar dit land ligt weet LaVega niet");
+  // De bol is NIET gedraaid: Parijs staat nog op dezelfde plek op het doek. Zonder
+  // deze controle zou een sprong naar [0, 0] — de Golf van Guinee — er van buiten
+  // uitzien als "hij deed iets".
+  expect(countryFocus("BV")).toBeNull();
+  pointer(canvas, "pointermove", voor.x, voor.y);
+  expect(readout(el)).toContain("Frankrijk");
 });
 
 test("de lijst is met het toetsenbord te bedienen", () => {
@@ -337,6 +372,40 @@ test("een klik zonder land noemt de oorzaak en verandert niets", () => {
   expect(onPick).not.toHaveBeenCalled();
 });
 
+test("waar de gebundelde grenzen ophouden zegt de bol dát, met de echte grens erbij", () => {
+  /* Hier stond een melding over de ZUIDkant: "onder 55,6° zuiderbreedte staat er
+   * niets in — Antarctica is weggelaten". Antarctica staat er nu wel, dus die zin
+   * was in één sweep onwaar geworden zonder dat er iets rood werd. Dat is de fout
+   * die deze test bewaakt: de grenzen komen uit WORLD_LATLON_BOUNDS en staan niet
+   * in de zin.
+   *
+   * De noordkant houdt wél nog op — op de noordpunt van Groenland — en dat is nu
+   * de kant waar deze melding echt verschijnt. */
+  const onPick = vi.fn();
+  const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
+  const canvas = el.querySelector('[data-testid="bol-canvas"]')!;
+
+  // Zes stappen omhoog vanaf 30° noord: recht op de noordpool.
+  for (let i = 0; i < 6; i++) press(canvas, "ArrowUp");
+  tapGlobe(el, DEFAULT_SIZE / 2, DEFAULT_SIZE / 2);
+
+  const tekst = el.querySelector('[data-testid="bol-misser"]')!.textContent ?? "";
+  expect(tekst).toContain("83,6° noorderbreedte");
+  expect(tekst).toContain("90° zuiderbreedte");
+  // Geen bewering over wat daar dan wél ligt, en geen verwijzing meer naar een
+  // weggelaten Antarctica.
+  expect(tekst).not.toContain("Antarctica");
+  expect(tekst).not.toContain("zee");
+  expect(onPick).not.toHaveBeenCalled();
+
+  // En de tegenhanger: aan de zuidkant houdt er niets meer op. Recht op de
+  // zuidpool is land, geen melding.
+  for (let i = 0; i < 18; i++) press(canvas, "ArrowDown");
+  tapGlobe(el, DEFAULT_SIZE / 2, DEFAULT_SIZE / 2);
+  expect(el.querySelector('[data-testid="bol-misser"]')).toBeNull();
+  expect(answer(el)).toContain("Antarctica");
+});
+
 test("een land uit de lijst draait de bol naar zich toe", () => {
   const onPick = vi.fn();
   const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
@@ -378,6 +447,49 @@ test("de pijltjestoetsen draaien de bol", () => {
   // Geen van beide heeft een koers bij ons, dus de doelvaluta hoort niet te
   // bewegen — dat is dezelfde regel als bij de lijst.
   expect(onPick).not.toHaveBeenCalled();
+});
+
+test("Antarctica is aan te klikken en geeft het zesde antwoord, zonder tarief", () => {
+  /* Antarctica stond niet in de bundel; onder 55,6° zuiderbreedte was de bol leeg.
+   * Nu staat het er, en dan moeten drie dingen tegelijk waar zijn:
+   *
+   *  1. er is een vlak om op te klikken (anders is "wel tekenen, wel aanklikbaar"
+   *     alleen op papier waar),
+   *  2. het antwoord is "geen wettig betaalmiddel" en niet "geen koers" — dat
+   *     eerste gaat over de plek, dat tweede over ons,
+   *  3. er komt geen percentage op het scherm. Ook geen 0%: er is geen munt, dus
+   *     er is niets om een tarief van te hebben. Dat is de val waar deze hele tab
+   *     omheen gebouwd is. */
+  const onPick = vi.fn();
+  const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
+
+  click(option(el, "FR"));
+  onPick.mockClear();
+  expect(answer(el)).toContain("Frankrijk");
+
+  // Naar de zuidpool draaien met het toetsenbord: de beginstand is 30° noord, dus
+  // elf stappen van 10° komen op 80° zuid uit. Zo wordt de klik hieronder een
+  // echte klik op het doek en niet een keuze uit de lijst.
+  const canvas = el.querySelector('[data-testid="bol-canvas"]')!;
+  for (let i = 0; i < 11; i++) press(canvas, "ArrowDown");
+
+  const pool = screenAt(0, -90, { lon: 8, lat: -80 });
+  expect(pool.front).toBe(true);
+  tapGlobe(el, pool.x, pool.y);
+
+  expect(answer(el)).toContain("Antarctica");
+  expect(answer(el)).toContain("geen wettig betaalmiddel");
+  // Niet de melding voor een land waarvan wij de koers missen: dat zou een leemte
+  // bij ons beweren waar er geen munt is.
+  expect(answer(el)).not.toContain("geen koers");
+  expect(answer(el)).not.toContain("valuta onbekend");
+  // Geen percentage, en geen doelvaluta gezet.
+  expect(answer(el)).not.toMatch(/%/);
+  expect(onPick).not.toHaveBeenCalled();
+  // En de leesregel zegt hetzelfde als het paneel: geen betaalmiddel, geen
+  // streepje dat als nul te lezen is.
+  expect(readout(el)).toContain("Antarctica");
+  expect(readout(el)).toContain("geen betaalmiddel");
 });
 
 test("het doek heeft een beschrijving en wijst naar de lijst", () => {
@@ -461,6 +573,25 @@ test("een prijsbaar land laat de berekening met die valuta verder rekenen", () =
   )!;
   expect(naar.value).toBe("JPY");
   expect(el.querySelector('[data-testid="arrives"]')!.textContent).not.toBe("onbekend");
+});
+
+test("Antarctica laat geen route en geen 0% in de berekening achter", () => {
+  const el = mount(<Valuta accounts={accounts} facts={[]} entries={entries} />);
+  const naar = () =>
+    [...el.querySelectorAll<HTMLSelectElement>("select")].find((s) => s.getAttribute("aria-label") === "Naar valuta")!;
+  const before = naar().value;
+
+  click(option(el, "AQ"));
+
+  // De berekening staat nog op wat hij stond: er valt niets te wisselen, dus er
+  // is ook niets om naartoe te rekenen.
+  expect(naar().value).toBe(before);
+  // Het antwoord noemt de echte reden en zet er geen getal bij. Een 0% hier zou
+  // beweren dat een omwisseling naar Antarctica gratis is; er is geen omwisseling.
+  const paneel = el.querySelector('[data-testid="bol-antwoord"]')!.textContent ?? "";
+  expect(paneel).toContain("geen wettig betaalmiddel");
+  expect(paneel).not.toMatch(/%/);
+  expect(paneel).not.toMatch(/0,00/);
 });
 
 test("een land zonder koers verandert de berekening niet", () => {

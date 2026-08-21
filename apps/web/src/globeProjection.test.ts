@@ -23,8 +23,15 @@ import { countryById, mapCountries } from "./worldMap.js";
  *     dan waar je op klikte),
  *  3. en loopt er nooit een lijn dwars over de bol. Dat laatste is HET
  *     faalgeval van een draaibare bol: als de achterkant niet netjes wordt
- *     afgekapt, zie je Amerika door Azië heen. Het wordt hier gemeten op alle 236
+ *     afgekapt, zie je Amerika door Azië heen. Het wordt hier gemeten op alle 237
  *     getekende landen bij vier standen, niet beoordeeld op een plaatje.
+ *
+ * Sinds Antarctica in de bundel zit is daar een vierde bij gekomen, en het is het
+ * enige geval van zijn soort: een ring die de POOL OMSLUIT. Elk ander land is een
+ * vlek op de bol; deze loopt van −180 tot 180 en sluit zichzelf via een naad langs
+ * de meridiaan naar het punt −90. Dat raakt precies de plek waar dit bestand het
+ * kwetsbaarst is (welke kant gaat de boog over de limbus op), dus daar staat een
+ * eigen test voor.
  */
 
 const VIEW: Viewport = { cx: 200, cy: 200, r: 100 };
@@ -357,11 +364,15 @@ test("een land dat maar een haartje zichtbaar is, vult geen halve wereld", () =>
 });
 
 test("bij zes standen loopt geen enkel land uit over de schijf", () => {
-  /* Dezelfde fout, nu over alle landen tegelijk. Gemeten per stand (som van alle
-   * ringen, gaten en enclaves dus dubbel geteld): tussen 9,5% en 47,1% van de
-   * schijf, en de grootste losse ring is Rusland met 10,0%. Eén ring die de
-   * verkeerde kant om sluit is meteen ~100%, dus de grenzen van 60% en 20% liggen
-   * ruim boven de meting en ruim onder de fout. */
+  /* Dezelfde fout, nu over alle landen tegelijk. Opnieuw gemeten met Antarctica
+   * erbij (som van alle ringen per stand, gaten en enclaves dus dubbel geteld):
+   * tussen 18,7% en 47,1% van de schijf, en de grootste losse ring is Rusland met
+   * 10,0% bij de stand op 175° oost. Antarctica komt daar bij de zuidelijke stand
+   * vlak achter met 9,1% — dat is de kap zoals hij hoort te zijn en niet een
+   * uitloper. Wat er door Antarctica veranderde: de onderste stand was 9,5% en is
+   * 18,7%, want daar stond eerst niets. Eén ring die de verkeerde kant om sluit is
+   * meteen ~100%, dus de grenzen van 60% en 20% liggen ruim boven de meting en
+   * ruim onder de fout. */
   const prepared = mapCountries().map((c) => c.rings.map((rg) => prepareRing(rg)));
   for (const rot of [
     { lon: 0, lat: 0 },
@@ -385,6 +396,58 @@ test("bij zes standen loopt geen enkel land uit over de schijf", () => {
     }
     expect(sum / DISC).toBeLessThan(0.6);
     expect(worst / DISC).toBeLessThan(0.2);
+  }
+});
+
+test("de kap om de zuidpool blijft een kap, van welke kant je hem ook ziet", () => {
+  /* Antarctica is de enige ring die de pool OMSLUIT, en dat maakt hem het lastigste
+   * geval in dit bestand. Zijn vlak loopt in de bron van lengtegraad −180 tot 180
+   * en sluit zichzelf via een naad: langs meridiaan 180 omlaag naar breedtegraad
+   * −90, dan naar −180, en weer omhoog. Op een bol vallen die twee naadstukken
+   * precies op elkaar (180 en −180 zijn dezelfde meridiaan) en is het gat een
+   * punt — maar alleen als het afkappen op de limbus en de boog eromheen kloppen.
+   * Gaat de boog de verkeerde kant op, dan vult Antarctica de hele bol, en dat is
+   * onderaan een scherm nu juist niet op te merken.
+   *
+   * Vier standen: recht op de zuidpool (alles zichtbaar), recht op de noordpool
+   * (niets zichtbaar), en twee keer van opzij (half afgekapt). */
+  const aq = countryById("AQ")?.rings;
+  expect(aq, "Antarctica staat niet meer in de bundel").toBeTruthy();
+  const rings = aq!.map((r) => prepareRing(r));
+
+  // Van de noordpool af gezien is er niets van te zien, en dan hoort er ook niets
+  // getekend te worden — geen leeg pad dat de vulregel in de war stuurt.
+  const noord = globeFrame({ lon: 0, lat: 90 }, VIEW);
+  for (const ring of rings) {
+    const { sink } = recorder();
+    expect(traceRing(ring, noord, sink)).toBe(false);
+  }
+
+  for (const rot of [
+    { lon: 0, lat: -90 },
+    { lon: 140, lat: -90 },
+    { lon: 0, lat: -20 },
+    { lon: 170, lat: 0 },
+  ]) {
+    const f = globeFrame(rot, VIEW);
+    let sum = 0;
+    let worst = 0;
+    for (const ring of rings) {
+      const { ops, sink } = recorder();
+      if (!traceRing(ring, f, sink)) continue;
+      sum += pathArea(ops, VIEW);
+      worst = Math.max(worst, longestSegment(ops, VIEW));
+    }
+    /* Gemeten: recht op de pool beslaat de kap 9,3% van de schijf (de kustlijn
+     * ligt in deze bron rond 70° zuid, dus het is een kap van ±18° en niet de
+     * halve zuidelijke hemisfeer), van opzij 3,3% en op 170°/0° nog 0,7%. De grens
+     * op 25% ligt ruim boven die metingen en ver onder de fout, want een boog die
+     * de verkeerde kant om gaat maakt er in één keer ~100% van. */
+    expect(sum / DISC, `stand ${rot.lon}/${rot.lat}`).toBeGreaterThan(0);
+    expect(sum / DISC, `stand ${rot.lon}/${rot.lat}`).toBeLessThan(0.25);
+    // En geen enkele rechte lijn dwars over de bol; zelfde grens als de test
+    // hierboven over alle landen.
+    expect(worst, `stand ${rot.lon}/${rot.lat}`).toBeLessThan(VIEW.r * 0.1);
   }
 });
 

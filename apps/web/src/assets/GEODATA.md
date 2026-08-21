@@ -6,8 +6,8 @@ De wereldbol in de Valuta-tab wordt **tijdens de sweep opgehaald en
 meegebundeld**, net als de banklogo's (zie `TRADEMARKS.md`). In de browser wordt
 er niets opgehaald: een tile-request zou de tileserver vertellen naar welk land de
 gebruiker kijkt, en in deze tab is dat "waar ga ik heen en hoeveel geld neem ik
-mee". Het gegenereerde bestand is `world-map.generated.ts` (203 kB,
-11580 punten in 649 ringen).
+mee". Het gegenereerde bestand is `world-map.generated.ts` (216 kB,
+12440 punten in 710 ringen).
 
 ## Van platte kaart naar bol
 
@@ -45,7 +45,7 @@ Gemeten aan de twee ergste gevallen: de grens VS/Canada volgt de 49e breedtegraa
 wél een grootcirkel, maar de koorde snijdt de boog met een pijlhoogte van
 0,034×R: op 320 px straal is dat 11 px.
 
-Daarom worden stukken langer dan 5° opgedeeld (26 punten bijgezet). Dat gebeurt
+Daarom worden stukken langer dan 5° opgedeeld (28 punten bijgezet). Dat gebeurt
 **lineair in lengte/breedte** en niet over de grootcirkel, want zo zijn die
 grenzen ook gedefinieerd: de 49e breedtegraad *volgt* de breedtegraad.
 Grootcirkel-interpolatie zou die grens 0,86° verkeerd neerzetten in plaats van
@@ -74,7 +74,7 @@ Aleoeten op ±180° in twee vlakken, dus de omhullende van álle ringen van Rusl
 loopt van −180° tot 180° — de hele wereld. Van het grootste vlak is het Siberië,
 en dat is wat iemand bedoelt die "Rusland" zoekt.
 
-De omhullende van alles wat er getekend wordt: -180, -55.6, 180, 83.6 (lonMin, latMin, lonMax, latMax).
+De omhullende van alles wat er getekend wordt: -180, -90, 180, 83.6 (lonMin, latMin, lonMax, latMax).
 
 Wat de bol daarmee doet staat in `countryFocus()` in `worldMap.ts`: het **midden
 van de `bbox`** is waar de bol naartoe draait, en dat is met opzet een ander punt
@@ -108,27 +108,25 @@ weten waar het ligt, niet hoe groot het is.
 | niet geprobeerd | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson | niet nodig — de bron erboven werkte |
 | niet geprobeerd | https://unpkg.com/world-atlas@2/countries-110m.json | niet nodig — de bron erboven werkte |
 | mislukt | https://restcountries.com/v3.1/all?fields=cca2,currencies,name | onleesbaar: de dienst antwoordt met een fout: This API version has been deprecated. Please visit https://restcountries.com/docs/countries/legacy-api-deprecation to migrate to our new version (v5). — begint met: { "success": false, "data": null, "errors": [ { "message": "This API version has been deprecated. Please visit https://restcount |
-| gelukt | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json | 255 landen met een geldige valuta op 2026-08-21 |
+| gelukt | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json | 255 landen met een geldige valuta op 2026-08-21, 3 waar de bron zegt dat er geen wettig betaalmiddel is |
 | niet geprobeerd | https://raw.githubusercontent.com/mledoze/countries/master/countries.json | niet nodig — de bron erboven werkte |
 | gelukt | https://api.frankfurter.dev/v1/currencies | 30 valuta's (ECB, via Frankfurter) |
 | gelukt | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_tiny_countries.geojson | 74 labelpunten (alleen gebruikt voor landen zonder eigen vlak) |
 
 ## Wat er is weggelaten, en waarom
 
-- **Antarctica.** Geen wettig betaalmiddel volgens CLDR (XXX), dus geen valuta om
-  te wisselen. **Dit is een open punt geworden** — zie hieronder.
 - **Losse eilanden onder ±400 km².** Vlakken kleiner dan 0,0324°² gaan eruit
-  (703 in totaal): Corsica blijft, Ibiza en Texel niet. Het **grootste vlak van
+  (723 in totaal): Corsica blijft, Ibiza en Texel niet. Het **grootste vlak van
   een land gaat er nooit uit** — anders zou Malta van de kaart vallen omdat Malta
   klein is. Een graad² krimpt met cos(breedte), dus bij 75° NB is deze drempel nog
   ±100 km² en blijven daar kleinere eilanden staan. Op de bol is dat precies goed:
   je kunt recht op de noordpool kijken, en dan wil je de Canadese archipel zien.
-- **Eilandjes die op dit raster geen vlak meer zijn** (169). Ze waren groot genoeg
+- **Eilandjes die op dit raster geen vlak meer zijn** (196). Ze waren groot genoeg
   voor de drempel hierboven, maar houden na afronden geen omtrek meer over. Apart
   geteld, want het is een andere uitspraak dan "te klein om te tellen" — en het is
   de enige post waar de overstap van doekeenheden naar graden echt iets weghaalt.
   Gemeten bij die overstap: op het oude, fijnere raster (0,036°) gebeurde dit met
-  152 vlakken, op 0,1° met 169. Dat verschil zit bij eilanden rond de 400 km²:
+  152 vlakken, op 0,1° met 196. Dat verschil zit bij eilanden rond de 400 km²:
   0,18° breed, dus op het oude raster vijf cellen en op dit raster minder dan
   twee. Op een bol van 640 px is zo'n eiland 0,65 px. Het **grootste** vlak van een
   land valt hier nooit onder: dat krijgt een fijner raster (zie hieronder) in
@@ -168,39 +166,49 @@ weten waar het ligt, niet hoe groot het is.
   minstens de helft van zijn oppervlakte overhouden; lukt dat niet, dan gaat de
   afronding voor dat ene land fijner: 43 op 2 decimalen (AD, AG, AI, AS, AW, BB, BH, BL, BM, CK, CW, DM, FM, GD, GG, GU, HK, HM, IO, JE, KI, KN, KY, LI, MF, MP, MS, MT, MV, NU, PF, PM, PW, SC, SG, SH, SM, ST, TC, TO, VC, VG, VI); 10 op 3 decimalen (MC, MH, MO, NF, NR, PN, SX, TV, VA, WF).
 
-## Open punt: Antarctica
+## Antarctica: opgelost, en hoe
 
-Antarctica staat **niet** in de bundel. Op de platte kaart was dat vooral
-opruimen: het beslaat daar de hele onderrand, uitgesmeerd door de projectie, en er
-is geen valuta.
+Antarctica stond twee versies lang **niet** in de bundel. Op de platte kaart was
+dat te verdedigen — het beslaat daar de hele onderrand, uitgesmeerd door de
+projectie, en er valt niets te wisselen. Op een bol niet: je kunt naar de
+zuidpool **toe draaien**, en dan hield alles op bij 55,6° zuiderbreedte. Wie
+daarheen draaide zag water waar land hoort. Dat is geen leemte die zichzelf
+meldt; dat is een bol die iets beweert.
 
-Op een bol is die afweging anders. Je kunt naar de zuidpool **toe draaien**, en
-dan is daar niets — geen land, geen ijs, alleen de kleur van de oceaan. De
-onderkant van wat er wél staat ligt op -55.6° NB; daaronder is de bol leeg.
+Er lagen drie mogelijkheden (laten zoals het was / wel tekenen maar niet
+aanklikbaar / wel tekenen én aanklikbaar met een eigen antwoord). Het is de derde
+geworden — Antarctica is getekend, aanklikbaar, en heeft een **eigen soort
+antwoord**: _geen wettig betaalmiddel_. Dat is precies wat CLDR zegt (XXX), en het
+is met opzet niet één van de twee antwoorden die erop lijken:
 
-Wat het kost om het terug te zetten: de kustlijn van Antarctica is met deze
-drempels ongeveer 1.500 punten, dus ±15 kB — er is ruimte. Wat het kost om het
-weg te laten: één zichtbaar gat, precies op de plek waar iemand die met een bol
-speelt vroeg of laat naartoe draait.
+- **niet `unknown`** — daar weten wij het niet; hier weten wij het wél.
+- **niet `noRate`** — daar hebben wij de koers niet; hier is er geen koers omdat
+  er geen munt is. Het gat zit niet bij ons.
 
-Drie mogelijkheden, met wat elk betekent:
+Wat het gekost heeft, nagemeten en niet geschat: 860 punten in 61 ringen, 11,5 kB van de 216 kB in dit bestand. De onderkant van de omhullende is daarmee −90° in plaats van −55,6° (Kaap Hoorn): de bol houdt onderaan niet meer op.
 
-1. **Laten zoals het is.** Goedkoopst, en de vraag "wat kost omwisselen" is er
-   niet — maar de bol liegt over de wereld.
-2. **Wel tekenen, niet aanklikbaar, zonder valuta-antwoord.** Eerlijk: het land is
-   er, er is niets te wisselen. Vraagt van de UI dat een klik daar "hier valt
-   niets te wisselen" zegt en niet stil niets doet, en niet "0%" — daar zit de
-   valkuil.
-3. **Wel tekenen en aanklikbaar met het antwoord "geen wettig betaalmiddel".**
-   Netter dan 2 en het is precies wat CLDR zegt (XXX). Vraagt een zesde soort
-   antwoord in `conversionFor()`, want dit is niet `unknown` (wij weten het) en
-   niet `noRate` (er is geen koers omdat er geen valuta is, niet omdat wij hem
-   missen).
+Wat er niet mee is opgelost: **bovenaan** houdt de tabel nog steeds op, op
+83,6° — de noordpunt van Groenland. Daarboven ligt alleen zee, maar dat is een
+uitspraak die deze tabel niet doet; de UI hoort daar te zeggen dat ONZE grenzen
+ophouden en niet dat daar water is.
 
-Advies: **3**, als er tijd is voor dat zesde antwoord, anders **2**. Beide zijn
-beter dan een bol met een gat erin, en 1 is alleen goed te praten zolang de bol
-niet naar de zuidpool kan draaien. De keuze is aan de eigenaar; dit script hoeft
-er alleen `DROP_CODES` voor te verliezen.
+## Geen valuta in de tabel: twee verschillende antwoorden
+
+Een leeg `currencies`-lijstje kan twee dingen betekenen, en de tabel houdt ze uit
+elkaar met de vlag `noTender`.
+
+| Wat de bron zegt | In de tabel | Landen |
+| --- | --- | --- |
+| er is hier geen wettig betaalmiddel (CLDR: XXX) | `currencies: []` **met** `noTender: true` | Antarctica (AQ) |
+| niets — de bron noemt voor dit land geen valuta | `currencies: []` zonder die vlag | geen |
+
+Het verschil is de reden dat er in `conversionFor()` een **zesde** soort antwoord
+staat. "Er is niets om te wisselen omdat er geen munt is" mag niet op één hoop met
+"wij weten niet waarmee daar betaald wordt", en al helemaal niet met "0%".
+
+Alleen CLDR kan de eerste uitspraak dragen. Draait de sweep op een terugvalbron,
+dan blijft die kolom leeg en is Antarctica gewoon **onbekend** — ook eerlijk, maar
+minder precies.
 
 ## Landen met meer dan één valuta
 

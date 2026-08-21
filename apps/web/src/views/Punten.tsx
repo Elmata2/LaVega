@@ -43,13 +43,14 @@ export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): Reward
 /* ---------------------------------------------------------------------------
  * ING PUNTEN — een programma met regels, zonder koers.
  *
- * Waarom dit hier staat en niet in REWARD_PROGRAMS (core): die lijst is deze run
- * van een andere lane. Zodra core bijgewerkt kan worden hoort ING Punten daar
- * thuis en mag EXTRA_PROGRAMS leeg. Let op: de bestaande core-regel
- * { name: "ING", note: "ING NL heeft geen puntenprogramma" } is inmiddels
- * WEERLEGD — zie het open punt in het slotverslag. Die note wordt nergens
- * afgedrukt, dus hij staat niet op het scherm, maar hij staat wel fout in de
- * data.
+ * Waarom dit hier staat en niet in REWARD_PROGRAMS (core): dat was tijdens deze
+ * run een bestand van een andere lane. De weerlegde core-regel
+ * { name: "ING", note: "ING NL heeft geen puntenprogramma" } is inmiddels WEG —
+ * rewards.ts draagt nu ING_NOTE met de echte drempels, het citaat uit de
+ * voorwaarden en de bron erbij, en er staan tests op die de note tegen
+ * docs/research/2026-08-20-punten-koersen.md leggen in plaats van tegen
+ * zichzelf. Deze lijst en die note mogen dus samengevoegd worden; dat is
+ * opruimwerk en geen correctie meer.
  *
  * Wat we van ING weten (bron: ING's eigen pagemodel-API achter
  * ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten, opgehaald 21-08-2026,

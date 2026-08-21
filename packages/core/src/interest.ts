@@ -1,6 +1,8 @@
 import type { Account, Tx } from "./model.js";
 import { norm } from "./hash.js";
 import { accountType } from "./balance.js";
+import { accountNamesProduct, type ProductFee } from "./accountCosts.js";
+import { holdingCostOfProduct, marginalHoldingCost, netBenefit, type NetBenefit } from "./netBenefit.js";
 
 /* Interest optimisation for the Optimisatie tab. Pure + deterministic. Own
  * account rates are derived locally (from "rente" bijschrijvingen) or set by the
@@ -40,6 +42,22 @@ export type RateBenchmark = {
    *  change. */
   sourceUrl?: string;
   asOf?: string;
+  /** DE CATALOGUSRIJ WAAR DEZE RENTE VANDAAN KOMT, als er één is.
+   *
+   *  Zonder dit veld had een renteadvies niets om de KOSTEN aan op te hangen. Een
+   *  benchmark is bank + product — twee vrij geschreven strings die drie bronnen
+   *  op drie manieren spellen — en de prijs van een rekening staat in de
+   *  catalogus op een rij met een id. `savingsBenchmarks` maakt deze rijen ván
+   *  die catalogusrijen en weet de id dus al; hem hier meesturen is het bewaren
+   *  van iets bekends, niet het reconstrueren van iets verlorens. Dat verschil is
+   *  de reden dat het zo gaat en niet via een naammatch achteraf: een
+   *  teruggerekende koppeling kan de VERKEERDE rij pakken, en een verkeerde prijs
+   *  rekent door — erger dan geen prijs (zie `productFeesById`).
+   *
+   *  Afwezig bij de vergelijkingsscrape en bij de ingebakken tabel hieronder: die
+   *  kennen geen catalogusrij. Dat wordt "kosten onbekend" en dus zichtbaar, niet
+   *  stilzwijgend nul. */
+  productId?: string;
   /** The bands and restrictions, in the document's words, when a rate is not flat. */
   conditions?: string;
   /** NOT A DEPOSIT. A money-market fund quoted as a "rate": Wise Rente and N26's
@@ -354,6 +372,24 @@ export type InterestAnalysis = {
   accountRates: AccountRate[];
   suggestions: InterestSuggestion[];
   totalExtraPerYearCents: number;
+  /** WAT ER OVERBLIJFT ALS DE REKENING WAAR JE HEEN ZOU GAAN ZELF GELD KOST.
+   *
+   *  `totalExtraPerYearCents` is BRUTO: het is rente, en rente alleen. Wie op dat
+   *  getal een rekening opent kan er per saldo op achteruit gaan — € 50 rente
+   *  meer op een rekening van € 4 per maand is € 2 minder, en dat moet hij kunnen
+   *  ZIEN in plaats van uitrekenen. `netBenefit` doet de aftrek in de drie
+   *  toestanden die er echt zijn (netto / geen aanbeveling / kosten onbekend).
+   *
+   *  OP HET TOTAAL EN NIET PER SUGGESTIE, en dat is een rekenkundige keuze met
+   *  een reden: het advies is één rekening openen en daar alles heen brengen. De
+   *  pakketprijs betaal je dan ÉÉN keer. Per suggestie aftrekken zou hem bij drie
+   *  rekeningen drie keer in rekening brengen, en dan valt een advies af op kosten
+   *  die niemand maakt.
+   *
+   *  Null als er niets te verrekenen valt: geen winnaar, geen suggestie, of een
+   *  brutobedrag van nul. Een netto van nul over een voordeel van nul is geen
+   *  antwoord, alleen ruis met een komma erin. */
+  net: NetBenefit | null;
 };
 
 /** Resolve an account's CURRENT rate, in order: user-set wins; else detected
@@ -393,6 +429,15 @@ export function analyzeInterest(
   rates: readonly RateBenchmark[],
   asOf: string,
   marginPct = MARGIN_PCT,
+  /** DE GEPRIJSDE CATALOGUS, per productId — wat `productFeesById` oplevert.
+   *
+   *  Optioneel, en leeg is niet gratis: zonder deze kaart weet niemand wat de
+   *  winnende rekening kost, en dan komt `net` als "kosten onbekend" terug in
+   *  plaats van als een netto van nul. Dat is precies het verschil dat deze hele
+   *  ronde bewaakt. Een Map en geen catalogus, omdat het opbouwen ervan de hele
+   *  catalogus doorloopt: de aanroeper memoïseert hem al (zie Optimalisatie), en
+   *  hier nog een keer bouwen zou dat werk per render herhalen. */
+  fees: ReadonlyMap<string, ProductFee> = new Map(),
 ): InterestAnalysis {
   const best = bestRate(rates);
   const bestPromo = bestPromoRate(rates);
@@ -432,12 +477,61 @@ export function analyzeInterest(
     }
   }
 
+  const totalExtraPerYearCents = suggestions.reduce((s, x) => s + x.extraPerYearCents, 0);
+
   return {
     best,
     bestPromo,
     promoExtraPerMonthCents,
     accountRates,
     suggestions,
-    totalExtraPerYearCents: suggestions.reduce((s, x) => s + x.extraPerYearCents, 0),
+    totalExtraPerYearCents,
+    net: netOfSwitch(accounts, best, totalExtraPerYearCents, fees),
   };
+}
+
+/** WAT DE OVERSTAP NETTO OPLEVERT, of waarom dat niet te zeggen is.
+ *
+ *  RENTE IS PER JAAR EN EEN PAKKETPRIJS VAAK PER MAAND, en dat is hier de enige
+ *  echte valkuil: € 4,00 en € 48,00 zijn hetzelfde bedrag en schelen een factor
+ *  twaalf zodra je ze in de verkeerde eenheid naast elkaar zet. Er wordt daarom
+ *  niets met de hand omgerekend — beide bedragen gaan als TERUGKEREND met hun
+ *  eigen periode naar `netBenefit`, dat naar de grofste van de twee rekent (hier
+ *  het jaar) en nooit naar de fijnste. Van een jaarprijs een maandprijs maken is
+ *  een bedrag verzinnen dat in geen enkel document staat.
+ *
+ *  GEEN HORIZON, en dat is geen weglating. Bij een reis staat een EENMALIGE winst
+ *  tegenover een doorlopende prijs, en dan moet er een periode bij (zie
+ *  netBenefit.ts). Rente en pakketprijs lopen allebei door, dus ze staan al in
+ *  dezelfde eenheid en gaan schoon van elkaar af.
+ *
+ *  EEN REKENING DIE HIJ AL HEEFT kost hem marginaal niets: die prijs loopt door
+ *  of hij het geld verplaatst of niet. `marginalHoldingCost` maakt daar een
+ *  BEKENDE nul van — een andere nul dan "niemand noemt een prijs", en op het
+ *  scherm een ander verhaal.
+ *
+ *  Wat hier NIET gebeurt, en dat hoort erbij te staan: `bestRate` kiest de
+ *  winnaar nog steeds op RENTE alleen. Een bank die iets minder betaalt maar zijn
+ *  rekening gratis weggeeft kan per saldo beter zijn, en die vergelijking hangt
+ *  van het saldo af — hetzelfde tarief is bij € 2.000 een verlies en bij € 50.000
+ *  winst. Dat is een rangschikking per rekening en een aparte beslissing; wat hier
+ *  wél gebeurt is dat een winnaar die zijn eigen prijs niet goedmaakt geen
+ *  aanbeveling meer heet. */
+function netOfSwitch(
+  accounts: readonly Account[],
+  best: RateBenchmark | null,
+  totalExtraPerYearCents: number,
+  fees: ReadonlyMap<string, ProductFee>,
+): NetBenefit | null {
+  if (best === null || totalExtraPerYearCents <= 0) return null;
+  // Geen productId betekent: deze rente komt van de vergelijkingsscrape of uit de
+  // ingebakken tabel en is nergens aan een catalogusrij vast te maken. Dat loopt
+  // door hetzelfde gat als "de catalogus prijst dit product niet", want het is
+  // voor de lezer dezelfde uitkomst: geen bron noemt wat deze rekening kost.
+  const fee = (best.productId === undefined ? undefined : fees.get(best.productId)) ?? null;
+  const held = fee !== null && accounts.some((a) => accountNamesProduct(a, fee));
+  return netBenefit({
+    benefit: { kind: "recurring", cents: totalExtraPerYearCents, period: "jaar" },
+    cost: marginalHoldingCost(holdingCostOfProduct(fee), held),
+  });
 }

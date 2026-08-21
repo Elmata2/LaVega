@@ -8,7 +8,7 @@ import type { CatalogValue } from "./catalog.js";
 import { isCovered } from "./catalog.js";
 import { issuerToBank, type CatalogueEntryLike } from "./catalogRates.js";
 import { splitProductName, bankNameMatches } from "./bankNl.js";
-import { accountFees, type ProductFee } from "./accountCosts.js";
+import { productFeesById } from "./accountCosts.js";
 import {
   MIN_HORIZON_MONTHS, describeNetBenefit, holdingCostOfProduct, marginalHoldingCost, netBenefit,
   type HoldingCost, type NetBenefit,
@@ -1295,86 +1295,17 @@ function heldCatalogueIds(
   return held;
 }
 
-/** Namen vergelijken zoals een mens ze leest: kleine letters, zonder accenten,
- *  losse woorden. De catalogus schrijft "Privérekening" en "priverekening" door
- *  elkaar, en dat mag geen twee producten worden. */
-function normProduct(s: string): string {
-  return String(s ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-/** DE KAARTPRIJZEN, uit hetzelfde artefact als de opslagen.
+/* DE KAARTPRIJZEN KOMEN UIT accountCosts.ts.
  *
- *  De catalogus draagt `accountFee` op 71 rijen (augustus 2026), en dat is
- *  hetzelfde bestand dat hier al binnenkomt — er is dus geen nieuwe invoer nodig,
- *  alleen een veld dat nog niet gelezen werd. `accountFees` doet de validatie
- *  (eenheid, bron, datum, voorwaarden) en beslist ook of het bedrag de prijs van
- *  DIT product op zichzelf is; die kennis hier nog eens opschrijven zou hem laten
- *  verlopen. Eén keer opbouwen per ranking, want het loopt de hele catalogus door.
- *
- *  DE PRIJS STAAT VAAK OP EEN ANDERE RIJ DAN DE KAART, en daar liep deze hele
- *  lane in stilte op stuk. De catalogus splitst een KAART (kind `betaalpas`, die
- *  `fxFeePct` draagt) van het PAKKET waarin hij zit (kind `betaalrekening` of
- *  `betaalpakket`, dat `accountFee` draagt): `n26-metal-betaalpas` heeft de 0%
- *  opslag, `n26-metal` heeft de € 16,90 per maand. Op `id` alleen matchen vond
- *  die prijs dus nooit, en N26 Metal kwam als gedeeld goedkoopste kaart uit de
- *  rangschikking met "kosten onbekend" — een kaart van € 16,90 per maand
- *  bovenaan, precies het advies dat deze lane moet voorkomen. Erger nog: de
- *  melding zei dat onze bronnen de prijs niet noemen, terwijl hij er wél in
- *  staat, één rij verderop.
- *
- *  DE MATCH IS OPZETTELIJK STRIKT, want een verkeerde prijs rekent door en is
- *  erger dan geen prijs:
- *   · alleen de kaartnaam wordt van zijn soortwoord ontdaan ("N26 Metal
- *     betaalpas" → "N26 Metal"). De pakketnaam blijft VOLLEDIG. Toen die ook
- *     werd ingekort viel "ING BetaalPakket" terug op "ing" en trok dan de
- *     € 6,85 van dat pakket naar de generieke "ING betaalpas" — terwijl ING die
- *     kaart in zeven pakketten van € 4 tot € 44,99 verkoopt. Om dezelfde reden
- *     kwam de creditcardbijdrage van ABN, Rabo, SNS en RegioBank op hun
- *     BETAALPAS terecht. Twaalf rijen matchen nu, en alle twaalf zijn een kaart
- *     die alleen binnen dat ene pakket bestaat;
- *   · het pakket moet een REKENING of PAKKET zijn (`group === "betaalrekening"`,
- *     wat betaalpakket meedekt). Zo kan een creditcardbijdrage nooit op een
- *     betaalpas landen, ook niet als de catalogus ooit een rij omdoopt;
- *   · precies één kandidaat, anders niets. Twee pakketten met dezelfde naam is
- *     geen keuze die wij mogen maken;
- *   · dezelfde bank aan beide kanten, als extra slot op een naam die toevallig
- *     tweemaal voorkomt.
- *
- *  Zijn EIGEN rij gaat altijd voor: een kaart die zelf geprijsd is, is geprijsd. */
-function holdingCostsById(entries: readonly CatalogueEntryLike[]): Map<string, ProductFee> {
-  const fees = accountFees(entries);
-  const out = new Map<string, ProductFee>(fees.map((f) => [f.productId, f]));
-
-  const plans = new Map<string, ProductFee[]>();
-  for (const f of fees) {
-    if (f.group !== "betaalrekening") continue;
-    const key = normProduct(f.product);
-    const list = plans.get(key);
-    if (list) list.push(f);
-    else plans.set(key, [f]);
-  }
-
-  for (const e of entries) {
-    if (out.has(e.id)) continue; // eigen prijs gaat voor
-    const split = splitProductName(e.product);
-    if (!split) continue;
-    const candidates = plans.get(normProduct(split.bank));
-    if (!candidates || candidates.length !== 1) continue;
-    const plan = candidates[0];
-    // Beide kanten dezelfde bank. `issuerToBank` haalt de merknaam uit de
-    // juridische uitgever ("N26 Bank AG; Mastercard Debit" → "N26"), zodat de
-    // kaartrij en de pakketrij op hun bank vergeleken kunnen worden en niet op
-    // hun uitgeverstekst.
-    if (e.issuer && plan.issuer && !bankNameMatches(issuerToBank(e.issuer), issuerToBank(plan.issuer))) continue;
-    out.set(e.id, plan);
-  }
-  return out;
-}
+ * `productFeesById` stond hier, privé, en dat was het probleem: Optimalisatie
+ * moest dezelfde vraag beantwoorden ("wat kost dit catalogusproduct om te
+ * hebben") en kon er niet bij, dus matchte dat scherm op GELIJK id en miste
+ * precies de twaalf kaart/pakket-paren die deze matcher koppelt — waaronder de
+ * € 16,90 per maand van N26 Metal. Twee schermen die hetzelfde beweren over
+ * dezelfde catalogus en het niet eens zijn. Hij hoort bij de rest van de
+ * kostenkennis (eenheid, bron, `pricedOnItsOwn`), dus daar staat hij nu, met de
+ * hele redenering achter de strikte match erbij.
+ */
 
 export function marketCardOffers(
   entries: readonly CatalogueEntryLike[],
@@ -1383,7 +1314,7 @@ export function marketCardOffers(
   tripMonths: number = TRAVEL_TRIP_MONTHS,
 ): CardOffer[] {
   const held = heldCatalogueIds(entries, heldProducts);
-  const fees = holdingCostsById(entries);
+  const fees = productFeesById(entries);
 
   const offers: CardOffer[] = [];
   for (const e of entries) {
@@ -1532,7 +1463,7 @@ export function marketWithdrawOptions(
   tripMonths: number = TRAVEL_TRIP_MONTHS,
 ): CashOffer[] {
   const held = heldCatalogueIds(entries, heldProducts);
-  const fees = holdingCostsById(entries);
+  const fees = productFeesById(entries);
   const out: CashOffer[] = [];
   for (const e of entries) {
     if (!SPENDABLE_KINDS.has(String(e.kind ?? ""))) continue;

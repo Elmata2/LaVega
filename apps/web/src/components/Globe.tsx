@@ -41,7 +41,7 @@ import {
  *     eerder een eigen "wat kost het daarheen" en dat liep binnen een dag uit de
  *     pas met het paneel ernaast — twee schermen die over hetzelfde bedrag iets
  *     anders zeggen is erger dan één scherm zonder bol.
- *   - daarom wordt `onPick` NIET altijd aangeroepen. Een land geeft vijf soorten
+ *   - daarom wordt `onPick` NIET altijd aangeroepen. Een land geeft zes soorten
  *     antwoord (zie worldMap.ts) en maar twee daarvan zijn een valuta waar de
  *     berekening mee verder kan:
  *       euro      → doelvaluta naar EUR, en het paneel zegt het echte antwoord:
@@ -55,6 +55,10 @@ import {
  *                   hebben geen koers. Een doelvaluta zetten waar de berekening
  *                   geen koers voor heeft levert een leeg <select> en een
  *                   "onbekend" zonder uitleg.
+ *       noTender  → er is daar geen wettig betaalmiddel (Antarctica). Ook hier
+ *                   verandert er niets aan de berekening, maar de reden is een
+ *                   ANDERE dan bij noRate en dat staat er ook zo: daar missen
+ *                   wij een koers, hier is er geen munt.
  *       unknown   → de bron noemt geen valuta. Ook dat is geen nul.
  *   - PRIJSBAAR VOLGENS DE LIVE LIJST (`supported`), niet volgens de vlag uit de
  *     bundel. Die vlag zegt of de valuta op de dag van de sweep in de ECB-lijst
@@ -66,12 +70,13 @@ import {
  *
  * 1. EEN CANVAS, GEEN SVG-PADEN. De platte kaart was 236 <path>-elementen met een
  *    vast `d`. Op een bol verandert élk punt bij élke graad draaien, dus dat zou
- *    236 attribuutmutaties per sleepbeeld zijn — dat is precies waar de browser
- *    het langzaamst in is. Nu wordt er per beeld één keer getekend. Gemeten op
- *    deze data (236 landen, 649 ringen, 11.580 punten, r = 208): het voorbereiden
- *    kost 2,1 ms éénmalig en het herprojecteren van alles plus de graticule
- *    0,36 ms per beeld. Dat is de MEETKUNDE; het vullen van die 236 paden doet de
- *    browser daar bovenop, en dat is niet in Node te meten.
+ *    per sleepbeeld één attribuutmutatie per land zijn — dat is precies waar de
+ *    browser het langzaamst in is. Nu wordt er per beeld één keer getekend.
+ *    Opnieuw gemeten nu Antarctica erbij staat (237 landen, 710 ringen, 12.440
+ *    punten, r = 208): voorbereiden 1,3 ms de eerste keer en 0,4 ms warm, en het
+ *    herprojecteren van alles plus de graticule 0,31 ms per beeld. Dat is de
+ *    MEETKUNDE; het vullen van die 237 paden doet de browser daar bovenop, en dat
+ *    is niet in Node te meten.
  * 2. AANWIJZEN GAAT VIA DE OMGEKEERDE PROJECTIE, niet via een tweede canvas met
  *    een kleur per land. Die kleurtruc is sneller op papier, maar het is een
  *    TWEEDE antwoord op "waar klikte ik": hij rastert op hele pixels, hij hangt
@@ -82,7 +87,7 @@ import {
  * 3. EEN CANVAS BESTAAT NIET VOOR EEN SCHERMLEZER. De platte kaart had 236
  *    aanklikbare paden met een verschuivende focus; op een doek is daar niets van
  *    over. Daarom staat de LANDENLIJST ernaast en is die niet de terugval maar de
- *    tweede volwaardige besturing: één tabstop, alle 249 landen (ook de dertien
+ *    tweede volwaardige besturing: één tabstop, alle 250 landen (ook de dertien
  *    zonder vlak), pijltjes lopen erdoor, Enter kiest, en typen filtert. Het doek
  *    heeft een beschrijving en is met de pijltjes te draaien, maar wie hem niet
  *    ziet mist niets: alles wat de bol kan, kan de lijst ook.
@@ -90,6 +95,16 @@ import {
  *    en dat is geen bezuiniging: bewegen loopt in dit project via een eigen laag,
  *    dus een bol die naar Japan toe glijdt is een besluit dat daar hoort. Slepen
  *    is geen animatie — daar beweegt de vinger.
+ *
+ * 5. ANTARCTICA IS GEEN UITZONDERING MEER. Het stond niet in de bundel, dus onder
+ *    55,6° zuiderbreedte was de bol leeg en zei dit bestand dat de data daar
+ *    ophield. Nu staat het er wél op, is het aan te klikken en heeft het een eigen
+ *    antwoord (`noTender`). Wat dat hier heeft geschrapt: de aparte "polaire"
+ *    misser-melding, die naar een grens verwees die niet meer bestaat. Wat
+ *    ervoor in de plaats staat is dezelfde melding maar UIT DE DATA — zie
+ *    `countryAtPoint`, dat `WORLD_LATLON_BOUNDS` leest in plaats van een
+ *    breedtegraad in een zin over te typen. Zo'n overgetypt getal is precies wat
+ *    er de vorige keer verouderde.
  *
  * ER WORDT NIETS OPGEHAALD. De grenzen staan in de bundel (assets/GEODATA.md).
  * Een tile-request zou die server vertellen naar welk land iemand kijkt, en in
@@ -162,13 +177,18 @@ function pixelRatio(): number {
   return Math.min(2, Math.max(1, dpr));
 }
 
-/** Welke kleurgroep een land krijgt. Dit gaat over ONS, niet over het land:
- *  "geen koers" is een leemte aan onze kant en de legenda zegt dat ook zo. */
-type Tone = "euro" | "rate" | "norate";
+/** Welke kleurgroep een land krijgt.
+ *
+ *  Drie van de vier gaan over ONS: "geen koers" is een leemte aan onze kant en de
+ *  legenda zegt dat ook zo. De vierde, `notender`, gaat juist NIET over ons — daar
+ *  is geen munt, en dus niets dat wij zouden kunnen missen. Die twee dezelfde
+ *  kleur geven zou op de bol de bewering opleveren dat Antarctica een land is
+ *  waarvan wij de koers kwijt zijn. */
+type Tone = "euro" | "rate" | "norate" | "notender";
 
 /** Elk land één keer voorgekauwd. Dit staat buiten de component omdat het niet van
- *  props afhangt en 2,1 ms kost: bij het openen van een andere tab en weer terug
- *  zou dat er anders elke keer bij komen. Lui, want wie de Valuta-tab nooit
+ *  props afhangt en gemeten 1,3 ms kost: bij het openen van een andere tab en weer
+ *  terug zou dat er anders elke keer bij komen. Lui, want wie de Valuta-tab nooit
  *  opent, hoeft er ook niet voor te betalen. */
 type Land = { c: WorldCountry; tone: Tone; rings: PreparedRing[] };
 let PREPARED: { c: WorldCountry; rings: PreparedRing[] }[] | null = null;
@@ -185,7 +205,14 @@ function preparedGrid(): PreparedRing[] {
 
 function tone(c: WorldCountry, canPrice: (x: WorldCurrency) => boolean): Tone {
   if (c.currencies.length > 0 && c.currencies.every((x) => x.code === "EUR")) return "euro";
-  return c.currencies.some(canPrice) ? "rate" : "norate";
+  if (c.currencies.some(canPrice)) return "rate";
+  /* Leeg lijstje: dan beslist de BRON welke van de twee het is, niet deze functie.
+   * Zegt de bron "hier is geen wettig betaalmiddel", dan is dat een eigen kleur;
+   * zegt de bron niets, dan valt het onder dezelfde grijstint als "geen koers" —
+   * want beide zijn dan een leemte bij ons, en de tekst in het paneel maakt het
+   * onderscheid dat een kleur niet kan dragen. Vandaag komt dat tweede geval niet
+   * voor: alle 250 landen hebben óf valuta óf de vlag. */
+  return c.noTender ? "notender" : "norate";
 }
 
 /** Wat de bol met een land kan doen, nadat de live koerslijst erover heen is
@@ -197,6 +224,7 @@ type Effect =
   | { kind: "set"; code: string }
   | { kind: "noRate"; code: string }
   | { kind: "choice"; currencies: readonly WorldCurrency[] }
+  | { kind: "noTender" }
   | { kind: "unknown" };
 
 function resolve(id: string, canPrice: (c: WorldCurrency) => boolean): Effect {
@@ -211,9 +239,25 @@ function resolve(id: string, canPrice: (c: WorldCurrency) => boolean): Effect {
       return canPrice(answer.currency)
         ? { kind: "set", code: answer.currency.code }
         : { kind: "noRate", code: answer.currency.code };
+    /* Deze gaat ONGEWIJZIGD door de live koerslijst heen, en dat is het verschil
+     * met de tak erboven. Daar kan "prijsbaar volgens de bundel" alsnog op
+     * "onprijsbaar vandaag" uitkomen; hier is er niets om een koers van te
+     * hebben, dus er valt ook niets te herzien. */
+    case "noTender":
+      return { kind: "noTender" };
     default:
       return { kind: "unknown" };
   }
+}
+
+/** Een breedtegraad zoals hij in een Nederlandse zin hoort: een komma, en
+ *  "zuiderbreedte" in plaats van een minteken dat niemand voorleest. Het getal
+ *  komt uit `WORLD_LATLON_BOUNDS` en wordt hier dus omgezet en niet overgetypt —
+ *  dat overtypen is precies wat er de vorige keer verouderde toen de bundel
+ *  veranderde. */
+function latitudeText(lat: number): string {
+  const n = Math.abs(lat).toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return `${n}° ${lat < 0 ? "zuiderbreedte" : "noorderbreedte"}`;
 }
 
 /** "Amerikaanse dollar (USD)", of gewoon "USD" als het platform de code niet
@@ -228,10 +272,18 @@ function currencyLabel(code: string): string {
   }
 }
 
-/** Waarmee er in dit land betaald wordt, kort. Leeg is hier "valuta onbekend" en
- *  niet een streepje: een streepje leest als nul. */
-function codesOf(c: WorldCountry): string {
-  return c.currencies.length === 0 ? "valuta onbekend" : c.currencies.map((x) => x.code).join(" / ");
+/** Waarmee er in dit land betaald wordt, kort — voor de landenlijst en voor de
+ *  leesregel boven de bol. Nooit een streepje bij een leeg lijstje: een streepje
+ *  leest als nul.
+ *
+ *  De twee argumenten staan er los omdat de twee aanroepplekken hun antwoord uit
+ *  verschillende hoeken halen (de lijst uit de landrij, de leesregel uit
+ *  `conversionFor`) en ze tóch hetzelfde moeten zeggen. Eén tekst voor een leeg
+ *  lijstje zou dat onmogelijk maken: leeg kan "er is geen munt" of "wij weten het
+ *  niet" betekenen, en dat is precies het onderscheid dat deze tab moet maken. */
+function moneyLine(currencies: readonly WorldCurrency[], noTender: boolean): string {
+  if (currencies.length > 0) return currencies.map((x) => x.code).join(" / ");
+  return noTender ? "geen betaalmiddel" : "valuta onbekend";
 }
 
 /* --- kleuren -------------------------------------------------------------- */
@@ -252,7 +304,7 @@ function codesOf(c: WorldCountry): string {
  *  browser tot een stijlberekening, en dat per sleepbeeld doen kost meer dan het
  *  hele tekenen. De app heeft vandaag één thema; komt er een tweede, dan hoort
  *  hier een herlezing bij het omschakelen. */
-const INK_ROLES = ["sea", "grid", "rim", "euro", "rate", "norate", "hover", "selected", "pin"] as const;
+const INK_ROLES = ["sea", "grid", "rim", "euro", "rate", "norate", "notender", "hover", "selected", "pin"] as const;
 type Palette = Record<(typeof INK_ROLES)[number], string>;
 
 function readPalette(host: HTMLElement): Palette | null {
@@ -284,8 +336,13 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   const [dragging, setDragging] = useState(false);
   /** Er is geklikt, maar er zat geen land. Dat is een antwoord en geen fout, en
    *  het hoort met de echte oorzaak op het scherm te komen — anders zoekt iemand
-   *  de klik nog vier keer. */
-  const [miss, setMiss] = useState<null | "off" | "sea" | "polar">(null);
+   *  de klik nog vier keer.
+   *
+   *  `beyond` was `polar` en betekende "onder de zuidgrens van onze data".
+   *  Antarctica heeft die zuidgrens weggenomen (de bundel loopt nu tot −90), maar
+   *  bovenaan houdt de tabel nog steeds op — dus is dit nu de melding voor BEIDE
+   *  richtingen, met de grens uit de data in plaats van uit een zin. */
+  const [miss, setMiss] = useState<null | "off" | "sea" | "beyond">(null);
 
   const figureRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -321,8 +378,8 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
    * ref, zónder een React-render — en daarom staat de STAND VAN DE BOL in een ref
    * en niet in state.
    *
-   * De reden is de lijst ernaast: 249 <li>. Zet de stand in state en elke
-   * pointermove is een render van die 249 regels, die er allemaal hetzelfde uit
+   * De reden is de lijst ernaast: 250 <li>. Zet de stand in state en elke
+   * pointermove is een render van die 250 regels, die er allemaal hetzelfde uit
    * blijven zien. Dat is werk zonder uitkomst. Eerlijk gezegd: dit is niet
    * gemeten maar vermeden — ik heb nooit een versie gebouwd waarin de stand in
    * state stond, dus ik kan niet zeggen hoeveel het kost, alleen dat het niets
@@ -375,7 +432,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     ctx.lineWidth = 1;
     ctx.lineJoin = "round";
     /* Per land één pad en één vulling, en met opzet niet drie grote paden per
-     * kleurgroep. Dat zou 236 vullingen terugbrengen tot 3, maar de even-odd-regel
+     * kleurgroep. Dat zou 237 vullingen terugbrengen tot 4, maar de even-odd-regel
      * werkt dan over landen HEEN: Vaticaanstad ligt binnen het vlak van Italië en
      * is ook "euro", dus Rome zou een gat krijgen. */
     const paint = (land: Land, color: string) => {
@@ -525,16 +582,24 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     return { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale };
   }
 
-  function countryAtPoint(x: number, y: number): { id: string | null; miss: "off" | "sea" | "polar" | null } {
+  function countryAtPoint(x: number, y: number): { id: string | null; miss: "off" | "sea" | "beyond" | null } {
     const at = unproject(x, y, globeFrame(rotRef.current, view));
     if (!at) return { id: null, miss: "off" };
     const c = countryAtLonLat(at[0], at[1]);
     if (c) return { id: c.id, miss: null };
-    /* Onder de onderrand van de bundel houdt onze data op. Dat is een ander
+    /* Buiten de breedtegraden van de bundel houdt onze data op. Dat is een ander
      * antwoord dan "hier is zee": wij hebben daar niets, en wat er wél ligt kan
      * deze tabel niet zeggen. De melding zegt dus wat ONS mankeert en niet wat
-     * daar is — "daar is water" zou een bewering zijn die de leemte niet draagt. */
-    return { id: null, miss: at[1] < WORLD_LATLON_BOUNDS[1] ? "polar" : "sea" };
+     * daar is — "daar is water" zou een bewering zijn die de leemte niet draagt.
+     *
+     * De grenzen komen UIT de data en staan niet in de zin. Dat is de les van de
+     * vorige versie: daar stond "onder 55,6°" in de tekst, en toen Antarctica in
+     * de bundel kwam klopte die zin niet meer terwijl er niets rood werd. Nu is
+     * de zuidkant −90 (Antarctica loopt tot de pool) en is deze tak daar dus
+     * onbereikbaar; de noordkant houdt op bij de noordpunt van Groenland en dáár
+     * is hij springlevend. */
+    const beyond = at[1] < WORLD_LATLON_BOUNDS[1] || at[1] > WORLD_LATLON_BOUNDS[3];
+    return { id: null, miss: beyond ? "beyond" : "sea" };
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -671,10 +736,11 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             {readoutId ? (
               <>
                 <span className="lv-globe-readout-name">{countryLabel(readoutId) || readoutId}</span>
+                {/* Niet `currencies.length ? codes : "onbekend"`: een leeg lijstje is
+                    hier twee verschillende antwoorden, en `kind` is het enige dat
+                    weet welke. Zie moneyLine. */}
                 <span className="lv-globe-readout-ccy">
-                  {readout && readout.currencies.length > 0
-                    ? readout.currencies.map((c) => c.code).join(" / ")
-                    : "valuta onbekend"}
+                  {readout ? moneyLine(readout.currencies, readout.kind === "noTender") : "valuta onbekend"}
                 </span>
               </>
             ) : (
@@ -710,6 +776,9 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             </li>
             <li>
               <span className="lv-globe-swatch" data-tone="norate" aria-hidden="true" /> geen koers bij LaVega
+            </li>
+            <li>
+              <span className="lv-globe-swatch" data-tone="notender" aria-hidden="true" /> geen wettig betaalmiddel
             </li>
             <li>
               <span className="lv-globe-swatch" data-tone="selected" aria-hidden="true" /> gekozen
@@ -765,9 +834,14 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
                     onClick={() => select(c.id, true)}
                   >
                     <span>{countryLabel(c.id) || c.name}</span>
+                    {/* Twee verschillende dingen en dus twee verschillende teksten. Een
+                        land zonder vlak MET een speld kan de bol wel vinden — daar staat
+                        straks een stip. Een land zonder speld kan hij niet vinden, en dan
+                        hoort dat hier al te staan en niet pas nadat je erop hebt geklikt
+                        en er niets gebeurde. */}
                     <span className="cell-sub">
-                      {codesOf(c)}
-                      {c.rings === null ? " · niet op de bol" : ""}
+                      {moneyLine(c.currencies, c.noTender === true)}
+                      {c.rings !== null ? "" : c.pin ? " · geen vlak, wel een plek" : " · geen vlak, plek onbekend"}
                     </span>
                   </li>
                 ))
@@ -782,8 +856,8 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           <p className="lv-globe-miss" data-testid="bol-misser">
             {miss === "off"
               ? "Dat punt ligt naast de bol, dus er is daar geen land."
-              : miss === "polar"
-                ? "Zo ver naar het zuiden houdt onze gebundelde data op: onder 55,6° zuiderbreedte staat er niets in — Antarctica is weggelaten. Wat daar ligt kan LaVega dus niet zeggen."
+              : miss === "beyond"
+                ? `Dat punt ligt buiten de band waarover onze gebundelde grenzen iets zeggen: die loopt van ${latitudeText(WORLD_LATLON_BOUNDS[1])} tot ${latitudeText(WORLD_LATLON_BOUNDS[3])}. Wat daarbuiten ligt kan LaVega niet zeggen — het staat niet in de tabel.`
                 : "Daar ligt geen land in onze grenzen: zee, of een land dat op deze schaal geen eigen vlak heeft. Die laatste staan wel in de lijst."}
             {effect ? ` Er is niets veranderd; ${label} blijft gekozen.` : ""}
           </p>
@@ -827,6 +901,27 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             </p>
             <p className="cell-sub">De doelvaluta is niet veranderd; die staat nog op {value}.</p>
           </>
+        ) : effect.kind === "noTender" ? (
+          <>
+            <p className="lv-globe-answer-lead">{label} — geen wettig betaalmiddel</p>
+            {/* Geen praktische tip erbij ("neem dollars mee", "je betaalt bij je
+                vervoerder"). Dat klinkt behulpzaam, maar de afwezigheid van een
+                munt kan zo'n bewering niet dragen — en dit paneel is de plek waar
+                dat verschil bewaakt hoort te worden. De laatste zin zegt daarom
+                waar onze kennis ophoudt in plaats van hem aan te vullen. */}
+            <p>
+              Daar is geen munt: de gebundelde bron noemt er geen wettig betaalmiddel. Dat is iets anders dan een
+              koers die LaVega mist — er is niets om een koers van te hebben, en dus ook niets om te wisselen. Waarmee
+              er op een onderzoeksstation dan wél wordt afgerekend, staat niet in deze tabel.
+            </p>
+            {/* "ook geen nul" en niet "ook geen 0%": op een scherm dat iemand
+                scant is het teken % het enige dat blijft hangen, en dan staat er
+                dus juist wél een nultarief. */}
+            <p className="cell-sub">
+              De doelvaluta is niet veranderd; die staat nog op {value}. Er is hier geen tarief om te tonen — ook geen
+              nul.
+            </p>
+          </>
         ) : effect.kind === "choice" ? (
           <>
             <p className="lv-globe-answer-lead">{label} — meer dan één valuta</p>
@@ -869,11 +964,17 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         )}
         {/* Waar de bol wél of niet naartoe kon draaien. Dit hoort bij het antwoord
             en niet bij de bol: wie een land kiest dat wij niet tekenen, ziet
-            anders een bol die zwijgt. */}
+            anders een bol die zwijgt.
+            De eerste tak is voor de acht landen met vlak noch labelpunt (BV, CC,
+            CX, GF, RE, SJ, UM, YT). Die staan wél in de lijst en hebben wél een
+            valuta-antwoord, dus de zoekbalk hoort ze te blijven vinden — maar dan
+            met deze mededeling erbij, want anders is een keuze uit de lijst een
+            klik waarna er zichtbaar niets gebeurt. */}
         {effect && !focus ? (
           <p className="cell-sub">
-            Waar dit land ligt weet LaVega niet — de gebundelde bron heeft er vlak noch punt voor. De bol is daarom
-            niet gedraaid.
+            Waar dit land ligt weet LaVega niet: de gebundelde bron heeft er vlak noch punt voor. De bol is daarom
+            niet gedraaid, en aanwijzen op de bol kan hier ook niet. Wat er hierboven over de valuta staat, staat daar
+            los van en blijft gelden.
           </p>
         ) : effect && focus?.from === "pin" ? (
           <p className="cell-sub">
@@ -885,8 +986,9 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
 
       <p className="lv-globe-source">
         Grenzen en valuta's zijn meegebundeld (Natural Earth, CLDR), opgehaald op {WORLD_MAP_SOURCES.fetchedAt}. Er
-        wordt niets opgehaald terwijl je aan de bol draait. Antarctica zit niet in die grenzen: draai je naar de
-        zuidpool, dan is daar leegte — dat is een gat in onze data en geen zee.
+        wordt niets opgehaald terwijl je aan de bol draait. De grenzen lopen van {latitudeText(WORLD_LATLON_BOUNDS[1])}{" "}
+        tot {latitudeText(WORLD_LATLON_BOUNDS[3])}: Antarctica staat erop, boven de noordpunt van Groenland staat er
+        niets meer in de tabel. Dat laatste is een gat in onze data en geen uitspraak over wat daar ligt.
       </p>
     </div>
   );

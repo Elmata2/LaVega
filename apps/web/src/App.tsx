@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
 import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
-import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { gateState } from "./vault-gate.js";
@@ -322,7 +322,18 @@ export default function App() {
         const newAccounts: Account[] = [];
         const rawTxs: Array<Omit<Tx, "id">> = [];
         for (const item of data.items ?? []) {
-          const acc = mapEbAccount({ ...item.account, aspsp }, pickEbBalance(item.balances));
+          /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
+           * rekening "stand van <dag>", en zonder deze derde parameter stond daar
+           * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
+           * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
+           * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
+           * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
+           * laten lezen. */
+          const acc = mapEbAccount(
+            { ...item.account, aspsp },
+            pickEbBalance(item.balances),
+            pickEbBalanceDate(item.balances) ?? undefined,
+          );
           acc.entity = entity;
           newAccounts.push(acc);
           const key = ebAccountKey(item.account);

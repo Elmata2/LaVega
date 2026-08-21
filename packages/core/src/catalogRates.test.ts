@@ -48,6 +48,16 @@ describe("savingsBenchmarks", () => {
     expect(b.sourceUrl).toBe("https://abn/fid.pdf");
   });
 
+  test("carries the CATALOGUS-ID mee, want daar hangt de prijs van de rekening aan", () => {
+    // Zonder dit veld had een renteadvies niets om de kosten aan op te hangen: een
+    // benchmark is verder alleen bank + product, twee vrij geschreven strings die
+    // drie bronnen op drie manieren spellen. Hier is de rij nog bekend, dus wordt
+    // hij bewaard in plaats van straks teruggerekend — en een teruggerekende
+    // koppeling kan de verkeerde rij pakken.
+    const [b] = savingsBenchmarks([entry()]);
+    expect(b.productId).toBe("abn-amro-direct-sparen");
+  });
+
   test("REFUSES a figure whose conditions were never settled", () => {
     // An uncovered rate would rank a bank on a number nobody could qualify — the
     // exact failure the catalogue exists to prevent.

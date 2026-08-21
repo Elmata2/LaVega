@@ -43,6 +43,21 @@
   --lv-globe-euro: color-mix(in srgb, var(--accent) 24%, var(--surface));
   --lv-globe-rate: color-mix(in srgb, var(--accent) 48%, var(--surface));
   --lv-globe-norate: color-mix(in srgb, var(--muted) 34%, var(--surface));
+  /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
+   * dezelfde als "geen koers" zou beweren dat het aan ONS ligt dat daar niets te
+   * wisselen valt, en dat is precies het onderscheid waar deze tab over gaat.
+   *
+   * Waarom donkerder grijs en niet lichter: gemeten op deze tokens is lichter dan
+   * de zee onbruikbaar (grijs 18% haalt contrast 1,09 tegen --surface-2 en dat is
+   * niets — zie de rekensom over Afrika hierboven). Op 46% is het 1,68 tegen de
+   * zee, 1,21 tegen "geen koers" en 1,25 tegen "koers". Die laatste twee zijn
+   * krap, en dat is een bewuste grens: de grijstinten liggen dicht bij elkaar
+   * omdat de blauwreeks de ruimte erboven al gebruikt. Wat het draagbaar maakt is
+   * dat deze tint op precies één land valt en dat dat land alleen aan oceaan
+   * grenst — er is nergens een naad waar twee van deze drie tinten tegen elkaar
+   * aan liggen. Komt er ooit een tweede land bij, dan is dit de eerste regel die
+   * opnieuw gemeten moet worden. */
+  --lv-globe-notender: color-mix(in srgb, var(--muted) 46%, var(--surface));
   --lv-globe-hover: color-mix(in srgb, var(--accent) 68%, var(--surface));
   --lv-globe-selected: var(--accent);
   --lv-globe-pin: var(--ink);
@@ -145,6 +160,7 @@
 .lv-globe-inks [data-ink="euro"] { color: var(--lv-globe-euro); }
 .lv-globe-inks [data-ink="rate"] { color: var(--lv-globe-rate); }
 .lv-globe-inks [data-ink="norate"] { color: var(--lv-globe-norate); }
+.lv-globe-inks [data-ink="notender"] { color: var(--lv-globe-notender); }
 .lv-globe-inks [data-ink="hover"] { color: var(--lv-globe-hover); }
 .lv-globe-inks [data-ink="selected"] { color: var(--lv-globe-selected); }
 .lv-globe-inks [data-ink="pin"] { color: var(--lv-globe-pin); }
@@ -179,6 +195,9 @@
 .lv-globe-swatch[data-tone="rate"] {
   background: var(--lv-globe-rate);
 }
+.lv-globe-swatch[data-tone="notender"] {
+  background: var(--lv-globe-notender);
+}
 .lv-globe-swatch[data-tone="selected"] {
   background: var(--lv-globe-selected);
 }
@@ -199,10 +218,10 @@
 }
 
 /* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
- * altijd — ook met een leeg zoekveld, en dan staan alle 249 landen erin. Een
+ * altijd — ook met een leeg zoekveld, en dan staan alle 250 landen erin. Een
  * lijst die pas iets laat zien als je het juiste woord al weet, helpt precies
  * degene niet die de bol niet kan zien. Vandaar de vaste hoogte met eigen
- * scroll: 249 regels mogen de pagina niet uitrekken. */
+ * scroll: 250 regels mogen de pagina niet uitrekken. */
 .lv-globe-results {
   display: flex;
   flex-direction: column;
