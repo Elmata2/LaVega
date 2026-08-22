@@ -104,7 +104,11 @@ export type InvoiceVatWindow = {
   paidCents: number | null;
   /** How many invoices in the window state a BTW amount, out of how many there
    *  are. `withVat < total` is the honest reason a figure may not be used. */
-  coverage: { withVat: number; total: number };
+  /** `total` gaat over het VENSTER; `outside` telt de facturen van deze
+   *  onderneming die erbuiten vallen, met de dichtstbijzijnde datum erbij. Zonder
+   *  die twee is een nul niet te beoordelen — zie de toelichting in
+   *  invoiceVatInWindow. */
+  coverage: { withVat: number; total: number; outside: number; nearestOutside: string | null };
 };
 
 /**
@@ -126,10 +130,35 @@ export function invoiceVatInWindow(
   let paid: number | null = null;
   let withVat = 0;
   let total = 0;
+  /* WAT ER BUITEN HET VENSTER VALT, en dat is geen boekhoudkundig detail maar het
+   * verschil tussen twee heel verschillende nullen.
+   *
+   * Gemeld op 22 augustus: hij zette het stelsel op factuurstelsel, voerde een
+   * factuur mét btw in die goed werd gelezen, en de Belasting-tab bleef 0 tonen.
+   * Zijn eigen woorden: "is dat goed of niet weet ik niet." Dat is precies de
+   * fout — de 0 KLOPTE (zijn factuur was van een eerdere maand), maar het scherm
+   * kon het verschil niet laten zien tussen "je hebt niets aan btw" en "je
+   * factuur staat in een ander tijdvak". Een cijfer dat waar is en niet te
+   * beoordelen, is een cijfer waar niemand iets aan heeft.
+   *
+   * Deze teller draagt daarom het aantal facturen van deze onderneming dat
+   * ERBUITEN valt, plus het dichtstbijzijnde tijdvak waarin er wel een staat, en
+   * telt niet mee in `total` — die blijft over het venster gaan. */
+  let outside = 0;
+  let nearest: string | null = null;
   for (const i of invoices) {
     if (i.entity !== entity) continue;
     if (i.status === "cancelled") continue;
-    if (i.issueDate < from || i.issueDate > to) continue;
+    if (i.issueDate < from || i.issueDate > to) {
+      outside++;
+      // De dichtstbijzijnde erbuiten: die verklaart het scherm het snelst.
+      if (nearest === null) nearest = i.issueDate;
+      else {
+        const afstand = (d: string) => Math.min(Math.abs(Date.parse(d) - Date.parse(from)), Math.abs(Date.parse(d) - Date.parse(to)));
+        if (afstand(i.issueDate) < afstand(nearest)) nearest = i.issueDate;
+      }
+      continue;
+    }
     total++;
     if (typeof i.vatAmount !== "number" || !Number.isFinite(i.vatAmount)) continue;
     withVat++;
@@ -137,5 +166,5 @@ export function invoiceVatInWindow(
     if (i.direction === "in") charged = (charged ?? 0) + cents;
     else paid = (paid ?? 0) + cents;
   }
-  return { chargedCents: charged, paidCents: paid, coverage: { withVat, total } };
+  return { chargedCents: charged, paidCents: paid, coverage: { withVat, total, outside, nearestOutside: nearest } };
 }

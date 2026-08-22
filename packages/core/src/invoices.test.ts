@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { makeInvoice, scheduledInvoiceFlows } from "./invoices.js";
+import { invoiceVatInWindow, makeInvoice, scheduledInvoiceFlows } from "./invoices.js";
 import type { Invoice } from "./model.js";
 
 const inv = (o: Partial<Invoice>): Invoice => makeInvoice({
@@ -81,4 +81,57 @@ test("reconcileInvoices: the invoice number does not override amount, sign or th
   expect(reconcileInvoices(invoices, [txd("t1", "2026-08-28", -900, "KPN", number)])[0].status).toBe("expected");   // wrong amount
   expect(reconcileInvoices(invoices, [txd("t2", "2026-08-28", 1210, "KPN", number)])[0].status).toBe("expected");   // wrong sign
   expect(reconcileInvoices(invoices, [txd("t3", "2026-05-01", -1210, "KPN", number)])[0].status).toBe("expected");  // outside the window
+});
+
+
+/* DE NUL DIE NIET TE BEOORDELEN WAS.
+ *
+ * Gemeld op 22 augustus: stelsel op factuurstelsel gezet, een factuur mét btw
+ * ingevoerd die correct werd gelezen, en de Belasting-tab bleef 0 tonen. Zijn
+ * woorden: "is dat goed of niet weet ik niet." De 0 KLOPTE — de factuur viel in
+ * een ander tijdvak — maar het scherm kon het verschil niet laten zien tussen
+ * "je hebt geen btw" en "je factuur staat ergens anders". Een cijfer dat waar is
+ * en niet te beoordelen, is een cijfer waar niemand iets aan heeft. */
+test("een factuur buiten het tijdvak wordt geteld, niet verzwegen", () => {
+  const w = invoiceVatInWindow(
+    [inv({ issueDate: "2026-06-14", vatAmount: 210 })],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.total).toBe(0); // in het venster: niets, en dat blijft waar
+  expect(w.coverage.outside).toBe(1);
+  expect(w.coverage.nearestOutside).toBe("2026-06-14");
+  expect(w.chargedCents).toBeNull(); // geen nul: er is niets om uit te lezen
+});
+
+test("de dichtstbijzijnde erbuiten wint, want die verklaart het scherm het snelst", () => {
+  const w = invoiceVatInWindow(
+    [
+      inv({ issueDate: "2024-01-05", vatAmount: 210 }),
+      inv({ issueDate: "2026-06-28", vatAmount: 210, amount: 999 }),
+    ],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.outside).toBe(2);
+  expect(w.coverage.nearestOutside).toBe("2026-06-28");
+});
+
+test("wat WEL in het venster valt telt gewoon, en erbuiten blijft erbuiten", () => {
+  const w = invoiceVatInWindow(
+    [
+      inv({ issueDate: "2026-08-01", vatAmount: 210, direction: "in" }),
+      inv({ issueDate: "2026-05-01", vatAmount: 999, direction: "in", amount: 5000 }),
+    ],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.total).toBe(1);
+  expect(w.coverage.withVat).toBe(1);
+  expect(w.coverage.outside).toBe(1);
+  // De 999 van buiten het venster telt NIET mee in het bedrag.
+  expect(w.chargedCents).toBe(21000);
 });

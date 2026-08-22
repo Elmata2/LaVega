@@ -298,7 +298,21 @@ export default function Facturen({
         return;
       }
       if (outcome.kind === "network") {
-        setN8nNote("Geen antwoord van n8n — netwerk, verkeerde URL, of allowedOrigins staat deze pagina niet toe. Hier is niets binnengekomen; heeft n8n het verzoek tóch verwerkt, dan is die wachtrij nu leeg. Kijk in dat geval in n8n.");
+        /* DE MEEST WAARSCHIJNLIJKE OORZAAK EERST, in plaats van drie naast
+         * elkaar. Hij meldde "geen antwoord" ÉN dat er in n8n niets te zien was,
+         * en die combinatie wijst één ding aan: LaVega stuurt de tokenheader
+         * x-lavega-token mee, en een eigen header maakt van dit verzoek een
+         * cross-origin CALL MET PREFLIGHT. De browser stuurt dan eerst OPTIONS,
+         * en als de webhook die origin niet toestaat sterft het verzoek daar —
+         * zonder dat n8n er een uitvoering van logt. "Niets in n8n" is dus geen
+         * teken dat de URL fout is; het hoort bij dit geval.
+         *
+         * De oude tekst zette netwerk, URL en allowedOrigins als gelijke
+         * kandidaten naast elkaar. Drie oorzaken noemen waarvan er één de echte
+         * is, is bijna net zo onbruikbaar als er geen noemen. */
+        setN8nNote(
+          "Geen antwoord van n8n. Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig. Hier is niets binnengekomen.",
+        );
         return;
       }
       if (outcome.kind === "unreadable") {

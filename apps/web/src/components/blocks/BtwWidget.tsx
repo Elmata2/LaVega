@@ -138,6 +138,19 @@ export function btwRows({ entities, txs, accounts, asOf, vatSettings, invoices, 
 function shortNote(row: BtwRow): string | null {
   const { position: p, entity } = row;
   const missing = p.coverage.total - p.coverage.withVat;
+  /* Dezelfde reden als in Belasting.tsx: een 0 zonder te zeggen dat zijn factuur
+   * in een ander tijdvak staat, is niet te beoordelen. De kaart heeft één regel,
+   * dus hij noemt alleen het aantal en niet de datum. */
+  const buiten = p.coverage.outside;
+  /* ALS ER NIETS TE MELDEN IS MAAR ER WEL FACTUREN BUITEN HET TIJDVAK STAAN, is
+   * dat het nuttigste dat de kaart kan zeggen. Zonder deze regel las hij een kale
+   * 0 en kon hij niet zien of die klopte. */
+  if (p.note === null && buiten > 0 && p.coverage.total === 0) {
+    return buiten === 1
+      ? `Geen factuur van ${entity} in dit tijdvak — de enige die LaVega kent valt erbuiten.`
+      : `Geen factuur van ${entity} in dit tijdvak; ${buiten} vallen erbuiten.`;
+  }
+
   switch (p.note) {
     case null:
       return null;

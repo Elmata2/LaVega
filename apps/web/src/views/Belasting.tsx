@@ -308,6 +308,24 @@ export default function Belasting({
                   </p>
                 )}
 
+{/* WAAROM DIT ER STAAT: hij zette het stelsel goed, voerde een factuur
+                    mét btw in die correct werd gelezen, en zag 0 staan — "is dat
+                    goed of niet weet ik niet". De 0 klopte: zijn factuur viel in
+                    een ander tijdvak. Maar een cijfer dat waar is en niet te
+                    beoordelen, is een cijfer waar niemand iets aan heeft. Deze
+                    regel maakt het verschil zichtbaar tussen "je hebt geen btw"
+                    en "je factuur staat ergens anders". */}
+                {coverage.outside > 0 && (
+                  <p className="cell-sub" data-testid={`btw-buiten-${entity}`}>
+                    {coverage.outside === 1
+                      ? "Er staat 1 factuur van deze onderneming buiten dit tijdvak"
+                      : `Er staan ${coverage.outside} facturen van deze onderneming buiten dit tijdvak`}
+                    {coverage.nearestOutside ? `, de dichtstbijzijnde van ${coverage.nearestOutside}` : ""}
+                    . {coverage.total === 0
+                      ? "In dit tijdvak staat er geen enkele, dus hier valt niets uit je facturen af te leiden."
+                      : "Die telt hier dus niet mee."}
+                  </p>
+                )}
                 {note && <p className="cell-sub">{noteText(note, p)}</p>}
 
                 {direction === "terugvragen" && (

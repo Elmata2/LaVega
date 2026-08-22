@@ -235,7 +235,7 @@ export type VatPosition = {
   netCents: number | null;
   direction: VatDirection;
   /** Invoices in the window that state a BTW amount, out of how many there are. */
-  coverage: { withVat: number; total: number };
+  coverage: { withVat: number; total: number; outside: number; nearestOutside: string | null };
   note: VatNote | null;
   /** The date the rule pack itself states — provenance, not the day we looked. */
   rulesAsOf: string;
