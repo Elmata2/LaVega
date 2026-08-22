@@ -357,3 +357,163 @@ test("een regel zonder naam wordt geweigerd, niet als naamloze stroom getoond", 
   const naamloos = ["2026-06-04", "2026-07-04", "2026-08-04"].map((d) => flow("", d, -25));
   expect(detectScheduleStreams(naamloos, { asOf: "2026-08-16" })).toEqual([]);
 });
+
+/* ── Eén ritme-lezer voor twee detectoren (review 4, antwoord op vraag 1) ───
+ *
+ * Vijf reviews lang stond zijn Simyo van € 11,89 niet bij de abonnementen. De
+ * oorzaak was niet dat de detector stuk was, maar dat er TWEE waren. De
+ * Betaalagenda las een gat van 61 dagen als één overgeslagen maand; de
+ * abonnementendetectie berekende een variatiecoëfficiënt over alle gaten en
+ * kwam op 0,433 uit tegen een grens van 0,4. Dezelfde rijen, twee antwoorden.
+ *
+ * De gemeten getallen staan in de tests hieronder, met VOOR en NA erbij, want
+ * "nu werkt het" is drie keer eerder gezegd terwijl de tests groen stonden. Wat
+ * die tests maten was een schone reeks; zijn kluis is dat niet. */
+
+/** De oude poort, letterlijk: mediaan van de gaten in een band + cv <= 0,4.
+ *  Staat hier zodat het VOOR-getal in de tests gemeten is en niet onthouden. */
+function oudeGate(dates: string[]): { gaps: number[]; cv: number } {
+  const d = [...dates].sort();
+  const dagen = (a: string, b: string) => {
+    const [ay, am, ad] = a.split("-").map(Number);
+    const [by, bm, bd] = b.split("-").map(Number);
+    return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+  };
+  const gaps = d.slice(1).map((x, i) => dagen(d[i], x));
+  const gem = gaps.reduce((s, v) => s + v, 0) / gaps.length;
+  const sd = Math.sqrt(gaps.reduce((s, v) => s + (v - gem) ** 2, 0) / (gaps.length - 1));
+  return { gaps, cv: sd / gem };
+}
+
+test("een gemiste incasso kostte hem het abonnement: cv 0,433 tegen een grens van 0,4", () => {
+  const dates = ["2026-05-04", "2026-06-04", "2026-08-04", "2026-09-03"]; // juli mist
+  const meting = oudeGate(dates);
+  // Dit is het getal uit het onderzoek, hier opnieuw gemeten in plaats van geloofd.
+  expect(meting.gaps).toEqual([31, 61, 30]);
+  expect(meting.cv).toBeCloseTo(0.433, 3);
+  expect(meting.cv).toBeGreaterThan(0.4); // de oude grens — 8% eroverheen
+
+  const simyo = dates.map((d) => tx("SIMYO B.V.", d, -11.89));
+  const [sub] = detectSubscriptions(simyo, { asOf: "2026-09-10" });
+  expect(sub).toMatchObject({
+    cadenceDays: 30, monthlyCents: 1189, occurrences: 4, skippedCycles: 1, function: "Mobiel abonnement",
+  });
+});
+
+test("Optimalisatie en de Betaalagenda geven op dezelfde rijen hetzelfde antwoord", () => {
+  // Dit is het eigenlijke defect: twee functies die naar één reeks keken. Ze
+  // delen nu `fitCadence`, dus deze test kan alleen nog falen als iemand er
+  // opnieuw een tweede kopie naast zet.
+  const rijen = [
+    tx("SIMYO B.V.", "2026-03-04", -11.89),
+    tx("Simyo B.V. 4839201", "2026-04-04", -11.89),
+    tx("SIMYO", "2026-05-04", -11.89),
+    // juni: incasso mislukt
+    tx("SIMYO B.V.", "2026-07-04", -11.89),
+    tx("Simyo B.V.", "2026-08-04", -11.89),
+  ];
+  const [sub] = detectSubscriptions(rijen, { asOf: "2026-08-16" });
+  const [stream] = detectScheduleStreams(rijen, { asOf: "2026-08-16" });
+  expect(sub).toBeDefined();
+  expect(stream).toBeDefined();
+  expect(sub.cadenceDays).toBe(stream.cadenceDays);
+  expect(sub.lastAmountCents).toBe(stream.amountCents);
+  expect(sub.occurrences).toBe(stream.occurrences);
+  expect(sub.skippedCycles).toBe(stream.skippedCycles);
+  expect(sub.skippedCycles).toBe(1);
+});
+
+test("twee gemiste incasso's mag nog, drie op een rij is een gestopte stroom", () => {
+  // De grens is MAX_SKIPPED_CYCLES = 2, en dat is een keuze: één misser is een
+  // hapering, twee is pech, drie maanden stilte is opgezegd. Gemeten cv's van
+  // de oude poort staan erbij — die weigerde alle drie.
+  const tweeGemist = ["2026-05-04", "2026-06-04", "2026-09-03", "2026-10-03"]; // gaten [31, 91, 30]
+  expect(oudeGate(tweeGemist).cv).toBeCloseTo(0.689, 3);
+  const [sub] = detectSubscriptions(tweeGemist.map((d) => tx("SIMYO B.V.", d, -11.89)), { asOf: "2026-10-10" });
+  expect(sub).toMatchObject({ cadenceDays: 30, monthlyCents: 1189, skippedCycles: 2 });
+
+  const drieGemist = ["2026-05-04", "2026-06-04", "2026-10-03", "2026-11-02"]; // gaten [31, 121, 30]
+  expect(oudeGate(drieGemist).cv).toBeCloseTo(0.861, 3);
+  expect(detectSubscriptions(drieGemist.map((d) => tx("SIMYO B.V.", d, -11.89)), { asOf: "2026-11-10" })).toEqual([]);
+});
+
+test("een eenmalige bundel vlak na de incasso sloopte het abonnement, en nu niet meer", () => {
+  /* De bestaande test hierboven ("a one-off charge from the same merchant…")
+   * zette de bundel 11 dagen na de laatste incasso en stond daarmee 0,014 van
+   * de rand: op 9 dagen kwam de cv op 0,433 en verdween het abonnement. Die
+   * ene dag mocht niet beslissen of hij zijn telefoonabonnement ziet. */
+  const incasso = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89));
+  const negenDagen = [...incasso, tx("Simyo extra bundel", "2026-08-12", -10)];
+  expect(oudeGate(negenDagen.map((t) => t.date)).cv).toBeCloseTo(0.433, 3); // VOOR: geweigerd
+
+  const [sub] = detectSubscriptions(negenDagen, { asOf: "2026-08-16" });
+  // De bundel hoort niet bij de stroom: hij telt niet mee in de prijs en ook
+  // niet in het aantal afschrijvingen.
+  expect(sub).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 4, skippedCycles: 0 });
+});
+
+test("een tweede losse bundel is één zwerver te veel — geweigerd, net als voorheen", () => {
+  /* Het budget is `extras <= floor(members / 3)`: minstens drie van elke vier
+   * afschrijvingen bij die winkel moeten op het ritme vallen. Bij vier
+   * incasso's mag er dus precies één zwerver zijn. Dat is geen versoepeling
+   * ten opzichte van vroeger — de oude poort weigerde deze reeks ook (cv
+   * 0,567) — maar nu weigert hij om een reden die uit te leggen is. */
+  const rijen = [
+    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89)),
+    tx("Simyo extra bundel", "2026-08-14", -10),
+    tx("Simyo extra bundel", "2026-08-20", -10),
+  ];
+  expect(oudeGate(rijen.map((t) => t.date)).cv).toBeCloseTo(0.567, 3);
+  expect(detectSubscriptions(rijen, { asOf: "2026-08-25" })).toEqual([]);
+});
+
+test("uit een drukke winkel wordt geen abonnement gesneden", () => {
+  /* De prijs van het toestaan van zwervers: als de detector rijen mag
+   * overslaan, kan hij in principe een maandritme uit een berg boodschappen
+   * knippen. Drie bezoeken van € 42,50, precies een maand uit elkaar, tussen
+   * twaalf wekelijkse boodschappenrondes — dat is precies de vorm van een
+   * spookabonnement. Het budget weigert hem; dezelfde drie rijen ALLEEN zijn
+   * wel een abonnement, en dat verschil is het hele punt: de omringende
+   * rijen zijn het bewijs dat dit een winkel is en geen incasso. */
+  const wekelijks: Tx[] = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(2026, 4, 2 + i * 7)).toISOString().slice(0, 10);
+    wekelijks.push(tx("Albert Heijn 1234", d, -(30 + (i % 5))));
+  }
+  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) => tx("Albert Heijn 1234", d, -42.5));
+  expect(detectSubscriptions([...wekelijks, ...maandelijks], { asOf: "2026-07-25" })).toEqual([]);
+  expect(detectSubscriptions(maandelijks, { asOf: "2026-07-25" })).toHaveLength(1);
+});
+
+test("een toestelaankoop vlak VOOR de incasso pakt niet anders uit dan vlak erna", () => {
+  /* De keten pakte de EERSTE rij die binnen de tolerantie viel, en dat hoeft de
+   * rij niet te zijn die de incasso IS. Gemeten op vijf schone incasso's van
+   * € 11,89 met één toestelaankoop van € 80,00 ernaast:
+   *
+   *   aankoop 3 dagen NA de junidatum   -> 11,89/mnd   (de incasso stond vooraan)
+   *   aankoop 3 dagen VOOR de junidatum -> NIETS        (de aankoop stond vooraan)
+   *
+   * In het tweede geval kwam de aankoop in de stroom en viel de incasso eruit,
+   * en de bedragspreiding die daaruit volgt weigert het hele abonnement. Het
+   * verschil tussen die twee uitkomsten zat in de leesvolgorde en nergens
+   * anders in — precies dezelfde soort fout als de gemiste incasso: het ritme
+   * ligt er, de detector kijkt eroverheen. */
+  const cvVan = (cents: number[]) => {
+    const gem = cents.reduce((s, c) => s + c, 0) / cents.length;
+    return Math.sqrt(cents.reduce((s, c) => s + (c - gem) ** 2, 0) / (cents.length - 1)) / gem;
+  };
+  // De muur waar hij tegenaan liep, hier gemeten en niet onthouden: de grens
+  // op de bedragspreiding is 0,35.
+  expect(cvVan([1189, 1189, 8000, 1189, 1189])).toBeCloseTo(1.194, 3);
+
+  const incasso = ["2026-04-02", "2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"]
+    .map((d) => tx("SIMYO B.V.", d, -11.89));
+  const ervoor = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-05-29", -80)], { asOf: "2026-08-16" });
+  const erna = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-06-05", -80)], { asOf: "2026-08-16" });
+
+  // Beide kanten geven nu hetzelfde antwoord, en het is het juiste: de vijf
+  // incasso's zijn de stroom, de aankoop is een zwerver ernaast.
+  expect(ervoor).toHaveLength(1); // was: []
+  expect(ervoor[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
+  expect(erna[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
+});

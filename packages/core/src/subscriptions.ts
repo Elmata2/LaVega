@@ -18,6 +18,11 @@ export type Subscription = {
   changePct: number;        // (last - first) / first, rounded to 0.001
   occurrences: number;
   lastDate: string;
+  /** Cycles that were expected inside the observed history and never arrived —
+   *  a failed direct debit. Kept because "monthly, seen 5x" and "monthly, seen
+   *  4x with one miss" are different claims, and because the empty-list
+   *  explanation needs to be able to say which one it saw. */
+  skippedCycles: number;
 };
 
 export type SubscriptionOverlap = { function: string; subs: Subscription[]; monthlyCents: number };
@@ -208,11 +213,6 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 
-function median(nums: number[]): number {
-  const s = [...nums].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
-}
 function mean(nums: number[]): number {
   return nums.reduce((s, n) => s + n, 0) / nums.length;
 }
@@ -232,8 +232,11 @@ function std(nums: number[]): number {
  * two-monthly or half-yearly charge matched no band and could never appear. The
  * two rows below close those holes; both need 3 occurrences, because two
  * payments 60 days apart at a similar amount are just as likely to be two
- * ordinary purchases at the same shop, and a third occurrence brings the
- * interval-CV guard into play.
+ * ordinary purchases at the same shop, and a third occurrence gives the cycle
+ * fit a second gap to check the rhythm against. (That last clause used to say
+ * "brings the interval-CV guard into play"; that guard is gone — see the
+ * fitter below — and a comment describing a removed knob is how two detectors
+ * drifted apart in the first place.)
  *
  * The real constraint is therefore HISTORY, not a window: see
  * `minHistoryDaysFor` and `subscriptionCoverage`. */
@@ -244,6 +247,178 @@ const CADENCE_BANDS: ReadonlyArray<{ cadenceDays: number; min: number; max: numb
   { cadenceDays: 182, min: 170, max: 195, minOcc: 2 },
   { cadenceDays: 365, min: 350, max: 380, minOcc: 2 },
 ];
+
+/* ===========================================================================
+ * READING THE RHYTHM — ONE FITTER, BOTH DETECTORS.
+ *
+ * There used to be two, in this one file. `detectSubscriptions` picked a band
+ * by MEDIAN gap and then demanded a coefficient of variation <= 0.4 over all
+ * gaps at once. `detectScheduleStreams` (the Betaalagenda, further down) read
+ * the gaps as whole CYCLES and tolerated a skipped one — a repair built for the
+ * agenda in round 2/3 and never carried across.
+ *
+ * Measured on his Simyo stream with a failed June direct debit, gaps
+ * [31, 61, 30]: mean 40.67, sd 17.62, CV 0.433 against a 0.4 limit. The agenda
+ * printed "SIMYO B.V. 11,89 every 30d, 1 skipped"; Optimalisatie printed
+ * nothing, on the very same rows. Two functions looking at one series and
+ * disagreeing is the defect — he reported the symptom five times.
+ *
+ * Copying the cycle logic across by hand would have made a THIRD copy, and two
+ * copies are exactly what drifted, so the copies are gone: both detectors call
+ * `fitCadence` and can no longer disagree. A CV cannot express "one cycle was
+ * missed" at all — it can only see a series that got bumpier — which is why the
+ * cycle reading wins the merge and the CV knob is deleted rather than retuned.
+ *
+ * What this adds on top of the agenda's old `fitCycles`: a bounded number of
+ * charges may be left OUT of the stream. One merchant is one group (that is
+ * what fixed the alternating spellings), so a Simyo extra data bundle 11 days
+ * after the incasso sits in the same group as the incasso — and a pure cycle
+ * fit refuses the whole group over that one row, which would have cost him the
+ * subscription he asked about. The budget is deliberately mean: `extras <=
+ * floor(members / 3)`, i.e. at least three of every four charges at that
+ * merchant must fall on the rhythm. That is what keeps a shop he visits weekly
+ * from having a "monthly subscription" carved out of its busiest quarter — the
+ * phantom he complained about before the miss — and it is arithmetic rather
+ * than a hope: weekly visits produce roughly four rows for every one a monthly
+ * rhythm can claim, so `extras` lands near `3 x members` and the budget refuses
+ * it. Measured: twelve weekly groceries around three monthly charges of the
+ * same amount gives nothing, while those same three rows on their own are a
+ * subscription.
+ * ========================================================================= */
+
+type CadenceBand = (typeof CADENCE_BANDS)[number];
+
+export type CadenceFit = {
+  band: CadenceBand;
+  /** Indices into the sorted dates that form the stream, ascending. */
+  members: number[];
+  /** Gaps between consecutive members, in days — the honest record of what the
+   *  rhythm looked like, so a rejection can be explained in numbers. */
+  gaps: number[];
+  /** Expected cycles that never arrived inside the observed history. */
+  skippedCycles: number;
+  /** Rows in the group that are NOT on the rhythm (a one-off, an extra bundle,
+   *  a device instalment). Bounded — see the comment above. */
+  extras: number;
+  /** Summed absolute day-drift of the member gaps; the tie-breaker. */
+  residual: number;
+};
+
+/** How far a gap may sit off a whole cycle. DERIVED FROM THE BAND TABLE, not
+ *  from a constant of its own: the table already says how wide monthly is
+ *  (26-36 days), and a second number saying the same thing differently is the
+ *  precise mechanism that broke this module. Monthly -> 6 days, quarterly ->
+ *  11, yearly -> 15. The agenda's old `max(4, 12% of cadence)` gave 4 for
+ *  monthly (tighter, and it disagreed with the table it sat next to) and 44 for
+ *  yearly (three times looser than the table allows). */
+function bandTolerance(b: CadenceBand): number {
+  return Math.max(b.cadenceDays - b.min, b.max - b.cadenceDays);
+}
+
+/** How many cycles a stream may skip and still be the same stream. Three misses
+ *  in a row is a stopped stream, not a bumpy one. */
+const MAX_SKIPPED_CYCLES = 2;
+
+/** One chain, anchored at `start`: greedy from cycle to cycle, but never greedy
+ *  WITHIN a cycle — see the pick below. Exported nowhere: `fitCadence` tries
+ *  every anchor and keeps the best. */
+function chainFrom(dates: string[], start: number, band: CadenceBand): CadenceFit | null {
+  const tol = bandTolerance(band);
+  const members = [start];
+  const gaps: number[] = [];
+  let skippedCycles = 0;
+  let residual = 0;
+  let onCycle = 0;
+  let last = start;
+  for (let i = start + 1; i < dates.length; i++) {
+    const g = daysBetween(dates[last], dates[i]);
+    const k = Math.round(g / band.cadenceDays);
+    const drift = Math.abs(g - k * band.cadenceDays);
+    if (k >= 1 && k <= MAX_SKIPPED_CYCLES + 1 && drift <= tol) {
+      /* `i` is the FIRST row that fits this cycle, which is not the same thing
+       * as the row that IS it. Taking the first one cost a whole subscription,
+       * measured: five clean € 11,89 incasso's plus one € 80,00 device charge
+       * three days BEFORE the June debit put the device charge in the stream
+       * and the debit out of it, and the amount spread that followed
+       * (11,89 / 80,00, CV 1,19) failed the 0,35 guard — NIETS, no
+       * subscription at all. The same charge three days AFTER the debit was
+       * harmless, because then the debit was simply scanned first. An
+       * asymmetry with no reason behind it other than the reading order is a
+       * defect, and it is the same class of defect as the one he reported five
+       * times: the rhythm is there and the detector looks past it.
+       *
+       * So every row inside THIS cycle's window competes and the one nearest
+       * the expected day wins. No row outside the window is jumped over — a row
+       * lying between two candidates is inside the window too, by definition —
+       * so a chain is no easier to start, extend or fabricate than before. Only
+       * which row fills one slot changes. */
+      const target = k * band.cadenceDays;
+      let pick = i;
+      let pickDrift = drift;
+      for (let j = i + 1; j < dates.length; j++) {
+        const gj = daysBetween(dates[last], dates[j]);
+        if (gj > target + tol) break;
+        const dj = Math.abs(gj - target);
+        if (dj < pickDrift) { pick = j; pickDrift = dj; }
+      }
+      members.push(pick);
+      gaps.push(daysBetween(dates[last], dates[pick]));
+      residual += pickDrift;
+      if (k === 1) onCycle++;
+      else skippedCycles += k - 1;
+      last = pick;
+      /* Resume after the row we took. What sat between `i` and it stays a
+       * stray, counted in `extras` and governed by the budget below. */
+      i = pick;
+      continue;
+    }
+    /* Too soon to be the next cycle: a charge from the same merchant that is
+     * not this stream. Step over it WITHOUT moving the anchor — the next real
+     * cycle must still be measured from the last real one, or one extra bundle
+     * would shift every gap after it and take the whole stream down. */
+    if (g < band.cadenceDays - tol) continue;
+    /* Anything else — a gap of four cycles or more, or one that lands between
+     * cycles — ends the chain here. Stopping is the strict choice, and it is
+     * deliberate: it is what stops a stream being carved out of the middle of a
+     * merchant that is simply visited a lot. */
+    break;
+  }
+  if (members.length < band.minOcc) return null;
+  /* The majority must be SINGLE cycles. Without this a monthly stream fits a
+   * weekly cadence arithmetically (30 ~ 4x7) while being nothing of the sort. */
+  if (onCycle < Math.ceil(gaps.length / 2)) return null;
+  const extras = dates.length - members.length;
+  if (extras > Math.floor(members.length / 3)) return null;
+  return { band, members, gaps, skippedCycles, extras, residual };
+}
+
+function betterFit(a: CadenceFit, b: CadenceFit): boolean {
+  if (a.members.length !== b.members.length) return a.members.length > b.members.length;
+  if (a.skippedCycles !== b.skippedCycles) return a.skippedCycles < b.skippedCycles;
+  if (a.residual !== b.residual) return a.residual < b.residual;
+  return a.band.cadenceDays < b.band.cadenceDays;
+}
+
+/** The cadence a series of dates actually follows, or null when none does.
+ *  `sortedDates` must be ascending. Deterministic: the winner puts the most
+ *  charges on the rhythm, then skips the fewest cycles, then drifts the least,
+ *  then has the shortest cadence.
+ *
+ *  The anchor is bounded by `floor(n / 4)` rather than tried everywhere: with
+ *  `extras <= floor(members / 3)` a chain can never start later than that, so
+ *  the extra anchors could only produce fits that are thrown away again. */
+export function fitCadence(sortedDates: string[]): CadenceFit | null {
+  const maxStart = Math.floor(sortedDates.length / 4);
+  let best: CadenceFit | null = null;
+  for (const band of CADENCE_BANDS) {
+    if (sortedDates.length < band.minOcc) continue;
+    for (let s = 0; s <= maxStart && s + band.minOcc <= sortedDates.length; s++) {
+      const fit = chainFrom(sortedDates, s, band);
+      if (fit !== null && (best === null || betterFit(fit, best))) best = fit;
+    }
+  }
+  return best;
+}
 
 /** Dutch name of each cadence, for the UI. */
 export const CADENCE_LABEL_NL: Readonly<Record<number, string>> = {
@@ -300,7 +475,12 @@ export function subscriptionCoverage(txs: Tx[]): SubscriptionCoverage {
 }
 
 export type DetectSubscriptionOptions = {
-  maxIntervalCv?: number;
+  /* There is no interval knob any more. It was `maxIntervalCv` (0.4), and it is
+   * the number that hid his Simyo: gaps [31, 61, 30] give a CV of 0.433, 8%
+   * over the line, on a stream that is perfectly monthly with one failed
+   * incasso in it. Raising it would have let genuinely irregular series in;
+   * the rhythm is read in cycles now (`fitCadence`) and there is nothing left
+   * to tune. */
   maxAmountCv?: number;
   /** The day the answer is "as of", used to tell a running subscription from a
    *  cancelled one. Defaults per account to the last date that account's data
@@ -320,7 +500,6 @@ export type DetectSubscriptionOptions = {
  *  stream is refused unless it has a merchant name, an amount that actually
  *  repeats, and a charge recent enough to still be running. */
 export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions = {}): Subscription[] {
-  const maxIntervalCv = opts.maxIntervalCv ?? 0.4;
   // 0.6 let three ordinary dinners at one restaurant (€ 42,50 / € 18,90 / € 71)
   // through as a € 71-a-month subscription. A real price change is far tamer:
   // Netflix 13,99 -> 15,99 over five charges is a CV of 0.07.
@@ -365,27 +544,30 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
     if (group.length < 2) continue;
     const sorted = [...group].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-    const gaps: number[] = [];
-    for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
-    const medGap = median(gaps);
-    const band = CADENCE_BANDS.find((b) => medGap >= b.min && medGap <= b.max);
-    if (!band) continue;
-    if (sorted.length < band.minOcc) continue;
-    if (gaps.length >= 2 && std(gaps) / mean(gaps) > maxIntervalCv) continue;
+    /* The rhythm, read by the same function the Betaalagenda uses. Everything
+     * below this line therefore looks at `stream` — the charges that ARE the
+     * subscription — and not at every row the merchant produced. That matters
+     * twice over: the price is read off the stream (an extra bundle can no
+     * longer inflate the amount spread and get the whole thing refused), and
+     * `occurrences` counts what was actually billed on the cadence. */
+    const fit = fitCadence(sorted.map((t) => t.date));
+    if (fit === null) continue;
+    const band = fit.band;
+    const stream = fit.members.map((i) => sorted[i]);
 
     // Still being paid? A cancelled stream keeps its cadence and its history
     // forever, so without this the tab lists what he USED to pay as what he
     // pays. Two missed cycles (plus a few days' slack for a weekend shift) is
     // the line: one skipped charge is a billing hiccup, two is a cancellation.
-    const lastDate = sorted[sorted.length - 1].date;
+    const lastDate = stream[stream.length - 1].date;
     let asOf = opts.asOf ?? "";
-    if (asOf === "") for (const t of sorted) {
+    if (asOf === "") for (const t of stream) {
       const end = accountEnd.get(t.accountKey) ?? "";
       if (end > asOf) asOf = end;
     }
     if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
-    const amountsCents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
     const amtMean = mean(amountsCents);
     if (amtMean <= 0) continue;
     if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv) continue;
@@ -418,15 +600,16 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
 
     subs.push({
       key,
-      name: sorted[0].counterparty,
-      function: subscriptionFunction(sorted[0].counterparty),
+      name: stream[0].counterparty,
+      function: subscriptionFunction(stream[0].counterparty),
       cadenceDays: band.cadenceDays,
       monthlyCents,
       firstAmountCents,
       lastAmountCents,
       changePct,
-      occurrences: sorted.length,
+      occurrences: stream.length,
       lastDate,
+      skippedCycles: fit.skippedCycles,
     });
   }
 
@@ -567,38 +750,16 @@ export function scheduleParty(counterparty: string, description = ""): { key: st
   return { key: merchantKey(cp), label: counterparty };
 }
 
-/** Day-of-month drift plus a weekend shift: a monthly incasso on the 4th lands
- *  anywhere from the 1st to the 6th, and February is three days short. */
-const SCHEDULE_TOLERANCE_DAYS = 4;
-/** How many cycles a stream may skip and still be the same stream. Three misses
- *  in a row is a stopped stream, not a bumpy one. */
-const MAX_SKIPPED_CYCLES = 2;
-
-type CycleFit = { onCycle: number; skippedCycles: number; residual: number };
-
-/** Read the gaps of a stream as whole CYCLES of `cadence`: every gap must be a
- *  near-exact multiple, at most `MAX_SKIPPED_CYCLES + 1` of them, and the
- *  majority must be single cycles. That last rule is what stops a monthly
- *  stream being called weekly (30 ≈ 4 × 7 fits the arithmetic; nothing about it
- *  is weekly), and it is why this replaces a coefficient of variation: a CV
- *  cannot tell a skipped month from an irregular one. */
-function fitCycles(gaps: number[], cadence: number): CycleFit | null {
-  const tol = Math.max(SCHEDULE_TOLERANCE_DAYS, Math.round(cadence * 0.12));
-  let onCycle = 0;
-  let skippedCycles = 0;
-  let residual = 0;
-  for (const g of gaps) {
-    const k = Math.round(g / cadence);
-    if (k < 1 || k > MAX_SKIPPED_CYCLES + 1) return null;
-    const r = Math.abs(g - k * cadence);
-    if (r > tol) return null;
-    if (k === 1) onCycle++;
-    else skippedCycles += k - 1;
-    residual += r;
-  }
-  if (onCycle < Math.ceil(gaps.length / 2)) return null;
-  return { onCycle, skippedCycles, residual };
-}
+/* `fitCycles` used to live here — tolerance `max(4, 12% of cadence)`, every gap
+ * a whole cycle, majority single cycles. It is `fitCadence` now, at the top of
+ * this file, and `detectSubscriptions` calls the same one. What the agenda
+ * gains from the move: a one-off charge from a party it already tracks (a
+ * reminder fee, an extra bundle) no longer refuses the whole schedule row — it
+ * is counted as a stray, within the same mean budget. What it loses: the
+ * tolerance now comes from the band table instead of a formula next to it, so
+ * monthly is 6 days wide instead of 4 and yearly 15 instead of 44. The yearly
+ * number is the honest one — 44 days of slack made "a year, give or take six
+ * weeks" a cadence. */
 
 export type DetectScheduleOptions = {
   /** The day the answer is "as of" — decides which streams are still running.
@@ -638,38 +799,27 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
     const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     if (sorted.length < 2) continue;
 
-    const gaps: number[] = [];
-    for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
-
-    let best: { band: (typeof CADENCE_BANDS)[number]; fit: CycleFit } | null = null;
-    for (const band of CADENCE_BANDS) {
-      if (sorted.length < band.minOcc) continue;
-      const fit = fitCycles(gaps, band.cadenceDays);
-      if (fit === null) continue;
-      if (
-        best === null ||
-        fit.onCycle > best.fit.onCycle ||
-        (fit.onCycle === best.fit.onCycle && fit.residual < best.fit.residual)
-      ) best = { band, fit };
-    }
-    if (best === null) continue;
+    const fit = fitCadence(sorted.map((t) => t.date));
+    if (fit === null) continue;
+    const band = fit.band;
+    const stream = fit.members.map((i) => sorted[i]);
 
     // Still running? A stopped stream keeps its cadence forever, and rolling it
     // forward would put a payment on the agenda that nobody is going to make.
-    const lastDate = sorted[sorted.length - 1].date;
+    const lastDate = stream[stream.length - 1].date;
     let asOf = opts.asOf ?? "";
-    if (asOf === "") for (const t of sorted) {
+    if (asOf === "") for (const t of stream) {
       const end = accountEnd.get(t.accountKey) ?? "";
       if (end > asOf) asOf = end;
     }
-    if (asOf !== "" && daysBetween(lastDate, asOf) > best.band.cadenceDays * 2 + 5) continue;
+    if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
     /* The amount. An agenda that prints a figure nobody was ever charged is
      * worse than an agenda with one row fewer, so a stream must either repeat a
      * figure or be tight enough that its last charge IS the figure (a yearly
      * index-linked premium). Both are then reported as what it last actually
      * charged, never as an average. */
-    const amountsCents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
     const amtMean = mean(amountsCents);
     if (amtMean <= 0) continue;
     const amtCv = std(amountsCents) / amtMean;
@@ -688,12 +838,12 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
     out.push({
       key,
       label: group.label,
-      sign: sorted[0].amount >= 0 ? 1 : -1,
-      cadenceDays: best.band.cadenceDays,
+      sign: stream[0].amount >= 0 ? 1 : -1,
+      cadenceDays: band.cadenceDays,
       amountCents,
-      occurrences: sorted.length,
+      occurrences: stream.length,
       lastDate,
-      skippedCycles: best.fit.skippedCycles,
+      skippedCycles: fit.skippedCycles,
     });
   }
 
