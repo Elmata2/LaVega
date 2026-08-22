@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import type { Tx } from "./model.js";
-import { detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams, fitMerchantStreams } from "./subscriptions.js";
+import { merchantTallies, detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams, fitMerchantStreams } from "./subscriptions.js";
 
 let n = 0;
 const tx = (cp: string, date: string, amount: number): Tx =>
@@ -766,4 +766,74 @@ test("de uitkomst hangt niet van de volgorde van de rijen af", () => {
     }
     expect(JSON.stringify(detectSubscriptions(r, { asOf: "2026-08-25" }))).toBe(basis);
   }
+});
+
+/* DE METING DIE HET SCHERM MISTE.
+ *
+ * 22 augustus: 382 dagen afschrift, 813 uitgaande transacties, 286 ontvangers,
+ * 85 minstens twee keer betaald, NUL abonnementen. Het scherm kon niet zeggen
+ * waarom — en die 286 en 85 werden bovendien op de RUWE tegenpartijtekst geteld,
+ * terwijl de detector op merchantKey groepeert na uitsluitingen. Twee
+ * groeperingen, dus dat getal beschreef een andere vraag. */
+describe("merchantTallies — wat de detector zag, op zijn eigen grondslag", () => {
+  const tx = (cp: string, date: string, amount: number): Tx => ({
+    id: `${cp}-${date}`, accountKey: "A", date, amount, currency: "EUR",
+    counterparty: cp, description: "", category: "", manual: false,
+  });
+
+  it("groepeert zoals de detector, dus twee schrijfwijzen zijn één ontvanger", () => {
+    const t = merchantTallies([
+      tx("Simyo", "2026-01-14", -11.89),
+      tx("SIMYO B.V.", "2026-02-14", -11.89),
+      tx("simyo", "2026-03-14", -11.89),
+    ]);
+    expect(t).toHaveLength(1);
+    expect(t[0].charges).toBe(3);
+    expect(t[0].medianGapDays).toBe(30);
+    expect(t[0].amountCv).toBe(0);
+    expect(t[0].excluded).toBeNull();
+  });
+
+  it("zegt WAAROM een ontvanger de detector niet eens haalt", () => {
+    const t = merchantTallies([
+      tx("A. Jansen", "2026-01-05", -50),
+      tx("A. Jansen", "2026-02-05", -50),
+      tx("Woningstichting Rochdale", "2026-01-01", -900),
+      tx("Woningstichting Rochdale", "2026-02-01", -900),
+    ]);
+    const persoon = t.find((x) => x.label.includes("Jansen"))!;
+    const huur = t.find((x) => x.label.includes("Rochdale"))!;
+    expect(persoon.excluded).toBe("overboeking-of-persoon");
+    expect(huur.excluded).toBe("woonlast");
+  });
+
+  it("een wild springend bedrag is zichtbaar in de spreiding, niet in een verdict", () => {
+    const t = merchantTallies([
+      tx("Restaurant De Kade", "2026-01-10", -42.5),
+      tx("Restaurant De Kade", "2026-02-11", -18.9),
+      tx("Restaurant De Kade", "2026-03-09", -71),
+    ]);
+    expect(t[0].charges).toBe(3);
+    // Gaten: 32 en 26 dagen, dus mediaan 29 — zelf misgerekend, nu nageteld.
+    expect(t[0].medianGapDays).toBe(29);
+    // Hier zit het antwoord: het ritme klopt bijna, het bedrag niet.
+    expect(t[0].amountCv).toBeGreaterThan(0.35);
+  });
+
+  it("het grootste totaal staat vooraan, want daar verstopt een abonnement zich", () => {
+    const t = merchantTallies([
+      tx("Klein Winkeltje", "2026-01-02", -3),
+      tx("Klein Winkeltje", "2026-02-02", -3),
+      tx("Achmea", "2026-01-24", -142.5),
+      tx("Achmea", "2026-02-24", -142.5),
+    ]);
+    expect(t[0].label).toBe("Achmea");
+  });
+
+  it("naamloze rijen worden apart geteld en niet tot één spookontvanger gesmeed", () => {
+    const t = merchantTallies([tx("", "2026-01-02", -10), tx("", "2026-02-02", -20)]);
+    expect(t).toHaveLength(1);
+    expect(t[0].excluded).toBe("geen-naam");
+    expect(t[0].merchant).toBe("");
+  });
 });

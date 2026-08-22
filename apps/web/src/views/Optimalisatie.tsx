@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, NetBasis, NetBenefit, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
 import {
+  merchantTallies,
   accountCosts,
   accountLabel,
   accountReturns,
@@ -571,6 +572,29 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
      uitgaven van een kaart waarvan we het percentage niet kennen horen NIET in de
      basis, want dan zou een bedrag worden vermenigvuldigd met een getal dat er
      niet is. */
+  /* De meting achter de lege staat. Alleen ontvangers met meer dan één
+     afschrijving, want een eenmalige aankoop zegt niets over een ritme — en
+     afgekapt op vijftien, want een tabel van 85 regels is geen diagnose maar een
+     tweede probleem. Ze staan op totaalbedrag gesorteerd, dus wat eraf valt is
+     het kleingeld. */
+  const tallies = useMemo(
+    () => merchantTallies(txs).filter((t) => t.charges > 1 && t.excluded !== "woonlast").slice(0, 15),
+    [txs],
+  );
+  /* WOONLASTEN BLIJVEN VAN DIT SCHERM AF, en dat is niet mijn keuze maar de
+     zijne: het Woonlasten-blok is op zijn verzoek uit Optimalisatie verdwenen
+     (review 2), en er staat een test op dat de huur hier niet meer opduikt. Die
+     test ving mijn eerste versie, waarin de tabel zijn woningstichting weer
+     terugbracht — en waarin de reden bovendien naar dat verwijderde blok wees,
+     een plek die niet meer bestaat.
+
+     Ze worden geteld en niet verzwegen: een diagnose die stil rijen weglaat is
+     precies het soort halve waarheid dat dit scherm moet bestrijden. */
+  const woonlastenWeggelaten = useMemo(
+    () => merchantTallies(txs).filter((t) => t.charges > 1 && t.excluded === "woonlast").length,
+    [txs],
+  );
+
   const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
   /* WHAT HE COULD OPEN, not only what he holds. Valuta ranks every bank and the
      travel agent already offers alternatives; this module was the last one asking
@@ -867,11 +891,81 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </p>
               <p className="cell-sub">Wat LaVega een abonnement noemt:</p>
               <ul>
-                <li>minstens twee betalingen aan dezelfde ontvanger;</li>
+                {/* DRIE EN NIET TWEE, en dat is een correctie. Hier stond "minstens
+                    twee betalingen" terwijl de maandband minstens DRIE afschrijvingen
+                    eist (CADENCE_BANDS in subscriptions.ts: minOcc 3 voor 30 dagen,
+                    2 voor kwartaal, halfjaar en jaar). Wie twee maandbedragen zag
+                    staan en dit las, zocht de fout op de verkeerde plek. */}
+                <li>
+                  minstens drie betalingen als het maandelijks is, twee als het per kwartaal,
+                  halfjaar of jaar gaat;
+                </li>
                 <li>een vast ritme: ongeveer maandelijks, per kwartaal of jaarlijks;</li>
                 <li>een bedrag dat mag stijgen (dat is juist het signaal) maar niet wild springt;</li>
                 <li>geen eigen overboeking of kaartafrekening.</li>
               </ul>
+
+              {/* WAT DE DETECTOR ZELF ZAG, per ontvanger. De regels hierboven zijn een
+                  samenvatting; dit is de meting. Aanleiding: hij las "85 ontvangers
+                  minstens twee keer betaald, nul abonnementen" en kon niets met dat
+                  getal — en het was ook op een ANDERE grondslag geteld dan de
+                  detector gebruikt (ruwe tegenpartijtekst tegenover merchantKey na
+                  uitsluitingen). Deze tabel deelt de grondslag met de detector, dus
+                  wat hier staat is wat hij zag. */}
+              {tallies.length > 0 && (
+                <ToonMeer summary={`Wat LaVega per ontvanger zag (${tallies.length} met meer dan één afschrijving)`}>
+                  <div className="table-wrap table-cards">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Ontvanger</th>
+                          <th className="num">Keer</th>
+                          <th className="num">Totaal</th>
+                          <th className="num">Ritme</th>
+                          <th className="num">Spreiding</th>
+                          <th>Meegenomen?</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tallies.map((t) => (
+                          <tr key={`${t.merchant}-${t.label}`}>
+                            <td>{t.label || "(geen naam)"}</td>
+                            <td className="num">{t.charges}</td>
+                            <td className="num">{formatEuro(t.totalCents / 100)}</td>
+                            <td className="num">
+                              {t.medianGapDays === null ? "—" : `${t.medianGapDays} dg`}
+                            </td>
+                            <td className="num">{t.amountCv === null ? "—" : t.amountCv.toFixed(2)}</td>
+                            <td>
+                              {t.excluded === null
+                                ? "ja"
+                                : t.excluded === "overboeking-of-persoon"
+                                  ? "nee — gelezen als overboeking of persoon"
+                                  : "nee — geen naam op de regel"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="cell-sub">
+                    Een ritme rond 30, 61, 91, 182 of 365 dagen is bruikbaar; een spreiding boven 0,35
+                    betekent dat het bedrag te wild springt. Staat je abonnement hier met een goed ritme
+                    en een lage spreiding en tóch niet in de lijst hierboven, dan is dat een fout van ons
+                    — stuur die regel door.
+                    {woonlastenWeggelaten > 0 && (
+                      <>
+                        {" "}
+                        {woonlastenWeggelaten === 1
+                          ? "Eén terugkerende ontvanger staat hier niet bij"
+                          : `${woonlastenWeggelaten} terugkerende ontvangers staan hier niet bij`}
+                        : die zijn als vaste woonlast gelezen (huur, hypotheek, VvE), en die horen niet op dit
+                        scherm.
+                      </>
+                    )}
+                  </p>
+                </ToonMeer>
+              )}
               <p className="cell-sub">
                 Meestal ontbreekt de rekening waar ze vanaf gaan: importeer je creditcard of privérekening,
                 dan verschijnen ze hier — inclusief prijsstijgingen en dubbele diensten.

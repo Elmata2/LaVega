@@ -701,6 +701,100 @@ export type DetectSubscriptionOptions = {
  *  in the whole tab, and he named the phantom before he named the miss. So a
  *  stream is refused unless it has a merchant name, an amount that actually
  *  repeats, and a charge recent enough to still be running. */
+/** Wat de detector ZAG, per ontvanger, met de grondslag die hij zelf gebruikt.
+ *
+ *  WAAROM DIT BESTAAT. Op 22 augustus meldde de eigenaar: 382 dagen afschrift,
+ *  813 uitgaande transacties, 286 ontvangers, 85 daarvan minstens twee keer
+ *  betaald — en NUL abonnementen. Dat is geen randgeval, en het scherm kon niet
+ *  zeggen waarom, want het lijstje regels eronder is een samenvatting en geen
+ *  meting.
+ *
+ *  Erger nog: die 286 en 85 werden geteld op de RUWE tegenpartijtekst
+ *  (`counterparty.trim().toLowerCase()`), terwijl deze detector groepeert op
+ *  `merchantKey` NA `norm`, en daarvoor rijen weggooit die op een overboeking,
+ *  een persoon of een woonlast lijken. Twee verschillende groeperingen, dus het
+ *  getal op het scherm beschreef een andere vraag dan de zin eronder suggereerde.
+ *
+ *  Deze functie staat daarom IN dit bestand: ze deelt de norm, de merchantKey en
+ *  de uitsluitingen met de detector. Een kopie in de UI zou op precies dezelfde
+ *  manier uit elkaar lopen — en dat is in deze repo al vijf keer gebeurd.
+ *
+ *  Ze geeft GEEN oordeel over waarom iets afvalt; ze geeft de cijfers waarmee de
+ *  eigenaar dat zelf kan zien: hoeveel afschrijvingen, over welke periode, wat de
+ *  mediaan van de gaten is en hoe wild het bedrag springt. Dat is genoeg om in
+ *  één blik te zien of iets een ritme HEEFT. */
+export type MerchantTally = {
+  merchant: string;
+  /** De tegenpartij zoals de bank hem schreef, van de laatste afschrijving. */
+  label: string;
+  charges: number;
+  totalCents: number;
+  firstDate: string;
+  lastDate: string;
+  /** Mediaan van de gaten in dagen, of null bij één afschrijving. */
+  medianGapDays: number | null;
+  /** Spreiding van de bedragen (variatiecoefficient), of null bij één. */
+  amountCv: number | null;
+  /** Waarom deze ontvanger de detector niet eens haalt, of null. */
+  excluded: "overboeking-of-persoon" | "woonlast" | "geen-naam" | null;
+};
+
+export function merchantTallies(txs: Tx[]): MerchantTally[] {
+  const groups = new Map<string, { label: string; rows: Tx[]; excluded: MerchantTally["excluded"] }>();
+  for (const t of txs) {
+    if (t.amount >= 0) continue;
+    const h = norm(t.counterparty);
+    let excluded: MerchantTally["excluded"] = null;
+    if (knownMerchant(h) === null) {
+      if (looksLikeTransfer(h)) excluded = "overboeking-of-persoon";
+      else if (looksLikeHousing(h)) excluded = "woonlast";
+    }
+    const merchant = merchantKey(h);
+    // Een lege sleutel is geen ontvanger; hij zou alle naamloze rijen tot één
+    // spookontvanger smeden. Wel apart geteld, want "geen naam" is een antwoord.
+    const key = merchant === "" ? "\u0000geen-naam" : merchant;
+    const g = groups.get(key);
+    if (g) {
+      g.rows.push(t);
+      g.label = t.counterparty || g.label;
+    } else {
+      groups.set(key, { label: t.counterparty, rows: [t], excluded: merchant === "" ? "geen-naam" : excluded });
+    }
+  }
+
+  const out: MerchantTally[] = [];
+  for (const [key, g] of groups) {
+    const sorted = [...g.rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const cents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const gaps: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      gaps.push(Math.round((Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date)) / 86400000));
+    }
+    const med = (xs: number[]): number | null => {
+      if (xs.length === 0) return null;
+      const s = [...xs].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 === 1 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+    };
+    const mean = cents.reduce((a, b) => a + b, 0) / cents.length;
+    const sd = Math.sqrt(cents.reduce((a, c) => a + (c - mean) ** 2, 0) / cents.length);
+    out.push({
+      merchant: key.startsWith("\u0000") ? "" : key,
+      label: g.label,
+      charges: sorted.length,
+      totalCents: cents.reduce((a, b) => a + b, 0),
+      firstDate: sorted[0].date,
+      lastDate: sorted[sorted.length - 1].date,
+      medianGapDays: med(gaps),
+      amountCv: cents.length > 1 && mean > 0 ? Math.round((sd / mean) * 1000) / 1000 : null,
+      excluded: g.excluded,
+    });
+  }
+  // Grootste totaal eerst: daar verstopt een echt abonnement zich, niet in de
+  // staart van eenmalige aankopen.
+  return out.sort((a, b) => b.totalCents - a.totalCents);
+}
+
 export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions = {}): Subscription[] {
   // 0.6 let three ordinary dinners at one restaurant (€ 42,50 / € 18,90 / € 71)
   // through as a € 71-a-month subscription. A real price change is far tamer:
