@@ -820,14 +820,24 @@ describe("merchantTallies — wat de detector zag, op zijn eigen grondslag", () 
     expect(t[0].amountCv).toBeGreaterThan(0.35);
   });
 
-  it("het grootste totaal staat vooraan, want daar verstopt een abonnement zich", () => {
+  it("het meest abonnement-achtige staat vooraan, niet het grootste bedrag", () => {
+    /* DIT WAS EERST OP TOTAALBEDRAG en dat was fout. Hij opende de tabel om zijn
+     * telefoonabonnement van 11,89 per maand te vinden - 143 euro over een jaar -
+     * en die haalt de eerste vijftien nooit tussen huur en verzekeringen. De vorm
+     * beslist nu: ligt de mediaan van de gaten bij een band, en springt het bedrag
+     * weinig. */
     const t = merchantTallies([
-      tx("Klein Winkeltje", "2026-01-02", -3),
-      tx("Klein Winkeltje", "2026-02-02", -3),
-      tx("Achmea", "2026-01-24", -142.5),
-      tx("Achmea", "2026-02-24", -142.5),
+      // Groot bedrag, maar geen ritme en een wild springend bedrag.
+      tx("Aankopen Groot BV", "2026-01-03", -800),
+      tx("Aankopen Groot BV", "2026-01-19", -120),
+      tx("Aankopen Groot BV", "2026-03-27", -640),
+      // Klein bedrag, maar een keurig maandritme.
+      tx("Simyo", "2026-01-14", -11.89),
+      tx("Simyo", "2026-02-14", -11.89),
+      tx("Simyo", "2026-03-14", -11.89),
     ]);
-    expect(t[0].label).toBe("Achmea");
+    expect(t[0].label).toBe("Simyo");
+    expect(t[0].totalCents).toBeLessThan(t[1].totalCents); // kleiner, en tóch eerst
   });
 
   it("naamloze rijen worden apart geteld en niet tot één spookontvanger gesmeed", () => {

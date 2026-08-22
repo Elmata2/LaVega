@@ -790,9 +790,29 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
       excluded: g.excluded,
     });
   }
-  // Grootste totaal eerst: daar verstopt een echt abonnement zich, niet in de
-  // staart van eenmalige aankopen.
-  return out.sort((a, b) => b.totalCents - a.totalCents);
+  /* GESORTEERD OP HOE ABONNEMENT-ACHTIG iets is, niet op bedrag. Dat was mijn
+   * eerste keuze en die was fout: op totaalbedrag komen huur, verzekeringen en de
+   * supermarkt bovenaan, en een telefoonabonnement van 11,89 per maand — 143 euro
+   * over een jaar — haalt de eerste vijftien nooit. Terwijl dat precies is waar
+   * iemand naar zoekt als hij deze tabel opent.
+   *
+   * De score is bewust grof en gaat over VORM: ligt de mediaan van de gaten bij
+   * een van de banden, en springt het bedrag weinig. Dat zijn de twee dingen die
+   * een abonnement van een reeks losse aankopen scheiden. Bij gelijke score wint
+   * het aantal afschrijvingen, en pas daarna het bedrag. */
+  const bandAfstand = (gap: number | null): number => {
+    if (gap === null) return 999;
+    let best = 999;
+    for (const b of CADENCE_BANDS) best = Math.min(best, Math.abs(gap - b.cadenceDays) / b.cadenceDays);
+    return best;
+  };
+  return out.sort((a, b) => {
+    const sa = bandAfstand(a.medianGapDays) + (a.amountCv ?? 1);
+    const sb = bandAfstand(b.medianGapDays) + (b.amountCv ?? 1);
+    if (Math.abs(sa - sb) > 1e-9) return sa - sb;
+    if (a.charges !== b.charges) return b.charges - a.charges;
+    return b.totalCents - a.totalCents;
+  });
 }
 
 export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions = {}): Subscription[] {

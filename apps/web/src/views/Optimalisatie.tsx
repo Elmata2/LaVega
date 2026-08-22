@@ -577,10 +577,17 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
      afgekapt op vijftien, want een tabel van 85 regels is geen diagnose maar een
      tweede probleem. Ze staan op totaalbedrag gesorteerd, dus wat eraf valt is
      het kleingeld. */
-  const tallies = useMemo(
-    () => merchantTallies(txs).filter((t) => t.charges > 1 && t.excluded !== "woonlast").slice(0, 15),
+  /* ALLE terugkerende ontvangers, niet de eerste vijftien. De afkapping was een
+     tweede fout bovenop de sortering: hij las boven de tabel dat er 98 ontvangers
+     twee keer betaald waren en in het label dat er 15 waren — twee getallen over
+     dezelfde vraag. En wie een specifiek abonnement zoekt heeft niets aan een
+     top-N: die staat er dan juist niet bij. De tabel zit achter een plooi en
+     scrollt, dus lengte kost hier niets. */
+  const alleTallies = useMemo(
+    () => merchantTallies(txs).filter((t) => t.charges > 1),
     [txs],
   );
+  const tallies = useMemo(() => alleTallies.filter((t) => t.excluded !== "woonlast"), [alleTallies]);
   /* WOONLASTEN BLIJVEN VAN DIT SCHERM AF, en dat is niet mijn keuze maar de
      zijne: het Woonlasten-blok is op zijn verzoek uit Optimalisatie verdwenen
      (review 2), en er staat een test op dat de huur hier niet meer opduikt. Die
@@ -591,8 +598,8 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
      Ze worden geteld en niet verzwegen: een diagnose die stil rijen weglaat is
      precies het soort halve waarheid dat dit scherm moet bestrijden. */
   const woonlastenWeggelaten = useMemo(
-    () => merchantTallies(txs).filter((t) => t.charges > 1 && t.excluded === "woonlast").length,
-    [txs],
+    () => alleTallies.filter((t) => t.excluded === "woonlast").length,
+    [alleTallies],
   );
 
   const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
@@ -913,7 +920,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                   uitsluitingen). Deze tabel deelt de grondslag met de detector, dus
                   wat hier staat is wat hij zag. */}
               {tallies.length > 0 && (
-                <ToonMeer summary={`Wat LaVega per ontvanger zag (${tallies.length} met meer dan één afschrijving)`}>
+                <ToonMeer summary={`Wat LaVega per ontvanger zag (${tallies.length} ontvangers, meest abonnement-achtige eerst)`}>
                   <div className="table-wrap table-cards">
                     <table className="table">
                       <thead>
