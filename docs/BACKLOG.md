@@ -236,6 +236,31 @@ onbevestigde aanname.
 
 ---
 
+### Het doorstuuradres bestaat nog niet (22 augustus)
+
+Hij probeerde weg 1 te testen en stuurde een factuur naar het doorstuuradres. Zijn
+bevinding: **dat adres bestaat niet.** Er kwam dus niets bij Cloudflare aan, niets bij n8n,
+en er valt langs die weg voorlopig niets te testen.
+
+**Twee blokkades die niet door elkaar mogen lopen**, want ze zitten op verschillende
+plekken in de keten en de een lost de ander niet op:
+
+1. **De mailkant.** Het doorstuuradres moet bestaan en op de Cloudflare-worker uitkomen.
+   Zolang dat er niet is, is weg 1 niet te testen — ook niet gedeeltelijk. Wacht op zijn
+   cofounder (zie sectie 4).
+2. **De ophaalkant.** Los daarvan gaf de app "geen antwoord van n8n", en dat is een ANDER
+   probleem: de app haalt de wachtrij op met een eigen header, dus de browser doet eerst
+   een CORS-preflight, en een geweigerde preflight laat in n8n géén uitvoering achter.
+   Zet Allowed Origins in de Webhook-node, of controleer de URL met curl buiten de browser
+   om. Die controle kan hij nu al doen, zonder dat het mailadres bestaat.
+
+**Wat intussen wél werkt en wat hij dus kan blijven gebruiken:** de PDF in Facturen slepen
+(werkt, bevestigd) en de nepwachtrij met `--rows` en zijn eigen cijfers. Die twee dekken
+samen alles behalve de afzendercontrole.
+
+**Nog open aan de facturenkant:** xlsx wordt niet gelezen. Hij had een factuur met btw in
+xlsx en moest hem overslaan.
+
 ## 5. Onbereikbaar gebleken — met de reden
 
 **Wat hier staat is "wij zijn er langs deze routes niet in gekomen", niet "het bestaat niet".** Een
