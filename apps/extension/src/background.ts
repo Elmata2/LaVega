@@ -5,6 +5,12 @@
  *   2. hij beantwoordt de vraag van het content script met AFGEMAAKTE ZINNEN;
  *   3. hij ruimt op zodra de gebruiker een toestemming intrekt.
  *
+ * Wat er in stap 2 bij is gekomen: het puntenblok. Dat leest de saldi uit
+ * chrome.storage.local — zijn eigen opgave, geen paginagegevens — en rekent ze
+ * met de gebundelde koersen om. Er gaat GEEN saldo naar de pagina: het content
+ * script krijgt zinnen, net als bij de kaarten, dus het aantal punten staat
+ * alleen in de tekst die op het scherm hoort te komen en nergens als getal.
+ *
  * ── WAAROM DE WORKER LEEST EN NIET HET CONTENT SCRIPT ──────────────────────
  *
  * Dat lijkt omslachtig: het content script zit al ín de pagina, waarom stuurt
@@ -35,8 +41,10 @@ import { SITES, siteForUrl, ontleedMatch, type Site } from "./sites.js";
 import { collectEvidence, readCheckout, type Evidence } from "./read.js";
 import { rankCheckout } from "./rank.js";
 import { buildPanel, PANEEL_CAPS } from "./panel.js";
-import { getHeldIds, getEnabledSiteIds, setEnabledSiteIds } from "./store.js";
-import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
+import { pointsCoverage } from "./points.js";
+import { getHeldIds, getEnabledSiteIds, setEnabledSiteIds, getPointsBalances } from "./store.js";
+import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
+import { POINTS_RATES } from "./generated/points-rates.generated.js";
 
 /** Het id waaronder een site zijn content script registreert. Eén vaste vorm,
  *  zodat opruimen ook lukt als de sitelijst inmiddels is veranderd: alles met
@@ -234,9 +242,21 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
   const reading = readCheckout(evidence);
   const heldIds = await getHeldIds();
 
-  /* De peildatum komt HIER vandaan en niet uit rank.ts: die is puur en kent geen
-   * klok. Dit is de enige plek in de extensie waar de tijd wordt afgelezen. */
+  /* De peildatum komt HIER vandaan en niet uit rank.ts of points.ts: die zijn
+   * puur en kennen geen klok. Dit is de enige plek in de service worker waar de
+   * tijd wordt afgelezen. */
   const asOf = new Date().toISOString().slice(0, 10);
+
+  /* De puntensaldi komen uit de opslag en niet uit de pagina, en dat is precies
+   * waarom dit blok ook werkt als de lezing mislukt: wat hij aan punten heeft
+   * liggen hangt niet van deze winkel af. Alleen de DEKKING doet dat, en die
+   * blijft null zolang er geen bedrag is. */
+  const punten = pointsCoverage({
+    balances: await getPointsBalances(),
+    rates: POINTS_RATES,
+    amountCents: reading.ok && reading.currency === "EUR" ? reading.amountCents : null,
+    asOf,
+  });
 
   const ranking = reading.ok
     ? rankCheckout({
@@ -248,7 +268,7 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
       })
     : null;
 
-  return buildPanel({ reading, ranking, catalogAt: CATALOG_GENERATED_AT, caps: PANEEL_CAPS });
+  return buildPanel({ reading, ranking, cards: CHECKOUT_CARDS, punten, caps: PANEEL_CAPS });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

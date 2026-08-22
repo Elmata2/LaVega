@@ -62,6 +62,23 @@ export function pct(value: number): string {
   return `${new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 2 }).format(value)}%`;
 }
 
+/** Een gewoon getal in Nederlandse notatie: "0,5", "1,5", "42.000".
+ *
+ *  DIT BESTOND NIET EN DAT WAS TE ZIEN. In het optiescherm stond
+ *  `${c.pointsPerEuro.value} punt(en) per euro` — een rauw JavaScript-nummer op
+ *  een Nederlands scherm. Vier van de eenenvijftig kaarten met een puntencijfer
+ *  hebben een niet-heel getal, en die stonden er als "0.5", "0.8" en "1.5". Op
+ *  precies dezelfde plek stond "€ 37.5 per jaar" tot dat bedrag door `euro`
+ *  ging; het veld ernaast is toen vergeten. Eén formatter voor allebei, zodat
+ *  dat niet nog een keer per veld hoeft te worden ontdekt.
+ *
+ *  Duizendtallen krijgen wél een scheidingsteken, en dat is voor puntensaldi de
+ *  hele reden dat deze functie bestaat: "42000" leest aan een kassa als iets
+ *  waar je even naar moet kijken, "42.000" niet. */
+export function getal(waarde: number, maxDecimalen = 2): string {
+  return new Intl.NumberFormat("nl-NL", { maximumFractionDigits: maxDecimalen }).format(waarde);
+}
+
 /** Punten: hele punten, want een halve KLM-mijl bestaat niet. Naar beneden,
  *  omdat afronden naar boven een punt zou beloven die er niet komt. */
 export function points(amountCents: number, perEuro: number): number {

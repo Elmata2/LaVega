@@ -151,6 +151,20 @@ if (manifest) {
     );
   }
   eis(!/unsafe-eval|remote|https?:/i.test(csp), "content_security_policy laat een schema of unsafe-eval toe.");
+
+  /* STYLE-SRC MOET 'self' ZIJN EN GEEN 'unsafe-inline'. Dat stond er wel, voor
+   * precies één style-attribuut in popup.html — een marge van zestien pixels.
+   * Zo'n uitzondering blijft staan en wordt de volgende keer niet meer
+   * afgewogen: elke inline stijl die er daarna bij komt, valt er stilzwijgend
+   * onder. Het attribuut is naar stijl.css verhuisd en deze controle houdt de
+   * deur dicht. */
+  const styleSrc = /(^|;)\s*style-src\s+([^;]+)/.exec(csp);
+  eis(
+    styleSrc !== null && !/unsafe-inline/i.test(styleSrc[2]),
+    `content_security_policy zet style-src op "${styleSrc ? styleSrc[2].trim() : "(niets)"}".\n` +
+      `        Deze extensie heeft geen inline stijl nodig; 'self' is genoeg, en 'unsafe-inline'\n` +
+      `        is een uitzondering die niemand een tweede keer afweegt.`,
+  );
   eis(
     !JSON.stringify(manifest).includes("<all_urls>"),
     "manifest bevat <all_urls>. Dat mag nooit: elke host moet apart te verantwoorden zijn.",
@@ -414,10 +428,24 @@ const ZELFTEST_SCHOON = [
     "generated/catalog.generated.js",
     'export const CHECKOUT_CARDS = [{ id: "x", source: "https://www.crypto.com/nl/cards, gelezen 2026-08-12" }];',
   ],
+  [
+    "de gebundelde puntenkoersen, met de bron van de koers als tekst",
+    "generated/points-rates.generated.js",
+    'export const POINTS_RATES = [{ program: "Membership Rewards", sourceUrl: "https://www.americanexpress.com/nl-nl/rewards/membership-rewards/" }];',
+  ],
+];
+
+/* En één geval dat niet in een van de twee lijsten past: een bestand met een
+ * onbekende extensie. De poort behandelt alles wat niet .js is als "elk adres
+ * verboden", en dat MOET ook voor een .png, een .txt of een .woff2 gelden — de
+ * pixel die er de vorige keer doorheen kwam, kwam door een extensie die niemand
+ * had bedacht. */
+const ZELFTEST_ONBEKENDE_EXTENSIE = [
+  ["een adres in een bestand met een onbekende extensie", "iets.dat", "GET https://tracker.example.com/p.gif"],
 ];
 
 const zelftestFouten = [];
-for (const [naam, pad, bron] of ZELFTEST_VUIL) {
+for (const [naam, pad, bron] of [...ZELFTEST_VUIL, ...ZELFTEST_ONBEKENDE_EXTENSIE]) {
   const bezwaren = keurBron(pad, bron);
   if (bezwaren.length === 0) zelftestFouten.push(`de poort ziet ${naam} NIET (${pad})`);
 }
@@ -437,7 +465,7 @@ if (zelftestFouten.length > 0) {
   process.exit(1);
 }
 gedaan.push(
-  `zelftest netwerkcontrole: ${ZELFTEST_VUIL.length} gevallen betrapt, ` +
+  `zelftest netwerkcontrole: ${ZELFTEST_VUIL.length + ZELFTEST_ONBEKENDE_EXTENSIE.length} gevallen betrapt, ` +
     `${ZELFTEST_SCHOON.length} schone bestanden met rust gelaten`,
 );
 

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Tx } from "./model.js";
-import { detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams } from "./subscriptions.js";
+import { detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams, fitMerchantStreams } from "./subscriptions.js";
 
 let n = 0;
 const tx = (cp: string, date: string, amount: number): Tx =>
@@ -516,4 +516,254 @@ test("een toestelaankoop vlak VOOR de incasso pakt niet anders uit dan vlak erna
   expect(ervoor).toHaveLength(1); // was: []
   expect(ervoor[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
   expect(erna[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
+});
+
+
+/* ------------------------------------------------------------------------- *
+ * REEKS H — TWEE MAANDSTROMEN BIJ ÉÉN WINKEL (review 21 aug, 22 aug gebouwd)
+ *
+ * Zijn melding was diagnostisch: "Simyo staat wel als Abonnementen in
+ * Transacties, maar niet als abonnement in Optimalisatie." De categorie matcht
+ * op tekst en werkte dus; de detector keek naar het ritme van de hele winkel.
+ * Abonnement € 11,89 en toestelkrediet € 25,00, allebei maandelijks, een halve
+ * maand uit elkaar. De getallen hieronder zijn gemeten, niet onthouden.
+ * ------------------------------------------------------------------------- */
+
+/** Mediaan van de gaten in een reeks datums — het getal waar de OUDE poort een
+ *  band mee koos. Staat hier zodat het VOOR-getal in de test gemeten is. */
+function mediaanGaten(dates: string[]): { gaps: number[]; mediaan: number } {
+  const d = [...dates].sort();
+  const dagen = (a: string, b: string) => {
+    const [ay, am, ad] = a.split("-").map(Number);
+    const [by, bm, bd] = b.split("-").map(Number);
+    return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+  };
+  const gaps = d.slice(1).map((x, i) => dagen(d[i], x));
+  const g = [...gaps].sort((a, b) => a - b);
+  const m = g.length >> 1;
+  return { gaps, mediaan: g.length % 2 ? g[m] : (g[m - 1] + g[m]) / 2 };
+}
+
+/** `fitMerchantStreams` op één winkel, met de rijen op datum gesorteerd zoals
+ *  de detector het zelf doet. */
+function stromenVan(rijen: Tx[]) {
+  const s = [...rijen].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const r = fitMerchantStreams(s.map((t) => t.date), s.map((t) => Math.round(Math.abs(t.amount) * 100)));
+  return {
+    ...r,
+    perStroom: r.streams.map((f) => ({
+      cadence: f.band.cadenceDays,
+      gaps: f.gaps,
+      occ: f.members.length,
+      bedragCents: Math.round(Math.abs(s[f.members[0]].amount) * 100),
+    })),
+  };
+}
+
+const reeksH = [
+  ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89)),
+  ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Simyo B.V. toestelkrediet", d, -25)),
+];
+
+test("reeks H: op de hoop is de mediaan 15 dagen, per bedrag 31 — en dát is het verschil", () => {
+  const hoop = mediaanGaten(reeksH.map((t) => t.date));
+  expect(hoop.gaps).toEqual([14, 17, 15, 15, 16, 16, 15]);
+  expect(hoop.mediaan).toBe(15); // VOOR: leest als tweewekelijks, en dan valt alles af
+
+  const abo = mediaanGaten(reeksH.filter((t) => t.amount === -11.89).map((t) => t.date));
+  const toestel = mediaanGaten(reeksH.filter((t) => t.amount === -25).map((t) => t.date));
+  expect(abo.gaps).toEqual([31, 30, 32]);
+  expect(toestel.gaps).toEqual([32, 31, 31]);
+  expect(abo.mediaan).toBe(31);     // NA: twee maandritmes, allebei zuiver
+  expect(toestel.mediaan).toBe(31);
+});
+
+test("reeks H gaf NIETS en geeft nu twee abonnementen — € 11,89 en € 25,00 per maand", () => {
+  /* De tweede muur, na de mediaan: sinds de cyclusfitter (21 aug) vindt de
+   * keten de € 11,89-stroom op de hoop wél — vier rijen, gaten 31/30/32 — en
+   * gooit hem daarna alsnog weg, want de vier toestelafschrijvingen zijn vier
+   * zwervers tegen een budget van floor(4 / 3) = 1. Twee verschillende oorzaken,
+   * dezelfde uitkomst: niets. */
+  const gesplitst = stromenVan(reeksH);
+  expect(gesplitst.splitByAmount).toBe(true);
+  expect(gesplitst.strays).toBe(0); // alle acht rijen zitten in een stroom
+  expect(gesplitst.perStroom).toEqual([
+    { cadence: 30, gaps: [31, 30, 32], occ: 4, bedragCents: 1189 },
+    { cadence: 30, gaps: [32, 31, 31], occ: 4, bedragCents: 2500 },
+  ]);
+
+  const subs = detectSubscriptions(reeksH, { asOf: "2026-08-25" });
+  expect(subs.map((x) => [x.monthlyCents, x.occurrences, x.cadenceDays])).toEqual([
+    [2500, 4, 30],
+    [1189, 4, 30],
+  ]);
+  // Twee rijen op het scherm zijn twee sleutels; een gedeelde sleutel is een
+  // renderfout en geen detail.
+  expect(new Set(subs.map((x) => x.key)).size).toBe(2);
+  expect(subs.every((x) => x.merchant === "simyo")).toBe(true);
+  // En geen verzonnen prijsverandering: allebei de stromen staan stil.
+  expect(subs.map((x) => x.changePct)).toEqual([0, 0]);
+});
+
+test("Optimalisatie en de Betaalagenda blijven het eens, ook op reeks H", () => {
+  const subs = detectSubscriptions(reeksH, { asOf: "2026-08-25" });
+  const schema = detectScheduleStreams(reeksH, { asOf: "2026-08-25" });
+  expect(subs).toHaveLength(2);
+  expect(schema).toHaveLength(2);
+  expect(schema.map((x) => x.amountCents)).toEqual(subs.map((x) => x.lastAmountCents));
+  expect(schema.map((x) => x.cadenceDays)).toEqual(subs.map((x) => x.cadenceDays));
+  expect(new Set(schema.map((x) => x.key)).size).toBe(2);
+});
+
+test("twee stromen bij één winkel zijn geen twee diensten — de dubbelmelding blijft weg", () => {
+  /* Zonder deze grendel zou het overzicht "2 × Mobiel abonnement: Simyo +
+   * Simyo — één opzeggen scheelt tot € 300 per jaar" afdrukken. Twee onwaarheden
+   * in één zin: het zijn geen twee diensten, en een toestelkrediet zeg je niet op. */
+  expect(subscriptionOverlaps(detectSubscriptions(reeksH, { asOf: "2026-08-25" }))).toEqual([]);
+
+  // Met een tweede PROVIDER erbij is het wél een dubbeling — en de winkel wordt
+  // vertegenwoordigd door zijn KLEINSTE stroom, want dit blok belooft een
+  // besparing en niemand weet welke van de twee opzegbaar is.
+  const odido = ["2026-05-10", "2026-06-10", "2026-07-10", "2026-08-10"].map((d) => tx("Odido Netherlands", d, -19.5));
+  const [ov] = subscriptionOverlaps(detectSubscriptions([...reeksH, ...odido], { asOf: "2026-08-25" }));
+  expect(ov.subs.map((x) => x.monthlyCents).sort((a, b) => a - b)).toEqual([1189, 1950]);
+  expect(ov.monthlyCents).toBe(1189 + 1950); // niet 2500 + 1950
+});
+
+test("een prijsverhoging wordt niet in tweeën gehakt", () => {
+  // € 11,89 wordt € 12,49. Dat is één abonnement dat duurder werd, geen tweede
+  // stroom: de oude prijs is opgehouden vóór de nieuwe begon.
+  const duurder = [
+    ...["2026-03-02", "2026-04-02", "2026-05-02"].map((d) => tx("SIMYO B.V.", d, -11.89)),
+    ...["2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -12.49)),
+  ];
+  const subs = detectSubscriptions(duurder, { asOf: "2026-08-16" });
+  expect(subs).toHaveLength(1);
+  expect(subs[0]).toMatchObject({ cadenceDays: 30, occurrences: 6, firstAmountCents: 1189, lastAmountCents: 1249 });
+  expect(subs[0].changePct).toBeCloseTo(0.05, 3);
+  expect(subscriptionPriceIncreases(subs)).toHaveLength(1);
+
+  // Netflix 13,99 -> 15,99 loopt niet eens langs de splitsing: de hele winkel
+  // leest al als één maandstroom van vijf, dus er valt niets te winnen.
+  expect(stromenVan(netflix).splitByAmount).toBe(false);
+});
+
+test("een bedrag dat om en om wisselt blijft één maandstroom", () => {
+  /* De gevaarlijke kant van op bedrag groeperen, in de bedrag-dimensie ditmaal:
+   * € 2,50 / € 2,55 om en om zou als twee TWEEMAANDELIJKSE stromen van de halve
+   * prijs kunnen uitkomen — precies de fout die de wisselende schrijfwijzen ooit
+   * maakten. De hele winkel krijgt daarom het eerste woord: de splitsing wordt
+   * alleen gebruikt als ze STRIKT meer afschrijvingen verklaart. */
+  const wisselend = ["2026-03-02", "2026-04-02", "2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"]
+    .map((d, i) => tx("Kruidvat Winkel", d, i % 2 === 0 ? -2.5 : -2.55));
+  const gesplitst = stromenVan(wisselend);
+  expect(gesplitst.splitByAmount).toBe(false);
+  expect(gesplitst.perStroom).toEqual([{ cadence: 30, gaps: [31, 30, 31, 30, 32], occ: 6, bedragCents: 250 }]);
+  expect(detectSubscriptions(wisselend, { asOf: "2026-08-16" })).toMatchObject([{ cadenceDays: 30, occurrences: 6 }]);
+});
+
+test("de drukke winkel blijft geweigerd, en dit zijn de aantallen", () => {
+  /* De bestaande test hierboven ("uit een drukke winkel wordt geen abonnement
+   * gesneden") staat er nog en is groen. Deze zet de rekensom eronder, want op
+   * bedrag groeperen maakt het gevaar erger, niet kleiner: de wekelijkse
+   * bedragen herhalen zich elke vijf bezoeken, dus de splitsing levert netjes
+   * drie schone maandgroepen op — € 30, € 31 en de drie van € 42,50. Het budget
+   * wordt daarom over de HELE winkel gelezen en niet per bedrag. */
+  const wekelijks: Tx[] = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(2026, 4, 2 + i * 7)).toISOString().slice(0, 10);
+    wekelijks.push(tx("Albert Heijn 1234", d, -(30 + (i % 5))));
+  }
+  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) => tx("Albert Heijn 1234", d, -42.5));
+  const alles = [...wekelijks, ...maandelijks];
+
+  const gesplitst = stromenVan(alles);
+  expect(gesplitst.splitByAmount).toBe(true);
+  expect(gesplitst.strays).toBe(6);          // 15 rijen, 9 geclaimd
+  expect(alles.length - gesplitst.strays).toBe(9);
+  expect(Math.floor(9 / 3)).toBe(3);         // budget 3, en 6 > 3
+  expect(gesplitst.streams).toEqual([]);     // dus de hele winkel valt af
+  expect(detectSubscriptions(alles, { asOf: "2026-07-25" })).toEqual([]);
+
+  // Dezelfde drie rijen alleen zijn wél een abonnement — dat verschil is het punt.
+  expect(detectSubscriptions(maandelijks, { asOf: "2026-07-25" })).toHaveLength(1);
+});
+
+test("twee stromen met HETZELFDE bedrag blijven onzichtbaar — een misser, geen leugen", () => {
+  /* De grens van deze reparatie, uitgesproken in plaats van weggelaten. Twee
+   * sportschoolpassen van allebei € 24,99 zitten in één bedrag-groep en lezen
+   * dus weer als één drukke winkel. Ze uit elkaar trekken zou betekenen dat er
+   * parallelle ketens uit één stapel identieke afschrijvingen gepeld worden, en
+   * dan pelt twintig wekelijkse koffie van € 5,00 uiteen in vier
+   * "maandabonnementen". Een misser kost een inzicht; dat zou de tab kosten. */
+  const passen = [
+    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("Basic-Fit", d, -24.99)),
+    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Basic-Fit", d, -24.99)),
+  ];
+  const gesplitst = stromenVan(passen);
+  expect(gesplitst.splitByAmount).toBe(false); // één bedrag = één groep = de hele hoop
+  expect(gesplitst.strays).toBe(8);
+  expect(detectSubscriptions(passen, { asOf: "2026-08-25" })).toEqual([]);
+});
+
+test("een prijsverhoging binnen reeks H blijft één stroom die duurder werd", () => {
+  // De twee reparaties tegelijk: op bedrag splitsen én de prijsstap weer aan
+  // elkaar plakken. € 11,89 x2 wordt € 12,49 x2, en het toestelkrediet loopt er
+  // dwars doorheen.
+  const rijen = [
+    ...["2026-05-02", "2026-06-02"].map((d) => tx("SIMYO B.V.", d, -11.89)),
+    ...["2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -12.49)),
+    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Simyo B.V. toestelkrediet", d, -25)),
+  ];
+  const subs = detectSubscriptions(rijen, { asOf: "2026-08-25" });
+  expect(subs).toHaveLength(2);
+  const abo = subs.find((x) => x.lastAmountCents === 1249)!;
+  expect(abo).toMatchObject({ firstAmountCents: 1189, lastAmountCents: 1249, occurrences: 4, cadenceDays: 30 });
+  expect(abo.changePct).toBeCloseTo(0.05, 3);
+  expect(subs.find((x) => x.lastAmountCents === 2500)).toMatchObject({ occurrences: 4, changePct: 0 });
+});
+
+test("losse aankopen bij één winkel ketenen niet aan elkaar tot een stroom", () => {
+  /* De prijs van het samenvoegen van prijsstappen, gemeten voordat hij hem kon
+   * melden: vijf losse aankopen van € 1,50 / € 2,50 / € 3,50 / € 4,50 / € 5,50
+   * zijn stuk voor stuk één rij, ze overlappen elkaar niet in tijd, en elke stap
+   * blijft onder de 0,5. Met alleen die grens werden er vier aan elkaar geplakt
+   * en sneed de fitter er een "maandstroom" van drie uit. Die stroom werd verderop
+   * geweigerd (geen bedrag komt twee keer voor), maar hij had toen al 3 rijen als
+   * geclaimd geteld — en het zwerversbudget rekent met dat getal. Een groep van
+   * één mag daarom alleen worden aangevuld met iets binnen 0,1. */
+  const echt = [
+    ...["2026-05-03", "2026-06-03", "2026-07-03", "2026-08-03"].map((d) => tx("APPLE.COM/BILL", d, -0.99)),
+    ...["2026-05-11", "2026-06-11", "2026-07-11", "2026-08-11"].map((d) => tx("APPLE.COM/BILL", d, -10.99)),
+    ...["2026-05-20", "2026-06-20", "2026-07-20", "2026-08-20"].map((d) => tx("APPLE.COM/BILL", d, -9.99)),
+  ];
+  // Drie abonnementen onder één tegenpartij — dat is de winst van op bedrag
+  // groeperen buiten Simyo om; op de hoop gaven deze twaalf rijen niets.
+  const alleenAbos = detectSubscriptions(echt, { asOf: "2026-08-25" });
+  expect(alleenAbos.map((x) => x.monthlyCents)).toEqual([1099, 999, 99]);
+  expect(stromenVan(echt).strays).toBe(0);
+
+  const losse = ["2026-05-05", "2026-05-25", "2026-06-14", "2026-07-08", "2026-08-01"]
+    .map((d, i) => tx("APPLE.COM/BILL", d, -(1.5 + i)));
+  const gemengd = stromenVan([...echt, ...losse]);
+  expect(gemengd.strays).toBe(5);            // 17 rijen, 12 geclaimd
+  expect(Math.floor(12 / 3)).toBe(4);        // budget 4, en 5 > 4
+  expect(gemengd.streams).toEqual([]);       // de winkel valt in zijn geheel af
+  expect(detectSubscriptions([...echt, ...losse], { asOf: "2026-08-25" })).toEqual([]);
+});
+
+test("de uitkomst hangt niet van de volgorde van de rijen af", () => {
+  // Pure functie, dus dit hoort te gelden — en het is de goedkoopste manier om
+  // te zien of het groeperen per bedrag ergens op invoervolgorde leunt.
+  const basis = JSON.stringify(detectSubscriptions(reeksH, { asOf: "2026-08-25" }));
+  let zaad = 7;
+  for (let k = 0; k < 25; k++) {
+    const r = [...reeksH];
+    for (let i = r.length - 1; i > 0; i--) {
+      zaad = (zaad * 1103515245 + 12345) % 2147483648;
+      const j = zaad % (i + 1);
+      [r[i], r[j]] = [r[j], r[i]];
+    }
+    expect(JSON.stringify(detectSubscriptions(r, { asOf: "2026-08-25" }))).toBe(basis);
+  }
 });

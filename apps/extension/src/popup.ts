@@ -14,21 +14,26 @@
  * op twee manieren oplossen is hoe de twee schermen andere antwoorden gaan
  * geven op dezelfde invoer. */
 
-import { parseAmountToCents } from "./read.js";
+import { parseAmountToCents, reasonTextHandmatig } from "./read.js";
 import { rankCheckout } from "./rank.js";
-import { panelRows, POPUP_CAPS, footer } from "./panel.js";
+import { panelRows, POPUP_CAPS, footer, puntenBlok } from "./panel.js";
 import { headline } from "./lines.js";
 import { euro } from "./money.js";
-import { getHeldIds } from "./store.js";
-import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
+import { getHeldIds, getPointsBalances } from "./store.js";
+import { pointsCoverage } from "./points.js";
+import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
+import { POINTS_RATES } from "./generated/points-rates.generated.js";
 
 const GROEPKOP: Record<PaneelGroep, string> = {
   mijn: "Jouw kaarten",
   openen: "Zou je kunnen openen",
   achteruit: "Kost na kaartkosten meer dan het oplevert",
   "onbekende-kosten": "Kaartkosten onbekend",
+  "geen-euro-uitkomst": "Opbrengst niet in euro's",
   onbekend: "Hier kunnen we niets over zeggen",
 };
+
+const PUNTENKOP = "Punten die je hier hebt liggen";
 
 function el(tag: string, klasse: string, tekst?: string): HTMLElement {
   const e = document.createElement(tag);
@@ -66,19 +71,15 @@ async function bereken(): Promise<void> {
        * er "het bedrag op de pagina is niet eenduidig te lezen — vul het bedrag
        * zelf in" onder een veld waar hij zojuist iets in tikte. Dat noemt een
        * oorzaak die er niet is en geeft een advies dat hij al heeft opgevolgd.
-       * Gemeten in de browser met invoer "1.234"; het stond er echt. */
+       * Gemeten in de browser met invoer "1.234"; het stond er echt.
+       *
+       * WAT HIER EERST STOND WAS ÉÉN HARDGECODEERDE TEKST, en die was bij vier
+       * van de vijf oorzaken onwaar: "vanaf 39,99", "39," en "-5,00" kregen
+       * allemaal het verhaal over duizendtallen. Nu komt de tekst per oorzaak
+       * uit read.ts, waar hij naast de weigering staat die hem veroorzaakt. */
       const kaart = el("div", "kaart");
-      kaart.appendChild(el("div", "kop fout", `"${ruw}" is niet eenduidig te lezen.`));
-      kaart.appendChild(
-        el(
-          "div",
-          "noot",
-          "Eén punt of komma met drie cijfers erachter kan twee dingen betekenen: " +
-            "\"1.234\" is € 1,23 volgens schema.org en € 1.234 volgens de Nederlandse gewoonte. " +
-            "Dat scheelt duizend keer, dus we kiezen niet. Schrijf het voluit met centen — " +
-            "1234,00 of 1.234,00 — dan is er niets te raden.",
-        ),
-      );
+      kaart.appendChild(el("div", "kop fout", `"${ruw}" kan LaVega niet als bedrag lezen.`));
+      kaart.appendChild(el("div", "noot", reasonTextHandmatig(p.reason)));
       uitkomst.appendChild(kaart);
       return;
     }
@@ -86,17 +87,51 @@ async function bereken(): Promise<void> {
   }
 
   const heldIds = await getHeldIds();
+  /* De enige klokaflezing in dit scherm, en hij wordt door twee pure functies
+   * gedeeld zodat de kaartkant en de puntenkant niet op een andere dag kunnen
+   * uitkomen. */
+  const asOf = new Date().toISOString().slice(0, 10);
+  const punten = pointsCoverage({
+    balances: await getPointsBalances(),
+    rates: POINTS_RATES,
+    /* Alleen bij een euro-aankoop is `bedragCenten` een euro-bedrag waar een
+     * puntenkoers op losgelaten mag worden. Staat de munt op USD, dan is het
+     * ingevulde bedrag naar eigen zeggen "ongeveer wat er van je rekening af
+     * gaat" — dat is euro's, maar de koersopslag zit er nog niet in en het
+     * percentage zou dan net te hoog uitvallen. Liever geen percentage. */
+    amountCents: munt === "EUR" ? bedragCenten : null,
+    asOf,
+  });
   const ranking = rankCheckout({
     cards: CHECKOUT_CARDS,
     heldIds,
     currency: munt,
     amountCents: bedragCenten,
-    /* De enige klokaflezing in dit scherm. rank.ts zelf kent geen tijd. */
-    asOf: new Date().toISOString().slice(0, 10),
+    asOf,
   });
 
   const kaart = el("div", "kaart");
   if (bedragCenten !== null) kaart.appendChild(el("div", "bedrag", euro(bedragCenten)));
+
+  /* Punten eerst, net als in het paneel. Dit is wat hij al heeft liggen; de
+   * kaartrangschikking eronder gaat over wat hij zou kunnen doen. */
+  const blok = puntenBlok(punten, munt === "EUR" ? bedragCenten : null, munt);
+  if (blok.leeg) {
+    kaart.appendChild(el("div", "groep", PUNTENKOP));
+    kaart.appendChild(el("div", "noot", blok.leeg));
+  } else if (blok.regels.length > 0) {
+    kaart.appendChild(el("div", "groep", PUNTENKOP));
+    for (const r of blok.regels) {
+      const rij = el("div", "rij");
+      rij.appendChild(el("div", "titel", r.titel));
+      rij.appendChild(el("div", "regel", r.regel));
+      if (r.bron) rij.appendChild(el("div", "bron", r.bron));
+      kaart.appendChild(rij);
+    }
+    if (blok.voetnoot) kaart.appendChild(el("div", "bron", blok.voetnoot));
+  }
+
+  kaart.appendChild(el("div", "groep", "Jouw kaarten aan deze kassa"));
   kaart.appendChild(el("div", "kop", headline(ranking)));
 
   const regels = panelRows(ranking, POPUP_CAPS);
@@ -113,7 +148,7 @@ async function bereken(): Promise<void> {
     kaart.appendChild(rij);
   }
 
-  kaart.appendChild(el("div", "noot groep", footer(CATALOG_GENERATED_AT)));
+  kaart.appendChild(el("div", "noot groep", footer(CHECKOUT_CARDS)));
   uitkomst.appendChild(kaart);
 }
 

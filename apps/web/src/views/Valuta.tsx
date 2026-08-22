@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Account, CatalogueEntryLike, FxRate, FxRouteDelta, FxRouteOption, LearnedFact } from "@lavega/core";
 import {
   FX_RATE_FALLBACK,
@@ -84,10 +84,181 @@ import "../styles/views.css";
  * two currencies are three different answers, none of which may end up as a 0%
  * route in the ranking. The globe states the answer; `to` only moves when there
  * is a rate to move it to.
+ *
+ * 4. MEER KOERSEN, EN ZE ZIJN NIET ALLEMAAL EVENVEEL WAARD (22 augustus). Zijn
+ *    woorden: "ja meer koersen hoe beter." De lijst gaat van 29 naar 166 doordat
+ *    er een tweede laag onder de ECB-lijst ligt (apps/server/src/fx.ts). Dat is
+ *    geen kwestie van meer regels in hetzelfde <select>: een aggregator die
+ *    koersen samenvoegt uit bronnen die hij niet noemt is iets anders dan een
+ *    referentiekoers van de ECB, en twee koersen die er hetzelfde uitzien
+ *    zouden precies de vermenging zijn die de catalogus overal vermijdt. Wat dit
+ *    bestand daaraan doet, op vier plekken:
+ *
+ *      de kiezer      → twee <optgroup>'s, ECB bovenaan, de dagkoersen eronder
+ *      onder het bedrag → waar de koers van DIT paar vandaan komt, met datum
+ *      vóór de plooi  → de verplichte bronvermelding van de tweede laag
+ *      de bronregel   → beide lagen apart, met hun eigen datum en aantal
+ *
+ *    Wat er GEBEURT als de tweede laag wegvalt is een eis en geen bijkomstigheid:
+ *    die valuta's zijn dan weer "geen koers". Er blijft geen oude waarde staan
+ *    die zich als vers voordoet — de server bewaart die laag niet, en dit scherm
+ *    toont alleen wat er binnenkomt.
+ *
+ *    HET GEVOLG VOOR DE BOL, nagemeten en niet aangenomen: `supported` is de live
+ *    koerslijst, dus het aantal landen zonder koers gaat van 140 naar 1 (alleen
+ *    Noord-Korea, KPW). Alle vijf de antwoordsoorten blijven bereikbaar en de
+ *    legenda blijft waar — hij praat over of LaVega een koers HEEFT en niet over
+ *    wie hem publiceerde. Zie de tests onderaan Globe.test.tsx.
  */
 
 const CATALOGUE_FX: readonly CatalogueEntryLike[] =
   (catalogue as { entries?: CatalogueEntryLike[] }).entries ?? [];
+
+/* ───────────── DE HERKOMST VAN EEN KOERS ─────────────
+ *
+ * De koerslijst heeft sinds 22 augustus TWEE LAGEN (zie apps/server/src/fx.ts).
+ * De ECB publiceert referentiekoersen: één instelling, één vast tijdstip, een
+ * methode die je kunt nalezen — 29 valuta. Daaronder ligt een aggregator die
+ * koersen samenvoegt uit bronnen die hij niet noemt en één keer per dag
+ * ververst — daarmee komt de lijst op 166. Allebei bruikbaar, niet hetzelfde
+ * waard, en dus mogen ze niet als één lijst op het scherm staan: dan leest de
+ * koers van Marokko als even hard als die van de dollar. Elke koers draagt hier
+ * daarom zichtbaar zijn laag en zijn datum.
+ *
+ * De server doet het samenvoegen (ECB wint waar hij bestaat) en stuurt per
+ * valutacode mee welke laag hem leverde. Dit bestand LABELT alleen; het rekent
+ * niets om en het vult niets aan. */
+
+type FxOrigin = "ecb" | "aggregator";
+type FxLayerStatus = "live" | "geheugen" | "bundel";
+type FxLayer = { status: FxLayerStatus; date: string; count: number };
+type FxAggregatorLayer = FxLayer & { provider: string; nextUpdate: string | null };
+type FxProvenance = {
+  /** Valutacode -> laag. Dekt elke sleutel in `rates`, anders wordt hij geweigerd. */
+  origins: Record<string, FxOrigin>;
+  ecb: FxLayer | null;
+  aggregator: FxAggregatorLayer | null;
+};
+
+/** DE VERPLICHTE BRONVERMELDING, hier en niet op de server.
+ *
+ *  ExchangeRate-API staat het gebruik van zijn open-access-koersen toe — ook
+ *  commercieel — maar alleen MET vermelding. Nagekeken op 22 augustus 2026 op
+ *  exchangerate-api.com/docs/free: "We require attribution on the pages you're
+ *  using these rates with", met de linktekst hieronder. Let op de valstrik: de
+ *  algemene voorwaardenpagina (/terms) noemt die plicht NIET — daar staat alleen
+ *  dat gratis en betaalde accounts hetzelfde mogen en dat de data niet
+ *  herverspreid mag worden. Wie alleen /terms leest concludeert ten onrechte dat
+ *  vermelding niet hoeft.
+ *
+ *  Deze tabel staat in de UI en niet in de payload, zodat de vermelding niet
+ *  afhangt van wat de server toevallig meestuurt. Kent dit bestand de aanbieder
+ *  niet, dan worden zijn koersen NIET gebruikt — zie `rate` in de component, dat
+ *  ze er dan uit filtert. Dat is de enige manier om de plicht structureel te
+ *  maken in plaats van een belofte: een vermelding die je kunt vergeten is geen
+ *  vermelding. */
+const AGGREGATOR_CREDIT: Record<string, { naam: string; url: string; linktekst: string; voorwaarden: string }> = {
+  erapi: {
+    naam: "ExchangeRate-API",
+    url: "https://www.exchangerate-api.com",
+    linktekst: "Rates By Exchange Rate API",
+    voorwaarden: "https://www.exchangerate-api.com/terms",
+  },
+};
+
+function parseLayer(raw: unknown): FxLayer | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (o.status !== "live" && o.status !== "geheugen" && o.status !== "bundel") return null;
+  if (typeof o.date !== "string" || o.date === "") return null;
+  if (typeof o.count !== "number" || !Number.isFinite(o.count) || o.count < 0) return null;
+  return { status: o.status, date: o.date, count: o.count };
+}
+
+function parseAggregatorLayer(raw: unknown): FxAggregatorLayer | null {
+  const base = parseLayer(raw);
+  if (!base) return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.provider !== "string" || o.provider === "") return null;
+  // Geen opgave van de volgende ronde is null en niet "morgen". Onbekend is geen
+  // waarde die je zelf mag invullen.
+  const nextUpdate = typeof o.nextUpdate === "string" && o.nextUpdate !== "" ? o.nextUpdate : null;
+  return { ...base, provider: o.provider, nextUpdate };
+}
+
+/** De herkomstvelden uit het serverantwoord, of null als ze er niet zijn of niet
+ *  kloppen. Null betekent hier NIET "alles komt van de aggregator" en ook niet
+ *  "alles komt van de ECB" — het betekent dat dit scherm de herkomst niet weet,
+ *  en dan wordt er ook niets over beweerd.
+ *
+ *  Strikt met opzet: één koers zonder herkomst is genoeg om de hele labeling te
+ *  weigeren. Half labelen zou de ergste uitkomst zijn — een lijst waarin sommige
+ *  koersen "ECB" heten en de rest niets, waar een lezer uit afleidt dat de rest
+ *  ook ECB is. */
+function parseFxProvenance(raw: unknown, rate: FxRate): FxProvenance | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (!o.origins || typeof o.origins !== "object") return null;
+  if (!o.layers || typeof o.layers !== "object") return null;
+
+  const origins: Record<string, FxOrigin> = {};
+  for (const [code, v] of Object.entries(o.origins as Record<string, unknown>)) {
+    if (v !== "ecb" && v !== "aggregator") return null;
+    origins[code] = v;
+  }
+  for (const code of Object.keys(rate.rates)) if (!(code in origins)) return null;
+
+  const l = o.layers as Record<string, unknown>;
+  const ecb = parseLayer(l.ecb);
+  const aggregator = parseAggregatorLayer(l.aggregator);
+  // Een laag die er WEL staat maar niet te lezen is, is een kapot antwoord — niet
+  // een afwezige laag. Die twee uit elkaar houden is het hele punt van dit blok.
+  if (l.ecb != null && !ecb) return null;
+  if (l.aggregator != null && !aggregator) return null;
+  return { origins, ecb, aggregator };
+}
+
+/** Waar de koers van dit ENE valutapaar vandaan komt.
+ *
+ *  Dit is de vraag die het scherm echt moet beantwoorden, en hij valt niet samen
+ *  met "waar komt de lijst vandaan". Een omrekening loopt via de euro, dus
+ *  USD → MAD gebruikt TWEE koersen: de dollar van de ECB en de dirham van de
+ *  aggregator. Die kruising is niet zomaar "een ECB-koers" en niet zomaar "een
+ *  dagkoers": hij is zo hard als zijn zwakste been, en het scherm noemt allebei
+ *  de benen. */
+type PairOrigin =
+  | { kind: "same" }
+  | { kind: "unknown" }
+  | { kind: "ecb" }
+  | { kind: "aggregator" }
+  | { kind: "mixed"; ecbLeg: string; aggLeg: string };
+
+function pairOrigin(from: string, to: string, base: string, prov: FxProvenance | null): PairOrigin {
+  if (from === to) return { kind: "same" };
+  if (!prov) return { kind: "unknown" };
+  // De base is de eenheid en heeft geen koers; alleen de andere benen tellen.
+  const legs = [from, to].filter((c) => c !== base);
+  const kinds = legs.map((c) => prov.origins[c]);
+  if (kinds.some((k) => k === undefined)) return { kind: "unknown" };
+  if (kinds.every((k) => k === "ecb")) return { kind: "ecb" };
+  if (kinds.every((k) => k === "aggregator")) return { kind: "aggregator" };
+  return {
+    kind: "mixed",
+    ecbLeg: legs[kinds.indexOf("ecb")],
+    aggLeg: legs[kinds.indexOf("aggregator")],
+  };
+}
+
+/** Hoe vers de ECB-laag is, in woorden. Drie standen en niet twee: "geheugen" is
+ *  een ECHTE ophaal van de server waarvan de laatste poging mislukte, en dat is
+ *  iets anders dan de koers van zojuist én iets anders dan de meegebundelde
+ *  momentopname. Ze samenvoegen tot "live" was precies de bewering die deze kop
+ *  in juli onwaar maakte. */
+function ecbVersheid(layer: FxLayer): string {
+  if (layer.status === "live") return `ECB-referentiekoers van ${layer.date}`;
+  if (layer.status === "geheugen") return `ECB-referentiekoers van ${layer.date}, de laatste die de server binnenkreeg`;
+  return `de meegebundelde ECB-referentiekoers van ${layer.date}`;
+}
 
 /** How many alternatives to show before asking. His own banks are ALWAYS shown,
  *  however far down the ranking they sit — a bank he holds may never be hidden
@@ -148,6 +319,57 @@ function deltaWords(delta: FxRouteDelta): string | null {
     return delta.cents === 0 ? "even duur" : `${money} ${delta.cents < 0 ? "minder" : "meer"} in totaal`;
   }
   return delta.cents === 0 ? "dezelfde opslag" : `${money} ${delta.cents < 0 ? "minder" : "meer"} aan opslag`;
+}
+
+type CcyGroup = { key: string; label: string | null; codes: string[] };
+
+/** De valutakiezer, met de twee lagen als APARTE GROEPEN in plaats van als één
+ *  alfabetische rij.
+ *
+ *  Dit is de plek waar de zwakkere laag zichtbaar zwakker gelabeld moet zijn: je
+ *  kiest hier je valuta, dus hier hoort te staan wat voor koers je daarmee
+ *  binnenhaalt. Het alternatief dat we niet genomen hebben was een achtervoegsel
+ *  per regel ("MAD — dagkoers"); dat zet hetzelfde woord 137 keer op het scherm
+ *  terwijl <optgroup> het één keer zegt en de browser het vastzet tijdens het
+ *  scrollen.
+ *
+ *  De base (EUR) staat er LOS boven, zonder groep. Hij hoort bij geen van beide
+ *  lagen: hij is de eenheid waarin de rest genoteerd staat, geen koers. Hem in de
+ *  ECB-groep zetten zou hem een herkomst geven die hij niet heeft. */
+function CcySelect({
+  label,
+  value,
+  onChange,
+  base,
+  groups,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  base: string;
+  groups: readonly CcyGroup[];
+}) {
+  const option = (c: string) => (
+    <option key={c} value={c}>
+      {c}
+    </option>
+  );
+  return (
+    <select className="xfer-ccy" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      {option(base)}
+      {groups.map((g) =>
+        g.label === null ? (
+          // Zonder bekende herkomst geen groepskop: een kop verzinnen zou de lijst
+          // een bron toedichten die dit scherm niet kent.
+          <Fragment key={g.key}>{g.codes.map(option)}</Fragment>
+        ) : (
+          <optgroup key={g.key} label={g.label}>
+            {g.codes.map(option)}
+          </optgroup>
+        ),
+      )}
+    </select>
+  );
 }
 
 /** One bank, once. Selectable, because the whole point is that he can overrule
@@ -217,7 +439,8 @@ function RouteRow({
 }
 
 export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }: ValutaProps) {
-  const [rate, setRate] = useState<FxRate>(FX_RATE_FALLBACK);
+  const [served, setServed] = useState<FxRate>(FX_RATE_FALLBACK);
+  const [prov, setProv] = useState<FxProvenance | null>(null);
   const [source, setSource] = useState<"live" | "offline">("offline");
   const [amount, setAmount] = useState("1000");
   const [from, setFrom] = useState("EUR");
@@ -238,7 +461,11 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
       .then((j) => {
         const parsed = parseFxRatePayload(j);
         if (ok && parsed) {
-          setRate(parsed);
+          setServed(parsed);
+          // De herkomst komt uit hetzelfde antwoord en wordt tegen dezelfde
+          // koerslijst gecontroleerd. Lukt dat niet, dan blijft `prov` null en
+          // beweert het scherm niets over herkomst — het verzint er geen.
+          setProv(parseFxProvenance(j, parsed));
           setSource("live");
         }
       })
@@ -246,10 +473,55 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
     return () => { ok = false; };
   }, []);
 
+  /** De aanbieder van de tweede laag, zoals dit bestand hem kent. Null als er geen
+   *  tweede laag is — of als de server een aanbieder noemt die hier niet in
+   *  `AGGREGATOR_CREDIT` staat. */
+  const credit = prov?.aggregator ? AGGREGATOR_CREDIT[prov.aggregator.provider] ?? null : null;
+
+  /** GEEN VERMELDING, GEEN GEBRUIK.
+   *
+   *  De tweede laag mag alleen gebruikt worden met een zichtbare bronvermelding.
+   *  Kent dit bestand de aanbieder niet, dan kan het die vermelding niet zetten,
+   *  en dan gaan zijn koersen eruit — de tab valt terug op de ECB-lijst en de
+   *  betrokken valuta's zijn weer "geen koers". Dat is streng, en dat is de
+   *  bedoeling: de alternatieve uitkomst is een scherm dat koersen toont die het
+   *  niet mag tonen, en dat merkt niemand tot het te laat is.
+   *
+   *  In de praktijk gebeurt dit alleen bij een server die een nieuwe bron in
+   *  gebruik heeft genomen zonder hem hier aan te melden. Het scherm doet het dan
+   *  nog, met minder valuta — en de bronregel noemt die oorzaak met de naam van de
+   *  onbekende aanbieder erbij, zodat het niet leest als een bron die wegviel. */
+  const rate = useMemo<FxRate>(() => {
+    if (!prov?.aggregator || credit) return served;
+    const rates: Record<string, number> = {};
+    for (const [code, v] of Object.entries(served.rates)) {
+      if (prov.origins[code] !== "aggregator") rates[code] = v;
+    }
+    return { ...served, rates };
+  }, [served, prov, credit]);
+
   const currencies = useMemo(
     () => [rate.base, ...Object.keys(rate.rates)].filter((v, i, a) => a.indexOf(v) === i).sort(),
     [rate],
   );
+
+  /** De valutalijst opgesplitst naar laag, in de volgorde waarin ze op het scherm
+   *  horen: eerst wat een centrale bank publiceert, dan wat een aggregator
+   *  samenstelt. Zonder herkomst één naamloze groep — dan staat de lijst er net zo
+   *  bij als voor 22 augustus. */
+  const ccyGroups = useMemo<CcyGroup[]>(() => {
+    const rest = currencies.filter((c) => c !== rate.base);
+    if (!prov) return [{ key: "onbekend", label: null, codes: rest }];
+    const of = (o: FxOrigin) => rest.filter((c) => prov.origins[c] === o);
+    const out: CcyGroup[] = [];
+    const ecb = of("ecb");
+    const agg = of("aggregator");
+    if (ecb.length > 0) out.push({ key: "ecb", label: `ECB-referentiekoers (${ecb.length})`, codes: ecb });
+    if (agg.length > 0 && credit) {
+      out.push({ key: "aggregator", label: `Dagkoers via ${credit.naam} (${agg.length})`, codes: agg });
+    }
+    return out;
+  }, [currencies, rate.base, prov, credit]);
 
   const byKey = useMemo(() => new Map(accounts.map((a) => [a.key, a])), [accounts]);
   const fromAcc = fromKey ? byKey.get(fromKey) ?? null : null;
@@ -264,6 +536,58 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
       return null;
     }
   }, [from, to, rate]);
+
+  /** Waar de koers van DIT paar vandaan komt. Niet hetzelfde als waar de lijst
+   *  vandaan komt: een omrekening loopt via de euro en kan dus twee lagen
+   *  aanraken. */
+  const pair = useMemo(() => pairOrigin(from, to, rate.base, prov), [from, to, rate.base, prov]);
+
+  /** De regel die de koers onder het bedrag verantwoordt. Null waar er niets te
+   *  verantwoorden valt: bij gelijke valuta is er geen koers, en zonder bekende
+   *  herkomst wordt er niets beweerd (regel 2 — een afwezigheid draagt geen
+   *  conclusie). */
+  const koersHerkomst = ((): string | null => {
+    if (pair.kind === "same" || pair.kind === "unknown") return null;
+    const agg = prov?.aggregator;
+    const ecb = prov?.ecb;
+    const aggZin = agg && credit ? `de dagkoerslijst van ${credit.naam} van ${agg.date}` : null;
+    const ecbZin = ecb ? ecbVersheid(ecb) : null;
+    if (pair.kind === "ecb") return ecbZin ? `Gerekend met ${ecbZin}.` : null;
+    if (pair.kind === "aggregator") {
+      return aggZin
+        ? `Gerekend met ${aggZin}. Dat is een samengestelde dagkoers en geen referentiekoers van een centrale bank.`
+        : null;
+    }
+    // Gemengd: allebei de benen noemen. Eén van de twee weglaten zou de kruising
+    // sterker of zwakker laten lijken dan hij is, en dat is precies de vermenging
+    // die de twee lagen moeten voorkomen.
+    return ecbZin && aggZin
+      ? `Gekruist via de euro: ${pair.ecbLeg} komt uit ${ecbZin}, ${pair.aggLeg} uit ${aggZin}. De uitkomst is zo hard als dat tweede been.`
+      : null;
+  })();
+
+  /** Het opschrift boven het scherm. Het mag niet meer "ECB-middenkoers" zeggen
+   *  zodra er koersen bij staan die niet van de ECB komen — dat was tot 22
+   *  augustus de eerste regel van het scherm, en met 137 dagkoersen erbij zou hij
+   *  onwaar zijn geworden voor het grootste deel van de lijst. */
+  const koersKop = ((): string => {
+    if (source !== "live") return `ECB-middenkoers van ${rate.date} uit de app`;
+    if (!prov) return "live ECB-middenkoers";
+    const stukken: string[] = [];
+    if (prov.ecb) {
+      // De bundel krijgt zijn eigen woord in de kop. "ECB-referentiekoers" is voor
+      // die stand waar, maar het verzwijgt dat hij uit de app komt en weken oud
+      // kan zijn — en dat is nou net wat een kop wél moet dragen.
+      const woord = prov.ecb.status === "bundel" ? "meegebundelde ECB-koersen" : "ECB-referentiekoersen";
+      stukken.push(`${prov.ecb.count} ${woord} van ${prov.ecb.date}`);
+    }
+    if (prov.aggregator && credit) {
+      stukken.push(`${prov.aggregator.count} dagkoersen via ${credit.naam} van ${prov.aggregator.date}`);
+    }
+    // Geen enkele laag is geen lege kop maar een mededeling: dan staat er geen
+    // koers in dit scherm, en dat hoort er te staan in plaats van niets.
+    return stukken.length > 0 ? stukken.join(" en ") : "geen koerslijst in dit scherm";
+  })();
 
   /** HET BEDRAG IN EURO'S, want daarin staan de prijzen van de rekeningen.
    *
@@ -363,10 +687,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             als vaste tekst, en dat is de eerste regel van het scherm die onwaar is
             zodra de aanroep niet aankomt: dan rekent de tab met de meegebundelde
             momentopname van begin augustus terwijl er "live" boven staat. */}
-        <span className="eyebrow">
-          {source === "live" ? "live ECB-middenkoers" : `ECB-middenkoers van ${rate.date} uit de app`} · koersopslag
-          per bank uit de catalogus
-        </span>
+        <span className="eyebrow">{koersKop} · koersopslag per bank uit de catalogus</span>
       </div>
 
       {/* DE INDELING VAN 21 AUGUSTUS. Zijn woorden: rekenmachine links, bol rechts,
@@ -412,9 +733,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   aria-label="Bedrag"
                   onChange={(e) => setAmount(e.target.value)}
                 />
-                <select className="xfer-ccy" aria-label="Van valuta" value={from} onChange={(e) => setFrom(e.target.value)}>
-                  {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <CcySelect label="Van valuta" value={from} onChange={setFrom} base={rate.base} groups={ccyGroups} />
               </div>
               <div className="xfer-foot">
                 <span>Beschikbaar</span>
@@ -440,9 +759,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                 <span className={`xfer-out${netReceived === null ? " xfer-out-unknown" : ""}`} data-testid="arrives">
                   {netReceived === null ? "onbekend" : fmt(netReceived, to)}
                 </span>
-                <select className="xfer-ccy" aria-label="Naar valuta" value={to} onChange={(e) => setTo(e.target.value)}>
-                  {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <CcySelect label="Naar valuta" value={to} onChange={setTo} base={rate.base} groups={ccyGroups} />
               </div>
               <div className="xfer-foot">
                 <span>Komt aan na kosten · beschikbaar</span>
@@ -484,6 +801,35 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               </>
             )}
           </p>
+
+          {/* WAAR DEZE KOERS VANDAAN KOMT, bij het bedrag en niet in de bronregel
+              onderaan. De bronregel vertelt waar de LIJST vandaan komt; dit
+              vertelt waar de koers vandaan komt waarmee het bedrag hierboven
+              gerekend is, en dat is sinds de tweede laag niet meer hetzelfde.
+              Zonder deze regel staan de dollar en de dirham als even harde
+              getallen naast elkaar, en dat is precies het verschil dat de
+              catalogus overal bewaakt. */}
+          {koersHerkomst && (
+            <p className="cell-sub" data-testid="koers-herkomst">
+              {koersHerkomst}
+            </p>
+          )}
+
+          {/* DE VERPLICHTE BRONVERMELDING. Hij staat hier — vóór de plooi, altijd
+              zichtbaar zodra de tweede laag in de lijst zit — en niet in de
+              opgevouwen bronregel: een vermelding achter een dichte <details> is
+              een vermelding die je niet ziet, en de voorwaarden vragen om een
+              zichtbare. Zie AGGREGATOR_CREDIT voor de precieze eis en de datum
+              waarop hij nagekeken is. */}
+          {credit && (
+            <p className="cell-sub" data-testid="fx-bronvermelding">
+              Koersen buiten de ECB-lijst:{" "}
+              <a href={credit.url} target="_blank" rel="noreferrer">
+                {credit.linktekst}
+              </a>
+              .
+            </p>
+          )}
 
           {chosen && chosen.pct !== null && !sameCurrency && (
             <>
@@ -653,13 +999,78 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                 omdat de overgang dan in een microtask valt en elke test die dit
                 scherm monteert — twee bestanden, ruim veertig tests — daarop zou
                 moeten wachten. Dat staat als open punt bij deze lane. */}
-            <p>
-              <strong>Koers:</strong>{" "}
-              {source === "live"
-                ? `live ECB-middenkoers via Frankfurter, peildatum ${rate.date}`
-                : `de meegebundelde ECB-middenkoers van ${rate.date}, want er staat nu geen live koers in dit scherm`}
-              .
-            </p>
+            {/* TWEE LAGEN, TWEE ALINEA'S. Ze samenvoegen tot één zin over "de
+                koers" zou de indruk wekken dat er één bron is met één peildatum,
+                en dat is sinds 22 augustus voor 137 van de 166 valuta onwaar.
+                Elke laag noemt daarom zijn eigen aanbieder, zijn eigen datum en
+                hoeveel koersen hij levert. */}
+            {prov ? (
+              <>
+                {prov.ecb ? (
+                  <p>
+                    <strong>Koers, laag 1:</strong> {prov.ecb.count}{" "}
+                    {prov.ecb.status === "bundel"
+                      ? `koersen uit de meegebundelde ECB-momentopname van ${prov.ecb.date}, want er kwam geen live ECB-lijst binnen`
+                      : `ECB-referentiekoersen van ${prov.ecb.date} via Frankfurter`}
+                    {prov.ecb.status === "geheugen"
+                      ? " — dat is de laatste lijst die de server binnenkreeg; de poging van zojuist mislukte"
+                      : ""}
+                    . De ECB publiceert die op een vast tijdstip volgens een methode die je kunt nalezen.
+                  </p>
+                ) : (
+                  <p>
+                    <strong>Koers, laag 1:</strong> er staat op dit moment geen ECB-lijst in dit scherm. Alle koersen
+                    hieronder komen uit laag 2.
+                  </p>
+                )}
+                {prov.aggregator && credit ? (
+                  <p>
+                    <strong>Koers, laag 2:</strong> {prov.aggregator.count} koersen van {credit.naam}, peildatum{" "}
+                    {prov.aggregator.date}
+                    {prov.aggregator.nextUpdate ? `, volgende ronde ${prov.aggregator.nextUpdate}` : ""}. Dit zijn
+                    samengestelde dagkoersen: de aanbieder voegt ze samen uit bronnen die hij niet noemt en ververst
+                    één keer per dag. Ze vullen alleen de valuta's die de ECB niet publiceert — een ECB-koers wordt er
+                    nooit door overschreven. Valt deze bron weg, dan zijn die valuta's weer "geen koers"; er blijft
+                    geen oude waarde staan.{" "}
+                    <a href={credit.url} target="_blank" rel="noreferrer">
+                      {credit.linktekst}
+                    </a>
+                    {" · "}
+                    <a href={credit.voorwaarden} target="_blank" rel="noreferrer">
+                      voorwaarden
+                    </a>
+                    .
+                  </p>
+                ) : prov.aggregator ? (
+                  // DE ECHTE OORZAAK, en niet "er is geen tweede laag" — die is er
+                  // wel, hij wordt geweigerd. Die twee door elkaar halen stuurt de
+                  // volgende lezer naar de bron kijken terwijl het probleem in deze
+                  // app zit. Er staat ook geen advies bij dat de gebruiker kan
+                  // opvolgen: dit is een deploy die uit de pas loopt, en daar kan
+                  // hij vanaf dit scherm niets aan doen.
+                  <p>
+                    <strong>Koers, laag 2:</strong> de server levert koersen van een aanbieder ({prov.aggregator.provider})
+                    die dit scherm niet kent. Die koersen mogen alleen getoond worden met de bronvermelding die de
+                    aanbieder voorschrijft, en die staat hier niet — dus worden ze niet gebruikt. De lijst is daardoor
+                    beperkt tot wat de ECB publiceert; voor de valuta's daarbuiten heeft LaVega nu geen koers.
+                  </p>
+                ) : (
+                  <p>
+                    <strong>Koers, laag 2:</strong> er staat geen tweede laag in dit scherm, dus de lijst is beperkt
+                    tot wat de ECB publiceert. Voor de valuta's daarbuiten heeft LaVega nu geen koers — dat is iets
+                    anders dan een koers van nul.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>
+                <strong>Koers:</strong>{" "}
+                {source === "live"
+                  ? `live ECB-middenkoers via Frankfurter, peildatum ${rate.date}`
+                  : `de meegebundelde ECB-middenkoers van ${rate.date}, want er staat nu geen live koers in dit scherm`}
+                .
+              </p>
+            )}
             <p>
               <strong>Kosten:</strong> de koersopslag zoals de bank die zelf in haar tarievenoverzicht noemt.
               Elke regel draagt de bron en de datum die dat document noemt.

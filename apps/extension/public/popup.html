@@ -38,8 +38,12 @@
 
   <div id="uitkomst" role="status" aria-live="polite"></div>
 
-  <p style="margin-top: 16px">
-    <a id="naar-opties" href="#">Kaarten en winkels instellen</a>
+  <!-- Geen style-attribuut hier. Zolang er één inline stijl op een
+       extensiepagina staat, moet de CSP `style-src 'unsafe-inline'` toestaan, en
+       dan staat die deur open voor alles wat er ooit nog bij komt. Eén klasse in
+       stijl.css kost niets en houdt de CSP op 'self'. -->
+  <p class="onderaan">
+    <a id="naar-opties" href="#">Kaarten, punten en winkels instellen</a>
   </p>
 
   <script type="module" src="popup.js"></script>

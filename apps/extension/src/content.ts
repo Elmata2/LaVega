@@ -87,8 +87,15 @@
      * de regel zelf, en die komt uit lines.ts waar hij getest is. */
     achteruit: "Kost na kaartkosten meer dan het oplevert",
     "onbekende-kosten": "Kaartkosten onbekend",
+    /* Niet "kaartkosten onbekend": bij deze kaarten staan de kosten vaak wél in
+     * de voorwaarde. Wat ontbreekt is een OPBRENGST in euro's, want de uitkering
+     * is in een token of het cijfer is vervallen. Twee verschillende onbekenden
+     * onder één kop was een onwaarheid in de sterkste regel van het blok. */
+    "geen-euro-uitkomst": "Opbrengst niet in euro's",
     onbekend: "Hier kunnen we niets over zeggen",
   };
+
+  const PUNTENKOP = "Punten die je hier hebt liggen";
 
   function el(tag: string, klasse: string, tekst?: string): HTMLElement {
     const e = document.createElement(tag);
@@ -127,13 +134,37 @@
     balk.appendChild(sluit);
     paneel.appendChild(balk);
 
+    /* Het puntenblok staat BOVEN de kaarten, in allebei de toestanden. Dat is
+     * geen opmaakvoorkeur: dit is wat hij al heeft liggen, en het is het enige
+     * deel dat ook nog iets zegt als het bedrag op deze pagina niet te lezen
+     * was. */
+    function toonPunten(punten: PaneelPunten): void {
+      if (punten.leeg) {
+        paneel.appendChild(el("div", "groep", PUNTENKOP));
+        paneel.appendChild(el("div", "uitleg", punten.leeg));
+        return;
+      }
+      if (punten.regels.length === 0) return;
+      paneel.appendChild(el("div", "groep", PUNTENKOP));
+      for (const r of punten.regels) {
+        const rij = el("div", "rij");
+        rij.appendChild(el("div", "titel", r.titel));
+        rij.appendChild(el("div", "regel", r.regel));
+        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
+        paneel.appendChild(rij);
+      }
+      if (punten.voetnoot) paneel.appendChild(el("div", "bron", punten.voetnoot));
+    }
+
     if (antwoord.soort === "geen-bedrag") {
       paneel.appendChild(el("div", "kop", antwoord.kop));
       paneel.appendChild(el("div", "uitleg", antwoord.uitleg));
+      toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "voet", antwoord.voet));
     } else {
       if (antwoord.bedrag) paneel.appendChild(el("div", "bedrag", antwoord.bedrag));
       if (antwoord.bedragNoot) paneel.appendChild(el("div", "noot", antwoord.bedragNoot));
+      toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "kop", antwoord.kop));
 
       let vorigeGroep: PaneelGroep | null = null;

@@ -8,7 +8,17 @@ import { norm } from "./hash.js";
  * Pure + deterministic: integer cents, ISO-date day math via Date.UTC. */
 
 export type Subscription = {
-  key: string;              // merchantKey(counterparty) + "|out"
+  /** Unique per stream: merchantKey(counterparty) + "|out|" + the repeating
+   *  price in cents. The price is in there because one merchant can bill more
+   *  than one stream — a phone subscription and the device credit next to it —
+   *  and two rows sharing a key is a rendering bug, not a detail. Two streams
+   *  at one merchant can never share a price: an amount is what groups them
+   *  (see `fitMerchantStreams`). */
+  key: string;
+  /** The merchant behind the stream (`merchantKey`), without the direction or
+   *  the price. Two streams at the SAME merchant are not two competing
+   *  services, and `subscriptionOverlaps` needs to be able to see that. */
+  merchant: string;
   name: string;             // raw counterparty of the first occurrence
   function: string;         // "Videostreaming" | "Muziekstreaming" | ... | "Overig"
   cadenceDays: number;      // 30 | 61 | 91 | 182 | 365
@@ -206,11 +216,17 @@ function looksLikeHousing(counterparty: string): boolean {
   return HOUSING_RES.some((re) => re.test(h));
 }
 
+/** An ISO date as a whole day number (days since the epoch) via Date.UTC, so
+ *  the arithmetic is locale- and TZ-safe. Date-only UTC timestamps are always
+ *  exact multiples of a day, so this is an integer. */
+function dayNumber(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+}
+
 /** Whole days between two ISO dates via Date.UTC (locale/TZ-safe). */
 function daysBetween(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+  return dayNumber(b) - dayNumber(a);
 }
 
 function mean(nums: number[]): number {
@@ -276,7 +292,10 @@ const CADENCE_BANDS: ReadonlyArray<{ cadenceDays: number; min: number; max: numb
  * fit refuses the whole group over that one row, which would have cost him the
  * subscription he asked about. The budget is deliberately mean: `extras <=
  * floor(members / 3)`, i.e. at least three of every four charges at that
- * merchant must fall on the rhythm. That is what keeps a shop he visits weekly
+ * merchant must fall on the rhythm. (Since 22 Aug a merchant is read one AMOUNT
+ * at a time — `fitMerchantStreams` below — and the same budget is then also
+ * checked over the merchant as a whole, because a budget read per amount group
+ * would let a busy shop hand out one clean group at a time.) That is what keeps a shop he visits weekly
  * from having a "monthly subscription" carved out of its busiest quarter — the
  * phantom he complained about before the miss — and it is arithmetic rather
  * than a hope: weekly visits produce roughly four rows for every one a monthly
@@ -322,7 +341,7 @@ const MAX_SKIPPED_CYCLES = 2;
 /** One chain, anchored at `start`: greedy from cycle to cycle, but never greedy
  *  WITHIN a cycle — see the pick below. Exported nowhere: `fitCadence` tries
  *  every anchor and keeps the best. */
-function chainFrom(dates: string[], start: number, band: CadenceBand): CadenceFit | null {
+function chainFrom(days: number[], start: number, band: CadenceBand): CadenceFit | null {
   const tol = bandTolerance(band);
   const members = [start];
   const gaps: number[] = [];
@@ -330,8 +349,8 @@ function chainFrom(dates: string[], start: number, band: CadenceBand): CadenceFi
   let residual = 0;
   let onCycle = 0;
   let last = start;
-  for (let i = start + 1; i < dates.length; i++) {
-    const g = daysBetween(dates[last], dates[i]);
+  for (let i = start + 1; i < days.length; i++) {
+    const g = days[i] - days[last];
     const k = Math.round(g / band.cadenceDays);
     const drift = Math.abs(g - k * band.cadenceDays);
     if (k >= 1 && k <= MAX_SKIPPED_CYCLES + 1 && drift <= tol) {
@@ -355,14 +374,14 @@ function chainFrom(dates: string[], start: number, band: CadenceBand): CadenceFi
       const target = k * band.cadenceDays;
       let pick = i;
       let pickDrift = drift;
-      for (let j = i + 1; j < dates.length; j++) {
-        const gj = daysBetween(dates[last], dates[j]);
+      for (let j = i + 1; j < days.length; j++) {
+        const gj = days[j] - days[last];
         if (gj > target + tol) break;
         const dj = Math.abs(gj - target);
         if (dj < pickDrift) { pick = j; pickDrift = dj; }
       }
       members.push(pick);
-      gaps.push(daysBetween(dates[last], dates[pick]));
+      gaps.push(days[pick] - days[last]);
       residual += pickDrift;
       if (k === 1) onCycle++;
       else skippedCycles += k - 1;
@@ -387,7 +406,7 @@ function chainFrom(dates: string[], start: number, band: CadenceBand): CadenceFi
   /* The majority must be SINGLE cycles. Without this a monthly stream fits a
    * weekly cadence arithmetically (30 ~ 4x7) while being nothing of the sort. */
   if (onCycle < Math.ceil(gaps.length / 2)) return null;
-  const extras = dates.length - members.length;
+  const extras = days.length - members.length;
   if (extras > Math.floor(members.length / 3)) return null;
   return { band, members, gaps, skippedCycles, extras, residual };
 }
@@ -408,16 +427,199 @@ function betterFit(a: CadenceFit, b: CadenceFit): boolean {
  *  `extras <= floor(members / 3)` a chain can never start later than that, so
  *  the extra anchors could only produce fits that are thrown away again. */
 export function fitCadence(sortedDates: string[]): CadenceFit | null {
-  const maxStart = Math.floor(sortedDates.length / 4);
+  return fitCadenceDays(sortedDates.map(dayNumber));
+}
+
+/* The same fitter on day numbers that were already parsed. It exists because
+ * every date used to be re-parsed inside the innermost loop — `daysBetween`
+ * splits two strings and builds two UTC timestamps — and that loop runs
+ * O(anchors x rows x window) times. Measured on a synthetic vault of 2400 rows
+ * with one 400-row supermarket in it, three runs each: `detectSubscriptions`
+ * went from 1992/1996/2269 ms to 23/23/25 ms, on the same answers. That is a
+ * pre-existing cost, not one the amount split introduced — but the split does
+ * fit more series per merchant, so it is paid off here rather than left to grow.
+ * It is the same arithmetic; only the parsing moved out of the loop. */
+function fitCadenceDays(days: number[]): CadenceFit | null {
+  const maxStart = Math.floor(days.length / 4);
   let best: CadenceFit | null = null;
   for (const band of CADENCE_BANDS) {
-    if (sortedDates.length < band.minOcc) continue;
-    for (let s = 0; s <= maxStart && s + band.minOcc <= sortedDates.length; s++) {
-      const fit = chainFrom(sortedDates, s, band);
+    if (days.length < band.minOcc) continue;
+    for (let s = 0; s <= maxStart && s + band.minOcc <= days.length; s++) {
+      const fit = chainFrom(days, s, band);
       if (fit !== null && (best === null || betterFit(fit, best))) best = fit;
     }
   }
   return best;
+}
+
+/* ===========================================================================
+ * ONE MERCHANT IS NOT ONE STREAM — READ THE AMOUNT BEFORE THE RHYTHM.
+ *
+ * `merchantKey` put every Simyo row in one group, which is what fixed the
+ * alternating spellings. It also created series H from the 21 Aug review: a
+ * phone subscription of EUR 11,89 and the device credit of EUR 25,00 at the
+ * SAME merchant, both monthly, halfway through each other's month. Measured on
+ * those eight rows:
+ *
+ *   gaps over the heap : 14/17/15/15/16/16/15  -> median 15  (reads as biweekly)
+ *   gaps per amount    : 31/30/32  and  32/31/31 -> median 31 each
+ *
+ * The old gate picked a band by that median of 15 and matched nothing. The
+ * cycle fitter above does better — it skips the rows that are "too soon" and
+ * lands on the EUR 11,89 chain of four — and then throws it away anyway,
+ * because the four device charges are four strays against a budget of
+ * `floor(4 / 3) = 1`. Either way: NOTHING, on a merchant with two perfectly
+ * regular monthly debits. Not an edge case — a phone with a device, a gym with
+ * a second pass, a streaming service with an extra profile all have this shape.
+ *
+ * WHAT IS NOT DONE HERE, deliberately: widening the tolerance. Letting 11,89
+ * and 25,00 into one stream would forge an average of 18,45 that neither of
+ * them is ever charged, and the tab would print a price nobody paid.
+ *
+ * WHAT IS DONE: group the merchant's rows by AMOUNT first, then read the rhythm
+ * inside each group. Three guards keep that from becoming a subscription
+ * factory — groceries at one supermarket repeat amounts too:
+ *
+ *  1. THE WHOLE GROUP GETS THE FIRST WORD. The split is only used when it
+ *     explains STRICTLY MORE charges than reading the merchant as one stream
+ *     does. So every merchant that already read as one subscription is
+ *     untouched, and a stream whose amount alternates between two figures
+ *     (2,50 / 2,55) stays ONE monthly stream instead of being halved into two
+ *     two-monthly ones — the same mistake the alternating spellings made, in
+ *     the amount dimension.
+ *  2. A PRICE RISE IS NOT A SECOND STREAM. Two amount groups are put back
+ *     together when the older one has finished before the newer one starts
+ *     (they never interleave) and the step between them is at most
+ *     `MAX_PRICE_STEP`. Netflix 13,99 x3 then 15,99 x2 is one subscription that
+ *     got 14% more expensive, and `subscriptionPriceIncreases` has to keep
+ *     seeing it. Merging can only ever move BACK toward the old whole-merchant
+ *     group, so it cannot introduce anything the detector did not already
+ *     accept yesterday.
+ *  3. THE STRAY BUDGET IS READ OVER THE WHOLE MERCHANT, not per amount. This is
+ *     the one that matters: `strays <= floor(claimed / 3)` counts every row at
+ *     that merchant that no stream claimed. Twelve weekly groceries around
+ *     three monthly charges of EUR 42,50 do carve out a clean amount group —
+ *     and two more, because the weekly amounts repeat every five visits — but
+ *     they claim 9 of 15 rows and leave 6 strays against a budget of 3, so the
+ *     merchant is refused whole. The surrounding rows are the proof that this
+ *     is a shop and not a biller, and that proof is lost the moment the budget
+ *     is read per amount group. Series H leaves 0 strays out of 8.
+ *
+ * KNOWN MISS, stated rather than hidden: two streams at the same merchant for
+ * the SAME amount (two gym passes at EUR 24,99) still read as one busy
+ * merchant and yield nothing. Splitting those would mean peeling parallel
+ * chains out of one pile of identical charges, and twenty weekly coffees of
+ * EUR 5,00 peel into four "monthly subscriptions" that way. A miss costs an
+ * insight; that would cost the tab.
+ * ========================================================================= */
+
+/** The largest step between two consecutive prices that still reads as the same
+ *  subscription getting more (or less) expensive rather than a different
+ *  charge. Measured against the real ones this has to survive: Netflix
+ *  13,99 -> 15,99 is 0.143, his Simyo 11,89 -> 12,49 is 0.050. It is set well
+ *  above those and still far below the case it must refuse — a EUR 500 one-off
+ *  next to a EUR 10 monthly charge would drag the one-off back into the stream
+ *  and its amount spread would then refuse the whole thing. */
+const MAX_PRICE_STEP = 0.5;
+
+/** The step allowed when the older group is a SINGLE charge. Measured why it has
+ *  to be tighter than `MAX_PRICE_STEP`: five unrelated app purchases at one
+ *  merchant (1,50 / 2,50 / 3,50 / 4,50 / 5,50, each on its own date) are all
+ *  single charges and all time-disjoint, and every step between them is under
+ *  0.5 — so the wide limit chained four of them into one "group" and the cycle
+ *  fitter carved a three-charge monthly stream out of it. Downstream refused
+ *  that stream (no amount in it repeats twice), but it had already counted 3
+ *  rows as CLAIMED, and the stray budget is read on that number: the merchant
+ *  passed a budget it had not earned. With the tight limit those five stay five
+ *  strays and the merchant is refused whole.
+ *
+ *  What the tight limit still lets through, measured on his own shape: the
+ *  FIRST charge of a stream at the old price. Simyo 11,89 once and then 12,49
+ *  three times, next to the device credit, keeps all four charges in the stream
+ *  (occurrences 4, not 3). The reported price change stays 0 there, and that is
+ *  right — 11,89 was billed once, which is not an old price, it is a first
+ *  invoice. */
+const TIGHT_PRICE_STEP = 0.1;
+
+/** The merchant's rows, indexed into the day/amount arrays, grouped by amount,
+ *  with consecutive price steps put back together. Groups come out ordered by
+ *  their first charge; indices inside a group stay ascending (= date order). */
+function amountGroups(days: number[], amountsCents: number[]): number[][] {
+  const byAmount = new Map<number, number[]>();
+  for (let i = 0; i < amountsCents.length; i++) {
+    const g = byAmount.get(amountsCents[i]);
+    if (g) g.push(i);
+    else byAmount.set(amountsCents[i], [i]);
+  }
+  /* First charge, then amount: two groups starting on the same day must still
+   * come out in the same order on every machine. */
+  const bare = [...byAmount.values()].sort((x, y) =>
+    days[x[0]] - days[y[0]] || amountsCents[x[0]] - amountsCents[y[0]]);
+
+  const merged: number[][] = [];
+  for (const g of bare) {
+    let into: number[] | null = null;
+    let bestStep = Infinity;
+    for (const open of merged) {
+      /* Interleaving is the whole signal: a device credit runs ALONGSIDE the
+       * subscription, a new price runs AFTER the old one. Same-day counts as
+       * alongside — two amounts charged on one day are two things. */
+      if (days[open[open.length - 1]] >= days[g[0]]) continue;
+      const from = amountsCents[open[open.length - 1]];
+      const step = Math.abs(amountsCents[g[0]] - from) / from;
+      // A group that has already repeated may take a real price step; a lone
+      // charge may only be joined by something within a hair of it.
+      if (step > (open.length >= 2 ? MAX_PRICE_STEP : TIGHT_PRICE_STEP)) continue;
+      if (step < bestStep) { bestStep = step; into = open; }
+    }
+    if (into) {
+      into.push(...g);
+      into.sort((a, b) => a - b);
+    } else merged.push([...g]);
+  }
+  return merged;
+}
+
+export type MerchantStreams = {
+  /** The rhythms found at this merchant, most charges first. `members` index
+   *  into the `sortedDates` that was passed in, not into an amount group. */
+  streams: CadenceFit[];
+  /** Rows at this merchant that no stream claimed. */
+  strays: number;
+  /** Whether the amount split was used at all — false means the merchant read
+   *  as one stream and nothing about it changed. Reported so a test can pin
+   *  WHICH mechanism produced the answer instead of only the answer. */
+  splitByAmount: boolean;
+};
+
+/** Every subscription-shaped stream one merchant is billing, read amount-first.
+ *  `sortedDates` must be ascending and `amountsCents` positive and aligned to
+ *  it. Returns no streams at all when the merchant looks like a shop — see the
+ *  budget in the comment above; it is a whole-merchant veto on purpose. */
+export function fitMerchantStreams(sortedDates: string[], amountsCents: number[]): MerchantStreams {
+  const days = sortedDates.map(dayNumber);
+  const whole = fitCadenceDays(days);
+  const wholeClaimed = whole === null ? 0 : whole.members.length;
+
+  const split: CadenceFit[] = [];
+  let splitClaimed = 0;
+  for (const idx of amountGroups(days, amountsCents)) {
+    const fit = fitCadenceDays(idx.map((i) => days[i]));
+    if (fit === null) continue;
+    // Back to the merchant's own indices; everything downstream reads rows, not
+    // amount groups.
+    split.push({ ...fit, members: fit.members.map((i) => idx[i]) });
+    splitClaimed += fit.members.length;
+  }
+
+  const useSplit = splitClaimed > wholeClaimed;
+  const streams = useSplit ? split : whole === null ? [] : [whole];
+  const claimed = useSplit ? splitClaimed : wholeClaimed;
+  const strays = sortedDates.length - claimed;
+  if (streams.length === 0) return { streams: [], strays, splitByAmount: useSplit };
+  if (strays > Math.floor(claimed / 3)) return { streams: [], strays, splitByAmount: useSplit };
+  streams.sort((a, b) => b.members.length - a.members.length || a.members[0] - b.members[0]);
+  return { streams, strays, splitByAmount: useSplit };
 }
 
 /** Dutch name of each cadence, for the UI. */
@@ -517,7 +719,7 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
     if (cur === undefined || t.date > cur) accountEnd.set(t.accountKey, t.date);
   }
 
-  const groups = new Map<string, Tx[]>();
+  const groups = new Map<string, { merchant: string; txs: Tx[] }>();
   for (const t of txs) {
     if (t.amount >= 0) continue; // outflows only
     const h = norm(t.counterparty);
@@ -533,87 +735,96 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
     // fallbacks) all shared the key "|out" and were emitted as ONE phantom
     // subscription with an empty name and a total no merchant ever charged.
     if (merchant === "") continue;
-    const key = merchant + "|out";
-    const g = groups.get(key);
-    if (g) g.push(t);
-    else groups.set(key, [t]);
+    const g = groups.get(merchant);
+    if (g) g.txs.push(t);
+    else groups.set(merchant, { merchant, txs: [t] });
   }
 
   const subs: Subscription[] = [];
-  for (const [key, group] of groups) {
-    if (group.length < 2) continue;
-    const sorted = [...group].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  for (const [merchant, group] of groups) {
+    if (group.txs.length < 2) continue;
+    const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-    /* The rhythm, read by the same function the Betaalagenda uses. Everything
-     * below this line therefore looks at `stream` — the charges that ARE the
-     * subscription — and not at every row the merchant produced. That matters
-     * twice over: the price is read off the stream (an extra bundle can no
-     * longer inflate the amount spread and get the whole thing refused), and
-     * `occurrences` counts what was actually billed on the cadence. */
-    const fit = fitCadence(sorted.map((t) => t.date));
-    if (fit === null) continue;
-    const band = fit.band;
-    const stream = fit.members.map((i) => sorted[i]);
+    /* The rhythms, read by the same function the Betaalagenda uses, and read
+     * per AMOUNT rather than over the whole merchant — see the block comment at
+     * `fitMerchantStreams`. Two things follow from that. One merchant can now
+     * produce more than one subscription (his Simyo bill and the device credit
+     * next to it, which together gave NOTHING before). And everything below
+     * this line looks at `stream` — the charges that ARE this subscription —
+     * not at every row the merchant produced, so the price is read off the
+     * stream and `occurrences` counts what was actually billed on the cadence. */
+    const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts);
 
-    // Still being paid? A cancelled stream keeps its cadence and its history
-    // forever, so without this the tab lists what he USED to pay as what he
-    // pays. Two missed cycles (plus a few days' slack for a weekend shift) is
-    // the line: one skipped charge is a billing hiccup, two is a cancellation.
-    const lastDate = stream[stream.length - 1].date;
-    let asOf = opts.asOf ?? "";
-    if (asOf === "") for (const t of stream) {
-      const end = accountEnd.get(t.accountKey) ?? "";
-      if (end > asOf) asOf = end;
-    }
-    if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
+    for (const fit of streams) {
+      const band = fit.band;
+      const stream = fit.members.map((i) => sorted[i]);
 
-    const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const amtMean = mean(amountsCents);
-    if (amtMean <= 0) continue;
-    if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv) continue;
-    // A subscription bills the SAME figure more than once — that is what makes
-    // it a price and not a series of purchases. Replaces the old ±25% guard on
-    // 2-occurrence streams, and closes the same hole for 3+ occurrences, where
-    // repeated visits to one shop used to pass on cadence alone. A price change
-    // survives it (13,99 x3 then 15,99 x2 still repeats 13,99); a usage-based
-    // bill that is never twice the same does not, and is refused rather than
-    // reported at a "monthly price" that was never charged.
-    const timesCharged = new Map<number, number>();
-    for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
-    if (Math.max(...timesCharged.values()) < 2) continue;
-
-    /* The price is the figure the stream REPEATS, not simply its first and last
-     * row. Now that one merchant's charges are grouped together, a one-off from
-     * the same merchant (a Simyo extra bundle, an app purchase at Apple) can sit
-     * at either end of the group — and taken literally it would be printed as
-     * "what you pay per month" and as a price change that never happened. */
-    const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
-    const firstAmountCents = amountsCents.find(repeats) ?? amountsCents[0];
-    let lastAmountCents = amountsCents[amountsCents.length - 1];
-    if (!repeats(lastAmountCents)) {
-      for (let i = amountsCents.length - 1; i >= 0; i--) {
-        if (repeats(amountsCents[i])) { lastAmountCents = amountsCents[i]; break; }
+      // Still being paid? A cancelled stream keeps its cadence and its history
+      // forever, so without this the tab lists what he USED to pay as what he
+      // pays. Two missed cycles (plus a few days' slack for a weekend shift) is
+      // the line: one skipped charge is a billing hiccup, two is a cancellation.
+      const lastDate = stream[stream.length - 1].date;
+      let asOf = opts.asOf ?? "";
+      if (asOf === "") for (const t of stream) {
+        const end = accountEnd.get(t.accountKey) ?? "";
+        if (end > asOf) asOf = end;
       }
-    }
-    const changePct = firstAmountCents > 0 ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000 : 0;
-    const monthlyCents = Math.round((lastAmountCents * 30) / band.cadenceDays);
+      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
-    subs.push({
-      key,
-      name: stream[0].counterparty,
-      function: subscriptionFunction(stream[0].counterparty),
-      cadenceDays: band.cadenceDays,
-      monthlyCents,
-      firstAmountCents,
-      lastAmountCents,
-      changePct,
-      occurrences: stream.length,
-      lastDate,
-      skippedCycles: fit.skippedCycles,
-    });
+      const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
+      const amtMean = mean(amountsCents);
+      if (amtMean <= 0) continue;
+      if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv) continue;
+      // A subscription bills the SAME figure more than once — that is what makes
+      // it a price and not a series of purchases. Replaces the old ±25% guard on
+      // 2-occurrence streams, and closes the same hole for 3+ occurrences, where
+      // repeated visits to one shop used to pass on cadence alone. A price change
+      // survives it (13,99 x3 then 15,99 x2 still repeats 13,99); a usage-based
+      // bill that is never twice the same does not, and is refused rather than
+      // reported at a "monthly price" that was never charged.
+      const timesCharged = new Map<number, number>();
+      for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+      if (Math.max(...timesCharged.values()) < 2) continue;
+
+      /* The price is the figure the stream REPEATS, not simply its first and last
+       * row. Now that one merchant's charges are grouped together, a one-off from
+       * the same merchant (a Simyo extra bundle, an app purchase at Apple) can sit
+       * at either end of the group — and taken literally it would be printed as
+       * "what you pay per month" and as a price change that never happened. */
+      const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
+      const firstAmountCents = amountsCents.find(repeats) ?? amountsCents[0];
+      let lastAmountCents = amountsCents[amountsCents.length - 1];
+      if (!repeats(lastAmountCents)) {
+        for (let i = amountsCents.length - 1; i >= 0; i--) {
+          if (repeats(amountsCents[i])) { lastAmountCents = amountsCents[i]; break; }
+        }
+      }
+      const changePct = firstAmountCents > 0 ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000 : 0;
+      const monthlyCents = Math.round((lastAmountCents * 30) / band.cadenceDays);
+
+      subs.push({
+        // The price is part of the identity now: one merchant, two streams, and
+        // a shared key would have collapsed them into one row on screen.
+        key: `${merchant}|out|${lastAmountCents}`,
+        merchant,
+        name: stream[0].counterparty,
+        function: subscriptionFunction(stream[0].counterparty),
+        cadenceDays: band.cadenceDays,
+        monthlyCents,
+        firstAmountCents,
+        lastAmountCents,
+        changePct,
+        occurrences: stream.length,
+        lastDate,
+        skippedCycles: fit.skippedCycles,
+      });
+    }
   }
 
-  return subs.sort((a, b) => b.monthlyCents - a.monthlyCents);
+  // Key as the tie-breaker: a merchant can now contribute more than one row, and
+  // two rows at the same monthly cost must not swap places between renders.
+  return subs.sort((a, b) => b.monthlyCents - a.monthlyCents || a.key.localeCompare(b.key));
 }
 
 export type PriceIncrease = { sub: Subscription; fromCents: number; toCents: number; changePct: number };
@@ -629,18 +840,34 @@ export function subscriptionPriceIncreases(subs: Subscription[]): PriceIncrease[
 
 /** Groups of >= 2 subscriptions sharing a known function (candidate duplicates,
  *  e.g. two videostreaming services). "Overig" is never grouped. Sorted by
- *  combined monthly cost, descending. */
+ *  combined monthly cost, descending.
+ *
+ *  ONE STREAM PER MERCHANT COUNTS. Since a merchant can bill two streams (the
+ *  Simyo subscription and the Simyo device credit), a plain grouping by function
+ *  would print "2 x Mobiel abonnement: Simyo + Simyo — cancel one and save EUR
+ *  300 a year". Both halves of that are false: they are not two services, and
+ *  the device credit cannot be cancelled. So one stream represents its merchant
+ *  and it takes two DIFFERENT merchants to make an overlap.
+ *
+ *  Which one represents it: the SMALLEST. This block prints a saving, and when
+ *  a merchant runs two streams nothing in the data says which of them is the
+ *  cancellable service — the device credit is often the bigger figure. Taking
+ *  the smallest under-claims the saving instead of promising money he cannot
+ *  free up by cancelling. */
 export function subscriptionOverlaps(subs: Subscription[]): SubscriptionOverlap[] {
-  const byFn = new Map<string, Subscription[]>();
+  const byFn = new Map<string, Map<string, Subscription>>();
   for (const s of subs) {
     if (s.function === "Overig") continue;
-    const arr = byFn.get(s.function);
-    if (arr) arr.push(s);
-    else byFn.set(s.function, [s]);
+    let perMerchant = byFn.get(s.function);
+    if (!perMerchant) { perMerchant = new Map(); byFn.set(s.function, perMerchant); }
+    const held = perMerchant.get(s.merchant);
+    if (held === undefined || s.monthlyCents < held.monthlyCents
+        || (s.monthlyCents === held.monthlyCents && s.key < held.key)) perMerchant.set(s.merchant, s);
   }
   const out: SubscriptionOverlap[] = [];
-  for (const [fn, group] of byFn) {
-    if (group.length < 2) continue;
+  for (const [fn, perMerchant] of byFn) {
+    if (perMerchant.size < 2) continue;
+    const group = [...perMerchant.values()];
     out.push({ function: fn, subs: group, monthlyCents: group.reduce((s, x) => s + x.monthlyCents, 0) });
   }
   return out.sort((a, b) => b.monthlyCents - a.monthlyCents);
@@ -682,7 +909,10 @@ export function subscriptionOverlaps(subs: Subscription[]): SubscriptionOverlap[
 
 /** One recurring money movement the agenda may expect again, either direction. */
 export type ScheduleStream = {
-  /** Stable identity: payer/payee key + "|in" / "|out". */
+  /** Stable identity: payer/payee key + "|in" / "|out" + the repeating amount
+   *  in cents. The amount is in there because one party can run two streams
+   *  (a subscription and a device credit at the same provider) and the agenda
+   *  keys its rows on this. */
   key: string;
   /** What to put on the row — the institution's name when we know it. */
   label: string;
@@ -799,52 +1029,63 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
     const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     if (sorted.length < 2) continue;
 
-    const fit = fitCadence(sorted.map((t) => t.date));
-    if (fit === null) continue;
-    const band = fit.band;
-    const stream = fit.members.map((i) => sorted[i]);
+    /* Amount-first, exactly like Optimalisatie — `fitMerchantStreams`, not a
+     * second copy of it. If the agenda kept reading a party as one stream, the
+     * two would disagree again on the very series that prompted the split:
+     * Simyo's EUR 11,89 subscription plus the EUR 25,00 device credit is two
+     * dates on the agenda, not none. The device credit ends one day and its row
+     * stops with it — that is what the asOf check below is for. */
+    const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
+    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts);
 
-    // Still running? A stopped stream keeps its cadence forever, and rolling it
-    // forward would put a payment on the agenda that nobody is going to make.
-    const lastDate = stream[stream.length - 1].date;
-    let asOf = opts.asOf ?? "";
-    if (asOf === "") for (const t of stream) {
-      const end = accountEnd.get(t.accountKey) ?? "";
-      if (end > asOf) asOf = end;
-    }
-    if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
+    for (const fit of streams) {
+      const band = fit.band;
+      const stream = fit.members.map((i) => sorted[i]);
 
-    /* The amount. An agenda that prints a figure nobody was ever charged is
-     * worse than an agenda with one row fewer, so a stream must either repeat a
-     * figure or be tight enough that its last charge IS the figure (a yearly
-     * index-linked premium). Both are then reported as what it last actually
-     * charged, never as an average. */
-    const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const amtMean = mean(amountsCents);
-    if (amtMean <= 0) continue;
-    const amtCv = std(amountsCents) / amtMean;
-    if (amtCv > 0.35) continue;
-    const timesCharged = new Map<number, number>();
-    for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
-    const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
-    if (Math.max(...timesCharged.values()) < 2 && amtCv > 0.1) continue;
-    let amountCents = amountsCents[amountsCents.length - 1];
-    if (!repeats(amountCents)) {
-      for (let i = amountsCents.length - 1; i >= 0; i--) {
-        if (repeats(amountsCents[i])) { amountCents = amountsCents[i]; break; }
+      // Still running? A stopped stream keeps its cadence forever, and rolling it
+      // forward would put a payment on the agenda that nobody is going to make.
+      const lastDate = stream[stream.length - 1].date;
+      let asOf = opts.asOf ?? "";
+      if (asOf === "") for (const t of stream) {
+        const end = accountEnd.get(t.accountKey) ?? "";
+        if (end > asOf) asOf = end;
       }
-    }
+      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
-    out.push({
-      key,
-      label: group.label,
-      sign: stream[0].amount >= 0 ? 1 : -1,
-      cadenceDays: band.cadenceDays,
-      amountCents,
-      occurrences: stream.length,
-      lastDate,
-      skippedCycles: fit.skippedCycles,
-    });
+      /* The amount. An agenda that prints a figure nobody was ever charged is
+       * worse than an agenda with one row fewer, so a stream must either repeat a
+       * figure or be tight enough that its last charge IS the figure (a yearly
+       * index-linked premium). Both are then reported as what it last actually
+       * charged, never as an average. */
+      const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
+      const amtMean = mean(amountsCents);
+      if (amtMean <= 0) continue;
+      const amtCv = std(amountsCents) / amtMean;
+      if (amtCv > 0.35) continue;
+      const timesCharged = new Map<number, number>();
+      for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+      const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
+      if (Math.max(...timesCharged.values()) < 2 && amtCv > 0.1) continue;
+      let amountCents = amountsCents[amountsCents.length - 1];
+      if (!repeats(amountCents)) {
+        for (let i = amountsCents.length - 1; i >= 0; i--) {
+          if (repeats(amountsCents[i])) { amountCents = amountsCents[i]; break; }
+        }
+      }
+
+      out.push({
+        // Same reason as the subscription key: one party, two streams, and the
+        // agenda would have rendered them over each other.
+        key: `${key}|${amountCents}`,
+        label: group.label,
+        sign: stream[0].amount >= 0 ? 1 : -1,
+        cadenceDays: band.cadenceDays,
+        amountCents,
+        occurrences: stream.length,
+        lastDate,
+        skippedCycles: fit.skippedCycles,
+      });
+    }
   }
 
   return out.sort((a, b) => b.amountCents - a.amountCents || a.key.localeCompare(b.key));

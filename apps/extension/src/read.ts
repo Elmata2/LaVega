@@ -63,20 +63,40 @@
  *
  * BIJ TWIJFEL LEEST DE LEZER NIETS EN ZEGT WAAROM. De gebruiker kan het bedrag
  * altijd zelf invullen; een bedrag dat er verkeerd naast staat kan hij niet
- * corrigeren, want hij ziet niet dat het fout is. Er zijn zeven redenen om te
- * weigeren, en alle zeven noemen de ECHTE oorzaak:
+ * corrigeren, want hij ziet niet dat het fout is. Er zijn tien redenen om te
+ * weigeren, en alle tien noemen de ECHTE oorzaak:
  *
  *   geen-prijsmarkup     er staat niets machineleesbaars op de pagina
  *   geen-artikelprijs    er staat wel een bedrag, maar het is er een van een
  *                        andere soort: een prijs per kilo, of verzendkosten
- *   prijsbereik          er staat een reeks (laagste én hoogste), geen prijs
+ *   prijsbereik          er staat een reeks met twee verschillende uiteinden
+ *   prijs-vanaf          er staat maar ÉÉN uiteinde van een reeks; de andere
+ *                        kant is onbekend en dus niet gelijk aan deze
  *   prijs-zonder-valuta  een bedrag zonder munt, of met alleen een dollarteken
  *   munt-spreekt-tegen   twee bronnen op de pagina zijn het oneens over de munt
  *   meerdere-prijzen     twee echt verschillende bedragen, geen totaal ertussen
  *   bedrag-onduidelijk   het scheidingsteken kan twee dingen betekenen
+ *   bedrag-afgekapt      er staat een scheidingsteken zonder cijfers erachter
+ *   bedrag-niet-leesbaar er staat iets anders dan een getal in het veld
+ *   bedrag-negatief      het bedrag is negatief, en dat is geen aankoopbedrag
  *
- * Bij alle zeven is het handmatige veld het antwoord dat in die toestand wél
- * werkt, en dat staat in de tekst. */
+ * ── WAAROM HET ER TIEN ZIJN EN GEEN ZEVEN ──────────────────────────────────
+ *
+ * Omdat "bedrag-onduidelijk" een vergaarbak was met één uitleg eronder. Gemeten
+ * met `parseAmountToCents`: "96,99 €", "EUR 96,99", "vanaf 39,99", "39," en
+ * "-5,00" kwamen er allemaal uit als "bedrag-onduidelijk", en de tekst daarbij
+ * ging over "één punt met drie cijfers erachter". Bij vijf van de zes gemeten
+ * gevallen was dat de verkeerde oorzaak — huisregel 3, in de functie die er het
+ * meest last van heeft.
+ *
+ * De eerste twee van die vijf waren bovendien helemaal geen weigering waard.
+ * "96,99 €" is de gewone Nederlandse schrijfwijze en "EUR 96,99" staat in
+ * talloze feeds; die worden nu gewoon gelezen. Wat overblijft weigert nog steeds,
+ * maar met de oorzaak die er ook echt is.
+ *
+ * Bij alle tien is het handmatige veld het antwoord dat in die toestand wél
+ * werkt, en dat staat in de tekst — in twee smaken, want in het handmatige veld
+ * zelf is "vul het bedrag zelf in" geen advies maar een echo. */
 
 export type Basis = "bestelling" | "artikel";
 
@@ -84,10 +104,14 @@ export type ReadReason =
   | "geen-prijsmarkup"
   | "geen-artikelprijs"
   | "prijsbereik"
+  | "prijs-vanaf"
   | "prijs-zonder-valuta"
   | "munt-spreekt-tegen"
   | "meerdere-prijzen"
-  | "bedrag-onduidelijk";
+  | "bedrag-onduidelijk"
+  | "bedrag-afgekapt"
+  | "bedrag-niet-leesbaar"
+  | "bedrag-negatief";
 
 export type Reading =
   | { ok: true; amountCents: number; currency: string; basis: Basis; via: string }
@@ -207,9 +231,25 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
     const m = inner["priceCurrency"];
     const munt = typeof m === "string" ? m.trim() : "";
     const ts = types(inner);
+    /* WAAROM UnitPriceSpecification HIER OOK IN STAAT, terwijl de reparatie van
+     * de kiloprijs juist op @type afging.
+     *
+     * Shopware en Magento schrijven de gewone artikelprijs als een
+     * UnitPriceSpecification zonder één eenheidsveld — geen unitCode, geen
+     * unitText, geen referenceQuantity. Dat IS de prijs van het artikel, alleen
+     * anders opgeschreven. Die werden geweigerd met "het is een bedrag van een
+     * andere soort, zoals een prijs per kilo", op een pagina waar geen kiloprijs
+     * staat. Een verkeerde oorzaak onder een terechte weigering, en hier zelfs
+     * onder een ONterechte weigering.
+     *
+     * Wat de kiloprijs-fixture tegenhoudt is dus niet het @type maar de
+     * eenheidsvelden eronder: die draagt `referenceQuantity: 1 KGM`. Dat is de
+     * eigenschap die een eenheidsprijs een eenheidsprijs maakt, en het @type
+     * was er alleen een indicatie van. Een DeliveryChargeSpecification blijft
+     * buiten de deur omdat die niet in deze lijst staat. */
     const kaal =
       ts.length === 0 ||
-      ts.every((t) => /(^|\/|:)(Compound)?PriceSpecification$/i.test(t));
+      ts.every((t) => /(^|\/|:)(Compound|Unit)?PriceSpecification$/i.test(t));
     const eenheid =
       inner["referenceQuantity"] !== undefined ||
       inner["unitCode"] !== undefined ||
@@ -446,15 +486,33 @@ export function parseAmountToCents(
   raw: string | number,
 ): { ok: true; cents: number } | { ok: false; reason: ReadReason } {
   if (typeof raw === "number") {
-    if (!Number.isFinite(raw) || raw < 0) return { ok: false, reason: "bedrag-onduidelijk" };
+    if (!Number.isFinite(raw)) return { ok: false, reason: "bedrag-niet-leesbaar" };
+    if (raw < 0) return { ok: false, reason: "bedrag-negatief" };
     return { ok: true, cents: Math.round(raw * 100) };
   }
 
-  /* Valutatekens en spaties (ook de harde) eraf. Alles wat daarna nog geen
-   * cijfer of scheidingsteken is, maakt het bedrag onbetrouwbaar in plaats van
-   * leesbaar — "vanaf 39,99" is geen prijs die je mag gebruiken. */
-  const s = raw.replace(/\s| /g, "").replace(/^[€$£]/, "").replace(/(EUR|USD|GBP)$/i, "");
-  if (!/^-?[\d.,]+$/.test(s) || !/\d/.test(s)) return { ok: false, reason: "bedrag-onduidelijk" };
+  /* Valutatekens en spaties (ook de harde) eraf, AAN ALLEBEI DE KANTEN.
+   *
+   * Hier stond alleen `^[€$£]` en `(EUR|USD|GBP)$`, en daardoor viel de gewone
+   * Nederlandse schrijfwijze "96,99 €" in de weigerbak — met een uitleg over
+   * duizendtallen eronder. "EUR 96,99", zoals talloze feeds het schrijven, ook.
+   * Dat waren geen onleesbare bedragen maar een te smalle strip.
+   *
+   * Dat we het teken hier weghalen kost niets: currencySignal leest het
+   * afzonderlijk uit dezelfde ruwe string, en die functie krijgt de ruwe waarde
+   * en niet deze. Deze functie gaat over het getal. */
+  const s = raw
+    .replace(/\s| /g, "")
+    .replace(/^(?:EUR|USD|GBP)/i, "")
+    .replace(/^[€$£]/, "")
+    .replace(/(?:EUR|USD|GBP)$/i, "")
+    .replace(/[€$£]$/, "");
+
+  /* Nu moet er een getal staan. Staat er iets ANDERS — "vanaf 39,99", "circa
+   * 40", "op aanvraag" — dan is dat de oorzaak, en niet een scheidingsteken dat
+   * twee dingen kan betekenen. */
+  if (!/^-?[\d.,]+$/.test(s) || !/\d/.test(s)) return { ok: false, reason: "bedrag-niet-leesbaar" };
+  if (s.startsWith("-")) return { ok: false, reason: "bedrag-negatief" };
 
   const dots = (s.match(/\./g) ?? []).length;
   const commas = (s.match(/,/g) ?? []).length;
@@ -471,14 +529,18 @@ export function parseAmountToCents(
   } else {
     const sep = dots === 1 ? "." : ",";
     const after = s.length - s.indexOf(sep) - 1;
-    /* Drie cijfers erachter: dubbelzinnig. Nul cijfers erachter ("39,"): geen
-     * bedrag, want dan is er iets afgekapt en weten we niet wat. */
-    if (after === 3 || after === 0) return { ok: false, reason: "bedrag-onduidelijk" };
+    /* Drie cijfers erachter: dubbelzinnig, en dít is het enige geval waar de
+     * duizendtal-uitleg over gaat. Nul cijfers erachter ("39,") is iets anders:
+     * daar is iets afgekapt en weten we niet wat. Die twee kregen dezelfde
+     * reden en dus dezelfde, half onware uitleg. */
+    if (after === 3) return { ok: false, reason: "bedrag-onduidelijk" };
+    if (after === 0) return { ok: false, reason: "bedrag-afgekapt" };
     normalised = s.replace(sep, ".");
   }
 
   const n = Number(normalised);
-  if (!Number.isFinite(n) || n < 0) return { ok: false, reason: "bedrag-onduidelijk" };
+  if (!Number.isFinite(n)) return { ok: false, reason: "bedrag-niet-leesbaar" };
+  if (n < 0) return { ok: false, reason: "bedrag-negatief" };
   return { ok: true, cents: Math.round(n * 100) };
 }
 
@@ -543,6 +605,8 @@ const REASON_TEXT: Record<ReadReason, string> = {
     "Er staat wel een bedrag in de opmaak van deze pagina, maar het is niet de prijs van dit artikel: het is een bedrag van een andere soort, zoals een prijs per kilo of de verzendkosten. Wat het artikel zelf kost, staat er niet machineleesbaar bij. Vul het bedrag zelf in.",
   "prijsbereik":
     "Deze pagina noemt geen prijs maar een bereik — een laagste en een hoogste bedrag, bijvoorbeeld van meerdere aanbieders of van een actieprijs naast de gewone prijs. Welke van de twee jij betaalt, staat er niet bij. Vul het bedrag zelf in.",
+  "prijs-vanaf":
+    "Deze pagina noemt maar één kant van een prijsbereik — een vanaf-prijs of een tot-prijs. De andere kant staat er niet, en onbekend is niet hetzelfde als de kant die er wel staat. Vul het bedrag zelf in.",
   "prijs-zonder-valuta":
     "Er staat wel een bedrag op de pagina, maar er staat niet bij in welke munt. Zonder munt is niet te zeggen of dit euro's of dollars zijn, en dat verandert het antwoord volledig. Een dollarteken alleen is niet genoeg: dat schrijven de Amerikaanse, de Canadese en de Australische dollar allemaal zo. Vul het bedrag en de munt zelf in.",
   "munt-spreekt-tegen":
@@ -550,11 +614,51 @@ const REASON_TEXT: Record<ReadReason, string> = {
   "meerdere-prijzen":
     "De pagina noemt meer dan één bedrag, en welke bij jouw bestelling hoort staat er niet bij. Vul het bedrag zelf in.",
   "bedrag-onduidelijk":
-    "Het bedrag op de pagina is niet eenduidig te lezen — bij één punt met drie cijfers erachter kan het duizend keer schelen. Vul het bedrag zelf in.",
+    "Het bedrag op de pagina is niet eenduidig te lezen: er staat één punt of komma met precies drie cijfers erachter, en dat kan \"1.234\" \u2014 € 1,23 volgens schema.org, € 1.234 volgens de Nederlandse gewoonte \u2014 duizend keer laten schelen. Vul het bedrag zelf in.",
+  "bedrag-afgekapt":
+    "Het bedrag op de pagina eindigt op een punt of komma zonder cijfers erachter. Er is dus iets afgekapt, en wat er weg is weten we niet. Vul het bedrag zelf in.",
+  "bedrag-niet-leesbaar":
+    "In het prijsveld van deze pagina staat niet alleen een getal — er staat bijvoorbeeld \"vanaf\" of \"circa\" bij. Wat je hier werkelijk afrekent staat er dus niet. Vul het bedrag zelf in.",
+  "bedrag-negatief":
+    "Het bedrag in de opmaak van deze pagina is negatief. Dat is een korting of een terugboeking en geen aankoopbedrag. Vul het bedrag zelf in.",
 };
 
 export function reasonText(reason: ReadReason): string {
   return REASON_TEXT[reason];
+}
+
+/** Dezelfde oorzaken, maar voor het HANDMATIGE veld in de popup.
+ *
+ *  WAAROM DEZE TWEEDE LIJST BESTAAT. De teksten hierboven eindigen allemaal met
+ *  "vul het bedrag zelf in", en dat is het goede advies zolang de oorzaak op een
+ *  PAGINA ligt. In het handmatige veld heeft hij dat net gedaan: daar leest
+ *  "vul het bedrag zelf in" als een advies dat hij al heeft opgevolgd, en
+ *  "het bedrag op de pagina" als een oorzaak die er niet is.
+ *
+ *  De vorige oplossing was één hardgecodeerde zin in popup.ts. Die noemde bij
+ *  vier van de vijf oorzaken het verkeerde probleem — dezelfde fout, één laag
+ *  hoger. Twee lijsten naast elkaar in hetzelfde bestand kunnen niet uit elkaar
+ *  lopen zonder dat tsc erover valt: `Record<ReadReason, string>` dwingt af dat
+ *  elke reden in allebei staat. */
+const HANDMATIG_TEXT: Record<ReadReason, string> = {
+  "geen-prijsmarkup": "Er staat geen getal in dit veld. Typ het bedrag in euro's, bijvoorbeeld 49,99.",
+  "geen-artikelprijs": "Typ het bedrag dat je afrekent, in euro's — bijvoorbeeld 49,99.",
+  "prijsbereik": "Typ één bedrag en geen bereik: het bedrag dat je hier werkelijk afrekent.",
+  "prijs-vanaf": "Typ het bedrag dat je werkelijk afrekent, niet de vanaf-prijs.",
+  "prijs-zonder-valuta": "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
+  "munt-spreekt-tegen": "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
+  "meerdere-prijzen": "Typ één bedrag: het totaal dat je hier afrekent.",
+  "bedrag-onduidelijk":
+    "Eén punt of komma met drie cijfers erachter kan twee dingen betekenen: \"1.234\" is € 1,23 volgens schema.org en € 1.234 volgens de Nederlandse gewoonte. Dat scheelt duizend keer, dus we kiezen niet. Schrijf het voluit met centen — 1234,00 of 1.234,00 — dan is er niets te raden.",
+  "bedrag-afgekapt": "Er staat een punt of komma zonder cijfers erachter. Schrijf de centen erbij, bijvoorbeeld 39,00.",
+  "bedrag-niet-leesbaar":
+    "Er staat iets anders dan een getal in het veld. Alleen cijfers, met een komma voor de centen — bijvoorbeeld 49,99.",
+  "bedrag-negatief":
+    "Dit is een negatief bedrag. Vul in wat je afrekent, niet wat je terugkrijgt — bijvoorbeeld 49,99.",
+};
+
+export function reasonTextHandmatig(reason: ReadReason): string {
+  return HANDMATIG_TEXT[reason];
 }
 
 function weiger(reason: ReadReason): Reading {
@@ -566,20 +670,34 @@ function isReeks(c: PriceCandidate): boolean {
   return c.via === VIA_REEKS_LAAG || c.via === VIA_REEKS_HOOG || c.via === VIA_REEKS_PRIJS;
 }
 
-/** Een reeks is alleen leesbaar als hij één bedrag noemt: laagste én hoogste
- *  aanwezig, en allebei hetzelfde. Dan valt er niets te kiezen. Ontbreekt een
- *  uiteinde, of verschillen ze, dan is de prijs van DEZE pagina onbekend — en
- *  onbekend is nooit "de laagste". */
-function reeksIsEenBedrag(reeks: PriceCandidate[]): boolean {
-  if (!reeks.some((c) => c.via === VIA_REEKS_LAAG)) return false;
-  if (!reeks.some((c) => c.via === VIA_REEKS_HOOG)) return false;
+/** Wat er van een AggregateOffer-reeks te maken valt.
+ *
+ *  "een-bedrag"  — laagste én hoogste staan er en noemen hetzelfde bedrag. Dan
+ *                  valt er niets te kiezen en is de reeks gewoon een prijs.
+ *  "bereik"      — allebei de uiteinden staan er en ze verschillen.
+ *  "eenzijdig"   — er staat maar één uiteinde. De andere kant is ONBEKEND, en
+ *                  onbekend is niet gelijk aan de kant die er wel staat.
+ *
+ *  DIT ONDERSCHEID BESTAAT OMDAT DE TEKST HET MOET DRAGEN. Beide gevallen
+ *  weigeren terecht, maar de uitleg "een laagste EN een hoogste bedrag" is bij
+ *  een vanaf-prijs onwaar — daar staat er precies één. Een oorzaak die er niet
+ *  is, is nog steeds een verkeerde oorzaak, ook als de weigering klopt. */
+type ReeksVorm = "een-bedrag" | "bereik" | "eenzijdig";
+
+function reeksVorm(reeks: PriceCandidate[]): ReeksVorm {
+  const heeftLaag = reeks.some((c) => c.via === VIA_REEKS_LAAG);
+  const heeftHoog = reeks.some((c) => c.via === VIA_REEKS_HOOG);
+  if (!heeftLaag || !heeftHoog) return "eenzijdig";
   const bedragen = new Set<number>();
   for (const c of reeks) {
     const p = parseAmountToCents(c.raw);
-    if (!p.ok) return false;
+    /* Een uiteinde dat we niet kunnen lezen maakt de reeks niet eenzijdig maar
+     * onbepaald: we weten dan niet of de twee kanten gelijk zijn. Dat is een
+     * bereik en geen prijs. */
+    if (!p.ok) return "bereik";
     bedragen.add(p.cents);
   }
-  return bedragen.size === 1;
+  return bedragen.size === 1 ? "een-bedrag" : "bereik";
 }
 
 export function readCheckout(ev: Evidence): Reading {
@@ -607,7 +725,11 @@ export function readCheckout(ev: Evidence): Reading {
    * wat een niet-lid afrekent. Welke van de twee deze gebruiker betaalt, weet
    * de pagina niet en wij dus ook niet. */
   const reeks = tier.filter(isReeks);
-  if (reeks.length > 0 && !reeksIsEenBedrag(reeks)) return weiger("prijsbereik");
+  if (reeks.length > 0) {
+    const vorm = reeksVorm(reeks);
+    if (vorm === "bereik") return weiger("prijsbereik");
+    if (vorm === "eenzijdig") return weiger("prijs-vanaf");
+  }
 
   for (const c of tier) {
     if (muntSpreektTegen(currencySignal(c.raw), c.currency)) return weiger("munt-spreekt-tegen");

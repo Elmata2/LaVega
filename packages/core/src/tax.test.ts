@@ -305,7 +305,13 @@ test("(b) the invoice basis uses vatAmount — and an UNPAID invoice already owe
   expect(p.chargedCents).toBe(21000);
   expect(p.paidCents).toBe(8400);
   expect(p.netCents).toBe(12600);
-  expect(p.coverage).toEqual({ withVat: 2, total: 2 });
+  /* GEEN toEqual op coverage: die vergelijkt de HELE vorm, dus elk veld dat er
+     * later bijkomt laat vijf tests tegelijk omvallen zonder dat er gedrag
+     * verandert. Dat gebeurde toen `outside` en `nearestOutside` erbij kwamen (de
+     * facturen die buiten het tijdvak vallen). Waar deze tests over gaan is
+     * withVat en total; die twee worden gericht getoetst, en `outside` heeft zijn
+     * eigen tests in invoices.test.ts. */
+    expect(p.coverage).toMatchObject({ withVat: 2, total: 2 });
   const f = computeVatSetAside([], settings({ vatBasis: "factuurstelsel" }), "2026-06-20", undefined, invoices)!;
   expect(f.amountCents).toBe(12600);
 });
@@ -339,7 +345,7 @@ test("without the stelsel the invoice basis is not used, and the reason is named
   const p = vatPosition({ txs: [tx("2026-04-10", 12100)], settings: settings(), asOf: "2026-06-20", invoices });
   expect(p.basis).toBe("proxy");
   expect(p.note).toBe("stelsel-onbekend");
-  expect(p.coverage).toEqual({ withVat: 2, total: 2 });
+  expect(p.coverage).toMatchObject({ withVat: 2, total: 2 });
 
   const kas = vatPosition({ txs: [tx("2026-04-10", 12100)], settings: settings({ vatBasis: "kasstelsel" }), asOf: "2026-06-20", invoices });
   expect(kas.basis).toBe("proxy");
@@ -349,7 +355,7 @@ test("without the stelsel the invoice basis is not used, and the reason is named
 test("a missing btw-bedrag on one invoice blocks the basis and says which count", () => {
   const invoices = [inv({ vatAmount: 210 }), inv({ counterparty: "Klant 2", vatAmount: undefined })];
   const p = vatPosition({ txs: [tx("2026-04-10", 12100)], settings: settings({ vatBasis: "factuurstelsel" }), asOf: "2026-06-20", invoices });
-  expect(p.coverage).toEqual({ withVat: 1, total: 2 });
+  expect(p.coverage).toMatchObject({ withVat: 1, total: 2 });
   expect(p.basis).toBe("proxy");
   expect(p.note).toBe("btw-onbekend-op-facturen");
 });
@@ -360,7 +366,7 @@ test("an explicit 0 (btw verlegd, ICP, 0%-export) is a KNOWN zero, not a gap", (
     inv({ direction: "out", amount: 484, vatAmount: 84 }),
   ];
   const p = vatPosition({ txs: [], settings: settings({ vatBasis: "factuurstelsel" }), asOf: "2026-06-20", invoices });
-  expect(p.coverage).toEqual({ withVat: 2, total: 2 });
+  expect(p.coverage).toMatchObject({ withVat: 2, total: 2 });
   expect(p.basis).toBe("invoices");
   expect(p.chargedCents).toBe(0);
   expect(p.netCents).toBe(-8400); // only voorbelasting: money back
@@ -382,7 +388,7 @@ test("coverage counts this entity's own invoices in this window, and no cancelle
     inv({ direction: "out", amount: 484, vatAmount: 84, status: "paid" }), // paid counts: the BTW was still due
   ];
   const p = vatPosition({ txs: [], settings: settings({ vatBasis: "factuurstelsel" }), asOf: "2026-06-20", invoices });
-  expect(p.coverage).toEqual({ withVat: 2, total: 2 });
+  expect(p.coverage).toMatchObject({ withVat: 2, total: 2 });
   expect(p.netCents).toBe(12600);
 });
 

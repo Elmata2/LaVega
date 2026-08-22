@@ -32,8 +32,20 @@
 
 import type { Ranking, Row } from "./rank.js";
 import type { Reading } from "./read.js";
+import type { PuntenRij } from "./points.js";
+import type { CheckoutCard } from "./types.js";
 import { reasonText } from "./read.js";
-import { rowLine, sourceLine, unknownLine, headline } from "./lines.js";
+import {
+  rowLine,
+  sourceLine,
+  unknownLine,
+  headline,
+  puntenRegel,
+  puntenBron,
+  puntenVoetnoot,
+  puntenLeegRegel,
+  catalogPeriode,
+} from "./lines.js";
 import { euro, dateNL } from "./money.js";
 
 export type Caps = {
@@ -74,8 +86,16 @@ export function panelRows(r: Ranking, caps: Caps): PaneelRegel[] {
   for (const row of r.mine.slice(0, caps.mijn)) uit.push(regel(row, "mijn"));
   for (const row of r.openWorthIt.slice(0, caps.openen)) uit.push(regel(row, "openen"));
   for (const row of r.openBackwards.slice(0, caps.achteruit)) uit.push(regel(row, "achteruit"));
+  /* TWEE SOORTEN ONBEKEND, TWEE KOPPEN. `openUnknownCost` draagt allebei: de
+   * kaarten waarvan we de PRIJS niet kennen (basis "bruto") en de kaarten
+   * waarvan de OPBRENGST niet in euro's is uit te drukken (basis
+   * "voorwaardelijk"). Ze stonden onder één kop, "Kaartkosten onbekend", en bij
+   * die tweede groep was dat onwaar: bij Crypto.com Obsidian staan de kosten
+   * gewoon in de voorwaarde ("€450,000 12-month CRO staking"). De rij zei het al
+   * goed; de kop erboven sprak hem tegen, en de kop is wat er het eerst gelezen
+   * wordt. */
   for (const row of r.openUnknownCost.slice(0, caps.onbekendeKosten)) {
-    uit.push(regel(row, "onbekende-kosten"));
+    uit.push(regel(row, row.basis === "voorwaardelijk" ? "geen-euro-uitkomst" : "onbekende-kosten"));
   }
   for (const u of r.unknowns) {
     uit.push({ titel: u.card.product, regel: unknownLine(u), bron: "", groep: "onbekend" });
@@ -95,23 +115,70 @@ export function amountNote(reading: Extract<Reading, { ok: true }>): string {
 
 /** De regel onderaan. Twee dingen, allebei nodig: hoe oud de kaartgegevens zijn,
  *  en wat er met deze pagina gebeurt. Het tweede staat er omdat een paneel dat
- *  ineens over je winkelwagen heen staat, die vraag oproept. */
-export function footer(catalogAt: string): string {
+ *  ineens over je winkelwagen heen staat, die vraag oproept.
+ *
+ *  DE DATUM IS EEN SPREIDING EN GEEN PUNT. Hier stond de bouwdatum van de
+ *  catalogus, en die was aantoonbaar onjuist: zesenveertig cijfers in dezelfde
+ *  bundel dragen een controledatum die NA die dag ligt, en het oudste cijfer is
+ *  van bijna vier jaar eerder. Zie `catalogPeriode` in lines.ts voor waarom geen
+ *  enkele losse datum hier waar kan zijn. Levert de bundel geen enkele leesbare
+ *  datum, dan zegt de voetregel dát — en niet een datum die dan uit de lucht
+ *  komt. */
+export function footer(cards: readonly CheckoutCard[]): string {
+  const periode = catalogPeriode(cards);
+  const kop =
+    periode === null
+      ? "Bij deze kaartgegevens staat geen controledatum."
+      : periode.eerste === periode.laatste
+        ? `Kaartgegevens gecontroleerd op ${dateNL(periode.eerste)}.`
+        : `Kaartgegevens gecontroleerd tussen ${dateNL(periode.eerste)} en ${dateNL(periode.laatste)}; ` +
+          `bij elke regel staat de datum van dat ene cijfer.`;
   return (
-    `Kaartgegevens van ${dateNL(catalogAt)}. LaVega leest deze pagina alleen om het bedrag te ` +
+    `${kop} LaVega leest deze pagina alleen om het bedrag te ` +
     `vinden, bewaart er niets van en stuurt niets naar buiten.`
   );
+}
+
+/** Het puntenblok voor het paneel en de popup.
+ *
+ *  Dit is de enige plek waar de puntenrijen zinnen worden, zodat de twee
+ *  schermen niet uit elkaar kunnen lopen in wat ze BEWEREN. */
+export function puntenBlok(rijen: readonly PuntenRij[], amountCents: number | null, currency: string): PaneelPunten {
+  return {
+    regels: rijen.map((rij) => ({
+      /* ZIJN EIGEN NAAM ALS TITEL, en niet de naam uit onze koerslijst. Wie
+       * "Amex" invoert en "Membership Rewards" terugleest, weet niet zeker of
+       * dit over zijn saldo gaat. De naam uit de koerslijst staat in de zin
+       * eronder, waar hij hoort: bij de koers. */
+      titel: rij.program,
+      regel: puntenRegel(rij, amountCents),
+      bron: puntenBron(rij),
+    })),
+    voetnoot: rijen.length === 0 ? "" : puntenVoetnoot(currency),
+    /* Alleen als er ECHT niets is ingevoerd. Rijen die wegvallen omdat het saldo
+     * nul is, tellen als ingevoerd: dan weet hij al waar het veld staat en zou
+     * deze zin hem naar een scherm sturen waar hij net vandaan komt. */
+    leeg: rijen.length === 0 ? puntenLeegRegel() : "",
+  };
 }
 
 export type PanelInput = {
   reading: Reading;
   ranking: Ranking | null;
-  catalogAt: string;
+  /** De gebundelde kaarten, voor de spreiding van de controledatums onderaan. */
+  cards: readonly CheckoutCard[];
+  /** Zijn puntensaldi, al uitgerekend door points.ts. Leeg is een geldige
+   *  waarde en betekent dat hij er nog geen heeft ingevoerd. */
+  punten: readonly PuntenRij[];
   caps?: Caps;
 };
 
 export function buildPanel(input: PanelInput): PaneelAntwoord {
-  const voet = footer(input.catalogAt);
+  const voet = footer(input.cards);
+  /* De munt van de LEZING, niet die van de rangschikking: de voetnoot van het
+   * puntenblok gaat over de winkel waar hij nu staat. Kon er niets gelezen
+   * worden, dan weten we de munt niet en blijft die zin bij het algemene deel. */
+  const muntVanPagina = input.reading.ok ? input.reading.currency : "";
 
   if (!input.reading.ok) {
     /* reasonText noemt al de echte oorzaak en eindigt met "vul het bedrag zelf
@@ -122,6 +189,10 @@ export function buildPanel(input: PanelInput): PaneelAntwoord {
       soort: "geen-bedrag",
       kop: "Het bedrag is hier niet te lezen.",
       uitleg: `${reasonText(input.reading.reason)} Dat doe je in het LaVega-venster: klik op het icoon in je werkbalk.`,
+      /* Zonder bedrag geen dekking, maar het SALDO staat er los van. Dit is de
+       * toestand waarin het paneel voorheen niets zei, en op een IKEA-pagina met
+       * een actieprijs is dit de toestand die je krijgt. */
+      punten: puntenBlok(input.punten, null, muntVanPagina),
       voet,
     };
   }
@@ -134,6 +205,7 @@ export function buildPanel(input: PanelInput): PaneelAntwoord {
         `Om daar euro's van te maken is een wisselkoers nodig, en die haalt LaVega nergens op. ` +
         `Vul in het LaVega-venster zelf het bedrag in euro's in en zet de munt op ${input.reading.currency}; ` +
         `dan wordt de koersopslag wel verrekend.`,
+      punten: puntenBlok(input.punten, null, muntVanPagina),
       voet,
     };
   }
@@ -147,6 +219,7 @@ export function buildPanel(input: PanelInput): PaneelAntwoord {
     kop: headline(input.ranking),
     bedrag: euro(input.reading.amountCents),
     bedragNoot: amountNote(input.reading),
+    punten: puntenBlok(input.punten, input.reading.amountCents, muntVanPagina),
     regels: panelRows(input.ranking, input.caps ?? PANEEL_CAPS),
     voet,
   };

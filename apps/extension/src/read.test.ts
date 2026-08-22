@@ -18,6 +18,7 @@ import {
   parseAmountToCents,
   currencySignal,
   reasonText,
+  reasonTextHandmatig,
   VIA_ORDER,
   VIA_OFFER,
   VIA_MICRODATA,
@@ -204,10 +205,49 @@ describe("parseAmountToCents", () => {
     expect(parseAmountToCents("1,234")).toEqual({ ok: false, reason: "bedrag-onduidelijk" });
   });
 
-  it("rommel is geen bedrag", () => {
-    expect(parseAmountToCents("vanaf 39,99")).toEqual({ ok: false, reason: "bedrag-onduidelijk" });
-    expect(parseAmountToCents("")).toEqual({ ok: false, reason: "bedrag-onduidelijk" });
-    expect(parseAmountToCents("39,")).toEqual({ ok: false, reason: "bedrag-onduidelijk" });
+  it("rommel is geen bedrag, en elke soort rommel heeft zijn EIGEN oorzaak", () => {
+    /* Hier stond drie keer "bedrag-onduidelijk", en de tekst bij die reden gaat
+     * over één punt met drie cijfers erachter. Bij deze drie is dat de verkeerde
+     * oorzaak, en de gebruiker leest de oorzaak — niet de code. */
+    expect(parseAmountToCents("vanaf 39,99")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+    expect(parseAmountToCents("")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+    expect(parseAmountToCents("op aanvraag")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+    expect(parseAmountToCents("39,")).toEqual({ ok: false, reason: "bedrag-afgekapt" });
+    expect(parseAmountToCents("-5,00")).toEqual({ ok: false, reason: "bedrag-negatief" });
+    expect(parseAmountToCents(-5)).toEqual({ ok: false, reason: "bedrag-negatief" });
+    expect(parseAmountToCents(Number.NaN)).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+  });
+
+  it("de gewone Nederlandse schrijfwijze met het teken ACHTER het bedrag wordt gelezen", () => {
+    /* "96,99 €" is hoe half Nederland het schrijft, en het viel in de weigerbak
+     * met een uitleg over duizendtallen eronder. De strip keek alleen naar een
+     * VOORAANSTAAND teken. */
+    expect(parseAmountToCents("96,99 €")).toEqual({ ok: true, cents: 9699 });
+    expect(parseAmountToCents("EUR 96,99")).toEqual({ ok: true, cents: 9699 });
+    expect(parseAmountToCents("96,99 EUR")).toEqual({ ok: true, cents: 9699 });
+    expect(parseAmountToCents("€ 1.234,56")).toEqual({ ok: true, cents: 123456 });
+  });
+
+  it("elke reden heeft een tekst voor de PAGINA en een tekst voor het handmatige veld", () => {
+    /* Twee lijsten, want "vul het bedrag zelf in" is onder het veld waar hij dat
+     * net deed geen advies maar een echo. Dat de twee lijsten volledig zijn,
+     * dwingt tsc af met Record<ReadReason, string>; dat ze VERSCHILLEN is wat
+     * hier wordt nagemeten. */
+    const redenen = [
+      "geen-prijsmarkup", "geen-artikelprijs", "prijsbereik", "prijs-vanaf",
+      "prijs-zonder-valuta", "munt-spreekt-tegen", "meerdere-prijzen",
+      "bedrag-onduidelijk", "bedrag-afgekapt", "bedrag-niet-leesbaar", "bedrag-negatief",
+    ] as const;
+    for (const r of redenen) {
+      expect(reasonText(r).length).toBeGreaterThan(20);
+      expect(reasonTextHandmatig(r).length).toBeGreaterThan(20);
+      expect(reasonTextHandmatig(r)).not.toContain("Vul het bedrag zelf in");
+    }
+    /* En de oorzaak die de tekst noemt, hoort bij de reden. */
+    expect(reasonText("bedrag-onduidelijk")).toContain("drie cijfers");
+    expect(reasonText("bedrag-afgekapt")).toContain("zonder cijfers erachter");
+    expect(reasonText("bedrag-negatief")).toContain("negatief");
+    expect(reasonText("prijs-vanaf")).toContain("één kant");
   });
 });
 
@@ -349,7 +389,36 @@ describe("een prijsbereik is geen prijs", () => {
     const r = read("kunstmatig-aggregateoffer-vanafprijs.html");
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.reason).toBe("prijsbereik");
+    /* EIGEN REDEN, en niet "prijsbereik". De weigering was al goed, de UITLEG
+     * niet: die zei "een laagste EN een hoogste bedrag" op een pagina waar er
+     * precies één staat. Een oorzaak die er niet is, blijft een verkeerde
+     * oorzaak, ook onder een terechte weigering. */
+    expect(r.reason).toBe("prijs-vanaf");
+    expect(reasonText(r.reason)).toContain("één kant");
+  });
+});
+
+describe("een UnitPriceSpecification zonder eenheid IS de artikelprijs", () => {
+  it("leest een Shopware/Magento-prijs in plaats van hem als kiloprijs te weigeren", () => {
+    /* De reparatie van de kiloprijs keurde af op @type, en daardoor viel de
+     * gewone artikelprijs van Shopware en Magento — een UnitPriceSpecification
+     * ZONDER unitCode, unitText of referenceQuantity — in de bak
+     * "geen-artikelprijs", met de uitleg "zoals een prijs per kilo of de
+     * verzendkosten" op een pagina waar geen van beide staat. */
+    const r = read("kunstmatig-eenheidsprijs-zonder-eenheid.html");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.amountCents).toBe(4999);
+    expect(r.currency).toBe("EUR");
+  });
+
+  it("maar mét een eenheid blijft het een bedrag van een andere soort", () => {
+    /* Dat is wat de kiloprijs een kiloprijs maakt, en niet het @type: het pak
+     * weegt 500 gram en kost € 9,25, terwijl er € 18,50 per KGM staat. */
+    const r = read("kunstmatig-eenheidsprijs-per-kilo.html");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("geen-artikelprijs");
   });
 });
 

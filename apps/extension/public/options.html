@@ -18,6 +18,30 @@
   <p class="hint" id="kaarten-telling"></p>
   <div id="kaartenlijst"></div>
 
+  <h2>Welke punten heb je liggen?</h2>
+  <p class="hint">
+    Deze saldi typ je hier zelf in; de extensie haalt ze nergens op en heeft geen verbinding met je
+    LaVega-kluis. Dat betekent dat je ze op twee plekken bijhoudt en dat ze uit elkaar kunnen lopen
+    — daarom staat bij elk saldo de datum waarop je het invulde, en zegt LaVega het erbij zodra dat
+    meer dan negentig dagen geleden is. Een saldo dat je leegmaakt, is meteen weg.
+  </p>
+  <div id="puntenlijst"></div>
+
+  <p class="hint" id="punten-melding"></p>
+
+  <h3>Een programma dat er niet bij staat</h3>
+  <p class="hint">
+    Van programma's buiten de lijst kennen we geen koers. LaVega laat dan alleen zien dát je punten
+    hebt liggen, met de mededeling dat we niet weten wat ze waard zijn — nooit een verzonnen bedrag.
+  </p>
+  <form id="punten-toevoegen" novalidate>
+    <label for="punten-naam">Naam van het programma</label>
+    <input id="punten-naam" type="text" placeholder="Marriott Bonvoy" autocomplete="off" />
+    <label for="punten-aantal">Aantal punten</label>
+    <input id="punten-aantal" type="text" inputmode="numeric" placeholder="12000" autocomplete="off" />
+    <button type="submit">Toevoegen</button>
+  </form>
+
   <h2>Op welke winkels mag het paneel verschijnen?</h2>
   <p class="hint">
     Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een

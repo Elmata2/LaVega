@@ -690,3 +690,101 @@ De goedkoopste ontbrekende test van déze ronde is haar tegenhanger: een test di
 `leesVoorwaarden` en `bepaalClaim` loslaat op een kaart waarvan de voorwaarden
 bij de KOERSOPSLAG staan in plaats van bij de cashback. Dat is één `describe`,
 en hij vangt N1 en N2 allebei.
+
+---
+
+# Wat de bouwlane hierna heeft gedaan — 22 augustus 2026
+
+*Toegevoegd door de bouwlane. Boven deze streep is niets veranderd: het oordeel
+van de tegenspraak hoort te blijven staan zoals het geschreven is.*
+
+De opdracht van deze ronde was niet "de bevindingen afvinken" maar de **eerste**
+reden van het oordeel wegnemen: *hij zegt niets nuttigs.* Dat is gedaan door de
+puntenkant te bouwen, langs het herschreven plan
+(`docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md`).
+De bevindingen die klein waren, zijn onderweg meegenomen.
+
+**Gedraaid, met de echte aantallen:** `npx vitest run` → **200 geslaagd, 0
+gefaald** (9 bestanden; was 164). `npx tsc --noEmit` schoon. `pnpm build` exit 0,
+**24 bestanden gescand** (was 22). En `dist/` is in Chrome 151 geladen: de
+extensie laadt, de service worker draait, popup en optiescherm renderen met
+**nul** CSP-weigeringen en nul console-fouten. Het paneel van het content script
+is daar ook gemeten, met een gestubde worker, in beide toestanden.
+
+## De kop van het oordeel: "hij zegt niets nuttigs"
+
+Op een IKEA-productpagina met twee gewone Nederlandse kaarten aangevinkt stond
+er: *"van de kaarten die je hebt aangevinkt, weten we bij geen enkele wat deze
+aankoop oplevert"*, met een advies van vijftig cent eronder. Dat staat er nog —
+het is waar, en de datalaag (A1) is niet in deze map te repareren.
+
+Wat er nu **boven** staat, letterlijk afgelezen uit de popup in Chrome 151, bij
+een saldo van 42.000 punten en een bedrag van € 360:
+
+> **PUNTEN DIE JE HIER HEBT LIGGEN**
+> *Amex* — Je hebt hier 42.000 punten liggen. Bij de gepubliceerde koers van
+> Membership Rewards is dat € 126,00 — 35% van deze € 360,00. Inwisselen gaat via
+> Betalen met Punten via de Amex App / online account — niet in de kassa van deze
+> winkel. Of deze winkel dit programma accepteert, kunnen we hier niet zien.
+> Overboeken naar een luchtvaart- of hotelpartner heeft een andere waarde, en die
+> publiceert Amex niet.
+> Koers: "1.000 Membership Rewards punten zijn gelijk aan € 3." Bron:
+> americanexpress.com, gelezen 21 augustus 2026. Op 22 augustus 2026 zelf opnieuw
+> opgehaald met kale curl en een browser-UA: HTTP 200, 604.301 bytes, en het
+> citaat staat er woordelijk in. Saldo door jou ingevoerd op 12 augustus 2026.
+>
+> Deze punten gaan niet verloren door hier met een andere kaart te betalen — ze
+> blijven staan. Dit is een herinnering, geen voordeel dat je hier moet pakken.
+
+En op een **IKEA-actiepagina**, waar de lezer sinds L6 niets teruggeeft en het
+paneel dus zweeg, staat nu hetzelfde puntenblok onder de melding over het bedrag.
+Dat is de directe reparatie van de tweede helft van het oordeel: het blok hangt
+niet aan een leesbaar bedrag, alleen het percentage doet dat.
+
+Het gat is niet dichtgepraat. Bij één van de vier programma's staat een bedrag,
+en bij de andere drie staat er per programma een **andere** reden waarom niet —
+ING (uitgesproken nul van de uitgever), Revolut (uitgever zegt: geen vaste
+waarde), Flying Blue (wij konden het niet lezen). Dat onderscheid is de kern en
+het is getest (`points.test.ts`, 20 tests).
+
+## De openstaande bevindingen
+
+| # | wat er is gebeurd |
+| --- | --- |
+| **A3** | **dicht.** Eigen `PaneelGroep` `geen-euro-uitkomst` met de kop "Opbrengst niet in euro's". Afgelezen in Chrome: Bleap staat onder "Kaartkosten onbekend", de zeven tokenkaarten onder de nieuwe kop. Test in `panel.test.ts`. |
+| **A6** | **dicht.** `getal()` in `money.ts`; `options.ts:90` gebruikt hem. "0.5 punt(en) per euro" is "0,5 punt(en) per euro". Test in `money.test.ts`. |
+| **B3** | **dicht.** De zin in `chrome.d.ts` zegt nu dat `connect-src 'none'` alleen voor `extension_pages` geldt, dat een content script daar buiten valt, en wat de dekking daar wél is (de buildpoort, met de zeven naalden opgesomd). |
+| **N4** | **dicht, en de vergaarbak is opgesplitst.** `bedrag-onduidelijk` gaat nu alleen nog over het duizendteken. Erbij: `bedrag-afgekapt`, `bedrag-niet-leesbaar`, `bedrag-negatief`. Bijvangst: `"96,99 €"` en `"EUR 96,99"` werden geweigerd en worden nu gewoon gelezen — de strip keek alleen naar een vooraanstaand teken. En `popup.ts` heeft zijn hardgecodeerde tekst niet meer: er is een tweede lijst `HANDMATIG_TEXT`, want "vul het bedrag zelf in" is onder het veld waar je dat net deed geen advies. |
+| **N5** | **dicht.** Eén uiteinde van een reeks geeft `prijs-vanaf` met een eigen tekst; twee verschillende uiteinden blijven `prijsbereik`. |
+| **N6** | **dicht.** Een `UnitPriceSpecification` **zonder** `unitCode`, `unitText` of `referenceQuantity` is de artikelprijs (Shopware/Magento). De kiloprijs-fixture weigert nog steeds — die draagt `referenceQuantity: 1 KGM`, en dát is wat een eenheidsprijs een eenheidsprijs maakt. Nieuwe fixture erbij. |
+| **N7** | **dicht.** De SLÄKT-meting staat onder het vinkje (`sites.ts`) en in de README-tabel, met de consequentie erbij: op actiepagina's zegt de extensie niets over het bedrag. Plus wat er dan wél staat. |
+| **N8** | **dicht, maar anders.** De voetregel noemt niet één datum maar de **spreiding**: "Kaartgegevens gecontroleerd tussen 1 maart 2022 en 20 augustus 2026; bij elke regel staat de datum van dat ene cijfer." Geen enkele losse datum kan hier waar zijn — de bouwdatum verzwijgt het oudste cijfer, de nieuwste controledatum verklaart alles vers. Afgeleid uit de bundel zelf, dus het beweegt mee. `docs/catalog/catalog.json` is **niet** aangeraakt: dat is niet van deze lane. |
+| **N9** | **dicht.** Het Escape-voorbehoud staat in de README, met de reden dat er geen globale vanger hangt. |
+| **N10** | **dicht.** De alinea is vervangen door de meting: het commando, de extensie-id, en wat er wel en niet te meten viel. Het toestemmingsvenster blijft onmeetbaar in headless en dat staat er ook. |
+| **11** | **dicht.** Het `style`-attribuut is naar `stijl.css`; `style-src` staat op `'self'`. De build weigert het nu als `'unsafe-inline'` terugkomt, en dat is nagemeten door het opzettelijk terug te zetten in een kopie buiten de repo. |
+| **N1/N2/N3** | waren al dicht vóór deze lane, in commit `a4147ec`. Zelf nagelezen in `rank.ts` (`bepaalClaim` neemt `veld`; `feeClaim.soort !== "vast"` maakt van een voorwaardelijke nul een brutoregel) en de tests staan er (`rank.test.ts:479` e.v.). 37 rank-tests groen. |
+| **A1** | **niet dicht, en niet hier te repareren.** 0 van de 77 kaarten heeft zowel een cashbackcijfer als een prijs. De puntenkant is geen oplossing voor A1 — het is een tweede antwoord naast een leeg antwoord. |
+
+## Wat er bij is gekomen aan poorten
+
+De buildpoort scande "alles in dist", maar dat was alleen bewezen voor `.html` en
+`.css`, omdat die in de zelftest stonden. Er staat nu een achtste zelftestgeval:
+een adres in een bestand met een **onbekende extensie**. Onafhankelijk nagemeten
+in een kopie buiten de repo — met een `dist/pixel.dat` erbij sluit de build af
+met exit 1 en `dist/pixel.dat:1 bevat een http(s)-adres`, naast de drie oude
+gevallen. Vier op vier betrapt.
+
+## Wat blijft liggen, met de reden
+
+1. **A1, de datalaag.** Buiten deze map. Eén gangbare Nederlandse kaart met een
+   cashbackcijfer én een prijs verandert meer dan alles hierboven.
+2. **`generatedAt` in `docs/catalog/catalog.json`.** Dat bestand is van een
+   andere lane. De voetregel is aan onze kant waar gemaakt; de bron van de
+   verwarring niet.
+3. **Het toestemmingsdialoog.** Een venster van het besturingssysteem; blijft in
+   een headless sessie hangen. De code hangt er niet van af.
+4. **Revolut's koersbron is vandaag niet te lezen** (HTTP 403, Cloudflare, ook
+   via `r.jina.ai`). Niet omzeild. Die regel draagt daarom de datum van 21
+   augustus en zegt dat er zelf bij op het scherm.
+5. **Geen brug naar de kluis.** Beredeneerd, niet vergeten: zie "Waarom de saldi
+   in de extensie worden ingetypt" in de README en de kop van `store.ts`.

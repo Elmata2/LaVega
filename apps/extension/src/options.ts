@@ -28,10 +28,20 @@
  * en klopt het gedrag met wat er beloofd is. */
 
 import { SITES, type Site } from "./sites.js";
-import { getHeldIds, setHeldIds, getEnabledSiteIds, setEnabledSiteIds } from "./store.js";
+import {
+  getHeldIds,
+  setHeldIds,
+  getEnabledSiteIds,
+  setEnabledSiteIds,
+  getPointsBalances,
+  setPointsBalances,
+} from "./store.js";
 import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
-import { pct, dateNL, euro, eurosToCents } from "./money.js";
+import { POINTS_RATES } from "./generated/points-rates.generated.js";
+import { pct, dateNL, euro, eurosToCents, getal } from "./money.js";
 import { leesVoorwaarden } from "./rank.js";
+import { normaliseerProgramma, zoekKoers, VEROUDERD_NA_DAGEN, type PointsBalance } from "./points.js";
+import { citaat } from "./lines.js";
 import type { CheckoutCard } from "./types.js";
 
 function el(tag: string, klasse: string, tekst?: string): HTMLElement {
@@ -87,7 +97,13 @@ function watWeWeten(c: CheckoutCard): string {
   const bits: string[] = [];
   bits.push(c.fxFeePct ? `koersopslag ${pct(c.fxFeePct.value)}${voorwaardeNoot(c.fxFeePct)}` : "koersopslag onbekend");
   bits.push(c.cashbackPct ? `cashback ${pct(c.cashbackPct.value)}${voorwaardeNoot(c.cashbackPct)}` : "cashback onbekend");
-  if (c.pointsPerEuro) bits.push(`${c.pointsPerEuro.value} punt(en) per euro`);
+  /* Door money.ts, net als de bedragen ernaast. Hier stond
+   * `${c.pointsPerEuro.value}` en dat gaf op een Nederlands scherm "0.5 punt(en)
+   * per euro" — een Engelse punt, en bij vier van de eenenvijftig kaarten met
+   * een puntencijfer viel dat op. Dit is precies dezelfde bevinding als
+   * "€ 37.5 per jaar" één veld verderop; die is toen gerepareerd en deze bleef
+   * staan omdat er per veld werd gekeken in plaats van per regel. */
+  if (c.pointsPerEuro) bits.push(`${getal(c.pointsPerEuro.value)} punt(en) per euro`);
   bits.push(
     c.fee
       ? `kosten ${euro(eurosToCents(c.fee.value))} per ${c.fee.period}${voorwaardeNoot(c.fee)}`
@@ -145,6 +161,219 @@ function toonTelling(): void {
 }
 
 zoek.addEventListener("input", tekenKaarten);
+
+/* ────────────────────────────── de punten ────────────────────────────────── */
+
+/* WAAROM DE SALDI HIER WORDEN INGETYPT EN NIET UIT DE KLUIS KOMEN, staat voluit
+ * in de kop van store.ts. Kort: een brug naar de LaVega-tab is een nieuw kanaal
+ * met een tweede redactiegrens en hij werkt niet met de tab dicht; twee keer
+ * invoeren levert saldi op die uit elkaar lopen. Dat tweede is niet te
+ * voorkomen, alleen zichtbaar te maken — en dat gebeurt hier, met de datum bij
+ * elk saldo en een waarschuwing zodra hij ouder is dan negentig dagen.
+ *
+ * WAT ER GEBEURT ALS HET VELD LEEG WORDT GEMAAKT: de regel verdwijnt uit de
+ * opslag. Niet "op nul zetten": nul punten en geen saldo zijn twee verschillende
+ * uitspraken, en de eerste zou aan een kassa een regel opleveren over een
+ * programma waar niets ligt. */
+
+const puntenLijst = document.getElementById("puntenlijst") as HTMLDivElement;
+const puntenMelding = document.getElementById("punten-melding") as HTMLParagraphElement;
+const puntenFormulier = document.getElementById("punten-toevoegen") as HTMLFormElement;
+const puntenNaam = document.getElementById("punten-naam") as HTMLInputElement;
+const puntenAantal = document.getElementById("punten-aantal") as HTMLInputElement;
+
+let saldi: PointsBalance[] = [];
+
+/** De peildatum van dit scherm. De enige klokaflezing hier, en hij staat bewust
+ *  in één functie: een saldo dat hij vandaag bevestigt, draagt de datum van
+ *  vandaag, en points.ts rekent daar later mee zonder zelf een klok te kennen. */
+function vandaag(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Alleen hele, niet-negatieve getallen. Een punt of komma erin is bijna altijd
+ *  een duizendteken ("42.000") en nooit een decimaal: een halve mijl bestaat
+ *  niet. We halen ze dus weg in plaats van te weigeren — maar alleen als er
+ *  daarna niets anders dan cijfers overblijft. */
+function leesAantal(ruw: string): number | null {
+  const t = ruw.trim();
+  if (t === "") return null;
+  const kaal = t.replace(/[.\s ]/g, "");
+  if (!/^\d+$/.test(kaal)) return null;
+  const n = Number(kaal);
+  if (!Number.isSafeInteger(n) || n < 0 || n > 1_000_000_000) return null;
+  return n;
+}
+
+/** Horen deze twee namen bij hetzelfde programma?
+ *
+ *  NIET ALLEEN OP DE LETTERLIJKE NAAM VERGELIJKEN, en dat is gemeten. Wie zijn
+ *  saldo onder "Amex" opschrijft, kreeg in dit scherm TWEE rijen: "Membership
+ *  Rewards" met de koers en een leeg veld, en daaronder "Amex" met de mededeling
+ *  "we kennen geen koers voor dit programma" — wat onwaar is, want die koers
+ *  staat één rij hoger. Dezelfde aliaslijst die het paneel gebruikt om de koers
+ *  te vinden, hoort dus ook hier te bepalen of twee namen hetzelfde programma
+ *  zijn. */
+function zelfdeProgramma(a: string, b: string): boolean {
+  if (normaliseerProgramma(a) === normaliseerProgramma(b)) return true;
+  const ka = zoekKoers(a, POINTS_RATES);
+  const kb = zoekKoers(b, POINTS_RATES);
+  return ka !== null && kb !== null && ka.program === kb.program;
+}
+
+function saldoVan(programma: string): PointsBalance | undefined {
+  return saldi.find((b) => zelfdeProgramma(b.program, programma));
+}
+
+async function zetSaldo(programma: string, punten: number | null): Promise<void> {
+  /* Alles wat bij hetzelfde programma hoort eruit, ook als hij het onder een
+   * andere naam had staan. Anders levert een invoer op de rij "Membership
+   * Rewards" een tweede saldo naast het bestaande "Amex" op, en dan telt het
+   * paneel twee keer punten die hij één keer heeft. */
+  saldi = saldi.filter((b) => !zelfdeProgramma(b.program, programma));
+  if (punten !== null) saldi.push({ program: programma, points: punten, updatedAt: vandaag() });
+  await setPointsBalances(saldi);
+  tekenPunten();
+}
+
+/** Wat we over de koers van dit programma weten, in één regel onder het veld.
+ *  Vier soorten, vier zinnen — zie de kop van points.ts voor waarom "geen koers"
+ *  niet één ding is. */
+function koersNoot(programma: string): string {
+  const rate = POINTS_RATES.find((r) => r.program === programma);
+  if (!rate) return "We kennen geen koers voor dit programma. LaVega toont dan alleen dát je punten hebt.";
+  switch (rate.soort) {
+    case "koers":
+      return `Koers bekend: ${citaat(rate.quote)} Geldt voor ${rate.scope}, gelezen ${dateNL(rate.gelezenOp)}.`;
+    /* "De uitgever" en niet de programmanaam: "ING Punten zegt zelf" laat een
+     * programma spreken, en dat doet het niet. */
+    case "uitgesproken-nul":
+      return `De uitgever zegt zelf: ${citaat(rate.quote)} Aan een kassa dekken ze dus niets; LaVega zet er geen percentage bij.`;
+    case "geen-vaste-waarde":
+      return `De uitgever zegt zelf: ${citaat(rate.quote)} Er is dus geen koers om mee te rekenen — en dat is iets anders dan nul.`;
+    case "niet-gepubliceerd":
+      return "Wij hebben voor dit programma geen koers kunnen lezen. Dat is een gat in onze meting, geen uitspraak van de uitgever.";
+  }
+}
+
+function dagenSinds(iso: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const toen = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const nuM = /^(\d{4})-(\d{2})-(\d{2})$/.exec(vandaag())!;
+  const nu = Date.UTC(Number(nuM[1]), Number(nuM[2]) - 1, Number(nuM[3]));
+  return Math.round((nu - toen) / 86_400_000);
+}
+
+function tekenPunten(): void {
+  leeg(puntenLijst);
+
+  /* Eerst de programma's waarvan we iets weten, in de volgorde van het
+   * gegenereerde bestand. Daarna alles wat hij zelf heeft toegevoegd. */
+  const bekend = POINTS_RATES.map((r) => r.program);
+  const eigen = saldi.map((b) => b.program).filter((naam) => zoekKoers(naam, POINTS_RATES) === null);
+  const namen = [...bekend, ...eigen];
+
+  for (const naam of namen) {
+    const saldo = saldoVan(naam);
+    const rij = el("div", "puntrij");
+
+    const veld = el("div", "veld");
+    const invoer = document.createElement("input");
+    invoer.type = "text";
+    invoer.inputMode = "numeric";
+    invoer.id = `punten-${normaliseerProgramma(naam).replace(/ /g, "-")}`;
+    invoer.placeholder = "leeg";
+    invoer.autocomplete = "off";
+    invoer.value = saldo ? getal(saldo.points, 0) : "";
+    /* `change` en niet `input`: anders schrijft elke toetsaanslag een nieuwe
+     * datum weg, en dan betekent "ingevoerd op" niet meer dat hij het toen heeft
+     * bevestigd maar dat hij toen aan het typen was. */
+    invoer.addEventListener("change", () => {
+      const ruw = invoer.value.trim();
+      if (ruw === "") {
+        void zetSaldo(naam, null);
+        puntenMelding.textContent = `${naam} staat niet meer in de lijst.`;
+        puntenMelding.className = "hint";
+        return;
+      }
+      const n = leesAantal(ruw);
+      if (n === null) {
+        puntenMelding.textContent =
+          `"${ruw}" is geen aantal punten. Alleen hele getallen; een duizendpunt mag ("42.000").`;
+        puntenMelding.className = "hint fout";
+        return;
+      }
+      puntenMelding.textContent = `${naam}: ${getal(n, 0)} punten, met de datum van vandaag erbij.`;
+      puntenMelding.className = "hint";
+      void zetSaldo(naam, n);
+    });
+    veld.appendChild(invoer);
+
+    const tekst = el("div", "tekst");
+    const label = document.createElement("label");
+    label.htmlFor = invoer.id;
+    label.className = "titel";
+    label.textContent = naam;
+    tekst.appendChild(label);
+    tekst.appendChild(el("div", "noot", koersNoot(naam)));
+    if (saldo) {
+      const dagen = saldo.updatedAt === "" ? null : dagenSinds(saldo.updatedAt);
+      const wanneer =
+        saldo.updatedAt === ""
+          ? "Bij dit saldo staat geen datum, dus we weten niet hoe oud het is."
+          : `Ingevoerd op ${dateNL(saldo.updatedAt)}.`;
+      const oud =
+        dagen !== null && dagen > VEROUDERD_NA_DAGEN
+          ? ` Dat is ${dagen} dagen geleden — LaVega zegt er aan de kassa bij dat dit saldo oud is.`
+          : "";
+      tekst.appendChild(el("div", "noot", wanneer + oud));
+    }
+
+    rij.appendChild(veld);
+    rij.appendChild(tekst);
+
+    /* Alleen bij zelf toegevoegde programma's een knop, want de vier bekende
+     * rijen verdwijnen niet: die horen in de lijst te blijven staan zodat hij
+     * ziet dat de extensie ze kent. Leegmaken van het veld is daar het
+     * weghalen. */
+    if (saldo && zoekKoers(naam, POINTS_RATES) === null) {
+      const weg = document.createElement("button");
+      weg.type = "button";
+      weg.className = "weg";
+      weg.textContent = "Weghalen";
+      weg.addEventListener("click", () => {
+        void zetSaldo(naam, null);
+        puntenMelding.textContent = `${naam} is weggehaald.`;
+        puntenMelding.className = "hint";
+      });
+      rij.appendChild(weg);
+    }
+
+    puntenLijst.appendChild(rij);
+  }
+}
+
+puntenFormulier.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const naam = puntenNaam.value.trim();
+  const n = leesAantal(puntenAantal.value);
+  if (naam === "") {
+    puntenMelding.textContent = "Vul een naam in, anders weet LaVega niet waar dit saldo bij hoort.";
+    puntenMelding.className = "hint fout";
+    return;
+  }
+  if (n === null) {
+    puntenMelding.textContent = "Vul een aantal punten in — alleen hele getallen.";
+    puntenMelding.className = "hint fout";
+    return;
+  }
+  puntenNaam.value = "";
+  puntenAantal.value = "";
+  puntenMelding.textContent = `${naam}: ${getal(n, 0)} punten toegevoegd, met de datum van vandaag.`;
+  puntenMelding.className = "hint";
+  void zetSaldo(naam, n);
+});
 
 /* ───────────────────────────── de winkels ────────────────────────────────── */
 
@@ -230,6 +459,9 @@ async function start(): Promise<void> {
   aangevinkteKaarten = new Set(await getHeldIds());
   tekenKaarten();
   toonTelling();
+
+  saldi = await getPointsBalances();
+  tekenPunten();
 
   const aangevinkteSites = new Set(await getEnabledSiteIds());
   const toegestaan = new Set<string>();

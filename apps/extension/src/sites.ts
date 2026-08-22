@@ -123,8 +123,12 @@ export const SITES: readonly Site[] = [
       "alleen productpagina's onder /nl/nl/p/ — de extensie slaat elk ander pad zelf over, " +
       "ook als Chrome de toestemming voor het hele domein geeft",
     evidence:
-      "Gemeten op 21 augustus 2026: twee van de twee productpagina's met prijsopmaak gaven het bedrag " +
-      "van het artikel dat er ook echt stond (BILLY € 49,99, KALLAX € 69,99).",
+      "Gemeten op 21 augustus 2026, drie productpagina's. Twee gaven het bedrag van het artikel dat er " +
+      "ook echt stond (BILLY € 49,99, KALLAX € 69,99). De derde (SLÄKT) zet een actieprijs neer als " +
+      "bereik van € 96,99 tot € 114,99, en daar leest LaVega niets: welke van de twee jij betaalt " +
+      "staat er niet bij. Op IKEA-pagina's mét korting zegt het paneel dus dat het bedrag er niet " +
+      "te lezen is en wijst het naar het handmatige veld. Wat je aan punten hebt liggen staat er wel, " +
+      "want dat hangt niet van het bedrag af.",
   },
 ];
 

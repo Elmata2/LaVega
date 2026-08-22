@@ -14,9 +14,20 @@
  *                      van het bericht en heeft verder niets nodig.
  *   chrome.cookies   — nooit.
  *   chrome.webRequest, chrome.history, chrome.bookmarks, chrome.downloads — nooit.
- *   fetch/XHR        — staat niet in dit bestand omdat het in de DOM-lib zit,
- *                      maar het manifest zet er `connect-src 'none'` overheen.
- *                      Zie public/manifest.json.
+ *   fetch/XHR        — staat niet in dit bestand omdat het in de DOM-lib zit.
+ *                      Het manifest zet er `connect-src 'none'` overheen, MAAR
+ *                      alleen voor `extension_pages`: de popup, het optiescherm
+ *                      en de service worker. Een CONTENT SCRIPT valt daar niet
+ *                      onder — dat draait binnen de CSP van de winkelpagina, en
+ *                      die is van de winkel. Deze regel stond er eerst zonder
+ *                      dat voorbehoud en stelde de dekking dus te breed voor.
+ *                      Wat het content script tegenhoudt is iets anders: er
+ *                      staat geen netwerkaanroep in src/content.ts, en
+ *                      copy-static.mjs scant dat bestand bij elke build op
+ *                      fetch, XHR, WebSocket, sendBeacon, EventSource,
+ *                      importScripts, new Image() en op elke URL in
+ *                      resourcepositie. Een poort in de build, geen belofte van
+ *                      het manifest.
  *
  * De vier namespaces die er wél in staan zijn runtime, storage, permissions en
  * scripting, en elk daarvan alleen in de vorm die we gebruiken: de

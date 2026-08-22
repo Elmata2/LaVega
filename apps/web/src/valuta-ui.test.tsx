@@ -542,3 +542,213 @@ test("een bank met onbekende kosten blijft bruto, met de reden, en zonder het wo
   expect(c.querySelector('[data-testid="valuta-goedkoper-kosten-netto"]')).toBeNull();
   expect(c.querySelector('[data-testid="valuta-goedkoper-kosten-geen"]')).toBeNull();
 });
+
+/* ════════════════ DE TWEEDE KOERSLAAG (22 augustus) ════════════════
+ *
+ * De koerslijst komt niet meer uit één bron. De ECB levert 29 referentiekoersen;
+ * een aggregator vult aan tot 166. Wat hieronder bewaakt wordt is niet dat het
+ * er meer zijn — dat is een getal en dat verandert vanzelf — maar de VIER dingen
+ * die het verschil tussen die twee lagen moeten dragen:
+ *
+ *   1. de ECB wint waar allebei een koers hebben, en dat is op het scherm te zien
+ *   2. een koers uit de tweede laag zegt dat hij uit de tweede laag komt
+ *   3. valt die laag weg, dan is het weer "geen koers" — geen oude waarde
+ *   4. de verplichte bronvermelding staat er, vóór de plooi
+ *
+ * Alle tests hierboven draaien met een MISLUKTE koersaanroep (zie beforeEach) en
+ * dus zonder herkomst. Die stand blijft precies zoals hij was: zonder herkomst
+ * beweert het scherm er niets over. */
+
+/** Een serverantwoord met twee lagen. USD en GBP van de ECB, MAD van de
+ *  aggregator — genoeg om alle vier de vragen op te stellen. */
+function layered(over: Record<string, unknown> = {}) {
+  return {
+    base: "EUR",
+    date: "2026-08-21",
+    rates: { USD: 1.1699, GBP: 0.85, MAD: 10.789411 },
+    origins: { USD: "ecb", GBP: "ecb", MAD: "aggregator" },
+    layers: {
+      ecb: { status: "live", date: "2026-08-21", count: 2 },
+      aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "erapi", nextUpdate: "2026-08-23" },
+    },
+    ...over,
+  };
+}
+
+/** Renderen MET een geslaagde koersaanroep. De aanroep zit in een useEffect en
+ *  lost op in een microtask, dus dit moet `await act` zijn — anders meet je het
+ *  scherm zoals het er een tel eerder uitzag, met de meegebundelde koers. */
+async function renderLive(payload: unknown, opts: { entries?: CatalogueEntryLike[] } = {}) {
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  })) as unknown as typeof fetch;
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(<Valuta accounts={ACCOUNTS} facts={[]} entries={opts.entries ?? ENTRIES} />);
+  });
+  return container;
+}
+
+/** De opties van een van de twee valutakiezers, per groep. `null` is de groep
+ *  zonder kop: dat zijn de opties die los boven de <optgroup>'s staan. */
+function ccyGroepen(c: HTMLElement, label: string): Map<string | null, string[]> {
+  const sel = c.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+  const out = new Map<string | null, string[]>();
+  for (const opt of [...sel.querySelectorAll("option")]) {
+    const groep = opt.parentElement instanceof HTMLOptGroupElement ? opt.parentElement.label : null;
+    out.set(groep, [...(out.get(groep) ?? []), opt.value]);
+  }
+  return out;
+}
+
+function kiesValuta(c: HTMLElement, label: string, waarde: string) {
+  const sel = c.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+  act(() => {
+    sel.value = waarde;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+test("de twee lagen staan als aparte groepen in de valutakiezer, met de ECB bovenaan", async () => {
+  const c = await renderLive(layered());
+  const groepen = ccyGroepen(c, "Naar valuta");
+  const koppen = [...groepen.keys()].filter((k): k is string => k !== null);
+
+  // De volgorde is de rangorde: eerst wat een centrale bank publiceert.
+  expect(koppen).toEqual(["ECB-referentiekoers (2)", "Dagkoers via ExchangeRate-API (1)"]);
+  expect(groepen.get("ECB-referentiekoers (2)")).toEqual(["GBP", "USD"]);
+  expect(groepen.get("Dagkoers via ExchangeRate-API (1)")).toEqual(["MAD"]);
+  // De euro hoort bij geen van beide lagen: hij is de eenheid, geen koers.
+  expect(groepen.get(null)).toEqual(["EUR"]);
+});
+
+test("een koers uit de tweede laag zegt dat hij dat is, met zijn eigen datum", async () => {
+  const c = await renderLive(layered());
+  kiesValuta(c, "Naar valuta", "MAD");
+  const herkomst = c.querySelector('[data-testid="koers-herkomst"]')!.textContent ?? "";
+  expect(herkomst).toContain("ExchangeRate-API");
+  expect(herkomst).toContain("2026-08-22");
+  // En het woord dat het onderscheid draagt: dit is geen referentiekoers.
+  expect(herkomst).toContain("geen referentiekoers van een centrale bank");
+});
+
+test("een ECB-koers noemt de ECB en zijn eigen, andere peildatum", async () => {
+  const c = await renderLive(layered());
+  const herkomst = c.querySelector('[data-testid="koers-herkomst"]')!.textContent ?? "";
+  expect(herkomst).toContain("ECB-referentiekoers van 2026-08-21");
+  expect(herkomst).not.toContain("ExchangeRate-API");
+});
+
+test("een kruising tussen de twee lagen noemt allebei de benen", async () => {
+  const c = await renderLive(layered());
+  kiesValuta(c, "Van valuta", "USD");
+  kiesValuta(c, "Naar valuta", "MAD");
+  const herkomst = c.querySelector('[data-testid="koers-herkomst"]')!.textContent ?? "";
+  // USD → MAD loopt via de euro en raakt dus BEIDE lagen. Eén ervan verzwijgen
+  // zou de uitkomst harder of zachter laten lijken dan hij is.
+  expect(herkomst).toContain("Gekruist via de euro");
+  expect(herkomst).toContain("USD");
+  expect(herkomst).toContain("MAD");
+  expect(herkomst).toContain("ECB-referentiekoers van 2026-08-21");
+  expect(herkomst).toContain("ExchangeRate-API");
+  expect(herkomst).toContain("zo hard als dat tweede been");
+});
+
+test("de verplichte bronvermelding staat vóór de plooi, niet in een uitklapper", async () => {
+  const c = await renderLive(layered());
+  const vermelding = c.querySelector('[data-testid="fx-bronvermelding"]')!;
+  const link = vermelding.querySelector("a")!;
+  // De voorwaarden schrijven deze linktekst voor (exchangerate-api.com/docs/free,
+  // nagekeken 22 augustus 2026). Hij staat er letterlijk.
+  expect(link.textContent).toBe("Rates By Exchange Rate API");
+  expect(link.getAttribute("href")).toBe("https://www.exchangerate-api.com");
+  // Een vermelding achter een dichte <details> is een vermelding die je niet ziet.
+  expect(vermelding.closest("details")).toBeNull();
+});
+
+test("zonder tweede laag verdwijnen die valuta uit de lijst — geen oude waarde, geen vermelding", async () => {
+  const c = await renderLive(
+    layered({
+      rates: { USD: 1.1699, GBP: 0.85 },
+      origins: { USD: "ecb", GBP: "ecb" },
+      layers: { ecb: { status: "live", date: "2026-08-21", count: 2 }, aggregator: null },
+    }),
+  );
+  const groepen = ccyGroepen(c, "Naar valuta");
+  expect([...groepen.values()].flat()).not.toContain("MAD");
+  expect([...groepen.keys()]).not.toContain("Dagkoers via ExchangeRate-API (1)");
+  // Geen bron, geen vermelding — en geen lege alinea waar hij stond.
+  expect(c.querySelector('[data-testid="fx-bronvermelding"]')).toBeNull();
+  // De bronregel zegt het ook, in plaats van de laag stilzwijgend weg te laten.
+  const tekst = paneel(toonmeer("valuta-bronnen"));
+  expect(tekst).toContain("er staat geen tweede laag in dit scherm");
+  expect(tekst).toContain("dat is iets anders dan een koers van nul");
+});
+
+test("een aanbieder die dit scherm niet kent levert geen koersen, want de vermelding kan niet", async () => {
+  const c = await renderLive(
+    layered({
+      layers: {
+        ecb: { status: "live", date: "2026-08-21", count: 2 },
+        aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "nooitvanGehoord", nextUpdate: null },
+      },
+    }),
+  );
+  // Geen vermelding mogelijk, dus de koersen gaan eruit. Streng, en met opzet:
+  // de andere uitkomst is een scherm dat koersen toont die het niet mag tonen.
+  expect([...ccyGroepen(c, "Naar valuta").values()].flat()).not.toContain("MAD");
+  expect(c.querySelector('[data-testid="fx-bronvermelding"]')).toBeNull();
+});
+
+test("de kop noemt beide lagen met hun aantallen, en zegt niet meer 'ECB-middenkoers'", async () => {
+  const c = await renderLive(layered());
+  const eyebrow = c.querySelector(".view-head .eyebrow")!.textContent ?? "";
+  expect(eyebrow).toContain("2 ECB-referentiekoersen van 2026-08-21");
+  expect(eyebrow).toContain("1 dagkoersen via ExchangeRate-API van 2026-08-22");
+  // De oude vaste tekst zou nu voor het grootste deel van de lijst onwaar zijn.
+  expect(eyebrow).not.toContain("live ECB-middenkoers");
+  expect(eyebrow).toContain("koersopslag per bank uit de catalogus");
+});
+
+test("een antwoord waarin één koers geen herkomst heeft, wordt in zijn geheel niet gelabeld", async () => {
+  const c = await renderLive(layered({ origins: { USD: "ecb", GBP: "ecb" } }));
+  // MAD staat in `rates` maar niet in `origins`. Half labelen is de ergste
+  // uitkomst: dan lijkt de rest zonder kop óók ECB. Dus: geen groepen, geen
+  // herkomstregel, geen vermelding — en de koersen blijven gewoon werken.
+  expect([...ccyGroepen(c, "Naar valuta").keys()]).toEqual([null]);
+  expect(c.querySelector('[data-testid="koers-herkomst"]')).toBeNull();
+  expect(c.querySelector('[data-testid="fx-bronvermelding"]')).toBeNull();
+  expect([...ccyGroepen(c, "Naar valuta").values()].flat()).toContain("MAD");
+});
+
+test("de bronregel noemt beide lagen apart, elk met zijn eigen datum en aanbieder", async () => {
+  await renderLive(layered());
+  const tekst = paneel(toonmeer("valuta-bronnen"));
+  expect(tekst).toContain("2 ECB-referentiekoersen van 2026-08-21 via Frankfurter");
+  expect(tekst).toContain("1 koersen van ExchangeRate-API, peildatum 2026-08-22");
+  expect(tekst).toContain("volgende ronde 2026-08-23");
+  // De regel die het hele ontwerp draagt, in woorden op het scherm.
+  expect(tekst).toContain("een ECB-koers wordt er nooit door overschreven");
+  expect(tekst).toContain("er blijft geen oude waarde staan");
+});
+
+test("een onbekende aanbieder levert een melding met de ECHTE oorzaak, niet 'bron weggevallen'", async () => {
+  await renderLive(
+    layered({
+      layers: {
+        ecb: { status: "live", date: "2026-08-21", count: 2 },
+        aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "nooitvanGehoord", nextUpdate: null },
+      },
+    }),
+  );
+  const tekst = paneel(toonmeer("valuta-bronnen"));
+  // De laag IS er; hij wordt geweigerd. Die twee door elkaar halen stuurt de
+  // lezer naar de bron kijken terwijl het probleem in deze app zit.
+  expect(tekst).toContain("nooitvanGehoord");
+  expect(tekst).toContain("die dit scherm niet kent");
+  expect(tekst).not.toContain("er staat geen tweede laag in dit scherm");
+});

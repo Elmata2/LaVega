@@ -1,14 +1,97 @@
 # LaVega — aan de kassa
 
-Een browserextensie voor Chrome en Edge (Manifest V3) die bij het afrekenen laat
-zien wat jouw kaarten op die aankoop opleveren: het bedrag, waar dat cijfer
-vandaan komt en van welke datum het is. Onbekende cijfers worden niet op nul
-gezet — ze staan er als onbekend.
+Een browserextensie voor Chrome en Edge (Manifest V3) die bij het afrekenen twee
+dingen laat zien:
+
+1. **welke punten je hier hebt liggen** — en waar een uitgever een koers
+   publiceert, wat ze van deze aankoop dekken, met bron en datum;
+2. **welke van jouw kaarten op deze aankoop het meeste oplevert** — met dezelfde
+   bron-en-datumregel.
+
+Onbekende cijfers worden niet op nul gezet: ze staan er als onbekend, met de
+reden waarom.
 
 Alles gebeurt in je eigen browser. Er gaat geen enkel verzoek naar buiten, ook
 niet naar lavega.dev.
 
-### Wat "verrekenen" hier betekent, en hoe vaak dat vandaag gebeurt
+### De punten: wat we weten en wat we niet weten
+
+**Wij kennen je saldo. Wij kennen niet wat een winkel accepteert.** Die twee
+zinnen bepalen alles wat er op het scherm mag staan.
+
+Je saldi typ je zelf in (zie "Eerst instellen"). De koersen zitten in de bundel,
+uit `docs/catalog/staging-points.json`, met per regel de letterlijke zin van de
+uitgever, de bron en de datum. Gemeten op 22 augustus 2026:
+
+```bash
+node -e "import('./dist/generated/points-rates.generated.js').then(m=>{
+  const r=m.POINTS_RATES;const per=s=>r.filter(x=>x.soort===s).length;
+  console.log(r.length,'programma\'s |','koers:',per('koers'),
+    '| uitgesproken nul:',per('uitgesproken-nul'),
+    '| geen vaste waarde:',per('geen-vaste-waarde'),
+    '| niet gelezen:',per('niet-gepubliceerd'))})"
+# → 4 programma's | koers: 1 | uitgesproken nul: 1 | geen vaste waarde: 1 | niet gelezen: 1
+```
+
+Bij **één** programma mag er dus een bedrag én een percentage op het scherm:
+Amex Membership Rewards, `1.000 punten = € 3`, zelf opgehaald met kale curl
+(HTTP 200, 604.301 bytes, citaat woordelijk aanwezig). Bij de andere drie staat
+er alleen dát je punten hebt, met per programma een andere reden waarom er geen
+bedrag bij staat:
+
+| Programma | Wat er op het scherm mag | Waarom |
+| --- | --- | --- |
+| Amex Membership Rewards | bedrag én percentage | de uitgever publiceert de koers |
+| ING Punten | geen percentage, wel de nul | ING zegt zélf "geen geldwaarde" — een uitgesproken nul, maar alleen voor géld; wat een punt in de ING Winkel aan korting doet is onbekend |
+| Revolut RevPoints | alleen het saldo | Revolut zegt zelf dat er géén vaste waarde is. Dat is iets anders dan nul |
+| Flying Blue Miles | alleen het saldo | **wij** konden geen koers lezen (404 op het inwisselpad). Een gat in onze meting, geen uitspraak van de uitgever |
+
+Een programma dat niet in die lijst staat, mag hij zelf toevoegen. Dan staat er
+"we weten niet wat een punt hier waard is" — nooit een verzonnen bedrag.
+
+**En één zin die de verkoopkant van dit idee tegenspreekt, en er daarom staat:**
+inwisselen levert overal dezelfde koers op, dus er is aan deze kassa geen
+voordeel te halen dat er morgen niet ook is. Door hier met een andere kaart te
+betalen gaat er niets verloren. Dit blok is een **herinnering** — dat je punten
+hebt liggen op het moment dat het ertoe doet — en geen arbitrage. Bij een
+aankoop in vreemde valuta is het sterker: met de kaart van het programma betalen
+om punten te kunnen inwisselen kost koersopslag over het hele bedrag, terwijl
+diezelfde punten volgende week op een euro-aankoop even veel waard zijn. Dat
+staat er dan ook.
+
+**Wat er nooit staat**, elk met de fout die eronder ligt:
+
+- een percentage bij een programma zonder gepubliceerde koers — verzonnen getal;
+- "deze winkel accepteert je punten" — dat kunnen we op een afrekenpagina niet
+  zien, en de koers die we hebben is niet winkelspecifiek;
+- een saldo zonder de datum waarop je het invoerde — een saldo van vier maanden
+  oud als "nu" presenteren is een stille onwaarheid;
+- "gebruik je punten hier en bespaar X" — inwisselen gebeurt bij Amex achteraf in
+  de app, dus dat is advies dat aan deze kassa niet uit te voeren is.
+
+### Waarom de saldi in de extensie worden ingetypt en niet uit de kluis komen
+
+Er waren twee wegen en geen goede.
+
+**Een brug naar de LaVega-tab** houdt het saldo op één plek. Maar het is een
+nieuw kanaal: `externally_connectable` of hostrechten op het eigen domein, een
+berichtvorm, en aan beide kanten een redactiegrens die bewaakt moet worden. Elk
+van die drie kan stukgaan, en de derde kan stukgaan met iets dat weglekt.
+Bovendien werkt hij niet als de tab dicht is — precies op het moment waarvoor
+dit gebouwd is.
+
+**Twee keer invoeren** levert saldi op die uit elkaar lopen met de kluis. Dat is
+een echte kost en hij is niet te vermijden, alleen zichtbaar te maken: elk saldo
+draagt de datum waarop je het opschreef, die datum staat altijd op het scherm, en
+na negentig dagen (`VEROUDERD_NA_DAGEN`, hetzelfde getal als `isStale` in
+`packages/core`) zegt de extensie erbij dat het oud is.
+
+**V1 kiest de tweede weg, want die kan op minder manieren kapot**: geen kanaal,
+geen tweede grens, en hij werkt met de kluis dicht. De eerste weg blijft open —
+komt er ooit een brug, dan vervangt die de invoer en verandert er in `points.ts`
+geen regel, want dat bestand krijgt zijn saldi als parameter.
+
+### Wat "verrekenen" bij de KAARTEN betekent, en hoe vaak dat vandaag gebeurt
 
 Een eerdere versie van deze alinea zei "met de kaartkosten erin verrekend". Dat
 klopte niet, en de reden is te meten.
@@ -84,7 +167,27 @@ er netto gerekend. Het waarom staat uitgeschreven in `src/rank.ts`. Dat is de
 regel; met de huidige bundel komt hij nooit aan de beurt, want geen enkele kaart
 heeft zowel een cashbackcijfer als een prijs.
 
+### En je puntensaldi
+
+In hetzelfde optiescherm staat **Welke punten heb je liggen?**. Vier programma's
+staan er al in omdat we van elk weten welke soort uitspraak we mogen doen; typ er
+het aantal punten in dat je hebt. Wat je invoert krijgt de datum van vandaag mee,
+en die datum komt aan de kassa op het scherm — na negentig dagen met de
+mededeling dat het saldo oud is.
+
+Een programma dat er niet bij staat, voeg je onderaan toe. Dan zie je aan de
+kassa dát je punten hebt, met de mededeling dat we niet weten wat ze waard zijn.
+Leeg maken van het veld haalt het saldo weg; nul punten en geen saldo zijn twee
+verschillende dingen en nul levert geen regel op — er ligt dan niets om aan te
+herinneren.
+
 ## Wat hij doet
+
+**Het puntenblok staat bovenaan, en werkt ook zonder leesbaar bedrag.** Wat je
+aan punten hebt liggen hangt niet af van wat er op de pagina staat. Alleen het
+percentage doet dat, en dat verdwijnt dan — het bedrag dat je saldo bij de
+gepubliceerde koers waard is, blijft staan. Dat is precies de toestand op een
+IKEA-pagina met een actieprijs, waar de extensie over het bedrag zwijgt.
 
 **Het werkbalkvenster werkt overal.** Je typt een bedrag, kiest eventueel de
 munt waarin de winkel afrekent, en krijgt de ranglijst. Dit venster leest geen
@@ -93,7 +196,11 @@ gebruik.
 
 **Het paneel op de winkelpagina is de uitzondering.** Op een winkel die je hebt
 aangevinkt leest de extensie het bedrag van de pagina en zet het antwoord in een
-klein paneel rechtsonder. Je sluit het met het kruisje of met Escape.
+klein paneel rechtsonder. Je sluit het met het kruisje, of met Escape **zodra de
+aandacht in het paneel zit** — klik er dus eerst in, of gebruik het kruisje. Er
+hangt met opzet geen globale Escape-vanger in de pagina: die zou de zoekbalk of
+de maatkiezer van de winkel in de weg zitten, en een extensie hoort geen toetsen
+af te pakken van de winkel waar je aan het afrekenen bent.
 
 In beide gevallen staat onder elk cijfer waar het vandaan komt en wanneer het
 voor het laatst is gecontroleerd. Aan een kassa is die datum het enige waarop je
@@ -111,7 +218,20 @@ gangbare Nederlandse kaarten cijfers krijgt.
 
 | Winkel | Patroon | Status |
 | --- | --- | --- |
-| IKEA Nederland | `https://www.ikea.com/nl/nl/p/*` | werkt — productpagina's |
+| IKEA Nederland | `https://www.ikea.com/nl/nl/p/*` | werkt op productpagina's met één prijs; **zwijgt over het bedrag op pagina's met een actieprijs** |
+
+Die tweede helft is nieuw en het is een echte beperking. Van de drie
+IKEA-productpagina's die op 21 augustus 2026 zijn gemeten, gaven er twee het
+bedrag van het artikel dat er ook echt stond (BILLY € 49,99, KALLAX € 69,99). De
+derde (SLÄKT) zet zijn Family-actieprijs neer als een `AggregateOffer` van
+€ 96,99 tot € 114,99, en welke van de twee jij afrekent staat er niet bij. Daar
+leest de extensie dus **niets** en wijst ze naar het handmatige veld. Dat is het
+juiste antwoord — de vorige versie gaf daar de Family-prijs aan iemand die
+misschien geen lid is — maar het betekent dat het paneel over het BEDRAG zwijgt
+op precies de pagina's waar korting staat.
+
+Wat er op zo'n pagina wél staat: je puntensaldi. Die hangen niet van het bedrag
+af, dus daar is de leestoestemming niet voor nodig en verschijnt het blok gewoon.
 
 Dat is de hele lijst. De drempel is niet "de winkel is groot" maar: **kunnen we
 aantonen dat het bedrag dat we lezen ook echt het bedrag op díé pagina is.**
@@ -181,12 +301,14 @@ deze extensie mag aanroepen.
      `importScripts`, `new Image(`) en op adressen in resourcepositie
      (`url()`, `@import`, `src=`, `href=`). In alles wat geen `.js` is geldt nul
      tolerantie voor http(s):// en voor `//domein`; in `.js` mag een URL als
-     tekst voorkomen, want de catalogus draagt bij elk cijfer zijn bron mee en
-     er wordt niets mee opgehaald.
+     tekst voorkomen, want de catalogus en de puntenkoersen dragen bij elk cijfer
+     hun bron mee en er wordt niets mee opgehaald.
   2. **de CSP** in het manifest, voor de extensiepagina's en de service worker:
      `default-src 'none'` met `img-src`, `font-src`, `media-src`, `connect-src`,
-     `object-src`, `frame-src` en `child-src` allemaal op `'none'`, en
-     `script-src 'self'`. Zonder die `default-src` — de vorige vorm — waren
+     `object-src`, `frame-src` en `child-src` allemaal op `'none'`,
+     `script-src 'self'` en `style-src 'self'` — zonder `'unsafe-inline'`, sinds
+     het ene `style`-attribuut in `popup.html` naar `stijl.css` is verhuisd; de
+     build weigert het nu ook als het terugkomt. Zonder die `default-src` — de vorige vorm — waren
      `img-src`, `font-src` en `style-src` onbeperkt: `connect-src 'none'` vangt
      fetch en XHR, maar niet een `<img>` met het bedrag in de querystring.
 
@@ -200,9 +322,20 @@ deze extensie mag aanroepen.
   vinkje in de opties vanzelf uit. Geeft Chrome de toestemming ruimer dan het
   patroon — voor het hele domein — dan blijft de extensie zich aan het pad
   houden; zie [Alleen productpagina's](#alleen-productpaginas--en-dat-dwingt-de-extensie-zelf-af).
-- **Geen bedragen of ordergegevens bewaren.** In de opslag staan twee lijstjes:
-  welke kaarten je hebt en welke winkels aan staan. Niets dat aan een bezoek
-  vastzit — geen bedragen, geen artikelen, geen hosts, geen tijdstippen.
+- **Geen bedragen of ordergegevens bewaren.** In de opslag staan drie dingen:
+  welke kaarten je hebt, welke winkels aan staan, en de puntensaldi die je zelf
+  hebt ingetypt. Niets dat aan een BEZOEK vastzit — geen bedragen van een pagina,
+  geen artikelen, geen hosts, geen tijdstippen.
+
+  Dat derde lijstje verdient een aparte zin, want het lijkt een uitzondering op
+  de eerste. Wat er niet in mag is alles wat ONTSTAAT doordat je ergens kijkt;
+  dat is de data waarvan een bewaarde kopie een boodschappenlijst is. Een
+  puntensaldo is het omgekeerde: je eigen opgave over jezelf, ingetypt op een
+  leeg formulier, en het verandert niet doordat je een winkel bezoekt. Er zit
+  geen euro in, geen rekeningnummer en geen transactie — een programmanaam, een
+  aantal punten en de dag waarop je het opschreef. En dat aantal gaat nooit als
+  getal naar een winkelpagina: het content script krijgt afgemaakte zinnen, net
+  als bij de kaarten.
 - **Niets van de pagina behalve het bedrag.** Wat de extensie uit een pagina
   meeneemt is de host plus de bedragen die er machineleesbaar op staan. Geen
   titel, geen artikelnaam, geen omschrijving. `read.test.ts` bewaakt die grens
@@ -220,18 +353,20 @@ deze extensie mag aanroepen.
 ```
 public/manifest.json     Manifest V3
 public/popup.html        het werkbalkvenster        → src/popup.ts
-public/options.html      kaarten en winkels         → src/options.ts
+public/options.html      kaarten, punten, winkels   → src/options.ts
 src/content.ts           het paneel op de pagina    (klassiek script, geen imports)
 src/background.ts        service worker: registratie, lezen, antwoorden
 src/read.ts              bedrag van een pagina lezen, of weigeren met een reden
+src/points.ts            wat je puntensaldi hier dekken — of waarom niet
 src/rank.ts              welke kaart hier het meeste oplevert
 src/horizon.ts           de horizonregel: eenmalig versus terugkerend
 src/lines.ts             de Nederlandse zinnen
 src/panel.ts             van rangschikking naar schermtekst
 src/sites.ts             welke winkels, en de meting waarop dat rust
 src/money.ts             centen en nl-NL-notatie
-src/store.ts             de twee lijstjes in chrome.storage
-src/generated/           de gebundelde kaartgegevens (77 producten)
+src/store.ts             de drie lijstjes in chrome.storage
+src/generated/           de gebundelde kaartgegevens (77 producten) en
+                         de puntenkoersen (4 programma's)
 ```
 
 De keten bij een winkelpagina: content script meldt zich → service worker
@@ -277,22 +412,33 @@ Chrome zou afwijzen of die stilletjes niets doet:
    alleen `.js`)
 4. loopt `optional_host_permissions` nog gelijk met `src/sites.ts`, en wijst elk
    patroon een pad aan in plaats van een heel domein?
-5. heeft de CSP een `default-src`, en staan `img-src`, `font-src`, `media-src`
-   en `connect-src` op `'none'`?
+5. heeft de CSP een `default-src`, staan `img-src`, `font-src`, `media-src` en
+   `connect-src` op `'none'`, en staat `style-src` op `'self'` zonder
+   `'unsafe-inline'`?
 6. past de `description` binnen de 132 tekens die Chrome toestaat?
 
 Die fouten zie je anders pas als de extensie al geïnstalleerd is — of, bij de
 tweede, alleen in de console van de winkelpagina.
 
 **Controle 3 controleert ook zichzelf.** Bij elke build gaat er eerst een
-zelftest doorheen: zeven bestanden die er niet doorheen mógen (een `@font-face`
-naar `fonts.gstatic.com`, een `background-image` naar een vreemd domein, een
-1×1-`<img>` met het bedrag in de querystring, een schemaloos `//domein`, een
-`fetch(` in een inline script, een remote `url()` in een stylesheet die
-JavaScript in de pagina zet, en een vreemd adres in het manifest) en vier die er
-juist met rust gelaten moeten worden (de echte popup, de echte stylesheet, het
-echte manifest met zijn matchpatroon, en de catalogus met haar bronvermeldingen
-als tekst). Mist de poort er één, dan is de build klaar en is er niets gescand.
+zelftest doorheen: **acht** bestanden die er niet doorheen mógen (een
+`@font-face` naar `fonts.gstatic.com`, een `background-image` naar een vreemd
+domein, een 1×1-`<img>` met het bedrag in de querystring, een schemaloos
+`//domein`, een `fetch(` in een inline script, een remote `url()` in een
+stylesheet die JavaScript in de pagina zet, een vreemd adres in het manifest, en
+een adres in een bestand met een **onbekende extensie**) en vijf die er juist met
+rust gelaten moeten worden (de echte popup, de echte stylesheet, het echte
+manifest met zijn matchpatroon, de catalogus met haar bronvermeldingen als tekst,
+en de puntenkoersen met de bron van de koers als tekst). Mist de poort er één,
+dan is de build klaar en is er niets gescand.
+
+Dat achtste geval is er op 22 augustus 2026 bij gezet, want het was nergens
+bewezen: de poort behandelt alles wat niet `.js` is als "elk adres verboden",
+maar dat gold voor `.html` en `.css` alleen omdat die in de zelftest stonden.
+Een `.png`, een `.txt` of een `.woff2` viel onder dezelfde regel zonder dat
+iemand het had nagemeten. Onafhankelijk nagemeten in een kopie buiten de repo:
+met een `dist/pixel.dat` erbij die één adres bevat, sluit de build af met exit 1
+en `dist/pixel.dat:1 bevat een http(s)-adres`.
 
 Dat staat er omdat de vorige versie van deze controle alleen naar `.js` keek.
 `public/` levert ook `.html` en `.css` mee, dus een trackingpixel mét bedrag ging
@@ -309,22 +455,39 @@ de bundel.
 
 - Eén winkel. Meer winkels betekent meer metingen, niet meer regels in het
   manifest.
-- Geen brug naar de LaVega-kluis. Het kaartenlijstje is met de hand.
+- Geen brug naar de LaVega-kluis. Het kaartenlijstje én de puntensaldi zijn met
+  de hand. Waarom dat een keuze is en niet een tekort, staat in "Waarom de saldi
+  in de extensie worden ingetypt" hierboven — met de kost die eraan vastzit.
+- Eén programma met een koers. Komt er een tweede, dan groeit
+  `points-rates.generated.ts` met één regel en verandert er verder niets; dat is
+  met opzet zo gebouwd.
 - Het paneel verschijnt op elke aangevinkte productpagina en wordt per pagina
   weggeklikt; er is geen "niet meer tonen op deze winkel" die iets onthoudt,
   omdat daarvoor bijgehouden zou moeten worden waar je bent geweest.
 - Geen netto-antwoord. Zie de meting in de eerste sectie: geen enkele kaart in
   de bundel heeft zowel een cashbackcijfer als een prijs, dus de netto-tak van
   de code draait vandaag niet.
-- De CSP laat nog `'unsafe-inline'` toe voor stijl. Dat is voor één ding: het
-  attribuut `style="margin-top: 16px"` in `public/popup.html`. Verhuist die
-  regel naar `stijl.css`, dan kan `style-src` terug naar `'self'`. Het is geen
-  gat naar buiten — elke richting die iets kan ophalen (`img-src`, `font-src`,
-  `media-src`, `connect-src`) staat op `'none'`.
-- Het toestemmingsdialoog van Chrome is nog nooit in het echt gedraaid. Chrome
-  151 weigert `--load-extension` zodra de sessie geautomatiseerd is, dus de
-  extensie is hier niet in een echte Chrome geladen. Wat wél is gemeten: de CSP
-  uit dit manifest, met deze `popup.html`, `options.html` en `stijl.css`, in een
-  echte Chromium — de pagina's werken zonder één CSP-weigering, en een
-  trackingpixel, een remote font, een vreemde stylesheet en een vreemd script
-  worden alle vier geweigerd.
+- Het **toestemmingsdialoog** van Chrome is nog nooit in het echt doorlopen. Wat
+  hier eerder stond — "Chrome 151 weigert `--load-extension` zodra de sessie
+  geautomatiseerd is" — was onjuist, en dat is met één commando te weerleggen:
+
+  ```bash
+  CHR=".../Google Chrome for Testing"   # 151.0.7922.34
+  "$CHR" --user-data-dir=$D --no-first-run --disable-extensions-except=$E \
+         --load-extension=$E --remote-debugging-port=9444 --headless=new about:blank
+  curl -s http://127.0.0.1:9444/json/list
+  ```
+
+  Gedraaid op 22 augustus 2026: de extensie **laadt** (id
+  `bpbjefffbjacklbbfndibdlcmghogigk`), de service worker `background.js` draait,
+  en `popup.html` en `options.html` renderen volledig — met **nul**
+  `Log.entryAdded`-meldingen, dus geen CSP-weigering en geen console-fout. Ook
+  het paneel van het content script is daar gemeten, met een gestubde service
+  worker: het staat in zijn gesloten schaduw-DOM, in beide toestanden, ook zonder
+  leesbaar bedrag.
+
+  Wat wél onmeetbaar blijft: het toestemmingsvenster zelf is een venster van het
+  besturingssysteem en blijft in een headless sessie hangen. Na een echte klik op
+  het vinkje stond `permissions.getAll()` nog op `{"origins":[]}`. De code hangt
+  daar niet van af — `siteForUrl` controleert schema, host, poort en pad zelf, en
+  de build weigert een patroon zonder pad.

@@ -3,12 +3,12 @@
  * verzinnen. */
 
 import { describe, it, expect } from "vitest";
-import { buildPanel, panelRows, PANEEL_CAPS, POPUP_CAPS, amountNote, footer } from "./panel.js";
+import { buildPanel, panelRows, PANEEL_CAPS, POPUP_CAPS, amountNote, footer, puntenBlok } from "./panel.js";
 import { rankCheckout, type Ranking } from "./rank.js";
+import { pointsCoverage } from "./points.js";
+import { POINTS_RATES } from "./generated/points-rates.generated.js";
 import type { CheckoutCard, CardFee } from "./types.js";
 import type { Reading } from "./read.js";
-
-const CATALOGUS = "2026-08-19";
 
 function sourced(value: number) {
   return { value, sourceUrl: "https://voorbeeld.nl/x", checkedAt: "2026-06-15", conditions: null };
@@ -19,6 +19,13 @@ function fee(value: number, period: "maand" | "jaar"): CardFee {
 function card(p: Partial<CheckoutCard> & { id: string; product: string }): CheckoutCard {
   return { issuer: "Bank Voorbeeld", kind: "creditcard", fxFeePct: null, cashbackPct: null, pointsPerEuro: null, fee: null, ...p };
 }
+/* Twee kaarten met een controledatum ver uit elkaar, zodat de voetregel iets te
+ * spreiden heeft. */
+const BUNDEL: CheckoutCard[] = [
+  card({ id: "oud", product: "Oude Kaart", fxFeePct: { value: 2, sourceUrl: "https://voorbeeld.nl/a", checkedAt: "2022-10-01", conditions: null } }),
+  card({ id: "nieuw", product: "Nieuwe Kaart", fxFeePct: { value: 1, sourceUrl: "https://voorbeeld.nl/b", checkedAt: "2026-08-20", conditions: null } }),
+];
+const GEEN_PUNTEN: ReturnType<typeof pointsCoverage> = [];
 function rank(cards: CheckoutCard[], heldIds: string[], amountCents: number | null, currency = "EUR"): Ranking {
   return rankCheckout({ cards, heldIds, currency, amountCents, asOf: "2026-08-21" });
 }
@@ -40,7 +47,8 @@ describe("als het bedrag niet te lezen is, wordt er niet gegokt", () => {
     const a = buildPanel({
       reading: { ok: false, reason: "geen-prijsmarkup", detail: "…" },
       ranking: null,
-      catalogAt: CATALOGUS,
+      cards: BUNDEL,
+      punten: GEEN_PUNTEN,
     });
     expect(a.soort).toBe("geen-bedrag");
     if (a.soort !== "geen-bedrag") return;
@@ -54,7 +62,8 @@ describe("als het bedrag niet te lezen is, wordt er niet gegokt", () => {
     const a = buildPanel({
       reading: gelezen(30000, "USD"),
       ranking: rank([], [], 30000, "USD"),
-      catalogAt: CATALOGUS,
+      cards: BUNDEL,
+      punten: GEEN_PUNTEN,
     });
     expect(a.soort).toBe("geen-bedrag");
     if (a.soort !== "geen-bedrag") return;
@@ -72,10 +81,20 @@ describe("wat een gelezen bedrag is, staat erbij", () => {
     expect(amountNote(gelezen(31245, "EUR", "bestelling"))).toContain("totaal van je bestelling");
   });
 
-  it("de voet noemt de ouderdom van de gegevens en dat er niets weggaat", () => {
-    const v = footer(CATALOGUS);
-    expect(v).toContain("19 augustus 2026");
+  it("de voet noemt de SPREIDING van de controledatums en niet één datum", () => {
+    /* Hier stond de bouwdatum van de catalogus, en die was aantoonbaar onjuist:
+     * zesenveertig cijfers in dezelfde bundel droegen een NIEUWERE datum dan de
+     * datum die het scherm noemde, en het oudste cijfer was bijna vier jaar
+     * ouder. Eén datum boven zo'n verzameling is altijd fout. */
+    const v = footer(BUNDEL);
+    expect(v).toContain("1 oktober 2022");
+    expect(v).toContain("20 augustus 2026");
     expect(v).toContain("stuurt niets naar buiten");
+  });
+
+  it("zegt het als er geen enkele controledatum in de bundel staat", () => {
+    const v = footer([card({ id: "x", product: "Kaal" })]);
+    expect(v).toContain("geen controledatum");
   });
 });
 
@@ -128,7 +147,8 @@ describe("het volledige paneel", () => {
     const a = buildPanel({
       reading: gelezen(4999),
       ranking: rank([mijn], ["m"], 4999),
-      catalogAt: CATALOGUS,
+      cards: BUNDEL,
+      punten: GEEN_PUNTEN,
     });
     expect(a.soort).toBe("toon");
     if (a.soort !== "toon") return;
@@ -136,5 +156,89 @@ describe("het volledige paneel", () => {
     expect(a.kop).toContain("Mijn Kaart");
     expect(a.regels).toHaveLength(1);
     expect(a.voet).toContain("bewaart er niets van");
+  });
+});
+
+
+describe("het puntenblok", () => {
+  const rijen = (saldi: { program: string; points: number; updatedAt: string }[], amountCents: number | null) =>
+    pointsCoverage({ balances: saldi, rates: POINTS_RATES, amountCents, asOf: "2026-08-22" });
+
+  it("verschijnt OOK als het bedrag niet te lezen is — dat is de hele winst", () => {
+    /* Op een IKEA-actiepagina is het bedrag een bereik en zei het paneel
+     * helemaal niets. Wat hij aan punten heeft liggen hangt niet van dat bedrag
+     * af, dus daar staat nu wél iets waars. */
+    const a = buildPanel({
+      reading: { ok: false, reason: "prijsbereik", detail: "…" },
+      ranking: null,
+      cards: BUNDEL,
+      punten: rijen([{ program: "Amex", points: 42000, updatedAt: "2026-08-12" }], null),
+    });
+    expect(a.soort).toBe("geen-bedrag");
+    if (a.soort !== "geen-bedrag") return;
+    expect(a.punten.regels).toHaveLength(1);
+    expect(a.punten.regels[0]!.regel).toContain("42.000 punten");
+    expect(a.punten.regels[0]!.regel).toContain("€ 126,00");
+    /* Maar geen percentage: daar is een aankoopbedrag voor nodig. */
+    expect(a.punten.regels[0]!.regel).not.toContain("%");
+  });
+
+  it("zet er bij een gelezen bedrag wél een percentage bij, met de route erbij", () => {
+    const a = buildPanel({
+      reading: gelezen(36000),
+      ranking: rank([], [], 36000),
+      cards: BUNDEL,
+      punten: rijen([{ program: "American Express", points: 42000, updatedAt: "2026-08-12" }], 36000),
+    });
+    expect(a.soort).toBe("toon");
+    if (a.soort !== "toon") return;
+    const r = a.punten.regels[0]!;
+    expect(r.regel).toContain("€ 126,00");
+    expect(r.regel).toContain("35%");
+    /* De route mag nooit weg: zonder deze zin leest het percentage als een knop
+     * in de kassa van de winkel, en die knop bestaat niet. */
+    expect(r.regel).toContain("niet in de kassa van deze winkel");
+    expect(r.bron).toContain("12 augustus 2026");
+  });
+
+  it("zegt bij een leeg blok waar de saldi vandaan moeten komen, en anders niets", () => {
+    const leegBlok = puntenBlok([], 4999, "EUR");
+    expect(leegBlok.regels).toHaveLength(0);
+    expect(leegBlok.leeg).toContain("nog geen puntensaldo");
+    expect(leegBlok.voetnoot).toBe("");
+
+    const vol = puntenBlok(rijen([{ program: "Amex", points: 1000, updatedAt: "2026-08-12" }], 4999), 4999, "EUR");
+    expect(vol.leeg).toBe("");
+    expect(vol.voetnoot).toContain("herinnering");
+  });
+
+  it("waarschuwt bij vreemde valuta dat inwisselen hier juist geld kost", () => {
+    const rij = rijen([{ program: "Amex", points: 1000, updatedAt: "2026-08-12" }], 4999);
+    expect(puntenBlok(rij, 4999, "USD").voetnoot).toContain("koersopslag");
+    expect(puntenBlok(rij, 4999, "EUR").voetnoot).not.toContain("koersopslag");
+  });
+});
+
+describe("twee soorten onbekend krijgen twee groepskoppen", () => {
+  it("een opbrengst in een token staat niet onder \"kaartkosten onbekend\"", () => {
+    /* Bij Crypto.com Obsidian staan de kaartkosten letterlijk in de voorwaarde
+     * ("€450,000 12-month CRO staking"). "Kaartkosten onbekend" boven die rij is
+     * onwaar, en een groepskop is de sterkste uitspraak in het blok. */
+    const inToken = card({
+      id: "t",
+      product: "Tokenkaart",
+      fxFeePct: sourced(0),
+      cashbackPct: {
+        value: 5,
+        sourceUrl: "https://voorbeeld.nl/c",
+        checkedAt: "2026-06-15",
+        conditions: "Rewards are PAID IN CRO, not euro.",
+      },
+    });
+    const geenPrijs = card({ id: "g", product: "Geen Prijskaartje", fxFeePct: sourced(0), cashbackPct: sourced(3) });
+    const r = rank([inToken, geenPrijs], [], 30000);
+    const groepen = panelRows(r, POPUP_CAPS);
+    expect(groepen.find((x) => x.titel === "Tokenkaart")?.groep).toBe("geen-euro-uitkomst");
+    expect(groepen.find((x) => x.titel === "Geen Prijskaartje")?.groep).toBe("onbekende-kosten");
   });
 });

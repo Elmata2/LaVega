@@ -841,3 +841,111 @@ test("het stijlblad van de bol beweegt niet en hangt niet aan de breedte van het
   expect(zonderCommentaar).not.toContain("lv-globe-stage");
   expect(zonderCommentaar).not.toContain("lv-globe-side");
 });
+
+/* ════════════════ DE BREDERE KOERSLIJST (22 augustus) ════════════════
+ *
+ * De Valuta-tab kende 29 ECB-koersen; er ligt nu een tweede laag onder die de
+ * lijst op 166 brengt (zie apps/server/src/fx.ts). De bol bepaalt "prijsbaar"
+ * aan de LIVE lijst, dus er lichten vanzelf tientallen landen op. Gemeten op de
+ * gebundelde wereld van 250 landen:
+ *
+ *              alleen ECB (30)      ECB + aggregator (166)
+ *   prijsbaar          65                     204
+ *   geen koers        140                       1
+ *   eurozone           37                      37
+ *   keuze               7                       7
+ *   geen wettig         1                       1
+ *
+ * Wat hieronder bewaakt wordt is dat die verschuiving de bol niet KAPOT maakt:
+ * alle antwoordsoorten blijven bereikbaar en blijven van elkaar te onderscheiden,
+ * en geen enkele legenda-regel wordt een dode letter. Dat laatste was de echte
+ * zorg — "geen koers" gaat van 140 landen naar één (Noord-Korea, KPW), en een
+ * legenda-regel voor een kleur die nergens meer voorkomt is een regel die liegt
+ * over wat je ziet. Hij blijft staan, want hij is de stand waar de bol naar
+ * terugvalt zodra de tweede laag wegvalt — en dan zijn het er weer 140. */
+
+/** De 29 ECB-koersen plus een handvol uit de tweede laag: Marokko, de Emiraten,
+ *  Vietnam. Expliciet en niet uit de bundel gelezen, zodat deze test niet
+ *  meebeweegt met wat een bron vandaag toevallig publiceert. */
+const SUPPORTED_TWEE_LAGEN = [...SUPPORTED, "MAD", "AED", "VND", "CUP", "PAB"];
+
+test("een land dat alleen de tweede laag kent, wordt prijsbaar zodra die laag er is", () => {
+  // Marokko betaalt in MAD. De ECB publiceert die niet; de aggregator wel.
+  expect(countryById("MA")!.currencies).toEqual([{ code: "MAD", priceable: false }]);
+
+  const zonder = vi.fn();
+  click(option(mount(<Globe value="USD" from="EUR" onPick={zonder} supported={SUPPORTED} />), "MA"));
+  expect(zonder).not.toHaveBeenCalled();
+
+  act(() => root?.unmount());
+  host?.remove();
+
+  const met = vi.fn();
+  const el = mount(<Globe value="USD" from="EUR" onPick={met} supported={SUPPORTED_TWEE_LAGEN} />);
+  click(option(el, "MA"));
+  expect(met).toHaveBeenCalledWith("MAD");
+  expect(answer(el)).toContain("MAD");
+  // De vlag in de bundel staat nog op `priceable: false`; de LIJST wint. Dat is
+  // dezelfde regel als bij Nieuw-Zeeland hierboven, maar dan de andere kant op.
+  expect(answer(el)).not.toContain("geen koers");
+});
+
+test("met de bredere lijst blijven alle vijf de antwoordsoorten van elkaar te onderscheiden", () => {
+  const onPick = vi.fn();
+  const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED_TWEE_LAGEN} />);
+
+  // 1. eurozone — geen omwisseling, en nog steeds geen percentage.
+  click(option(el, "NL"));
+  expect(answer(el)).toContain("euro");
+  expect(answer(el)).not.toMatch(/\d\s*%/);
+
+  // 2. prijsbaar via de tweede laag.
+  click(option(el, "AE"));
+  expect(onPick).toHaveBeenLastCalledWith("AED");
+
+  // 3. keuze — Panama kent nu ALLEBEI de valuta's, en de bol kiest nog steeds
+  //    zelf niet. Dat is het gevaar van een bredere lijst: met twee prijsbare
+  //    munten is "de eerste pakken" ineens verleidelijk, en het verandert nog
+  //    steeds het antwoord.
+  const gekozen = onPick.mock.calls.length;
+  click(option(el, "PA"));
+  expect(answer(el)).toContain("Welke bedoel je?");
+  expect(onPick.mock.calls.length).toBe(gekozen);
+
+  // 4. geen koers — Noord-Korea is met 166 valuta het enige land dat overblijft.
+  click(option(el, "KP"));
+  expect(answer(el)).toContain("KPW");
+  expect(answer(el)).toContain("geen koers");
+  expect(answer(el)).not.toMatch(/\d\s*%/);
+
+  // 5. geen wettig betaalmiddel — dit antwoord gaat NIET over ons en verandert
+  //    dus niet mee met de koerslijst, hoe lang die ook wordt.
+  click(option(el, "AQ"));
+  expect(answer(el)).toContain("geen wettig betaalmiddel");
+  expect(answer(el)).not.toContain("geen koers");
+});
+
+test("de legenda blijft waar met een bredere lijst, en geen regel wordt een dode letter", () => {
+  const el = mount(<Globe value="USD" from="EUR" onPick={vi.fn()} supported={SUPPORTED_TWEE_LAGEN} />);
+  const regels = [...el.querySelectorAll(".lv-globe-legend li")].map((li) => (li.textContent ?? "").trim());
+
+  /* De legenda zegt "LaVega heeft een koers" en "geen koers bij LaVega" — over
+   * ONS, niet over welke instelling de koers publiceerde. Dat is precies waarom
+   * hij niet hoefde mee te bewegen: beide lagen zijn "een koers hebben". Het
+   * verschil TUSSEN de lagen hoort waar de koers gebruikt wordt (de herkomstregel
+   * in Valuta.tsx), niet in een kleur op een bol — een vijfde tint zou een
+   * onderscheid als kleur coderen dat alleen in woorden klopt. */
+  expect(regels).toEqual([
+    "euro — niets te wisselen",
+    "LaVega heeft een koers",
+    "geen koers bij LaVega",
+    "geen wettig betaalmiddel",
+    "gekozen",
+  ]);
+  // Geen enkele regel noemt een bron, dus geen enkele regel wordt onwaar als er
+  // een bron bij komt of wegvalt.
+  for (const r of regels) {
+    expect(r).not.toContain("ECB");
+    expect(r).not.toContain("dagkoers");
+  }
+});

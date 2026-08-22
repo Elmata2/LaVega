@@ -114,3 +114,22 @@ a { color: var(--groen); }
 
 .grens { margin-top: 10px; padding-left: 18px; }
 .grens li { margin-bottom: 4px; }
+
+/* Stond als style-attribuut in popup.html. Eén inline stijl dwingt
+ * `style-src 'unsafe-inline'` af in de CSP van het manifest, en dat is een
+ * brede uitzondering voor een marge van zestien pixels. */
+.onderaan { margin-top: 16px; }
+
+h3 { margin: 18px 0 4px; font-size: 12.5px; font-weight: 600; }
+
+/* De puntenrijen. Zelfde ritme als .vinkrij, maar met een getalveld in plaats
+ * van een vinkje: een saldo is geen ja/nee. */
+.puntrij { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--lijn); }
+.puntrij .veld { flex: 0 0 110px; }
+.puntrij .veld input { width: 100%; margin-top: 0; }
+.puntrij .tekst { flex: 1 1 auto; }
+.puntrij .weg {
+  flex: 0 0 auto; margin-top: 0; padding: 5px 9px;
+  border: 1px solid var(--lijn); background: var(--wit); color: var(--gedempt); font-weight: 400;
+}
+.puntrij .weg:hover { background: var(--vlak); color: var(--inkt); }

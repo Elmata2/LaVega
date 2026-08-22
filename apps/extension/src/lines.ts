@@ -23,7 +23,9 @@
  * Toon: zoals de rest van de views. Rustig, concreet, geen uitroeptekens. */
 
 import type { Row, Ranking, UnknownRow, Caveat, Veld } from "./rank.js";
-import { euro, pct, dateNL, eurosToCents } from "./money.js";
+import type { PuntenRij } from "./points.js";
+import type { CheckoutCard } from "./types.js";
+import { euro, pct, dateNL, eurosToCents, getal } from "./money.js";
 
 /* ─────────────────────────── de uitgeversnaam ────────────────────────────── */
 
@@ -49,6 +51,260 @@ export function korteUitgever(issuer: string): string | null {
   const naam = kop.trim().replace(/[\s;,]+$/, "");
   if (naam === "" || naam.length > MAX_UITGEVER) return null;
   return naam;
+}
+
+/* ──────────────────── hoe oud de kaartgegevens zijn ──────────────────────── */
+
+/** De vroegste en de laatste controledatum in de bundel.
+ *
+ *  ── WAAROM HIER ÉÉN DATUM NIET KAN ─────────────────────────────────────────
+ *
+ *  De voettekst zei "Kaartgegevens van 19 augustus 2026", en dat was de datum
+ *  waarop de CATALOGUS is gebouwd. In diezelfde bundel staan zesenveertig
+ *  cijfers met een controledatum van 20 augustus — nieuwer dan de datum die het
+ *  scherm noemde — en tegelijk een ING-cijfer van 1 oktober 2022, bijna vier
+ *  jaar ouder. Eén datum boven zo'n verzameling is dus altijd fout, en het maakt
+ *  niet uit welke je kiest: de bouwdatum verzwijgt hoe oud het oudste cijfer is,
+ *  de nieuwste controledatum verklaart alles vers, en de oudste maakt verse
+ *  cijfers verdacht.
+ *
+ *  Wat wél waar is, is de SPREIDING. Die staat er nu, en per regel staat de
+ *  datum van dat ene cijfer er al (zie `sourceLine`). Dan kan de gebruiker zien
+ *  waarop hij afgaat zonder dat de voetregel iets belooft.
+ *
+ *  Afgeleid uit de bundel zelf en niet uit een gegenereerde constante, zodat het
+ *  meeverandert zodra de catalogus verandert — dat is precies de fout die hier
+ *  zat: de constante was blijven staan terwijl de inhoud bijgewerkt was. */
+export function catalogPeriode(cards: readonly CheckoutCard[]): { eerste: string; laatste: string } | null {
+  const datums: string[] = [];
+  for (const c of cards) {
+    for (const veld of [c.fxFeePct, c.cashbackPct, c.pointsPerEuro, c.fee]) {
+      const d = veld?.checkedAt?.trim();
+      /* Alleen volledige ISO-datums. "2026-08" sorteert als string prima maar
+       * leest als een maand, en een halve datum in een spreiding maakt de
+       * spreiding onwaar. */
+      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) datums.push(d);
+    }
+  }
+  if (datums.length === 0) return null;
+  datums.sort();
+  return { eerste: datums[0]!, laatste: datums[datums.length - 1]! };
+}
+
+/* ────────────────────────────── de punten ────────────────────────────────── */
+
+/** De host uit een bron-URL, voor in een zin. Geen pad en geen querystring: aan
+ *  een kassa is "americanexpress.com" wat je wilt weten en de rest is ruis.
+ *  Lukt het ontleden niet, dan komt er niets — een half adres in een zin is
+ *  slechter dan geen adres. */
+function bronHost(url: string): string | null {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h.startsWith("www.") ? h.slice(4) : h;
+  } catch {
+    return null;
+  }
+}
+
+/** Een letterlijk citaat, met een sluitend leesteken.
+ *
+ *  Zonder dit liep de volgende zin het citaat in: er stond «"… niet overdragen
+ *  aan anderen" Voor inwisselen voor geld is dat een uitgesproken nul» en dan is
+ *  niet meer te zien waar de uitgever ophoudt en wij beginnen. Bij een citaat is
+ *  dat precies de grens die moet blijken. Het leesteken komt BUITEN de
+ *  aanhalingstekens als de bron er zelf geen had: een punt binnen het citaat
+ *  zetten die er niet stond, is het citaat veranderen. */
+export function citaat(tekst: string): string {
+  const t = tekst.trim();
+  if (t === "") return "";
+  return /[.!?]$/.test(t) ? `"${t}"` : `"${t}".`;
+}
+
+/** Het saldo zelf, in woorden. Altijd met het aantal, want dát is de
+ *  herinnering: hij weet niet dat ze er liggen. */
+function saldoZin(rij: PuntenRij): string {
+  return `Je hebt hier ${getal(rij.points, 0)} punten liggen.`;
+}
+
+/** De zin onder één puntenprogramma.
+ *
+ *  ── WAT HIER NOOIT MAG STAAN, en waarom het per geval een andere fout is ───
+ *
+ *   1. een PERCENTAGE bij een programma zonder gepubliceerde koers. Dat getal
+ *      zou verzonnen zijn, en er is niets om het aan af te meten.
+ *   2. "deze winkel accepteert je punten". Dat kunnen we op een afrekenpagina
+ *      niet zien — er is geen veld, geen opmaak en geen lijst waaruit het
+ *      blijkt. De koers die we wél hebben is niet winkelspecifiek.
+ *   3. een saldo zonder de datum waarop hij het invoerde. Die staat in `bron`
+ *      hieronder en niet in deze zin, maar hij staat er.
+ *   4. "gebruik je punten hier en bespaar X". Inwisselen gebeurt bij Amex
+ *      achteraf in de app; hier is geen knop. Advies dat in de toestand waarin
+ *      het verschijnt niet kan werken, is precies wat huisregel 3 verbiedt.
+ *
+ *  Wat er wél mag, en wat vandaag niemand hem vertelt: dát ze er liggen, wat ze
+ *  bij een GEPUBLICEERDE koers waard zijn, en langs welke weg dat dan gaat. */
+export function puntenRegel(rij: PuntenRij, amountCents: number | null): string {
+  const delen: string[] = [saldoZin(rij)];
+
+  switch (rij.waarom) {
+    case "koers-bekend": {
+      const koers = rij.rate!;
+      const waarde = rij.saldoWaardeCents!;
+      if (rij.afgetopt) {
+        delen.push(
+          `Bij de gepubliceerde koers van ${koers.program} is dat ${euro(waarde)} — meer dan deze ` +
+            `aankoop kost, dus je saldo dekt hem helemaal.`,
+        );
+      } else {
+        delen.push(
+          `Bij de gepubliceerde koers van ${koers.program} is dat ${euro(waarde)} — ` +
+            `${pct(rij.pct ?? 0)} van deze ${euro(amountCents ?? 0)}.`,
+        );
+      }
+      delen.push(inwisselZin(koers.scope));
+      if (koers.nuance) delen.push(koers.nuance);
+      break;
+    }
+    case "geen-bedrag": {
+      const koers = rij.rate!;
+      /* Zonder aankoopbedrag is er geen percentage, maar de WAARDE van het saldo
+       * hangt niet van deze pagina af. Die mag dus wel, en juist hier is hij het
+       * nuttigst: dit is de toestand waarin het paneel voorheen helemaal niets
+       * zei. */
+      delen.push(
+        `Bij de gepubliceerde koers van ${koers.program} is dat ${euro(rij.saldoWaardeCents!)}. ` +
+          `Wat dat van deze aankoop dekt staat er niet bij, want het bedrag op deze pagina is niet gelezen.`,
+      );
+      delen.push(inwisselZin(koers.scope));
+      if (koers.nuance) delen.push(koers.nuance);
+      break;
+    }
+    case "uitgesproken-geen-geldwaarde": {
+      const koers = rij.rate!;
+      delen.push(
+        `De uitgever zegt er zelf over: ${citaat(koers.quote)} Voor ${koers.scope} is dat een ` +
+          `uitgesproken nul, dus hier dekken ze niets.`,
+      );
+      if (koers.nuance) delen.push(koers.nuance);
+      delen.push("Er staat hier daarom geen percentage.");
+      break;
+    }
+    case "geen-vaste-waarde": {
+      const koers = rij.rate!;
+      delen.push(
+        `De uitgever zegt er zelf over: ${citaat(koers.quote)} Er is dus geen koers om mee te ` +
+          `rekenen — en dat is iets anders dan nul.`,
+      );
+      if (koers.nuance) delen.push(koers.nuance);
+      break;
+    }
+    case "koers-niet-gelezen": {
+      const koers = rij.rate!;
+      const host = bronHost(koers.sourceUrl);
+      delen.push(
+        `Wat ze waard zijn hebben WIJ niet kunnen lezen${host ? ` op ${host}` : ""}. Dat is een gat in ` +
+          `onze meting en geen uitspraak van de uitgever, dus er staat hier geen bedrag.`,
+      );
+      if (koers.nuance) delen.push(koers.nuance);
+      break;
+    }
+    case "programma-onbekend":
+      delen.push(
+        "Dit programma staat niet in onze koerslijst, dus we weten niet wat een punt hier waard is. " +
+          "Onbekend is niet nul.",
+      );
+      break;
+  }
+
+  return delen.join(" ");
+}
+
+/** De route, en die mag nooit weg. Zonder deze zin leest een percentage als een
+ *  knop in de kassa van de winkel, en die knop bestaat niet: Amex' koers geldt
+ *  voor inwisselen achteraf via de app of het online account. */
+function inwisselZin(scope: string): string {
+  return (
+    `Inwisselen gaat via ${scope} — niet in de kassa van deze winkel. Of deze winkel dit programma ` +
+    `accepteert, kunnen we hier niet zien.`
+  );
+}
+
+/** Waar de koers vandaan komt, van wanneer, en wanneer HIJ het saldo invoerde.
+ *  Die twee datums zijn allebei nodig en ze zijn niet uitwisselbaar: de eerste
+ *  zegt hoe oud ons cijfer is, de tweede hoe oud zijn eigen opgave is. */
+export function puntenBron(rij: PuntenRij): string {
+  const bits: string[] = [];
+
+  if (rij.rate && rij.rate.soort === "koers") {
+    const host = bronHost(rij.rate.sourceUrl);
+    /* Het citaat als eigen zin, en de herkomst als tweede. Alles in één zin
+     * proppen gaf «Koers: "…". americanexpress.com, gelezen 21 augustus 2026» —
+     * een losse hostnaam die aan niets vastzit. */
+    bits.push(`Koers: ${citaat(rij.rate.quote)}`);
+    bits.push(`Bron${host ? `: ${host}` : ""}, gelezen ${dateNL(rij.rate.gelezenOp)}.`);
+  } else if (rij.rate) {
+    const host = bronHost(rij.rate.sourceUrl);
+    bits.push(
+      `Bron${host ? `: ${host}` : ""}${rij.rate.bronDatum ? ` (${rij.rate.bronDatum})` : ""}, ` +
+        `gelezen ${dateNL(rij.rate.gelezenOp)}.`,
+    );
+  }
+  if (rij.rate?.hercontrole) bits.push(rij.rate.hercontrole);
+
+  /* Een saldo zonder datum is niet vers. Dat er geen datum bij staat is zelf de
+   * mededeling; er stilletjes vandaag van maken zou een saldo van vier maanden
+   * oud vers verklaren. */
+  if (rij.updatedAt === "") {
+    bits.push("Bij dit saldo staat geen datum, dus we weten niet hoe oud het is.");
+  } else {
+    bits.push(`Saldo door jou ingevoerd op ${dateNL(rij.updatedAt)}.`);
+    if (rij.verouderd) {
+      bits.push(
+        `Dat is meer dan ${VEROUDERD_TEKST} geleden — kijk even na of het nog klopt voordat je erop afgaat.`,
+      );
+    }
+  }
+  return bits.join(" ");
+}
+
+const VEROUDERD_TEKST = "negentig dagen";
+
+/** De regel onder het hele puntenblok.
+ *
+ *  DEZE ZIN SPREEKT DE VERKOOPKANT VAN DIT IDEE TEGEN EN STAAT ER DAAROM. Punten
+ *  inwisselen levert overal dezelfde koers op, dus er is aan deze kassa geen
+ *  voordeel te halen dat er morgen niet ook is: door hier met een andere kaart
+ *  te betalen gaat er niets verloren. Dit blok is een herinnering, en het als
+ *  arbitrage verkopen zou een winst beloven die er niet is.
+ *
+ *  Bij een aankoop in vreemde valuta is het sterker dan dat: dan KOST het geld.
+ *  Met de kaart van het programma betalen om hier punten te kunnen inwisselen
+ *  brengt koersopslag mee over het hele bedrag, terwijl diezelfde punten
+ *  volgende week op een euro-aankoop precies evenveel waard zijn. */
+export function puntenVoetnoot(currency: string): string {
+  const basis =
+    "Deze punten gaan niet verloren door hier met een andere kaart te betalen — ze blijven staan. " +
+    "Dit is een herinnering, geen voordeel dat je hier moet pakken.";
+  const munt = currency.trim().toUpperCase();
+  if (munt === "" || munt === "EUR") return basis;
+  return (
+    `${basis} Deze winkel rekent af in ${munt}: met de kaart van een puntenprogramma betalen om hier ` +
+    `punten te kunnen inwisselen kost koersopslag over het hele bedrag, en dezelfde punten zijn ` +
+    `volgende week op een euro-aankoop even veel waard.`
+  );
+}
+
+/** Wat er staat als hij nog geen enkel saldo heeft ingevoerd.
+ *
+ *  Geen verwijt en geen aansporing: één zin die zegt waar het veld staat. Op een
+ *  winkelpagina is dit het enige wat over punten gezegd kan worden zonder een
+ *  saldo, en het is meer dan zwijgen — hij weet anders niet dat de extensie dit
+ *  kan. */
+export function puntenLeegRegel(): string {
+  return (
+    "Je hebt nog geen puntensaldo ingevoerd. Zet je saldi in de instellingen van LaVega neer, dan " +
+    "zie je bij het afrekenen staan wat je hebt liggen."
+  );
 }
 
 /* ───────────────────────────── de voorwaarden ────────────────────────────── */

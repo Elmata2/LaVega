@@ -30,8 +30,46 @@
 declare type PaneelVerzoek = { soort: "paneel-vragen" };
 
 /** Waar een regel bij hoort. Bepaalt alleen de kop erboven; het content script
- *  doet er verder niets mee dan groeperen. */
-declare type PaneelGroep = "mijn" | "openen" | "achteruit" | "onbekende-kosten" | "onbekend";
+ *  doet er verder niets mee dan groeperen.
+ *
+ *  "geen-euro-uitkomst" IS ER LATER BIJ GEKOMEN EN DAT WAS EEN CORRECTIE. De
+ *  kaarten waarvan de opbrengst niet in euro's is uit te drukken zaten in
+ *  dezelfde groep als de kaarten waarvan we de PRIJS niet kennen, onder de kop
+ *  "Kaartkosten onbekend". Bij Crypto.com Obsidian stond in dezelfde record
+ *  letterlijk "€450,000 12-month CRO staking": de kaartkosten waren daar niet
+ *  onbekend, ze stonden er. De rij zei dat inmiddels goed, de kop erboven niet —
+ *  en een groepskop is de sterkste uitspraak in dat blok. Twee verschillende
+ *  onbekenden horen dus niet onder één kop. */
+declare type PaneelGroep =
+  | "mijn"
+  | "openen"
+  | "achteruit"
+  | "onbekende-kosten"
+  | "geen-euro-uitkomst"
+  | "onbekend";
+
+/** Eén puntenprogramma in het paneel. Zelfde vorm als een kaartregel — titel,
+ *  zin, bron — omdat het content script er hetzelfde mee doet: neerzetten. */
+declare type PaneelPuntRegel = {
+  titel: string;
+  regel: string;
+  bron: string;
+};
+
+/** Het puntenblok. Staat BOVEN de kaarten, want dit is wat hij al heeft liggen
+ *  en dat is het antwoord op de vraag waarom deze extensie er is.
+ *
+ *  `regels` mag leeg zijn; dan draagt `leeg` de ene zin die er dan hoort te
+ *  staan (waar hij zijn saldi invoert) en verschijnt er geen kop over punten
+ *  boven een lege lijst. */
+declare type PaneelPunten = {
+  regels: PaneelPuntRegel[];
+  /** De zin onder het blok: dat punten niet verloren gaan door hier anders te
+   *  betalen, en bij vreemde valuta dat inwisselen hier juist geld kost. */
+  voetnoot: string;
+  /** Gevuld als er geen enkel saldo is ingevoerd; anders "". */
+  leeg: string;
+};
 
 declare type PaneelRegel = {
   /** De productnaam. */
@@ -53,14 +91,21 @@ declare type PaneelAntwoord =
       /** Waar dat bedrag vandaan komt en wat het WEL en NIET is — een
        *  artikelprijs is geen ordertotaal. Null als er geen bedrag is. */
       bedragNoot: string | null;
+      punten: PaneelPunten;
       regels: PaneelRegel[];
       /** De regel onderaan: peildatum van de gegevens en wat er níét gebeurt. */
       voet: string;
     }
   /** Er staat wel een pagina maar er is geen bedrag met zekerheid te lezen. Dan
    *  wordt er niet gegokt en wijst het paneel naar de plek waar het handmatige
-   *  veld wél staat. */
-  | { soort: "geen-bedrag"; kop: string; uitleg: string; voet: string }
+   *  veld wél staat.
+   *
+   *  HET PUNTENBLOK GAAT HIER WÉL MEE, en dat is de belangrijkste eigenschap van
+   *  deze toestand. Wat hij aan punten heeft liggen hangt niet van het bedrag op
+   *  deze pagina af. Voorheen zweeg het paneel hier volledig — juist op de
+   *  IKEA-pagina's met een actieprijs, waar het bedrag een bereik is en dus niet
+   *  te lezen. Nu staat er nog steeds iets waars en bruikbaars. */
+  | { soort: "geen-bedrag"; kop: string; uitleg: string; punten: PaneelPunten; voet: string }
   /** Niets tonen. `reden` is voor de console van de ontwikkelaar, niet voor het
    *  scherm — een paneel dat verschijnt om te melden dat het er niet hoort te
    *  zijn, is erger dan geen paneel. */

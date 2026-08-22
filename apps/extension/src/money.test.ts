@@ -9,7 +9,7 @@
  * bij een string blijft die je moet vertrouwen. */
 
 import { describe, it, expect } from "vitest";
-import { euro, pct, points, eurosToCents, pctOfCents, dateNL } from "./money.js";
+import { euro, pct, points, eurosToCents, pctOfCents, dateNL, getal } from "./money.js";
 
 /** De codepunten als leesbare hex, zodat een melding het VERSCHIL laat zien en
  *  niet twee keer dezelfde regel. */
@@ -56,6 +56,17 @@ describe("de rest van de notatie", () => {
 
   it("rondt punten naar beneden, want een halve mijl komt er niet", () => {
     expect(points(19999, 1)).toBe(199);
+  });
+
+  it("schrijft een gewoon getal Nederlands, met een duizendteken", () => {
+    /* Hier zat de bevinding die twee ronden overleefde: het optiescherm zette
+     * `${c.pointsPerEuro.value}` neer en dat gaf "0.5 punt(en) per euro" — een
+     * Engelse punt op een Nederlands scherm, niet te onderscheiden van 0,5 of
+     * 05. Het bedrag ernaast liep al door `euro`; dit veld was vergeten. */
+    expect(getal(0.5)).toBe("0,5");
+    expect(getal(1.5)).toBe("1,5");
+    expect(getal(42000, 0)).toBe("42.000");
+    expect(getal(1)).toBe("1");
   });
 
   it("geeft een onleesbare datum onveranderd door in plaats van hem weg te laten", () => {
