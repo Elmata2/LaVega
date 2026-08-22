@@ -1738,10 +1738,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                         {free.map((f) => (
                           <li key={f.productId}>
                             {f.product} — {feeLabel(f.amount)}.{" "}
-                            {f.conditions ?? "De bron noemt hierbij geen voorwaarde."}{" "}
-                            <span style={{ opacity: 0.7 }}>
-                              ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
-                            </span>
+                            {f.conditions ?? "De bron noemt hierbij geen voorwaarde."}
                           </li>
                         ))}
                       </ul>
@@ -1749,6 +1746,27 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                         Is dit jouw rekening? Zet die naam bij Rekeningen in het veld <strong>Naam</strong>, dan
                         rekent LaVega er met € 0,00 voor.
                       </p>
+                      {/* BRON EN PEILDATUM ACHTER DE PLOOI, op zijn verzoek van 22
+                          augustus. Ze stonden per regel achter het bedrag, en dat
+                          maakte van een lijstje van drie een muur.
+
+                          WAT VOORAAN BLIJFT is het bedrag EN de voorwaarde, en dat
+                          is geen halve maatregel: een studentenrekening is gratis
+                          áls je student bent, en zonder die eis is "gratis" een
+                          advies dat in zijn eigen toestand niet hoeft te werken.
+                          De herkomst mag een klik verderop; de eis niet. */}
+                      <ToonMeer
+                        variant="regel"
+                        summary={`Waar ${free.length === 1 ? "deze prijs" : "deze prijzen"} vandaan ${free.length === 1 ? "komt" : "komen"}`}
+                      >
+                        <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                          {free.map((f) => (
+                            <li key={`bron-${f.productId}`}>
+                              {f.product}: {sourceHost(f.sourceUrl)}, peildatum {f.asOf}
+                            </li>
+                          ))}
+                        </ul>
+                      </ToonMeer>
                     </div>
                   )}
                 </div>

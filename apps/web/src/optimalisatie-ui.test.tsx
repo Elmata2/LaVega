@@ -401,10 +401,21 @@ test("een onherkende ING-rekening ziet de gratis pakketten staan, elk met zijn e
   // punt 24 draagt: zonder haar is dit een gratis-melding die over twee jaar
   // niet meer klopt.
   expect(gratis).toContain("18 tot 30 jaar");
-  // En met de bron erbij, want een nul zonder herkomst is precies de valse nul
-  // waar dit project al een keer op struikelde.
-  expect(gratis).toContain("assets.ing.com");
-  expect(gratis).toContain("peildatum");
+  /* DE BRON MOET ER ZIJN, MAAR ACHTER DE PLOOI — zijn keuze van 22 augustus, en
+   * het paar is precies dit: de EIS staat vooraan (hierboven getoetst) en de
+   * HERKOMST een klik verderop. Een nul zonder herkomst blijft de valse nul waar
+   * dit project al een keer op struikelde, dus hij moet vindbaar blijven; een
+   * gratis-melding zonder de leeftijdseis is advies dat niet hoeft te werken,
+   * dus die mag niet opvouwen.
+   *
+   * Niet getoetst via row(): die helper snijdt op de eerste </div> en mijn
+   * uitklap zit een niveau dieper. Zoeken in de <details>-blokken zelf zegt bovendien
+   * meer — het bewijst dat de bron OPGEVOUWEN is en niet alleen dat hij bestaat. */
+  const panelen = [...html.matchAll(/<details[^>]*>([\s\S]*?)<\/details>/g)].map((m) => m[1]);
+  expect(panelen.some((d) => d.includes("assets.ing.com"))).toBe(true);
+  expect(panelen.some((d) => d.includes("18 tot 30 jaar"))).toBe(false);
+  // De peildatum reist mee met de bron, dus ook die zit nu in het paneel.
+  expect(panelen.some((d) => d.includes("peildatum"))).toBe(true);
   // De weg naar het juiste bedrag staat erbij, en het is een weg die bestaat:
   // Rekeningen heeft dat naamveld.
   expect(gratis).toContain("Rekeningen");
