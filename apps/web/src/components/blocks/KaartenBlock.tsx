@@ -112,6 +112,19 @@ export function ibanTail(iban: string): string | null {
   return clean.length >= 4 ? clean.slice(-4) : null;
 }
 
+/** Waar de glans moet staan als de cursor op (x, y) binnen `rect` zit.
+ *
+ *  Puur en apart, want dit is het enige rekenwerk in de hele interactie en het
+ *  is met een muis niet te toetsen. Het antwoord is een transform-string omdat
+ *  die rechtstreeks op het element wordt gezet: een CSS-variabele op de KAART
+ *  zou de stijl van elk kind laten hertekenen bij elke muisbeweging, en een
+ *  kaart heeft er een stuk of acht. */
+export function sheenTransform(rect: { left: number; top: number }, clientX: number, clientY: number): string {
+  const x = Math.round(clientX - rect.left);
+  const y = Math.round(clientY - rect.top);
+  return `translate3d(${x}px, ${y}px, 0)`;
+}
+
 type KaartenBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
@@ -157,7 +170,20 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                 key={account.key}
                 style={{ background: face }}
                 aria-label={`${account.bank || "Onbekende bank"} · ${type}`}
+                /* De glans volgt de cursor. De transform gaat RECHTSTREEKS op de
+                 * laag en niet via React-state: bij state zou elke muisbeweging
+                 * een render van de hele kaartenrij zijn. Zo raakt hij alleen
+                 * zichzelf, en blijft hij op de GPU. */
+                onPointerMove={(e) => {
+                  if (e.pointerType !== "mouse") return;
+                  const sheen = e.currentTarget.querySelector<HTMLElement>(".bank-card-sheen");
+                  if (!sheen) return;
+                  const r = e.currentTarget.getBoundingClientRect();
+                  sheen.style.transform = sheenTransform(r, e.clientX, e.clientY);
+                }}
               >
+                {/* Puur decoratief: een schermlezer heeft niets aan een lichtvlek. */}
+                <span className="bank-card-sheen" aria-hidden="true" />
                 <header className="bank-card-top">
                   <span className="bank-card-bank">
                     {logo ? (

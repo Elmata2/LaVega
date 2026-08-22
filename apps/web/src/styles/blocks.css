@@ -551,6 +551,11 @@
   border-radius: var(--r);
   color: var(--on-ink);
   box-shadow: var(--shadow-sm);
+  /* Voor de glans: `relative` geeft hem iets om zich aan te hangen, en `hidden`
+   * houdt hem binnen de afgeronde hoeken - anders steekt er een lichte cirkel
+   * buiten de kaart uit zodra de cursor bij de rand komt. */
+  position: relative;
+  overflow: hidden;
 }
 
 /* DE HOVER-TOESTAND (review 4, punt 10: "and that I can hover over it").
@@ -575,6 +580,59 @@
  * app-frame, dus dat lenen zou de kaart laten zweven als een venster. Wel
  * dezelfde inkt (rgba(26, 26, 23, …)) als beide tokens, want een tweede grijs
  * naast het bestaande grijs valt op als een fout. */
+/* DE GLANS DIE DE CURSOR VOLGT.
+ *
+ * Een eigen laag en geen CSS-variabele op de kaart zelf: een variabele op de
+ * ouder laat de stijl van elk kind hertekenen bij elke muisbeweging, en een
+ * kaart heeft er een stuk of acht. Deze laag beweegt met `transform`, dus hij
+ * blijft op de GPU en raakt de rest van de kaart niet aan.
+ *
+ * De alpha is 0.14 en dat getal staat OOK in brandFace.ts (SHEEN_PEAK_ALPHA),
+ * want de kaartkleur wordt net zo lang verdonkerd tot wit ook MET deze glans
+ * erop nog 4,5:1 haalt. Zet je hem hier hoger, dan zakt het contrast precies
+ * onder de cursor - en daar leest iemand. Er staat een test op die deze twee
+ * getallen tegen elkaar houdt.
+ *
+ * Alleen de dekking heeft een korte overgang; de POSITIE krijgt een langere,
+ * zodat het licht de cursor met een klein beetje traagheid volgt in plaats van
+ * eraan vastgeplakt te zitten. Een transitie en geen keyframes, want de muis
+ * verandert voortdurend van richting en een transitie richt zich onderweg
+ * gewoon opnieuw. */
+.bank-card-sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 180px;
+  height: 180px;
+  margin: -90px 0 0 -90px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Aanwijsapparaat met een fijne punt, dus geen aanraakscherm: daar zet een tik
+ * de hover aan en blijft de glans hangen op een plek waar geen vinger meer is. */
+@media (hover: hover) and (pointer: fine) {
+  .bank-card-sheen {
+    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .bank-card:hover .bank-card-sheen {
+    opacity: 1;
+  }
+}
+
+/* Minder beweging: het licht blijft, maar het volgt niets meer. De glans zit dan
+ * stil in de linkerbovenhoek waar de gradient ook vandaan komt, dus de kaart
+ * houdt zijn diepte zonder dat er iets meebeweegt. */
+@media (prefers-reduced-motion: reduce) {
+  .bank-card-sheen {
+    transition: opacity 160ms linear;
+    transform: translate3d(30%, 20%, 0) !important;
+  }
+}
+
 .bank-card:hover,
 .bank-card:focus-within {
   box-shadow:

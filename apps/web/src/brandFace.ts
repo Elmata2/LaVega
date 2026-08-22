@@ -192,6 +192,28 @@ export type CardRamp = {
 const RAMP_STEPS = [-0.72, -0.45, -0.18, 0] as const;
 const RAMP_POSITIONS = [0, 38, 72, 100] as const;
 
+/** Hoe wit de glans op zijn sterkste punt is (bank-card-sheen in blocks.css).
+ *
+ *  DIT GETAL MOET GELIJK ZIJN AAN DAT IN DE CSS, en daarom staat het hier en
+ *  niet daar: de glans maakt de kaart LICHTER, en wel precies op de plek waar de
+ *  cursor staat — dus precies waar iemand kijkt. Zonder deze correctie zou de
+ *  4,5:1 van de witte tekst gelden voor de kaart zoals hij ER ZONDER GLANS
+ *  UITZIET, en onder de cursor stilletjes zakken. Dat is de vervelendste soort
+ *  regressie: hij treedt alleen op tijdens hover, dus een schermafdruk laat hem
+ *  niet zien. */
+export const SHEEN_PEAK_ALPHA = 0.14;
+
+/** De kleur zoals hij wordt MET de glans er op zijn sterkst overheen. Wit over
+ *  een kleur is een gewone alpha-compositie; er zit geen blend-mode tussen, juist
+ *  omdat die het contrast onvoorspelbaar zou maken. */
+export function withSheen(rgb: Rgb, alpha: number = SHEEN_PEAK_ALPHA): Rgb {
+  return {
+    r: rgb.r + (255 - rgb.r) * alpha,
+    g: rgb.g + (255 - rgb.g) * alpha,
+    b: rgb.b + (255 - rgb.b) * alpha,
+  };
+}
+
 /** Het kaartvlak voor een huisstijlkleur.
  *
  *  De LICHTSTE stop wordt eerst verdonkerd tot de tekst erop 4,5:1 haalt; alle
@@ -200,7 +222,8 @@ const RAMP_POSITIONS = [0, 38, 72, 100] as const;
 export function cardRamp(brand: Rgb): CardRamp {
   let top = brand;
   // Ruim genoeg om vanaf puur wit onder de grens te komen; stopt zodra het klopt.
-  for (let i = 0; i < 40 && contrastOnCard(top) < WHITE_MIN_CONTRAST; i++) {
+  // MET de glans erop meegerekend, niet zonder — zie SHEEN_PEAK_ALPHA.
+  for (let i = 0; i < 40 && contrastOnCard(withSheen(top)) < WHITE_MIN_CONTRAST; i++) {
     top = shade(top, -0.08);
   }
   const stops = RAMP_STEPS.map((f) => toHex(f === 0 ? top : shade(top, f)));

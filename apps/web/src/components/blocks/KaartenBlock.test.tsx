@@ -135,8 +135,21 @@ const cardCss = readFileSync(fileURLToPath(new URL("../../styles/blocks.css", im
  *  en werd door de eerste versie helemaal niet gevonden. Een test die zijn eigen
  *  regel niet vindt, meldt "geen hover-toestand" terwijl die er wel is. */
 function rule(selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return cardCss.match(new RegExp(`${escaped}(?:,| )[^{}]*\\{[^}]*\\}`))?.[0] ?? "";
+  /* DERDE KEER RAAK, dus nu geen tekstzoektocht meer maar een vergelijking van de
+   * hele selectorlijst. De vorige versie liet na de selector een spatie toe (voor
+   * `.bank-card {`), en een spatie is ook de nakomeling-combinator: zodra
+   * `.bank-card:hover .bank-card-sheen` erbij kwam, vond hij DIE en meldde dat de
+   * hover-toestand geen box-shadow had. Een test die de verkeerde regel pakt
+   * klaagt over iets dat wél klopt, en dat kost meer tijd dan een echte fout. */
+  /* Commentaar eerst eruit: dit bestand legt keuzes uit met CSS-fragmenten IN de
+   * toelichting, en een accolade in een comment laat elke regel daarna een stap
+   * verschuiven. Zo verdween .card-strip, die er gewoon staat. */
+  const zonderCommentaar = cardCss.replace(/\/\*[\s\S]*?\*\//g, " ");
+  for (const [, selectors, body] of zonderCommentaar.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const namen = selectors.split(",").map((x) => x.trim());
+    if (namen.includes(selector)) return `${selectors.trim()} {${body}}`;
+  }
+  return "";
 }
 
 test("het tokenvlak is een verloop met bereik, niet twee naburige kleuren", () => {

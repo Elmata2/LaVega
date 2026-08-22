@@ -1,14 +1,6 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import {
-  CARD_TEXT,
-  WHITE_MIN_CONTRAST,
-  cardRamp,
-  contrastOnCard,
-  contrastWithWhite,
-  dominantColor,
-  luminance,
-  toHex,
-} from "./brandFace.js";
+import { CARD_TEXT, SHEEN_PEAK_ALPHA, WHITE_MIN_CONTRAST, cardRamp, contrastOnCard, contrastWithWhite, dominantColor, luminance, toHex, withSheen } from "./brandFace.js";
 
 /** Een blokje pixels in één kleur, plus optioneel een witte rand eromheen. */
 function pixels(color: [number, number, number], n: number, white = 0): number[] {
@@ -140,4 +132,40 @@ test("een donkere maar echte huisstijlkleur blijft wel staan", () => {
   const got = dominantColor(ics);
   expect(got).not.toBeNull();
   expect(toHex(got!)).toBe("#0e1844");
+});
+
+test("wit blijft leesbaar ONDER de glans, niet alleen ernaast", () => {
+  /* De glans is het enige dat de kaart lichter maakt, en hij zit precies onder de
+   * cursor — dus precies waar iemand leest. Tot deze test bestond gold de 4,5:1
+   * voor de kaart zoals hij er ZONDER glans uitziet; een schermafdruk zou dat
+   * nooit laten zien, want de glans verschijnt alleen tijdens hover. */
+  for (const brand of [
+    { r: 255, g: 105, b: 1 }, // ING, gemeten
+    { r: 0, g: 167, b: 226 }, // Trading 212, gemeten
+    { r: 159, g: 232, b: 112 }, // Wise, het lichtste merk dat we hebben
+    { r: 255, g: 214, b: 0 }, // knalgeel
+    { r: 255, g: 255, b: 255 }, // extreem: puur wit
+  ]) {
+    const ramp = cardRamp(brand);
+    for (const stop of ramp.stops) {
+      const rgb = {
+        r: parseInt(stop.slice(1, 3), 16),
+        g: parseInt(stop.slice(3, 5), 16),
+        b: parseInt(stop.slice(5, 7), 16),
+      };
+      expect(contrastOnCard(withSheen(rgb))).toBeGreaterThanOrEqual(WHITE_MIN_CONTRAST);
+    }
+  }
+});
+
+test("de glans in de CSS is niet sterker dan waar de ramp op rekent", () => {
+  /* Twee plekken die hetzelfde getal moeten dragen, en de CSS is de plek waar
+   * iemand het per ongeluk mooier zet. Gaat de alpha daar omhoog zonder dat
+   * SHEEN_PEAK_ALPHA meebeweegt, dan klopt de hele contrastgarantie niet meer —
+   * en dan valt hier een test om in plaats van dat niemand het merkt. */
+  const css = readFileSync(new URL("./styles/blocks.css", import.meta.url), "utf8");
+  const sheen = css.slice(css.indexOf(".bank-card-sheen"));
+  const alphas = [...sheen.slice(0, 900).matchAll(/rgba?\([^)]*?([01]?\.\d+)\s*\)/g)].map((m) => Number(m[1]));
+  expect(alphas.length).toBeGreaterThan(0);
+  expect(Math.max(...alphas)).toBeLessThanOrEqual(SHEEN_PEAK_ALPHA);
 });
