@@ -52,7 +52,7 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
 
   return (
     <Module
-      title="Positie per bedrijf"
+      title="Positie"
       height="short"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>

@@ -125,8 +125,8 @@ test("the surface is exactly three ways in, and nothing else", () => {
   const c = render();
   const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
   expect(titles).toEqual([
-    "1 · Automatisch (n8n)",
-    "2 · Sleep een factuur hierheen",
+    "1 · Automatisch",
+    "2 · Slepen",
     "3 · Handmatig",
   ]);
 

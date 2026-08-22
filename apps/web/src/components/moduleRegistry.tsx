@@ -421,7 +421,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "positie",
-    label: "Positie per bedrijf",
+    label: "Positie",
     what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
     preview: (
       <Thumb>

@@ -52,7 +52,7 @@ test("the grey instruction sentence under the title is gone", () => {
 test("NL gets exactly one tax module — its VAT — because that is all LaVega can compute there", () => {
   const html = render([tx("t1", "2026-08-01", 12_100)]);
   const titles = [...html.matchAll(/class="module-title">([^<]*)</g)].map((m) => m[1]);
-  expect(titles).toEqual(["BTW", "Wat LaVega hier niet berekent"]);
+  expect(titles).toEqual(["BTW", "Niet berekend"]);
 
   expect(html).toContain("Belasting · Nederland");
   expect(html).toContain("1 belasting");
@@ -68,7 +68,7 @@ test("switching the profile to DE adds the prepayment module, with its dated ins
   const html = render([tx("t1", "2026-02-01", 100_000)]);
 
   const titles = [...html.matchAll(/class="module-title">([^<]*)</g)].map((m) => m[1]);
-  expect(titles).toEqual(["USt", "Vorauszahlung", "Wat LaVega hier niet berekent"]);
+  expect(titles).toEqual(["USt", "Vorauszahlung", "Niet berekend"]);
   expect(html).toContain("Belasting · Duitsland");
   expect(html).toContain("2 belastingen");
   expect(html).toContain("Tarieven in Duitsland: 19% / 7% / 0%");

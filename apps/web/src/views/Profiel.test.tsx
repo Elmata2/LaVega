@@ -279,9 +279,9 @@ test("the overview widgets are switched here, and they start off", async () => {
   expect(items.length).toBeGreaterThanOrEqual(2);
   expect(items.length).toBe(WIDGETS.length);
   expect(widgets.textContent).toContain("Aandacht");
-  expect(widgets.textContent).toContain("Positie per bedrijf");
+  expect(widgets.textContent).toContain("Positie");
 
-  for (const label of ["Aandacht", "Positie per bedrijf"]) {
+  for (const label of ["Aandacht", "Positie"]) {
     const toggle = widgets.querySelector(`[aria-label="${label} op je overzicht"]`) as HTMLButtonElement;
     expect(toggle, `no switch for ${label}`).not.toBeNull();
     expect(toggle.getAttribute("aria-checked")).toBe("false");

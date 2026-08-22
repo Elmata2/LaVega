@@ -674,7 +674,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             scherm staat de rekenmachine links van de bol en op een smal scherm
             erboven, dus elke richting in die zin is de helft van de tijd onwaar. */}
         <Module
-          title="Waar ga je heen?"
+          title="Bestemming"
           footer={<span>De bol zet alleen de doelvaluta in de rekenmachine — er komt geen tweede berekening bij.</span>}
         >
           <Globe value={to} from={from} onPick={setTo} supported={currencies} />

@@ -515,7 +515,7 @@ export default function Belasting({
 
         {/* ── Wat dit land WEL heeft maar LaVega niet berekent. Hoort erbij:
              de lijst hierboven is anders niet te beoordelen. ──────────────── */}
-        <Module title="Wat LaVega hier niet berekent" span={profitTax ? 2 : 1}>
+        <Module title="Niet berekend" span={profitTax ? 2 : 1}>
           <ul className="tax-caveats">
             {pack.caveats.map((c) => (
               <li key={c}>{c}</li>

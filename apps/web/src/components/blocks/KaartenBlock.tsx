@@ -133,7 +133,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
 
   return (
     <Module
-      title="Je kaarten"
+      title="Kaarten"
       span={3}
       height="short"
       menu={

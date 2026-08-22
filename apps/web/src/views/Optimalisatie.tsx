@@ -1509,7 +1509,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
         {hasCostsToShow(costs) && (
           <Module
             span={2}
-            title="Wat je rekeningen kosten"
+            title="Kosten"
             footer={
               <span>
                 Bedragen uit de kostendocumenten van de aanbieders zelf, met de datum die dat document noemt.

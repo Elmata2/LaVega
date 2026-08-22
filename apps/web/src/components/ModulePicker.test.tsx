@@ -304,17 +304,17 @@ test("the picker puts a widget on the overview and takes it off again", () => {
   renderWidgets();
   // Off by default: the card is not on the page at all, not merely empty.
   expect(card("Aandacht")).toBeNull();
-  expect(card("Positie per bedrijf")).toBeNull();
+  expect(card("Positie")).toBeNull();
   expect(widgetToggle("Aandacht").getAttribute("aria-checked")).toBe("false");
   expect(widgetToggle("Aandacht").disabled).toBe(false);
 
-  click(widgetToggle("Positie per bedrijf"));
-  expect(card("Positie per bedrijf")).not.toBeNull();
-  expect(card("Positie per bedrijf")!.textContent).toContain("BV1 Holding");
+  click(widgetToggle("Positie"));
+  expect(card("Positie")).not.toBeNull();
+  expect(card("Positie")!.textContent).toContain("BV1 Holding");
   expect(card("Aandacht")).toBeNull(); // one switch moves one widget
 
-  click(widgetToggle("Positie per bedrijf"));
-  expect(card("Positie per bedrijf")).toBeNull();
+  click(widgetToggle("Positie"));
+  expect(card("Positie")).toBeNull();
 });
 
 test("a widget he switched on survives a reload; one he never touched stays off", () => {
@@ -336,7 +336,7 @@ test("a widget he switched on survives a reload; one he never touched stays off"
   container!.remove();
   renderWidgets();
   expect(card("Aandacht")).not.toBeNull();
-  expect(card("Positie per bedrijf")).toBeNull();
+  expect(card("Positie")).toBeNull();
   expect(card("Betaalagenda")).not.toBeNull();
 });
 

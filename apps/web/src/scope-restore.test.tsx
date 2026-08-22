@@ -4,6 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Account, EntityProfile, Tx } from "@lavega/core";
 
+/* DE NAVIGATIE IS EEN <a href> GEWORDEN, geen <button> meer (commit edea871,
+ * path-based personal views). Dat is een verbetering - er zijn nu echte URL's,
+ * dus middenklik, "link kopiëren" en de terugknop werken - maar de selector hier
+ * stond nog op button.nav-item en die vond niets meer. De test zei toen "geen
+ * knop Rekeningen", wat klonk als een verdwenen knop terwijl hij er gewoon staat
+ * als link.
+ */
 /* Persoonlijk ⇄ Zakelijk must RESTORE.
  *
  * His report: switching to Zakelijk shows only the accounts, and switching back
@@ -192,11 +199,11 @@ test("you come back to the module you left the half on, not the one the other ha
 test("each half keeps its own module, so switching back and forth is a round trip", async () => {
   await mount();
 
-  await click(button("button.nav-item", "Rekeningen")); // Persoonlijk left on Rekeningen
+  await click(button("a.nav-item", "Rekeningen")); // Persoonlijk left on Rekeningen
   const personal = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("button.nav-item", "Forecast")); // Zakelijk left on Forecast
+  await click(button("a.nav-item", "Forecast")); // Zakelijk left on Forecast
   const business = screen();
 
   await click(scopeButton("Persoonlijk"));
@@ -213,7 +220,7 @@ test("a filter naming an account of one half never narrows the other half", asyn
 
   // Rekeningen → click the personal account's transaction count → Transacties,
   // filtered to that account.
-  await click(button("button.nav-item", "Rekeningen"));
+  await click(button("a.nav-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
   await click(buttonLike("button.bank-group-head", "TEST"));
   await click(buttonLike("button.card-link", "4 transacties bekijken"));

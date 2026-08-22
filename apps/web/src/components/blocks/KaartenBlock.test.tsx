@@ -20,7 +20,7 @@ const amex: Account = {
 
 test("KaartenBlock renders one card per account with the holder and the bank", () => {
   const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).toContain("Je kaarten");
+  expect(html).toContain("Kaarten");
   expect(html).toContain("bank-card");
   expect(html).toContain("ING");
   expect(html).toContain("Rabobank");

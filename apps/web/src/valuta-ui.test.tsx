@@ -267,7 +267,7 @@ const paneel = (d: HTMLDetailsElement) => d.querySelector(`.${TOONMEER_CLASS.pan
 test("twee kolommen: de rekenmachine links, de bol rechts", () => {
   const c = render();
   const modules = [...c.querySelectorAll<HTMLElement>(".module-grid > .module")];
-  expect(modules.map((m) => m.getAttribute("aria-label"))).toEqual(["Overzetten", "Waar ga je heen?"]);
+  expect(modules.map((m) => m.getAttribute("aria-label"))).toEqual(["Overzetten", "Bestemming"]);
   // Allebei één kolom breed in een raster van twee: de bol stond over de volle
   // breedte onder de kolommen (span 2) en is nu zelf de rechterkolom.
   expect(modules.every((m) => m.classList.contains("module-span-1"))).toBe(true);
@@ -383,7 +383,7 @@ test("de kop belooft geen live koers als die er niet is", () => {
 
 test("de voettekst onder de bol wijst geen richting aan", () => {
   const c = render();
-  const bol = [...c.querySelectorAll<HTMLElement>(".module")].find((m) => m.getAttribute("aria-label") === "Waar ga je heen?")!;
+  const bol = [...c.querySelectorAll<HTMLElement>(".module")].find((m) => m.getAttribute("aria-label") === "Bestemming")!;
   const foot = bol.querySelector(".module-foot")!.textContent ?? "";
   expect(foot).toContain("De bol zet alleen de doelvaluta");
   // "hierboven" klopte toen de bol ónder de kolommen stond. Nu staat hij op een

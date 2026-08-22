@@ -709,7 +709,7 @@ export default function Facturen({
 
       <ModuleGrid label="Facturen invoeren">
         {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
-        <Module title="1 · Automatisch (n8n)" height="tall">
+        <Module title="1 · Automatisch" height="tall">
           <p className="cell-sub">
             LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna
             elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. De knop
@@ -747,7 +747,7 @@ export default function Facturen({
         </Module>
 
         {/* ── 2. sleep een factuurbestand hierheen ────────────────────── */}
-        <Module title="2 · Sleep een factuur hierheen" height="tall">
+        <Module title="2 · Slepen" height="tall">
           <label
             className={`dropzone${dragOver ? " dropzone-over" : ""}`}
             aria-label="Factuurbestand hierheen slepen"

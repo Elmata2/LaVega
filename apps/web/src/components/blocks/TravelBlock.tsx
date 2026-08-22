@@ -1081,7 +1081,7 @@ export default function TravelBlock({
     : "Alle routes, de bronnen en de voorwaarden";
 
   return (
-    <Module title="Travel Agent" span={3} height="tall">
+    <Module title="Travel" span={3} height="tall">
       <div className="travel-controls">
         <label>
           <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>

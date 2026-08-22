@@ -37,7 +37,7 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
   expect(html).toContain('class="module module-span-3 module-tall"');
   // Named after the question he asks, not after the software that answers it
   // (review 3, item 4). The Module puts the title in its aria-label too.
-  expect(html).toContain("Travel Agent");
+  expect(html).toContain("Travel");
   expect(html).not.toContain("reisagent");
   expect(html).toContain("Ik reis vanuit NL naar");
   expect(html).toContain("Kies een land");
