@@ -553,14 +553,18 @@ test("de lijst zet de programma's met een saldo bovenaan en verzint er geen bij"
   expect(rosterFigure(rows.find((r) => r.name === AMEX)!)).toBe("nog geen saldo");
 });
 
-test("de euro-uitleg staat opgevouwen, maar de mededeling zelf staat er open", () => {
+test("er staat geen uitleg meer over waarom punten geen euro-waarde hebben", () => {
+  /* HIJ HEEFT DIT BLOK LATEN VERWIJDEREN (22 augustus), samen met de inleidende
+   * alinea. De test blijft staan en draait om: wat hier stond was een uitleg
+   * over het SCHERM, en die hoort er niet meer te zijn.
+   *
+   * Wat deze test daarom óók bewaakt, en dat is het echte punt: er mag nergens
+   * een euro-waarde bij een puntensaldo verschijnen. De uitleg is weg, de regel
+   * niet — en zonder deze assertie zou "geen uitleg" op een dag stilzwijgend
+   * "wel een euro-bedrag" kunnen worden. */
   mount(<Punten {...puntenProps([])} />);
-  const fold = container!.querySelector<HTMLDetailsElement>(".punt-waarom")!;
-  expect(fold.open).toBe(false);
-  // Wat er DICHT te lezen is, is de conclusie; de onderbouwing zit erachter en
-  // blijft volledig in de DOM staan.
-  expect(fold.querySelector("summary")!.textContent).toContain("Geen euro-waarde bij punten");
-  expect(fold.textContent).toContain("transfer naar een luchtvaartprogramma");
+  expect(container!.querySelector(".punt-waarom")).toBeNull();
+  expect(container!.textContent).not.toContain("Geen euro-waarde bij punten");
 });
 
 test("de lijst zet geen euroteken bij punten, en wél bij cashback in euro's", () => {
