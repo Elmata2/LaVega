@@ -381,14 +381,15 @@ test("de kop belooft geen live koers als die er niet is", () => {
   expect(eyebrow).toContain("koersopslag per bank uit de catalogus");
 });
 
-test("de voettekst onder de bol wijst geen richting aan", () => {
+test("er staat geen voettekst onder de bol die een richting aanwijst", () => {
+  /* De voetregel is er op zijn verzoek helemaal uit (22 augustus). Deze test blijft
+   * staan met de eis die hem hoe dan ook moest binden: als er ooit weer iets onder
+   * de bol komt, mag daar geen "hierboven" of "hiernaast" in staan. De bol staat op
+   * een breed scherm naast de rekenmachine en op een smal scherm eronder, dus elke
+   * richtingsaanwijzing is de helft van de tijd onwaar. */
   const c = render();
   const bol = [...c.querySelectorAll<HTMLElement>(".module")].find((m) => m.getAttribute("aria-label") === "Bestemming")!;
-  const foot = bol.querySelector(".module-foot")!.textContent ?? "";
-  expect(foot).toContain("De bol zet alleen de doelvaluta");
-  // "hierboven" klopte toen de bol ónder de kolommen stond. Nu staat hij op een
-  // breed scherm ernaast en op een smal scherm eronder, dus elke richting in die
-  // zin is de helft van de tijd onwaar.
+  const foot = bol.querySelector(".module-foot")?.textContent ?? "";
   expect(foot).not.toContain("hierboven");
   expect(foot).not.toContain("hiernaast");
 });

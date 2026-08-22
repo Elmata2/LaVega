@@ -584,30 +584,15 @@ export default function Punten({
           {attention > 0 ? ` · ${attention} te bevestigen` : ""}
         </span>
       </div>
-      <p className="view-lead">
-        Elk saldo hieronder is het getal dat jij zelf hebt ingevoerd, met de datum erbij. LaVega haalt
-        niets op bij het programma — er is geen koppeling — en telt programma's niet bij elkaar op:
-        een Avios en een Bonvoy-punt zijn niet hetzelfde ding.
-      </p>
-      {/* De onderbouwing staat er nog helemaal, maar opgevouwen. Het scherm moet
-          met een saldo beginnen en niet met een alinea over wat er níét staat —
-          dezelfde reden waarom hij dit voor de categorielijst en de grafieken
-          vroeg. Native <details>: dicht blijft de tekst in de DOM (dus vindbaar
-          met ctrl-F en voor een schermlezer), en er komt geen component uit een
-          ander bestand aan te pas. */}
-      <details className="field-note punt-waarom">
-        <summary style={{ cursor: "pointer" }}>
-          <strong>Geen euro-waarde bij punten.</strong> Een saldo in punten is een feit; een bedrag in
-          euro's zou een schatting zijn. <span className="eyebrow">Toon waarom</span>
-        </summary>
-        <p style={{ margin: "0.5rem 0 0" }}>
-          Wat één punt waard is, hangt af van hoe je hem inwisselt — als tegoed op je rekening is dat een
-          fractie van wat een transfer naar een luchtvaartprogramma kan opleveren. Eén bedrag zou dus een
-          verzonnen bedrag zijn. Cashback is de uitzondering: die staat al in euro's, want dat ís de
-          eenheid — er zit geen omrekening tussen. Vraag de assistent rechtsonder naar actuele inwissel-
-          en transferwaardes.
-        </p>
-      </details>
+      {/* GEEN INLEIDING EN GEEN WAAROM-BLOK MEER, op zijn verzoek (22 augustus).
+          Er stond een alinea over wat LaVega hier NIET doet en een uitklap over
+          waarom er geen euro-waarde is. Allebei waar, allebei weg: het scherm
+          begint nu bij het saldo.
+
+          Wat NIET is meeverdwenen en ook niet mag: bij ING Punten staat op de
+          programmaregel zelf waarom daar geen koers per euro is. Dat is geen
+          uitleg over het scherm maar een eigenschap van dat programma, en zonder
+          die zin zou een lege plek als een ontbrekend cijfer lezen. */}
 
       {rows.length === 0 ? (
         <div className="empty-guide">

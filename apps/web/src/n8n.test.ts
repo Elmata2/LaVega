@@ -369,3 +369,46 @@ test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag
   expect(d.reason).toContain("afzender");
   expect(d.reason).not.toContain("10.000");
 });
+
+/* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil staat in de reden.
+ *
+ * Aanleiding: het testplan voor een factuur uit zijn Gmail. Zet je daar een
+ * doorstuurregel aan, dan blijft `From:` de leverancier terwijl Google verstuurt
+ * — SPF zakt, DKIM blijft staan. De melding noemde toen twee oorzaken ("slordig
+ * ingesteld domein of een nagemaakte afzender") waarvan er geen enkele de echte
+ * was: de echte oorzaak is het doorsturen zelf. */
+test("een doorgestuurde mail krijgt de reden die klopt, niet de verdenking", () => {
+  const doorgestuurd = verifiedRow({
+    senderCheck: "failed",
+    senderChecks: { spf: "softfail", dkim: "pass", dmarc: "fail" },
+  });
+  const d = autoBookDecision(doorgestuurd, { entityChoices: [], defaultEntity: "Prive" });
+  if (d.book) throw new Error("de poort hoort dicht te blijven");
+  // Let op de ONTKENNING: de tekst noemt "nagemaakte afzender" juist om te zeggen
+  // dat het dat NIET is. Toetsen op de kale woorden zou hier dus altijd falen.
+  expect(d.reason).toContain("niet bij een nagemaakte afzender");
+  expect(d.reason).toContain("DOORGESTUURDE");
+});
+
+test("een echt nagemaakte afzender houdt de verdenking wél", () => {
+  // Geen geldige DKIM: precies wat iemand die een domein naspeelt niet krijgt.
+  const nep = verifiedRow({
+    senderCheck: "failed",
+    senderChecks: { spf: "softfail", dkim: "fail", dmarc: "fail" },
+  });
+  const d = autoBookDecision(nep, { entityChoices: [], defaultEntity: "Prive" });
+  if (d.book) throw new Error("de poort hoort dicht te blijven");
+  expect(d.reason).toContain("óf een nagemaakte afzender");
+  expect(d.reason).not.toContain("DOORGESTUURDE");
+});
+
+test("de poort gaat niet open van een geldige DKIM alleen", () => {
+  /* De grens die dit werk NIET verlegt. DKIM zegt dat het bericht onderweg niet
+   * is veranderd; het zegt niets over wie het doorstuurde. Zou deze test omvallen,
+   * dan is er een tekstwijziging uitgelopen op een besluit over veiligheid. */
+  const d = autoBookDecision(
+    verifiedRow({ senderCheck: "failed", senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" } }),
+    { entityChoices: [], defaultEntity: "Prive" },
+  );
+  expect(d.book).toBe(false);
+});

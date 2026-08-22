@@ -390,6 +390,22 @@ function formatCeiling(): string {
   return `€ ${(AUTO_BOOK_CEILING_CENTS / 100).toLocaleString("nl-NL")}`;
 }
 
+/** Ziet dit eruit als een doorgestuurde mail in plaats van een nagemaakte afzender?
+ *
+ *  SPF gaat over de verzendende SERVER, DKIM over het BERICHT. Doorsturen wisselt
+ *  de server en laat het bericht heel, dus dan zakt SPF en blijft DKIM staan. Wie
+ *  een afzender naspeelt heeft precies het omgekeerde probleem: die krijgt geen
+ *  geldige DKIM-handtekening voor andermans domein.
+ *
+ *  Dit VERSOEPELT de poort niet - het bepaalt alleen welke reden erbij komt te
+ *  staan. Die keuze is met opzet zo klein gehouden: DKIM verschuiven naar een
+ *  toelatingsgrond is een besluit over veiligheid en niet over tekst. */
+export function forwardedNotSpoofed(c: N8nInvoiceRow["senderChecks"]): boolean {
+  if (!c) return false;
+  const spfZakt = c.spf === "fail" || c.spf === "softfail" || c.spf === "permerror";
+  return spfZakt && c.dkim === "pass";
+}
+
 export function autoBookDecision(
   row: N8nInvoiceRow,
   ctx: EntityContext,
@@ -399,7 +415,27 @@ export function autoBookDecision(
     const detail = c ? ` (SPF ${c.spf}, DKIM ${c.dkim}, DMARC ${c.dmarc})` : "";
     return {
       book: false,
-      reason: `De afzender kwam niet door de SPF/DKIM-controle${detail}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
+      reason: forwardedNotSpoofed(c)
+        ? /* DE ECHTE OORZAAK IS HET DOORSTUREN, en dat moet er staan.
+           *
+           * SPF zakt en DKIM slaagt is de handtekening van een DOORGESTUURDE
+           * mail: DKIM ondertekent het bericht en overleeft de reis, SPF gaat
+           * over de verzendende server en die is bij doorsturen niet meer die
+           * van de leverancier. Een NAGEMAAKTE afzender krijgt juist geen
+           * geldige DKIM voor het domein dat hij naspeelt - dat is nou net wat
+           * DKIM moeilijk maakt.
+           *
+           * De oude tekst noemde hier twee oorzaken ("slordig ingesteld domein
+           * of een nagemaakte afzender") waarvan er in dit geval GEEN ENKELE de
+           * echte was. Wie een doorstuurregel in Gmail aanzet kreeg dus bij elke
+           * factuur te lezen dat zijn leverancier verdacht was.
+           *
+           * De poort blijft dicht, en dat is opzet: DKIM zegt dat het bericht
+           * onderweg niet is veranderd, niet dat de doorstuurder te vertrouwen
+           * is. Maar wachten met de juiste reden is iets anders dan wachten met
+           * een verkeerde. */
+          `De afzender kwam niet door de SPF-controle${detail}, maar DKIM klopt wél — dat patroon hoort bij een DOORGESTUURDE mail en niet bij een nagemaakte afzender. Waarschijnlijk je eigen doorstuurregel. LaVega boekt hem toch niet zelf: dat de mail onderweg niet is veranderd, zegt niets over wie hem doorstuurde. Controleer de regel en bevestig hem zelf.`
+        : `De afzender kwam niet door de SPF/DKIM-controle${detail}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
     };
   }
   if (row.senderCheck !== "passed") {

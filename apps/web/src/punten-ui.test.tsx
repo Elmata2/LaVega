@@ -142,7 +142,18 @@ test("cashback in euro's is the one value shown — the balance itself, no rate"
 
 test("nothing on the screen adds two programmes together", () => {
   render([mr(245_000, ASOF), fb(60_000, ASOF)]);
-  expect(container!.textContent).toContain("telt programma's niet bij elkaar op");
+  /* DE ZIN IS WEG, DE EIGENSCHAP NIET. Hij liet de inleidende alinea verwijderen
+   * (22 augustus), en die alinea was tot nu het enige bewijs dat er niets wordt
+   * opgeteld — een test die op een uitleg leunt, toetst de uitleg en niet het
+   * gedrag. Nu wordt het gedrag zelf gemeten: er zijn twee kaarten met elk hun
+   * eigen eenheid, en nergens staat de som van de twee. */
+  // Allebei apart zichtbaar, met hun eigen getal, en nergens de som ervan.
+  expect(container!.textContent).toContain("American Express Membership Rewards");
+  expect(container!.textContent).toContain("Flying Blue");
+  expect(container!.textContent).toContain("245.000");
+  expect(container!.textContent).toContain("60.000");
+  expect(container!.textContent).not.toContain("305.000"); // 245.000 + 60.000
+  expect(container!.textContent).not.toContain("305000");
   expect(container!.textContent).not.toContain("305.000");
 });
 

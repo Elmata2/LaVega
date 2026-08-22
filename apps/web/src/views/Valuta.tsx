@@ -673,10 +673,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             De voettekst zegt met opzet geen richting ("hierboven"): op een breed
             scherm staat de rekenmachine links van de bol en op een smal scherm
             erboven, dus elke richting in die zin is de helft van de tijd onwaar. */}
-        <Module
-          title="Bestemming"
-          footer={<span>De bol zet alleen de doelvaluta in de rekenmachine — er komt geen tweede berekening bij.</span>}
-        >
+        {/* Zonder voetregel, op zijn verzoek. De zin legde uit wat de bol NIET
+            doet, en dat is precies het soort tekst dat hij deze ronde overal weg
+            wil hebben: het scherm hoort te tonen wat er wel gebeurt. */}
+        <Module title="Bestemming">
           <Globe value={to} from={from} onPick={setTo} supported={currencies} />
         </Module>
       </ModuleGrid>
