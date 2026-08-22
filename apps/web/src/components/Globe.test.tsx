@@ -182,7 +182,14 @@ test("een land zonder koers noemt de oorzaak en laat de doelvaluta staan", () =>
   const text = answer(el);
   expect(text).toContain("CUP");
   expect(text).toContain("geen koers");
-  expect(text).toContain("geen nul");
+  /* DE ZIN IS WEG, DE EIS NIET. "Dat is een leemte bij ons en het is geen nul"
+   * is er op zijn verzoek uit — het was uitleg over ONS in plaats van over zijn
+   * geld. Wat die zin moest tegenhouden staat hier nu als eis: er verschijnt
+   * geen percentage en geen bedrag, want dat is precies hoe een leemte zich als
+   * een nul zou voordoen. Een tekst kan verdwijnen; deze eis niet. */
+  expect(text).not.toMatch(/\d\s*%/);
+  expect(text).not.toContain("€");
+  expect(text).not.toContain("0,00");
   // De melding moet zeggen wat er NIET gebeurd is, anders zoekt iemand de
   // verandering in de berekening die er niet is.
   expect(text).toContain("niet veranderd");

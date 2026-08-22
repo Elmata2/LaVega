@@ -864,8 +864,15 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           <>
             <p className="lv-globe-answer-lead">{label} — geen koers</p>
             <p>
+              {/* Zonder de zin "dat is een leemte bij ons en het is geen nul", op
+                  zijn verzoek. Wat die zin deed was ONS uitleggen, en dat is
+                  precies het register dat hij deze ronde overal weghaalt. Het
+                  feit zelf staat er nog: welke munt daar geldt, en dat wij het
+                  bedrag niet kunnen uitrekenen. De KLEUR op de bol en de
+                  legenda-regel dragen het onderscheid met een nul; daar is geen
+                  zin voor nodig. */}
               Daar betaal je met {currencyLabel(effect.code)}. Van die valuta heeft LaVega geen koers, dus wat er
-              aankomt kan LaVega niet uitrekenen. Dat is een leemte bij ons en het is geen nul.
+              aankomt kan LaVega niet uitrekenen.
             </p>
             <p className="cell-sub">De doelvaluta is niet veranderd; die staat nog op {value}.</p>
           </>
