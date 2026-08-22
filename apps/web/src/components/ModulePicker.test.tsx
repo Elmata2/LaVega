@@ -23,6 +23,8 @@ import {
 import { AandachtWidget } from "./blocks/AandachtBlock";
 import { BetaalschemaWidget } from "./blocks/BetaalschemaBlock";
 import { PositieWidget } from "./blocks/PositieBlock";
+import { BtwWidget } from "./blocks/BtwWidget";
+import { FacturenWidget } from "./blocks/FacturenWidget";
 import { getEnabledModules, setEnabledModules } from "../settings";
 
 /* The nav is now the owner's own selection. These prove the two halves of that
@@ -212,34 +214,64 @@ test("every registry entry carries what the picker shows: label, one line, icon,
  * overal: onbekend is geen nul.
  * ---------------------------------------------------------------------- */
 
-test("een verse installatie toont de twee gekozen kaarten niet, en de Betaalagenda wel", () => {
+test("een verse installatie toont alleen de kaarten die standaard aan staan", () => {
   // Nooit gekozen. Voor de NAV betekent dat "alles", want een nav leegmaken die
   // iemand al gebruikt leest als een storing; voor deze lijst betekent het per
   // kaart iets anders, en dat staat in `defaultOn`.
+  //
+  // BTW is de tweede kaart die standaard aan staat, en op een andere grond dan
+  // de Betaalagenda: die stond er al, BTW is nieuw en staat er toch, omdat hij
+  // er met zoveel woorden om vroeg ("doe default wel btw"). Facturen zat in
+  // dezelfde zin met de tegenovergestelde opdracht ("als de gebruiker dat wilt")
+  // en begint daarom uit.
   expect(getEnabledWidgets()).toBeNull();
-  expect(DEFAULT_WIDGETS).toEqual(["betaalagenda"]);
-  expect(enabledWidgets(null)).toEqual(["betaalagenda"]);
+  expect(DEFAULT_WIDGETS).toEqual(["betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(null)).toEqual(["betaalagenda", "btw-stand"]);
+  expect(DEFAULT_WIDGETS).not.toContain("facturen-open");
 });
 
 test("een oude opgeslagen lijst zet alleen uit waar hij toen over ging", () => {
   /* De kale array is de vorm van vóór de Betaalagenda. Hij kan die id dus niet
    * bevatten, en zijn afwezigheid mag niet als "uitgezet" gelezen worden — de
    * vraag is die installatie nooit gesteld. Wat er WEL in stond gaat over
-   * Aandacht en Positie, en daar is afwezig een echt antwoord. */
-  expect(enabledWidgets(["aandacht"])).toEqual(["aandacht", "betaalagenda"]);
-  expect(enabledWidgets([])).toEqual(["betaalagenda"]);
+   * Aandacht en Positie, en daar is afwezig een echt antwoord. Voor elke kaart
+   * die er later bij kwam geldt hetzelfde als voor de Betaalagenda: zijn eigen
+   * `defaultOn` beslist, niet zijn afwezigheid. */
+  expect(enabledWidgets(["aandacht"])).toEqual(["aandacht", "betaalagenda", "btw-stand"]);
+  expect(enabledWidgets([])).toEqual(["betaalagenda", "btw-stand"]);
   // Een nav-lijst die per ongeluk hier belandt levert geen enkele widget op
   // behalve de standaard: geen van die ids is een widget.
-  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(["betaalagenda"]);
+  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(["betaalagenda", "btw-stand"]);
+});
+
+test("geen enkele widget-id is ook een module-id", () => {
+  /* De eis achter de namen `facturen-open` en `btw-stand`. `enabledWidgets`
+   * accepteert nog steeds een KALE LIJST (de opslagvorm van vroeger), dus een
+   * lijst uit de verkeerde hoek moet nul widgets opleveren in plaats van er
+   * stilletjes een aan te zetten. Was de widget "facturen" gaan heten, dan zou
+   * een nav-voorkeur met de MODULE facturen erin de kaart aanzetten. */
+  const moduleIds = new Set<string>(MODULES.map((m) => m.id));
+  for (const w of WIDGETS) expect(moduleIds.has(w.id), `${w.id} is ook een route`).toBe(false);
+  expect(enabledWidgets(MODULES.map((m) => m.id))).toEqual(DEFAULT_WIDGETS);
 });
 
 test("uitzetten werkt ook voor de kaart die standaard aan staat", () => {
   /* Zodra hij zich heeft uitgesproken telt afwezigheid wél, en niet meer
    * `defaultOn`. Zonder deze tweede lijst kwam de Betaalagenda door de deur van
    * "nooit gevraagd" terug en deed de schakelaar niets. */
-  const gezien = ["aandacht", "positie", "betaalagenda"];
-  expect(enabledWidgets({ on: [], seen: gezien })).toEqual([]);
-  expect(enabledWidgets({ on: ["aandacht"], seen: gezien })).toEqual(["aandacht"]);
+  const alles = WIDGETS.map((w) => w.id);
+  expect(enabledWidgets({ on: [], seen: alles })).toEqual([]);
+  expect(enabledWidgets({ on: ["aandacht"], seen: alles })).toEqual(["aandacht"]);
+  // Alleen BTW is gevraagd en uitgezet; de Betaalagenda is nooit gevraagd en
+  // valt dus nog steeds terug op zijn eigen `defaultOn`.
+  expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual(["betaalagenda"]);
+
+  /* En de andere kant van diezelfde regel, nu voor de twee nieuwe kaarten: een
+   * `seen` uit de tijd van de eerste drie zegt niets over hen, dus hun eigen
+   * `defaultOn` beslist — BTW verschijnt, Facturen niet. */
+  const gezienToen = ["aandacht", "positie", "betaalagenda"];
+  expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual(["btw-stand"]);
+  expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual(["aandacht", "btw-stand"]);
 });
 
 test("een lijst ids opschonen is iets anders dan een voorkeur lezen", () => {
@@ -263,6 +295,17 @@ const widgetAccounts = [
   { key: "prive", entity: "Privé", balance: 40_00 },
 ] as unknown as Parameters<typeof PositieWidget>[0]["accounts"];
 
+/** Eén factuur en één onderneming: genoeg om de twee nieuwe kaarten iets te
+ *  laten zeggen. Zonder dat renderen ze allebei niets — en dan zou deze test
+ *  niet kunnen zien of de schakelaar of de leegte de kaart weghoudt. */
+const widgetInvoices = [
+  {
+    id: "inv1", entity: "BV1 Holding", direction: "in", counterparty: "Klant BV",
+    issueDate: "2026-07-10", dueDate: "2026-09-10", amount: 1_210, currency: "EUR",
+    status: "expected", sourceType: "manual",
+  },
+] as unknown as Parameters<typeof FacturenWidget>[0]["invoices"];
+
 /** The homescreen and the profile at once: the widgets as Overzicht would place
  *  them, plus the switch that decides whether they are there.
  *
@@ -277,6 +320,22 @@ function WidgetShell() {
       <AandachtWidget alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />
       <PositieWidget accounts={widgetAccounts} onNavigate={() => {}} />
       <BetaalschemaWidget scheduledFlows={[]} txs={[]} asOf="2026-08-16" />
+      <BtwWidget
+        entities={["BV1 Holding"]}
+        txs={[]}
+        accounts={widgetAccounts}
+        asOf="2026-08-16"
+        vatSettings={[]}
+        invoices={widgetInvoices}
+        country="NL"
+        onNavigate={() => {}}
+      />
+      <FacturenWidget
+        invoices={widgetInvoices}
+        entities={["BV1 Holding"]}
+        asOf="2026-08-16"
+        onNavigate={() => {}}
+      />
       <WidgetPicker enabled={widgets} onChange={setWidgets} />
     </>
   );
@@ -322,13 +381,13 @@ test("a widget he switched on survives a reload; one he never touched stays off"
   click(widgetToggle("Aandacht"));
   expect(card("Aandacht")).not.toBeNull();
   /* Wat er ECHT wordt weggeschreven: wat aan staat én waar hij zich over heeft
-   * uitgesproken. De Betaalagenda staat in `on` omdat hij aan stond toen hij op
-   * Aandacht klikte — een schakelaar omzetten mag nooit een andere kaart
-   * meenemen. En `seen` is de hele lijst, want de picker toont ze alle drie
-   * tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
+   * uitgesproken. De Betaalagenda en BTW staan in `on` omdat ze aan stonden toen
+   * hij op Aandacht klikte — een schakelaar omzetten mag nooit een andere kaart
+   * meenemen. En `seen` is de hele registerlijst, want de picker toont ze
+   * allemaal tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
   expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual({
-    on: ["aandacht", "betaalagenda"],
-    seen: ["aandacht", "positie", "betaalagenda"],
+    on: ["aandacht", "betaalagenda", "btw-stand"],
+    seen: WIDGETS.map((w) => w.id),
   });
 
   // Tear the tree down and mount a fresh one, as a reload would.
@@ -359,6 +418,34 @@ test("de Betaalagenda staat er vanaf de eerste render, en gaat pas weg als hij h
   renderWidgets();
   expect(card("Betaalagenda")).toBeNull();
   expect(widgetToggle("Betaalagenda").getAttribute("aria-checked")).toBe("false");
+});
+
+test("BTW staat er meteen, Facturen pas als hij hem aanzet", () => {
+  /* De twee kaarten uit één zin: "dan moet de factuur ook in het overzicht
+   * komen, als de gebruiker dat wilt, doe default wel btw." Twee helften, twee
+   * standen — en allebei moeten ze te schakelen zijn, anders is het geen
+   * widget. */
+  renderWidgets();
+  expect(card("BTW")).not.toBeNull();
+  expect(widgetToggle("BTW").getAttribute("aria-checked")).toBe("true");
+  expect(card("Facturen")).toBeNull();
+  expect(widgetToggle("Facturen").getAttribute("aria-checked")).toBe("false");
+  expect(widgetToggle("Facturen").disabled).toBe(false);
+
+  click(widgetToggle("Facturen"));
+  expect(card("Facturen")).not.toBeNull();
+  expect(card("BTW")).not.toBeNull(); // één schakelaar verplaatst één kaart
+
+  click(widgetToggle("BTW"));
+  expect(card("BTW")).toBeNull();
+
+  // En allebei die keuzes overleven een herstart: zonder de `seen`-lijst zou
+  // BTW terugkomen door de deur van "nooit gevraagd".
+  act(() => root!.unmount());
+  container!.remove();
+  renderWidgets();
+  expect(card("Facturen")).not.toBeNull();
+  expect(card("BTW")).toBeNull();
 });
 
 test("the widget preference is its own key — switching a widget leaves the nav alone", () => {

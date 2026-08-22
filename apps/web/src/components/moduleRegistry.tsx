@@ -376,8 +376,16 @@ export function navModules(enabled: ModuleId[]): ModuleDef[] {
  * in the top navigation and break that type's promise.
  * ====================================================================== */
 
-/** A widget id is not a route, so it is its own union — see above. */
-export type WidgetId = "aandacht" | "positie" | "betaalagenda";
+/** A widget id is not a route, so it is its own union — see above.
+ *
+ *  GEEN ENKELE WIDGET-ID IS OOK EEN MODULE-ID, en dat is een eis en geen
+ *  toeval. De twee voorkeuren staan onder verschillende sleutels, maar
+ *  `enabledWidgets` accepteert nog steeds een KALE LIJST (de oude opslagvorm),
+ *  en een lijst die per ongeluk uit de verkeerde hoek komt moet dan nul widgets
+ *  opleveren in plaats van er stilletjes een aan te zetten. Daarom heten de twee
+ *  nieuwe kaarten `facturen-open` en `btw-stand` en niet `facturen` en
+ *  `belasting`: die laatste twee zijn routes. Er staat een test op. */
+export type WidgetId = "aandacht" | "positie" | "betaalagenda" | "facturen-open" | "btw-stand";
 
 export type WidgetDef = {
   id: WidgetId;
@@ -395,7 +403,16 @@ export type WidgetDef = {
    *  verschijnen. Betaalagenda staat aan, en dat is dezelfde regel en niet de
    *  omgekeerde: die kaart staat er al sinds hij bestaat, en review 4 punt 8
    *  vraagt om een schakelaar — niet om hem kwijt te raken. Een widget
-   *  schakelbaar maken mag nooit hetzelfde zijn als hem weghalen. */
+   *  schakelbaar maken mag nooit hetzelfde zijn als hem weghalen.
+   *
+   *  BTW IS HET OMGEKEERDE GEVAL EN DE UITZONDERING DIE UITGESCHREVEN MOET
+   *  WORDEN: die kaart is NIEUW en staat tóch aan. Niet omdat een nieuwe kaart
+   *  dat mag — dat mag hij niet, zie Facturen hiernaast — maar omdat hij er in
+   *  dezelfde zin expliciet om vroeg: "als de gebruiker dat wilt, doe default
+   *  wel btw". De regel hierboven zegt dat een kaart niet ONGEVRAAGD verschijnt;
+   *  deze is gevraagd. Facturen in diezelfde zin ("als de gebruiker dat wilt")
+   *  is precies het tegenovergestelde verzoek en staat dus uit. Zonder deze
+   *  alinea lezen die twee naast elkaar als een inconsequentie. */
   defaultOn?: boolean;
   /** Eén regel extra onder `what`, voor het geval dat uitleg nodig heeft. */
   note?: string;
@@ -458,6 +475,49 @@ export const WIDGETS: WidgetDef[] = [
       </Thumb>
     ),
   },
+  {
+    id: "facturen-open",
+    label: "Facturen",
+    what: "Hoeveel facturen er open staan, voor welk bedrag, en wat er over de vervaldatum heen is.",
+    /* "dan moet de factuur ook in het overzicht komen, ALS DE GEBRUIKER DAT
+     * WILT." Die tweede helft is de standaard: uit, tot hij hem hier aanzet. */
+    note: "Staat standaard uit — zet hem aan als je hem op je overzicht wilt.",
+    preview: (
+      <Thumb>
+        <Line x={8} y={9} w={10} strong />
+        <Line x={22} y={10} w={22} />
+        <Tile x={8} y={22} w={80} h={13} />
+        <Line x={13} y={26} w={26} />
+        <Line x={68} y={26} w={14} strong />
+        <Tile x={8} y={38} w={80} h={13} />
+        <Line x={13} y={42} w={20} />
+        <Line x={68} y={42} w={14} strong />
+        <rect x="8" y="38" width="3" height="13" rx="1.5" fill="var(--neg)" opacity="0.7" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "btw-stand",
+    label: "BTW",
+    what: "Wat je deze aangifteperiode te betalen of terug te vragen hebt, en tot wanneer je hebt.",
+    /* Nieuw en tóch aan — zie de alinea bij `defaultOn` hierboven: hij vroeg er
+     * met zoveel woorden om. De note zegt dat hier ook, want een schakelaar die
+     * aan staat terwijl de kaart nieuw is, laat de lezer aan zichzelf twijfelen. */
+    note: "Deze kaart staat standaard op je overzicht — hier zet je hem uit.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Line x={8} y={9} w={14} strong />
+        <rect x="8" y="18" width="34" height="9" rx="2" fill="var(--neg)" opacity="0.55" />
+        <Line x={8} y={33} w={44} />
+        <Line x={8} y={41} w={30} />
+        <rect x="58" y="16" width="30" height="30" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <Line x={63} y={22} w={12} strong />
+        <Line x={63} y={30} w={20} />
+        <rect x="63" y="36" width="20" height="5" rx="2.5" fill="var(--warn)" opacity="0.45" />
+      </Thumb>
+    ),
+  },
 ];
 
 /** Wat er op de startpagina staat zolang hij niets gekozen heeft: per widget wat
@@ -466,8 +526,9 @@ export const WIDGETS: WidgetDef[] = [
  *  De asymmetrie met DEFAULT_MODULES blijft: een ongekozen NAV betekent "alles",
  *  want een navigatie leegmaken leest als een storing. Een ongekozen WIDGET
  *  betekent per kaart iets anders, en dat is geen slordigheid maar het enige
- *  antwoord dat allebei zijn zinnen respecteert — Aandacht en Positie mogen niet
- *  ongevraagd verschijnen, Betaalagenda mag niet ongevraagd verdwijnen. */
+ *  antwoord dat allebei zijn zinnen respecteert — Aandacht, Positie en Facturen
+ *  mogen niet ongevraagd verschijnen, Betaalagenda mag niet ongevraagd
+ *  verdwijnen, en BTW moet er staan omdat hij daar met zoveel woorden om vroeg. */
 export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter((w) => w.defaultOn).map((w) => w.id);
 
 const KNOWN_WIDGETS = new Set<string>(WIDGETS.map((w) => w.id));

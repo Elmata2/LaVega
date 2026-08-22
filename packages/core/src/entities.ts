@@ -203,3 +203,21 @@ export function consolidateByScope(
   const { byEntity, totalBalance } = consolidate(relabelled, [...txs]);
   return { byScope: byEntity, totalBalance };
 }
+
+/** De transacties van ÉÉN onderneming. Een `Tx` draagt alleen een `accountKey`,
+ *  dus de entiteit komt van de rekening waar hij op staat.
+ *
+ *  Staat hier en niet in een scherm omdat er inmiddels meer dan één scherm deze
+ *  vraag stelt (Belasting, en de btw-kaart op het overzicht). Dat is precies het
+ *  patroon dat in deze repo eerder is misgegaan: twee kopieën van dezelfde regel
+ *  die daarna uit elkaar lopen. Eén definitie, en beide schermen tellen dus
+ *  gegarandeerd dezelfde transacties.
+ *
+ *  Een tx op een rekening die niet in `accounts` staat hoort bij geen enkele
+ *  onderneming en valt buiten elke uitkomst — hem bij de gevraagde entiteit
+ *  optellen zou een bedrag ophogen met geld waarvan niemand weet van wie het is. */
+export function txsForEntity(txs: readonly Tx[], accounts: readonly Account[], entity: string): Tx[] {
+  const keyToEntity = new Map<string, string>();
+  for (const a of accounts) keyToEntity.set(a.key, a.entity);
+  return txs.filter((t) => keyToEntity.get(t.accountKey) === entity);
+}

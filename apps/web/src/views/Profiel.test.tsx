@@ -289,6 +289,35 @@ test("the overview widgets are switched here, and they start off", async () => {
   }
 });
 
+test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand", async () => {
+  /* Uit één zin: "dan moet de factuur ook in het overzicht komen, als de
+   * gebruiker dat wilt, doe default wel btw." Twee kaarten, twee standen. De
+   * standen zelf staan in het register; wat hier bewezen wordt is dat ze in het
+   * profiel te bereiken zijn — een kaart die standaard aan staat en die je niet
+   * kunt uitzetten, is geen widget maar een besluit. */
+  await render();
+  const widgets = section("Widgets");
+  const facturen = widgets.querySelector('[aria-label="Facturen op je overzicht"]') as HTMLButtonElement;
+  const btw = widgets.querySelector('[aria-label="BTW op je overzicht"]') as HTMLButtonElement;
+
+  expect(facturen, "geen schakelaar voor Facturen").not.toBeNull();
+  expect(btw, "geen schakelaar voor BTW").not.toBeNull();
+  expect(facturen.getAttribute("aria-checked")).toBe("false");
+  expect(btw.getAttribute("aria-checked")).toBe("true");
+  expect(facturen.disabled).toBe(false);
+  expect(btw.disabled).toBe(false);
+
+  act(() => btw.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(btw.getAttribute("aria-checked")).toBe("false");
+  const stored = JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null");
+  expect(stored.on).not.toContain("btw-stand");
+  expect(stored.seen).toEqual(expect.arrayContaining(["btw-stand", "facturen-open"]));
+
+  act(() => facturen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(facturen.getAttribute("aria-checked")).toBe("true");
+  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain("facturen-open");
+});
+
 test("switching a widget on is remembered, and does not touch the nav preference", async () => {
   await render();
   const toggle = section("Widgets").querySelector('[aria-label="Aandacht op je overzicht"]') as HTMLButtonElement;

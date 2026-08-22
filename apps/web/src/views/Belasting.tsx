@@ -12,9 +12,11 @@ import {
   readSheetCsv,
   readTaxSheet,
   rebuildVatFlows,
+  resolveVatSettings,
   suggestTaxSheetMapping,
   sumTaxFigures,
   taxPack,
+  txsForEntity,
   vatPosition,
 } from "@lavega/core";
 import { formatEuro } from "../format";
@@ -161,30 +163,18 @@ export default function Belasting({
     return m;
   }, [vatSettings]);
 
-  const keyToEntity = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of accounts) m.set(a.key, a.entity);
-    return m;
-  }, [accounts]);
-
-  function defaultSettings(entity: string): VatSettings {
-    return {
-      entity,
-      frequency: pack.vat.frequencies.includes("quarterly") ? "quarterly" : pack.vat.frequencies[0],
-      defaultRatePct: pack.vat.defaultRatePct,
-      mixedRates: false,
-      country,
-    };
-  }
-
   /** The settings in force for an entity. The COUNTRY always comes from the
    *  profile — that is the single switch this whole screen is driven by — while
    *  the rate/frequency he set himself are left alone. A frequency this country
-   *  does not allow is replaced rather than filed. */
+   *  does not allow is replaced rather than filed.
+   *
+   *  DE REGEL ZELF STAAT IN CORE (`resolveVatSettings`), en niet meer hier. Dit
+   *  scherm is niet langer het enige dat hem stelt: de btw-kaart op het overzicht
+   *  moet exact dezelfde periode en hetzelfde stelsel gebruiken, anders noemen
+   *  twee schermen op dezelfde dag een ander kwartaal. Wat hier blijft staan is
+   *  het enige wat écht van dit scherm is: de nog niet bewaarde bewerking. */
   function resolve(entity: string): VatSettings {
-    const base = drafts[entity] ?? savedByEntity.get(entity) ?? defaultSettings(entity);
-    const frequency = pack.vat.frequencies.includes(base.frequency) ? base.frequency : pack.vat.frequencies[0];
-    return { ...base, country, frequency };
+    return resolveVatSettings({ entity, saved: drafts[entity] ?? savedByEntity.get(entity), country });
   }
 
   function patch(entity: string, partial: Partial<VatSettings>) {
@@ -192,8 +182,11 @@ export default function Belasting({
     setDrafts((prev) => ({ ...prev, [entity]: { ...resolve(entity), ...partial } }));
   }
 
+  /** De transacties van één onderneming. Ook dit staat in core
+   *  (`txsForEntity`), om dezelfde reden als `resolve`: de btw-kaart op het
+   *  overzicht moet over precies dezelfde transacties rekenen als dit scherm. */
   function entityTxs(entity: string): Tx[] {
-    return txs.filter((t) => keyToEntity.get(t.accountKey) === entity);
+    return txsForEntity(txs, accounts, entity);
   }
 
   /** His own figures for exactly the filing window this entity is in. */

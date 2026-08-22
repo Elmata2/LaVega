@@ -969,6 +969,15 @@ export default function App() {
               asOf={asOf}
               bufferCents={bufferCents}
               scheduledFlows={scopedScheduledFlows}
+              /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
+                 en dat is de bedoeling: de btw-kaart op het overzicht en het
+                 scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
+                 hier iets anders neerzet, laat de twee schermen op dezelfde dag
+                 een ander bedrag noemen. */
+              entities={entityScope ? [entityScope] : entityOptions}
+              vatSettings={vatSettings}
+              invoices={invoices}
+              country={homeCountry}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
               travel={{

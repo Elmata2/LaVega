@@ -106,6 +106,61 @@ export function nextVatPeriod(frequency: VatFrequency, asOf: string, country?: s
 /** The name this had when NL was the only country. */
 export const nextBtwDeadline = nextVatPeriod;
 
+/* ── WELKE INSTELLINGEN GELDEN ER VOOR ÉÉN ONDERNEMING ─────────────────────
+ *
+ * Dit stond als `defaultSettings` + `resolve` in Belasting.tsx, en het moest
+ * daar weg zodra een TWEEDE scherm dezelfde vraag ging stellen (de btw-kaart op
+ * het overzicht). Niet uit netheid: in deze repo is meer dan eens een tweede
+ * kopie van dezelfde regel ontstaan die daarna uit elkaar liep, en juist deze
+ * regel bepaalt de AANGIFTEPERIODE en dus het bedrag. Twee schermen die op één
+ * dag een ander kwartaal noemen, is precies het soort verschil dat niemand
+ * meldt omdat allebei de schermen op zichzelf kloppend lijken.
+ *
+ * Puur, en zonder klok: `asOf` hoort bij de periode (`nextVatPeriod`), niet bij
+ * de instellingen.
+ */
+export type ResolveVatSettingsInput = {
+  entity: string;
+  /** Wat er voor deze onderneming bekend is — een bewaarde instelling, of een
+   *  nog niet bewaarde bewerking uit het scherm. Afwezig = nooit ingevuld, en
+   *  dan komen de startwaarden uit het pakket van het land. */
+  saved?: VatSettings;
+  /** Het land uit het profiel. Onbekend of niet-bestaand valt terug op het
+   *  standaardland, net als `taxPack` zelf doet. */
+  country?: string;
+};
+
+/**
+ * De instellingen die voor deze onderneming GELDEN.
+ *
+ * Twee dingen worden bewust overschreven en de rest wordt met rust gelaten:
+ *
+ *  - het LAND komt altijd uit het profiel. Dat is de ene schakelaar waar dit
+ *    hele onderwerp aan hangt, en een onderneming die nog het vorige land
+ *    draagt zou onder andere regels gerekend worden dan het scherm toont;
+ *  - een FREQUENTIE die dit land niet kent wordt vervangen door de eerste die
+ *    het wél kent, in plaats van bewaard te blijven en stilletjes een periode
+ *    op te leveren die niet bestaat.
+ *
+ * Het TARIEF, het handmatige bedrag, het stelsel en de gemengde tarieven blijven
+ * onaangeroerd: dat zijn zijn eigen antwoorden. Het stelsel krijgt hier
+ * nadrukkelijk GEEN standaard — zie `vatPosition`, waar "stelsel-onbekend" een
+ * eigen uitkomst is. Er zelf een kiezen zou het bedrag veranderen op grond van
+ * een aanname, en onbekend is geen keuze.
+ */
+export function resolveVatSettings({ entity, saved, country }: ResolveVatSettingsInput): VatSettings {
+  const pack = taxPack(country);
+  const base: VatSettings = saved ?? {
+    entity,
+    frequency: pack.vat.frequencies.includes("quarterly") ? "quarterly" : pack.vat.frequencies[0],
+    defaultRatePct: pack.vat.defaultRatePct,
+    mixedRates: false,
+    country: pack.country as VatSettings["country"],
+  };
+  const frequency = pack.vat.frequencies.includes(base.frequency) ? base.frequency : pack.vat.frequencies[0];
+  return { ...base, entity, country: pack.country as VatSettings["country"], frequency };
+}
+
 /** Income minus expenses over an inclusive ISO window, in cents. A crude proxy
  *  for the real figure — it reads bank movements, so it is VAT-inclusive and
  *  knows nothing about accruals. The owner's own spreadsheet (`taxSheet.ts`)
