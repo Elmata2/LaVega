@@ -180,3 +180,37 @@ test("een rij zonder naam ontdubbelt nooit — geen naam is geen bewijs", () => 
   expect(ingest(naamloos, [bron("", "2026-08-03", -25, "andere tekst")])).toHaveLength(2);
   expect(ingest(naamloos, [bron("Simyo B.V.", "2026-08-03", -25, "SEPA Incasso")])).toHaveLength(2);
 });
+
+/* TWEE REKENINGEN — het geval dat hij nu gaat testen.
+ *
+ * Het ontdubbelen kijkt naar (rekening, datum, bedrag) en is bedoeld om dezelfde
+ * betaling uit twee BRONNEN samen te voegen. Met één rekening geïmporteerd kon
+ * dat nooit fout gaan; met twee wel, want dan bestaan er echt twee verschillende
+ * betalingen van hetzelfde bedrag op dezelfde dag. De sleutel dekt dat af doordat
+ * accountKey erin zit — maar dat stond nergens vastgelegd, en een eigenschap die
+ * alleen per ongeluk klopt, klopt tot iemand de sleutel aanpast. */
+test("dezelfde dag, hetzelfde bedrag, dezelfde winkel — maar twee rekeningen: allebei blijven", () => {
+  const opgeslagen = assignTxIds([mk({ accountKey: "A", counterparty: "Albert Heijn" })]);
+  const nieuw = ingest(opgeslagen, [mk({ accountKey: "B", counterparty: "Albert Heijn 1234" })]);
+  expect(nieuw).toHaveLength(2);
+  expect(new Set(nieuw.map((t) => t.accountKey))).toEqual(new Set(["A", "B"]));
+});
+
+test("en op DEZELFDE rekening voegt hij de twee schrijfwijzen wel samen", () => {
+  // De tegenproef: zonder deze blijft de test hierboven ook groen als het
+  // ontdubbelen helemaal stuk is.
+  const opgeslagen = assignTxIds([mk({ accountKey: "A", counterparty: "Albert Heijn" })]);
+  const nieuw = ingest(opgeslagen, [mk({ accountKey: "A", counterparty: "Albert Heijn 1234" })]);
+  expect(nieuw).toHaveLength(1);
+});
+
+test("een overboeking tussen zijn eigen twee rekeningen blijft twee rijen", () => {
+  /* Eén overboeking is aan de ene kant een afschrijving en aan de andere een
+   * bijschrijving. Zelfde dag, zelfde bedrag in absolute zin, en straks ook
+   * dezelfde tegenpartij (zijn eigen naam) — maar het zijn twee kanten van
+   * hetzelfde en allebei horen ze in de kluis, anders klopt geen enkel saldo. */
+  const opgeslagen = assignTxIds([mk({ accountKey: "A", amount: -250, counterparty: "A Steunenberg" })]);
+  const nieuw = ingest(opgeslagen, [mk({ accountKey: "B", amount: 250, counterparty: "A Steunenberg" })]);
+  expect(nieuw).toHaveLength(2);
+  expect(nieuw.map((t) => t.amount).sort((a, b) => a - b)).toEqual([-250, 250]);
+});
