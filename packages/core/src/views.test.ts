@@ -451,3 +451,37 @@ describe("onbekend: the rows he showed us", () => {
     expect(categorize(t, [])).toBe("Boodschappen");
   });
 });
+
+/* TWEE REKENINGEN GEKOPPELD — wat hij op 22 augustus is gaan testen.
+ *
+ * Met één rekening geïmporteerd kon een overboeking naar jezelf niet als zodanig
+ * herkend worden: de tegenrekening was onbekend. Met twee wél, en dan verschijnt
+ * dezelfde overboeking TWEE KEER in de kluis — als afschrijving op de ene en als
+ * bijschrijving op de andere.
+ *
+ * De uitgaande kant werd al uitgesloten van de uitgaven. De INKOMENDE kant is de
+ * kant die niemand test, en juist daar zit het gevaar: een bijschrijving van
+ * € 250 die als inkomen meetelt maakt van geld verplaatsen geld verdienen. */
+test("een overboeking tussen zijn eigen twee rekeningen telt aan GEEN van beide kanten mee", () => {
+  const own = ownAccounts([
+    { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+    { key: "NL91ABNA0417164300", iban: "NL91ABNA0417164300", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: null },
+  ]);
+  const rows: Tx[] = [
+    // De twee kanten van één overboeking, elk op hun eigen rekening.
+    { id: "uit", accountKey: "NL91ABNA0417164300", date: "2026-08-15", amount: -250, currency: "EUR", counterparty: "NL01INGB0001", description: "sparen", category: "", manual: false },
+    { id: "in", accountKey: "NL01INGB0001", date: "2026-08-15", amount: 250, currency: "EUR", counterparty: "NL91ABNA0417164300", description: "sparen", category: "", manual: false },
+    // Een echte uitgave en een echt inkomen, als ijkpunt.
+    { id: "ah", accountKey: "NL91ABNA0417164300", date: "2026-08-03", amount: -70, currency: "EUR", counterparty: "Albert Heijn", description: "", category: "", manual: false },
+    { id: "sal", accountKey: "NL91ABNA0417164300", date: "2026-08-01", amount: 3000, currency: "EUR", counterparty: "Salaris", description: "", category: "", manual: false },
+  ];
+  const rules: Rule[] = [{ id: "b1", match: "albert heijn", category: "Boodschappen" }];
+
+  // Allebei de kanten krijgen dezelfde categorie, en het is niet "Overboekingen".
+  for (const id of ["uit", "in"]) {
+    const tx = rows.find((r) => r.id === id)!;
+    expect(categorize(tx, rules, own)).toBe("Eigen overboeking");
+  }
+  // En het ijkpunt blijft staan: de echte uitgave is geen eigen overboeking.
+  expect(categorize(rows.find((r) => r.id === "ah")!, rules, own)).toBe("Boodschappen");
+});

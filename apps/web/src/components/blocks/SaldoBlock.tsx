@@ -249,6 +249,17 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
             ariaLabel="Totale positie per dag"
             readoutLabel="Positie op"
             height={132}
+            /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
+             * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
+             * standaard op span 2, dus er is ruimte — maar iemand kan het op 1
+             * zetten, en dan is een as die de helft van de breedte kost erger dan
+             * geen as. Vandaar de voorwaarde in plaats van een vast true.
+             *
+             * Wat de as toevoegt is niet decoratief: zonder ijkpunten vertelt een
+             * lijn alleen de VORM, en op een positiegrafiek is het verschil tussen
+             * een dal van honderd euro en een van tienduizend precies wat je wilt
+             * weten. */
+            showAxis={span >= 2}
           />
         </div>
       ) : (
