@@ -119,9 +119,15 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.12
         version: 2.0.12(hono@4.12.32)
+      '@lavega/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@lavega/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@lavega/investing-server':
+        specifier: workspace:*
+        version: link:../investing-server
       hono:
         specifier: ^4.12.32
         version: 4.12.32

@@ -11,10 +11,18 @@ RUN npm install -g pnpm@11.18.0
 COPY . .
 RUN pnpm install --frozen-lockfile
 
-# Build the web SPA into apps/web/dist (served by the server).
+# Investing dashboard: UI under /investing/, API merged into the personal server.
+ENV INVESTING_WEB_BASE=/investing/
+RUN pnpm --filter @lavega/investing-web build
+
+# Personal SPA — link "Investing" to /investing on this origin (override via build arg).
+ARG VITE_INVESTING_URL=/investing
+ENV VITE_INVESTING_URL=${VITE_INVESTING_URL}
 RUN pnpm build
 
 ENV NODE_ENV=production
+ENV INVESTING_WEB_DIST=/app/apps/investing-web/dist
+ENV INVESTING_MOUNT=1
 # Railway provides PORT at runtime; the server reads it (defaults to 8787).
 EXPOSE 8787
 CMD ["pnpm", "start"]

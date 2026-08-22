@@ -8,9 +8,10 @@
  * It used to need nothing at all, because the origin was hardcoded to
  * http://127.0.0.1:8790 — the port scripts/rebuild-investing-orbstack.sh
  * publishes on a developer machine. On lavega.dev that link opened a browser
- * error page. The URL is therefore configuration. The chrome always shows the
- * link when a URL resolves (so owners can reach a deployed investing host);
- * `investingReachable` remains for callers that still want a liveness probe. */
+ * error page. The URL is configuration. Production Docker bakes
+ * `VITE_INVESTING_URL=/investing` on the all-in-one deploy; override with a full
+ * origin when investing runs on its own host. `investingReachable` remains for
+ * optional liveness checks. */
 
 export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
 
@@ -20,8 +21,8 @@ export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
  *    a same-origin path (`/beleggen`) — that, minus any trailing slash.
  *  - set but blank — off; the link is not rendered at all.
  *  - unset, dev — the local container from rebuild-investing-orbstack.sh.
- *  - unset, production — `/investing` on this origin (needs that path to be
- *    served, or set `VITE_INVESTING_URL` to the real investing host). */
+ *  - unset, production — `/investing` on this origin (served by the all-in-one
+ *    Docker image when `INVESTING_MOUNT` is on). */
 export function resolveInvestingUrl(env: InvestingEnv): string | null {
   const configured = env.VITE_INVESTING_URL;
   if (configured !== undefined) {

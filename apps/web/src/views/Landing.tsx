@@ -107,7 +107,10 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <a href="#how">Hoe het werkt</a>
           <a href="#wachtlijst">Wachtlijst</a>
           {INVESTING_URL && (
-            <a href={INVESTING_URL} target="_blank" rel="noopener noreferrer">
+            <a
+              href={INVESTING_URL}
+              {...(INVESTING_URL.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            >
               Investing
             </a>
           )}

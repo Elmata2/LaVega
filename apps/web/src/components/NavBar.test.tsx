@@ -46,7 +46,8 @@ test("the investing link is always a real href out of the SPA when configured", 
   );
   expect(html).toContain("Investing");
   const nav = readFileSync(new URL("./NavBar.tsx", import.meta.url), "utf8");
-  expect(nav).toContain('<a href={INVESTING_URL} target="_blank" rel="noopener noreferrer"');
+  expect(nav).toContain("href={INVESTING_URL}");
+  expect(nav).toContain('INVESTING_URL.startsWith("http")');
   expect(nav).toContain("pathForView");
 });
 

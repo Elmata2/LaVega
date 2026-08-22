@@ -32,8 +32,11 @@ test("the investing link is a link out, not a nav-item that changes view", async
   const html = container.innerHTML;
   const right = html.slice(html.indexOf('class="appbar-right"'));
   const link = right.slice(right.indexOf("<a "), right.indexOf("</a>"));
-  expect(link).toContain('target="_blank"');
-  expect(link).toContain('rel="noopener noreferrer"');
   expect(link).toContain("Investing");
   expect(link).toContain(`href="${INVESTING_URL}"`);
+  if (INVESTING_URL!.startsWith("http")) {
+    expect(link).toContain('target="_blank"');
+  } else {
+    expect(link).not.toContain('target="_blank"');
+  }
 });

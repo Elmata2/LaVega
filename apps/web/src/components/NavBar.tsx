@@ -67,7 +67,11 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
          * vault stays put. Always shown when a URL is configured — reachability
          * used to hide a dead localhost link; production default is /investing. */}
         {INVESTING_URL && (
-          <a href={INVESTING_URL} target="_blank" rel="noopener noreferrer" className="appbar-investing">
+          <a
+            href={INVESTING_URL}
+            {...(INVESTING_URL.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            className="appbar-investing"
+          >
             <Icon>
               <path d="M4 19h16" />
               <path d="M7 19V10M12 19V5M17 19v7" />
