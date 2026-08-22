@@ -43,6 +43,7 @@ import { getCashbackAssumptionEnabled } from "../settings";
 import { formatEuro, monthLabelNL } from "../format";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import ToonMeer from "../components/ToonMeer";
 import "../styles/views.css";
 
 /* Optimalisatie — rebalanced (UI review, 2026-08-16).
@@ -663,6 +664,18 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   // afschrift it was read from rather than taken on trust.
   const spendOf = useMemo(() => new Map(returns.map((r) => [r.account.key, r.spend])), [returns]);
 
+  /* ZIT ER IETS ACHTER DE PLOOI? Een <ToonMeer> die op een leeg paneel uitkomt is
+     erger dan geen plooi: het label belooft iets ("waar deze cijfers vandaan
+     komen") en dan is er niets. Vandaar deze vraag vooraf in plaats van vier
+     losse `&&`-takken die samen ook leeg kunnen uitpakken.
+     De vergelijking telt alleen mee als hij ook echt te tonen is — dezelfde drie
+     voorwaarden als de antwoordregel, want de plooi bevat zíjn onderbouwing. */
+  const cashbackOnderbouwing =
+    routing.length > 0 ||
+    heldCashback.length > 0 ||
+    otherOffers.length > 0 ||
+    (cashbackUpgrade !== null && monthlyBaseCents !== null && bestHeldCashback !== null);
+
   /* De vaste kosten van de rekeningen zelf. `hasCostsToShow` beslist of het blok
      er komt: zonder een enkel tarief én zonder een enkel pakket om te tonen is
      dit een leeg blok, en die worden hier niet gerenderd. */
@@ -1204,12 +1217,42 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
           </details>
         </Module>
 
-        {/* ── Cashback: de rentemodule's vorm, op wat je uitgeeft ─────────── *
-            Three beats, the same three the Rente module has: what you get now,
-            what the best one we can PROVE gives, and the difference in euros on
-            a base he recognises. His ask: "this could be cashback that you do
-            not have ... what you would basically get back if you had used that
-            card. Give the user a bit more fuel." */}
+        {/* ── Cashback: het antwoord vooraan, de onderbouwing in één plooi ─── *
+            De drie beats uit review 2 staan er nog — wat je eigen kaart zou
+            teruggeven, wat de beste kaart die we kunnen AANTONEN teruggeeft, en
+            het verschil. Ze staan alleen niet meer als eerste. Zijn opdracht van
+            22 augustus is "meer top down", en dat is deze ronde bij Statistieken
+            en het reisblok precies zo gedaan: vooraan het ANTWOORD, alle
+            onderbouwing achter het gedeelde <ToonMeer>. Zie
+            components/ToonMeer.tsx voor de gebruiksaanwijzing, en TravelBlock.tsx
+            voor de taal — twee schermen die hetzelfde zeggen in andere woorden
+            zijn samen erger dan één druk scherm.
+
+            WAT VOORAAN BLIJFT, en waarom juist dit:
+             · DE OVERSTAP TUSSEN ZIJN EIGEN KAARTEN. Een wissel die hij vandaag
+               kan maken is een antwoord; de meting eronder ("gerekend over …
+               dagen afschrift") is onderbouwing en vouwt op.
+             · DE NETTOREGEL. Wat de beste kaart oplevert MET de kaartprijs erin
+               verrekend is de zin waar deze module om bestaat, dus
+               `Productkosten` staat vooraan — in al zijn drie takken.
+             · DE WEIGERING, en dat is de val waar deze ronde expliciet voor
+               gewaarschuwd is. "Wat deze kaart zelf kost, weten we niet" is geen
+               uitleg maar de UITKOMST, en het is vandaag de echte toestand: van
+               geen enkele kaart met een aantoonbare cashback noemt een bron een
+               maand- of jaarprijs. Vouw je die zin weg, dan lijkt de module leeg
+               terwijl er iets te zeggen valt — en dan lijkt hij stuk.
+             · DE VOORWAARDEN bij dat tarief, want een 5%-kaart achter een
+               stakingdrempel is voor hem geen 5%-kaart. De TEKST mag opgevouwen
+               (het is een lang citaat), maar het LABEL van die plooi zegt zelf al
+               dát er voorwaarden zijn. Het is met opzet een tweede, kleine plooi
+               naast de grote: dit begrenst het antwoord en hoort dus bij het
+               antwoord te staan, niet bij de bewijslast eronder.
+             · DE OPENSTAANDE VRAAG ("cashback onbekend voor …"). Ook een
+               weigering; die verhuist naar boven in plaats van onderaan de module
+               te blijven hangen.
+            Al het andere gaat de plooi in: de bron en de peildatum van elk cijfer,
+            de uitleg over de catalogus, de opsomming van alle kandidaten en de zin
+            over wat er niet is meegerekend. */}
         <Module
           span={2}
           title="Cashback"
@@ -1223,12 +1266,14 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               DEZE keuze zijn ze nul. Dat is dezelfde regel die core's
               `marginalHoldingCost` in het reisblok toepast, en hier is er niets
               te tonen in plaats van een nul om uit te leggen. Wat die rekeningen
-              wél kosten staat in de module "Wat je rekeningen kosten". */}
-          {routing.map((a) => {
-            const base = spendOf.get(a.from.key);
-            return (
-              <div className="reason-list" key={a.from.key + a.to.key}>
-                <div className="position-row">
+              wél kosten staat in de module "Kosten".
+
+              ALLEEN DE REGEL ZELF, sinds de top-downronde: waar die euro's over
+              gerekend zijn staat in de plooi onderaan, bij de rest van de meting. */}
+          {routing.length > 0 && (
+            <div className="reason-list">
+              {routing.map((a) => (
+                <div className="position-row" key={a.from.key + a.to.key}>
                   <span>
                     Betaal met <strong>{a.to.bank}</strong> in plaats van {a.from.bank} — {pct(a.toPct)} tegen{" "}
                     {pct(a.fromPct)}.
@@ -1238,187 +1283,73 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                     {euro(a.gainPerYearCents)} per jaar
                   </span>
                 </div>
-                {/* Where the euros come from. "tot" is not a hedge for its own
-                    sake: on a betaalrekening the base still has rent and
-                    incasso's inside it, so the figure is the most it could be
-                    and the sentence has to say why. */}
-                <p className="cell-sub">
-                  Gerekend over {a.approximate ? "maximaal " : ""}
-                  {euro(a.baseCents)} aan uitgaven per jaar
-                  {base ? `, gemeten over ${base.observedDays} dagen afschrift` : ""}.
-                  {a.approximate &&
-                    " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was — huur en incasso's zitten er dus nog in."}
-                </p>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          )}
 
           {cashbackUpgrade && cashbackNet && monthlyBaseCents !== null && bestHeldCashback !== null ? (
             <div className="reason-list" style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}>
-              {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
-                  NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
-                  spending sits on the 0% pas, so the first row is what that card
-                  WOULD return on this base — a rate comparison, not a statement
-                  about what lands on his account. Labelling it as income he
-                  already gets would be a number he can check and find wrong. */}
-              <div className="position-row" data-testid="cashback-nu">
-                <span>
-                  <strong>Op je beste eigen kaart</strong> — {pct(bestHeldCashback)}
-                  {/* DE HARDHEID STAAT OP DEZELFDE REGEL ALS HET GETAL, niet in
-                      een voetnoot en niet in een comment. Dit is de hele
-                      voorzorg: een aangenomen nul die er precies zo uitziet als
-                      een gemeten nul is de valse nul waar dit project al een keer
-                      op stukliep. */}
-                  {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
-                </span>
-                <span>{euro(Math.round((monthlyBaseCents * bestHeldCashback) / 100))} per maand</span>
-              </div>
-              {bestHeld?.k.tier === "aangenomen" && (
-                <p className="cell-sub" data-testid="cashback-aanname">
-                  <strong>{describeCashback(bestHeld.k)}.</strong> Een gewone Nederlandse betaalpas of
-                  grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met
-                  “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document
-                  van {bestHeld.account.bank || bestHeld.product}.{" "}
-                  {bestHeld.k.lastCheckedAt
-                    ? `De voorwaarden van ${bestHeld.k.issuerFamily} zijn voor het laatst gelezen op ${bestHeld.k.lastCheckedAt}.`
-                    : `Van ${bestHeld.k.issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`}
-                  {assumptionDueForReview(bestHeld.k.lastCheckedAt, asOf) &&
-                    " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik."}{" "}
-                  Klopt het niet? Zet het juiste percentage bij <strong>Profiel → Cashback corrigeren</strong>; wat
-                  jij invult gaat vóór alles wat LaVega zelf vindt.
-                </p>
-              )}
-              <div className="position-row" data-testid="cashback-beste">
-                <span>
-                  <strong>Op de beste kaart die we kunnen aantonen</strong> —{" "}
-                  {pct(cashbackUpgrade.best.cashbackPct)} bij {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}{" "}
-                  <span className="cell-sub">({cashbackUpgrade.best.product}, peildatum {cashbackUpgrade.best.asOf})</span>
-                  {ALT_KIND_LABEL[bestOfferKind] ? <> <span className="badge">{ALT_KIND_LABEL[bestOfferKind]}</span></> : null}
-                </span>
-                <span>{euro(Math.round((monthlyBaseCents * cashbackUpgrade.best.cashbackPct) / 100))} per maand</span>
-              </div>
-              {/* HET VERSCHIL IS BRUTO, en dat staat er nu bij. Zonder dat woord
-                  las deze regel als wat je erop overhoudt, terwijl de kaart zelf
-                  ook geld kost: 2% tegen 1,5% levert € 163,92 per jaar op, en een
-                  kaart van € 16,90 per maand kost € 202,80. De aftrek staat in de
-                  twee regels hieronder, in deze volgorde: bruto, kosten, netto. */}
-              <div className="position-row" data-testid="cashback-verschil">
-                <span>
-                  <strong>Verschil</strong> — wat dezelfde uitgaven daar extra opleveren, vóór kaartkosten
-                </span>
-                <span className="text-pos">
-                  {euro(Math.round(cashbackUpgrade.extraPerYearCents / 12))} per maand ·{" "}
-                  {euro(cashbackUpgrade.extraPerYearCents)} per jaar
-                </span>
-              </div>
+              {/* HET ANTWOORD, IN ÉÉN REGEL. Welke kaart, tegen welke van hem, en
+                  hoeveel dat bruto scheelt — daarna doet `Productkosten` er de
+                  kaartprijs vanaf. In die volgorde, want de aftrek is niet te
+                  volgen zonder het bedrag waarvan wordt afgetrokken.
+
+                  DE TWEE MERKTEKENS GAAN MEE NAAR VOREN en blijven niet bij hun
+                  rij in de plooi achter, en dat is geen opmaak maar de voorzorg
+                  waar dit project al een keer op struikelde:
+                   · "aangenomen" — de nul aan ZIJN kant kan een gemeten nul zijn
+                     of een aanname van ons. Zonder dat woord draagt deze zin een
+                     conclusie op een afwezigheid.
+                   · "prepaidkaart"/"cryptokaart" — de kaart die wint is vandaag
+                     nooit een gewone bankkaart. Zonder dat woord leest de regel
+                     als "dit is de beste bankkaart", en dat is niet wat er
+                     gevonden is. Het is dezelfde splitsing als in het reisblok:
+                     een HERKEND kenmerk staat vooraan, de vrije brontekst
+                     eromheen vouwt op. */}
+              <p className="reason-lead" data-testid="cashback-antwoord">
+                <strong>{cashbackUpgrade.best.product}</strong>
+                {cashbackUpgrade.best.bank ? ` bij ${cashbackUpgrade.best.bank}` : ""} geeft{" "}
+                {pct(cashbackUpgrade.best.cashbackPct)} terug op wat je uitgeeft, tegen{" "}
+                {pct(bestHeldCashback)} op je beste eigen kaart
+                {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
+                {ALT_KIND_LABEL[bestOfferKind] ? <> <span className="badge">{ALT_KIND_LABEL[bestOfferKind]}</span></> : null}{" "}
+                — <strong>{euro(cashbackUpgrade.extraPerYearCents)}</strong> per jaar meer, vóór kaartkosten.
+              </p>
 
               {/* WAT DE KAART ZELF KOST, in de drie toestanden die er echt zijn.
                   Dezelfde component en dezelfde zinnen als de Rente-module
-                  hieronder en als het reisblok — één gat, één verhaal. */}
+                  hierboven en als het reisblok — één gat, één verhaal. */}
               <Productkosten
                 net={cashbackNet}
                 id="cashback"
                 noun="kaart"
                 gainWord="meer cashback"
                 costWord="kaartkosten"
-                unknownTail="Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Wat je rekeningen kosten”."
+                unknownTail="Bij de kaarten die de catalogus wél prijst, staat dat bedrag onder “Kosten”."
               />
-              {/* The base, and how it was measured, so the figure can be redone
-                  against the same afschrift instead of taken on trust. Two
-                  paragraphs: the number first, then what it does and does not
-                  claim — one block held all of it and read as fine print. */}
-              <p className="cell-sub" data-testid="cashback-basis">
-                Gerekend over {baseIsUpperBound ? "maximaal " : ""}
-                {euro(monthlyBaseCents)} aan kaartuitgaven <strong>gemiddeld per maand</strong>, gemeten over{" "}
-                {baseObservedDays} dagen afschrift.
-              </p>
 
-              {/* ── ÉÉN ECHTE MAAND, met zijn drie vragen erin (punt 23) ────────
-                  Samenvatting in de kop, onderbouwing eronder — dat is het thema
-                  van deze hele review: "the usual should be just the graphs and
-                  the numbers, and all the text below it should be a show more."
-                  Zijn antwoord staat dus al in de samenvattingsregel; wie het wil
-                  nakijken klapt hem open. */}
-              {lastMonthCompare && (
-                <details className="cell-sub" data-testid="cashback-vorige-maand">
-                  <summary>
-                    <strong>Vorige volle maand ({monthLabelNL(lastMonthCompare.ym)})</strong> —{" "}
-                    {euro(lastMonthCompare.spentCents)} uitgegeven,{" "}
-                    {euro(lastMonthCompare.bestCents - lastMonthCompare.ownCents)} meer cashback op{" "}
-                    {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}
-                  </summary>
-                  <div className="reason-list" style={{ marginTop: ".35rem" }}>
-                    <div className="position-row">
-                      <span>Wat je die maand uitgaf</span>
-                      <span>{euro(lastMonthCompare.spentCents)}</span>
-                    </div>
-                    <div className="position-row">
-                      <span>
-                        Wat je eigen kaart daarop teruggaf — {pct(bestHeldCashback)}
-                        {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
-                      </span>
-                      <span>{euro(lastMonthCompare.ownCents)}</span>
-                    </div>
-                    <div className="position-row">
-                      <span>
-                        Wat {cashbackUpgrade.best.product} had teruggegeven — {pct(cashbackUpgrade.best.cashbackPct)}
-                      </span>
-                      <span>{euro(lastMonthCompare.bestCents)}</span>
-                    </div>
-                    {/* Dezelfde component, dezelfde zinnen en dezelfde rekenwijze
-                        als het jaarblok hierboven. Het verschil zit alleen in de
-                        BASIS: hier staat een eenmalige opbrengst tegen een prijs
-                        die doorloopt, dus rekent `netBenefit` een hele
-                        factureringsperiode en zegt `spanWords` erbij welke. */}
-                    <Productkosten
-                      net={lastMonthCompare.net}
-                      id="cashback-maand"
-                      noun="kaart"
-                      gainWord="meer cashback in die maand"
-                      costWord="kaartkosten"
-                    />
-                  </div>
-                  <p style={{ margin: ".35rem 0 0" }}>
-                    Dit is de laatste maand die je import van begin tot eind dekt. Eén maand is één steekproef, dus
-                    de aanbeveling hierboven staat op het maandgemiddelde en niet op deze maand — dit getal is de
-                    controle die je tegen je eigen herinnering kunt houden.
-                  </p>
-                </details>
-              )}
-              <p className="cell-sub">
-                Beide regels hierboven zijn dezelfde uitgaven op een andere kaart — een vergelijking van tarieven, niet
-                wat er vandaag op je rekening komt. Het verschil is daarom minstens dit: wat nu op een kaart met minder
-                cashback staat, levert nog meer op.
-                {baseIsUpperBound &&
-                  " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was, dus huur en incasso's zitten nog in die basis — vandaar \"maximaal\"."}
-              </p>
               {/* THE GATE, IF THERE IS ONE, IN FULL. A 5% card behind a staking
                   tier is not a 5% card for him, so the euro figure above cannot
                   stand without its conditions. It was truncated at first, and
                   that was worse than not showing it: the Obsidian text names its
                   tier gate near the END, so the clamp cut off the only part that
-                  mattered. Full text, collapsed — nothing hidden, nothing
-                  shouted. */}
+                  mattered. Volledige tekst, opgevouwen — en het label zegt zelf
+                  dát er voorwaarden zijn, zodat dicht niet hetzelfde is als weg. */}
               {cashbackUpgrade.best.conditions && (
-                <details className="cell-sub">
-                  <summary>Aan dit tarief hangen voorwaarden — lees ze voordat je hierop rekent.</summary>
-                  <p style={{ margin: ".35rem 0 0" }}>{cashbackUpgrade.best.conditions}</p>
-                  <p style={{ margin: ".35rem 0 0" }}>Bron: {cashbackUpgrade.best.sourceUrl}</p>
-                </details>
-              )}
-              {allOffersAlt && (
-                <p className="cell-sub">
-                  <strong>Geen gewone bankkaart</strong> in de catalogus heeft een aantoonbaar cashbackpercentage —
-                  alle {cashbackOffers.length} die we kunnen onderbouwen zijn prepaid- of cryptokaarten. Dat is wat de
-                  bronnen zeggen, niet een keuze van LaVega.
-                </p>
+                <ToonMeer summary="Aan dit tarief hangen voorwaarden — lees ze voordat je hierop rekent">
+                  <p style={{ margin: 0 }}>{cashbackUpgrade.best.conditions}</p>
+                  <p className="cell-sub" style={{ margin: ".35rem 0 0" }}>
+                    Bron: {cashbackUpgrade.best.sourceUrl} · peildatum {cashbackUpgrade.best.asOf}
+                  </p>
+                </ToonMeer>
               )}
             </div>
           ) : (
             /* WHY THERE IS NO FIGURE, in the order the reasons actually apply.
                Each names the half that is missing; none of them concludes that
                he is already in the best place, because an absence of a
-               comparison is not a comparison. */
+               comparison is not a comparison. Dit is een weigering en dus de
+               uitkomst zelf — hij staat vooraan en vouwt nooit op. */
             <p className="block-empty" style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}>
               {spendable.length === 0
                 ? "Nog geen betaalrekening of creditcard in beeld — er is dus nog niets om mee te vergelijken."
@@ -1427,9 +1358,9 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                        ontbreekt. Deze tak haalt het sinds review 4 alleen nog bij
                        kaarten die buiten de aanname vallen — een prepaidkaart, een
                        Amex, een neobank — of als hij de aanname zelf heeft
-                       uitgezet. De lijst eronder noemt per kaart welke van die
+                       uitgezet. De lijst in de plooi noemt per kaart welke van die
                        redenen het is. */
-                    "Wat dit jou zou opleveren weet LaVega nog niet: bij deze kaarten mag er geen nul worden aangenomen, en zonder die helft is er geen verschil te berekenen. Hieronder staat per kaart waarom."
+                    "Wat dit jou zou opleveren weet LaVega nog niet: bij deze kaarten mag er geen nul worden aangenomen, en zonder die helft is er geen verschil te berekenen. Onder “Waar deze cijfers vandaan komen” staat het per kaart."
                   : monthlyBaseCents === null
                     ? `LaVega kent de cashback van je kaarten, maar heeft nog te weinig afschrift om te zien wat je ermee uitgeeft (minimaal ${MIN_SPEND_DAYS} dagen). Zonder die basis is er een percentage, maar geen bedrag.`
                     : cashbackOffers.length === 0
@@ -1438,50 +1369,12 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             </p>
           )}
 
-          {/* ── WAT WE VAN ELKE EIGEN KAART WETEN, en hoe hard ─────────────────
-              Achter "toon meer", want de samenvatting hierboven is het antwoord
-              en dit is de onderbouwing (review 4, het thema van de hele ronde).
-              Maar het STAAT er, per kaart, met het woord "aangenomen" voluit —
-              dat is de prijs van een aanname: hij mag, mits hij overal te vinden
-              is. */}
-          {heldCashback.length > 0 && (
-            <details className="cell-sub" data-testid="cashback-kaarten" style={{ marginTop: ".75rem" }}>
-              <summary>Waar het percentage van elk van je {heldCashback.length === 1 ? "kaart" : "kaarten"} vandaan komt</summary>
-              <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
-                {heldCashback.map((h) => (
-                  <li key={h.account.key}>
-                    {/* Eén zin, uit core. De vier takken stonden hier ooit als
-                        vier stukjes JSX, en Profiel zei bijna dezelfde vier
-                        dingen net iets anders — zie `describeHeldCashback`. */}
-                    <strong>{h.product}</strong> — {describeHeldCashback(h.k)}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-
-          {/* The rest of the field, without repeating the card named above — four
-              Crypto.com tiers under a Crypto.com headline was the module talking
-              to itself. */}
-          {otherOffers.length > 0 && (
-            <div className="opt-row" style={{ marginTop: ".75rem" }}>
-              <p style={{ margin: 0 }}>
-                <strong>{cashbackUpgrade ? "Andere kaarten" : "Kaarten"} die we kunnen aantonen</strong>{" "}
-                <span className="cell-sub">— niet alleen de jouwe</span>
-              </p>
-              <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
-                {otherOffers.map((o) => (
-                  <li key={o.productId}>
-                    <strong>{pct(o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}{o.product}{" "}
-                    <span style={{ opacity: 0.7 }}>(peildatum {o.asOf})</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
+          {/* DE OPENSTAANDE VRAAG STAAT VOORAAN, en stond eerst onderaan de
+              module. Het is geen uitleg maar een weigering: over deze kaarten
+              mag niets worden ingevuld, dus het bedrag hierboven gaat niet over
+              hen. Wie dat opvouwt laat een afwezigheid een conclusie dragen. */}
           {openCashbackGaps.length > 0 && (
-            <p className="cell-sub" data-testid="cashback-open">
+            <p className="cell-sub" data-testid="cashback-open" style={{ marginTop: "var(--sp-3)" }}>
               {/* Name a way to close the gap that EXISTS. Sinds review 4 zijn er
                   TWEE die bestaan, en de tweede is nieuw: het percentage is nu
                   ook zelf in te vullen, bij Profiel → Cashback corrigeren. Dat
@@ -1498,6 +1391,231 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               <strong>Zoek voorwaarden</strong>, of vul het percentage zelf in bij{" "}
               <strong>Profiel → Cashback corrigeren</strong>.
             </p>
+          )}
+
+          {/* ── DE ONDERBOUWING, IN ÉÉN PLOOI ───────────────────────────────
+              Eén plooi voor de hele module en niet één per onderdeel: vier
+              driehoekjes onder elkaar is geen rustiger scherm maar hetzelfde
+              scherm met vier knoppen erbij. Het label is een BELOFTE en geen
+              "meer informatie" — een label dat niets belooft is een label waar
+              niemand op klikt, en dan is de onderbouwing niet opgevouwen maar
+              zoek (zie ToonMeer.tsx).
+
+              De plooi komt er alleen als er iets in zit; een plooi die op een
+              leeg paneel uitkomt is erger dan geen plooi. */}
+          {cashbackOnderbouwing && (
+            <ToonMeer summary="Waar deze cijfers vandaan komen, en wat er niet in zit">
+              {cashbackUpgrade && monthlyBaseCents !== null && bestHeldCashback !== null && (
+                <div className="reason-list">
+                  {/* BOTH ROWS ARE THE SAME EUROS ON A DIFFERENT CARD. Deliberately
+                      NOT "wat je nu terugkrijgt": his best own rate is 1,5% but his
+                      spending sits on the 0% pas, so the first row is what that card
+                      WOULD return on this base — a rate comparison, not a statement
+                      about what lands on his account. Labelling it as income he
+                      already gets would be a number he can check and find wrong.
+
+                      DAT DE PERCENTAGES HIERBOVEN OOK AL STAAN is geen slordigheid:
+                      wat de plooi toevoegt is het BEDRAG per kant, en een paneel dat
+                      alleen te lezen is met de zin erboven ernaast is geen
+                      onderbouwing maar een restant. */}
+                  <div className="position-row" data-testid="cashback-nu">
+                    <span>
+                      <strong>Op je beste eigen kaart</strong> — {pct(bestHeldCashback)}
+                      {/* DE HARDHEID STAAT OP DEZELFDE REGEL ALS HET GETAL, niet in
+                          een voetnoot en niet in een comment. Dit is de hele
+                          voorzorg: een aangenomen nul die er precies zo uitziet als
+                          een gemeten nul is de valse nul waar dit project al een keer
+                          op stukliep. Hij staat daarom óók op de antwoordregel
+                          vooraan — dit cijfer mag nergens kaal voorkomen. */}
+                      {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
+                    </span>
+                    <span>{euro(Math.round((monthlyBaseCents * bestHeldCashback) / 100))} per maand</span>
+                  </div>
+                  {bestHeld?.k.tier === "aangenomen" && (
+                    <p className="cell-sub" data-testid="cashback-aanname">
+                      <strong>{describeCashback(bestHeld.k)}.</strong> Een gewone Nederlandse betaalpas of
+                      grootbankcreditcard geeft geen cashback, dus LaVega vult hier nul in in plaats van je met
+                      “onbekend” te laten zitten — maar het blijft een aanname van ons en geen zin uit een document
+                      van {bestHeld.account.bank || bestHeld.product}.{" "}
+                      {bestHeld.k.lastCheckedAt
+                        ? `De voorwaarden van ${bestHeld.k.issuerFamily} zijn voor het laatst gelezen op ${bestHeld.k.lastCheckedAt}.`
+                        : `Van ${bestHeld.k.issuerFamily} heeft LaVega geen enkel gelezen document met een datum erbij.`}
+                      {assumptionDueForReview(bestHeld.k.lastCheckedAt, asOf) &&
+                        " Dat is een jaar of langer geleden, dus deze aanname is toe aan een nieuwe blik."}{" "}
+                      Klopt het niet? Zet het juiste percentage bij <strong>Profiel → Cashback corrigeren</strong>; wat
+                      jij invult gaat vóór alles wat LaVega zelf vindt.
+                    </p>
+                  )}
+                  <div className="position-row" data-testid="cashback-beste">
+                    <span>
+                      <strong>Op de beste kaart die we kunnen aantonen</strong> —{" "}
+                      {pct(cashbackUpgrade.best.cashbackPct)} bij {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}{" "}
+                      <span className="cell-sub">({cashbackUpgrade.best.product}, peildatum {cashbackUpgrade.best.asOf})</span>
+                      {ALT_KIND_LABEL[bestOfferKind] ? <> <span className="badge">{ALT_KIND_LABEL[bestOfferKind]}</span></> : null}
+                    </span>
+                    <span>{euro(Math.round((monthlyBaseCents * cashbackUpgrade.best.cashbackPct) / 100))} per maand</span>
+                  </div>
+                  {/* HET VERSCHIL IS BRUTO, en dat staat er nu bij. Zonder dat woord
+                      las deze regel als wat je erop overhoudt, terwijl de kaart zelf
+                      ook geld kost: 2% tegen 1,5% levert € 163,92 per jaar op, en een
+                      kaart van € 16,90 per maand kost € 202,80. De aftrek staat
+                      vooraan, bij het antwoord; hier staat waar dat brutobedrag
+                      vandaan komt. */}
+                  <div className="position-row" data-testid="cashback-verschil">
+                    <span>
+                      <strong>Verschil</strong> — wat dezelfde uitgaven daar extra opleveren, vóór kaartkosten
+                    </span>
+                    <span className="text-pos">
+                      {euro(Math.round(cashbackUpgrade.extraPerYearCents / 12))} per maand ·{" "}
+                      {euro(cashbackUpgrade.extraPerYearCents)} per jaar
+                    </span>
+                  </div>
+                  {/* The base, and how it was measured, so the figure can be redone
+                      against the same afschrift instead of taken on trust. */}
+                  <p className="cell-sub" data-testid="cashback-basis">
+                    Gerekend over {baseIsUpperBound ? "maximaal " : ""}
+                    {euro(monthlyBaseCents)} aan kaartuitgaven <strong>gemiddeld per maand</strong>, gemeten over{" "}
+                    {baseObservedDays} dagen afschrift.
+                  </p>
+                  <p className="cell-sub">
+                    Beide regels hierboven zijn dezelfde uitgaven op een andere kaart — een vergelijking van tarieven,
+                    niet wat er vandaag op je rekening komt. Het verschil is daarom minstens dit: wat nu op een kaart
+                    met minder cashback staat, levert nog meer op.
+                    {baseIsUpperBound &&
+                      " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was, dus huur en incasso's zitten nog in die basis — vandaar \"maximaal\"."}
+                  </p>
+                </div>
+              )}
+
+              {/* Waar de euro's van de overstap tussen zijn EIGEN kaarten over
+                  gerekend zijn. "tot" is geen slag om de arm om de slag om de arm:
+                  op een betaalrekening zitten huur en incasso's nog in de basis,
+                  dus het bedrag is het meeste dat het kan zijn — en de zin die dat
+                  zegt hoort bij de meting, niet bij het antwoord. */}
+              {routing.length > 0 && (
+                <div style={{ marginTop: "var(--sp-3)" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>Waarover die overstap gerekend is</strong>
+                  </p>
+                  {routing.map((a) => {
+                    const base = spendOf.get(a.from.key);
+                    return (
+                      <p className="cell-sub" key={`basis-${a.from.key}${a.to.key}`}>
+                        {a.to.bank} in plaats van {a.from.bank}: gerekend over {a.approximate ? "maximaal " : ""}
+                        {euro(a.baseCents)} aan uitgaven per jaar
+                        {base ? `, gemeten over ${base.observedDays} dagen afschrift` : ""}.
+                        {a.approximate &&
+                          " Je bank zegt er niet bij of een afschrijving een kaartbetaling of een incasso was — huur en incasso's zitten er dus nog in."}
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ── ÉÉN ECHTE MAAND, met zijn drie vragen erin (punt 23) ────────
+                  Dit stond zelf in een <details> en is nu gewoon een blok in de
+                  plooi: een driehoekje ín een driehoekje is twee klikken naar
+                  hetzelfde antwoord. */}
+              {lastMonthCompare && cashbackUpgrade && bestHeldCashback !== null && (
+                <div className="reason-list" data-testid="cashback-vorige-maand" style={{ marginTop: "var(--sp-3)" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>Vorige volle maand ({monthLabelNL(lastMonthCompare.ym)})</strong> —{" "}
+                    {euro(lastMonthCompare.spentCents)} uitgegeven,{" "}
+                    {euro(lastMonthCompare.bestCents - lastMonthCompare.ownCents)} meer cashback op{" "}
+                    {cashbackUpgrade.best.bank || cashbackUpgrade.best.product}
+                  </p>
+                  <div className="position-row">
+                    <span>Wat je die maand uitgaf</span>
+                    <span>{euro(lastMonthCompare.spentCents)}</span>
+                  </div>
+                  <div className="position-row">
+                    <span>
+                      Wat je eigen kaart daarop teruggaf — {pct(bestHeldCashback)}
+                      {bestHeld?.k.tier === "aangenomen" && <> <span className="badge">aangenomen</span></>}
+                    </span>
+                    <span>{euro(lastMonthCompare.ownCents)}</span>
+                  </div>
+                  <div className="position-row">
+                    <span>
+                      Wat {cashbackUpgrade.best.product} had teruggegeven — {pct(cashbackUpgrade.best.cashbackPct)}
+                    </span>
+                    <span>{euro(lastMonthCompare.bestCents)}</span>
+                  </div>
+                  {/* Dezelfde component, dezelfde zinnen en dezelfde rekenwijze
+                      als het jaarblok vooraan. Het verschil zit alleen in de
+                      BASIS: hier staat een eenmalige opbrengst tegen een prijs
+                      die doorloopt, dus rekent `netBenefit` een hele
+                      factureringsperiode en zegt `spanWords` erbij welke. */}
+                  <Productkosten
+                    net={lastMonthCompare.net}
+                    id="cashback-maand"
+                    noun="kaart"
+                    gainWord="meer cashback in die maand"
+                    costWord="kaartkosten"
+                  />
+                  <p className="cell-sub">
+                    Dit is de laatste maand die je import van begin tot eind dekt. Eén maand is één steekproef, dus
+                    de aanbeveling vooraan staat op het maandgemiddelde en niet op deze maand — dit getal is de
+                    controle die je tegen je eigen herinnering kunt houden.
+                  </p>
+                </div>
+              )}
+
+              {/* DE UITLEG OVER DE CATALOGUS. Dat de winnende kaart geen gewone
+                  bankkaart is, staat als merkteken op de antwoordregel vooraan;
+                  dit is de zin eromheen — wat de bronnen wél en niet dekken. */}
+              {allOffersAlt && (
+                <p className="cell-sub">
+                  <strong>Geen gewone bankkaart</strong> in de catalogus heeft een aantoonbaar cashbackpercentage —
+                  alle {cashbackOffers.length} die we kunnen onderbouwen zijn prepaid- of cryptokaarten. Dat is wat de
+                  bronnen zeggen, niet een keuze van LaVega.
+                </p>
+              )}
+
+              {/* ── WAT WE VAN ELKE EIGEN KAART WETEN, en hoe hard ─────────────
+                  Het STAAT er, per kaart, met het woord "aangenomen" voluit — dat
+                  is de prijs van een aanname: hij mag, mits hij overal te vinden
+                  is. */}
+              {heldCashback.length > 0 && (
+                <div data-testid="cashback-kaarten" style={{ marginTop: "var(--sp-3)" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>
+                      Waar het percentage van elk van je {heldCashback.length === 1 ? "kaart" : "kaarten"} vandaan komt
+                    </strong>
+                  </p>
+                  <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                    {heldCashback.map((h) => (
+                      <li key={h.account.key}>
+                        {/* Eén zin, uit core. De vier takken stonden hier ooit als
+                            vier stukjes JSX, en Profiel zei bijna dezelfde vier
+                            dingen net iets anders — zie `describeHeldCashback`. */}
+                        <strong>{h.product}</strong> — {describeHeldCashback(h.k)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* The rest of the field, without repeating the card named above — four
+                  Crypto.com tiers under a Crypto.com headline was the module talking
+                  to itself. */}
+              {otherOffers.length > 0 && (
+                <div style={{ marginTop: "var(--sp-3)" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>{cashbackUpgrade ? "Andere kaarten" : "Kaarten"} die we kunnen aantonen</strong>{" "}
+                    <span className="cell-sub">— niet alleen de jouwe</span>
+                  </p>
+                  <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                    {otherOffers.map((o) => (
+                      <li key={o.productId}>
+                        <strong>{pct(o.cashbackPct)}</strong> — {o.bank ? `${o.bank} · ` : ""}{o.product}{" "}
+                        <span style={{ opacity: 0.7 }}>(peildatum {o.asOf})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </ToonMeer>
           )}
         </Module>
 
@@ -1517,18 +1635,20 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </span>
             }
           >
-            {/* HET TOTAAL, MET HET GAT ERIN BENOEMD. Core levert drie varianten en
-                dit zijn ze alle drie: een som met onbekende rekeningen erin is
-                geen totaal, en zonder één bekend tarief is er niets om op te
-                tellen. */}
+            {/* HET ANTWOORD: wat het je per jaar kost om te houden wat je hebt.
+                Core levert drie varianten en dit zijn ze alle drie — een som met
+                onbekende rekeningen erin is geen totaal, en zonder één bekend
+                tarief is er niets om op te tellen. De tweede en de derde zijn
+                WEIGERINGEN en dus zelf de uitkomst: ze staan vooraan en vouwen
+                nooit op. */}
             {costs.total.kind === "complete" && (
-              <p className="reason-lead">
+              <p className="reason-lead" data-testid="kosten-totaal">
                 Je betaalt <strong>{euro(costs.total.perYearCents)}</strong> per jaar om deze{" "}
                 {costs.total.accounts} {costs.total.accounts === 1 ? "rekening" : "rekeningen"} aan te houden.
               </p>
             )}
             {costs.total.kind === "incomplete" && (
-              <p className="reason-lead">
+              <p className="reason-lead" data-testid="kosten-totaal">
                 Van {costs.total.known} van je {costs.total.known + costs.total.unknown} rekeningen staat het
                 tarief vast: samen <strong>{euro(costs.total.knownPerYearCents)}</strong> per jaar. De andere{" "}
                 {costs.total.unknown} {costs.total.unknown === 1 ? "rekening telt" : "rekeningen tellen"} niet
@@ -1536,194 +1656,116 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </p>
             )}
             {costs.total.kind === "none" && (
-              <p className="reason">
+              <p className="reason" data-testid="kosten-totaal">
                 Van geen van deze rekeningen staat het tarief vast, dus er is geen totaal. Wat de catalogus bij
-                deze banken wél weet, staat hieronder.
+                deze banken wél weet, staat in de plooi hieronder.
               </p>
             )}
 
-            <div className="table-wrap table-cards">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Rekening</th>
-                    <th className="num">Kosten</th>
-                    <th className="num">Per jaar</th>
-                    <th>Bron</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {costRows.map((row) => {
-                    const c = row.cost;
-                    const bank = row.account.bank || row.account.name;
-                    return (
-                      <tr key={row.account.key}>
-                        <td data-label="Rekening">
-                          <div style={{ fontWeight: 600 }}>{bank}</div>
-                          <div className="cell-sub">{row.account.name}</div>
-                        </td>
-                        <td className="num" data-label="Kosten">
-                          {c.kind === "known" ? feeLabel(c.amount) : "onbekend"}
-                        </td>
-                        {/* "niet in het totaal" in plaats van een streepje: een em
-                            dash naast euro's leest als nul, en dit is het enige
-                            veld waar de lezer kan zien wat er met een onbekende
-                            gebeurt. */}
-                        <td className="num" data-label="Per jaar">
-                          {c.kind === "known" ? (
-                            <>
-                              {euro(c.amount.perYearCents)}
-                              {c.amount.perYearDerived && (
-                                <div className="cell-sub">12 × {euro(c.amount.cents)}</div>
-                              )}
-                            </>
-                          ) : (
-                            <span className="cell-sub">niet in het totaal</span>
-                          )}
-                        </td>
-                        <td data-label="Bron" className="cell-sub">
-                          {c.kind === "known" ? (
-                            <>
-                              <div>
-                                {c.matchedBy === "product-name"
-                                  ? c.fee.product
-                                  : `${c.agreeing.length} producten bij deze bank, alle even duur`}
-                              </div>
-                              <div>
-                                {sourceHost(c.sourceUrl)} · peildatum {c.asOf}
-                              </div>
-                              {/* EEN NUL DRAAGT ZIJN EIS IN DE OPEN LUCHT (review 4,
-                                  punt 24). Zijn ING is een studentenrekening en die
-                                  is gratis — maar "€ 0,00 per maand" met de
-                                  leeftijdseis achter een dichtgeklapte
-                                  "voorwaarden" is een gratis-melding zonder de eis
-                                  erbij, en dat is misleidend zodra hij dertig
-                                  wordt. Elke studentenrekening in dit land staat
-                                  letterlijk op € 0,00 in het wettelijk verplichte
-                                  kostendocument, mét een leeftijds- of
-                                  studievoorwaarde ernaast; die twee horen bij
-                                  elkaar. Bij een bedrag dat wél geld kost blijft de
-                                  voorwaarde opgevouwen — daar is de prijs het
-                                  nieuws en de voorwaarde de onderbouwing. */}
-                              {c.conditions &&
-                                (c.amount.cents === 0 ? (
-                                  <div data-testid={`kosten-gratis-${row.account.key}`}>
-                                    <strong>Gratis, mits:</strong> {c.conditions}
-                                  </div>
-                                ) : (
-                                  <details>
-                                    <summary>voorwaarden</summary>
-                                    <p style={{ margin: ".35rem 0 0" }}>{c.conditions}</p>
-                                  </details>
-                                ))}
-                            </>
-                          ) : (
-                            <>
-                              <div>
-                                {/* Drie oorzaken, drie zinnen. De derde hangt aan
-                                    wat er te tonen is: bij Trading 212 kent de
-                                    catalogus alleen een kaarttarief en niets voor
-                                    een betaalrekening, en "we weten niet welk
-                                    product dit is" boven een lege lijst is een
-                                    melding die zijn eigen oorzaak niet noemt. */}
-                                {c.reason === "no-bank"
-                                  ? "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken."
-                                  : c.reason === "provider-unknown"
-                                    ? `LaVega kent geen tarief van ${bank}.`
-                                    : row.candidates.length === 0
-                                      ? `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`
-                                      : `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`}
-                              </div>
-                              {/* ── DE GRATIS PRODUCTEN, VOORAAN EN MET HUN EIS ────
-                                  Review 4, punt 24: "ING is bij hem een
-                                  studentenrekening — hij betaalt niets. Dat moet
-                                  vindbaar zijn." Vindbaar betekent niet "staat in
-                                  de lijst van negen ING-pakketten achter een
-                                  dichtgeklapt driehoekje"; het betekent dat je het
-                                  ziet zonder te zoeken. Dus komt de nul naar
-                                  voren.
+            {/* ── DE UITGESPROKEN NULLEN, VOORAAN EN MET HUN EIS ───────────────
+                De keerzijde van "onbekend is nooit nul": zegt het kostendocument
+                letterlijk € 0,00, dan is dat een gemeten feit en dus een ANTWOORD.
+                Het stond in de bronkolom van de tabel; nu de tabel de plooi in
+                gaat, zou het meevouwen — en review 4, punt 24 was juist dat dit
+                vindbaar moet zijn zonder te zoeken ("ING is bij hem een
+                studentenrekening — hij betaalt niets").
 
-                                  EN NOOIT ZONDER DE EIS. Elke studentenrekening in
-                                  dit land staat op € 0,00 in het wettelijk
-                                  verplichte kostendocument, met een leeftijds- of
-                                  studievoorwaarde erbij ("Alleen voor
-                                  rekeninghouders van 18 tot 30 jaar"). Zonder die
-                                  zin is dit een gratis-melding die over twee jaar
-                                  niet meer klopt en die LaVega hem nooit heeft
-                                  verteld. Noemt de bron geen voorwaarde, dan staat
-                                  DAT er — een leeg veld zou als "geldt voor
-                                  iedereen" lezen. */}
-                              {row.candidates.some((f) => f.amount.cents === 0) && (
-                                <div data-testid={`gratis-bij-${row.account.key}`} style={{ marginTop: ".35rem" }}>
-                                  <strong>Gratis bij {bank}:</strong>
-                                  <ul style={{ margin: ".2rem 0 0", paddingLeft: "1.1rem" }}>
-                                    {row.candidates
-                                      .filter((f) => f.amount.cents === 0)
-                                      .map((f) => (
-                                        <li key={f.productId}>
-                                          {f.product} — {feeLabel(f.amount)}.{" "}
-                                          {f.conditions ?? "De bron noemt hierbij geen voorwaarde."}{" "}
-                                          <span style={{ opacity: 0.7 }}>
-                                            ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
-                                          </span>
-                                        </li>
-                                      ))}
-                                  </ul>
-                                  <p style={{ margin: ".2rem 0 0" }}>
-                                    Is dit jouw rekening? Zet die naam bij Rekeningen in het veld <strong>Naam</strong>,
-                                    dan rekent LaVega er met € 0,00 voor.
-                                  </p>
-                                </div>
-                              )}
-                              {/* Wat er WEL is, en de enige stap die dit echt
-                                  oplost: de naam van een rekening bepaalt of
-                                  LaVega het pakket herkent, en die naam is bij
-                                  Rekeningen aan te passen. Dat staat er alleen
-                                  als er ook pakketten zijn om uit te kiezen —
-                                  anders is het advies dat in deze toestand niet
-                                  kan werken. */}
-                              {row.candidates.length > 0 && (
-                                <details>
-                                  <summary>
-                                    {row.candidates.length}{" "}
-                                    {row.candidates.length === 1 ? "tarief" : "tarieven"} bij {bank}
-                                  </summary>
-                                  <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
-                                    {row.candidates.map((f) => (
-                                      <li key={f.productId}>
-                                        {f.product} — {feeLabel(f.amount)}{" "}
-                                        <span style={{ opacity: 0.7 }}>
-                                          ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                  {/* Geen voorbeeldnaam erbij: de lijst staat er al
-                                      boven, en het goedkoopste pakket als
-                                      voorbeeld noemen is een duwtje richting een
-                                      naam die niet klopt. */}
-                                  <p style={{ margin: ".35rem 0 0" }}>
-                                    Weet je welk het is? Zet die naam bij Rekeningen in het veld{" "}
-                                    <strong>Naam</strong> — dan rekent LaVega met dat tarief.
-                                  </p>
-                                </details>
-                              )}
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                EN NOOIT ZONDER DE EIS. Elke studentenrekening in dit land staat op
+                € 0,00 in het wettelijk verplichte kostendocument, mét een
+                leeftijds- of studievoorwaarde ernaast; die twee horen bij elkaar,
+                anders klopt de melding over twee jaar niet meer. Bij een bedrag
+                dat wél geld kost blijft de voorwaarde in de tabel staan — daar is
+                de prijs het nieuws en de voorwaarde de onderbouwing. */}
+            {costRows.map((row) => {
+              const c = row.cost;
+              if (c.kind !== "known" || c.amount.cents !== 0) return null;
+              const bank = row.account.bank || row.account.name;
+              /* De naam van het PRODUCT als we het herkend hebben ("ING Student"),
+                 en anders bank plus rekeningnaam. Niet allebei achter elkaar: dat
+                 gaf "ING ING Student", en een dubbele banknaam leest als twee
+                 rekeningen. */
+              const label = c.matchedBy === "product-name" ? c.fee.product : `${bank} — ${row.account.name}`;
+              return (
+                <p className="reason" data-testid={`kosten-gratis-${row.account.key}`} key={`gratis-${row.account.key}`}>
+                  <strong>{label}</strong> —{" "}
+                  {c.conditions ? (
+                    <>
+                      <strong>Gratis, mits:</strong> {c.conditions}
+                    </>
+                  ) : (
+                    <>
+                      <strong>Gratis.</strong> De bron noemt hierbij geen voorwaarde.
+                    </>
+                  )}
+                </p>
+              );
+            })}
+
+            {/* ── WAT WE NIET WETEN, MET DE ECHTE OORZAAK ──────────────────────
+                Een weigering is geen uitleg maar de uitkomst zelf, dus die staat
+                vooraan. Drie oorzaken, drie zinnen, en de derde hangt aan wat er
+                te tonen is: bij Trading 212 kent de catalogus alleen een
+                kaarttarief en niets voor een betaalrekening, en "we weten niet
+                welk product dit is" boven een lege lijst is een melding die zijn
+                eigen oorzaak niet noemt.
+
+                DE GRATIS KANDIDATEN KOMEN MEE NAAR VOREN, om dezelfde reden als
+                hierboven: bij een onherkende ING-rekening is "ING Student kost
+                € 0,00" het enige harde dat we hebben, en dat achter een driehoekje
+                zetten is precies wat punt 24 verbood. De rest van de pakketlijst
+                blijft wel in de plooi — dat is een catalogus, geen antwoord. */}
+            {costRows.map((row) => {
+              const c = row.cost;
+              if (c.kind === "known") return null;
+              const bank = row.account.bank || row.account.name;
+              const free = row.candidates.filter((f) => f.amount.cents === 0);
+              return (
+                <div key={`onbekend-${row.account.key}`}>
+                  <p className="reason" data-testid={`kosten-onbekend-${row.account.key}`}>
+                    <strong>{bank} — {row.account.name}</strong>: kosten onbekend, en dat is geen nul.{" "}
+                    {c.reason === "no-bank"
+                      ? "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken."
+                      : c.reason === "provider-unknown"
+                        ? `LaVega kent geen tarief van ${bank}.`
+                        : row.candidates.length === 0
+                          ? `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`
+                          : `LaVega kent de tarieven van ${bank}, maar niet welk van deze producten dit is.`}
+                  </p>
+                  {free.length > 0 && (
+                    <div className="cell-sub" data-testid={`gratis-bij-${row.account.key}`}>
+                      <strong>Gratis bij {bank}:</strong>
+                      <ul style={{ margin: ".2rem 0 0", paddingLeft: "1.1rem" }}>
+                        {free.map((f) => (
+                          <li key={f.productId}>
+                            {f.product} — {feeLabel(f.amount)}.{" "}
+                            {f.conditions ?? "De bron noemt hierbij geen voorwaarde."}{" "}
+                            <span style={{ opacity: 0.7 }}>
+                              ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p style={{ margin: ".2rem 0 0" }}>
+                        Is dit jouw rekening? Zet die naam bij Rekeningen in het veld <strong>Naam</strong>, dan
+                        rekent LaVega er met € 0,00 voor.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {/* WAAR HET LOONT — en nooit zonder de voorwaarde. Een
                 studentenrekening is gratis áls je student bent; LaVega weet niet
                 hoe oud je bent, dus het bedrag komt er met de zin uit de bron
                 naast te staan en niet als een gedane zaak. Pakketten die de bron
                 zelf "niet meer te openen" noemt komen hier per constructie niet
-                in voor. */}
+                in voor.
+
+                DIT VOUWT NIET OP: het is een bedrag per jaar dat hij kan pakken,
+                dus een antwoord. Alleen de vindplaats van dat bedrag — host en
+                peildatum — verhuist naar de bronnenlijst in de plooi, waar de
+                rest van de herkomst ook staat. */}
             {costTips.length > 0 && (
               <div className="reason-list" style={{ marginTop: "var(--sp-4)" }}>
                 {costTips.map((row) => {
@@ -1746,8 +1788,7 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                         <p className="cell-sub">
                           {alt.conditional
                             ? `Voorwaarde volgens de bron: ${alt.fee.conditions}`
-                            : "De bron noemt hierbij geen voorwaarde."}{" "}
-                          ({sourceHost(alt.fee.sourceUrl)}, peildatum {alt.fee.asOf})
+                            : "De bron noemt hierbij geen voorwaarde."}
                         </p>
                       </div>
                     ),
@@ -1756,22 +1797,159 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
               </div>
             )}
 
-            {costSources.length > 0 && (
-              <details className="rates-benchmark">
-                <summary className="eyebrow">Waar deze bedragen vandaan komen</summary>
-                <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
-                  {costSources.map((row) => {
-                    const c = row.cost;
-                    if (c.kind !== "known") return null;
-                    return (
-                      <li key={row.account.key}>
-                        {row.account.bank || row.account.name}: {c.sourceUrl} (peildatum {c.asOf})
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-            )}
+            {/* ── DE ONDERBOUWING, IN ÉÉN PLOOI ─────────────────────────────────
+                De tabel is per rekening het rekenwerk achter het totaal vooraan:
+                welk tarief, in welke eenheid, uit welk document en van welke
+                datum. Precies wat volgens de opdracht van 22 augustus achter de
+                plooi hoort — samen met de opsomming van alle pakketten die er bij
+                een bank te kiezen zijn.
+
+                WAT ER NIET IN ZIT, en dat is met opzet: geen enkele weigering en
+                geen enkele uitgesproken nul. Die staan hierboven, want een
+                afwezigheid die je wegvouwt lijkt een leeg scherm, en een gratis
+                rekening die je wegvouwt heeft hij nooit gezien. */}
+            <ToonMeer summary="Per rekening: het tarief, de bron en de peildatum">
+              <div className="table-wrap table-cards">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Rekening</th>
+                      <th className="num">Kosten</th>
+                      <th className="num">Per jaar</th>
+                      <th>Bron</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costRows.map((row) => {
+                      const c = row.cost;
+                      const bank = row.account.bank || row.account.name;
+                      return (
+                        <tr key={row.account.key}>
+                          <td data-label="Rekening">
+                            <div style={{ fontWeight: 600 }}>{bank}</div>
+                            <div className="cell-sub">{row.account.name}</div>
+                          </td>
+                          <td className="num" data-label="Kosten">
+                            {c.kind === "known" ? feeLabel(c.amount) : "onbekend"}
+                          </td>
+                          {/* "niet in het totaal" in plaats van een streepje: een em
+                              dash naast euro's leest als nul, en dit is het enige
+                              veld waar de lezer kan zien wat er met een onbekende
+                              gebeurt. */}
+                          <td className="num" data-label="Per jaar">
+                            {c.kind === "known" ? (
+                              <>
+                                {euro(c.amount.perYearCents)}
+                                {c.amount.perYearDerived && (
+                                  <div className="cell-sub">12 × {euro(c.amount.cents)}</div>
+                                )}
+                              </>
+                            ) : (
+                              <span className="cell-sub">niet in het totaal</span>
+                            )}
+                          </td>
+                          <td data-label="Bron" className="cell-sub">
+                            {c.kind === "known" ? (
+                              <>
+                                <div>
+                                  {c.matchedBy === "product-name"
+                                    ? c.fee.product
+                                    : `${c.agreeing.length} producten bij deze bank, alle even duur`}
+                                </div>
+                                <div>
+                                  {sourceHost(c.sourceUrl)} · peildatum {c.asOf}
+                                </div>
+                                {/* Bij een bedrag dat geld KOST is de prijs het
+                                    nieuws en de voorwaarde de onderbouwing, dus die
+                                    mag hier staan. Bij een nul niet: die staat
+                                    vooraan, mét zijn eis — zie het blok bovenaan
+                                    deze module. */}
+                                {c.conditions && c.amount.cents > 0 && (
+                                  <div>
+                                    <strong>Voorwaarde:</strong> {c.conditions}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {/* De oorzaak staat vooraan, bij de weigering. Hier
+                                    staat alleen wat er nog te KIEZEN valt: de
+                                    pakketten die deze bank heeft, en de enige stap
+                                    die dit echt oplost — de naam van een rekening
+                                    bepaalt of LaVega het pakket herkent, en die naam
+                                    is bij Rekeningen aan te passen. Is er niets te
+                                    kiezen, dan staat er ook geen advies dat in deze
+                                    toestand niet kan werken. */}
+                                {row.candidates.length > 0 ? (
+                                  <>
+                                    <div>
+                                      {row.candidates.length}{" "}
+                                      {row.candidates.length === 1 ? "tarief" : "tarieven"} bij {bank}:
+                                    </div>
+                                    <ul style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                                      {row.candidates.map((f) => (
+                                        <li key={f.productId}>
+                                          {f.product} — {feeLabel(f.amount)}{" "}
+                                          <span style={{ opacity: 0.7 }}>
+                                            ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {/* Geen voorbeeldnaam erbij: de lijst staat er al
+                                        boven, en het goedkoopste pakket als
+                                        voorbeeld noemen is een duwtje richting een
+                                        naam die niet klopt. */}
+                                    <div style={{ marginTop: ".35rem" }}>
+                                      Weet je welk het is? Zet die naam bij Rekeningen in het veld{" "}
+                                      <strong>Naam</strong> — dan rekent LaVega met dat tarief.
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span>geen bron</span>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* De volledige vindplaats van elk bedrag dat vooraan meetelt, plus
+                  die van elke goedkopere optie die hierboven is aangeraden. Eén
+                  lijst en niet drie plekken: de herkomst van een cijfer hoort bij
+                  de herkomst van de andere cijfers te staan. */}
+              {(costSources.length > 0 || costTips.length > 0) && (
+                <div style={{ marginTop: "var(--sp-3)" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>Waar deze bedragen vandaan komen</strong>
+                  </p>
+                  <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
+                    {costSources.map((row) => {
+                      const c = row.cost;
+                      if (c.kind !== "known") return null;
+                      return (
+                        <li key={row.account.key}>
+                          {row.account.bank || row.account.name}: {c.sourceUrl} (peildatum {c.asOf})
+                        </li>
+                      );
+                    })}
+                    {costTips.map((row) =>
+                      [row.cheaperAtProvider, row.cheaperElsewhere].map((alt) =>
+                        alt === null ? null : (
+                          <li key={`alt-${row.account.key}-${alt.fee.productId}`}>
+                            {alt.fee.product}: {alt.fee.sourceUrl} (peildatum {alt.fee.asOf})
+                          </li>
+                        ),
+                      ),
+                    )}
+                  </ul>
+                </div>
+              )}
+            </ToonMeer>
           </Module>
         )}
       </ModuleGrid>
