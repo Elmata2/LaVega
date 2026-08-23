@@ -136,8 +136,8 @@ async function mount() {
   });
 }
 
-function button(selector: string, text: string): HTMLButtonElement {
-  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) => b.textContent === text);
+function button(selector: string, text: string): HTMLElement {
+  const found = [...container!.querySelectorAll<HTMLElement>(selector)].find((b) => b.textContent === text);
   if (!found) throw new Error(`geen knop "${text}" (${selector})`);
   return found;
 }
