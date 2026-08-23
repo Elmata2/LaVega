@@ -3,10 +3,9 @@ import { createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "
 import { createProblemReporter } from "./observability.js";
 import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
+  createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
-  createIbkrFlexAdapter,
-  createTrading212Adapter,
   syncScheduledBrokers,
   type BrokerSyncStateStore,
   type PriceStore,
@@ -52,36 +51,7 @@ export function createRuntimeBrokerSync(
 ): (force: boolean) => Promise<ScheduledSyncResult> {
   let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
-  const adapters = [
-    {
-      broker: "ibkr" as const,
-      adapter: {
-        async sync(input: { entity: string }) {
-          const stored = await credentials.getCredentials(LOCAL_TENANT_ID, "ibkr");
-          if (!stored) return { positions: [], trades: [], source: "ibkr-flex", problems: ["IBKR: credentials are not configured"] };
-          return createIbkrFlexAdapter({ token: stored.token, queryId: stored.queryId, endpoint: environment("IBKR_FLEX_ENDPOINT") }).sync(input);
-        },
-      },
-    },
-    {
-      broker: "trading212" as const,
-      adapter: {
-        async sync(input: { entity: string }) {
-          const stored = await credentials.getCredentials(LOCAL_TENANT_ID, "trading212");
-          if (!stored) return { positions: [], trades: [], source: "trading-212", problems: ["Trading 212: credentials are not configured"] };
-          return createTrading212Adapter({
-            token: stored.token,
-            secret: stored.secret,
-            baseUrl: environment("TRADING212_BASE_URL") ?? "https://live.trading212.com",
-            diagnostics: (details) => {
-              console.log(JSON.stringify({ event: "investing.trading212.http", ...details }));
-              onTrading212Diagnostic?.(details);
-            },
-          }).sync(input);
-        },
-      },
-    },
-  ];
+  const adapters = createCredentialsAwareBrokerAdapters({ credentials, onTrading212Diagnostic });
   return async (force) => {
     if (inFlight) return inFlight;
     const run = syncScheduledBrokers({ adapters, credentials, state, tenantId: LOCAL_TENANT_ID, entity, force })

@@ -17,6 +17,7 @@ export * from "./market-data/priceSync.js";
 export * from "./market-data/fx/frankfurterProvider.js";
 export * from "./market-data/identifier/openFigiProvider.js";
 export * from "./brokers/BrokerAccessAdapter.js";
+export * from "./brokers/credentialsAware.js";
 export * from "./brokers/scheduledSync.js";
 export * from "./brokers/degiro/fileImport.js";
 export * from "./brokers/ibkr/flexStatementClient.js";
