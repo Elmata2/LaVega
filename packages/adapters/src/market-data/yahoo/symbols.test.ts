@@ -11,3 +11,9 @@ test("keeps known Yahoo symbols and offers unknown-exchange fallbacks", () => {
   expect(getYahooSymbolsToTry("ASML.AS", "AMS")).toEqual(["ASML.AS"]);
   expect(getYahooSymbolsToTry("ASML", "")).toContain("ASML.AS");
 });
+
+test("strips Trading 212 ticker suffix for unknown exchanges", () => {
+  const candidates = getYahooSymbolsToTry("AMD_US_EQ", "UNKNOWN");
+  expect(candidates).toContain("AMD_US_EQ");
+  expect(candidates).toContain("AMD");
+});

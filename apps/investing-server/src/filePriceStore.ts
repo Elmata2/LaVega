@@ -31,25 +31,40 @@ export function createFilePriceStore(filePath: string): PriceStore {
   });
   const key = (bar: Pick<PriceBar, "tenantId" | "symbol" | "date">) => `${bar.tenantId}\u0000${bar.symbol}\u0000${bar.date}`;
 
+  // ponytail: tenant+symbol index over the parse-cached array; rebuilds on update.
+  let index: Map<string, StoredPriceBar[]> | null = null;
+  const symbolIndex = async (): Promise<Map<string, StoredPriceBar[]>> => {
+    if (index) return index;
+    const map = new Map<string, StoredPriceBar[]>();
+    for (const bar of await store.read()) {
+      const listKey = `${bar.tenantId}\u0000${bar.symbol}`;
+      const list = map.get(listKey);
+      if (list) list.push(bar);
+      else map.set(listKey, [bar]);
+    }
+    for (const list of map.values()) list.sort((left, right) => left.date.localeCompare(right.date));
+    index = map;
+    return map;
+  };
+
   return {
     async getRange(tenantId, symbol, from, to) {
-      return (await store.read())
-        .filter((bar) => bar.tenantId === tenantId && bar.symbol === symbol && bar.date >= from && bar.date <= to)
-        .sort((left, right) => left.date.localeCompare(right.date));
+      return (await symbolIndex()).get(`${tenantId}\u0000${symbol}`)?.filter((bar) => bar.date >= from && bar.date <= to) ?? [];
     },
     async lastDate(tenantId, symbol) {
-      const rows = (await store.read()).filter((bar) => bar.tenantId === tenantId && bar.symbol === symbol).sort((left, right) => left.date.localeCompare(right.date));
-      return rows.at(-1)?.date ?? null;
+      return (await symbolIndex()).get(`${tenantId}\u0000${symbol}`)?.at(-1)?.date ?? null;
     },
     async upsert(bars) {
       if (bars.length === 0) return;
       await store.update((rows) => {
         const byKey = new Map(rows.map((bar) => [key(bar), bar]));
         for (const bar of bars) byKey.set(key(bar), bar);
+        index = null;
         return [...byKey.values()].sort((left, right) => `${left.symbol}\u0000${left.date}`.localeCompare(`${right.symbol}\u0000${right.date}`));
       });
     },
     async purgeAll() {
+      index = null;
       await store.update(() => []);
     },
   };

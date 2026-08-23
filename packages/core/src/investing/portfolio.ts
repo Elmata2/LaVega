@@ -17,9 +17,11 @@ export type FxRates = FxRate | FxRate[];
 
 function rateFor(rates: FxRates, date: string): FxRate {
   const candidates = Array.isArray(rates) ? rates : [rates];
-  const rate = candidates.filter((candidate) => candidate.date <= date).sort((a, b) => b.date.localeCompare(a.date))[0];
-  if (!rate) throw new Error(`No FX rate available for ${date}`);
-  return rate;
+  if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
+  // Runtime often holds only the latest rate; fall forward to the nearest known
+  // rate instead of failing conversion for bars older than that rate's date.
+  const sorted = [...candidates].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.filter((candidate) => candidate.date <= date).at(-1) ?? sorted[0]!;
 }
 
 export function convertCurrency(value: number, from: string, to: string, date: string, fxRates: FxRates): number {

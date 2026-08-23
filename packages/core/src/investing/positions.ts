@@ -168,12 +168,23 @@ export function buildCurrentPositions(input: {
     groups.set(groupKey, [...(groups.get(groupKey) ?? []), position]);
   }
 
+  // Index bars once; a per-group scan of the full history is O(symbols × bars).
+  // Bars are market data without an entity, so they match every holding group
+  // of the same tenant + symbol.
+  const barsBySymbol = new Map<string, PriceBar[]>();
+  for (const bar of input.priceBars) {
+    if (bar.date > input.today) continue;
+    const listKey = `${bar.tenantId}\u0000${bar.symbol.toUpperCase()}`;
+    const list = barsBySymbol.get(listKey);
+    if (list) list.push(bar);
+    else barsBySymbol.set(listKey, [bar]);
+  }
+  for (const list of barsBySymbol.values()) list.sort((left, right) => left.date.localeCompare(right.date));
+
   const current = [...groups.entries()].map(([groupKey, positions]) => {
     const sample = positions[0]!;
     const quantity = positions.reduce((sum, position) => sum + position.quantity, 0);
-    const bars = input.priceBars
-      .filter((bar) => bar.tenantId === sample.tenantId && bar.symbol.toUpperCase() === sample.symbol.toUpperCase() && bar.date <= input.today)
-      .sort((left, right) => left.date.localeCompare(right.date));
+    const bars = barsBySymbol.get(`${sample.tenantId}\u0000${sample.symbol.toUpperCase()}`) ?? [];
     const latest = bars.at(-1);
     let marketValue: number | null = null;
     let priceStatus: PositionPriceStatus = "unpriced";

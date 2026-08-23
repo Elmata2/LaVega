@@ -25,7 +25,11 @@ export type JsonFileStore<T> = {
 export function createJsonFileStore<T>(filePath: string, options: { empty: T; validate: (contents: string) => T }): JsonFileStore<T> {
   let writeQueue = Promise.resolve();
 
+  // ponytail: process-local parse cache; external file edits need a restart.
+  let cache: T | null = null;
+
   const read = async (): Promise<T> => {
+    if (cache !== null) return cache;
     let contents: string;
     try {
       contents = await readFile(filePath, "utf8");
@@ -33,7 +37,8 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return options.empty;
       throw error;
     }
-    return options.validate(contents);
+    cache = options.validate(contents);
+    return cache;
   };
 
   const queue = <R>(operation: () => Promise<R>): Promise<R> => {
@@ -53,7 +58,9 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
     read,
     async update(mutate) {
       await queue(async () => {
-        await writeValue(mutate(await read()));
+        const next = mutate(await read());
+        cache = next;
+        await writeValue(next);
       });
     },
   };
