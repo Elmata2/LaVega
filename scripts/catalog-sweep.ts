@@ -42,11 +42,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
-import { runLadder, type RouteAttempt, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
-import { readIngTariffs, readDocumentDate, coverage, isCovered, mergeCatalogEntries } from "@lavega/core";
-import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "@lavega/core";
-import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "@lavega/core";
-import { sliceForExtraction } from "@lavega/core";
+import { readIngTariffs, readDocumentDate, coverage, isCovered, mergeCatalogEntries, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
+import { runLadder, type RouteAttempt } from "./catalog/catalogRoutes.js";
+import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "./catalog/catalogExtract.js";
+import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "./catalog/catalogInterest.js";
+import { sliceForExtraction } from "./catalog/catalogSlice.js";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const STATE = "docs/catalog/state.json";

@@ -1,16 +1,15 @@
 import { expect, test, vi } from "vitest";
-import { MarketDataRouter } from "./providerRouter.js";
 import { blockedYahooFixture } from "./yahoo/__fixtures__/blocked.js";
 import { rateLimitedYahooFixture } from "./yahoo/__fixtures__/rate-limited.js";
-import { createYahooPriceProvider, type PriceProviderResult, type YahooPriceRequest } from "./yahoo/priceProvider.js";
+import { createYahooPriceProvider } from "./yahoo/priceProvider.js";
 import { createInMemoryPriceStore } from "../prices/inMemoryPriceStore.js";
 import { syncPrices } from "./priceSync.js";
 import { YahooHttpClient } from "./yahoo/http.js";
 
 const request = { ticker: "ASML", exchange: "AMS", symbol: "ASML", currency: "EUR", today: "2026-01-03" };
 
-function router(provider: ReturnType<typeof createYahooPriceProvider>) {
-  return new MarketDataRouter<YahooPriceRequest, PriceProviderResult, never, never, never, never>({ price: [provider], fx: [], identifier: [] });
+function lane(provider: ReturnType<typeof createYahooPriceProvider>) {
+  return [provider];
 }
 
 test("calls Yahoo directly without a consent gate", async () => {
@@ -20,13 +19,10 @@ test("calls Yahoo directly without a consent gate", async () => {
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
 });
 
-test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked price request"])("preserves provider problem %s through router sync", async (problem) => {
+test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked price request"])("preserves provider problem %s through sync", async (problem) => {
   const store = createInMemoryPriceStore();
-  const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, never, never, never, never>({
-    price: [{ sourceKey: "yahoo", priority: 10, get: async () => ({ bars: [], problems: [problem] }) }],
-    fx: [], identifier: [],
-  });
-  await expect(syncPrices({ store, tenantId: "local", router, request: { symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", today: "2026-01-01" } })).resolves.toMatchObject({ problems: [problem] });
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get: async () => ({ bars: [], problems: [problem] }) }];
+  await expect(syncPrices({ store, tenantId: "local", priceProviders, request: { symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", today: "2026-01-01" } })).resolves.toMatchObject({ problems: [problem] });
 });
 
 test.each([
@@ -52,9 +48,9 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
   }) } as never;
   const store = createInMemoryPriceStore();
   const provider = createYahooPriceProvider({ client });
-  const r = router(provider);
-  await expect(syncPrices({ store, tenantId: "local", router: r, request: { ...request, today: "2026-01-01" } })).resolves.toMatchObject({ problems: [], fetched: true });
-  await expect(syncPrices({ store, tenantId: "local", router: r, request: { ...request, today: "2026-01-02" } })).resolves.toMatchObject({ problems: [], fetched: true });
+  const r = lane(provider);
+  await expect(syncPrices({ store, tenantId: "local", priceProviders: r, request: { ...request, today: "2026-01-01" } })).resolves.toMatchObject({ problems: [], fetched: true });
+  await expect(syncPrices({ store, tenantId: "local", priceProviders: r, request: { ...request, today: "2026-01-02" } })).resolves.toMatchObject({ problems: [], fetched: true });
   expect(urls[0]).toContain("range=5y");
   expect(urls[1]).toContain("period1=1767312000");
 });

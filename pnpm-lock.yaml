@@ -197,6 +197,12 @@ importers:
 
   packages/core: {}
 
+  scripts/catalog:
+    dependencies:
+      '@lavega/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

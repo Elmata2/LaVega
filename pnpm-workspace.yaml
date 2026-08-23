@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+  - "scripts/catalog"
 # pnpm 11's build-script approval gate: esbuild's postinstall fetches its
 # platform-specific binary, which vitest/vite need to run.
 allowBuilds:

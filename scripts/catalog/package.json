@@ -1,0 +1,10 @@
+{
+  "name": "@lavega/catalog-sweep",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lavega/core": "workspace:*"
+  }
+}

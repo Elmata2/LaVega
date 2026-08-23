@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { emptyInvestingDashboard, LOCAL_TENANT_ID, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
-import { LocalKeySource, MarketDataRouter, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, searchYahooBenchmarks, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult } from "@lavega/adapters";
+import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type YahooPriceRequest } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
 
@@ -31,20 +31,23 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const benchmarkSelectionStore = dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const benchmarkSearch = dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore = dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
-  const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
+  const priceProviders = [provider];
+  const fxProviders = [fxProvider];
+  const identifierProviders = [identifierProvider];
+  const mapIdentifier = (request: { isin: string }) => firstProviderResult(identifierProviders, request, undefined, hasProblems);
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
     sync: async (target) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string } = target;
       if (target.isin) {
-        const identifier = await router.mapIdentifier({ isin: target.isin });
+        const identifier = await mapIdentifier({ isin: target.isin });
         if (!identifier || identifier.value.problems.length || !identifier.value.match.ticker || !identifier.value.match.exchange) {
           return { bars: [], fetched: false, problems: identifier?.value.problems ?? ["Could not resolve ISIN"] };
         }
         request = { ...target, ticker: identifier.value.match.ticker, exchange: identifier.value.match.exchange };
       }
-      const result = await syncPrices({ store, tenantId: LOCAL_TENANT_ID, router, request });
+      const result = await syncPrices({ store, tenantId: LOCAL_TENANT_ID, priceProviders, request });
       if (result.fetched) dependencies.onPriceDataChanged?.();
       return result;
     },
@@ -144,8 +147,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); dependencies.onPriceDataChanged?.(); return c.json({ deleted: true }); });
   investingApp.get("/api/prices/sync/status", (c) => c.json(priceOrchestrator.status("local")));
-  investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await router.getFx({ from, to }); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
-  investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await router.mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
+  investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await firstProviderResult(fxProviders, { from, to }, undefined, hasProblems); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
+  investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.post("/api/prices/sync", async (c) => {
     if (!(await hasYahooConsent())) return c.json({ consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] }, 428);
     void priceOrchestrator.run("local");

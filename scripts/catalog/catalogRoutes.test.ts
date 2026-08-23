@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { ladderOrder, partialOrder, runLadder, type RouteAttempt } from "./catalogRoutes.js";
-import { isCovered, type CatalogValue } from "./catalog.js";
+import { isCovered, type CatalogValue } from "@lavega/core";
 
 const value = (route: CatalogValue["route"]): CatalogValue => ({
   value: 1.4, route, sourceUrl: "https://x", checkedAt: "2026-08-18",
