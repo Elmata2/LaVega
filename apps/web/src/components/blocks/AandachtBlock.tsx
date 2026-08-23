@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
+import { useWidgetEnabled } from "../moduleRegistry";
 
 /* Aandacht — the alert centre plus the buffer that defines "too low".
  *
@@ -165,4 +166,15 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
       )}
     </Module>
   );
+}
+
+/** Aandacht as the homescreen should place it: itself when switched on in
+ *  Profiel, nothing when off. See PositieWidget — same gate, same reason.
+ *
+ *  Worth being explicit about one consequence: with this widget off, the alert
+ *  centre is not on the homescreen at all. Nothing else claims that everything
+ *  is fine in its place, which is the only outcome that would be dishonest —
+ *  an absent block says nothing, and saying nothing is correct here. */
+export function AandachtWidget(props: AandachtBlockProps) {
+  return useWidgetEnabled("aandacht") ? <AandachtBlock {...props} /> : null;
 }

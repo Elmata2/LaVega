@@ -1,0 +1,460 @@
+{
+  "lane": "punten-koersen",
+  "question": "Per puntenprogramma twee losse cijfers: hoeveel punten levert een bestede euro op, en wat is een punt bij inwisselen waard? Voor de catalogusproducten waar pointsPerEuro nog leeg is.",
+  "generatedAt": "2026-08-21",
+  "usedApiCredits": false,
+  "field": "pointsPerEuro",
+  "warning": "Dit bestand is een STAGING-voorstel. Het wijzigt docs/catalog/catalog.json niet. Elke waarde staat hier met de bewijssoort erbij, zodat de hoofdsessie per regel kan besluiten of die bewijssoort sterk genoeg is.",
+  "legend": {
+    "earnPerEuro": "Punten per bestede euro. null = de aanbieder publiceert geen koers PER EURO. Dat is nadrukkelijk iets anders dan nul: bij ING bestaat het programma wel, maar het beloont drempels en gebeurtenissen, niet een bedrag per euro.",
+    "redeemEurPerPoint": "Wat één punt bij inwisselen waard is, in euro. Een apart cijfer van earnPerEuro; 0 mag hier alleen staan als de aanbieder zelf zegt dat punten geen geldwaarde hebben.",
+    "evidence": {
+      "stated-rate": "de aanbieder noemt het cijfer zelf, letterlijk geciteerd",
+      "stated-absence": "de aanbieder zegt zelf dat er geen (geld)waarde of geen programma is — bekende nul",
+      "enumerated-absence": "de eigen, complete productopsomming van de aanbieder (voordelen/eigenschappen, geen kostendocument) bevat geen puntenprogramma. Zwakker dan stated-absence.",
+      "shape-mismatch": "programma aangetoond, maar de koers heeft niet de vorm punten-per-euro",
+      "unpublished": "programma aangetoond, cijfer niet publiek te lezen"
+    },
+    "confidence": {
+      "hoog": "letterlijk cijfer of letterlijke ontkenning van de aanbieder zelf",
+      "middel": "complete eigen opsomming zonder puntenprogramma; de aanbieder zegt het niet met zoveel woorden",
+      "laag": "niet vastgesteld — hoort in deadEnds, niet in de catalogus"
+    }
+  },
+  "programmes": [
+    {
+      "programme": "ING Punten",
+      "issuer": "ING Bank N.V.",
+      "status": "actief",
+      "earnPerEuro": null,
+      "earnEvidence": "shape-mismatch",
+      "earnNote": "ING Punten kent GEEN koers per bestede euro. De beloning is een vast aantal punten per maand achter een drempel, plus eenmalige bedragen bij gebeurtenissen. 100 punten bij 'meer dan € 100 uitgeven' delen door 100 zou een koers van 1 punt per euro suggereren die niet bestaat: bij € 400 besteding blijft het 100 punten.",
+      "earnRules": [
+        {
+          "trigger": "Elke maand minimaal € 700 bijschrijven op je Betaalrekening",
+          "points": 250,
+          "period": "per maand"
+        },
+        {
+          "trigger": "10 transacties met je Betaalrekening",
+          "points": 100,
+          "period": "per maand"
+        },
+        {
+          "trigger": "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max",
+          "points": 250,
+          "period": "per maand"
+        },
+        {
+          "trigger": "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More",
+          "points": 100,
+          "period": "per maand"
+        },
+        {
+          "trigger": "Openen eerste Betaalrekening",
+          "points": 2500,
+          "period": "eenmalig"
+        },
+        {
+          "trigger": "Openen Extra Betaalrekening",
+          "points": 1000,
+          "period": "eenmalig"
+        },
+        {
+          "trigger": "Creditcard toevoegen aan je wallet",
+          "points": 100,
+          "period": "eenmalig"
+        },
+        {
+          "trigger": "Eerste Oranje Spaarrekening openen",
+          "points": 500,
+          "period": "eenmalig"
+        },
+        {
+          "trigger": "Rond af & Spaar actief gebruiken",
+          "points": 100,
+          "period": "per maand"
+        },
+        {
+          "trigger": "Hypotheek hebben",
+          "points": 250,
+          "period": "per maand"
+        }
+      ],
+      "packageMultiplier": {
+        "ING Go": "basis",
+        "ING More": "+10%",
+        "ING Extra": "+20%",
+        "ING Max": "+30%"
+      },
+      "redeemEurPerPoint": 0.0,
+      "redeemEvidence": "stated-absence",
+      "redeemNote": "Uitgesproken nul, en alleen voor inwisselen tegen geld. Wat een punt in de ING Winkel aan korting oplevert is een ander cijfer en is niet openbaar: de Winkel zit achter Mijn ING.",
+      "sources": [
+        {
+          "url": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "via": "https://api.www.ing.nl/nl/public/pagemodel?pageUrl=%2Fnl%2Fparticulier%2Fing-punten%2Fzo-spaar-je-ing-punten",
+          "route": "payload-json",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Waar krijg je Punten voor | Punten — Openen eerste Betaalrekening* 2.500 | Openen Extra Betaalrekening 1.000 | Elke maand minimaal € 700 bijschrijven op je Betaalrekening 250 per maand | 10 transacties met je Betaalrekening 100 per maand | Eerste Jongerenrekening openen 2.500 | Studentenrekening omzetten in Betaalrekening 500 | Al je bankzaken overzetten naar ING 500"
+        },
+        {
+          "url": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "via": "https://api.www.ing.nl/nl/public/pagemodel?pageUrl=%2Fnl%2Fparticulier%2Fing-punten%2Fzo-spaar-je-ing-punten",
+          "route": "payload-json",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Waar krijg je Punten voor | Punten — ING (studenten) Creditcard More aanvragen (1e Creditcard) 1.000 | ING Creditcard Extra of Max aanvragen (1e Creditcard) 2.500 | Extra ING (studenten) Creditcard More aanvragen 1.000 | Extra ING Creditcard Extra of Max aanvragen 2.500 | Meer dan € 100 uitgeven met je ING (studenten) Creditcard More 100 per maand | Meer dan € 100 uitgeven met je ING Creditcard Extra of Max 250 per maand | Creditcard toevoegen aan je wallet 100"
+        },
+        {
+          "url": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "via": "https://api.www.ing.nl/nl/public/pagemodel?pageUrl=%2Fnl%2Fparticulier%2Fing-punten%2Fzo-spaar-je-ing-punten",
+          "route": "payload-json",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Met een ander pakket spaar je meer ING Punten op alle onderstaande activiteiten. ING Go | onderstaand aantal Punten. ING More | 10% meer Punten. ING Extra | 20% meer Punten. ING Max | 30% meer Punten"
+        },
+        {
+          "url": "https://assets.ing.com/m/410cccd97ce258bd/original/Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf",
+          "route": "provider-pdf",
+          "sourceDate": "1 oktober 2025",
+          "quote": "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen"
+        },
+        {
+          "url": "https://assets.ing.com/m/410cccd97ce258bd/original/Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf",
+          "route": "provider-pdf",
+          "sourceDate": "1 oktober 2025",
+          "quote": "ING bepaalt het aantal ING Punten dat je ontvangt voor deze bankzaken en kan dit aantal wijzigen"
+        },
+        {
+          "url": "https://www.ing.nl/particulier/ing-punten",
+          "route": "provider-page",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Nee, ING Punten hebben geen monetaire waarde en kunnen niet worden ingewisseld voor geld."
+        }
+      ],
+      "conditions": "Alleen particuliere ING-klanten met minimaal 1 Betaalrekening met Nederlandse IBAN; sparen gaat automatisch vanaf 12 jaar. Punten worden bijgeschreven in de 2e week van de volgende maand. Punten verlopen niet, maar vervallen direct bij uitschrijven of bij opzeggen van de laatste Betaalrekening. ING behoudt zich het recht voor de activiteiten en de aantallen te wijzigen."
+    },
+    {
+      "programme": "RevPoints",
+      "issuer": "Revolut Bank UAB",
+      "status": "actief",
+      "earnPerEuro": {
+        "Standard": 0.1,
+        "Plus": 0.1,
+        "Premium": 0.25,
+        "Metal": 0.5,
+        "Ultra": 1.0
+      },
+      "earnEvidence": "stated-rate",
+      "earnNote": "Revolut noteert de koers omgekeerd, als euro's per punt. 0,1 / 0,25 / 0,5 / 1,0 punt per euro is de rechtstreekse omkering van '€10 voor 1 RevPoint' enzovoort, geen schatting. Ultra staat niet in de catalogus.",
+      "redeemEurPerPoint": null,
+      "redeemEvidence": "stated-absence",
+      "redeemNote": "Revolut zegt zelf dat er géén vaste waarde is; de waarde hangt af van de inwisselmethode en staat pas in de app. Daarom null en niet nul. De enige euro per punt die Revolut wel noemt, is een plafond op wat zij in rekening brengen bij een negatief puntensaldo — dat is geen inwisselwaarde.",
+      "revolutChargeCapEurPerPoint": 0.02,
+      "sources": [
+        {
+          "url": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-to-earn-revpoints/",
+          "route": "jina",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Standard: €10 voor 1 RevPoint | Plus: €10 voor 1 RevPoint | Premium: €4 voor 1 RevPoint | Metal: €2 voor 1 RevPoint | Ultra: €1 voor 1 RevPoint"
+        },
+        {
+          "url": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-can-i-redeem-my-revpoints/",
+          "route": "jina",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "RevPoints hebben geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."
+        },
+        {
+          "url": "https://www.revolut.com/nl-NL/legal/RevPoints/",
+          "route": "jina",
+          "sourceDate": "18 juni 2026",
+          "quote": "bedraagt het bedrag dat we je per punt in rekening brengen niet meer dan 0,02 euro"
+        }
+      ],
+      "conditions": "Geldt voor in aanmerking komende kaartbetalingen. Uitgesloten zijn onder meer overboekingen, wallet-opwaarderingen, crypto- en brokerage-aankopen, belastingen en boetes, gokken en loterijen, nutsbedrijven, goede doelen, onderwijsinstellingen en Revolut Pro-transacties. Punten zijn 3 jaar geldig. Het programma vereist een aparte aanmelding."
+    },
+    {
+      "programme": "Membership Rewards",
+      "issuer": "American Express (self-issued in NL)",
+      "status": "actief",
+      "earnPerEuro": "staat al in de catalogus (0,5 Blue; 1,0 Green/Gold/Platinum en de zakelijke kaarten)",
+      "earnEvidence": "stated-rate",
+      "redeemEurPerPoint": 0.003,
+      "redeemEvidence": "stated-rate",
+      "redeemNote": "Dit is het ontbrekende tweede cijfer voor Amex: 1.000 punten = € 3, dus € 0,003 per punt. Het geldt voor Betalen met Punten via de Amex App / het online account. Overboeken naar Flying Blue of hotelpartners heeft een andere, niet-gepubliceerde waarde.",
+      "sources": [
+        {
+          "url": "https://www.americanexpress.com/nl-nl/rewards/membership-rewards/",
+          "route": "provider-page",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "1.000 Membership Rewards punten zijn gelijk aan € 3. Deze verhouding kan naar goeddunken van American Express en zonder voorafgaande kennisgeving gewijzigd worden."
+        }
+      ],
+      "conditions": "Alleen bij Betalen met Punten via de Amex App of het online account. American Express mag de verhouding eenzijdig en zonder aankondiging wijzigen, dus dit cijfer heeft een korte houdbaarheid."
+    },
+    {
+      "programme": "Plutus Rewards (PLU)",
+      "issuer": "Plutus",
+      "status": "actief",
+      "earnPerEuro": null,
+      "earnEvidence": "shape-mismatch",
+      "earnNote": "Plutus beloont een percentage van de besteding, uitgekeerd in PLU-tokens, niet een aantal punten per euro. Basis 3%, oplopend tot 9% door PLU te stallen. Wat de uitkering in euro waard is hangt af van de PLU-koers op het moment van de transactie; Plutus publiceert die niet.",
+      "earnPct": 3.0,
+      "redeemEurPerPoint": null,
+      "redeemEvidence": "unpublished",
+      "sources": [
+        {
+          "url": "https://www.plutus.it/rewards",
+          "route": "jina",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Earn a minimum of 3% for every swipe or tap of your card."
+        },
+        {
+          "url": "https://www.plutus.it/rewards",
+          "route": "jina",
+          "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+          "quote": "Start with a guaranteed 3% rewards and stack them to progress through levels, earning up to a maximum of 9%."
+        }
+      ],
+      "conditions": "De pagina rekent in £ zowel als € en noemt caps per beloningsniveau; boven 3% moet je PLU aanhouden in een gekoppelde wallet. Niet vastgesteld welke niveaus voor een Nederlandse gebruiker gelden."
+    }
+  ],
+  "entries": [
+    {
+      "id": "ing-betaalpas",
+      "product": "ING betaalpas",
+      "programme": "ING Punten",
+      "pointsPerEuro": null,
+      "evidence": "shape-mismatch",
+      "confidence": "hoog",
+      "proposal": "laat pointsPerEuro LEEG",
+      "reason": "Het programma bestaat en de Betaalrekening spaart mee, dus 0 is fout. Maar de koers heeft niet de vorm punten-per-euro: 250 punten per maand bij minimaal € 700 instroom en 100 punten per maand bij 10 transacties. Een getal in dit veld zou een koers verzinnen die ING niet publiceert.",
+      "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "ing-creditcard",
+      "product": "ING creditcard",
+      "programme": "ING Punten",
+      "pointsPerEuro": null,
+      "evidence": "shape-mismatch",
+      "confidence": "hoog",
+      "proposal": "laat pointsPerEuro LEEG",
+      "reason": "De kaart spaart wel degelijk punten — 250 per maand bij pakket Extra of Max, 100 per maand bij (studenten) More — maar alleen als er in die maand meer dan € 100 mee is uitgegeven, en het bedrag erboven telt niet mee. Er is dus geen koers per euro.",
+      "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "ing-platinumcard",
+      "product": "ING Platinumcard",
+      "programme": "ING Punten",
+      "pointsPerEuro": null,
+      "evidence": "unpublished",
+      "confidence": "laag",
+      "proposal": "laat pointsPerEuro LEEG",
+      "reason": "ING's eigen spaartabel noemt de Platinumcard niet. Alleen 'ING (studenten) Creditcard More' en 'ING Creditcard Extra of Max' staan erin. Of de Platinumcard onder één van die regels valt is niet vast te stellen; niet aannemen dat het zo is.",
+      "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "revolut-standard-betaalpas",
+      "product": "Revolut Standard betaalpas",
+      "programme": "RevPoints",
+      "pointsPerEuro": 0.1,
+      "evidence": "stated-rate",
+      "confidence": "hoog",
+      "proposal": "vul 0.1",
+      "quote": "Standard: €10 voor 1 RevPoint",
+      "sourceUrl": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-to-earn-revpoints/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "conditions": "Alleen in aanmerking komende kaartbetalingen; overboekingen, crypto, gokken, belastingen, nutsbedrijven en goede doelen tellen niet mee. Punten 3 jaar geldig, aanmelding vereist."
+    },
+    {
+      "id": "revolut-plus-betaalpas",
+      "product": "Revolut Plus betaalpas",
+      "programme": "RevPoints",
+      "pointsPerEuro": 0.1,
+      "evidence": "stated-rate",
+      "confidence": "hoog",
+      "proposal": "vul 0.1",
+      "quote": "Plus: €10 voor 1 RevPoint",
+      "sourceUrl": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-to-earn-revpoints/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "conditions": "Zelfde uitsluitingen als Standard."
+    },
+    {
+      "id": "revolut-premium-betaalpas",
+      "product": "Revolut Premium betaalpas",
+      "programme": "RevPoints",
+      "pointsPerEuro": 0.25,
+      "evidence": "stated-rate",
+      "confidence": "hoog",
+      "proposal": "vul 0.25",
+      "quote": "Premium: €4 voor 1 RevPoint",
+      "sourceUrl": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-to-earn-revpoints/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "conditions": "Zelfde uitsluitingen als Standard; vereist het betaalde Premium-plan."
+    },
+    {
+      "id": "revolut-metal-betaalpas",
+      "product": "Revolut Metal betaalpas",
+      "programme": "RevPoints",
+      "pointsPerEuro": 0.5,
+      "evidence": "stated-rate",
+      "confidence": "hoog",
+      "proposal": "vul 0.5",
+      "quote": "Metal: €2 voor 1 RevPoint",
+      "sourceUrl": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-to-earn-revpoints/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "conditions": "Zelfde uitsluitingen als Standard; vereist het betaalde Metal-plan."
+    },
+    {
+      "id": "ics-visa-world-card-business",
+      "product": "ICS Visa World Card Business",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "De eigen productpagina somt de kaart volledig op onder 'Eigenschappen van de creditcard': jaarlijkse kosten, bestedingslimiet, uitgavenbeheer, digitaal betalen, facturatie en rente, inbegrepen verzekeringen en garanties, services, voorwaarden. Geen puntenprogramma, geen loyaliteitsrubriek. ICS zegt niet met zoveel woorden 'geen punten' — vandaar middel, geen hoog.",
+      "note": "De eerdere ronde las dit uit de Algemene Voorwaarden-PDF. Dat is een voorwaardendocument en kan een nul niet dragen; deze bron vervangt die.",
+      "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "ics-visa-world-card-business-gold",
+      "product": "ICS Visa World Card Business Gold",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
+      "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business-gold",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "ics-mastercard-business",
+      "product": "ICS Mastercard Business",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
+      "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/mastercard-business",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "ics-mastercard-corporate",
+      "product": "ICS Mastercard Corporate",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
+      "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/mastercard-corporate",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "knab-betaalpas",
+      "product": "Knab betaalpas",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "Knab's eigen negenpunts-opsomming 'Waarom je bankrekening openen bij Knab?' noemt spaarpotjes, spaarrente, vijf betaalrekeningen, Apple/Google Pay, gratis pinnen in Eurolanden, de app en het depositogarantiestelsel. Geen punten, geen spaarprogramma.",
+      "note": "De eerdere ronde las dit uit het Informatiedocument Knab Betaalrekening — een kostendocument, dat kan een nul niet dragen.",
+      "sourceUrl": "https://www.knab.nl/particulier/betalen/bankrekening-openen",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "triodos-betaalpas",
+      "product": "Triodos betaalpas",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "'Handig om te weten' somt de complete dienstverlening op: Apple/Google Pay, wereldwijd contactloos betalen met de Triodos Betaalpas, Internet Bankieren en de app. Daarnaast een volledige tarieventabel. Geen puntenprogramma.",
+      "sourceUrl": "https://www.triodos.nl/betaalrekening",
+      "sourceDate": "tarieven per 01-05-2025 (de voordelenopsomming zelf noemt geen datum)"
+    },
+    {
+      "id": "trade-republic-betaalpas",
+      "product": "Trade Republic betaalpas",
+      "programme": null,
+      "pointsPerEuro": 0.0,
+      "evidence": "enumerated-absence",
+      "confidence": "middel",
+      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "reason": "De eigen kaartpagina somt alle kaartvoordelen op: 3% rente op kassaldo, 1% Saveback op kaartbetalingen, Round up, geen abonnementskosten, gratis opnames vanaf € 100, wisselkoersen. Geen punten. Saveback is géén puntenprogramma: het is 1% van de kaartbesteding die in een periodieke belegging wordt gestopt, met koersrisico, en hoort in een cashback-/beleggingsveld, niet in pointsPerEuro.",
+      "quote": "Verdien 1 % Saveback op kaartbetalingen voor een periodieke belegging.",
+      "sourceUrl": "https://traderepublic.com/nl-nl/kaart",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    },
+    {
+      "id": "plutus-card",
+      "product": "Plutus Card",
+      "programme": "Plutus Rewards (PLU)",
+      "pointsPerEuro": null,
+      "evidence": "shape-mismatch",
+      "confidence": "hoog",
+      "proposal": "laat pointsPerEuro LEEG",
+      "reason": "Er is wél een beloningsprogramma, dus 0 is fout. Maar het is een percentage in PLU-tokens (basis 3%, tot 9% met gestalde PLU), geen aantal punten per euro. De euro-waarde volgt de PLU-koers en wordt door Plutus niet gepubliceerd.",
+      "quote": "Earn a minimum of 3% for every swipe or tap of your card.",
+      "sourceUrl": "https://www.plutus.it/rewards",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+    }
+  ],
+  "redemptionValues": [
+    {
+      "programme": "ING Punten",
+      "eurPerPoint": 0.0,
+      "scope": "inwisselen voor geld",
+      "evidence": "stated-absence",
+      "sourceUrl": "https://assets.ing.com/m/410cccd97ce258bd/original/Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf",
+      "sourceDate": "1 oktober 2025",
+      "quote": "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen"
+    },
+    {
+      "programme": "ING Punten",
+      "eurPerPoint": null,
+      "scope": "korting in de ING Winkel",
+      "evidence": "unpublished",
+      "sourceUrl": "https://www.ing.nl/punten/overview",
+      "sourceDate": null,
+      "quote": null,
+      "note": "De Winkel zit achter Mijn ING. Zie deadEnds."
+    },
+    {
+      "programme": "RevPoints",
+      "eurPerPoint": null,
+      "scope": "alle inwisselopties",
+      "evidence": "stated-absence",
+      "sourceUrl": "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-can-i-redeem-my-revpoints/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "quote": "RevPoints hebben geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."
+    },
+    {
+      "programme": "Membership Rewards",
+      "eurPerPoint": 0.003,
+      "scope": "Betalen met Punten via de Amex App / online account",
+      "evidence": "stated-rate",
+      "sourceUrl": "https://www.americanexpress.com/nl-nl/rewards/membership-rewards/",
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "quote": "1.000 Membership Rewards punten zijn gelijk aan € 3."
+    },
+    {
+      "programme": "Flying Blue Miles",
+      "eurPerPoint": null,
+      "scope": "alle inwisselopties",
+      "evidence": "unpublished",
+      "sourceUrl": "https://www.flyingblue.com/nl/miles/spend",
+      "sourceDate": null,
+      "quote": null,
+      "note": "404 op het inwisselpad. Zie deadEnds."
+    }
+  ]
+}

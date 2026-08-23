@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
-import { fetchQueue, parseQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nInvoiceRow } from "./n8n.js";
+import {
+  autoBookDecision,
+  bookingEntity,
+  fetchQueue,
+  forgetAutoBooked,
+  getAutoBookedInvoices,
+  parseQueue,
+  pendingToInvoice,
+  rememberAutoBooked,
+  toPending,
+  NOTICE_LABELS,
+  AUTO_BOOK_CEILING_CENTS,
+  type N8nInvoiceRow,
+} from "./n8n.js";
 import {
   addHandledInvoiceMessageIds,
   getHandledInvoiceMessageIds,
@@ -215,4 +228,187 @@ test("fetchQueue hands the notices through", async () => {
   const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
   const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
   expect(out.kind === "ok" && out.notices).toHaveLength(1);
+});
+
+/* ── Herkomst en de grens van wat zichzelf mag boeken ──────────────────────
+ *
+ * Twee handelingen die niet hetzelfde zijn:
+ *   BOEKEN   — van een mail een financieel record maken. Dat komt in zijn
+ *              administratie en in zijn btw-cijfers.
+ *   KOPPELEN — een geboekte factuur aan een banktransactie hangen. Dat doet
+ *              reconcileInvoices al, omkeerbaar, zonder klik.
+ *
+ * Alleen het eerste is gevaarlijk: wie het doorstuuradres kent, kan iets in zijn
+ * boeken proberen te krijgen. `senderCheck` is precies het signaal dat die
+ * poging moet doorstaan. */
+
+const FORWARDED = {
+  ...ROW,
+  source: "forward",
+  from: "facturen@acme.nl",
+  deliveredTo: "facturen@lavega.dev",
+  queueKey: "facturen",
+  senderCheck: "passed",
+  senderChecks: { spf: "pass", dkim: "pass", dmarc: "none" },
+};
+
+test("parseQueue neemt de herkomst over in plaats van hem te laten vallen", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(row.from).toBe("facturen@acme.nl");
+  expect(row.deliveredTo).toBe("facturen@lavega.dev");
+  expect(row.senderCheck).toBe("passed");
+  expect(row.senderChecks).toEqual({ spf: "pass", dkim: "pass", dmarc: "none" });
+});
+
+test("een regel zonder afzendercontrole krijgt 'unknown', nooit 'passed'", () => {
+  // Gmail-regels dragen deze velden met opzet niet: er wás geen doorstuuradres.
+  // Afwezig mag nooit als goedgekeurd binnenkomen.
+  const row = parseQueue({ invoices: [ROW] })!.rows[0];
+  expect(row.senderCheck).toBe("unknown");
+  expect(row.deliveredTo).toBeUndefined();
+  // En een verzonnen waarde ook niet.
+  expect(parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck).toBe("unknown");
+});
+
+test("autoBookDecision: geverifieerde afzender + complete factuur + één onderneming = boekt zichzelf", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({ book: true });
+});
+
+test("autoBookDecision: een afzender die de controle niet haalt of niet had, boekt niets", () => {
+  const failed = parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] })!.rows[0];
+  const d1 = autoBookDecision(failed, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d1.book).toBe(false);
+  expect(d1.book === false && d1.reason).toContain("SPF");
+
+  const unchecked = parseQueue({ invoices: [ROW] })!.rows[0];
+  const d2 = autoBookDecision(unchecked, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d2.book).toBe(false);
+  expect(d2.book === false && d2.reason).toContain("geen afzendercontrole");
+});
+
+test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt de poort niet", () => {
+  // Een zzp'er met één rekening heeft geen entiteiten opgegeven. Nul keuzes is
+  // GEEN openstaande vraag — het is het antwoord: alles staat op hem. De eis
+  // "precies één" hield hem hier tegen op een keuze die niet bestond.
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({ book: true });
+});
+
+test("bookingEntity: de poort en de boeking gebruiken dezelfde regel", () => {
+  // Als deze twee ooit uit elkaar lopen komt een factuur op de verkeerde BV
+  // terecht, en dat is precies wat de poort moest voorkomen. Eén functie dus.
+  expect(bookingEntity({ entityChoices: ["BV1"], defaultEntity: "Persoonlijk" })).toBe("BV1");
+  expect(bookingEntity({ entityChoices: [], defaultEntity: "Persoonlijk" })).toBe("Persoonlijk");
+});
+
+test("autoBookDecision: bij meer dan één onderneming wordt er niet gegokt welke BV", () => {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  const d = autoBookDecision(row, { entityChoices: ["BV1", "BV2"], defaultEntity: "BV1" });
+  expect(d.book).toBe(false);
+  expect(d.book === false && d.reason).toContain("onderneming");
+});
+
+test("autoBookDecision: een incomplete factuur boekt niet, en noemt precies wat er mist", () => {
+  const noDue = parseQueue({ invoices: [{ ...FORWARDED, dueDate: null }] })!.rows[0];
+  const d1 = autoBookDecision(noDue, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d1.book === false && d1.reason).toContain("vervaldatum");
+
+  const noCcy = parseQueue({ invoices: [{ ...FORWARDED, currency: "euro's" }] })!.rows[0];
+  const d2 = autoBookDecision(noCcy, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d2.book === false && d2.reason).toContain("valuta");
+
+  const noCp = parseQueue({ invoices: [{ ...FORWARDED, counterparty: null }] })!.rows[0];
+  const d3 = autoBookDecision(noCp, { entityChoices: ["BV1"], defaultEntity: "BV1" });
+  expect(d3.book === false && d3.reason).toContain("relatie");
+});
+
+test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", () => {
+  expect(getAutoBookedInvoices()).toEqual([]);
+  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" });
+  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" }); // idempotent
+  rememberAutoBooked({ invoiceId: "inv-2", messageId: "msg-2" });
+  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
+  expect(getAutoBookedInvoices()[0].subject).toBe("Factuur juli");
+  forgetAutoBooked("inv-1");
+  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-2"]);
+});
+
+/** Een geverifieerde rij zoals de app hem krijgt: via parseQueue, niet met de hand
+ *  in elkaar gezet — anders test dit een vorm die de app nooit ziet. */
+function verifiedRow(over: Partial<N8nInvoiceRow>): N8nInvoiceRow {
+  const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
+  return { ...row, ...over };
+}
+
+/* HET PLAFOND VAN € 10.000 — zijn grens van 20 augustus.
+ *
+ * De enige rem die niet over de HERKOMST van de mail gaat maar over de SCHADE: een
+ * geverifieerde afzender kan een correcte factuur sturen met een fout bedrag.
+ */
+test("boven het plafond boekt niets zichzelf, ook niet van een geverifieerde afzender", () => {
+  const ctx = { entityChoices: ["BV1"], defaultEntity: "BV1" };
+  const onder = autoBookDecision(verifiedRow({ amountCents: AUTO_BOOK_CEILING_CENTS }), ctx);
+  expect(onder.book).toBe(true);
+  const boven = autoBookDecision(verifiedRow({ amountCents: AUTO_BOOK_CEILING_CENTS + 1 }), ctx);
+  // Expliciet narrowen: AutoBookDecision is een union en een expect() vertelt de
+  // typechecker niets. Zonder dit compileert de test niet, en dat is de bedoeling
+  // van die union — de reden bestaat alleen als er niet geboekt wordt.
+  if (boven.book) throw new Error("verwacht dat het plafond dit tegenhoudt");
+  expect(boven.reason).toContain("10.000");
+});
+
+test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag", () => {
+  // De volgorde van de poorten bepaalt welke melding hij leest, en bij een
+  // nagemaakte afzender van € 50.000 is "de afzender klopt niet" het nuttige feit.
+  const d = autoBookDecision(
+    { ...verifiedRow({ amountCents: 5_000_000 }), senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    { entityChoices: ["BV1"], defaultEntity: "BV1" },
+  );
+  if (d.book) throw new Error("verwacht dat een gespoofte afzender dit tegenhoudt");
+  expect(d.reason).toContain("afzender");
+  expect(d.reason).not.toContain("10.000");
+});
+
+/* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil staat in de reden.
+ *
+ * Aanleiding: het testplan voor een factuur uit zijn Gmail. Zet je daar een
+ * doorstuurregel aan, dan blijft `From:` de leverancier terwijl Google verstuurt
+ * — SPF zakt, DKIM blijft staan. De melding noemde toen twee oorzaken ("slordig
+ * ingesteld domein of een nagemaakte afzender") waarvan er geen enkele de echte
+ * was: de echte oorzaak is het doorsturen zelf. */
+test("een doorgestuurde mail krijgt de reden die klopt, niet de verdenking", () => {
+  const doorgestuurd = verifiedRow({
+    senderCheck: "failed",
+    senderChecks: { spf: "softfail", dkim: "pass", dmarc: "fail" },
+  });
+  const d = autoBookDecision(doorgestuurd, { entityChoices: [], defaultEntity: "Prive" });
+  if (d.book) throw new Error("de poort hoort dicht te blijven");
+  // Let op de ONTKENNING: de tekst noemt "nagemaakte afzender" juist om te zeggen
+  // dat het dat NIET is. Toetsen op de kale woorden zou hier dus altijd falen.
+  expect(d.reason).toContain("niet bij een nagemaakte afzender");
+  expect(d.reason).toContain("DOORGESTUURDE");
+});
+
+test("een echt nagemaakte afzender houdt de verdenking wél", () => {
+  // Geen geldige DKIM: precies wat iemand die een domein naspeelt niet krijgt.
+  const nep = verifiedRow({
+    senderCheck: "failed",
+    senderChecks: { spf: "softfail", dkim: "fail", dmarc: "fail" },
+  });
+  const d = autoBookDecision(nep, { entityChoices: [], defaultEntity: "Prive" });
+  if (d.book) throw new Error("de poort hoort dicht te blijven");
+  expect(d.reason).toContain("óf een nagemaakte afzender");
+  expect(d.reason).not.toContain("DOORGESTUURDE");
+});
+
+test("de poort gaat niet open van een geldige DKIM alleen", () => {
+  /* De grens die dit werk NIET verlegt. DKIM zegt dat het bericht onderweg niet
+   * is veranderd; het zegt niets over wie het doorstuurde. Zou deze test omvallen,
+   * dan is er een tekstwijziging uitgelopen op een besluit over veiligheid. */
+  const d = autoBookDecision(
+    verifiedRow({ senderCheck: "failed", senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" } }),
+    { entityChoices: [], defaultEntity: "Prive" },
+  );
+  expect(d.book).toBe(false);
 });

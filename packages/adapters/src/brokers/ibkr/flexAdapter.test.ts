@@ -6,7 +6,11 @@ const report = `<FlexStatements><FlexStatement><OpenPositions>
   <OpenPosition symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
 </OpenPositions><Trades>
   <Trade symbol="AAPL" transactionID="tx-1" tradeDate="20260818;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="1" currency="USD" />
-</Trades></FlexStatement></FlexStatements>`;
+</Trades><CashReport>
+  <CashReportCurrency accountId="U1" currency="USD" toDate="20260818" endingCash="150" />
+</CashReport><StatementOfFunds>
+  <StatementOfFundsLine accountId="U1" transactionID="deposit-1" date="20260810" currency="USD" activityCode="DEP" activityDescription="Deposit" amount="100" />
+</StatementOfFunds></FlexStatement></FlexStatements>`;
 
 let server: ReturnType<typeof createServer>;
 let endpoint = "";
@@ -60,7 +64,11 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     source: "ibkr-flex",
     problems: [],
+    dividends: [],
+    cashBalances: [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }],
+    cashFlows: [expect.objectContaining({ tenantId: "local", entity: "personal", broker: "ibkr", currency: "USD", amount: 100, kind: "deposit", brokerFlowId: "U1:deposit-1" })],
     positions: [{
+      tenantId: "local",
       entity: "personal",
       symbol: "AAPL",
       isin: "US0378331005",
@@ -73,6 +81,7 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
       asOf: "2026-08-18",
     }],
     trades: [{
+      tenantId: "local",
       entity: "personal",
       date: "2026-08-18",
       symbol: "AAPL",
@@ -128,6 +137,9 @@ test("sync reports malformed or unexpected payload without throwing", async () =
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     positions: [],
     trades: [],
+    dividends: [],
+    cashBalances: [],
+    cashFlows: [],
     source: "ibkr-flex",
     problems: [expect.stringContaining("malformed")],
   });

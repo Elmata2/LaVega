@@ -1,0 +1,14 @@
+{
+  "name": "@lavega/extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Aan de kassa — de LaVega-extensie voor Chrome en Edge (Manifest V3)",
+  "scripts": {
+    "bundle:catalog": "tsx scripts/bundle-catalog.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-static.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "bundle:points": "tsx scripts/bundle-points-rates.ts"
+  }
+}

@@ -10,15 +10,21 @@
     "test": "turbo run test",
     "test:watch": "turbo watch test",
     "dev": "turbo run dev",
-    "build": "pnpm --filter @lavega/web build",
+    "build": "turbo run build",
     "start": "pnpm --filter @lavega/server start",
     "typecheck": "turbo run typecheck",
-    "sync:n8n": "node scripts/sync-n8n-code.mjs"
+    "orbstack:investing": "bash scripts/rebuild-investing-orbstack.sh",
+    "sync:n8n": "node scripts/sync-n8n-code.mjs",
+    "catalog:sweep": "tsx --env-file-if-exists=apps/server/.env scripts/catalog-sweep.ts",
+    "catalog:find-pdfs": "tsx scripts/find-tariff-pdfs.ts"
   },
   "devDependencies": {
+    "@lavega/core": "workspace:*",
     "jsdom": "^30.0.1",
+    "tsx": "^4",
     "turbo": "2.10.8",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "@anthropic-ai/sdk": "^0.115.0"
   }
 }

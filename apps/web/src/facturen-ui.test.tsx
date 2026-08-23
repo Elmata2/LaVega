@@ -2,7 +2,7 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import type { Invoice } from "@lavega/core";
+import { makeInvoice, type Invoice } from "@lavega/core";
 import Facturen from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
 
@@ -31,17 +31,22 @@ afterEach(() => {
   container = null;
 });
 
-function Harness({ invoices, pending: seed }: { invoices: Invoice[]; pending: PendingInvoice[] }) {
+function Harness({
+  invoices,
+  pending: seed,
+  entities = ["BV1"],
+  defaultEntity = "BV1",
+}: { invoices: Invoice[]; pending: PendingInvoice[]; entities?: string[]; defaultEntity?: string }) {
   const [pending, setPending] = useState<PendingInvoice[]>(seed);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
-      entities={["BV1"]}
+      entities={entities}
       invoices={invoices}
       txs={[]}
       asOf="2026-08-16"
       busy={false}
-      defaultEntity="BV1"
+      defaultEntity={defaultEntity}
       onSaveInvoices={(next) => saved.push(next)}
       pending={pending}
       onPendingChange={setPending}
@@ -53,12 +58,19 @@ function Harness({ invoices, pending: seed }: { invoices: Invoice[]; pending: Pe
   );
 }
 
-function render(invoices: Invoice[] = [], pending: PendingInvoice[] = []) {
+function render(
+  invoices: Invoice[] = [],
+  pending: PendingInvoice[] = [],
+  entities: string[] = ["BV1"],
+  defaultEntity = "BV1",
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Harness invoices={invoices} pending={pending} />);
+    root!.render(
+      <Harness invoices={invoices} pending={pending} entities={entities} defaultEntity={defaultEntity} />,
+    );
   });
   return container;
 }
@@ -113,8 +125,8 @@ test("the surface is exactly three ways in, and nothing else", () => {
   const c = render();
   const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
   expect(titles).toEqual([
-    "1 · Automatisch (n8n)",
-    "2 · Sleep een factuur hierheen",
+    "1 · Automatisch",
+    "2 · Slepen",
     "3 · Handmatig",
   ]);
 
@@ -207,4 +219,113 @@ test("the confirm-first queue still stands between an n8n row and a booking", ()
   expect(saved).toHaveLength(0);
   expect(c.textContent).toContain("LaVega gokt geen euro's");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1); // kept, not lost
+});
+
+/* ── Entiteiten: de zzp'er en de holdingbouwer op hetzelfde scherm ─────────
+ *
+ * Zijn regel: heeft de gebruiker ondernemingen opgegeven, dan per onderneming;
+ * heeft hij ze niet, dan is het één zelfstandige op één rekening en staat het
+ * gewoon in het overzicht. Voor die tweede is "entiteit" geen keuze maar
+ * jargon — en een keuzelijst met één verzonnen optie erin is een vraag stellen
+ * waarop maar één antwoord bestaat. */
+
+function invoice(entity: string, counterparty: string): Invoice {
+  return makeInvoice({
+    entity,
+    direction: "out",
+    counterparty,
+    issueDate: "2026-08-01",
+    dueDate: "2026-08-31",
+    amount: 121,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "manual",
+  });
+}
+
+test("zonder ondernemingen komt het woord entiteit nergens op het scherm", () => {
+  const c = render([], [], [], "Persoonlijk");
+  expect(c.querySelector('[aria-label="Entiteit"]')).toBeNull();
+  expect(c.textContent).not.toContain("Entiteit");
+  expect(c.textContent).not.toContain("onderneming");
+
+  // En zijn factuur boekt gewoon — op de standaard, zonder dat hij iets koos.
+  fillManual();
+  click(byText("button", "Toevoegen"));
+  expect(saved).toHaveLength(1);
+  expect(saved[0][0].entity).toBe("Persoonlijk");
+});
+
+test("zonder ondernemingen vraagt ook een n8n-regel er niet naar", () => {
+  const row: PendingInvoice = {
+    messageId: "msg-9",
+    subject: "Factuur juli",
+    entity: "Persoonlijk",
+    direction: "out",
+    counterparty: "ACME BV",
+    invoiceNumber: "1",
+    issueDate: "2026-07-01",
+    dueDate: "2026-07-31",
+    amount: "121.00",
+    vat: "",
+    currency: "EUR",
+  };
+  const c = render([], [row], [], "Persoonlijk");
+  expect(c.querySelector('[aria-label="Entiteit (n8n)"]')).toBeNull();
+
+  // Bevestigen boekt hem nog steeds, op diezelfde standaard.
+  click(byText("button", "Bevestigen"));
+  expect(saved).toHaveLength(1);
+  expect(saved[0][0].entity).toBe("Persoonlijk");
+});
+
+test("met meerdere ondernemingen zegt de tabel bij welke een factuur hoort", () => {
+  const c = render(
+    [invoice("Holding BV", "ACME BV"), invoice("Werk BV", "Zeta BV")],
+    [],
+    ["Holding BV", "Werk BV"],
+    "Holding BV",
+  );
+  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  expect(headers).toContain("Onderneming");
+  expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual([
+    "Holding BV",
+    "Werk BV",
+  ]);
+  // En daar is de keuze wél een echte vraag, dus staat de keuzelijst er.
+  expect(c.querySelector('[aria-label="Entiteit"]')).not.toBeNull();
+});
+
+test("met één onderneming blijft die kolom weg: hij zou op elke regel hetzelfde zeggen", () => {
+  const c = render([invoice("BV1", "ACME BV")]);
+  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  expect(headers).not.toContain("Onderneming");
+});
+
+test("de keuzelijst laat nooit iets anders zien dan waarop geboekt wordt", () => {
+  // De standaard-entiteit van de app hoeft niet tussen zijn eigen BV's te zitten.
+  // Stond die dan in de state maar niet in de lijst, dan boekte "Toevoegen" op
+  // "Persoonlijk" terwijl het scherm "Holding BV" toonde — een factuur op de
+  // verkeerde BV, en dat is precies wat scheef in de btw komt te staan.
+  const c = render([], [], ["Holding BV", "Werk BV"], "Persoonlijk");
+  const select = c.querySelector('[aria-label="Entiteit"]') as HTMLSelectElement;
+  expect(select.value).toBe("Holding BV");
+  fillManual();
+  click(byText("button", "Toevoegen"));
+  expect(saved[0][0].entity).toBe("Holding BV");
+});
+
+test("met meerdere ondernemingen belooft het scherm geen automatische boeking", () => {
+  // De uitleg somt op waaróm iets zichzelf boekt. Met meer dan één onderneming
+  // gebeurt dat nooit, dus mag daar niet "je hebt één onderneming" staan — dat
+  // is een voorwaarde afvinken die juist níet klopt, en dan wacht hij op een
+  // boeking die niet komt.
+  const c = render([], [], ["Holding BV", "Werk BV"], "Holding BV");
+  expect(c.textContent).not.toContain("je hebt één onderneming");
+  expect(c.textContent).toContain("meer dan één onderneming");
+});
+
+test("met één onderneming staat die voorwaarde er wél, want dan klopt hij", () => {
+  const c = render();
+  expect(c.textContent).toContain("je hebt één onderneming");
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { makeInvoice, scheduledInvoiceFlows } from "./invoices.js";
+import { invoiceVatInWindow, makeInvoice, scheduledInvoiceFlows } from "./invoices.js";
 import type { Invoice } from "./model.js";
 
 const inv = (o: Partial<Invoice>): Invoice => makeInvoice({
@@ -46,4 +46,92 @@ test("reconcileInvoices: one tx cannot settle two invoices", () => {
   const invoices = [inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" }), inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" })];
   const out = reconcileInvoices(invoices, [tx("t1", "2026-08-30", -100, "X")]);
   expect(out.filter((i) => i.status === "paid")).toHaveLength(1);
+});
+
+/* Automatic linking, part two: WHICH transaction settles this invoice.
+ *
+ * The counterparty on a bank statement is often not the name on the invoice —
+ * a direct debit shows the collecting party, a payment provider shows itself.
+ * But the invoice NUMBER is an identifier the invoice itself chose, and Dutch
+ * payments carry it in the description ("betalingskenmerk"). So a description
+ * that literally contains the invoice number is a STRONGER identification than
+ * a name that happens to overlap, and it may stand in for the name check.
+ * Amount, sign and the date window are untouched — this widens who is
+ * recognised, never what counts as a match. */
+const txd = (id: string, date: string, amount: number, cp: string, desc: string): Tx =>
+  ({ id, accountKey: "A", date, amount, currency: "EUR", counterparty: cp, description: desc, category: "", manual: false });
+
+test("reconcileInvoices: the invoice number in the description settles it even when the name does not overlap", () => {
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "2026-0042", amount: 1210, dueDate: "2026-09-01" })];
+  const out = reconcileInvoices(invoices, [txd("t1", "2026-08-28", -1210, "KPN B.V.", "Factuurnr 2026-0042 termijn augustus")]);
+  expect(out[0]).toMatchObject({ status: "paid", matchedTxId: "t1" });
+});
+
+test("reconcileInvoices: a short invoice number is not an identifier and cannot stand in for the name", () => {
+  // "7" appears in half of all descriptions. Only a number long enough to be
+  // its own identifier is allowed to replace the counterparty check.
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "7", amount: 1210, dueDate: "2026-09-01" })];
+  const out = reconcileInvoices(invoices, [txd("t1", "2026-08-28", -1210, "KPN B.V.", "termijn 7 augustus")]);
+  expect(out[0].status).toBe("expected");
+});
+
+test("reconcileInvoices: the invoice number does not override amount, sign or the date window", () => {
+  const invoices = [inv({ direction: "out", counterparty: "Simyo", invoiceNumber: "2026-0042", amount: 1210, dueDate: "2026-09-01" })];
+  const number = "Factuurnr 2026-0042";
+  expect(reconcileInvoices(invoices, [txd("t1", "2026-08-28", -900, "KPN", number)])[0].status).toBe("expected");   // wrong amount
+  expect(reconcileInvoices(invoices, [txd("t2", "2026-08-28", 1210, "KPN", number)])[0].status).toBe("expected");   // wrong sign
+  expect(reconcileInvoices(invoices, [txd("t3", "2026-05-01", -1210, "KPN", number)])[0].status).toBe("expected");  // outside the window
+});
+
+
+/* DE NUL DIE NIET TE BEOORDELEN WAS.
+ *
+ * Gemeld op 22 augustus: stelsel op factuurstelsel gezet, een factuur mét btw
+ * ingevoerd die correct werd gelezen, en de Belasting-tab bleef 0 tonen. Zijn
+ * woorden: "is dat goed of niet weet ik niet." De 0 KLOPTE — de factuur viel in
+ * een ander tijdvak — maar het scherm kon het verschil niet laten zien tussen
+ * "je hebt geen btw" en "je factuur staat ergens anders". Een cijfer dat waar is
+ * en niet te beoordelen, is een cijfer waar niemand iets aan heeft. */
+test("een factuur buiten het tijdvak wordt geteld, niet verzwegen", () => {
+  const w = invoiceVatInWindow(
+    [inv({ issueDate: "2026-06-14", vatAmount: 210 })],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.total).toBe(0); // in het venster: niets, en dat blijft waar
+  expect(w.coverage.outside).toBe(1);
+  expect(w.coverage.nearestOutside).toBe("2026-06-14");
+  expect(w.chargedCents).toBeNull(); // geen nul: er is niets om uit te lezen
+});
+
+test("de dichtstbijzijnde erbuiten wint, want die verklaart het scherm het snelst", () => {
+  const w = invoiceVatInWindow(
+    [
+      inv({ issueDate: "2024-01-05", vatAmount: 210 }),
+      inv({ issueDate: "2026-06-28", vatAmount: 210, amount: 999 }),
+    ],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.outside).toBe(2);
+  expect(w.coverage.nearestOutside).toBe("2026-06-28");
+});
+
+test("wat WEL in het venster valt telt gewoon, en erbuiten blijft erbuiten", () => {
+  const w = invoiceVatInWindow(
+    [
+      inv({ issueDate: "2026-08-01", vatAmount: 210, direction: "in" }),
+      inv({ issueDate: "2026-05-01", vatAmount: 999, direction: "in", amount: 5000 }),
+    ],
+    "BV1",
+    "2026-07-01",
+    "2026-09-30",
+  );
+  expect(w.coverage.total).toBe(1);
+  expect(w.coverage.withVat).toBe(1);
+  expect(w.coverage.outside).toBe(1);
+  // De 999 van buiten het venster telt NIET mee in het bedrag.
+  expect(w.chargedCents).toBe(21000);
 });

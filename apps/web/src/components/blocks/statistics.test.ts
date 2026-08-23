@@ -3,9 +3,12 @@ import type { Tx } from "@lavega/core";
 import { categorize } from "@lavega/core";
 import {
   bucketUnit,
+  categoryGrowth,
   categoryPerWindow,
+  categoryShare,
   MIN_WEEKDAY_DAYS,
   monthAxisLabel,
+  movedTotals,
   newestTxDate,
   presetWindow,
   weekdaySpend,
@@ -236,4 +239,103 @@ test("weekdaySpend reports nothing at all rather than a flat week with no data",
   expect(w.peak).toBeNull();
   expect(w.dayAverage).toBeNull();
   expect(w.rows.every((r) => r.average === null)).toBe(true);
+});
+
+/* ─────────────────── item 1: the donut said € 2 miljoen ───────────────────
+ *
+ * Measured before anything was changed (20 August): with two deposits into his
+ * own savings/broker accounts in the window, "Sparen & beleggen" took 98% of the
+ * ring and the period's "uitgaven" read € 20.335 on € 335 of actual spending.
+ *
+ * The rows below are that measurement, kept as a test. They are deliberately
+ * local rather than from `fixtures`: the case only exists when an own savings or
+ * investment account was NEVER IMPORTED, so `ownAccounts` cannot know its IBAN
+ * and "Eigen overboeking" can never fire on it. All the app ever sees is the
+ * category. */
+const AUG = { start: "2026-08-01", end: "2026-08-31" };
+const JUL = { start: "2026-07-01", end: "2026-07-31" };
+
+const parkTx = (id: string, date: string, amount: number, counterparty: string, description = ""): Tx => ({
+  id, accountKey: "A1", date, amount, currency: "EUR", counterparty, description, category: "", manual: false,
+});
+
+/** A realistic month: income, two real expenses, a transfer to an account the
+ *  app DOES know (A2's IBAN, so "Eigen overboeking"), and two deposits into
+ *  accounts it does not. */
+const parked: Tx[] = [
+  parkTx("p1", "2026-08-01", 6_000, "Klant BV", "Managementfee"),
+  parkTx("p2", "2026-08-03", -85.4, "Albert Heijn", "Boodschappen"),
+  parkTx("p3", "2026-08-05", -250, "Vattenfall", "Energie augustus"),
+  parkTx("p4", "2026-08-06", -15_000, "Trading 212", "Storting"),
+  parkTx("p5", "2026-08-07", -5_000, "Spaarrekening", "Naar spaarrekening"),
+  parkTx("p6", "2026-08-08", -1_000, "NL02RABO0001", "Naar Café BV"),
+  // Money coming BACK out of the broker is not income either.
+  parkTx("p7", "2026-08-09", 2_000, "Trading 212", "Opname"),
+];
+
+test("money parked in your own savings is not spending — it is the same euro elsewhere", () => {
+  const share = categoryShare(parked, [], own, AUG);
+  // The ring holds what was actually spent, and nothing else.
+  expect(share.slices.map((s) => s.category)).toEqual(["Wonen & energie", "Boodschappen"]);
+  expect(share.totalCents).toBe(25_000 + 8_540);
+  // Both moved categories are gone from the ring, in both directions.
+  expect(share.slices.map((s) => s.category)).not.toContain("Sparen & beleggen");
+  expect(share.slices.map((s) => s.category)).not.toContain("Eigen overboeking");
+});
+
+test("what fell outside the diagram is reported, per category, with the reason", () => {
+  const moved = movedTotals(parked, [], own, AUG);
+  // Biggest first, so the € 20.000 line is the one he reads.
+  expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen", "Eigen overboeking"]);
+  expect(moved[0].outCents).toBe(2_000_000);
+  expect(moved[0].inCents).toBe(200_000);
+  expect(moved[0].why).toContain("spaar");
+  expect(moved[1].outCents).toBe(100_000);
+  expect(moved[1].inCents).toBe(0);
+  // A window with nothing moved in it reports nothing — never a zero row.
+  expect(movedTotals(parked, [], own, JUL)).toEqual([]);
+});
+
+test("the window's own totals leave the moved money out of BOTH sides", () => {
+  const t = windowTotals(parked, [], own, AUG);
+  expect(t.outTotal).toBeCloseTo(85.4 + 250, 6);
+  expect(t.inTotal).toBeCloseTo(6_000, 6);
+});
+
+test("neither the bars nor the growth view counts a savings deposit as spending", () => {
+  const per = categoryPerWindow(parked, [], own, AUG, 4);
+  expect(per.categories).not.toContain("Sparen & beleggen");
+  expect(per.categories).not.toContain("Eigen overboeking");
+
+  const grown = categoryGrowth(parked, [], own, AUG);
+  expect(grown.rows.map((r) => r.category)).not.toContain("Sparen & beleggen");
+  expect(grown.rows.map((r) => r.category)).not.toContain("Eigen overboeking");
+});
+
+test("a weekday average is not made expensive by a savings deposit landing on it", () => {
+  // 6 August 2026 is a Thursday; the € 15.000 to Trading 212 is on it.
+  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" });
+  const thursday = w.rows[3];
+  expect(thursday.total).toBe(0);
+});
+
+/* GELDOPNAME IS EEN UITGAVE — zijn beslissing van 20 augustus.
+ *
+ * Contant opnemen is strikt genomen ook geld dat van plaats verandert, maar LaVega
+ * ziet het daarna nooit meer: er komt geen transactie die zegt waar het heen ging.
+ * Zou opnemen buiten de uitgaven vallen, dan verdween dat geld uit elke telling.
+ */
+test("een geldopname telt mee als uitgave, een storting op de eigen spaarrekening niet", () => {
+  const txs: Tx[] = [
+    { id: "a", accountKey: "A", date: "2026-08-05", amount: -200, currency: "EUR",
+      counterparty: "GELDMAAT AMSTERDAM", description: "Opname", category: "Geldopname", manual: true },
+    { id: "b", accountKey: "A", date: "2026-08-06", amount: -15000, currency: "EUR",
+      counterparty: "Eigen beleggingsrekening", description: "Storting", category: "Sparen & beleggen", manual: true },
+  ];
+  const share = categoryShare(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  expect(share.slices.map((s) => s.category)).toEqual(["Geldopname"]);
+  expect(share.totalCents).toBe(20000);
+  const moved = movedTotals(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen"]);
+  expect(moved[0].outCents).toBe(1500000);
 });

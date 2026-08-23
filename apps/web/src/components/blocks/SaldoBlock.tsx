@@ -162,6 +162,9 @@ function Comparison({
 }
 
 type SaldoBlockProps = {
+  /** Widened to 3 when the Positie widget is off, so that row has no hole. The
+   *  caller decides, because only Overzicht knows what else is on the page. */
+  span?: 1 | 2 | 3;
   accounts: Account[];
   txs: Tx[];
   scheduledFlows: ScheduledFlow[];
@@ -169,7 +172,9 @@ type SaldoBlockProps = {
   onNavigate: (view: View) => void;
 };
 
-export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavigate }: SaldoBlockProps) {
+export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavigate,
+  span = 2,
+}: SaldoBlockProps) {
   const series = useMemo(() => positionSeries(accounts, txs, asOf), [accounts, txs, asOf]);
 
   const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
@@ -194,7 +199,7 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
   return (
     <Module
       title={`Totale positie${unknownCount > 0 ? " (deels)" : ""}`}
-      span={2}
+      span={span}
       height="tall"
       menu={
         <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
@@ -244,6 +249,17 @@ export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavi
             ariaLabel="Totale positie per dag"
             readoutLabel="Positie op"
             height={132}
+            /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
+             * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
+             * standaard op span 2, dus er is ruimte — maar iemand kan het op 1
+             * zetten, en dan is een as die de helft van de breedte kost erger dan
+             * geen as. Vandaar de voorwaarde in plaats van een vast true.
+             *
+             * Wat de as toevoegt is niet decoratief: zonder ijkpunten vertelt een
+             * lijn alleen de VORM, en op een positiegrafiek is het verschil tussen
+             * een dal van honderd euro en een van tienduizend precies wat je wilt
+             * weten. */
+            showAxis={span >= 2}
           />
         </div>
       ) : (

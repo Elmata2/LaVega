@@ -26,6 +26,7 @@ export const NL_TAX_PACK = {
   },
   profitTax: null,
   caveats: [
+    "Een btw-aangifte bevat correcties die LaVega niet ziet: privégebruik, de jaarlijkse correctie in Q4, de KOR en de margeregeling. Het bedrag hier is daardoor structureel te laag, in Q4 het meest.",
     "De voorlopige aanslag vennootschapsbelasting wordt door de Belastingdienst opgelegd en in maandtermijnen geïnd — LaVega schat die niet, zet hem als handmatige reservering.",
     "Indicatieve momentopname; controleer bij de Belastingdienst.",
   ],

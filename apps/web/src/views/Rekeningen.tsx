@@ -49,6 +49,11 @@ export type BankGroup = {
   total: number | null;
   knownCount: number;
   unknownCount: number;
+  /** Hoeveel van de OPGETELDE saldi geen `balanceDate` hebben. De kop is de enige
+   *  plek die je dichtgeklapt ziet, en juist daar staat een euro-totaal dat als
+   *  "nu" leest. Eén woord erbij is genoeg om dat te stoppen; de uitleg staat in
+   *  het paneel, één klik verder. */
+  undatedCount: number;
   txCount: number;
 };
 
@@ -80,12 +85,14 @@ export function groupAccountsByBank(
     const sorted = [...g.rows].sort((a, b) => rowLabel(a).localeCompare(rowLabel(b), "nl"));
     let cents = 0;
     let knownCount = 0;
+    let undatedCount = 0;
     let txCount = 0;
     for (const r of sorted) {
       txCount += r.txCount;
       if (r.account.balance !== null) {
         cents += Math.round(r.account.balance * 100);
         knownCount += 1;
+        if (!r.account.balanceDate) undatedCount += 1;
       }
     }
     return {
@@ -96,6 +103,7 @@ export function groupAccountsByBank(
       total: knownCount === 0 ? null : cents / 100,
       knownCount,
       unknownCount: sorted.length - knownCount,
+      undatedCount,
       txCount,
     };
   });
@@ -319,15 +327,19 @@ function deleteQuestion(account: Account, txCount: number): string {
 /** Everything you can do to one account, laid out as fields instead of a table
  *  row. Same controls, same handlers — the grouping is presentation only. */
 function AccountPanel({
-  row, busy, labelledBy, onEntityChange, onAccountCommit, onAccountFieldChange, onSaldoCommit, onTypeCommit,
+  row, busy, labelledBy, latestTx, onEntityChange, onAccountCommit, onAccountFieldChange, onSaldoCommit, onTypeCommit,
   onSelectAccount, onDeleteAccount, onRenameOpen,
 }: {
   row: AccountSummary;
   busy: boolean;
   labelledBy?: string;
+  /** Nieuwste transactiedatum van deze rekening, of null. Zie SaldoAgeNote. */
+  latestTx: string | null;
   onRenameOpen: (account: Account, editing: boolean) => void;
 } & Pick<RekeningenProps, "onEntityChange" | "onAccountCommit" | "onAccountFieldChange" | "onSaldoCommit" | "onTypeCommit" | "onSelectAccount" | "onDeleteAccount">) {
   const { account, txCount } = row;
+  const age = saldoAge(account, latestTx);
+  const linked = linkedMoment(account);
   return (
     <div className="bank-panel" role="tabpanel" aria-labelledby={labelledBy}>
       <div className="bank-fields">
@@ -367,8 +379,20 @@ function AccountPanel({
           <div>
             <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
           </div>
+          <span className="cell-sub">{saldoAgeShort(age)}</span>
+        </div>
+        {/* NA het saldoveld, en dat is geen volgorde-toeval: het bedrag is waar
+            hij voor komt, het koppelmoment is de context eromheen. Een veld met
+            een datum vóór het saldo zou als de datum van dat saldo lezen — de
+            verwisseling die dit veld juist moet opheffen. */}
+        <div className="bank-field">
+          <span className="eyebrow">Gekoppeld</span>
+          <div className="cell-sub">{linkedShort(linked)}</div>
         </div>
       </div>
+
+      <SaldoAgeNote age={age} />
+      <LinkedNote moment={linked} />
 
       {account.iban ? <p className="bank-panel-iban">{account.iban}</p> : null}
 
@@ -396,6 +420,247 @@ function AccountPanel({
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * WANNEER KWAM DIT CIJFER BINNEN — de gevaarlijkste vraag op deze pagina.
+ *
+ * Een bankkoppeling ververst NIET. De server heeft vier routes (aspsps, auth,
+ * callback, accounts), geen refresh-route en geen interval, en `mapEbAccount`
+ * levert een Account zonder `balanceDate` af. Gevolg: `withCurrentBalances`
+ * leest zo'n saldo als "al actueel" (geen balanceDate => ongewijzigd terug), en
+ * een stand van het koppelmoment staat op het scherm alsof hij van vandaag is.
+ * Het cijfer is dan niet fout — de betekenis is fout, en dat is precies het
+ * soort fout dat je niet ziet gebeuren.
+ *
+ * Wat we per rekening ECHT weten:
+ *   - `balanceDate`: gezet door de CSV/MT940-parsers (de afsluitdatum van het
+ *     afschrift) en door een saldo dat de eigenaar zelf typt (App zet dan asOf).
+ *     Dit is de dag waarop het bedrag gold.
+ *   - géén `balanceDate`: een bankkoppeling, en zeldzaam een MT940-blok zonder
+ *     :61:-regels. Dan is er geen dag. Er staat hier dan ook geen dag — een
+ *     "vandaag" invullen zou het probleem juist maken.
+ *   - de nieuwste transactie die we van de rekening hebben. Dat is een feit over
+ *     de TRANSACTIES, en zo staat het er ook: het is géén bewijs over de
+ *     ouderdom van het saldo. Bij een koppeling komen saldo en transacties uit
+ *     dezelfde fetch, maar bewijzen kan ik dat per rekening niet, dus claim ik
+ *     het niet.
+ *
+ * Wat er NIET staat is het moment van binnenkomen zelf. Niets slaat dat op:
+ * geen veld op Account, geen importlog. Daarom heet het label "stand van" en
+ * niet "bijgewerkt op", hoe verleidelijk dat laatste ook is: balanceDate is de
+ * dag waarop het BEDRAG gold, niet de dag waarop het binnenkwam. Die twee door
+ * elkaar halen zou hier de verkeerde zekerheid geven — precies de fout die dit
+ * blok moet stoppen. Zolang er geen veld voor het ophaalmoment is, blijft dat
+ * moment onbekend en zegt de tekst dat.
+ *
+ * En de melding stelt niets voor wat hier niet kan. "Koppel opnieuw" staat er
+ * NIET: de knop daarvoor (BankLink) zit in het Importeren-blok in Profiel, niet
+ * op deze pagina, en een advies dat naar een knop wijst die je hier niet hebt is
+ * geen advies. Het saldoveld staat er wel — twee regels hoger — dus dat mag de
+ * tekst wel noemen.
+ * ------------------------------------------------------------------------- */
+
+const DAYS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+
+/** "2026-07-31" -> "31 juli 2026"; een onleesbare waarde komt ongewijzigd terug.
+ *
+ *  Eigen kopie in plaats van iets uit format.ts: die file is deze run van een
+ *  andere lane, en een maandnaam-formatter is te klein om er een eigendomsruzie
+ *  over te hebben. Staat het er ooit gedeeld, dan mag deze weg. */
+export function dayNL(iso: string): string {
+  const [y, m, d] = (iso ?? "").split("-").map(Number);
+  return DAYS_NL[m - 1] && d ? `${d} ${DAYS_NL[m - 1]} ${y}` : iso;
+}
+
+/** Nieuwste transactiedatum per accountKey. ISO-datums vergelijken als string,
+ *  dus geen Date nodig — en dus ook geen tijdzone die er een dag naast zit. */
+export function latestTxDates(txs: readonly Tx[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const t of txs) {
+    if (!t.date) continue;
+    const cur = out.get(t.accountKey);
+    if (cur === undefined || t.date > cur) out.set(t.accountKey, t.date);
+  }
+  return out;
+}
+
+/** De drie toestanden waarin een saldo kan staan. `laterTx` is alleen gezet als
+ *  er transacties NA de saldodatum liggen — dan is de stand aantoonbaar niet de
+ *  huidige positie. `latestTx` is de nieuwste transactie die we hebben, of null.
+ *
+ *  `linkedAt` hangt aan de ONGEDATEERDE tak en nergens anders, want daar zei de
+ *  uitleg tot vandaag: "wat hier staat is de stand van het moment waarop je
+ *  autoriseerde. Welk moment dat was, weet LaVega niet." Dat was waar zolang
+ *  niemand het opschreef; sinds `Account.linkedAt` bestaat kan het pertinent
+ *  onwaar zijn, en dan staat de app zichzelf twee regels verder tegen te
+ *  spreken. De tekst moet dus weten of dat moment bekend is. */
+export type SaldoAge =
+  | { kind: "dated"; date: string; laterTx: string | null }
+  | { kind: "undated"; latestTx: string | null; linkedAt: string | null }
+  | { kind: "none"; latestTx: string | null };
+
+export function saldoAge(account: Account, latestTx: string | null): SaldoAge {
+  if (account.balance === null) return { kind: "none", latestTx };
+  const date = account.balanceDate;
+  if (!date) return { kind: "undated", latestTx, linkedAt: account.linkedAt ?? null };
+  return { kind: "dated", date, laterTx: latestTx !== null && latestTx > date ? latestTx : null };
+}
+
+/** Het korte label naast het bedrag. Bij een onbekende dag staat er GEEN datum
+ *  en ook geen streepje dat voor een datum kan doorgaan, maar het woord zelf. */
+export function saldoAgeShort(age: SaldoAge): string {
+  if (age.kind === "dated") return `stand van ${dayNL(age.date)}`;
+  if (age.kind === "undated") return "datum onbekend";
+  return "geen saldo";
+}
+
+/** De uitleg eronder: eerst wat het cijfer is, dan waarom het niet meebeweegt,
+ *  dan — alleen als het waar is — wat je hier zelf kunt doen. */
+export function saldoAgeNote(age: SaldoAge): string {
+  if (age.kind === "dated") {
+    const later = age.laterTx
+      ? ` Er zijn transacties van ná die dag; de nieuwste is van ${dayNL(age.laterTx)}, dus dit is niet de stand van nu.`
+      : "";
+    return (
+      `Dit bedrag is de stand van ${dayNL(age.date)}, niet van vandaag. LaVega werkt het daarna niet zelf bij:` +
+      ` een koppeling of een import haalt alleen op het moment zelf gegevens binnen, er loopt niets op de achtergrond.` +
+      later +
+      ` Je kunt het bedrag in het veld hierboven overschrijven met wat je bankapp nu laat zien; LaVega legt dan de dag van vandaag erbij vast.`
+    );
+  }
+  if (age.kind === "undated") {
+    const tx = age.latestTx
+      ? ` De nieuwste transactie die LaVega van deze rekening heeft, is van ${dayNL(age.latestTx)} — dat zegt iets over de transacties, niet over dit bedrag.`
+      : "";
+    const invite = ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu laat zien; dan staat de dag er wel bij.`;
+    /* IS HET KOPPELMOMENT BEKEND, dan mag de oude zin hier niet meer staan.
+     *
+     * Die zin luidde: "wat hier staat is de stand van het moment waarop je
+     * autoriseerde. Welk moment dat was, weet LaVega niet." Met `linkedAt` op de
+     * rekening staat dat moment een regel verderop op ditzelfde scherm — de
+     * uitleg zou dus ontkennen wat er naast staat, en van de twee zinnen is er
+     * dan altijd één fout.
+     *
+     * Wat er in plaats daarvan NIET staat, is een uitspraak over de ouderdom van
+     * het bedrag. De verleiding is groot: "het bedrag is opgehaald op of ná de
+     * koppeling, dus ouder is het niet." Voor een bankkoppeling klopt dat, maar
+     * dit veld staat ook op geïmporteerde rekeningen, en een afschrift van juni
+     * dat in augustus wordt ingelezen heeft een saldo dat wél ouder is dan het
+     * koppelmoment. Eén regel die voor beide bronnen waar moet zijn, kan die
+     * grens dus niet trekken — dus trekt hij hem niet, en wijst hij naar de
+     * regel eronder die over de koppeling gaat en over niets anders. */
+    if (age.linkedAt) {
+      return (
+        `Bij dit bedrag staat geen dag: de bron stuurde er geen mee, en LaVega vult er zelf geen in.` +
+        ` De koppeling vernieuwt zichzelf niet — er loopt niets op de achtergrond, dus dit cijfer beweegt niet mee.` +
+        ` Wanneer deze rekening binnenkwam, staat in de regel hieronder; dat is de ouderdom van de koppeling en` +
+        ` niet die van dit bedrag.` +
+        tx +
+        invite
+      );
+    }
+    return (
+      `Bij dit bedrag staat geen dag, en van deze rekening is ook geen koppelmoment vastgelegd (zie de regel hieronder).` +
+      ` De koppeling vernieuwt zichzelf niet: wat hier staat is de stand van het moment waarop je autoriseerde.` +
+      ` Welk moment dat was, weet LaVega niet, en daarom staat er hier geen datum.` +
+      tx +
+      invite
+    );
+  }
+  const tx = age.latestTx
+    ? ` Er zijn wel transacties: de nieuwste is van ${dayNL(age.latestTx)}.`
+    : "";
+  return (
+    `Van deze rekening is geen saldo bekend — geen bedrag, en dus ook geen nul.` +
+    tx +
+    ` Vul het bedrag in het veld hierboven in zoals je bankapp het laat zien; LaVega legt de dag van vandaag erbij vast.`
+  );
+}
+
+/** Het blokje onder het saldoveld. Eén korte regel bij het bedrag en de uitleg
+ *  eronder — de uitleg staat er altijd, want de misleiding (een oude stand die
+ *  als de huidige leest) zit in élk saldo, niet alleen in een oud saldo. */
+function SaldoAgeNote({ age }: { age: SaldoAge }) {
+  return (
+    <p className="field-note bank-panel-age">
+      <strong>{saldoAgeShort(age)}</strong> — {saldoAgeNote(age)}
+    </p>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * HOE OUD IS DE KOPPELING — de tweede vraag, en niet dezelfde als hierboven.
+ *
+ * Het blok hiervoor gaat over de ouderdom van het BEDRAG. Dit gaat over de
+ * ouderdom van de KOPPELING: wanneer deze rekening in LaVega kwam. Dat waren
+ * altijd twee vragen, maar er was maar één antwoord — `balanceDate` — en dus
+ * werd dat antwoord voor allebei gelezen. Bij een bankkoppeling stuurt de bank
+ * vaak geen saldodag mee; er stond dan "datum onbekend", en de bovenstaande
+ * uitleg moest schrijven "wat hier staat is de stand van het moment waarop je
+ * autoriseerde. Welk moment dat was, weet LaVega niet." Dat laatste hoeft nu
+ * niet meer waar te zijn: `Account.linkedAt` legt dat moment vast bij het
+ * aanmaken van de rekening.
+ *
+ * De twee blijven WEL uit elkaar op het scherm, in twee zinnen en twee labels.
+ * Ze samenvoegen tot één "bijgewerkt op" is precies hoe ze eerder door elkaar
+ * gingen lopen: een koppelmoment van vandaag zegt niets over een saldo van
+ * vorige maand, en andersom net zo min.
+ *
+ * En voor rekeningen die er al stonden blijft het antwoord "onbekend". Zie
+ * `withLinkedAt` in core: niet met terugwerkende kracht invullen. Er staat hier
+ * dus geen datum en ook geen advies om iets opnieuw te importeren — dat zou een
+ * advies zijn dat niet werkt, want een her-import van een rekening die er al is
+ * verschuift het koppelmoment niet en máákt er ook geen.
+ *
+ * ALLEEN IN HET PANEEL, niet in de platte tabel. Die tabel heeft één saldokolom
+ * met één regel eronder; daar een tweede datum bij zetten levert twee datums in
+ * één cel op, en dan staan ze weer naast elkaar te lijken op hetzelfde ding. Een
+ * eigen kolom zou het wel scheiden maar maakt de rij op een telefoon onleesbaar.
+ * Het paneel is de plek waar één rekening wordt uitgelegd; daar hoort dit thuis.
+ * ------------------------------------------------------------------------- */
+
+export type LinkedMoment = { kind: "known"; date: string } | { kind: "unknown" };
+
+export function linkedMoment(account: Account): LinkedMoment {
+  const at = account.linkedAt;
+  return at ? { kind: "known", date: at } : { kind: "unknown" };
+}
+
+/** Het korte label. Bij onbekend staat er geen cijfer — geen jaartal, geen
+ *  streepje op een datumplek — om dezelfde reden als bij `saldoAgeShort`: alles
+ *  wat op een datum lijkt, wordt als de datum gelezen. */
+export function linkedShort(m: LinkedMoment): string {
+  return m.kind === "known" ? `gekoppeld op ${dayNL(m.date)}` : "koppelmoment onbekend";
+}
+
+/** De uitleg eronder. Bij een bekend moment één zin die zegt wat het WEL en wat
+ *  het NIET is; bij een onbekend moment de echte oorzaak, zonder handeling
+ *  erbij, want er is er geen die dit gat vult. */
+export function linkedNote(m: LinkedMoment): string {
+  if (m.kind === "known") {
+    return (
+      `Deze rekening staat sinds ${dayNL(m.date)} in LaVega — de dag van de koppeling of de import.` +
+      ` Dat is iets anders dan de dag waarop het saldo hierboven gold: dit zegt hoe oud de koppeling is,` +
+      ` niet hoe oud het bedrag is.`
+    );
+  }
+  return (
+    `Wanneer deze rekening in LaVega kwam, is niet vastgelegd: hij stond er al voordat LaVega het` +
+    ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
+    ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
+    ` koppelt of importeert krijgen hun moment wel.`
+  );
+}
+
+/** Eén regel plus uitleg, in dezelfde vorm als `SaldoAgeNote` en er bewust naast
+ *  in plaats van erin: twee vragen, twee alinea's. */
+function LinkedNote({ moment }: { moment: LinkedMoment }) {
+  return (
+    <p className="field-note bank-panel-linked">
+      <strong>{linkedShort(moment)}</strong> — {linkedNote(moment)}
+    </p>
+  );
+}
+
 /** The bank's saldo line. Three different sentences, because the three cases are
  *  genuinely different: everything known (a real total), some known (a total
  *  that is explicitly PART of the group), nothing known (no figure at all —
@@ -416,6 +681,10 @@ function GroupSaldo({ group }: { group: BankGroup }) {
           van {group.knownCount} van {group.rows.length}
         </span>
       )}
+      {/* Niet "verouderd" en geen datum: we weten van deze bedragen niet op welke
+          dag ze gelden. Zie SaldoAgeNote — het totaal blijft staan, want het is
+          wél de som van wat we hebben. */}
+      {group.undatedCount > 0 && <span className="badge">dag onbekend</span>}
     </span>
   );
 }
@@ -436,6 +705,9 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
 
   const rows = accountSummaries(accounts, txs);
   const groups = groupAccountsByBank(rows, (a) => (rename && rename.key === a.key ? rename.bank : a.bank));
+  // Eén doorloop over de transacties voor de hele pagina; per rekening opnieuw
+  // filteren maakte hier O(rekeningen x transacties) van iets dat O(n) is.
+  const latest = latestTxDates(txs);
 
   return (
     <section className="card" aria-label="Rekeningen">
@@ -559,6 +831,7 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                       key={activeRow.account.key}
                       row={activeRow}
                       busy={busy}
+                      latestTx={latest.get(activeRow.account.key) ?? null}
                       labelledBy={g.rows.length > 1 ? tabId(g.id, activeRow.account.key) : undefined}
                       onEntityChange={onEntityChange}
                       onAccountCommit={onAccountCommit}
@@ -615,6 +888,12 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                   </td>
                   <td className="num" data-label="Saldo">
                     <SaldoCell account={account} busy={busy} onCommit={onSaldoCommit} />
+                    {/* Dezelfde waarschuwing als in het paneel, maar de tabel
+                        heeft geen ruimte voor de uitleg: hier alleen de dag (of
+                        het woord "onbekend"), de uitleg staat per rekening in
+                        "Per bank". Een datum verzinnen om de kolom te vullen is
+                        het probleem dat deze regel juist oplost. */}
+                    <div className="cell-sub">{saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null))}</div>
                   </td>
                   <td className="num" data-label="Transacties">
                     <button

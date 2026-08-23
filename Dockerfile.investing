@@ -1,0 +1,20 @@
+# Self-hosted investing image. Personal LaVega deployment keeps using Dockerfile.
+FROM node:22-slim AS build
+WORKDIR /app
+
+RUN npm install -g pnpm@11.18.0
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @lavega/investing-web build
+
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8788
+ENV INVESTING_WEB_DIST=/app/apps/investing-web/dist
+
+RUN npm install -g pnpm@11.18.0
+COPY --from=build /app /app
+
+EXPOSE 8788
+CMD ["pnpm", "--filter", "@lavega/investing-server", "start:docker"]

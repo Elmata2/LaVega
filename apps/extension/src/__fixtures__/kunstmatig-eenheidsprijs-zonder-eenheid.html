@@ -1,0 +1,19 @@
+<!-- KUNSTMATIG. Hoe Shopware en Magento de GEWONE artikelprijs opschrijven: als
+     UnitPriceSpecification, maar ZONDER unitCode, unitText of
+     referenceQuantity. Er is hier dus geen eenheid — dit is wat het artikel
+     kost.
+
+     De reparatie van de kiloprijs keurde af op @type, en daardoor kwam deze
+     pagina eruit als {"ok":false,"reason":"geen-artikelprijs"} met de uitleg
+     "een bedrag van een andere soort, zoals een prijs per kilo of de
+     verzendkosten" — op een pagina waar geen van beide staat. Wat een
+     eenheidsprijs een eenheidsprijs maakt zijn de eenheidsvelden, niet het
+     @type. -->
+<!doctype html><html lang="nl"><head><title>Bureaulamp</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"Bureaulamp",
+ "offers":{"@type":"Offer",
+   "priceSpecification":{"@type":"UnitPriceSpecification","price":"49.99",
+     "priceCurrency":"EUR","valueAddedTaxIncluded":true}}}
+</script>
+</head><body><h1>Bureaulamp &mdash; &euro; 49,99</h1></body></html>

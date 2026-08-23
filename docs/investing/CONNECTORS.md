@@ -104,7 +104,7 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 **Approach:** IBKR's official **Flex Web Service** — token + numeric Query ID, no browser session login, no always-on local process, no re-auth ritual. The trade-off is near-real-time data for a report that refreshes daily server-side, which is fine given the sync cadence below.
 
-**Query shape:** one combined Flex Query with both **Open Positions** and **Trades** sections under a single Query ID — one token, one fetch, mapping directly onto `{positions, trades, source, problems}`.
+**Query shape:** one combined Flex Query with **Open Positions**, **Trades**, **Cash Report**, and **Statement of Funds** sections under a single Query ID. One token and one fetch now supply positions, trades, per-currency ending-cash anchors, deposits, withdrawals, interest, fees, other cash movements, and dividends. Existing token and Query ID setup stays unchanged.
 
 **Sync model: scheduled, automatic, daily (end of day).** No lockout to protect against, and the report's own refresh cadence is a daily ceiling regardless, so manual-only would add friction for no benefit.
 
@@ -112,7 +112,7 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 **Dependency:** none. Flex reports used by the adapter are flat, attribute-based rows (`<OpenPosition symbol="..." position="..." />` and `<Trade ... />`). A small parser handles those rows, XML entities, IBKR's `YYYYMMDD;HHMMSS` date format, and per-row problems without adding an XML runtime dependency.
 
-**Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions and Trades sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID.
+**Setup (user-facing):** in IBKR's Client Portal, create a Flex Query containing the Open Positions, Trades, Cash Report, and Statement of Funds sections, then generate a Flex Web Service token. LaVega needs the token and the Query ID. Statement duplicates use IBKR transaction identities when available. Dividend rows remain dividend records and are not also emitted as cash flows.
 
 ## Trading 212
 
@@ -122,16 +122,35 @@ Trading 212 does have an official public API (`https://docs.trading212.com/api`)
 
 **This corrects a line in `docs/CONTEXT.md`:** "Trading 212 = cashflows only, not securities trades" is true of Trading 212's **CSV export**, but *not* of its API, which exposes real order history via `GET /api/v0/equity/history/orders` (cursor-paginated via `nextPagePath`, similar in shape to the Enable Banking `continuation_key` pattern already in this codebase).
 
-**Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key.
+**Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key. Confirmed against the published spec.
 
-**Sync model: scheduled, automatic, daily.** Deliberately coarse — per-endpoint numeric rate limits are still unconfirmed, so staying daily avoids tripping an unknown ceiling. Revisit the interval once limits are confirmed.
+**Rate limits: confirmed, per endpoint, and tight.** Taken from Trading 212's OpenAPI description ([`api.json`](https://docs.trading212.com/_spec/api.json)); limits apply per account *and* per IP.
+
+| Endpoint | Limit |
+|---|---|
+| `GET /api/v0/equity/history/orders` | 6 req / 1m |
+| `GET /api/v0/equity/history/dividends` | 6 req / 1m |
+| `GET /api/v0/equity/history/transactions` | 6 req / 1m |
+| `GET /api/v0/equity/positions` | 1 req / 1s |
+| `GET /api/v0/equity/account/summary` | 1 req / 5s |
+| `GET /api/v0/equity/metadata/instruments` | 1 req / 50s |
+
+Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (Unix seconds) and `-used`. **Trading 212 does not send `Retry-After`**, so `x-ratelimit-reset` is the only header that says when a window reopens — an adapter that backs off exponentially instead gives up seconds into a 60-second window. The adapter paces itself off `-remaining`/`-reset` and waits through every required window without a local total-time cutoff. Repeated real HTTP 429 responses still produce `retryAfter` so scheduler can stop rejected requests. Runtime exposes pages, orders read, positions read, and current provider wait through broker-sync status API for UI progress.
+
+**Paging:** `limit` defaults to 20 and maxes at 50. Always request 50 — the default costs 2.5x the requests for the same history against a 6-per-minute budget.
+
+**Cash history:** `GET /api/v0/equity/account/summary` anchors available cash. Transaction and dividend endpoints follow every returned `nextPagePath` without date assumptions, deduplicate stable `reference` values, and persist normalized records in encrypted broker snapshots. Malformed rows and incomplete pagination become visible problems, so a partial sync cannot replace the last good snapshot. `TRANSFER` direction, provider sign behavior, and account-specific retention still require one sanitized live-response check. Until then, ambiguous transfers are not invented, and non-zero `inPies` or `reservedForOrders` prevents treating `availableToTrade` as total cash.
+
+**Sync model: scheduled, automatic, daily.** Deliberately coarse and paced by confirmed limits above. Sync state (`lastSyncedAt` plus any rate-limit cooldown) is persisted, so a restart does not turn into a fresh full sync.
 
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
 
-**Open items carried into implementation.** None of these change the shape decided above; all three are confirm-on-build:
-- exact positions/holdings endpoint name and fields (referenced in the docs but not confirmed from source)
-- per-endpoint numeric rate limits
-- whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable)
+**Open items carried into implementation.**
+- ~~per-endpoint numeric rate limits~~ — confirmed, see the table above.
+- ~~exact positions/holdings endpoint name~~ — confirmed as `GET /api/v0/equity/positions`, returning a bare `Position[]`.
+- ~~response field names and trade granularity~~ — mapped against the published schemas. `GET /api/v0/equity/history/orders` emits one LaVega trade per `HistoricalOrder.fill`, because fills are the executed units and carry execution price/time; `amount` is `fill.price * fill.quantity`, not `order.filledValue`, so partial fills are not double-counted. `GET /api/v0/equity/positions` maps `averagePricePaid` and `walletImpact.currentValue`; schema mismatches become `problems[]` entries.
+- sanitized live-response verification for transaction signs, transfer direction, and retained history depth.
+- whether a read-only key scope exists (drives the risk-disclosure gate above — the key format looks trade-capable). The spec does show per-scope 403s (`history:orders`, `portfolio`), so scopes exist; whether a read-only set can be granted is still unconfirmed.
 
 ---
 

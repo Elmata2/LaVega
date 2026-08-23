@@ -1,0 +1,35 @@
+<!-- ECHT, INGEKORT. Bron: https://www.ikea.com/nl/nl/p/slakt-bedframe-met-lattenbodem-wit-s79227755/
+     Opgehaald 21 augustus 2026 met een gewone browser-UA, HTTP 200, 1,1 MB.
+     Gevonden via https://www.ikea.com/nl/nl/offers/family-offers/ (ook HTTP 200).
+     Geen botdetectie omzeild: één curl met een browser-UA en Accept-Language,
+     redirects gevolgd, meer niet.
+
+     WAAROM DEZE FIXTURE ER IS.
+     De toestemming voor ikea.com rustte op twee metingen (BILLY en KALLAX) en
+     die hadden allebei GEEN actieprijs. Dit is het geval dat niet gemeten was:
+     een IKEA Family-actieprijs naast de gewone prijs. Op de pagina staat het
+     zo:
+         € 96.99   "Prijs € 96.99"
+         "15% korting, bespaar €18.-"
+         "Prijs voor niet IKEA Family leden: €114.99"
+         "Prijs geldig 13 aug - 31 aug of zolang de voorraad strekt"
+
+     En in de opmaak staat het als AggregateOffer met lowPrice 96,99 (de
+     Family-prijs) en highPrice 114,99 (wat iedereen zonder Family-kaart
+     betaalt). De hele JSON-LD is hieronder onveranderd overgenomen op één punt
+     na: aggregateRating, brand, category, color, depth, description, image,
+     material, mpn, review, url en width zijn weggelaten — de lezer raakt ze
+     niet aan en ze horen niet in het bewijsmateriaal. name, sku en offers staan
+     er letterlijk zoals ze binnenkwamen, inclusief de tikfout "offercount" van
+     IKEA zelf (schema.org schrijft offerCount).
+
+     WAT DE LEZER HIER DEED VOOR DE REPARATIE (gemeten 21 augustus 2026):
+         {"ok":true,"amountCents":9699,"currency":"EUR","basis":"artikel"}
+     Dus: de Family-prijs, met ok:true en zonder enige twijfel in beeld, aan een
+     gebruiker die misschien geen Family-lid is en dan € 114,99 afrekent. Niet
+     de oude prijs zoals verwacht, maar de NIEUWE — de laagste van de twee.
+     Na de reparatie weigert de lezer met reden "prijsbereik". -->
+<!doctype html><html lang="nl"><head><title>SLÄKT Bedframe met lattenbodem</title>
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Bedden"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"SLÄKT Bedframe met lattenbodem - wit 90x200 cm","sku":"792.277.55","offers":{"@type":"AggregateOffer","highPrice":"114.99","lowPrice":"96.99","offercount":1,"offers":[{"@type":"Offer","availability":"https://schema.org/InStock","itemCondition":"https://schema.org/NewCondition","price":"96.99","priceCurrency":"EUR","priceValidUntil":"2026-08-31Z","seller":{"@type":"Organization","name":"IKEA","url":"https://www.ikea.com/nl/nl/"},"shippingDetails":{"@type":"OfferShippingDetails","shippingDestination":{"@type":"DefinedRegion","addressCountry":"NL"}},"url":"https://www.ikea.com/nl/nl/p/slakt-bedframe-met-lattenbodem-wit-s79227755/"}],"priceCurrency":"EUR"}}</script>
+</head><body><h1>SLÄKT Bedframe met lattenbodem - wit 90x200 cm</h1></body></html>

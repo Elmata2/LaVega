@@ -1,0 +1,50 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LaVega — aan de kassa</title>
+<link rel="stylesheet" href="stijl.css" />
+<body class="popup">
+  <p class="merk">LaVega · aan de kassa</p>
+  <h1>Welke van jouw kaarten levert hier het meeste op?</h1>
+
+  <!-- Dit venster leest geen enkele pagina. Het rekent met wat je hier intypt en
+       met de gebundelde kaartgegevens, en daarom werkt het overal — ook op
+       winkels waar de extensie géén leestoestemming heeft en ook nooit vraagt. -->
+  <form id="formulier" novalidate>
+    <label for="bedrag">Bedrag in euro's</label>
+    <input id="bedrag" type="text" inputmode="decimal" placeholder="49,99" autocomplete="off" />
+
+    <label for="munt">De winkel rekent af in</label>
+    <select id="munt">
+      <option value="EUR" selected>euro (EUR)</option>
+      <option value="USD">Amerikaanse dollar (USD)</option>
+      <option value="GBP">Brits pond (GBP)</option>
+      <option value="CHF">Zwitserse frank (CHF)</option>
+      <option value="SEK">Zweedse kroon (SEK)</option>
+      <option value="DKK">Deense kroon (DKK)</option>
+      <option value="NOK">Noorse kroon (NOK)</option>
+      <option value="PLN">Poolse zloty (PLN)</option>
+      <option value="JPY">Japanse yen (JPY)</option>
+      <option value="CAD">Canadese dollar (CAD)</option>
+      <option value="AUD">Australische dollar (AUD)</option>
+    </select>
+    <p class="hint">
+      Vul het bedrag in euro's in — bij een winkel in een andere munt: ongeveer wat er van je
+      rekening af gaat. De munt hiernaast bepaalt alleen óf er koersopslag over je aankoop komt.
+      LaVega rekent zelf geen wisselkoersen om; daar zou een koers voor opgehaald moeten worden.
+    </p>
+
+    <button type="submit">Bereken</button>
+  </form>
+
+  <div id="uitkomst" role="status" aria-live="polite"></div>
+
+  <!-- Geen style-attribuut hier. Zolang er één inline stijl op een
+       extensiepagina staat, moet de CSP `style-src 'unsafe-inline'` toestaan, en
+       dan staat die deur open voor alles wat er ooit nog bij komt. Eén klasse in
+       stijl.css kost niets en houdt de CSP op 'self'. -->
+  <p class="onderaan">
+    <a id="naar-opties" href="#">Kaarten, punten en winkels instellen</a>
+  </p>
+
+  <script type="module" src="popup.js"></script>
+</body>

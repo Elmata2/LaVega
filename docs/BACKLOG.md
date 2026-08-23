@@ -1,458 +1,467 @@
-# LaVega — improvement backlog
+# LaVega — backlog
 
-Captured 2026-08-13 from Alexander. Working agreement: **one item at a time** —
-questions first (confirm the intent), then build, then he tests, then next.
+Bijgewerkt **21 augustus 2026**, na de drie app-reviews van 20 augustus
+(`docs/reviews/2026-08-20-app-review.md`, `-2.md`, `-3.md`).
 
-Status legend: `todo` · `questions-open` · `building` · `in-test` · `done`
+**Gegroepeerd op wat een punt blokkeert**, niet op wanneer het is opgeschreven. Bij elk open punt
+staat waarom het open staat. Staat die reden er niet bij, dan hoort het punt hier niet.
+
+Wat af is, staat er niet meer in. §0 noemt in één tabel wat er sinds 19 augustus is gesloten, met de
+commit erbij, zodat het terug te vinden is zonder hier ruimte te blijven innemen.
+
+Werkafspraak, ongewijzigd: **één ding tegelijk** — eerst de vraag bevestigen, dan bouwen, dan test
+hij, dan het volgende.
 
 ---
 
-# WHAT IS STILL OPEN — 2026-08-17
+## 0. Afgesloten sinds 19 augustus — verdwijnt uit deze backlog
 
-**This section is the single source of truth.** Everything below it is the historical record of
-how each item was captured; read that for intent, read this for state.
+Alle drie de reviews van 20 augustus zijn verwerkt, in de 50 commits die die dag draagt. Wat
+hieronder staat is gebouwd en getest in de repo; wat hij daarvan zelf op het scherm heeft
+teruggezien, staat eronder.
 
-Closed since 2026-08-16, in 22 commits (`16f107e` … `44b6d6c`): original items 1–8 all shipped or
-substantially shipped, both UI review rounds built, 870 tests passing.
-
-## THE ENDGOAL — a live product catalogue
-
-**Every money product a Dutch person can use, each with a value, its source, its date and its
-conditions, refreshed on a schedule, feeding every agent.**
-
-124 products found (`docs/catalog/watchlist.md`). The routes are measured and the two ceilings are
-gone — provider PDFs turned out to carry both ING's and Amex's figures, with conditions, by plain
-curl. Spec: `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md`.
-
-Not done until all four parts exist for all of them. A rate without its conditions is not covered:
-104 of 124 rates are conditional, and Revolut's 0% ranked first in the shipped app on a rate that
-expires €1.000 into the month.
-
-## Live defects
-
-| # | What | Notes |
+| Uit | Wat | Commit |
 |---|---|---|
-| **L1** | **The travel agent returns zero card terms.** Clicking a destination gives "nog geen route met bekende voorwaarden". He re-ran the ingest and got nothing. | He asked to DISCUSS before it is fixed. Second symptom pointing at the same area as the invoice PDF bug. |
-| ~~**L2**~~ | ~~The invoice flow is untested end to end.~~ **DONE 2026-08-17** — a live run returned `{addedInvoices: 1, inQueue: 1, remembered: 1}`. Three stacked faults closed: `downloadAttachments` in the wrong place, the body starving on HTML-only mail, and a storage reference shipped as base64. | Remaining: pull the queue into LaVega (Koppelingen URL + token → *Ophalen uit n8n* in Facturen) and confirm the row. |
+| R1-1 | ING stond op `aangenomen 0%` in Optimalisatie — de catalogusrij werd niet gevonden. Tegelijk de actierente: standaardrente rangschikt, promo staat er annotatief bij | `b16640f` |
+| R1-2 | De AI leest de onbekende rijen nu echt uit, en "onbekend" zegt waarom hij onbekend is | `6a88373` |
+| R1-3, R2-4 | Abonnementen groeperen per merchant, en weigeren wat hij niet betaalt | `7493837`, `8e40d5d` |
+| R1-4 | Een met de hand ingetypt puntensaldo kan niet meer worden overschreven of stilletjes verdwijnen | `2077c86` |
+| R1-5, R1-10 | Valuta: één rij per bank, en de hele catalogus gerangschikt in plaats van alleen zijn eigen rekeningen | `8dd061d` |
+| R1-6, R1-7, R1-8, R3-2, R3-3 | Travel Agent: geldopname erbij, cashback erbij, en de aanbeveling is de beste kaart in plaats van de kaart die hij toevallig heeft — met het verschil in euro's | `d0aa742`, `d764baf`, `8600380`, `5b655bf` |
+| R1-11 | Het IBAN-veld op de kaarten toont echte laatste vier cijfers of niets (`ibanTail` geeft `null`) | in `KaartenBlock` |
+| R1-12, R2-10, R2-11 | "Positie per onderneming" en "Aandacht" zijn schakelbare widgets, uit tenzij aangezet | `a833577`, `f4ee5fb` |
+| R1-13 (deels), R2-12, R3-5, R3-6, R3-7, R3-8 | Statistieken: donut plus groeigrafiek, exact getal af te lezen per balk/boog/punt met hover, tap én toets, doorklikken naar de categorie | `53c4ebc`, `2a0b21a`, `9e5616a` |
+| R1-17 (deels), R3-12 | Banklogo's worden tijdens de sweep opgehaald en gebundeld — in de browser wordt niets opgehaald. Kaartvlak in de huisstijlkleur van dat logo | `7f1c353`, `3eafe6f` |
+| R1-20, R2-16 | Facturen: een geverifieerde factuur boekt en koppelt zichzelf, met een plafond van € 10.000. Het doorstuuradres is invoerbaar, want Cloudflare bepaalt hem | `470dd3a`, `8b0f7a3`, `e3b39f5` |
+| R2-2 | "Al op de beste plek" bij 0% was een conclusie die het cijfer niet droeg — er wordt nu vergeleken met Scalable Capital en het euro-bedrag staat erbij | `9e5616a` |
+| R2-3 | De Investing-link opende een localhost die weigerde. Hij verschijnt nu pas als de investing-app antwoordt (zie §4.1 — de app zelf draait nog niet) | `ce8fb09` |
+| R2-5 | Betaalagenda ziet ook binnenkomende terugkerende stromen (DUO), en zijn eigen rekeningen | `8e40d5d` |
+| R2-6 | Categorieën lezen wie de tegenpartij is: een persoon, een incasso, of hijzelf | `c5d42ac`, `170e327` |
+| R2-9 | Cashback-blok in de vorm van het huurblok, gerekend over echte maanduitgaven | `56e2a8c`, `e0abd93` |
+| R2-13 | Weg wat niets opleverde: de gele voorwaardenregel, de forecast-uitleg, woonlasten, lege blokken | `56e2a8c` |
+| R3-1 | De donut zei € 2 miljoen — overboekingen naar eigen spaar- en beleggingsrekeningen werden als uitgave geteld; creditcard-afbetaling telt niet meer mee | `19e7573`, `5b655bf` |
+| R3-4 | Het heet Travel Agent | `5b655bf` |
+| R3-9 | Profiel opgeschoond: de n8n-opzethulp weg, het paar dat Facturen nodig heeft blijft | `dc06b59` |
+| R3-10 | Nul ondernemingen is geen openstaande vraag — dan is het één zzp'er en gaat de factuur gewoon in het overzicht | `a6e7d7b` |
+| R3-11 | Regels alfabetisch, op een kopie gesorteerd zodat de winnende regel niet stilletjes verandert | in `Regels.tsx` |
+| R1-19, R3-13 | Implementatieplan voor de extensie | `docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md` |
+| R3-14, R3-15 | De laatste kaarten zonder FX-cijfer en de ING-puntendata — gevonden, nog niet samengevoegd (§2.1) | `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md` |
+| B7 (oude backlog) | `category-trend.ts` met zijn zeven misleidend groene tests is weg; de dode `rules`-tak is weg en er staat nu bij waarom `koppelingen` en `backup` géén dode takken zijn; `saveScheduledFlows` merget, dus Belasting kan een gescopete lijst krijgen | diverse |
+| B6 (oude backlog) | Trendlijnen: de groeigrafiek en het weekdagpatroon staan er, en die vond hij goed | `53c4ebc` |
 
-## Buildable now
+**Gebouwd, maar door hem nog niet teruggezien.** Alles in de tabel hierboven is na review 3 gebouwd
+of vlak ervoor. Hij heeft review 3 gedicteerd om 23:14; wat daarna landde (`5b655bf` en verder) is
+door niemand anders dan de tests bekeken. Twee daarvan verdienen expliciet zijn oog, omdat ze eerder
+al eens "gefixt" zijn geweest en toch terugkwamen:
 
-| # | What |
+- **Simyo.** Drie keer gemeld (R1-3, R2-4), twee keer aangepakt. Er is geen meting tegen zijn echte
+  rijen, alleen tegen de tests. Tot hij het ziet, is dit niet af.
+- **De donut van € 2 miljoen.** De hypothese uit review 3 klopte en is gerepareerd, maar het getal
+  dat er nu staat is nooit door hem gecontroleerd.
+
+---
+
+## 1. Blokkeert de data die binnenkomt
+
+### 1.1 Enable Banking ververst niet. Zijn saldo is van het moment dat hij koppelde.
+
+**Dit is een gat, geen instelling.** Er is niets uitgezet dat aangezet kan worden.
+
+`apps/server/src/eb-routes.ts` registreert vier routes en niet meer:
+
+| Route | Wat hij doet |
 |---|---|
-| **B1** | **Aandacht/priority block** — his "still needs work" from round 1, never revisited. |
-| **B2** | **The forecast itself** — the cashflow block is liked; the forecast behind it is not finished. |
-| **B3** | **Travel block discoverability** — "Ververs voorwaarden" exists (`TravelBlock.tsx:185`) but he could not find it. |
-| **B4** | **Rekeningen grouped by bank**, with the bank's logo and its cards behind a click. His own words: "maybe just test this out, I'm not sure yet." |
-| **B5** | **Punten UI** nicer. |
-| **B6** | **Trend lines on statistics**, but only if they genuinely add something. |
-| **B7** | **Three cleanups from the adversarial pass**: retire the dead `category-trend.ts` (+ its 7 misleadingly-green tests), remove the unreachable `rules`/`koppelingen`/`backup` view branches, and give `saveScheduledFlows` a merge-based save so Belasting can finally take a scoped flow list. |
+| `GET /api/eb/aspsps` | de bankenlijst voor de kiezer |
+| `POST /api/eb/auth` | start de autorisatie, geeft de bank-URL terug |
+| `GET /api/eb/callback` | wisselt de code in voor een sessie en stuurt door naar `/?eb=<sessionId>` |
+| `GET /api/eb/accounts` | haalt saldi en transacties op, geeft de rauwe bank-JSON door aan de browser |
 
-## Blocked on a decision or a constraint
+Er is **geen refresh-route** en er is **geen interval** — niet in de server, niet in `App.tsx`. Data
+komt alleen binnen op de terugweg van een autorisatie. Drie dingen maken dat harder dan het klinkt:
 
-| # | What | The obstacle |
+1. **`/accounts` is eenmalig.** Direct na het uitleveren staat er `sessions.delete(sessionId)`.
+   Dezelfde sessie een tweede keer bevragen geeft *"Sessie onbekend of verlopen — koppel de bank
+   opnieuw."*
+2. **De sessies staan in het geheugen**, met een TTL van 60 minuten, en zijn weg na elke deploy of
+   herstart van de Railway-service.
+3. **De toestemming die hij gaf loopt 89 dagen** (`access: { valid_until: validUntil(89) }`). Het
+   recht om nog eens op te halen bestaat dus wél; wat ontbreekt is de route en de aanleiding die het
+   zou gebruiken.
+
+**Wat de gebruiker hiervan merkt, en waarom dat het ergste deel is.** Het saldo op zijn scherm is het
+saldo van het moment dat hij koppelde, en er staat nergens een datum bij: in `Rekeningen.tsx` is geen
+"bijgewerkt op". Een getal zonder datum leest als een getal van nu. De catalogus wordt élke maandag
+om 05:00 UTC ververst (`.github/workflows/catalog-sweep.yml`); zijn eigen saldi nooit.
+
+Wat het oplost, in volgorde van eerlijkheid:
+
+- **Eerst de datum.** Zet bij elke gekoppelde rekening wanneer die stand is opgehaald. Dat kan
+  vandaag, kost niets, en haalt de stilzwijgende bewering weg.
+- **Dan de knop.** Eén "opnieuw ophalen" die de autorisatie overdoet, met in de tekst de echte
+  oorzaak: er is geen achtergrondverversing, dus de bank vraagt opnieuw om toestemming.
+- **Dan pas het schema.** Een echte verversing binnen die 89 dagen vraagt om het bewaren van de
+  Enable Banking-sessie buiten het procesgeheugen, en dat botst met de opzet dat de server niets van
+  de gebruiker bewaart (`docs/CONTEXT.md`). Dat is een ontwerpbeslissing, geen bugfix, en hij hoort
+  hem te nemen — niet wij, en niet stilzwijgend.
+
+### 1.2 Puntensaldi komen alleen met de hand binnen
+
+Punten staan niet in een bankkoppeling, in geen enkele. De Punten-tab is een handmatige teller en dat
+is bewust. Zijn eigen wens (R1-7 uit de eerste ronde, en de "high trust"-variant in het oude item 7):
+één keer toegang geven, daarna afleiden uit de transacties.
+
+Dat is nu niet te bouwen, en de reden is niet techniek maar rekenkunde: voor ING bestaat er **geen
+koers per bestede euro** om mee te vermenigvuldigen (§5.1). Voor Amex bestaat die wel en zou het
+kunnen — maar dan alleen voor Amex, en dan moet er bij staan dat het een berekening is en geen saldo
+van de uitgever.
+
+### 1.3 De structurele oplossing is geen code maar toegang
+
+Realtime toegang tot de meeste rekeningen, inclusief Amex, komt niet uit een betere poller maar uit
+een LSP/TPP-status. Dat staat in §4.2, want daar wacht het op iemand anders.
+
+---
+
+## 2. Blokkeert het cijfer op het scherm
+
+### 2.1 Twee voorstellen liggen klaar en zijn niet samengevoegd
+
+Beide zijn expliciet als *voorstel* geschreven en raken `catalog.json` niet aan. Zolang ze niet zijn
+samengevoegd, mist de app cijfers die in huis zijn.
+
+| Voorstel | Wat erin zit | Wat het samenvoegen tegenhoudt |
 |---|---|---|
-| **D1** | **Real card art** (his Amex Gold request) | Trademarked artwork, so bundling is a licensing question; fetching at runtime tells that server which cards he holds. Possible instead: product-specific generated art from our own tokens. |
-| **D2** | **Points derived from transactions** once he grants access once (Amex, ING) | His framing: ask once, then compute. Needs the access model decided. |
-| **D3** | **Enable Banking multi-account** | His instruction: after the MVP, not before. |
-| **D4** | **Colours and font sizing** | His instruction: after the content is settled. Cheap then, wasteful now. |
-| **D5** | **Notifications in the profile** | There is no notification mechanism in the app yet, so there is nothing to configure. Needs the feature first. |
-| **D6** | **What the chat widget becomes** | Removed from the chrome; his `[later]`. |
-| **D7** | **Disclaimers and terms** | At launch, not in the working screen. |
-| **D8** | **Never pushed.** Nothing in this session is on lavega.dev. | Awaiting his go-ahead. |
+| `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md` | zes FX-cijfers om vast te pinnen (Revolut Premium/Metal 0, Amex Corporate 2,5, Gnosis Pay 0, paysafecard 3, Tria 0) — dat brengt kaart-FX van 73/82 naar 79/82. Plus drie schone negatieven met reden | Alleen dat iemand het doet. De gemeten stand in `catalog.json` is nog steeds 73 |
+| `docs/catalog/staging-points.json` | 15 producten, ING Punten en RevPoints als programma, en twee inwisselwaarden | Zes regels leunen op **`enumerated-absence`** (een complete eigen productopsomming waarin punten ontbreken), niet op een uitgesproken "wij hebben geen punten". Die bewijssoort is één beslissing van hem — zie §6 |
+| `docs/catalog/staging-account-fees.json` | 105 tarieven met bron en citaat, waarvan 26 een **uitgesproken** nul (elke studentenrekening) | Er is nog geen veld in de catalogus waar een maand- of jaarlast in past. `value` + `unit` horen bij elkaar en er mag niet worden omgerekend |
 
-## Decided 2026-08-17 — invoices arrive by forwarding address, OAuth is v2
+### 2.2 Wat de catalogus vandaag dekt, gemeten
 
-**The MVP: each user gets `<slug>-<random>@invoices.lavega.dev`** and forwards invoices to it (or
-sets one Gmail filter). Cloudflare Email Routing plus an Email Worker receives the mail and POSTs it
-to the n8n webhook, so everything downstream is the pipeline already built and debugged. Design:
+122 producten in `catalog.json` (gegenereerd 19-08). Per veld: **73** `fxFeePct`, **51**
+`pointsPerEuro`, **32** `interestPct`, **8** `cashbackPct`.
+
+Twee dingen die daarin verstopt zitten en die elke agent raken:
+
+- **Van de 51 puntencijfers zijn er 37 een bewezen nul en 14 groter dan nul — en die 14 zijn
+  állemaal American Express.** Buiten Amex heeft geen enkel product in de catalogus een aantoonbare
+  koers per bestede euro. Dat is de belangrijkste input voor het extensieplan en het staat daar nu
+  ook in.
+- **Cashback staat op 8 van de 122.** Elk cashback-antwoord dat de app geeft rust dus op een heel
+  smalle basis.
+
+### 2.3 Vier datums dragen mogelijk de dag dat wij keken
+
+Huisregel: elk cijfer draagt de datum die *het document* noemt, niet de dag dat wij keken. Twee
+regels zijn al gevonden door de lane die er niet in mocht schrijven; twee komen erbij uit een
+telling van 21-08 (het jaartal in de `sourceUrl` vergeleken met het jaartal in `checkedAt`, drie
+treffers op 122 producten):
+
+| Regel | Veld | Staat er nu | Waar de twijfel op rust |
+|---|---|---|---|
+| `american-express-corporate-gold-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, PDF-`CreationDate` 7 december 2022 — **bevestigd** |
+| `zeal-card-gnosis-pay-rails` | `fxFeePct` | `2026-04-27` | Zendesk-API `updated_at: 2026-08-12`, `created_at: 2025-07-21` — **bevestigd** |
+| `ing-betaalpas` | `fxFeePct` | `2026-06-15` | bron heet `ING_Kostenoverzicht-betaalproducten-particulieren_**2023**.pdf` — alleen de bestandsnaam gezien, het document zelf is niet geopend |
+| `klm-american-express-corporate-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, bestand `NL_KLM_Corporate_Cardmember_TCs_**Dec2022**.pdf` — idem |
+
+De laatste twee zijn **kandidaten, geen vondsten**: een jaartal in een URL is geen bewijs van de
+datum die het document zelf noemt. Ze horen opengemaakt te worden in dezelfde pass als de merge van
+§2.1, anders staan de nieuwe regels naast een paar die het anders doen.
+
+Dit raakt de gebruiker direct: `ing-betaalpas` is de rij die hij het vaakst ziet, en de datum ernaast
+suggereert dat de koersopslag van twee maanden geleden is gecontroleerd.
+
+---
+
+## 3. Blokkeert de oplevering van de MVP
+
+Zijn eigen doel uit review 3: *"as much as possible an MVP of the final product."* Dit is wat daar
+nog tussen zit, met per punt de reden dat het er nog is.
+
+| # | Wat | Waarom het open staat |
+|---|---|---|
+| **M1** | **Echte kaartafbeeldingen** (R1-17). De logo's zijn gebundeld en het kaartvlak heeft de huisstijlkleur; de kaart zelf is nog geen kaart | Merkenrecht. Een banklogo mag doorgaans gebruikt worden om dát product te identificeren, mits met disclaimer (`apps/web/src/assets/TRADEMARKS.md`); een kaartafbeelding is een ontwerp. Ophalen tijdens de sweep is de goedgekeurde route, de vraag is of het mág — niet of het kan |
+| **M2** | **De interactieve wereldkaart in Valuta** (R1-16) | Onderweg in deze ronde: `WorldMap.tsx`, `world-map.generated.ts` en `scripts/bundle-world-map.ts` staan in de werkboom en zijn nog niet gecommit. Gebundelde geodata mag, tiles ophalen niet — dat zou verraden naar welke landen hij kijkt |
+| **M3** | **Gemiddelde inkomsten en gemiddelde uitgaven** per periode (R1-13, laatste deel) | Niet gebouwd. Het weekdaggemiddelde bestaat, dit niet |
+| **M4** | **Periodeschakelaar op Abonnementen** (R1-14) | Niet gebouwd. In `Optimalisatie.tsx` staat overal "per maand" als vaste eenheid |
+| **M5** | **Een beter kostenoverzicht**, *"like an earlier version we worked with"*, waar categorieën als transport vanzelf goed stonden (R1-15) | Onduidelijk welke eerdere versie hij bedoelt. Dat moet hij aanwijzen; ernaar raden levert een tweede overzicht op in plaats van een beter |
+| **M6** | **De forecast zelf** (oude B2) | Het cashflowblok vindt hij goed, de voorspelling erachter is niet af. Nooit herzien sinds ronde 1 |
+| **M7** | **De Punten-UI mooier** (oude B5) | Cosmetisch, en de inhoud van die tab verandert nog (§1.2, §5.1) |
+| **M8** | **Rekeningen groeperen per bank**, met het logo en de kaarten achter een klik (oude B4) | Zijn eigen woorden: *"maybe just test this out, I'm not sure yet."* Het logo bestaat nu wel, dus het is goedkoper geworden om te proberen |
+| **M9** | **De vindbaarheid van "Ververs voorwaarden"** in het reisblok (oude B3) | Niet opnieuw gemeld in ronde 2 of 3. Niet gemeten of het nog speelt — dus ook niet afgevinkt |
+| **M10** | **Niets van deze ronde staat op lavega.dev** | Wacht op zijn go |
+
+---
+
+## 4. Wacht op iemand anders
+
+### 4.1 Zijn cofounder — de investing-app
+
+Twee losse dingen, en het tweede is groter dan het eerste.
+
+**a) Investing als tweede Railway-service.** `Dockerfile.investing` bestaat en is beschreven in
+`docs/investing/DOCKER.md`: één container die de dashboard en de API serveert op poort 8788, met
+`/data` als volume voor de prijs-cache en de versleutelde brokerkluis. `railway.json` bouwt vandaag
+alleen de gewone `Dockerfile`. Wat er moet gebeuren: een tweede service die op
+`Dockerfile.investing` bouwt, en daarna `VITE_INVESTING_URL` op de web-build zetten. Tot dat er
+staat, verbergt `investing.ts` de link — bewust, want *"a link that refuses to connect is worse than
+no link"* — en ziet hij de app dus niet in de navigatie.
+
+**b) Eén account over beide apps.** Dit is niet af te vinken met een omgevingsvariabele. LaVega
+bewaart alles in een versleutelde kluis in de browser; de investing-app heeft een eigen kluis op de
+server (`/data/credentials.json`, ontgrendeld met `LAVEGA_VAULT_PASSPHRASE`). Dat zijn twee
+sleutelbossen met twee bewaarplaatsen. "Eén account" betekent kiezen welke van de twee de
+waarheid is, en die keuze raakt de belofte dat de server niets van de gebruiker bewaart. Zijn
+cofounder bouwt de investing-kant; deze vraag hoort door hen samen beantwoord te worden voordat er
+iemand code voor schrijft.
+
+### 4.2 Enable Banking en FinAPI — de aanvraag
+
+R1-18: mailen of we een paar maanden als LSP/TPP mogen optreden en wat dat kost — *"hopefully free"*.
+De prijs die het oplevert: realtime toegang tot de meeste rekeningen **inclusief Amex**, wat geen
+enkele CSV-import geeft.
+
+**Stand: de brieven zijn nog niet geschreven.** Er staat geen concept in de repo. Dat is onze stap,
+niet die van hem; daarna is het wachten op hun antwoord en kan er van onze kant niets versneld
+worden. Wat er in moet, en waarom het geen standaardmail is: de huidige sandbox is beperkt tot één
+ING-rekening tegelijk, en dat is precies de beperking waar hij tegenaan loopt.
+
+Zolang dat antwoord er niet is, blijft §1.1 zoals hij is: koppelen, ophalen, klaar.
+
+### 4.3 Cloudflare — gedaan, maar nooit end-to-end gezien
+
+Zijn cofounder heeft de Cloudflare-kant gedaan (review 2, item 16) en `e3b39f5` maakt het
+doorstuuradres invoerbaar omdat Cloudflare bepaalt hoe hij heet. Wat niemand heeft gemeld is een
+echte mail die de hele keten door is gekomen tot een geboekte factuur. Dat is geen blokkade, wel een
+onbevestigde aanname.
+
+---
+
+### Het doorstuuradres bestaat nog niet (22 augustus)
+
+Hij probeerde weg 1 te testen en stuurde een factuur naar het doorstuuradres. Zijn
+bevinding: **dat adres bestaat niet.** Er kwam dus niets bij Cloudflare aan, niets bij n8n,
+en er valt langs die weg voorlopig niets te testen.
+
+**Twee blokkades die niet door elkaar mogen lopen**, want ze zitten op verschillende
+plekken in de keten en de een lost de ander niet op:
+
+1. **De mailkant.** Het doorstuuradres moet bestaan en op de Cloudflare-worker uitkomen.
+   Zolang dat er niet is, is weg 1 niet te testen — ook niet gedeeltelijk. Wacht op zijn
+   cofounder (zie sectie 4).
+2. **De ophaalkant.** Los daarvan gaf de app "geen antwoord van n8n", en dat is een ANDER
+   probleem: de app haalt de wachtrij op met een eigen header, dus de browser doet eerst
+   een CORS-preflight, en een geweigerde preflight laat in n8n géén uitvoering achter.
+   Zet Allowed Origins in de Webhook-node, of controleer de URL met curl buiten de browser
+   om. Die controle kan hij nu al doen, zonder dat het mailadres bestaat.
+
+**Wat intussen wél werkt en wat hij dus kan blijven gebruiken:** de PDF in Facturen slepen
+(werkt, bevestigd) en de nepwachtrij met `--rows` en zijn eigen cijfers. Die twee dekken
+samen alles behalve de afzendercontrole.
+
+**Nog open aan de facturenkant:** xlsx wordt niet gelezen. Hij had een factuur met btw in
+xlsx en moest hem overslaan.
+
+## 5. Onbereikbaar gebleken — met de reden
+
+**Wat hier staat is "wij zijn er langs deze routes niet in gekomen", niet "het bestaat niet".** Een
+afwezigheid draagt die conclusie niet. Elk punt hieronder noemt de route die dichtging, zodat een
+nieuwe route herkenbaar is als hij zich voordoet.
+
+En één waarschuwing bij alle vier: op dezelfde dag gaf `r.jina.ai` in de ene ronde HTTP 403 met een
+Cloudflare-challenge (`docs/research/2026-08-20-rekeningkosten.md`) en in de andere gewoon de pagina
+(`docs/research/2026-08-20-punten-koersen.md`). "Onbereikbaar" is hier dus een waarneming van een
+moment, geen eigenschap van de bron.
+
+### 5.1 De euro-waarde van een ING-punt
+
+De eerdere blokkade (shadow DOM) klopte voor de landingspagina, maar is voor de **verdienkant**
+inmiddels omzeild langs de voordeur: `api.www.ing.nl/nl/public/pagemodel?pageUrl=…` geeft HTTP 200 op
+plain curl en bevat de hele spaartabel. Dat deel is dus niet meer onbereikbaar.
+
+Wat wél dicht is, en waarschijnlijk dicht blijft:
+
+- **Wat een punt aan korting oplevert in de ING Winkel.** `www.ing.nl/punten/*` verbreekt de
+  HTTP/2-stream (ook op `--http1.1`), `r.jina.ai` meldt *"This page contains shadow DOM that are
+  currently hidden"* en levert alleen de titel, en de Wayback CDX heeft van dat pad uitsluitend
+  JS-bundles. De Winkel zit achter Mijn ING.
+- **Een koers per bestede euro bestaat niet.** ING beloont drempels: *"Meer dan € 100 uitgeven met je
+  ING Creditcard Extra of Max → 250 punten per maand"*, bij € 100 én bij € 4.000. Wie daar 2,5 punt
+  per euro van maakt, verzint een getal dat een factor 40 mis kan zitten. Dit veld blijft leeg — niet
+  omdat we het niet konden vinden, maar omdat het niet bestaat.
+
+Wat ING wél uitspreekt is een **bekende nul**, en die is als zodanig genoteerd: *"ING Punten hebben
+geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld"*
+(`Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf`).
+
+### 5.2 De inwisselwaarde van RevPoints
+
+De 403 gold voor directe curl op `revolut.com`. Via de reader kwamen `help.revolut.com/nl-NL/…` en
+de RevPoints-voorwaarden wel binnen — dezelfde publieke pagina, niets omzeild. **De verdienkoers is
+daarmee gevonden**: € 10 / € 10 / € 4 / € 2 per punt voor Standard / Plus / Premium / Metal, oftewel
+0,1 / 0,1 / 0,25 / 0,5 punt per euro.
+
+De inwisselwaarde blijft onbereikbaar omdat Revolut zegt dat hij niet bestaat: *"RevPoints hebben
+geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."* Daarom `null` en geen
+0. Het enige euro-per-punt dat Revolut noemt — maximaal € 0,02 bij het terugvorderen van een negatief
+saldo — is een plafond op een vordering en staat apart, zodat niemand het per ongeluk als koers
+leest.
+
+### 5.3 Het tariefdocument van Wise
+
+De vondst is niet "onleesbaar" maar sterker: **Wise heeft geen kaart-FX-percentage.** De pagina's
+lezen prima. `wise.com/nl/pricing/` geeft 200 op plain curl (578 kB) en noemt geen percentage per
+corridor; `wise.com/nl/pricing/card-fees` rekent live ("Fixed fee 0 EUR / Variable fee 4.58 EUR") in
+plaats van iets te publiceren.
+
+Het ene document dat het zou beslechten — het wettelijk gestandaardiseerde tarievendocument op
+`wise.com/pricing/fees-documents`, waar de prijspagina zelf naar linkt — geeft **403** op curl met
+browser-UA en Accept-Language, en via de reader tweemaal een 160-byte advertentiepixel in plaats van
+de pagina. Die route is dicht en dat is genoteerd, niet omzeild.
+
+Een 0 invullen zou hier de gevaarlijkste soort fout zijn: Wise zou de reisranglijst winnen van elke
+kaart die zijn percentage eerlijk opschrijft, terwijl er een laag lager wél kosten worden gerekend.
+Als de Travel Agent Wise ooit moet rangschikken, is de eerlijke ingang
+`api.wise.com/v4/comparisons` — publiek, geen auth, 200, met de eigen quote erin — als **live** bron
+naast de ECB, precies zoals de Valuta-tab het al doet.
+
+### 5.4 De logo's van SNS en ASN
+
+Op 20-08-2026 byte-identiek gecontroleerd op 16×16, 32×32 en 96×96: `snsbank.nl`, `asnbank.nl` en
+`regiobank.nl` serveren vanuit één CMS van de Volksbank **exact hetzelfde icoon** — een oranje
+eekhoorn. Dat is een groepsicoon, geen merkicoon, en uit hun eigen pagina's valt niet aan te tonen
+welk van de drie merken het zou identificeren.
+
+Daarom staan SNS en ASN in de `NO_LOGO`-lijst van `scripts/bundle-bank-logos.ts`, met de reden en de
+dag erbij. **Een verkeerd logo is erger dan geen logo**: het zegt met stelligheid iets fouts over bij
+wie hij bankiert. RegioBank kreeg er wel een, maar uit een andere bron (Wikimedia Commons, CC BY-SA
+4.0 — naamsvermelding is daar een verplichting en staat in `TRADEMARKS.md`).
+
+Wat het zou openen: hun eigen merkrichtlijnen, of een per-merk asset die aantoonbaar bij één van de
+drie hoort.
+
+---
+
+## 6. Wacht op zijn beslissing
+
+| # | De vraag | Waarom niemand anders hem kan beantwoorden |
+|---|---|---|
+| **V1** | **Zou hij een gevulde winkelwagen echt verlaten voor 8,5%?** Klarna's percentages zijn echt en gemeten, maar ze gelden alleen bij afrekenen in de Klarna-app, met een Klarna-saldo, en de winkel moet het goedkeuren | Dit beslist of koopjes in de extensie een kop zijn of een voetnoot — en daarmee de waarde van het hele plan. Het is de enige invoer die niet te meten valt. Staat bovenaan in het extensieplan |
+| **V2** | **Is `enumerated-absence` sterk genoeg bewijs?** Zes regels in `staging-points.json` leunen erop: een complete eigen productopsomming waarin punten ontbreken, terwijl de aanbieder nergens zegt "wij hebben geen punten" | Consistent met hoe ICS, ABN en Rabobank al op 0.0 staan. Accepteert hij het niet, dan blijven die zes leeg — één regel werk, maar het is zijn lat |
+| **V3** | **Optie B van de extensie** — inloggen bij Amex/Klarna om zijn persoonlijke aanbiedingen te lezen | Andere risicohouding, geen latere fase van A. Mag niet per ongeluk beginnen |
+| **V4** | **De belastingoptimalisatie** (R2-15). Er ligt een voorstel: `docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md` | Zijn woorden waren *"I'm thinking I do something here"* — een open brief, nog geen opdracht |
+| **V5** | **Kleuren en fontgroottes** | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop |
+| **V6** | **Wat de chatwidget wordt** | Uit de chrome gehaald, zijn `[later]` |
+| **V7** | **Meldingen in het profiel** | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie |
+| **V8** | **Disclaimers en voorwaarden** | Bij lancering, niet in het werkscherm |
+| **V9** | **Enable Banking met meerdere rekeningen** | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst |
+
+---
+
+## 7. Besluiten die blijven gelden
+
+Geen open werk, wel de grond waar het open werk op staat. Niet weggooien: dit is waar de specs naar
+verwijzen.
+
+### 7.1 De houding van de extensie
+
+Het extensieplan (`docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md`)
+neemt deze vier regels als gegeven en herhaalt ze niet:
+
+- hij leest de merchant en het bedrag van de pagina, en **niets anders** — geen pagina-inhoud, geen
+  formuliervelden, geen cookies, geen geschiedenis;
+- hij houdt geen saldi. Hij vraagt het de LaVega-tab en toont het antwoord; de kluis blijft waar hij
+  is;
+- hij belt nooit naar huis. Ontbreekt een cijfer in de catalogus, dan zegt hij **onbekend** in plaats
+  van het midden in een afrekening op te zoeken;
+- opt-in per site, standaard uit — dezelfde vorm als elke andere agent hier.
+
+Waarom dit in LaVega hoort en niet los: een extensie die "gebruik kaart X" zegt, gokt. Een extensie
+met de catalogus eronder — per product de koersopslag, cashback en punten, elk met bron en datum —
+antwoordt. `packages/core/src/returns.ts` rangschikt al op wat een uitgave oplevert en `travel.ts`
+prijst al een hele reis. De extensie is een nieuw **oppervlak** op werk dat er is.
+
+### 7.2 Facturen komen binnen via een doorstuuradres; OAuth is v2
+
+Elke gebruiker krijgt `<slug>-<random>@invoices.lavega.dev` en stuurt facturen door. Cloudflare Email
+Routing plus een Email Worker POST't naar de n8n-webhook, en alles daarna is de pijplijn die al
+gebouwd en gedebugd is. Ontwerp:
 `docs/superpowers/specs/2026-08-17-invoice-forwarding-address-design.md`.
 
-Why not the obvious "Connect Gmail" button first: `gmail.readonly` is a Google **restricted** scope,
-so a public app needs OAuth verification **plus a CASA Tier 2 assessment, renewed every 12 months**,
-from about $3,000 upward — a bill before the first customer, in exchange for access to the user's
-whole mailbox. `lavega.dev` is already on Cloudflare with no MX records, so the forwarding route
-costs nothing to host. Dext, Hubdoc and Xero all solve it this way.
-
-> **BLOCKED 2026-08-17 — Cloudflare access sits with the cofounder, not Alexander.** Everything up
-> to the DNS is built and testable; switching on Email Routing and deploying the Worker needs whoever
-> holds that account. Two steps for them: enable Email Routing on `lavega.dev` (it adds MX + TXT
-> automatically; there are no MX records today, so nothing is displaced and it is reversible), then
-> deploy the Worker and point a **catch-all** at it. Nothing else in LaVega waits on this.
-
-### Two things this route defers, recorded 2026-08-17
-
-**1. The address IS a credential.** For a single operator the pull works because his browser knows
-his own webhook URL and token. Ship this to strangers and that URL and token are the same for
-everyone — the app carries them — and one user's queue is separated from another's only by the
-random part of the address. So anyone who learns your full address can pull your queue.
-
-That is acceptable for an MVP and it is how several "forward your receipts here" products actually
-work, but it must be **stated plainly in the UI rather than discovered**. The replacement, when
-there are real users: bind the queue to the vault instead of to the address, so possession of the
-address is not possession of the invoices.
-
-**2. Operator and user are different people, and the UI must not mix them.** The n8n base URL and
-API key are for the OPERATOR, once. A user must never see them, never know n8n exists, and never
-hold a key for infrastructure they do not run. A user sees exactly one thing: their forwarding
-address.
-
-The auto-provisioning is therefore a **maintenance convenience, not a product feature**: it buys
-nothing for first-time setup (that is already done by hand) and everything for pushing a changed
-workflow — which happened five times in one day. If CORS makes it painful on his n8n, drop it and
-no user loses anything.
-
-**OAuth "Connect Gmail" — v2, with these limitations recorded so they are not rediscovered:**
-1. Restricted scope: verification + CASA Tier 2, **annual**, ~$3,000+.
-2. Background sync needs a **server-held refresh token** with standing whole-mailbox access, because
-   the browser is closed when the job runs. That ends local-first for this feature and needs a
-   deliberate decision against `CONTEXT.md` constraint 2.
-3. Encrypting extracted invoices to the user's public key reduces exposure **at rest only** —
-   plaintext still exists in server memory during extraction, and the token stays a live key.
-4. n8n becomes one workflow over many users: an HTTP Request node per user token, since the Gmail
-   node binds to a single credential.
-5. **Outlook may be the cheaper first OAuth** (publisher verification, no paid annual assessment as
-   far as we know — verify before planning around it).
-
-Nothing built for the forwarding route is wasted: extraction, queue, confirm-first review and dedup
-all sit downstream of how the mail arrived.
-
----
-
-## 1. Cross-agent money optimisation ("where do I put / convert / spend it")  — `in-test`
-
-> **Built and on master** (2026-08-13 → 08-15, `04e8da0` … `134f111`) as the **travel money
-> agent**. Spec: `docs/superpowers/specs/2026-08-13-travel-money-agent-design.md`.
-> Shipped: `planTravel()` in `packages/core/src/travel.ts` (deterministic store / convert /
-> spend ranking, local — the model never sees balances), `POST /api/agent/travel-facts`,
-> the `TravelBlock` on Overzicht, server-side card-terms cache, and the n8n ingest that
-> fetches each product's own tariff page instead of searching for it.
-> **Open:** the n8n workflow is imported but does not complete yet — set
-> `LAVEGA_INGEST_TOKEN` in the n8n environment (see `docs/n8n/README.md`). The Railway
-> side (`CARD_TERMS_INGEST_TOKEN` on `@lavega/web`) is set and verified 2026-08-16.
-> The cache is in server memory, so it is empty after every deploy until a run lands.
->
-> **Handoff — two follow-ups, both specified, neither built:**
-> 1. *Price the conversion leg.* `store` and `spend` answer in numbers; `convert` picks a
->    route but never costs it, so a via-route always looks free. Design:
->    `docs/superpowers/specs/2026-08-16-travel-conversion-pricing-design.md`.
-> 2. *One comparison source instead of thirty bank pages.* Verified 2026-08-16:
->    `bank.nl/kennisbank/betalen-in-buitenland/` returns 200, 96 kB, with real koersopslag
->    figures in the raw HTML for ten Dutch banks — including ING and Rabobank, which block
->    us directly. Same shape as the geld.nl savings scraper. Needs a row parser, a
->    bank→product name mapping, and a precedence rule (a provider's own page beats the
->    table). Not in it: Revolut, Wise, N26 — those stay with the agent. See
->    `docs/n8n/README.md`.
-
-One combined answer built from three agents that today don't talk to each other:
-
-- **a) Where to STORE money** — highest yield across what he already has vs. what's
-  available (existing ING vs. BigBank top rate). *Interest agent.*
-- **b) Where to CONVERT for foreign payments** — e.g. ING → Revolut free via iDEAL,
-  then pay in USD from Revolut at a lower fee than the source bank's. *Conversion agent.*
-- **c) Which CARD to pay with in the destination country** — best combination of
-  cashback, points, and conversion cost (e.g. Trading 212: no conversion cost + cashback).
-  *Points/cashback agent.*
-
-Key requirement: **the three agents must combine into one recommendation**, not three
-separate tabs the user has to reconcile himself.
-
-Trigger idea: the user tells LaVega "I'm travelling to the US" and the answer appears
-**on the homepage**. Home country (NL) should be known from signup, so only the
-destination is new information.
-
-Open questions: trigger/placement, source of fee+cashback+rate facts (live web search
-vs. curated table), whether a "my cards and their terms" registry is needed.
-
-## 2. Agent architecture: skills / workflows that actually learn  — `building` (first slice done)
-
-> **Landed with item 1:** `LearnedFact` in the vault (`VaultData.facts?`, additive, no
-> migration) with the learning contract **`source: "user"` always wins and an agent run
-> never overwrites it**; and the first instruction-file agent —
-> `apps/server/src/agent/prompts/travel.md` defines the travel agent like a skill.
-> The n8n card-terms workflow is the first "workflow instead of one-shot prompt".
-> **Still open:** move chat / categorize / invoice / tax onto the same instruction-file +
-> LearnedFact pattern, and decide how facts feed back into those agents.
-
-From an Instagram reel on Claude Skills (not viewable here — going on Alexander's summary).
-Wants the agents rebuilt as **proper agents with instructions** — Skill-style, or even
-n8n workflows — instead of one-shot prompts.
-
-**Most important part: they must consistently LEARN from the user**, so the product
-becomes tailored and sticky over time.
-
-Accepts that this may require **changing the privacy model** — but explicitly: see how far
-we can get while still running **locally / on the user's own company infrastructure**.
-
-Note: this underpins items 1, 3 and 5. Sequencing decision needed.
-
-## 3. Invoice agent → inbox integration  — `todo`
-
-Automatically scan Gmail (or another integration the user explicitly connects) and add
-invoice numbers to the business overview — **income, expense, and tax**.
-
-Relates to the long-deferred "Phase 2b email connectors" (Gmail `gmail.readonly` /
-MS-Graph `Mail.Read`, read-only OAuth relay + a "Koppelingen" consent view).
-
-## 4. Classify accounts personal vs. business  — `todo`
-
-Every account gets a personal/business classification, **defaulting to personal**, with
-renaming to an entity (BV1, …) allowed — which is roughly what the `entity` field already
-does. Needs a decision on whether this is a new axis or a reframing of `entity`.
-
-## 5. Tax agent → connect the user's spreadsheets  — `todo`
-
-Let the tax agent read spreadsheets the user already keeps.
-
-## 6. UI overhaul  — `todo` (blocked: screenshots not received)
-
-- Graphs in the style of the **Hercules** app's weight-trend charts: clean, sleek,
-  readable at a glance.
-- Show **changes in major categories** — side-by-side bar charts or change/trend graphs.
-- **Desktop:** move to the inspiration layout, **keep the current colours**, change the layout.
-- **Mobile:** separate inspiration screenshot.
-- **Modular blocks** are essential — that is the basis for the fully customised CFO AI agents.
-
-Blocked on: the three referenced screenshots (desktop inspo, mobile inspo, general inspo)
-were mentioned but not attached.
-
-## 7. Getting data we can't get from Enable Banking (points, card data)  — `todo`
-
-Two tiers, by how much the user trusts AI:
-
-- **High trust:** give the AI read-only access to download the CSV itself, or reach
-  balances like Amex points — possibly by logging into the site on the user's behalf.
-- **Low trust:** the user gets a **notification**, then adds the number manually — and
-  that must be as easy as replying to a WhatsApp/iMessage ("just the number").
-
-Explicitly aimed at the point balances Enable Banking cannot deliver.
-
-## 8. Tax rules per country, automatically  — `todo`
-
-Tax should follow the **user's country** automatically and pull in that country's relevant
-rules — not NL-only.
-
-Evidence from a customer interview (a German friend), which is really a *pain* statement,
-not just a feature request:
-
-> Knows a lot of freelancers (zzp'ers) — more liability, but don't have to charge certain
-> taxes. Judged their income from what friends said, and **thought they made more money
-> than they actually did**.
->
-> → Pissed off a few friends. In Germany, once you start making income you have to
-> **prepay corporate income tax**: 1M profit → 250k due at the beginning of next year.
-
-The insight to design for: **the surprise prepayment**. People spend money that was never
-theirs. This is a forecast/reservation problem as much as a tax-rules problem — and LaVega
-already has the set-aside machinery (VAT set-aside + scheduled flows) to build on.
-
----
-
-# UI review — dictated by Alexander, 2026-08-16
-
-Walkthrough of the rebuilt app. Captured verbatim in intent; the wording is mine.
-Status legend as above. Items marked **[later]** are his own "put it in the backlog".
-
-## A. The shell — a Profile owns everything that is not a workspace
-
-**The top nav is right, but overcrowded.** The fix is not to shorten names, it is to stop
-showing tabs nobody uses.
-
-- **Profile, top right.** It holds the module picker and everything that is a setting
-  rather than a place you work.
-- **Module picker.** Every module is listed with a **short preview** — what it looks like
-  and what it does — and a toggle. Toggled on, it appears in the horizontal top nav.
-  Toggled off, it disappears. This is the point of the modular grid: the nav becomes
-  the user's own selection instead of the full catalogue.
-- **Move into the profile:** Regels, Koppelingen, Backup ("set name for backup"),
-  Import (which accounts to import), Vergrendel/uitloggen, notifications, and the
-  country/region that drives the tax rules.
-- **Stays in the nav:** Overzicht, Forecast, and whatever the user switches on.
-- **Remove** the "lokaal & privé" badge. At launch that has to be evident from the
-  product, not asserted in the chrome.
-- **Remove** the floating chat widget for now. **[later]** decide what it becomes.
-- **Add widget** control, like the desktop reference.
-- **Header style:** take the reference's treatment — a title with a black rule under it,
-  rather than today's round-edged tiles. Cleaner.
-- **[later]** Colours and font sizing. He is not sure yet, and it is a cheap change once
-  the content is settled. Do not touch until the content work is done.
-
-## B. Overzicht
-
-- **Entity switcher → `Persoonlijk | Zakelijk`**, split by a vertical rule. Per-company
-  splitting only if users turn out to need it. **Not a priority.**
-- **New block: the cards you hold.** Purely presentational — card art plus the holder's
-  name, as in `Modules for homescreen 5/7.png`. It does little functionally and is worth
-  a lot: it shows at a glance which cards are connected.
-- **Totaalpositie** is the most important number on the page. Keep the click-through to
-  Rekeningen. **Add a graph under it:** the total position, against last week and last
-  month.
-- **Statistics is where the value is.** Make it live and make it the major block. Take
-  both references: grouped bars per category per month (`homescreen 5`), and the **trend
-  line across days of the week** (`homescreen 7`). The insight is "which day costs me
-  money" — Friday nights are expensive, and that is something to be warned about before
-  it happens, not after. Possibly merged with "verandering per categorie", which is the
-  same question asked twice.
-- **Positie over je bedrijven**: interesting, but far too large. Shrink it.
-- **Cashflow + buffer**: good as is. **[later]** the forecast itself needs work.
-- **Top-uitgaven shows "onbekend"**, which wastes the block. The **pre-made rules should
-  already be applying** — check what was built earlier. On top of that, an **AI pass that
-  categorises what is still uncategorised**, from a prompt, live, and probably month by
-  month.
-- **Recente transacties**: optional module. From `desktop homeview inspo.png`: merchant
-  logo, time, and our category per row, plus a search and a "bekijk alles" that lands in
-  Transacties.
-- **Betaalagenda**: same reference. Once recurring bills are detected, show them here for
-  users who want it.
-- **[later]** The travel block needs work. Note: the "Ververs voorwaarden" button DOES
-  exist (TravelBlock.tsx:185) — he could not find it, which is a discoverability defect,
-  not a missing feature.
-
-## C. Rekeningen
-
-Works: bank, rename, type, entity, transactions, delete, filter per company.
-
-- **Idea to test:** group by bank, with the bank's logo, and the cards at that bank as
-  sub-rows behind a click. Not certain it is better — try it.
-
-## D. The other tabs
-
-- **Regels** → move into the profile. It is a setting, not a workspace.
-- **Forecast** → stays in the nav. **[later]** needs work.
-- **Optimalisatie**: the reasoning must be explicit and end in a number — "you hold X at
-  ABN at 1.4%, bank Y pays 3.01%, so moving it earns you €Z". **Rebalance the layout:**
-  savings-rate optimisation smaller, **subscriptions much larger** and roughly equal in
-  weight. Seed a few test subscriptions so it can be judged full.
-- **Valuta**: rebuild around the reference's *Transfer money* block
-  (`Modules for homescreen example.png`) — from card, to card, amount, currency, and what
-  actually arrives. Add an **info button** beside the "..." menu: "this is the best
-  conversion your own cards allow", and "switching to Wise would beat it".
-- **Punten**: **[later]** the real question is whether an AI can fetch the balances with
-  the owner's approval. UI could be nicer.
-- **Belasting**: drop the grey instruction sentence under the title. Add a module per tax
-  that is actually relevant, driven by the country in the profile (NL income tax, etc.).
-- **Facturen**: the UI is bad. Reduce it to exactly three ways in — the automatic n8n
-  feed, manual entry, and **drag and drop an invoice file**. Nothing else.
-
----
-
-# UI review round 2 — dictated 2026-08-16
-
-His verdict on round 1: "major, major improvement". What follows is the de-duplicated signal.
-
-## Correctness first — two numbers and one behaviour that may be lying
-
-- **"Uitgaven t.o.v. vorige maand" showed a ~€24.000 rise he does not believe.** He guessed it
-  compares by UPLOAD date. Checked: `categoryComparison` (packages/core/src/views.ts:176) buckets on
-  `t.date`, so that guess is wrong — but he is right that the number is not trustworthy, for a
-  reason he could not have seen. There is **no per-account coverage guard**: every transaction is
-  bucketed by month regardless of which account it came from. Import ABN for Jan–Aug and Amex for
-  Aug only, and August carries a whole extra card that July never had — a large, entirely fictional
-  "increase". Compounding it, the "current" month is simply the latest date present, which may be a
-  half-imported month. **Fix: compare like for like** — restrict both months to accounts that have
-  data in both, and say so plainly when coverage differs, rather than printing a percentage that
-  cannot mean what it appears to mean.
-- **Persoonlijk ⇄ Zakelijk does not restore.** Switching to Zakelijk shows only the accounts;
-  switching back to Persoonlijk does not bring back what was there before. Investigate.
-- **The 3% figure beside Totaalpositie is unclear.** Say what it is measured against.
-
-## Overzicht
-
-- **Statistics — the time filter.** Wants `1 week · 1 maand · 3 maanden · 6 maanden · 12 maanden`,
-  or `1w · 1m · 3m · aangepast` where *aangepast* lets him pick any range.
-- **Remove the small note line under the statistics block** — it earns nothing.
-- **"6 kleinere categorieën niet getoond" — make the cut-off per TIMEFRAME, not global.** Small
-  amounts that add up meaningfully within a month are invisible against a year. The threshold must
-  be relative to the window being shown.
-- Trend lines, if they are genuinely useful. Only then.
-- **Recente transacties** — remove the note line underneath. On logos: if real logos are not
-  possible, drop the two-letter monogram circle and just show the name. He asked which is better.
-- **Payment schedule**: empty so far, but he likes it.
-- **Cashflow projection**: good.
-- **Cards** — he wants the REAL card art (his example: the Amex Gold card). Confirm the obstacles
-  and record them rather than quietly not doing it. Also remove the note under this block.
-- **Travel agent**: clicking a destination gives "nog geen route met bekende voorwaarden — ververs
-  eerst". He re-ran the ingest and got zero. Still broken; he wants to discuss before it is fixed.
-
-## Profiel
-
-- Likes it. Widgets and Persoonlijk/Zakelijk are right.
-- **Country/region: every country, not a short list.** And regions matter — tax in Texas is not tax
-  in New York — so a region level is needed under the country. Always entered by hand: privacy-first
-  means never inferring location.
-- **Import: default the entity to Persoonlijk.**
-- **Enable Banking — after the MVP**, then connecting several accounts. Not before we are happy.
-- **Koppelingen: simplify.** Explanations belong behind a small info (eye) icon, not as rows of
-  visible text. Click to learn, otherwise stay out of the way.
-- **Back-up** works well.
-- **Profile at the very top with first and last name**, so the screen feels like the user's own.
-
-## Optimalisatie
-
-- **His Simeo subscription is missing.** He suspects the detection window is one month. It must be
-  **at least 3 months, better 6** — quarterly subscriptions exist and a one-month window can never
-  see them.
-- Rent/savings framing: he likes it, but **he should not have to type the rent by hand — read it
-  from the data.**
-- Layout is good.
-
-## Punten
-
-- The real prize: **once the user grants access once, derive the points from the transactions**
-  (Amex, ING). Ask once, then compute. Backlog.
-
-## Elsewhere
-
-- **Remove the disclaimer block on the right.** Disclaimers and terms belong at launch, not in the
-  working screen.
-- **Invoices**: he is testing first; other work continues meanwhile.
-
-## Carried over from round 2's adversarial pass — 2026-08-17
-
-- **`Belasting` receives the UNSCOPED scheduled-flow list, on purpose.** It saves them back
-  through `onSaveScheduledFlows`, which persists replace-all, so handing it a scoped list would
-  delete every flow outside the current half. Scoping it needs a merge-based save first. Recorded
-  because it looks like a leak and someone will otherwise "fix" it into data loss.
-- **`apps/web/src/category-trend.ts` is dead code** — no non-test callers, and it carries the same
-  uncovered-account defect that `categoryComparison` was just fixed for. Its seven green tests make
-  it look maintained. Retire both deliberately.
-- **Unreachable view branches** for `rules`, `koppelingen` and `backup` in App.tsx: nothing calls
-  `setView` with those any more since Profiel renders the components inline. Not lost tabs — dead
-  branches. Remove them, or wire a deep link if a direct route is wanted.
-- **Real card art** (his Amex Gold request): blocked twice over. Card faces are trademarked artwork,
-  so bundling them is a licensing question, and fetching one at runtime tells that server which
-  cards he holds. What is possible is product-specific generated art from our own tokens.
-- **Points from transactions** once the owner grants access once (Amex, ING) — his own framing:
-  ask once, then compute.
-- **Enable Banking multi-account** after the MVP, not before.
-- Disclaimers and terms belong at launch, not in the working screen.
-
-## Decided 2026-08-17 — LaVega configures n8n itself
-
-His choice: paste the n8n base URL and an n8n API key once, and let LaVega do the rest. What that
-removes: exporting and importing the JSON, generating a token, creating the Header Auth credential,
-copying the webhook URL into Koppelingen, and pressing "Ophalen".
-
-**What can never be automated, in any option:** attaching the Gmail credential. Google's consent is
-interactive by design, and n8n's public API deliberately does not expose a way to LIST credentials,
-so LaVega cannot discover the one he already made and bind it. That stays a single manual step,
-done once, and the UI must say so plainly rather than appearing to fail.
-
-**The prerequisite he must set, and the reason this might not work at all:** n8n's REST API sends no
-CORS headers by default, so a browser cannot call it cross-origin. On his own instance that is two
-variables:
+Waarom niet meteen "Connect Gmail": `gmail.readonly` is een **restricted** scope, dus een publieke
+app heeft OAuth-verificatie **plus een CASA Tier 2-beoordeling, elke 12 maanden opnieuw**, vanaf zo'n
+$3.000 — een rekening vóór de eerste klant, in ruil voor toegang tot de hele mailbox. Dext, Hubdoc en
+Xero doen het allemaal via een doorstuuradres.
+
+Twee dingen die deze route uitstelt en die niet vergeten mogen worden:
+
+1. **Het adres ÍS een credential.** Voor één operator werkt de pull, want zijn browser kent zijn
+   eigen webhook-URL en token. Bij vreemden zijn die URL en dat token voor iedereen hetzelfde, en
+   scheidt alleen het willekeurige deel van het adres de ene wachtrij van de andere. Wie je volledige
+   adres kent, kan je wachtrij ophalen. Dat is aanvaardbaar voor een MVP en het is hoe meerdere
+   "stuur je bonnen hierheen"-producten echt werken — maar het moet **in de UI staan** in plaats van
+   ontdekt worden. De vervanging, zodra er echte gebruikers zijn: bind de wachtrij aan de kluis in
+   plaats van aan het adres.
+2. **Operator en gebruiker zijn verschillende mensen.** De n8n base-URL en API-key zijn van de
+   OPERATOR, eenmalig. Een gebruiker hoort ze nooit te zien, hoort niet te weten dat n8n bestaat en
+   hoort geen sleutel te houden voor infrastructuur die hij niet draait. Hij ziet precies één ding:
+   zijn doorstuuradres.
+
+Beperkingen van OAuth, opgeschreven zodat ze niet opnieuw ontdekt worden: restricted scope met
+jaarlijkse betaalde beoordeling; achtergrondsync vraagt een **server-side refresh token** met
+staande toegang tot de hele mailbox (de browser is dicht als de job draait — dat beëindigt
+local-first voor deze functie en botst met `CONTEXT.md`); versleutelen naar de publieke sleutel van
+de gebruiker helpt alleen *at rest*, want tijdens extractie staat de platte tekst in servergeheugen;
+n8n wordt één workflow over veel gebruikers, met een HTTP Request-node per token, want de Gmail-node
+bindt aan één credential. En **Outlook is mogelijk de goedkopere eerste OAuth** — publisher
+verification, voor zover bekend zonder betaalde jaarlijkse beoordeling; te verifiëren voordat er iets
+op gepland wordt.
+
+Niets van de doorstuurroute is weggegooid werk: extractie, wachtrij, bevestigen-voor-boeken en dedup
+zitten allemaal ná de vraag hoe de mail binnenkwam.
+
+### 7.3 LaVega configureert n8n zelf, en waarom dat browser-direct blijft
+
+Zijn keuze: één keer de n8n base-URL en een API-key plakken, de rest doet LaVega. Wat dat weghaalt:
+JSON exporteren en importeren, een token maken, de Header Auth-credential aanmaken, de webhook-URL
+overtypen en op "Ophalen" drukken.
+
+**Wat in geen enkele variant te automatiseren is:** de Gmail-credential koppelen. Google's consent is
+met opzet interactief, en n8n's publieke API kan bewust geen credentials *opsommen*, dus LaVega kan
+de credential die hij al maakte niet vinden en binden. Dat blijft één handmatige stap en de UI hoort
+dat gewoon te zeggen in plaats van te lijken te falen.
+
+**De voorwaarde die hij moet zetten, en meteen de reden dat het misschien niet werkt:** n8n's REST
+API stuurt standaard geen CORS-headers, dus een browser kan hem niet cross-origin aanroepen. Op zijn
+eigen instance zijn dat twee variabelen:
 
     N8N_DEFAULT_CORS=true
     N8N_CORS_ALLOW_ORIGIN=https://lavega.dev,http://localhost:5174
 
-Keeping the call in the BROWSER is what preserves the posture: the n8n API key never touches the
-LaVega server. Proxying it server-side would work around CORS but would park a key that can create
-and modify workflows on a shared host — a worse trade than the manual paste it replaces.
+De aanroep in de **browser** houden is wat de houding bewaart: de n8n API-key raakt de LaVega-server
+nooit. Server-side proxyen zou CORS omzeilen maar parkeert een sleutel die workflows kan maken en
+wijzigen op een gedeelde host — een slechtere ruil dan het handmatige plakken dat het vervangt.
 
-So: build it browser-direct, and when CORS blocks it, **name those two variables in the error**
-rather than reporting a generic failure. The manual paste stays as the fallback and must keep
-working — it is the path that needs nothing from his n8n at all.
+Dus: browser-direct bouwen, en als CORS het blokkeert **die twee variabelen in de foutmelding
+noemen** in plaats van een algemene fout. Het handmatige plakken blijft bestaan en moet blijven
+werken — dat is de weg die niets van zijn n8n nodig heeft.
 
-Shape: find-or-create the workflow by name → create the Header Auth credential with a generated
-token → activate → read the production webhook URL back → store URL and token locally → pull the
-queue on open and on a timer. The workflow JSON ships inside the web bundle, so the repo stays the
-source of truth for what gets pushed.
+### 7.4 De catalogus is het einddoel, en hij ververst zichzelf
+
+**Elk geldproduct dat een Nederlander kan gebruiken, met een waarde, een bron, een datum en de
+voorwaarden, op een schema ververst, als voeding voor elke agent.** 124 producten in
+`docs/catalog/watchlist.md`, 122 in `catalog.json`, elke maandag 05:00 UTC opnieuw gesweept.
+
+Niet af zolang niet alle vier de delen er voor allemaal zijn. Een tarief zonder zijn voorwaarden is
+geen dekking: 104 van de 124 kopcijfers zijn voorwaardelijk, en Revolut's 0% stond ooit bovenaan in
+de app op een tarief dat € 1.000 de maand in verloopt.
+
+### 7.5 Waarom dit product bestaat — het pijnpunt uit het klantgesprek
+
+Uit een gesprek met een Duitse zzp'er, en het is een pijn en geen feature-verzoek: in Duitsland moet
+je vennootschapsbelasting **vooruit** betalen zodra je inkomen maakt. 1M winst → 250k aan het begin
+van het volgende jaar. Mensen geven geld uit dat nooit van hen was.
+
+Ontwerp voor **de onverwachte voorafbetaling**. Dat is net zo goed een forecast- en
+reserveringsprobleem als een belastingregelprobleem, en LaVega heeft de machinerie er al voor
+(BTW-reservering plus ingeplande stromen). Het is ook de reden dat belastingregels de **landkeuze van
+de gebruiker** moeten volgen en niet NL-only mogen zijn.

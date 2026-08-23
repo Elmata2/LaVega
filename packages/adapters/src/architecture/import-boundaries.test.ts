@@ -44,6 +44,7 @@ const NODE_BUILTIN_OR_IO_SPECIFIERS = new Set([
 ]);
 
 type ImportEdge = { file: string; specifier: string };
+type SourceModule = { file: string; imports: ImportEdge[] };
 
 function isRuntimeSource(path: string): boolean {
   if (path.includes(".test.") || path.includes("__snapshots__")) return false;
@@ -64,19 +65,85 @@ async function collectSourceFiles(directory: string, result: string[] = []): Pro
   return result;
 }
 
-async function collectImports(): Promise<ImportEdge[]> {
+async function collectModules(): Promise<SourceModule[]> {
   const files = (await Promise.all(SOURCE_ROOTS.map((root) => collectSourceFiles(join(REPOSITORY_ROOT, root))))).flat();
-  const imports: ImportEdge[] = [];
+  const modules: SourceModule[] = [];
   for (const file of files) {
     const source = await readFile(file, "utf8");
+    const imports: ImportEdge[] = [];
     for (const match of source.matchAll(IMPORT_PATTERN)) {
+      if (/^(import|export)\s+type\b/.test(match[0])) continue;
       imports.push({
         file: relative(REPOSITORY_ROOT, file),
         specifier: match[1] ?? match[2] ?? "",
       });
     }
+    modules.push({ file: relative(REPOSITORY_ROOT, file), imports });
   }
-  return imports;
+  return modules;
+}
+
+function collectImports(modules: SourceModule[]): ImportEdge[] {
+  return modules.flatMap(({ imports }) => imports);
+}
+
+function resolveLocalImport(file: string, specifier: string, files: Set<string>): string | undefined {
+  const packageRoots: Record<string, string> = {
+    "@lavega/adapters": "packages/adapters/src/index.ts",
+    "@lavega/core": "packages/core/src/index.ts",
+  };
+  if (specifier in packageRoots) return packageRoots[specifier];
+  if (!specifier.startsWith(".")) return undefined;
+
+  const base = resolve(REPOSITORY_ROOT, dirname(file), specifier.replace(/\.js$/, ""));
+  const candidates = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
+  return candidates.map((candidate) => relative(REPOSITORY_ROOT, candidate)).find((candidate) => files.has(candidate));
+}
+
+function isInvestingServerEntry(file: string): boolean {
+  return file === "apps/investing-server/src/index.ts";
+}
+
+/**
+ * Node-only stores the entry point injects into otherwise portable code. Each
+ * is a default argument, so a Workers build supplies its own implementation.
+ */
+const INVESTING_SERVER_NODE_ADAPTERS = new Set(["./fileCredentialStore.js", "./fileBrokerSyncStateStore.js"]);
+
+function isInvestingServerNodeAdapter(file: string, specifier: string): boolean {
+  return file === "apps/investing-server/src/index.ts" && INVESTING_SERVER_NODE_ADAPTERS.has(specifier);
+}
+
+function findInvestingServerNodeImports(modules: SourceModule[]): ImportEdge[] {
+  const modulesByFile = new Map(modules.map((module) => [module.file, module]));
+  const files = new Set(modulesByFile.keys());
+  const queue = ["apps/investing-server/src/index.ts"];
+  const visited = new Set<string>();
+  const violations: ImportEdge[] = [];
+
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const module = modulesByFile.get(file);
+    if (!module) continue;
+
+    for (const edge of module.imports) {
+      if (isNodeBuiltinOrIo(edge.specifier)) {
+        violations.push(edge);
+        continue;
+      }
+      // The Node server adapter is the only Node entry dependency. Its import
+      // is allowed here; request-path modules remain Workers-portable.
+      if (isInvestingServerEntry(file) && edge.specifier === "@hono/node-server") continue;
+      if (isInvestingServerNodeAdapter(file, edge.specifier)) {
+        continue;
+      }
+      const target = resolveLocalImport(file, edge.specifier, files);
+      if (target) queue.push(target);
+    }
+  }
+  return violations;
 }
 
 function isCoreFile(file: string): boolean {
@@ -84,7 +151,11 @@ function isCoreFile(file: string): boolean {
 }
 
 function isStorageAdapterFile(file: string): boolean {
-  return file === "packages/adapters/src/index.ts" || file.startsWith("packages/adapters/src/storage/");
+  return file === "packages/adapters/src/index.ts"
+    || file.startsWith("packages/adapters/src/storage/")
+    // CredentialStore's local implementation is the one intentional consumer
+    // of encrypted storage outside the storage barrel.
+    || file === "packages/adapters/src/credentials/localCredentialStore.ts";
 }
 
 function isNodeBuiltinOrIo(specifier: string): boolean {
@@ -95,7 +166,7 @@ function isNodeBuiltinOrIo(specifier: string): boolean {
 
 describe("import boundaries", () => {
   test("core does not import adapters or I/O", async () => {
-    const violations = (await collectImports()).filter(({ file, specifier }) => {
+    const violations = collectImports(await collectModules()).filter(({ file, specifier }) => {
       if (!isCoreFile(file)) return false;
       return specifier === "@lavega/adapters"
         || specifier.startsWith("@lavega/adapters/")
@@ -105,8 +176,67 @@ describe("import boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  test("investing server request path does not import Node builtins transitively", async () => {
+    const violations = findInvestingServerNodeImports(await collectModules());
+
+    expect(violations).toEqual([]);
+  });
+
+  test("transitive Node builtin imports fail boundary check", () => {
+    const fixture: SourceModule[] = [
+      {
+        file: "apps/investing-server/src/index.ts",
+        imports: [{ file: "apps/investing-server/src/index.ts", specifier: "./app.js" }],
+      },
+      {
+        file: "apps/investing-server/src/app.ts",
+        imports: [{ file: "apps/investing-server/src/app.ts", specifier: "@lavega/adapters" }],
+      },
+      {
+        file: "packages/adapters/src/index.ts",
+        imports: [{ file: "packages/adapters/src/index.ts", specifier: "./node-only.ts" }],
+      },
+      {
+        file: "packages/adapters/src/node-only.ts",
+        imports: [{ file: "packages/adapters/src/node-only.ts", specifier: "node:fs" }],
+      },
+    ];
+
+    expect(findInvestingServerNodeImports(fixture)).toEqual([
+      { file: "packages/adapters/src/node-only.ts", specifier: "node:fs" },
+    ]);
+  });
+
+  test("entry adapter exemption does not allow Node builtins in entry", () => {
+    const fixture: SourceModule[] = [
+      {
+        file: "apps/investing-server/src/index.ts",
+        imports: [
+          { file: "apps/investing-server/src/index.ts", specifier: "@hono/node-server" },
+          { file: "apps/investing-server/src/index.ts", specifier: "node:fs" },
+        ],
+      },
+    ];
+
+    expect(findInvestingServerNodeImports(fixture)).toEqual([
+      { file: "apps/investing-server/src/index.ts", specifier: "node:fs" },
+    ]);
+  });
+
+  test("unreachable server modules do not affect request-path portability", () => {
+    const fixture: SourceModule[] = [
+      { file: "apps/investing-server/src/index.ts", imports: [] },
+      {
+        file: "apps/investing-server/src/unreachable.ts",
+        imports: [{ file: "apps/investing-server/src/unreachable.ts", specifier: "node:fs" }],
+      },
+    ];
+
+    expect(findInvestingServerNodeImports(fixture)).toEqual([]);
+  });
+
   test("concrete storage implementations stay inside storage adapter", async () => {
-    const violations = (await collectImports()).filter(({ file, specifier }) => {
+    const violations = collectImports(await collectModules()).filter(({ file, specifier }) => {
       if (isStorageAdapterFile(file)) return false;
       return /(?:^|\/)storage\/(?:indexeddb|encryptedStorage)(?:\.js)?$/.test(specifier);
     });

@@ -16,7 +16,7 @@ There is a second problem, quieter but more expensive to get wrong later. The ma
 
 Stand up the two missing applications, local tier first, with the hosted tier's seams cut but not implemented.
 
-A self-hosting LaVega user gets `apps/investing-web`: a React + Vite dashboard, styled in LaVega's own visual identity re-expressed in Tailwind and shadcn/ui, that plots the three charts v1 committed to — portfolio value against a benchmark, allocation by instrument and by broker, and a per-position price line with trade and dividend markers. Nothing more, and specifically no candlestick, no zoom, and no pan.
+A self-hosting LaVega user gets `apps/investing-web`: a React + Vite dashboard, styled in LaVega's own visual identity re-expressed in Tailwind and shadcn/ui, that plots the three charts v1 committed to — portfolio value against a benchmark, allocation by instrument and by entity, and a per-position price line with trade and dividend markers. Nothing more, and specifically no candlestick, no zoom, and no pan.
 
 Behind it, `apps/investing-server` is a Hono API in the same shape as `apps/server`: it fetches daily closing prices and FX rates, caches them, and triggers broker syncs when the app is opened rather than on a schedule the local tier has no scheduler for. Prices come from Yahoo Finance by default, behind the one-time consent gate ADR 0001 requires, through the priority-ordered `MarketDataRouter` that already exists — so a self-hoster who later wants a paid, terms-of-service-clean provider costs one new `Provider` implementation and no redesign.
 
@@ -34,7 +34,7 @@ The local-first guarantee holds throughout: no LaVega account, no LaVega-operate
 4. As a LaVega user, I want to switch the portfolio chart between 1 month, 6 months, 1 year, year-to-date, and all time, so that I can look at both the last few weeks and the whole history.
 5. As a LaVega user, I want to hover any point on a chart and see the exact value and date, so that I can read a specific day rather than eyeball the line.
 6. As a LaVega user, I want to see how my portfolio is split across instruments, so that I can notice when one position has quietly grown into half of everything I own.
-7. As a LaVega user, I want to see how my portfolio is split across brokers, so that I can see my concentration with any one counterparty.
+7. As a LaVega user, I want to see how my portfolio is split across entities, so that I can see concentration across my own portfolio partitions. Broker concentration waits until positions carry a real broker field.
 8. As a LaVega user, I want to open a single position and see its price history as a line, so that I can see what happened to that instrument specifically.
 9. As a LaVega user, I want my own buys and sells marked on that position's price line, so that I can see what I paid relative to where the price went.
 10. As a LaVega user, I want dividends marked on that same line, so that I can see income events in the context of the price.
@@ -108,7 +108,7 @@ Styling is Tailwind plus shadcn/ui with **cva** for variant-driven component sty
 **shadcn/ui Charts on Recharts** — one integration layer over one chart engine, not a second engine. Exactly three charts ship:
 
 - **Portfolio value vs. benchmark** — line, presented in EUR, default S&P 500 overlay, range switcher for 1M / 6M / 1Y / YTD / All.
-- **Allocation donut** — current snapshot only, switchable between grouping by instrument and grouping by broker.
+- **Allocation donut** — current snapshot only, switchable between grouping by instrument and grouping by entity. Broker grouping waits until positions carry a real broker field.
 - **Per-position price line** — one instrument, with trade and dividend markers.
 
 No candlestick or OHLC anywhere, since the pipeline carries daily EOD data only. No zoom, pan, or brush; the range switcher and hover tooltips are the whole interaction surface. Charts stay SVG/DOM so the app's existing `aria-label` accessibility convention continues to apply.
@@ -138,7 +138,7 @@ Local implementation is IndexedDB with a `(symbol, date)` composite index and a 
 
 ### Market data
 
-The existing `MarketDataRouter` and `Provider` shape in `packages/adapters/src/marketData/providerRouter.ts` are the seam; no new routing abstraction. The local tier registers:
+The existing `MarketDataRouter` and `Provider` shape in `packages/adapters/src/market-data/providerRouter.ts` are the seam; no new routing abstraction. The local tier registers:
 
 - **price** — the existing Yahoo Finance client in `packages/adapters/src/market-data/yahoo/`.
 - **fx** — Frankfurter/ECB, reusing the pattern already in `apps/server/src/fx.ts`.
@@ -180,9 +180,9 @@ A good test here asserts behaviour a user or a caller could observe, and nothing
 
 **Seams tested, outermost first:**
 
-1. **`packages/core/src/investing/` pure functions** — the highest seam and where most coverage belongs. Portfolio value series, benchmark normalisation, FX conversion, allocation bucketing by instrument and by broker, trade and dividend marker placement, range filtering. Input is plain arrays of `Position`, `Trade`, and `PriceBar`; output is plain arrays. No fakes needed at all.
+1. **`packages/core/src/investing/` pure functions** — the highest seam and where most coverage belongs. Portfolio value series, benchmark normalisation, FX conversion, allocation bucketing by instrument and by entity, trade and dividend marker placement, range filtering. Input is plain arrays of `Position`, `Trade`, and `PriceBar`; output is plain arrays. No fakes needed at all.
 2. **`PriceStore` contract** — one shared contract test run against both an in-memory fake and the IndexedDB implementation, covering range boundaries (inclusive ends, empty range, single day), `lastDate` on an empty store, upsert-as-update rather than duplicate, and `purgeAll` leaving the store readable and empty.
-3. **`MarketDataRouter` wiring** — stub `Provider` implementations already have prior art in `packages/adapters/src/marketData/providerRouter.test.ts`. Assert that a failing price provider falls through rather than throwing, that a null result is not treated as a value, and that the `identifier` lane is unaffected by the `price` lane's outcome.
+3. **`MarketDataRouter` wiring** — stub `Provider` implementations already have prior art in `packages/adapters/src/market-data/providerRouter.test.ts`. Assert that a failing price provider falls through rather than throwing, that a null result is not treated as a value, and that the `identifier` lane is unaffected by the `price` lane's outcome.
 4. **Yahoo client** — extend the existing tests in `packages/adapters/src/market-data/yahoo/` with fixture-backed responses, covering the rate-limited and blocked cases as `problems[]` rather than exceptions, and asserting no request is issued before consent is recorded.
 5. **`apps/investing-server` routes** — Hono's `app.request()` against the app instance, following `apps/server/src/index.test.ts`. Assert the 24-hour `lastSyncedAt` gate skips, that "sync now" bypasses it, that a broker returning `problems[]` yields a successful response carrying those problems, and that no key value appears in any response body.
 6. **Import boundaries** — extend the existing architecture test from [#39](https://github.com/Elmata2/LaVega/issues/39) so `core` still cannot import I/O, and so `investing-server` and its transitive adapter imports cannot import `node:` builtins.

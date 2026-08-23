@@ -1,0 +1,14 @@
+<!-- KUNSTMATIG. Een AggregateOffer waarvan de laagste en de hoogste prijs
+     HETZELFDE bedrag zijn: drie aanbieders, allemaal € 219,00. Dan is de reeks
+     één prijs en valt er niets te kiezen — weigeren zou hier een eenduidige
+     lezing weggooien, en dat is de fout uit L5 in een ander jasje.
+
+     De uiteinden worden vergeleken NA het ontcijferen, zodat "219" en "219.00"
+     hetzelfde bedrag zijn en niet twee schrijfwijzen. -->
+<!doctype html><html lang="nl"><head><title>Artikel bij drie aanbieders</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"N",
+ "offers":{"@type":"AggregateOffer","lowPrice":"219","highPrice":"219.00",
+           "offerCount":3,"priceCurrency":"EUR"}}
+</script>
+</head><body><h1>Artikel</h1></body></html>

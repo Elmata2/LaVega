@@ -4,8 +4,8 @@ import { headerIndex, parseAmount, parseDate, splitRows } from "./primitives.js"
 import { norm } from "../hash.js";
 
 export type ParsedBrokerFile = {
-  positions: Omit<Position, "entity">[];
-  trades: TradeWithoutId[];
+  positions: Omit<Position, "entity" | "tenantId">[];
+  trades: Omit<TradeWithoutId, "tenantId">[];
   source: string;
   problems: string[];
 };
@@ -43,7 +43,7 @@ function side(raw: string, quantity: number | null, amount: number | null): Trad
   return "other";
 }
 
-function finish(trades: TradeWithoutId[], source: string): ParsedBrokerFile {
+function finish(trades: Omit<TradeWithoutId, "tenantId">[], source: string): ParsedBrokerFile {
   if (trades.length) return { positions: [], trades, source, problems: [] };
   return {
     positions: [],
@@ -53,7 +53,7 @@ function finish(trades: TradeWithoutId[], source: string): ParsedBrokerFile {
   };
 }
 
-function finishPositions(positions: Omit<Position, "entity">[]): ParsedBrokerFile {
+function finishPositions(positions: Omit<Position, "entity" | "tenantId">[]): ParsedBrokerFile {
   if (positions.length) return { positions, trades: [], source: "DeGiro", problems: [] };
   return { positions: [], trades: [], source: "DeGiro", problems: ["formaat herkend (DeGiro portfolio) maar geen posities gevonden"] };
 }
@@ -100,7 +100,7 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
     const portfolioHint = /portfolio|position|posities|overzicht/i.test(filename) ||
       (symbol > -1 && positionQuantity > -1 && (marketValue > -1 || marketPrice > -1 || averagePrice > -1));
     if (portfolioHint && symbol > -1 && positionQuantity > -1 && (isin > -1 || pick(idx, ["symbol", "ticker"]) > -1)) {
-      const positions: Omit<Position, "entity">[] = [];
+      const positions: Omit<Position, "entity" | "tenantId">[] = [];
       for (let rowNo = 1; rowNo < rows.length; rowNo++) {
         const row = rows[rowNo];
         const symbolValue = value(row, symbol);
@@ -122,7 +122,7 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
     return { positions: [], trades: [], source: "", problems: ["onbekend of leeg bestand — geen transacties of posities herkend"] };
   }
 
-  const trades: TradeWithoutId[] = [];
+  const trades: Omit<TradeWithoutId, "tenantId">[] = [];
   for (let rowNo = 1; rowNo < rows.length; rowNo++) {
     const row = rows[rowNo];
     const dateValue = parseDate(value(row, date));

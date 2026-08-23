@@ -1,6 +1,6 @@
 {
-  "lastRun": null,
-  "note": "Watchlist baseline from the discovery sweep of 18 August 2026 (see watchlist.md). 124 products across 104 terms URLs: 101 readable by plain fetch, 23 needing the agent. Deliberately holds NO RATES — it is a diff anchor for identity and routing only. Every product's lastChecked is null because no collection run has happened yet; the first real sweep sets it and reports changes rather than re-dumping. httpStatus/readable are the values MEASURED on the sweep date, so a later change in either is itself a reportable move (a page going 200 -> 403, or marketing-only -> yes).",
+  "lastRun": "2026-08-18",
+  "note": "Watchlist baseline from the discovery sweep of 18 August 2026 (see watchlist.md). 124 products across 104 terms URLs: 101 readable by plain fetch, 23 needing the agent. Deliberately holds NO RATES — it is a diff anchor for identity and routing only. Every product's lastChecked is null because no collection run has happened yet; the first real sweep sets it and reports changes rather than re-dumping. httpStatus/readable are the values MEASURED on the sweep date, so a later change in either is itself a reportable move (a page going 200 -> 403, or marketing-only -> yes). | 2026-08-18: provider-page matches the FIRST koersopslag on a page, and 4 ICS business cards, 3 ANWB cards, 14 Amex cards and both Knab cards each share one URL - so a page-level match is not yet a product-level fact. Two figures were hand-verified as another row's (see figureNote on abn-amro-betaalpas and knab-creditcard). Row attribution is owed before any task raises coverage from provider-page. | 2026-08-18, MEASURED: the readable flags were recorded with curl, and node's fetch (what the sweep actually uses) disagrees on some hosts. rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden -> HTTP 200, 459 kB, 32x 'koersopslag', 22 percentage figures, where curl was 403. ing.nl/particulier/betalen/passen/buitenland -> 200, 26 kB (no percentages: shadow DOM). ing.nl spaarrente -> 200. revolut.com legal/standard-fees -> 403 to node too, coinbase.com/nl/card -> 403 to node too. Four URLs measured, not thirteen - do not generalise the rest without measuring them (that is error 3). Rabobank alone is 3 products with a live table, and it is the next slice's cheapest win, but provider-page must learn product-row attribution first or it will read the wrong row off a 22-figure page. | 2026-08-21, rekeningkosten-lane: 63 producten toegevoegd (46 pakketten/rekeningen/kaarten uit de zoekronde van 21-08-2026, 16 abonnementen van bunq/N26/Revolut en de Wise-rekening zonder bedrag), dus 185 in plaats van 122. Het blok `counts` hierboven is en blijft de MEETING van 18 augustus (124 producten, 101 readable) en beschrijft dus geen van beide totalen; het is niet bijgewerkt omdat readable/httpStatus voor de nieuwe rijen niet zijn gemeten en een opgehoogd getal zou doen alsof dat wel zo was. Alle 63 dragen lastChecked/lastValue null, termsUrl null en readable \"not measured\": ze zijn nooit gesweept. | 2026-08-21, rekeningkosten-datums-lane: 18 van de 21 rijen die op 20 augustus zijn afgewezen omdat hun bron geen eigen datum droeg, staan nu wél in catalog.json — niet met een ander bedrag, maar met een ander document. Voor ICS, ANWB en ASN is dat de wijzigingspagina van de jaarbijdrage, die het bedrag koppelt aan een ingangsdatum (\"vanaf 1 juni 2025\"); vijf daarvan zijn live van icscards.nl gehaald en zes uit een Wayback-kopie, omdat ICS zo'n pagina weghaalt zodra de volgende verhoging is aangekondigd. Voor zeven American Express-kaarten is het het \"Overzicht Kaartlidmaatschapsbijdragen\" (FEE_CONS_V7_240704_NL.pdf), waarvan het versiestempel in het document zelf staat. Er is geen product bijgekomen en er is geen docUrl/docDate van een andere lane overschreven: de vondsten staan als accountFee in catalog.json, precies zoals de negen van 20 augustus. Drie rijen bleven buiten: American Express Platinum (het gedateerde overzicht noemt € 65 per maand terwijl de kaart € 75 kost), American Express Business Green Card (het overzicht jaarbijdragen draagt nergens in de tekst een datum) en de Wise-betaalpas (de tarievenpagina draagt nog steeds geen datum). Zie rekeningkosten-datums-2026-08-21.md.",
   "counts": {
     "products": 124,
     "readableByFetch": 101,
@@ -24,12 +24,18 @@
       "kind": "betaalpas",
       "termsUrl": "https://www.ing.nl/particulier/betalen/passen/buitenland",
       "availableToNL": true,
-      "httpStatus": "connection killed (curl 92 on HTTP/2, curl 28/56 on HTTP/1.1)",
-      "readable": "bot-blocked",
-      "route": "agent",
+      "httpStatus": "node fetch: 200, 26 kB, 12x 'koersopslag' but no percentage in the stripped HTML (shadow DOM) — measured 2026-08-18. curl: connection killed (92 on HTTP/2, 28/56 on HTTP/1.1). readable=yes describes what the sweep's own fetch gets, which is not what curl gets.",
+      "readable": "yes",
+      "route": "provider-pdf",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "pdfUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "pdfCheckedAt": "2026-06-15",
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "ing-creditcard": {
       "product": "ING creditcard",
@@ -42,7 +48,16 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "pdfNote": "ING_Kostenoverzicht 2026-06-15 does carry this rate (ING Creditcard More 2,00%; Creditcard Extra 0,00% tot EUR 1000 p/m, daarna 2,00%), but the package table puts the label 'Koersopslag non-euro' on the line BELOW the figures, so readIngTariffs - which only emits lines containing 'koersopslag' - cannot reach it, and figures[0] is the betaalpas row (1,40%). Left unrouted rather than covered with the debit card's number.",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://assets.ing.com/m/6ebeaa434999a60b/original/ING_Kostenoverzicht-betaalproducten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "route-verified 2026-08-19; STRONGEST FIND IN THE BATCH — all five checks pass and it fills a product state.json deliberately left unrouted. (1) assets.ing.com serves H",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "ing-platinumcard": {
       "product": "ING Platinumcard",
@@ -55,7 +70,15 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on assets.ing.com (ING's own CDN), 179093 bytes, 4 pages, 'Datum: 1 januari 2026'. Quote verbatim at th",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "abn-amro-betaalpas": {
       "product": "ABN AMRO betaalpas",
@@ -71,7 +94,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "figureNote": "THE RECORDED 2% IS ANOTHER PRODUCT'S ROW. Re-measured 2026-08-18 on the live page: the sweep's regex takes the FIRST koersopslag on the page, which is 'Opnemen van contant geld (biljetten) in het buitenland met een creditcard ... In buitenlands geld 4% + 2,00 % valutakoersopslag' - the credit card's ATM row. The betaalpas rate is further down: 'Met Betaalpas EUR 0,15 en 1,2% valutakoersopslag per keer'. It is refused today (conditionsKnown=false), and lastReason says only 'conditions not established', which reads as 'we have the number, we lack the cap'. We do not have the number. Do not promote this figure by establishing conditions for it; provider-page needs product-row attribution first.",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-01",
+      "docNote": "route-verified 2026-08-19; Survives the exact trap the brief names. Verified 200 application/pdf, 234,203 B from assets.abnamro.com, 'Naam van de rekening: BasisPakket"
     },
     "abn-amro-creditcard": {
       "product": "ABN AMRO creditcard",
@@ -88,7 +119,14 @@
         "(merchant offers)"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+      "docKind": "html",
+      "docDate": "2026-08",
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ABN AMRO owner. The brief named ICS-157-NL-082026 as already found; I fetched it and can now report what"
     },
     "abn-amro-gold-card": {
       "product": "ABN AMRO Gold Card",
@@ -103,7 +141,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/666/ICS-157-NL-082026%20av%20abn%20amro%20en%20abn%20amro%20meespierson",
+      "docKind": "pdf",
+      "docDate": "2026-08",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on substance. Same document, same verbatim art. 13.1 quote, same 200 application/pdf on icscards.nl, 'Diemen, augustus 2026'. Gol"
     },
     "rabobank-betaalpas": {
       "product": "Rabobank betaalpas",
@@ -116,7 +161,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.4,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://media.rabobank.com/asset/5f815909-c7d5-498a-a1d6-9f954441bd8b/Tarieven-en-limieten-particulier-betalingsverkeer-2026.pdf",
+      "docKind": "pdf",
+      "docDate": "Juli 2026",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. media.rabobank.com URL serves a real 14-page PDF (200, application/pdf), page footers read 'Juli 2026' as claimed. The quote is a COMPOSITE,"
     },
     "rabobank-creditcard": {
       "product": "Rabobank creditcard",
@@ -129,7 +181,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-07",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL: 200 application/pdf on media.rabobank.com (Rabobank's own CDN), 351481 bytes, 5 pages, 'Datum: 7 januari 2026' with running"
     },
     "rabo-goldcard": {
       "product": "Rabo GoldCard",
@@ -142,7 +201,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://media.rabobank.com/m/722339f9ef5dbff2/original/Informatiedocument-Rabo-Comfort.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-07",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. Same Rabo Comfort FID (200 application/pdf, media.rabobank.com, 7 januari 2026), same verbatim row naming '[RaboCard, Rabo GoldC"
     },
     "sns-betaalpas": {
       "product": "SNS betaalpas",
@@ -158,7 +224,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "route-verified 2026-08-19; All five checks pass. URL served 200 application/pdf, 73,996 B / 4 pages from snsbank.nl with content-disposition filename '6.0006.41.2511 T"
     },
     "sns-creditcard": {
       "product": "SNS creditcard",
@@ -175,7 +248,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "route-verified 2026-08-19; Quote verbatim in the same PDF: 'Betalen met een creditcard / in euro € 0,00 / in vreemde valuta 2% wisselkoersopslag'. Rate belongs to that"
     },
     "asn-betaalpas": {
       "product": "ASN betaalpas",
@@ -190,7 +270,14 @@
         "fxFee"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-07-01",
+      "docNote": "route-verified 2026-08-19; Strongest find in the batch. URL served 200 application/pdf, 120,409 B / 4 pages from asnbank.nl, header 'per 1 juli 2026' — so the claimed "
     },
     "asn-creditcard": {
       "product": "ASN Creditcard",
@@ -207,7 +294,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/626/Algemene%20Voorwaarden%20ASN%20Creditcard%20-%2040",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED CARD LIST — flagging for the orchestrator to dedupe against whoever owns ASN, but it fell out of the same index page and I read th"
     },
     "regiobank-betaalpas": {
       "product": "RegioBank betaalpas",
@@ -222,7 +316,14 @@
         "fxFee"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "route-verified 2026-08-19; Verified: 200 application/pdf, 57,567 B / 4 pages from regiobank.nl, filename '2.00.70.37.2511_a_Tarievenwijzer_Betalen_per_01-02-2026.pdf',"
     },
     "regiobank-creditcard": {
       "product": "RegioBank creditcard",
@@ -238,7 +339,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "route-verified 2026-08-19; Quote verbatim: 'Betalen met de creditcard / • In euro in Nederland en andere Eurolanden € 0,00 / • In vreemde valuta 2% valutawisselkosten'"
     },
     "knab-betaalpas": {
       "product": "Knab betaalpas",
@@ -255,7 +363,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.4,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "docUrl": "https://assets-eu-01.kc-usercontent.com/35355cb5-f8a5-0105-c237-9bab7d11ff84/3ec88fbd-4326-4bf3-be18-ed80334ade03/20251001%20Informatiedocument%20Knab%20Betaalrekening.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-10-01",
+      "docNote": "route-verified 2026-08-19; Rate and quote verify: 'Betalen met een betaalpas / In vreemde valuta 1,4% koersopslag over het opgenomen bedrag in euro' (the doc really do",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "knab-creditcard": {
       "product": "Knab creditcard",
@@ -272,7 +388,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: conditions not established · agent: conditions not established",
+      "figureNote": "THE RECORDED 1,4% IS THE DEBIT CARD'S ROW. Re-measured 2026-08-18 on knab.nl/tarieven: the first match is 'Betalen en opname van contant geld buiten eurolanden - Mastercard wisselkoers + 1,4% koersopslag', which is the betaalrekening. The credit card's own row, further down, reads 'Betalingen in vreemde valuta 2% koersopslag'. Both products share one termsUrl and the regex cannot tell the rows apart. Refused today; do not promote it.",
+      "docUrl": "https://www.knab.nl/tarieven",
+      "docKind": "html",
+      "docDate": "2026-02-18",
+      "docNote": "skeptic-confirmed 2026-08-19; PER-PRODUCT ATTRIBUTION NOW SETTLED — this is the row the old regex got wrong. I extracted the page to text and kept line numbers: the heading 'Knab C"
     },
     "triodos-betaalpas": {
       "product": "Triodos betaalpas",
@@ -287,7 +411,14 @@
         "conditions only"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1,
+      "lastRoute": "agent",
+      "lastReason": "wayback: no figure · agent: conditions not established",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+      "docKind": "html",
+      "docDate": "2026-05-01",
+      "docNote": "route-verified 2026-08-19; Verified: 200 application/pdf, 148,294 B / 2 pages from triodos.nl. Quote verbatim across the table cells: 'Betalen met een betaalpas / in v"
     },
     "bunq-free-betaalpas": {
       "product": "bunq Free betaalpas",
@@ -305,7 +436,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 3,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Document, quote and column all verified — but the submitted rate of 0.5 is wrong for this field. URL returns HTTP 200, application/pdf, 8 pages, from "
     },
     "bunq-core-betaalpas": {
       "product": "bunq Core betaalpas",
@@ -323,7 +461,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 58 = the 'bunq Core' column, and the EUR 1.000 clause is absent from that column. On the no-cap condition I applied the"
     },
     "bunq-pro-betaalpas": {
       "product": "bunq Pro betaalpas",
@@ -340,7 +485,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, and the strongest genuine improvement in the batch. 0.5% sits at offset 39 = the 'bunq Pro' column, with no EUR 1.000 clause. I verified th"
     },
     "bunq-elite-betaalpas": {
       "product": "bunq Elite betaalpas",
@@ -358,7 +510,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 20 = the 'bunq Elite' column, no EUR 1.000 clause. Corroborated positively by the live Elite plan page, which I fetched"
     },
     "bunq-creditcard": {
       "product": "bunq creditcard",
@@ -374,7 +533,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://help.bunq.com/articles/whats-zerofx-and-how-does-it-save-me-money",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED, and a genuine improvement — this product has no docUrl and no value today. (1) static.bunq.com serves HTTP 200, real PDF 1.4, 8 p"
     },
     "bunq-termijndeposito": {
       "product": "bunq Termijndeposito",
@@ -390,7 +556,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/lock-in-a-higher-interest-rate-with-term-deposits",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200 from help.bunq.com (page title is 'Lock in a guaranteed interest rate with Term Deposits'; the slug still says 'highe"
     },
     "bunq-beleggingsrekening": {
       "product": "bunq beleggingsrekening",
@@ -405,7 +577,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/how-are-trading-fees-calculated",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — genuine improvement, no docUrl on this product today. (1) Same verified static.bunq.com PDF (200, 8 pages). (2) Quote verbatim: "
     },
     "bunq-crypto": {
       "product": "bunq crypto",
@@ -420,7 +599,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bunq.com/articles/how-do-the-fees-and-spread-work-in-bunq-crypto",
+      "docKind": "html",
+      "docDate": "2026-08-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — genuine improvement, no docUrl on this product today. (1) Same verified static.bunq.com PDF (200, 8 pages, /Title '20260803 bunq"
     },
     "bunq-free-business-betaalpas": {
       "product": "bunq Free Business betaalpas",
@@ -436,7 +622,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, with the rate corrected for convention consistency. I verified this is genuinely the business column and not a consumer figure reused: the "
     },
     "bunq-core-business-betaalpas": {
       "product": "bunq Core Business betaalpas",
@@ -452,7 +645,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 136 = the seventh header column, 'bunq Core' + 'Business' on the second header line, so this is the business column as "
     },
     "bunq-pro-business-betaalpas": {
       "product": "bunq Pro Business betaalpas",
@@ -468,7 +668,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · agent: conditions not established",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed. 0.5% sits at offset 117 = the sixth header column, 'bunq Pro' + 'Business'. No EUR 1.000 clause. Fills an empty field; the business plans p"
     },
     "bunq-elite-business-betaalpas": {
       "product": "bunq Elite Business betaalpas",
@@ -484,7 +691,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Confirmed, verified independently because the finder's report was TRUNCATED mid-entry for this product — I did not take the claim on trust, I read the"
     },
     "revolut-standard-betaalpas": {
       "product": "Revolut Standard betaalpas",
@@ -497,7 +711,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://cdn.revolut.com/terms_and_conditions/pdf/particuliere_tarieven_standaard_ba464230_1.7.1_1778145666_nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-07-09",
+      "docNote": "found + independently verified 2026-08-19; skeptic: CONFIRMED on all four checks. (1) URL serves HTTP 200, Content-Type application/pdf, 100143 bytes, 10 pages, on the issuer's own CDN (cdn.revolut.com)"
     },
     "revolut-plus-betaalpas": {
       "product": "Revolut Plus betaalpas",
@@ -510,7 +731,15 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "wayback",
+      "lastReason": null,
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Plus: wissellimiet van EUR 3.000 per maand; daarboven fair usage 0,5% per geldwissel. Replaces the 2025 archive snapshots."
     },
     "revolut-premium-betaalpas": {
       "product": "Revolut Premium betaalpas",
@@ -523,7 +752,15 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: 403",
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Premium: geen wissellimiet, geen fair usage-kosten. Replaces the 2025 archive snapshots."
     },
     "revolut-metal-betaalpas": {
       "product": "Revolut Metal betaalpas",
@@ -536,7 +773,15 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: 403",
+      "docUrl": "https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "Revolut's own particuliere-tarieven page, 'van toepassing vanaf 9 juli 2026', read via r.jina.ai because revolut.com answers plain curl with 403. It lists every plan on one page; Metal: geen wissellimiet, geen fair usage-kosten. Replaces the 2025 archive snapshots."
     },
     "n26-standard-betaalpas": {
       "product": "N26 Standard betaalpas",
@@ -555,7 +800,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED on all four tests. (1) URL: docs.n26.com (issuer's own domain), HTTP 200, real PDF 1.4, 8 pages, 174,674 bytes, \"Version 4.0, Date: 26.06.202"
     },
     "n26-smart-betaalpas": {
       "product": "N26 Smart betaalpas",
@@ -574,7 +826,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. Same document, same 200/real-PDF check. Quote verbatim (lines 103-105). Product identity confirmed inside the document rather than assumed: "
     },
     "n26-go-betaalpas": {
       "product": "N26 Go betaalpas",
@@ -593,7 +852,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED, including the differentiator the finder claimed. Quote verbatim (lines 103-105). The Go-specific ATM row is verbatim too, down to the source"
     },
     "n26-metal-betaalpas": {
       "product": "N26 Metal betaalpas",
@@ -612,7 +878,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED. Quote verbatim (lines 103-105); the Free FX-ATM row naming \"N26 Metal and N26 Business Metal users\" is verbatim (lines 157-158). Plan identi"
     },
     "n26-instant-savings": {
       "product": "N26 Instant Savings",
@@ -628,7 +901,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.3,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://n26.com/en-eu/savings-account",
+      "docKind": "html",
+      "docDate": "2025-06-11",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, including the on-site conflict, which I reproduced independently. Fetched today, HTTP 200. Footnote 1 verbatim: 'N26 Instant Savings accoun"
     },
     "n26-flexible-cash-fund": {
       "product": "N26 flexible cash fund",
@@ -644,7 +924,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.32,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://n26.com/en-eu/metal",
+      "docKind": "html",
+      "docDate": "2026-06-11",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with a freshness flag the submission missed. Fetched today, HTTP 200. Footnote 2 verbatim: 'The variable annual return rate shown (2.32%) i"
     },
     "wise-betaalpas": {
       "product": "Wise betaalpas",
@@ -661,7 +948,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://wise.com/nl/pricing/",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; SUBSTANCE CONFIRMED, BUT THE QUOTE IS NOT VERBATIM AND MUST BE REPLACED BEFORE PINNING. (1) wise.com/nl/pricing/ serves HTTP 200 on Wise's o"
     },
     "wise-rente": {
       "product": "Wise Rente",
@@ -677,7 +970,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure",
+      "docUrl": "https://wise.com/nl/interest/",
+      "docDate": "2026-05-08",
+      "docFetch": "jina"
     },
     "wise-aandelen": {
       "product": "Wise Aandelen",
@@ -693,7 +992,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure",
+      "docUrl": "https://wise.com/nl/pricing/",
+      "docKind": "html",
+      "docDate": "2026-06-30",
+      "docNote": "route-verified 2026-08-19; SUBSTANCE CONFIRMED, BUT THE QUOTE IS NOT VERBATIM AND MUST BE REPLACED BEFORE PINNING. (1) wise.com/nl/pricing/ serves HTTP 200 on Wise's o"
     },
     "trade-republic-betaalpas": {
       "product": "Trade Republic betaalpas",
@@ -711,7 +1017,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: page is 317k chars — refusing to send a truncated document",
+      "docUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      "docKind": "html",
+      "docDate": "2026-05-11",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200, application/json, 317KB from traderepublic.com itself. All four sentences are in the payload verbatim (Contentful st"
     },
     "trade-republic-spaarrekening-rente-op-kassaldo": {
       "product": "Trade Republic spaarrekening (rente op kassaldo)",
@@ -727,7 +1040,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: document is 259k chars — refusing to send a truncated one",
+      "docUrl": "https://traderepublic.com/nl-nl/rente/_payload.json",
+      "docKind": "html",
+      "docDate": "2026-07-14",
+      "docNote": "route-verified 2026-08-19; URL live now: HTTP 200, 259KB JSON from the issuer's own domain. Both quoted sentences are verbatim (the FAQ body of entry 3SUIOSDPEVMDz7r1o"
     },
     "212-card": {
       "product": "212 Card",
@@ -745,7 +1065,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://helpcentre.trading212.com/hc/en-us/articles/17749229128221-Can-I-use-the-card-if-I-travel-abroad",
+      "docKind": "html",
+      "docDate": "2026-07-28",
+      "docNote": "skeptic-confirmed 2026-08-19; The article the catalog already pointed at (19288398028317, 'What are the fees for using the 212 card') genuinely never states a currency-conversion r"
     },
     "trading-212-interest-on-cash": {
       "product": "Trading 212 interest on cash",
@@ -760,7 +1087,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-18",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure"
     },
     "trading-212-beleggingsrekening": {
       "product": "Trading 212 beleggingsrekening",
@@ -775,7 +1105,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: no figure",
+      "pdfUrl": "https://www.trading212.com/legal-documentation/cy/common/Costs-and-Charges-Disclosure_EN.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "openbank-betaalpas-r42-betaalpas": {
       "product": "Openbank betaalpas (R42 Betaalpas)",
@@ -791,7 +1126,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
+      "docKind": "html",
+      "docDate": "2024-07-01",
+      "docNote": "skeptic-confirmed 2026-08-19; Found by following the marketing page's own PDF references, not by guessing FID URLs. Two documents, and only one of them answers the question — worth"
     },
     "american-express-blue-card": {
       "product": "American Express Blue Card",
@@ -809,7 +1151,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-green-card": {
       "product": "American Express Green Card",
@@ -827,7 +1174,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-gold-card": {
       "product": "American Express Gold Card",
@@ -845,7 +1197,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-platinum-card": {
       "product": "American Express Platinum Card",
@@ -863,7 +1220,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-entry-card": {
       "product": "Flying Blue - American Express Entry Card",
@@ -881,7 +1243,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-silver-card": {
       "product": "Flying Blue - American Express Silver Card",
@@ -898,7 +1265,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-gold-card": {
       "product": "Flying Blue - American Express Gold Card",
@@ -916,7 +1288,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "flying-blue-american-express-platinum-card": {
       "product": "Flying Blue - American Express Platinum Card",
@@ -933,7 +1310,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-03-01/overeenkomst-voor-consumenten-american-express-kaarthouders-maart-2022.pdf",
+      "pdfFoundAt": "2026-08-19"
     },
     "american-express-business-entry-card": {
       "product": "American Express Business Entry Card",
@@ -950,7 +1332,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from a BUSINESS document, not the consumer agreement. Fetched myself this session with plain curl (200, application/pdf, %PDF- magic bytes conf"
     },
     "american-express-business-green-card": {
       "product": "American Express Business Green Card",
@@ -967,7 +1356,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same business agreement and same verbatim 2,5% row as the Business Entry Card; see that entry for the full evidence and the family-level attribution c"
     },
     "american-express-business-gold-card": {
       "product": "American Express Business Gold Card",
@@ -984,7 +1380,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2023-03-15/NL-Overeenkomst-voor-de-American-Express-Business-Card-15032023.pdf",
+      "docKind": "html",
+      "docDate": "2023-03-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same business agreement and same verbatim 2,5% row as the Business Entry Card; see that entry for the full evidence and the family-level attribution c"
     },
     "american-express-corporate-card": {
       "product": "American Express Corporate Card",
@@ -1001,7 +1404,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from the CORPORATE cardmember agreement, not the consumer one. Fetched myself this session with plain curl (200, application/pdf, %PDF- magic b"
     },
     "american-express-corporate-gold-card": {
       "product": "American Express Corporate Gold Card",
@@ -1018,7 +1428,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Same corporate cardmember agreement as the Corporate Card, and this card is named in it directly. Art. 2j defines 'Kaart' as 'de aan u uitgegeven Amer"
     },
     "klm-american-express-corporate-card": {
       "product": "KLM American Express Corporate Card",
@@ -1034,7 +1451,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_KLM_Corporate_Cardmember_TCs_Dec2022.pdf",
+      "docKind": "html",
+      "docDate": "2022-12-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Proven from this card's OWN programme document - a separate agreement from the proprietary Corporate one, which matters because Amex issues KLM Corpor"
     },
     "ics-visa-world-card": {
       "product": "ICS Visa World Card",
@@ -1052,7 +1476,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-gold": {
       "product": "ICS Visa World Card Gold",
@@ -1069,7 +1497,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/624/Algemene%20Voorwaarden%20ICS%20-%20121",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; This one had NOTHING — fields was literally {} — and it is the only ICS consumer card whose marketing page carries no fee block: /creditcard-aanvragen"
     },
     "ics-visa-world-card-platinum": {
       "product": "ICS Visa World Card Platinum",
@@ -1087,7 +1522,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-panda": {
       "product": "ICS Visa World Card Panda",
@@ -1105,7 +1544,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-classic": {
       "product": "ICS Mastercard Classic",
@@ -1123,7 +1566,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: conditions not established",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-gold": {
       "product": "ICS Mastercard Gold",
@@ -1141,7 +1588,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · provider-pdf: no figure · agent: no figure",
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-mastercard-black": {
       "product": "ICS Mastercard Black",
@@ -1159,7 +1610,11 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "pdfReason": "unpinned after measurement: ICS's general terms state 'de opslag is 2%' but defer the per-card price to 'de Documentatie', so the model refuses — while the marketing page states the same 2% WITH its scope and settles. Keeping it pinned costs a model call every sweep to reach a worse answer. The fallback in the agent rung now covers the general case; this removes the known-inferior source outright."
     },
     "ics-visa-world-card-business": {
       "product": "ICS Visa World Card Business",
@@ -1177,7 +1632,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/678/VISA-66-NL-072026%20AV%20Visa%20Worldcard%20Business",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business (pdf)\". PDF self-prints \"VISA-66-NL-07/2026\" and \"NNLDCVBICS\". Quote, art. 15 lid 4: \"De o",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-visa-world-card-business-gold": {
       "product": "ICS Visa World Card Business Gold",
@@ -1195,7 +1658,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Anchor text: \"Algemene Voorwaarden Visa World Card Business Gold (pdf)\". PDF self-prints \"VISA-27-NL-07/2026\". Quote, art. 15 lid 4: \"De opslagcompone",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-mastercard-business": {
       "product": "ICS Mastercard Business",
@@ -1213,7 +1684,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/676/MC-108-NL-072026%20AV%20ICS%20Mastercard%20Business",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; FOUND IT — the per-card business terms PDF. Verbatim from art. 15 lid 4: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "ics-mastercard-corporate": {
       "product": "ICS Mastercard Corporate",
@@ -1231,7 +1710,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
+      "docKind": "html",
+      "docDate": "2026-07",
+      "docNote": "skeptic-confirmed 2026-08-19; Same document body, ICS's own per-card edition for Mastercard Corporate. Anchor text on icscards.nl/zakelijk/info/algemene-voorwaarden: \"Algemene Voor",
+      "pointsReason": "pointsPerEuro teruggezet naar ONBEKEND: het bewijs was een kosten- of voorwaardendocument, en dat somt kosten op — geen voordelen. ING liet zien waar dat op stukloopt: hetzelfde soort bewijs zei 'geen punten' terwijl ing.nl/particulier/ing-punten bestaat. Een voordelenlijst van de aanbieder zelf zou dit wel kunnen dragen."
     },
     "anwb-visa-classic-card": {
       "product": "ANWB Visa Classic Card",
@@ -1248,7 +1735,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner. Currently 2 with conditionsKnown false, i.e. refused. ANWB's cards are ICS-issued and ICS pu"
     },
     "anwb-visa-silver-card": {
       "product": "ANWB Visa Silver Card",
@@ -1264,7 +1758,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner, but this product currently has NO figure at all (fields empty) and two independent ICS sourc"
     },
     "anwb-visa-gold-card": {
       "product": "ANWB Visa Gold Card",
@@ -1280,7 +1781,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.icscards.nl/webdocuments/633/Algemene%20Voorwaarden%20ANWB%20Creditcard%20-%20122",
+      "docKind": "html",
+      "docDate": "2026-05",
+      "docNote": "skeptic-confirmed 2026-08-19; OUTSIDE MY ASSIGNED LIST — dedupe against the ANWB owner. Currently empty. Like ICS Visa World Card Gold, this is the one ANWB card whose page prints "
     },
     "crypto-com-prepaid-card-basic-midnight-blue": {
       "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
@@ -1297,7 +1805,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+      "docKind": "html",
+      "docDate": "2026-07-31",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass. URL is HTTP 200 on the issuer's own domain (help.crypto.com), real HTML, region-scoped to 'users with a residential address in E"
     },
     "crypto-com-prepaid-card-plus-ruby-steel": {
       "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
@@ -1314,7 +1829,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+      "docKind": "html",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with one timing reservation. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residential scope). Quote ver"
     },
     "crypto-com-prepaid-card-pro-jade-green-royal-indigo": {
       "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
@@ -1331,7 +1853,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+      "docKind": "html",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: Checks pass, with the same timing reservation as the Plus tier. Same verified document (200, issuer domain, dateModified 2026-07-31, Europe/NL residen"
     },
     "crypto-com-prepaid-card-private-icy-white-rose-gold": {
       "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
@@ -1348,7 +1877,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+      "docKind": "html",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass, and this is the strongest of the five because the exemption survives BOTH schedules. Same verified document (200, issuer domain,"
     },
     "crypto-com-prepaid-card-private-obsidian": {
       "product": "Crypto.com Prepaid Card — Private (Obsidian)",
@@ -1365,7 +1901,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.crypto.com/en/articles/2742447-crypto-com-prepaid-card-rewards-benefits",
+      "docKind": "html",
+      "docDate": "2026-01-01",
+      "docNote": "found + independently verified 2026-08-19; skeptic: All four checks pass on the same basis as Icy White / Rose Gold, and the exemption again survives both schedules. Same verified document (200, issuer "
     },
     "nexo-card": {
       "product": "Nexo Card",
@@ -1383,7 +1926,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-18",
+      "lastValue": 0.2,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "krak-card-kraken": {
       "product": "Krak Card (Kraken)",
@@ -1401,7 +1947,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://krak.app/pricing",
+      "docKind": "html",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED verbatim on the issuer's own pricing page: 'Foreign Exchange (FX) for EEA debit card customers | Cash FX Conversion | We don't charge FX fees"
     },
     "plutus-card": {
       "product": "Plutus Card",
@@ -1418,7 +1970,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://plutus.it/fees",
+      "docKind": "html",
+      "docNote": "found + independently verified 2026-08-19; skeptic: VERIFIED verbatim. '2.2 Point of Sale transaction (Non Domestic)*' shows 2.5% / 2.5% / 2.5% across the Starter, Everyday and Premium columns, and the "
     },
     "bleap-card": {
       "product": "Bleap Card",
@@ -1434,7 +1992,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
+      "docKind": "html",
+      "docDate": "2026-04-20",
+      "docNote": "route-verified 2026-08-19; CONFIRMED as a card-fee/SEPA source, REFUSED as an FX rate - and the claim's own instruction to read it narrowly is correct, so I am upholdi"
     },
     "zeal-card-gnosis-pay-rails": {
       "product": "Zeal Card (Gnosis Pay rails)",
@@ -1452,7 +2017,15 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: 403",
+      "docUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+      "docKind": "html",
+      "docDate": "2026-07-15",
+      "docNote": "skeptic-confirmed 2026-08-19; Per-product attribution is clean here because the fee document belongs to the card's operator (Gnosis Pay) and Zeal's own page independently states it",
+      "docFetch": "jina"
     },
     "gnosis-pay-card-direct-consumer": {
       "product": "Gnosis Pay Card (direct consumer)",
@@ -1465,7 +2038,15 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: 403",
+      "docUrl": "https://help.gnosispay.com/api/v2/help_center/en-us/articles/40288567337876.json",
+      "docKind": "html",
+      "docDate": "2026-07-15",
+      "docNote": "route-verified 2026-08-19; CONFIRMED (help.gnosispay.com/hc/en-us/articles/40288567337876, 'Intermediary Cashback Programme', live via the same API, draft:false). Verb",
+      "docFetch": "jina"
     },
     "bybit-card": {
       "product": "Bybit Card",
@@ -1478,20 +2059,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
-    },
-    "coinbase-card": {
-      "product": "Coinbase Card",
-      "issuer": "Coinbase (EEA); issuing EMI not obtainable",
-      "kind": "betaalpas",
-      "termsUrl": "https://www.coinbase.com/nl/card",
-      "availableToNL": true,
-      "httpStatus": "403 (Cloudflare)",
-      "readable": "bot-blocked",
-      "route": "agent",
-      "fieldsOnPage": [],
-      "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 0.5,
+      "lastRoute": "agent",
+      "lastReason": "wayback: no figure · agent: conditions not established",
+      "docUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+      "docKind": "html",
+      "docDate": "2026-06-03",
+      "docNote": "route-verified 2026-08-19; CONFIRMED, and this is the strongest find in the batch. www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card serves HT"
     },
     "wirex-card-wirex-one": {
       "product": "Wirex Card (Wirex One)",
@@ -1504,20 +2079,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
-    },
-    "binance-card": {
-      "product": "Binance Card",
-      "issuer": "Binance (EEA programme, formerly Visa)",
-      "kind": "crypto",
-      "termsUrl": "https://www.binance.com/en/support/faq/frequently-asked-questions-on-binance-card-eea-program-closure-d6c54984df904db7a0705f2914827381",
-      "availableToNL": false,
-      "httpStatus": "202 with a ZERO-BYTE body",
-      "readable": "unfetchable",
-      "route": "agent",
-      "fieldsOnPage": [],
-      "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: no figure",
+      "docUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+      "docKind": "html",
+      "docNote": "route-verified 2026-08-19; CONFIRMED as a refusal, and the refusal is the correct call - keep the rate null. help.wirexapp.com/article/wirex-fees-1379 serves HTTP 200 ",
+      "docDate": "2024-01-11"
     },
     "paysafecard-prepaid-code-paysafewallet": {
       "product": "paysafecard (prepaid code / PaysafeWallet)",
@@ -1533,7 +2102,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "provider-page: no figure · agent: no figure",
+      "docUrl": "https://www.paysafecard.com/nl-nl/alg-vw/",
+      "docKind": "html",
+      "docDate": "2026-05-26",
+      "docNote": "skeptic-confirmed 2026-08-19; Two independent issuer sources agree on 3%, which is why I am comfortable pinning a prepaid product. (1) The dated NL terms quoted above. (2) paysafec"
     },
     "tria-card": {
       "product": "Tria Card",
@@ -1546,7 +2122,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: no figure",
+      "docUrl": "https://help.tria.so/en/articles/13513481-what-are-tria-cards",
+      "docKind": "html",
+      "docDate": "2026-06-14",
+      "docNote": "route-verified 2026-08-19; CONFIRMED verbatim, but the 0 must not be published as an unconditional FX rate. help.tria.so/en/articles/13513481 'What are Tria Cards?' se"
     },
     "bigbank-flexibel-sparen": {
       "product": "Bigbank Flexibel Sparen",
@@ -1563,7 +2146,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.bigbank.nl/flexibel-sparen/",
+      "docKind": "html",
+      "docDate": "2026-08-07",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, every quoted sentence verbatim on the page I fetched. The date is the bank's own change notice (7 August 2026 was a Friday, consistent with"
     },
     "bunq-spaarrekening-massinterest": {
       "product": "bunq spaarrekening (MassInterest)",
@@ -1579,7 +2169,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.51,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me",
+      "docKind": "html",
+      "docDate": "2026-07-01",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — the only find in the batch whose quote greps clean, and the second-strongest. (1) help.bunq.com serves HTTP 200 real HTML on bun"
     },
     "santander-consumer-bank-spaarrekening": {
       "product": "Santander Consumer Bank Spaarrekening",
@@ -1595,7 +2192,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.1,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.santanderconsumerbank.nl/nl/sparen/spaarrekening",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED including the self-contradiction, with one attribution fix. Fetched both pages today, HTTP 200. Product page verbatim: 'Spaarrekening tot 3,"
     },
     "garanti-bbva-international-gouden-internet-rekening": {
       "product": "Garanti BBVA International Gouden Internet Rekening",
@@ -1608,7 +2211,10 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-18",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure"
     },
     "dhb-bank-saveonlinerekening": {
       "product": "DHB Bank S@veOnlinerekening",
@@ -1625,7 +2231,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.85,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.dhbbank.nl/rentetarieven",
+      "docKind": "html",
+      "docDate": "2026-07-14",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and this is the cleanest find in the batch: the quoted table (product | saldoklasse | rente | geldig vanaf) matches row for row, the date i"
     },
     "anadolubank-alfa-slimmer-sparen": {
       "product": "Anadolubank Alfa Slimmer Sparen",
@@ -1641,7 +2254,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.9,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.anadolubank.nl/klantenservice/rentetarieven/",
+      "docKind": "html",
+      "docDate": "2026-06-08",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on both halves. The rate page reads 'Anadolubank Alfa Slimmer Sparen (Geldig vanaf 8 juni 2026) 1.90 % Rente variabel (effectief op jaarbasi"
     },
     "scalable-capital-scalable-overnight": {
       "product": "Scalable Capital Scalable Overnight",
@@ -1657,7 +2277,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 2.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://nl.scalable.capital/overnight",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with one condition the submission missed. Fetched today, HTTP 200. The comparison table renders exactly as claimed — 'Zonder PRIME+ | 2.50%"
     },
     "raisin-spaarrekening-platform-19-partner-banks": {
       "product": "Raisin spaarrekening (platform, 19 partner banks)",
@@ -1673,7 +2299,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure"
     },
     "klarna-flex-rekening": {
       "product": "Klarna Flex rekening",
@@ -1689,7 +2318,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.95,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.klarna.com/nl/flex-rekening/",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED as to value, quotes and conditions: the headline, both footnotes and the 3-account limit are verbatim on the page I fetched, and I re-extrac",
+      "docDate": "2026-08-19"
     },
     "ayvens-bank-flexibel-sparen": {
       "product": "Ayvens Bank Flexibel Sparen",
@@ -1704,7 +2340,14 @@
         "interest"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.85,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.ayvensbank.nl/actuele-rentestanden",
+      "docKind": "html",
+      "docDate": "2026-07-17",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I fixed the missing date, which was the one leg that kept this find out of COVERED. Live page reads 'Actuele rentetarieven bij Ayvens B"
     },
     "argenta-internetspaarrekening": {
       "product": "Argenta Internetspaarrekening",
@@ -1719,7 +2362,12 @@
         "interest (wrong product only)"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-18",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://www.argenta.nl/sparen/spaarrente-overzicht",
+      "docDate": "2026-05-12"
     },
     "openbank-welkom-spaarrekening": {
       "product": "Openbank Welkom Spaarrekening",
@@ -1736,7 +2384,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.8,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.openbank.nl/page-data/spaarrekening/page-data.json",
+      "docKind": "html",
+      "docDate": "2026-08-04",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, date included. Fetched myself: HTTP 200, application/json, 31.543 bytes. Verbatim: 'De eerste zes maanden krijg je 2,80%* rente over je sal"
     },
     "openbank-open-spaarrekening": {
       "product": "Openbank Open Spaarrekening",
@@ -1753,7 +2408,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.8,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.openbank.nl/page-data/gratis-spaarrekening/page-data.json",
+      "docKind": "html",
+      "docDate": "2026-07-22",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, date included. Fetched the endpoint myself: HTTP 200, application/json, 30.093 bytes. Verbatim in the payload: 'Met de Open Spaarrekening o"
     },
     "yapi-kredi-bank-euro-plus-spaarrekening": {
       "product": "Yapi Kredi Bank Euro-Plus Spaarrekening",
@@ -1769,7 +2431,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.8,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.yapikredi.nl/particulieren/renteoverzicht",
+      "docKind": "html",
+      "docDate": "2026-06-26",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on value and date, but ONE CONDITION IS WRONG and must be corrected before pinning. Fetched today, HTTP 200. The Renteoverzicht renders each"
     },
     "nibc-spaarrekening": {
       "product": "NIBC Spaarrekening",
@@ -1786,7 +2455,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.55,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.nibc.nl/particulieren/sparen/spaarrentes",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched today, HTTP 200. The rate table renders row by row: 'Spaarrekening | 1,55%' · 'Kwartaalspaarrekening | 1,60%*' · then the Termijnde",
+      "docDate": "2026-08-19"
     },
     "nibc-kwartaalspaarrekening": {
       "product": "NIBC Kwartaalspaarrekening",
@@ -1803,7 +2479,14 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.6,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.nibc.nl/particulieren/sparen/kwartaalspaarrekening",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, and I reproduced the 1,50%/1,60% hazard the submission flagged. Fetched today, HTTP 200. Body verbatim: 'Kwartaal­spaarrekening 1,60% spaar",
+      "docDate": "2026-08-04"
     },
     "lloyds-bank-spaarrekening": {
       "product": "Lloyds Bank Spaarrekening",
@@ -1820,7 +2503,13 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.lloydsbank.nl/sparen/actuele-rentes-sparen",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED with one attribution correction. Fetched today, HTTP 200. Verbatim: 'De actuele spaarrente is 1,50%. Dit is de rente op jaarbasis. Een varia"
     },
     "nationale-nederlanden-internetsparen": {
       "product": "Nationale-Nederlanden Internetsparen",
@@ -1836,7 +2525,13 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.3,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.nn.nl/Particulier/Sparen/Actuele-spaarrentes.htm",
+      "docKind": "html",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED, with one condition strengthened. Fetched today, HTTP 200. The Internetsparen table renders exactly as submitted: '€ 0,- tot en met € 25.000"
     },
     "centraal-beheer-rentepl-s-rekening": {
       "product": "Centraal Beheer RentePlús Rekening",
@@ -1852,7 +2547,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.5,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.centraalbeheer.nl/sparen/renteplus-rekening/rente",
+      "docKind": "html",
+      "docDate": "2025-07-10",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED on both pages, which I fetched separately. The dated sentence is verbatim on /sparen (so 2025-07-10 is Centraal Beheer's own date) and the €"
     },
     "knab-flexibel-sparen": {
       "product": "Knab Flexibel Sparen",
@@ -1869,7 +2571,12 @@
         "annualFee"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.25,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://www.knab.nl/particulier/rente-tarieven",
+      "docDate": "2026-02-18"
     },
     "abn-amro-direct-sparen": {
       "product": "ABN AMRO Direct Sparen",
@@ -1882,7 +2589,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.25,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.abnamro.nl/nl/prive/rente/actuele-rente.html",
+      "docKind": "html",
+      "docDate": "2025-05-01",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Fetched the page myself today: the Direct Sparen row reads exactly € 0 t/m € 500.000 = 1,25% / € 500.000–1.000.000 = 1,45% / vanaf € 1.000."
     },
     "ing-oranje-spaarrekening": {
       "product": "ING Oranje Spaarrekening",
@@ -1895,7 +2609,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-18",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure",
+      "docUrl": "https://assets.ing.com/m/164f8ec0df799d44/original/Historische-rentetarieven-particulier-2026.pdf",
+      "docDate": "2026-01-01",
+      "docFetch": "jina",
+      "pointsReason": "ING HEEFT WEL EEN PUNTENPROGRAMMA: ing.nl/particulier/ing-punten bestaat en heet 'Spaar punten en bespaar op je uitgaven'. De koers is niet te lezen — de pagina rendert in shadow DOM, dezelfde faalmodus als de rest van ing.nl, en r.jina.ai geeft alleen de titel terug. Dus pointsPerEuro is ONBEKEND, niet nul. Het eerdere 0 kwam uit het kostendocument (FID), en dat somt KOSTEN op, geen voordelen — punten die niet in een tarievenlijst staan bewijzen niets over het bestaan van een puntenprogramma."
     },
     "rabobank-rabo-spaarrekening": {
       "product": "Rabobank Rabo SpaarRekening",
@@ -1908,7 +2629,14 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": false,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.5,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-rentes",
+      "docKind": "html",
+      "docDate": "2026-08-05",
+      "docNote": "route-verified 2026-08-19; CONFIRMED — strongest find in the batch, all five checks pass. (1) https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-ren"
     },
     "asn-bank-asn-ideaalsparen": {
       "product": "ASN Bank ASN Ideaalsparen",
@@ -1924,7 +2652,12 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "agent: no figure",
+      "docUrl": "https://www.asnbank.nl/sparen/rente.html",
+      "docDate": "2025-11-18"
     },
     "sns-internet-sparen": {
       "product": "SNS Internet Sparen",
@@ -1940,7 +2673,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.3,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "regiobank-spaar-op-maat-vrij": {
       "product": "RegioBank Spaar-op-Maat Vrij",
@@ -1956,7 +2692,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.3,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "triodos-bank-internet-sparen": {
       "product": "Triodos Bank Internet Sparen",
@@ -1972,7 +2711,10 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.15,
+      "lastRoute": "agent",
+      "lastReason": null
     },
     "brand-new-day-de-spaarrekening": {
       "product": "Brand New Day De Spaarrekening",
@@ -1988,7 +2730,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.3,
+      "lastRoute": "agent",
+      "lastReason": "agent: conditions not established",
+      "docUrl": "https://new.brandnewday.nl/rentestanden/",
+      "docKind": "html",
+      "docDate": "2025-05-07",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED. Both the sentence form ('De variabele rente – die hoger of lager kan worden – is op dit moment 1,30%') and the table row are verbatim, and "
     },
     "nexent-bank-spaarrekening": {
       "product": "Nexent Bank Spaarrekening",
@@ -2004,7 +2753,14 @@
         "conditions"
       ],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": 1.25,
+      "lastRoute": "agent",
+      "lastReason": null,
+      "docUrl": "https://www.nexentbank.nl/onze-producten/nexent-bank-spaarrekening/",
+      "docKind": "html",
+      "docDate": "2025-08-29",
+      "docNote": "skeptic-confirmed 2026-08-19; CONFIRMED in full — the strongest of my seventeen. Fetched today, HTTP 200. Verbatim: 'De voorwaarden zijn van toepassing vanaf 29-08-2025 tot nader o"
     },
     "revolut-dagelijkse-spaarrekening": {
       "product": "Revolut Dagelijkse Spaarrekening",
@@ -2017,7 +2773,1274 @@
       "route": "agent",
       "fieldsOnPage": [],
       "conditionalHeadlineRate": true,
-      "lastChecked": null
+      "lastChecked": "2026-08-19",
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "wayback: no figure · agent: 403",
+      "docUrl": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/",
+      "docKind": "html",
+      "docFetch": "jina",
+      "docDate": "2026-07-09",
+      "docNote": "skeptic-confirmed 2026-08-19; REFUTED AS SUBMITTED AND CORRECTED — do NOT pin the submitted row. Two failures. (1) The submitted claim that 'the exact per-plan rate is not publishe"
+    },
+    "ing-go": {
+      "product": "ING Go",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-more": {
+      "product": "ING More",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-extra": {
+      "product": "ING Extra",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-max": {
+      "product": "ING Max",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-student": {
+      "product": "ING Student",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-jongerenrekening": {
+      "product": "ING Jongerenrekening",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-kinderrekening": {
+      "product": "ING Kinderrekening",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-oranjepakket-met-korting": {
+      "product": "ING OranjePakket met korting",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": false,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-basispakket": {
+      "product": "ING BasisPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": false,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-betaalpakket": {
+      "product": "ING BetaalPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": false,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-royaalpakket": {
+      "product": "ING RoyaalPakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": false,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-oranjepakket": {
+      "product": "ING OranjePakket",
+      "issuer": "ING Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": "unverified",
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"1 januari 2026\" -> 2026-01-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-creditcard-more": {
+      "product": "ING Creditcard More",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-creditcard-extra": {
+      "product": "ING Creditcard Extra",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "ing-creditcard-max": {
+      "product": "ING Creditcard Max",
+      "issuer": "ING Bank N.V.",
+      "kind": "creditcard",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-15",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Kostenoverzicht (PDF), documentdatum \"15 juni 2026\" -> 2026-06-15. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Geen pdfUrl gezet: de provider-pdf-regexronde pakt figures[0] van het hele document en dat is bij ING de betaalpasregel (1,40%) — zie het pdfNote op ing-creditcard. Alleen docUrl, want die ronde leest per product."
+    },
+    "abn-studenten-pakket": {
+      "product": "ABN AMRO Studenten Pakket",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatieblad Betaaldiensten Particulieren (PDF), documentdatum \"Januari 2026\" -> 2026-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatieblad als de accountFee op abn-amro-creditcard en abn-amro-gold-card."
+    },
+    "abn-jongerengroeirekening": {
+      "product": "ABN AMRO Jongerengroeirekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatieblad Betaaldiensten Particulieren (PDF), documentdatum \"Januari 2026\" -> 2026-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatieblad als de accountFee op abn-amro-creditcard en abn-amro-gold-card."
+    },
+    "abn-vreemde-valuta-rekening": {
+      "product": "ABN AMRO Vreemde Valuta Rekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatieblad Betaaldiensten Particulieren (PDF), documentdatum \"Januari 2026\" -> 2026-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatieblad als de accountFee op abn-amro-creditcard en abn-amro-gold-card."
+    },
+    "abn-losse-betaalrekening": {
+      "product": "ABN AMRO losse betaalrekening",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatieblad Betaaldiensten Particulieren (PDF), documentdatum \"Januari 2026\" -> 2026-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatieblad als de accountFee op abn-amro-creditcard en abn-amro-gold-card."
+    },
+    "rabo-comfort": {
+      "product": "Rabo Comfort",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/00a13f9d8f3575a1/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-Comfort-1.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-01-07",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"7 januari 2026\" -> 2026-01-07. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-riantpakket": {
+      "product": "Rabo RiantPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/24fdccc361593353/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-RiantPakket-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-06-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"1 juni 2025\" -> 2025-06-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-jongerenrekening": {
+      "product": "Rabo JongerenRekening",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/11cd24df945a70e8/original/Informatiedocument-betreffende-de-vergoedingen-Rabo-JongerenRekening-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-06-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"1 juni 2025\" -> 2025-06-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-free": {
+      "product": "Rabo Free",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-12",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarieven en limieten (PDF), documentdatum \"December 2025\" -> 2025-12. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-directpakket": {
+      "product": "Rabo DirectPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": "unverified",
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-12",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarieven en limieten (PDF), documentdatum \"December 2025\" -> 2025-12. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-basispakket": {
+      "product": "Rabo BasisPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": "unverified",
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-12",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarieven en limieten (PDF), documentdatum \"December 2025\" -> 2025-12. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-totaalpakket": {
+      "product": "Rabo TotaalPakket",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": "unverified",
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-12",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarieven en limieten (PDF), documentdatum \"December 2025\" -> 2025-12. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "rabo-vreemde-valutarekening": {
+      "product": "Rabo Vreemde Valuta-rekening",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
+      "docKind": "pdf",
+      "docDate": "2025-12",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarieven en limieten (PDF), documentdatum \"December 2025\" -> 2025-12. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Rabobank's eigen informatiedocument/tarievenlijst."
+    },
+    "sns-basis": {
+      "product": "SNS Basis",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "sns-eu-betaalrekening": {
+      "product": "SNS EU Betaalrekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "sns-basis-priverekening": {
+      "product": "SNS Basis Privérekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "sns-jongerenpakket": {
+      "product": "SNS Jongerenpakket",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "sns-studentenrekening": {
+      "product": "SNS Studentenrekening",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "asn-basisbankrekening": {
+      "product": "ASN Basisbankrekening",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-07-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 juli 2026\" -> 2026-07-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "asn-studentenrekening": {
+      "product": "ASN Studentenrekening",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-07-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 juli 2026\" -> 2026-07-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "asn-jongerenpakket": {
+      "product": "ASN Jongerenpakket",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-07-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 juli 2026\" -> 2026-07-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "regiobank-jongwijs": {
+      "product": "RegioBank JongWijs Betaalrekening",
+      "issuer": "RegioBank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "regiobank-studentenrekening": {
+      "product": "RegioBank Studentenrekening",
+      "issuer": "RegioBank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+      "docKind": "pdf",
+      "docDate": "2026-02-01",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Tarievenwijzer (PDF achter een .html-pad), documentdatum \"per 1 februari 2026\" -> 2026-02-01. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Het .html-pad serveert PDF-bytes; dezelfde URL staat al als docUrl op de creditcardrij van deze bank, daar route-verified op 2026-08-19."
+    },
+    "knab-gezamenlijke-rekening": {
+      "product": "Knab Gezamenlijke rekening",
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group)",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.knab.nl/tarieven",
+      "docKind": "html",
+      "docDate": "2026-02-18",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: tarievenpagina, documentdatum \"Tarieven per 18-02-2026\" -> 2026-02-18. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Tarievenpagina; het Knab-informatiedocument van 01-10-2025 noemt hetzelfde bedrag plus het jaartotaal."
+    },
+    "triodos-betaalrekening-23-25": {
+      "product": "Triodos Internet Betaalrekening (23 t/m 25 jaar)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"mei 2026\" -> 2026-05. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatiedocument als docUrl op triodos-betaalpas; daar staat docDate 2026-05-01, hier 2026-05, want het document noemt alleen de maand."
+    },
+    "triodos-betaalrekening-26plus": {
+      "product": "Triodos Internet Betaalrekening (vanaf 26 jaar)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"mei 2026\" -> 2026-05. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatiedocument als docUrl op triodos-betaalpas; daar staat docDate 2026-05-01, hier 2026-05, want het document noemt alleen de maand."
+    },
+    "triodos-betaalrekening-enof": {
+      "product": "Triodos Internet Betaalrekening (en/of rekening)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+      "docKind": "pdf",
+      "docDate": "2026-05",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Informatiedocument betreffende de vergoedingen (PDF), documentdatum \"mei 2026\" -> 2026-05. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde informatiedocument als docUrl op triodos-betaalpas; daar staat docDate 2026-05-01, hier 2026-05, want het document noemt alleen de maand."
+    },
+    "bunq-free": {
+      "product": "bunq Free",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-free-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-core": {
+      "product": "bunq Core",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-core-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-pro": {
+      "product": "bunq Pro",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-pro-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-elite": {
+      "product": "bunq Elite",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-elite-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-free-business": {
+      "product": "bunq Free Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-free-business-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-core-business": {
+      "product": "bunq Core Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-core-business-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-pro-business": {
+      "product": "bunq Pro Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-pro-business-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "bunq-elite-business": {
+      "product": "bunq Elite Business",
+      "issuer": "bunq B.V.",
+      "kind": "betaalpakket",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-08-03",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: bunq Tarieven - Informatie over kosten (PDF), documentdatum \"03/08/2026\" -> 2026-08-03. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde tarievendocument als docUrl op de bunq-passen, daar route-verified op 2026-08-19. Dit plan is een ander catalogusproduct dan bunq-elite-business-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "n26-standard": {
+      "product": "N26 Standard",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19. Dit plan is een ander catalogusproduct dan n26-standard-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md. | 2026-08-21, rekeningkosten-datums-lane: de productnaam is van \"N26 Account (Standard)\" naar \"N26 Standard\" gebracht, in state.json en catalog.json tegelijk. Reden is de matcher, niet de smaak: productNamedByAccount in accountCosts.ts haalt de haakjes uit de naam en zoekt de overgebleven woorden als aaneengesloten reeks terug in \"<bank> <rekeningnaam>\". Bij de oude naam was dat \"n26 account\", en dat staat in geen enkele rekeningnaam die iemand intikt — de uitgesproken nul van € 0,00 per maand was daardoor per constructie onvindbaar en elke N26-betaalrekening viel terug op product-unknown, want de acht N26-plannen zijn het over het bedrag niet eens. \"N26 Standard\" matcht wel, sluit aan op de zusterrijen N26 Smart/Go/Metal en op de kaartrij \"N26 Standard betaalpas\", en het bedrag zelf is niet aangeraakt."
+    },
+    "n26-smart": {
+      "product": "N26 Smart",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19. Dit plan is een ander catalogusproduct dan n26-smart-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "n26-go": {
+      "product": "N26 Go",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19. Dit plan is een ander catalogusproduct dan n26-go-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "n26-metal": {
+      "product": "N26 Metal",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19. Dit plan is een ander catalogusproduct dan n26-metal-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "n26-business": {
+      "product": "N26 Business",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19."
+    },
+    "n26-business-smart": {
+      "product": "N26 Business Smart",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19."
+    },
+    "n26-business-go": {
+      "product": "N26 Business Go",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19."
+    },
+    "n26-business-metal": {
+      "product": "N26 Business Metal",
+      "issuer": "N26 Bank AG",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
+      "docKind": "pdf",
+      "docDate": "2026-06-26",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: List of Prices and Services (PDF), documentdatum \"Version 4.0, Date: 26.06.2026\" -> 2026-06-26. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. Zelfde prijslijst als docUrl op de N26-passen, daar geverifieerd op 2026-08-19."
+    },
+    "revolut-standard": {
+      "product": "Revolut Standard",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "http://web.archive.org/web/20250719221017id_/https://www.revolut.com/nl-NL/legal/standard-fees/",
+      "docKind": "html",
+      "docDate": "2025-04-22",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Particuliere tarieven (Wayback-snapshot van de legal-pagina), documentdatum \"van toepassing vanaf 22 april 2025\" -> 2025-04-22. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. revolut.com antwoordt met 403 op een directe fetch (gemeten door twee lanes), dus de gelezen kopie is een Wayback-snapshot en dat is ook de sourceUrl. LET OP: een andere lane heeft dezelfde tarievenpagina in een versie van 9 juli 2026 gepind (docNote op revolut-plus-betaalpas); die versie is hier NIET gelezen, dus dit bedrag kan achterhaald zijn. Dit plan is een ander catalogusproduct dan revolut-standard-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md. | 2026-08-21, rekeningkosten-datums-lane: de productnaam is van \"Revolut Standaard\" naar \"Revolut Standard\" gebracht, in state.json en catalog.json tegelijk. Zelfde reden als bij N26: productNamedByAccount matcht op woorden, en \"standaard\" is niet \"standard\" — een rekening die Revolut Standard heet liep langs de rij met de uitgesproken nul heen en kwam op product-unknown uit, omdat de vijf Revolut-plannen het over het bedrag niet eens zijn. De Engelse vorm is ook wat de rest van de familie draagt (Plus, Premium, Metal, Ultra) en wat de kaartrij \"Revolut Standard betaalpas\" al gebruikte. Het bedrag zelf is niet aangeraakt."
+    },
+    "revolut-plus": {
+      "product": "Revolut Plus",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "http://web.archive.org/web/20250808164730id_/https://www.revolut.com/nl-NL/legal/plus-fees/",
+      "docKind": "html",
+      "docDate": "2025-04-22",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Particuliere tarieven (Wayback-snapshot van de legal-pagina), documentdatum \"van toepassing vanaf 22 april 2025\" -> 2025-04-22. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. revolut.com antwoordt met 403 op een directe fetch (gemeten door twee lanes), dus de gelezen kopie is een Wayback-snapshot en dat is ook de sourceUrl. LET OP: een andere lane heeft dezelfde tarievenpagina in een versie van 9 juli 2026 gepind (docNote op revolut-plus-betaalpas); die versie is hier NIET gelezen, dus dit bedrag kan achterhaald zijn. Dit plan is een ander catalogusproduct dan revolut-plus-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "revolut-premium": {
+      "product": "Revolut Premium",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "http://web.archive.org/web/20250113142818id_/https://www.revolut.com/nl-NL/legal/premium-fees/",
+      "docKind": "html",
+      "docDate": "2024-08-28",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Particuliere tarieven (Wayback-snapshot van de legal-pagina), documentdatum \"van toepassing vanaf 28 augustus 2024\" -> 2024-08-28. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. revolut.com antwoordt met 403 op een directe fetch (gemeten door twee lanes), dus de gelezen kopie is een Wayback-snapshot en dat is ook de sourceUrl. LET OP: een andere lane heeft dezelfde tarievenpagina in een versie van 9 juli 2026 gepind (docNote op revolut-plus-betaalpas); die versie is hier NIET gelezen, dus dit bedrag kan achterhaald zijn. Dit plan is een ander catalogusproduct dan revolut-premium-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "revolut-metal": {
+      "product": "Revolut Metal",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "http://web.archive.org/web/20250210225314id_/https://www.revolut.com/nl-NL/legal/metal-fees/",
+      "docKind": "html",
+      "docDate": "2024-09-16",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Particuliere tarieven (Wayback-snapshot van de legal-pagina), documentdatum \"van toepassing vanaf 16 september 2024\" -> 2024-09-16. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. revolut.com antwoordt met 403 op een directe fetch (gemeten door twee lanes), dus de gelezen kopie is een Wayback-snapshot en dat is ook de sourceUrl. LET OP: een andere lane heeft dezelfde tarievenpagina in een versie van 9 juli 2026 gepind (docNote op revolut-plus-betaalpas); die versie is hier NIET gelezen, dus dit bedrag kan achterhaald zijn. Dit plan is een ander catalogusproduct dan revolut-metal-betaalpas: die rij draagt de koersopslag en de punten van de pas (kind betaalpas, gelezen door travel.ts), deze rij draagt de abonnementsprijs (gelezen door accountCosts.ts). Zie producten-toegevoegd-2026-08-21.md."
+    },
+    "revolut-ultra": {
+      "product": "Revolut Ultra",
+      "issuer": "Revolut Bank UAB",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "http://web.archive.org/web/20250711052252id_/https://www.revolut.com/nl-NL/legal/ultra-fees/",
+      "docKind": "html",
+      "docDate": "2025-04-22",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: Particuliere tarieven (Wayback-snapshot van de legal-pagina), documentdatum \"van toepassing vanaf 22 april 2025\" -> 2025-04-22. Waarde, bron, datum en voorwaarden staan als accountFee in catalog.json. revolut.com antwoordt met 403 op een directe fetch (gemeten door twee lanes), dus de gelezen kopie is een Wayback-snapshot en dat is ook de sourceUrl. LET OP: een andere lane heeft dezelfde tarievenpagina in een versie van 9 juli 2026 gepind (docNote op revolut-plus-betaalpas); die versie is hier NIET gelezen, dus dit bedrag kan achterhaald zijn."
+    },
+    "wise-rekening": {
+      "product": "Wise-rekening",
+      "issuer": "Wise Europe SA",
+      "kind": "betaalrekening",
+      "termsUrl": null,
+      "availableToNL": true,
+      "httpStatus": "not measured 2026-08-21 (rekeningkosten-lane: dit product komt uit een tarievendocument, er is geen URL opgehaald)",
+      "readable": "not measured",
+      "route": "agent",
+      "fieldsOnPage": [],
+      "conditionalHeadlineRate": null,
+      "lastChecked": null,
+      "lastValue": null,
+      "lastRoute": null,
+      "lastReason": "not swept — toegevoegd op 2026-08-21; de accountFee komt uit docUrl en niet uit een sweep",
+      "docUrl": "https://wise.com/nl/pricing/",
+      "docKind": "html",
+      "docNote": "toegevoegd 2026-08-21 door de rekeningkosten-lane uit staging-account-fees.json: tarievenpagina, documentdatum \"geen datum in het document (opgehaald 20-08-2026)\" — geen eigen datum, dus GEEN accountFee. De pagina draagt geen datum, dus het uitgesproken bedrag (€ 0,00 per maand, 'geen abonnementen of plannen') is NIET als accountFee opgenomen. Wat hem alsnog binnenhaalt is een Wise-document dat zijn eigen ingangsdatum noemt; of Wise dat publiceert is niet vastgesteld — dezelfde pagina staat al als docUrl op wise-betaalpas en droeg daar ook geen datum."
     }
   }
 }

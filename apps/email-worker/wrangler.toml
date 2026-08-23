@@ -22,16 +22,7 @@ compatibility_flags = []
 [observability]
 enabled = true
 
-[vars]
-# De PRODUCTION-URL van de n8n-webhook "E-mail binnen" — niet de test-URL.
-# Die eindigt op /webhook/lavega-mail-in; de test-URL op /webhook-test/... en
-# die luistert maar één keer.
-#
-# Vul je eigen n8n-host in vóór de eerste deploy. Blijft dit leeg, dan weigert
-# de Worker elke mail met precies die mededeling in de bounce — hij doet niet
-# alsof het gelukt is.
-N8N_WEBHOOK_URL = ""
-
-# N8N_SHARED_SECRET staat hier NIET. Het is een secret:
+# N8N_WEBHOOK_URL en N8N_SHARED_SECRET staan hier NIET. Het zijn secrets:
+#     pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL
 #     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET
 # Secrets komen de repo niet in. Zie docs/CONTEXT.md, harde eis 2.

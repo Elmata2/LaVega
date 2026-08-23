@@ -9,6 +9,8 @@ import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
+import { loadCatalogue } from "./catalogFile.js";
+import { forwardInvesting, shouldMountInvesting } from "./investing-mount.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -17,6 +19,15 @@ export const PORT = Number(process.env.PORT) || 8787;
 const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
 export const app = new Hono();
+
+/* The committed catalogue, read once as this module loads — before any request
+ * can arrive. Every figure it holds is one the travel block answers from a file
+ * instead of waiting 40s-5min on a lookup; every figure it does NOT hold (no
+ * conditions established, older than what is already cached) is refused here
+ * rather than served wrong. Both counts are logged, because "accepted 0" and "a
+ * broken loader" look identical otherwise. A missing or malformed file logs and
+ * the server boots anyway. */
+loadCatalogue();
 
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -97,6 +108,20 @@ registerAgentRoutes(app);
  * registration and linked from the app footer. Before the static catch-all. */
 app.get("/privacy", (c) => c.html(privacyHtml));
 app.get("/terms", (c) => c.html(termsHtml));
+
+/* Investing dashboard (apps/investing-web + apps/investing-server) on `/investing`
+ * with API routes at `/api/investing/*`, `/api/brokers/*`, etc. Enabled when the
+ * investing-web dist exists (production Docker build). */
+if (shouldMountInvesting()) {
+  const toInvesting = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  app.all("/api/investing/*", toInvesting);
+  app.all("/api/brokers/*", toInvesting);
+  app.all("/api/prices/*", toInvesting);
+  app.all("/api/market-data/*", toInvesting);
+  app.all("/api/config/status", toInvesting);
+  app.get("/investing", (c) => c.redirect("/investing/"));
+  app.all("/investing/*", toInvesting);
+}
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web

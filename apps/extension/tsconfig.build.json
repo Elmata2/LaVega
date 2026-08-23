@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "outDir": "dist"
+  },
+  /* Alleen het draaiende deel. Tests, fixtures en het sweep-script horen niet
+   * in de map die je in Chrome laadt: dat is code die de gebruiker meekrijgt
+   * zonder er iets aan te hebben. */
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/__fixtures__/**"]
+}

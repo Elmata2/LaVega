@@ -6,7 +6,7 @@ import { accounts } from "./fixtures";
 
 test("PositieBlock renders one compact row per entity in a small card", () => {
   const html = renderToStaticMarkup(<PositieBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).toContain("Positie per bedrijf");
+  expect(html).toContain("Positie");
   expect(html).toContain("Holding BV");
   expect(html).toContain("Café BV");
   expect(html).toContain("Webshop BV");

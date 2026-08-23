@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { parseBankCsv } from "./bankCsv.js";
 import { parseIngCsv } from "./csv.js";
 
@@ -247,4 +247,56 @@ test("Savings balance export: no txs, one account per Rekening, latest Boeksaldo
   const a = r.accounts.find((x) => x.key === "A28641213")!;
   expect(a).toMatchObject({ name: "Oranje Spaarrekening", bank: "ING", balance: 1234.56, balanceDate: "2026-07-31", currency: "EUR" });
   expect(r.accounts.find((x) => x.key === "D12883091")!.balance).toBe(0.2);
+});
+
+/* ING'S ENGLISH EXPORT.
+ *
+ * His main history file, and no profile covered it: every row fell through to the
+ * generic profile, which reads neither the Debit/credit column nor the per-row
+ * Account, so the sign came out wrong and the account was lost. A large share of
+ * the "onbekend" category traced back to here rather than to the categoriser.
+ */
+describe("ING English CSV export", () => {
+  const EN = [
+    '"Date","Name / Description","Account","Counterparty","Code","Debit/credit","Amount (EUR)","Transaction type","Notifications"',
+    '"20260715","Albert Heijn 1234","NL88INGB0793113504","","BA","Debit","42,15","Betaalautomaat","Pasvolgnr 001 15-07-2026 12:03"',
+    '"20260701","Salaris Generation C","NL88INGB0793113504","NL12ABNA0417164300","OV","Credit","3.250,00","Overschrijving","Salaris juli"',
+  ].join("\n");
+
+  test("reads the sign from Debit/credit, not from the amount's punctuation", () => {
+    const out = parseBankCsv(EN, "fallback");
+    expect(out.txs).toHaveLength(2);
+    // Debit must be negative even though the CSV writes the amount unsigned.
+    expect(out.txs.find((t) => t.counterparty.includes("Albert Heijn"))!.amount).toBeCloseTo(-42.15, 2);
+    expect(out.txs.find((t) => t.counterparty.includes("Salaris"))!.amount).toBeCloseTo(3250, 2);
+  });
+
+  test("keeps the per-row account, so the transactions are not orphaned", () => {
+    const out = parseBankCsv(EN, "fallback");
+    expect(Object.values(out.accounts).some((a) => a.iban === "NL88INGB0793113504")).toBe(true);
+    expect(out.txs.every((t) => t.accountKey === "NL88INGB0793113504")).toBe(true);
+  });
+
+  test("reads Name / Description as the counterparty, not Notifications", () => {
+    // Getting these the wrong way round is what makes a row look like a payment to
+    // "Pasvolgnr 001" — unrecognisable, and straight into onbekend.
+    const out = parseBankCsv(EN, "fallback");
+    const ah = out.txs.find((t) => t.amount < 0)!;
+    expect(ah.counterparty).toContain("Albert Heijn");
+    expect(ah.description).toContain("Pasvolgnr");
+  });
+
+  test("still recognises it as ING", () => {
+    expect(Object.values(parseBankCsv(EN, "fallback").accounts)[0].bank).toBe("ING");
+  });
+
+  test("the Dutch export keeps working unchanged", () => {
+    const NL = [
+      '"Datum","Naam / Omschrijving","Rekening","Tegenrekening","Code","Af Bij","Bedrag (EUR)","Mutatiesoort","Mededelingen"',
+      '"20260715","Albert Heijn 1234","NL88INGB0793113504","","BA","Af","42,15","Betaalautomaat","Pasvolgnr 001"',
+    ].join("\n");
+    const out = parseBankCsv(NL, "fallback");
+    expect(out.txs[0].amount).toBeCloseTo(-42.15, 2);
+    expect(Object.values(out.accounts)[0].bank).toBe("ING");
+  });
 });

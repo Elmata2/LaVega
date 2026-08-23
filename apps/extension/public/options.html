@@ -1,0 +1,102 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LaVega — aan de kassa · instellingen</title>
+<link rel="stylesheet" href="stijl.css" />
+<body class="opties">
+  <p class="merk">LaVega · aan de kassa</p>
+  <h1>Instellingen</h1>
+
+  <h2>Welke kaarten heb je?</h2>
+  <p class="hint">
+    Dit is de hele koppeling met LaVega in deze versie: één lijstje dat in je browser blijft.
+    Er is geen verbinding met je kluis, geen account en geen server. Kaarten die je hier
+    aanvinkt worden behandeld als kaarten die je al betaalt — hun maandprijs of jaarprijs wordt
+    dan niet van de opbrengst afgetrokken, want die kosten lopen toch door.
+  </p>
+  <label for="zoek">Zoeken</label>
+  <input id="zoek" type="text" placeholder="naam of bank" autocomplete="off" />
+  <p class="hint" id="kaarten-telling"></p>
+  <div id="kaartenlijst"></div>
+
+  <h2>Welke punten heb je liggen?</h2>
+  <p class="hint">
+    Deze saldi typ je hier zelf in; de extensie haalt ze nergens op en heeft geen verbinding met je
+    LaVega-kluis. Dat betekent dat je ze op twee plekken bijhoudt en dat ze uit elkaar kunnen lopen
+    — daarom staat bij elk saldo de datum waarop je het invulde, en zegt LaVega het erbij zodra dat
+    meer dan negentig dagen geleden is. Een saldo dat je leegmaakt, is meteen weg.
+  </p>
+  <div id="puntenlijst"></div>
+
+  <p class="hint" id="punten-melding"></p>
+
+  <h3>Een programma dat er niet bij staat</h3>
+  <p class="hint">
+    Van programma's buiten de lijst kennen we geen koers. LaVega laat dan alleen zien dát je punten
+    hebt liggen, met de mededeling dat we niet weten wat ze waard zijn — nooit een verzonnen bedrag.
+  </p>
+  <form id="punten-toevoegen" novalidate>
+    <label for="punten-naam">Naam van het programma</label>
+    <input id="punten-naam" type="text" placeholder="Marriott Bonvoy" autocomplete="off" />
+    <label for="punten-aantal">Aantal punten</label>
+    <input id="punten-aantal" type="text" inputmode="numeric" placeholder="12000" autocomplete="off" />
+    <button type="submit">Toevoegen</button>
+  </form>
+
+  <h2>Op welke winkels mag het paneel verschijnen?</h2>
+  <p class="hint">
+    Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een
+    winkel aan, dan vraagt Chrome je apart om toestemming voor dat ene adres; die kun je in
+    <code>chrome://extensions</code> altijd weer intrekken. De lijst is kort omdat er alleen
+    winkels in staan waarvan we hebben gemeten dat het bedrag dat we lezen ook echt bij de
+    pagina hoort.
+  </p>
+  <div id="siteslijst"></div>
+  <p class="hint" id="sites-melding"></p>
+
+  <h2>Mag LaVega je Amex-aanbiedingen lezen?</h2>
+  <p class="hint">
+    Dit is een <strong>aparte vraag</strong> van de vraag hierboven. Wie ja zegt tegen "lees de prijs
+    op ikea.nl" heeft daarmee geen ja gezegd tegen "lees mijn Amex-account". Deze schakelaar staat
+    standaard uit en zet niets anders aan.
+  </p>
+  <p class="hint">
+    Amex zet aanbiedingen klaar die alleen voor jouw kaart gelden — "30% korting bij deze winkel",
+    "€&nbsp;20 terug bij besteding van €&nbsp;100". Die staan achter je login en zijn van buitenaf
+    niet te zien; op 22 augustus 2026 gemeten geeft de aanbiedingenpagina zonder login alleen de
+    schil van de app terug, zonder één aanbieding erin. Maar in jouw browser ben jíj ingelogd, en
+    daar kan LaVega die pagina wél lezen. Er gaat nog steeds niets naar een server.
+  </p>
+  <p class="hint">Wat er van die pagina meekomt:</p>
+  <ul class="grens" id="amex-wel"></ul>
+  <p class="hint">En wat niet:</p>
+  <ul class="grens" id="amex-niet"></ul>
+  <p class="hint">
+    Zet je de schakelaar uit, dan wordt de leestoestemming ingetrokken en gaat alles wat er gelezen
+    is meteen weg — niet pas bij het volgende bezoek. Hetzelfde gebeurt als je de toestemming in
+    <code>chrome://extensions</code> intrekt.
+  </p>
+  <div id="amexschakelaar"></div>
+  <p class="hint" id="amex-melding"></p>
+
+  <h3>Wat er is gelezen</h3>
+  <p class="hint" id="amex-status"></p>
+  <div id="amexlijst"></div>
+
+  <h2>Wat deze extensie niet doet</h2>
+  <ul class="grens">
+    <li>Geen netwerkverkeer. Niet naar lavega.dev, niet naar een statistiekendienst, nergens
+      heen. De kaartgegevens zitten in de bundel en worden nooit bijgewerkt zonder een nieuwe
+      versie van de extensie.</li>
+    <li>Geen bedragen bewaren. Wat er op een pagina staat wordt gelezen, gebruikt om de zin op
+      het scherm te maken, en daarna is het weg. Er is geen geschiedenis.</li>
+    <li>Geen andere pagina's dan de aangevinkte winkels. Geen <code>&lt;all_urls&gt;</code>,
+      geen achtergrondtoegang tot je tabbladen, geen cookies.</li>
+    <li>Geen advies dat je hier niet kunt navolgen. Weten we de kosten van een kaart niet, dan
+      staat er een brutobedrag met die onbekendheid erbij — en niet het woord "netto".</li>
+  </ul>
+
+  <h2>Waar de cijfers vandaan komen</h2>
+  <p class="hint" id="herkomst"></p>
+
+  <script type="module" src="options.js"></script>
+</body>

@@ -1,0 +1,25 @@
+<!-- ECHT, INGEKORT. Bron: https://www.ikea.com/nl/nl/p/billy-boekenkast-wit-00263850/
+     Opgehaald 21 augustus 2026 met een gewone browser-UA, HTTP 200, 1,1 MB.
+     Alleen het JSON-LD Product-blok is bewaard, en daarbinnen alleen de takken
+     die de lezer aanraakt: name, sku en offers. De omschrijving en de
+     beeldenlijst (samen ~7 kB) zijn weggelaten omdat de lezer er niets mee doet
+     — en omdat ze in het bewijsmateriaal niet mogen belanden.
+
+     WAAROM DEZE FIXTURE ER IS EN DE COOLBLUE-FIXTURE NIET MEER VOLSTAAT.
+     De vorige meting noteerde Coolblue als de enige leesbare winkel. Bij de
+     hermeting op 21 augustus 2026 bleek WAT er leesbaar was niet te kloppen:
+     Coolblue serveerde op de AirPods-URL een Samsonite kofferset van € 420 en
+     op de Sonos-URL een PlayStation 5 van € 490. Twee verschillende URL's, twee
+     verschillende verkeerde artikelen. De lezer leest dat bedrag met vlag en
+     wimpel — en zou op een Sonos van € 279 doodleuk € 490 melden.
+
+     IKEA deed het omgekeerde en dat is de reden dat deze fixture bestaat: op de
+     BILLY-URL kwam BILLY terug (€ 49,99) en op de KALLAX-URL kwam KALLAX terug
+     (€ 69,99). Twee van de twee pagina's met een Product-blok beschreven het
+     artikel dat er ook echt stond. Dat is het enige domein waarvan we KUNNEN
+     aantonen dat het bedrag bij de pagina hoort, en daarom het enige domein in
+     src/sites.ts. -->
+<!doctype html><html lang="nl"><head><title>BILLY Boekenkast</title>
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Opbergen &amp; organiseren"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"BILLY Boekenkast - wit 80x28x202 cm","sku":"002.638.50","offers":{"@type":"Offer","availability":"https://schema.org/InStock","itemCondition":"https://schema.org/NewCondition","price":"49.99","priceCurrency":"EUR","seller":{"@type":"Organization","name":"IKEA","url":"https://www.ikea.com/nl/nl/"},"shippingDetails":{"@type":"OfferShippingDetails","shippingDestination":{"@type":"DefinedRegion","addressCountry":"NL"}},"url":"https://www.ikea.com/nl/nl/p/billy-boekenkast-wit-00263850/"}}</script>
+</head><body><h1>BILLY Boekenkast - wit 80x28x202 cm</h1></body></html>

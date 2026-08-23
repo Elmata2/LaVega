@@ -14,7 +14,19 @@ import {
   getN8nInvoiceUrl,
   setAiExtractionEnabled,
 } from "../settings";
-import { fetchQueue, pendingToInvoice, toPending, NOTICE_LABELS, type N8nNotice, type PendingInvoice } from "../n8n";
+import {
+  autoBookDecision,
+  bookingEntity,
+  fetchQueue,
+  forgetAutoBooked,
+  getAutoBookedInvoices,
+  pendingToInvoice,
+  rememberAutoBooked,
+  toPending,
+  NOTICE_LABELS,
+  type N8nNotice,
+  type PendingInvoice,
+} from "../n8n";
 import "../styles/views.css";
 
 /* Facturen — reduced to EXACTLY three ways in (UI review, 2026-08-16):
@@ -25,11 +37,46 @@ import "../styles/views.css";
  *
  * Only the SURFACE was simplified. Every safety rule the feature had is still
  * here and still enforced in the same place:
- *   - nothing books itself: an n8n row is a proposal until "Bevestigen";
  *   - a row without a valid amount is refused (pendingToInvoice / handleAdd);
  *   - an unreadable currency blocks the row instead of silently becoming EUR —
  *     for the n8n queue AND for manual entry;
  *   - the AI PDF read stays opt-in, per document, and only pre-fills a draft.
+ *
+ * WHAT CHANGED (20 August 2026), and why the old "nothing books itself" is now
+ * "almost nothing books itself":
+ *
+ * He asked for a forwarded invoice to end up linked without him clicking. That
+ * is TWO acts, and they never deserved the same treatment:
+ *
+ *   BOOKING  — turning a mail into a financial record. It lands in his
+ *              administration and in his BTW figures.
+ *   LINKING  — hanging a booked invoice on a bank transaction. reconcileInvoices
+ *              has always done this by itself, and it is reversible.
+ *
+ * MEASURED before changing anything: linking was already automatic, but only on
+ * a bank sync or a file import (App.tsx) — so an invoice confirmed today whose
+ * payment already went out last week sat at "expected" until the next import.
+ * That is fixed here: every path that BOOKS an invoice now reconciles the whole
+ * list against the transactions on hand, immediately. Both the auto path and
+ * "Bevestigen".
+ *
+ * Booking is the dangerous half — a forwarded mail comes from outside, and
+ * whoever knows the forwarding address can try to get something into his books.
+ * So a row still has to earn it, and `autoBookDecision` (see n8n.ts) is the
+ * whole rule: a verified sender, no open question about the entity, and a
+ * complete invoice. Everything else stays a proposal AND carries the reason it
+ * waits.
+ *
+ * "No open question" is two cases, not one — and that cost him an evening. The
+ * gate demanded EXACTLY ONE entity, so the freelancer who never entered any
+ * entities was held at a choice that does not exist. Zero entities is the
+ * answer, not a missing one: everything is his, it books on the app's default,
+ * and the word "entiteit" never appears on this screen. Two or more IS a real
+ * question, and it is still asked exactly once.
+ * What does book itself is visible as automatic (the "automatisch" badge, from
+ * the auto-booked log) and reversible in one click ("Terugdraaien" → cancelled,
+ * which drops it out of the forecast without deleting the record). Something
+ * silent that changes his books is worse than a click.
  */
 
 /** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
@@ -141,6 +188,8 @@ export default function Facturen({
   // input, but the Invoice keeps vatAmount for the (later) tax agent, so we
   // carry it through the confirm rather than silently dropping it.
   const [pendingVat, setPendingVat] = useState<number | null>(null);
+  /** Het btw-veld op het formulier, als tekst — leeg is een echte staat en niet 0. */
+  const [vatInput, setVatInput] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
 
@@ -249,7 +298,21 @@ export default function Facturen({
         return;
       }
       if (outcome.kind === "network") {
-        setN8nNote("Geen antwoord van n8n — netwerk, verkeerde URL, of allowedOrigins staat deze pagina niet toe. Hier is niets binnengekomen; heeft n8n het verzoek tóch verwerkt, dan is die wachtrij nu leeg. Kijk in dat geval in n8n.");
+        /* DE MEEST WAARSCHIJNLIJKE OORZAAK EERST, in plaats van drie naast
+         * elkaar. Hij meldde "geen antwoord" ÉN dat er in n8n niets te zien was,
+         * en die combinatie wijst één ding aan: LaVega stuurt de tokenheader
+         * x-lavega-token mee, en een eigen header maakt van dit verzoek een
+         * cross-origin CALL MET PREFLIGHT. De browser stuurt dan eerst OPTIONS,
+         * en als de webhook die origin niet toestaat sterft het verzoek daar —
+         * zonder dat n8n er een uitvoering van logt. "Niets in n8n" is dus geen
+         * teken dat de URL fout is; het hoort bij dit geval.
+         *
+         * De oude tekst zette netwerk, URL en allowedOrigins als gelijke
+         * kandidaten naast elkaar. Drie oorzaken noemen waarvan er één de echte
+         * is, is bijna net zo onbruikbaar als er geen noemen. */
+        setN8nNote(
+          "Geen antwoord van n8n. Staat er in n8n óók geen uitvoering, dan is dit vrijwel zeker de CORS-controle: LaVega stuurt een tokenheader mee, dus de browser vraagt eerst toestemming met een OPTIONS-verzoek — en dat verzoek laat in n8n geen spoor na als de webhook deze pagina niet toestaat. Zet in de Webhook-node bij Allowed Origins (CORS) het adres van deze pagina, of * om het uit te proberen. Wil je eerst weten of de URL überhaupt leeft, plak hem dan met het token in een terminal met curl: dat verzoek gaat buiten de browser om en heeft dus geen CORS nodig. Hier is niets binnengekomen.",
+        );
         return;
       }
       if (outcome.kind === "unreadable") {
@@ -263,9 +326,57 @@ export default function Facturen({
       const already = new Set(currentPending.map((p) => p.messageId));
       const fresh = outcome.rows.filter((r) => !handled.has(r.messageId) && !already.has(r.messageId));
       const duplicates = outcome.rows.length - fresh.length;
-      if (fresh.length > 0) {
-        onPendingChange([...currentPending, ...fresh.map((r) => toPending(r, entity || defaultEntity))]);
+
+      // The gate. Rows that clear it become invoices right here; the rest go to
+      // the review list WITH the reason they are waiting, so the queue never
+      // shows a row without saying why it needs him.
+      const booked: Invoice[] = [];
+      const bookedFrom: { invoiceId: string; messageId: string; subject?: string }[] = [];
+      const decidedIds: string[] = [];
+      let alreadyStored = 0;
+      const proposals: PendingInvoice[] = [];
+      const seenIds = new Set(invoices.map((i) => i.id));
+      const entityCtx = { entityChoices, defaultEntity: selectedEntity };
+      for (const row of fresh) {
+        const draft = toPending(row, bookingEntity(entityCtx));
+        const decision = autoBookDecision(row, entityCtx);
+        if (!decision.book) {
+          proposals.push({ ...draft, waitReason: decision.reason });
+          continue;
+        }
+        // De poort laat alleen door wat GEEN keuze meer is: één onderneming of
+        // geen enkele. `bookingEntity` zegt welke dat dan is — dezelfde functie
+        // die de poort gebruikte, zodat er niet op een andere BV geboekt kan
+        // worden dan waarop hij goedkeurde.
+        const result = pendingToInvoice({ ...draft, entity: bookingEntity(entityCtx) });
+        if (!result.ok) {
+          // Unreachable while the gate checks the same thing, but a row must
+          // land in the review list rather than vanish if the two ever diverge.
+          proposals.push({ ...draft, waitReason: result.error });
+          continue;
+        }
+        if (seenIds.has(result.invoice.id)) {
+          alreadyStored++;
+        } else {
+          seenIds.add(result.invoice.id);
+          // ON THE RECORD, not beside it. `autoBooked` travels with the invoice
+          // into the encrypted vault and the back-up, so "this one arrived without
+          // you" survives a reload, a restore and a new device. The localStorage
+          // log stays as well, for invoices booked before the field existed.
+          booked.push({ ...result.invoice, autoBooked: true });
+          bookedFrom.push({ invoiceId: result.invoice.id, messageId: row.messageId, subject: row.subject });
+        }
+        // Decided either way, so n8n's next hourly pass will not re-offer it.
+        decidedIds.push(row.messageId);
       }
+      if (decidedIds.length > 0) addHandledInvoiceMessageIds(decidedIds);
+      if (booked.length > 0) {
+        // ONE save with everything, and reconciled in the same breath: a payment
+        // that already came in links now instead of at the next import.
+        onSaveInvoices(reconcileInvoices([...invoices, ...booked], txs));
+        for (const b of bookedFrom) rememberAutoBooked(b);
+      }
+      if (proposals.length > 0) onPendingChange([...currentPending, ...proposals]);
       // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
       const knownNotices = new Set(currentNotices.map((n) => n.messageId));
       const freshNotices = outcome.notices.filter(
@@ -278,7 +389,22 @@ export default function Facturen({
       } else if (fresh.length === 0) {
         parts.push("Niets nieuws: alles wat n8n stuurde was hier al afgehandeld.");
       } else {
-        parts.push(`${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd — bevestig of verwerp elke regel.`);
+        parts.push(`${fresh.length} ${fresh.length === 1 ? "factuur" : "facturen"} opgehaald. n8n heeft de wachtrij hiermee geleegd.`);
+      }
+      if (booked.length > 0) {
+        parts.push(
+          `${booked.length} daarvan ${booked.length === 1 ? "is" : "zijn"} automatisch geboekt: de afzender kwam door de SPF/DKIM-controle en er stond alles in wat nodig is. Ze staan hieronder met “automatisch” erbij en zijn met één klik terug te draaien.`,
+        );
+      }
+      if (alreadyStored > 0) {
+        parts.push(
+          alreadyStored === 1
+            ? "Eén ervan stond al in LaVega en is niet dubbel geboekt."
+            : `${alreadyStored} ervan stonden al in LaVega en zijn niet dubbel geboekt.`,
+        );
+      }
+      if (proposals.length > 0) {
+        parts.push(`${proposals.length} ${proposals.length === 1 ? "regel wacht" : "regels wachten"} op jou — bij elke regel staat waarom.`);
       }
       if (duplicates > 0) parts.push(`${duplicates} regel(s) kende LaVega al (zelfde messageId) en worden niet opnieuw aangeboden.`);
       if (outcome.dropped > 0) parts.push(`${outcome.dropped} regel(s) misten een messageId of een bedrag en zijn niet overgenomen — die staan niet in LaVega en niet meer in n8n.`);
@@ -312,7 +438,10 @@ export default function Facturen({
       return;
     }
     const duplicate = invoices.some((i) => i.id === result.invoice.id);
-    if (!duplicate) onSaveInvoices([...invoices, result.invoice]);
+    // Reconciled on the spot, exactly like the auto path and like a file import:
+    // if the payment already went out, this invoice is linked before he leaves
+    // the screen instead of at the next bank sync.
+    if (!duplicate) onSaveInvoices(reconcileInvoices([...invoices, result.invoice], txs));
     addHandledInvoiceMessageIds([p.messageId]);
     onPendingChange(pending.filter((x) => x.messageId !== p.messageId));
     dropRowError(p.messageId);
@@ -347,9 +476,46 @@ export default function Facturen({
     [flows],
   );
 
-  // Entity options: fall back to the app's default entity when no accounts are
-  // imported yet, so a first invoice still attaches to a BV (and thus scopes).
-  const entityChoices = entities.length > 0 ? entities : [defaultEntity];
+  /* ── Wel of geen ondernemingen ───────────────────────────────────────────
+   *
+   * Zijn regel: heeft de gebruiker ondernemingen opgegeven, dan per
+   * onderneming; heeft hij ze niet, dan is het één zelfstandige die alles op
+   * dezelfde rekening doet en staat het gewoon in het overzicht.
+   *
+   * Dus GEEN keuzelijst met één verzonnen optie erin. Die stond er wel — de
+   * standaard van de app werd als "keuze" opgevoerd — en dat is een vraag
+   * stellen waarop maar één antwoord bestaat. Erger: de poort in n8n.ts kreeg
+   * daardoor altijd precies één optie te zien, dus dacht hij dat er een
+   * onderneming gekozen wás. Nu ziet de poort de échte lijst, en zegt
+   * `bookingEntity` één keer waarop er geboekt wordt.
+   *
+   * `entiteit` als woord komt hieronder alleen op het scherm als hij er zelf
+   * ondernemingen heeft. */
+  const hasEntities = entities.length > 0;
+  const entityChoices = entities;
+  // De keuzelijst mag nooit iets anders tonen dan waarop geboekt wordt: stond
+  // in de state een entiteit die niet in de lijst staat (de app-standaard hoeft
+  // niet tussen zijn BV's te zitten), dan toonde het scherm de eerste BV en
+  // boekte "Toevoegen" op die standaard. Een factuur op de verkeerde BV staat
+  // scheef in de btw — precies wat de poort moest voorkomen.
+  const selectedEntity = hasEntities
+    ? (entityChoices.includes(entity) ? entity : entityChoices[0])
+    : defaultEntity;
+  // "Per onderneming" heeft alleen zin als er meer dan één is: bij één staat op
+  // elke regel dezelfde naam.
+  const showEntityColumn = entities.length > 1;
+
+  // Which invoices got here without him clicking. Read from the log on EVERY
+  // render, deliberately un-memoised: the log is written by this view (booking,
+  // undoing) and by a previous session, so any cache key would be a guess about
+  // when it changed. It is one localStorage read of a handful of ids.
+  // The FIELD is the truth; the log is the fallback for invoices booked before
+  // the field existed. An invoice with autoBooked absent was confirmed by hand —
+  // the safe reading, since that is what every older row actually was.
+  const autoBookedIds = new Set([
+    ...invoices.filter((i) => i.autoBooked).map((i) => i.id),
+    ...getAutoBookedInvoices().map((a) => a.invoiceId),
+  ]);
 
   function handleAdd() {
     const cp = counterparty.trim();
@@ -365,7 +531,7 @@ export default function Facturen({
     if (!/^[A-Z]{3}$/.test(ccy)) return setManualError("Vul de valuta in (3 letters) — LaVega gokt geen euro's.");
     setManualError(null);
     const inv = makeInvoice({
-      entity: entity || defaultEntity,
+      entity: selectedEntity,
       direction,
       counterparty: cp,
       invoiceNumber: invoiceNumber.trim() || undefined,
@@ -376,7 +542,11 @@ export default function Facturen({
       status: "expected",
       sourceType: pendingSource,
       confidence: pendingSource === "llm" ? (pendingConfidence ?? undefined) : undefined,
-      vatAmount: pendingSource === "llm" ? (pendingVat ?? undefined) : undefined,
+      // Wat in het veld staat wint van wat het concept meebracht: hij kan een
+      // AI-bedrag corrigeren, en dan is zijn correctie het feit.
+      vatAmount: vatInput.trim() !== "" && Number.isFinite(Number(vatInput.replace(",", ".")))
+        ? Number(vatInput.replace(",", "."))
+        : (pendingSource === "llm" ? (pendingVat ?? undefined) : undefined),
     });
     // Whether the draft is added or turns out to be a duplicate, it has now been
     // dealt with — clear the AI-draft tags so the NEXT manual entry can't inherit
@@ -391,12 +561,23 @@ export default function Facturen({
     setCounterparty("");
     setInvoiceNumber("");
     setAmount("");
+    setVatInput("");
     setImportNote(null);
     clearDraftTags();
   }
 
   function setStatus(id: string, status: Invoice["status"]) {
     onSaveInvoices(invoices.map((i) => (i.id === id ? { ...i, status } : i)));
+  }
+
+  // Undo an automatic booking. It CANCELS rather than deletes: cancelled drops
+  // straight out of scheduledInvoiceFlows (so it stops moving the forecast) but
+  // the record and its trail stay, which is what "reversible" has to mean for
+  // something that entered his books on its own.
+  function undoAutoBooked(id: string) {
+    setStatus(id, "cancelled");
+    forgetAutoBooked(id);
+    setN8nNote("Automatische boeking teruggedraaid: de factuur staat op geannuleerd en telt niet meer mee in de prognose.");
   }
 
   // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
@@ -418,6 +599,7 @@ export default function Facturen({
     setIssueDate("");
     setDueDate("");
     setAmount("");
+    setVatInput("");
     setCurrency("EUR");
   }
 
@@ -428,7 +610,7 @@ export default function Facturen({
         setImportNote("Geen facturen herkend in dit bestand.");
         return;
       }
-      const parsed = rows.map((row) => makeInvoice({ ...row, entity: entity || defaultEntity }));
+      const parsed = rows.map((row) => makeInvoice({ ...row, entity: selectedEntity }));
       // Dedup by content-hashed id so re-importing the same file (or an
       // overlapping export) doesn't duplicate rows already on file.
       const seen = new Set(invoices.map((i) => i.id));
@@ -517,6 +699,7 @@ export default function Facturen({
       setPendingSource("llm");
       setPendingConfidence(confidence);
       const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
+      setVatInput(vat === null ? "" : String(vat));
       setPendingVat(vat);
       // Only show a percentage the model actually reported; otherwise just ask
       // the owner to check every field (no fabricated confidence number).
@@ -535,17 +718,31 @@ export default function Facturen({
     <>
       <div className="view-head">
         <h2>Drie manieren om een factuur binnen te krijgen</h2>
-        <span className="eyebrow">niets wordt automatisch geboekt</span>
+        <span className="eyebrow">alleen een geverifieerde afzender boekt zichzelf</span>
       </div>
 
       <ModuleGrid label="Facturen invoeren">
         {/* ── 1. de automatische n8n-feed ─────────────────────────────── */}
-        <Module title="1 · Automatisch (n8n)" height="tall">
+        <Module title="1 · Automatisch" height="tall">
           <p className="cell-sub">
             LaVega haalt de wachtrij van je eigen n8n op zodra dit scherm opent, en daarna
-            elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. Er wordt
-            niets automatisch geboekt: je ziet elke regel eerst en bevestigt hem zelf. De knop
+            elke {Math.round(PULL_INTERVAL_MS / 60000)} minuten zolang je hier bent. De knop
             hieronder is voor een directe hercontrole.
+          </p>
+          {/* De voorwaarden die hier staan moeten de voorwaarden zijn die
+              gelden. Bij één onderneming is dat een afgevinkte voorwaarde; bij
+              meer is het juist de reden dat er niets automatisch gaat, en dan
+              hoort er geen belofte te staan; bij geen enkele bestaat de
+              voorwaarde niet en hoeft het woord niet te vallen. */}
+          <p className="cell-sub">
+            Een factuur boekt zichzelf alleen als er niets meer te beslissen valt: de mail
+            kwam via je doorstuuradres binnen én door de SPF/DKIM-controle
+            {entities.length === 1 ? ", je hebt één onderneming" : ""}, en de factuur is
+            compleet. Die krijgt het label “automatisch” en is met één klik terug te
+            draaien. Al het andere wacht op jou, met de reden erbij — een
+            niet-geverifieerde afzender boekt hier niets.
+            {entities.length > 1 &&
+              " Je hebt meer dan één onderneming, dus kiest LaVega de BV nooit voor je: die keuze vraagt hij één keer, en tot die tijd boekt er hier niets automatisch."}
           </p>
           <div className="stack-form-actions">
             <button type="button" className="btn btn-primary" disabled={busy || n8nBusy} onClick={() => void handleFetchN8n()}>
@@ -564,7 +761,7 @@ export default function Facturen({
         </Module>
 
         {/* ── 2. sleep een factuurbestand hierheen ────────────────────── */}
-        <Module title="2 · Sleep een factuur hierheen" height="tall">
+        <Module title="2 · Slepen" height="tall">
           <label
             className={`dropzone${dragOver ? " dropzone-over" : ""}`}
             aria-label="Factuurbestand hierheen slepen"
@@ -627,14 +824,17 @@ export default function Facturen({
         >
           <div className="stack-form">
             <div className="stack-form-row">
-              <label>
-                Entiteit
-                <select value={entity} disabled={busy} aria-label="Entiteit" onChange={(e) => setEntity(e.target.value)}>
-                  {entityChoices.map((e) => (
-                    <option key={e} value={e}>{e}</option>
-                  ))}
-                </select>
-              </label>
+              {/* Geen ondernemingen = geen keuze = geen keuzelijst. */}
+              {hasEntities && (
+                <label>
+                  Entiteit
+                  <select value={selectedEntity} disabled={busy} aria-label="Entiteit" onChange={(e) => setEntity(e.target.value)}>
+                    {entityChoices.map((e) => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
                 Richting
                 <select value={direction} disabled={busy} aria-label="Richting"
@@ -672,6 +872,22 @@ export default function Facturen({
                 {pendingSource === "llm" && <span className="badge">AI-concept</span>}
                 <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
                   disabled={busy} aria-label="Bedrag" onChange={(e) => setAmount(e.target.value)} />
+              </label>
+              <label>
+                {/* BTW BIJ DE HAND, want de facturenbasis leest juist dit veld.
+                    Het stond er niet: vatAmount kwam alleen mee met een AI-concept,
+                    dus een handmatig ingevoerde factuur maakte het kwartaal
+                    onvolledig en de Belasting-tab viel terug op de zwakkere
+                    marge-benadering — precies de betere bron die hij net kan kiezen.
+                    Leeg blijft ONBEKEND en wordt nooit 0: een factuur zonder btw en
+                    een factuur waarvan de btw niet is ingevuld zijn niet hetzelfde,
+                    en de dekkingsmeter moet dat verschil kunnen zien. Wil hij nul
+                    zeggen (btw verlegd, ICP, 0%-export), dan typt hij 0. */}
+                Btw <span className="cell-sub">(leeg = onbekend)</span>
+                {pendingSource === "llm" && pendingVat !== null && <span className="badge">AI-concept</span>}
+                <input className="saldo-input" type="number" step={0.01} min={0}
+                  value={vatInput} placeholder="onbekend" disabled={busy} aria-label="Btw"
+                  onChange={(e) => setVatInput(e.target.value)} />
               </label>
               <label>
                 Valuta
@@ -714,16 +930,24 @@ export default function Facturen({
                   Uit de mail: {p.subject ?? "(geen onderwerp)"}
                   {p.note ? ` · ${p.note}` : ""}
                 </p>
+                {/* Waarom juist DEZE regel wacht. Zonder deze zin is "bevestig
+                    hem zelf" een opdracht zonder reden — en de reden is het
+                    enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
+                {p.waitReason && <p className="cell-sub text-warn">Wacht op jou: {p.waitReason}</p>}
                 <div className="facturen-form">
-                  <label>
-                    Entiteit{" "}
-                    <select value={p.entity} aria-label="Entiteit (n8n)"
-                      onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
-                      {entityChoices.map((e) => (
-                        <option key={e} value={e}>{e}</option>
-                      ))}
-                    </select>
-                  </label>{" "}
+                  {hasEntities && (
+                    <>
+                      <label>
+                        Entiteit{" "}
+                        <select value={p.entity} aria-label="Entiteit (n8n)"
+                          onChange={(e) => patchRow(p.messageId, { entity: e.target.value })}>
+                          {entityChoices.map((e) => (
+                            <option key={e} value={e}>{e}</option>
+                          ))}
+                        </select>
+                      </label>{" "}
+                    </>
+                  )}
                   <label>
                     Richting{" "}
                     <select value={p.direction} aria-label="Richting (n8n)"
@@ -856,6 +1080,11 @@ export default function Facturen({
               <thead>
                 <tr>
                   <th>Relatie</th>
+                  {/* De onderneming staat er alleen als er meer dan één is. Bij
+                      één (of geen) zou de kolom op elke regel hetzelfde zeggen,
+                      en dan is het geen informatie maar ruis — en voor de
+                      zelfstandige zonder entiteiten is het bovendien jargon. */}
+                  {showEntityColumn && <th>Onderneming</th>}
                   <th>Richting</th>
                   <th className="num">Bedrag</th>
                   <th>Vervaldatum</th>
@@ -872,8 +1101,17 @@ export default function Facturen({
                         {inv.counterparty}
                         {inv.invoiceNumber ? <span className="cell-sub"> · {inv.invoiceNumber}</span> : null}
                       </td>
+                      {showEntityColumn && <td data-label="Onderneming">{inv.entity}</td>}
                       <td data-label="Richting">
                         <span className="badge">{inv.direction === "in" ? "AR · inkomend" : "AP · uitgaand"}</span>
+                        {autoBookedIds.has(inv.id) && (
+                          <>
+                            {" "}
+                            <span className="badge" title="Deze factuur is zonder klik geboekt: de afzender kwam door de SPF/DKIM-controle en de factuur was compleet.">
+                              automatisch
+                            </span>
+                          </>
+                        )}
                       </td>
                       <td className={`num ${signed >= 0 ? "text-pos" : "text-neg"}`} data-label="Bedrag">{formatEuro(signed)}</td>
                       <td data-label="Vervaldatum">{inv.dueDate}</td>
@@ -883,6 +1121,14 @@ export default function Facturen({
                       <td>
                         {inv.status === "expected" ? (
                           <>
+                            {autoBookedIds.has(inv.id) && (
+                              <>
+                                <button type="button" className="btn" disabled={busy}
+                                  onClick={() => undoAutoBooked(inv.id)}>
+                                  Terugdraaien
+                                </button>{" "}
+                              </>
+                            )}
                             <button type="button" className="btn" disabled={busy}
                               onClick={() => setStatus(inv.id, "paid")}>
                               markeer betaald

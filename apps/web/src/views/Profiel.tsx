@@ -1,10 +1,32 @@
-import { Fragment, useEffect, useMemo, useRef } from "react";
-import type { EntityScope, EntitySummary, Rule } from "@lavega/core";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { Account, EntityScope, EntitySummary, LearnedFact, Rule } from "@lavega/core";
+import {
+  accountType,
+  assumptionDueForReview,
+  CATALOGUE_KINDS_FOR,
+  describeHeldCashback,
+  factEntry,
+  factId,
+  factNumber,
+  heldCashbackOf,
+  isSpendable,
+  lastTermsCheckedForIssuer,
+  learnFacts,
+  makeFact,
+  productOf,
+  TRAVEL_AGENT,
+} from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
-import ModulePicker from "../components/ModulePicker";
-import type { ModuleId } from "../components/moduleRegistry";
+import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
+import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
+import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { countryList, countryName, regionLabel, regionsFor } from "../countries.js";
-import { ownerDisplayName, type OwnerName } from "../settings.js";
+import {
+  getCashbackAssumptionEnabled,
+  ownerDisplayName,
+  setCashbackAssumptionEnabled,
+  type OwnerName,
+} from "../settings.js";
 import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
 import Import from "./Import";
 import Regels from "./Regels";
@@ -62,6 +84,261 @@ type ProfielProps = {
   onRestored: () => void;
 };
 
+/* ── CASHBACK CORRIGEREN — de feedbackmodule (app review 4, punt 22) ─────────
+ *
+ * Hij vroeg om twee dingen bij de aanname "een gewone kaart heeft geen
+ * cashback": een jaarlijkse sweep, en "een feedbackmodule in de instellingen
+ * waar de gebruiker informatie kan corrigeren". Dit is die module.
+ *
+ * DRIE BESLISSINGEN, en alle drie zijn ze de reden dat hij hier zo klein is:
+ *
+ *  1. HET IS GEEN TWEEDE MECHANISME. Wat hij invult wordt een `LearnedFact` met
+ *     bron "user", door dezelfde `learnFacts` als elke agent — en een
+ *     gebruikersfeit verslaat elke agent, dat staat in `upsertFacts` en niet
+ *     hier. Een eigen "correcties"-tabel ernaast zou betekenen dat er twee
+ *     plekken zijn waar een cijfer vandaan kan komen, en dan wint op een dag de
+ *     verkeerde.
+ *
+ *  2. ER GAAT NIETS NAAR EEN SERVER. "Feedback" betekent in de meeste apps: naar
+ *     ons toe. Hier betekent het: naar zijn eigen kluis. Er is geen knop die iets
+ *     verstuurt, en de tekst zegt dat ook, want anders vult niemand het in.
+ *
+ *  3. DE SCHAKELAAR STAAT HIER OOK. De aanname buigt de regel die deze app
+ *     draagt ("onbekend is nooit nul"), en wie ooit twijfelt aan een nul op zijn
+ *     scherm moet in één klik kunnen zien wat er zónder de aanname overblijft.
+ *     Een aanname die je niet kunt uitzetten is niet te controleren.
+ *
+ * WAAROM DIT ZIJN EIGEN GEGEVENS UIT DE KLUIS LEEST in plaats van ze als prop te
+ * krijgen: de rekeningen en de feiten hangen in App aan de schermen die ermee
+ * rekenen, en die weg loopt niet langs Profiel. Lezen uit `storage` is dezelfde
+ * kluis en geen tweede bron — maar het betekent wel dat een correctie die hier
+ * wordt opgeslagen pas op Optimalisatie verschijnt nadat App zijn feiten opnieuw
+ * inleest. Daarom de `onRestored()` aan het eind: dat is precies het signaal "de
+ * kluis is onder je veranderd, lees hem opnieuw" dat Back-up ook geeft. */
+function CashbackCorrigeren({
+  storage,
+  asOf,
+  onRestored,
+}: {
+  storage: VaultStorage;
+  asOf: string;
+  onRestored: () => void;
+}) {
+  const [cards, setCards] = useState<Account[] | null>(null);
+  const [facts, setFacts] = useState<LearnedFact[]>([]);
+  const [loadProblem, setLoadProblem] = useState<string | null>(null);
+  const [assumptionOn, setAssumptionOn] = useState<boolean>(() => getCashbackAssumptionEnabled());
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [loadedAccounts, loadedFacts] = await Promise.all([storage.getAccounts(), storage.getFacts()]);
+        if (!alive) return;
+        setCards(loadedAccounts.filter(isSpendable));
+        setFacts(loadedFacts);
+      } catch (e) {
+        // De echte oorzaak, niet "er ging iets mis": een vergrendelde kluis en
+        // een kapotte index vragen om een andere volgende stap.
+        if (alive) setLoadProblem(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [storage]);
+
+  /* Eén regel per PRODUCT, niet per rekening. Feiten zijn gekeyd op de
+     productnaam ("ING betaalpas"), dus twee ING-betaalrekeningen zijn hier één
+     vraag met één antwoord — twee regels zouden suggereren dat je ze los kunt
+     zetten, en de tweede zou de eerste stil overschrijven. */
+  const rows = useMemo(() => {
+    const byProduct = new Map<string, { product: string; bank: string; kind: "betaalpas" | "creditcard"; names: string[] }>();
+    for (const a of cards ?? []) {
+      const product = productOf(a);
+      if (!product) continue;
+      const kind = accountType(a) === "Creditcard" ? "creditcard" : "betaalpas";
+      const row = byProduct.get(product) ?? { product, bank: String(a.bank ?? ""), kind, names: [] };
+      row.names.push(a.name || a.key);
+      byProduct.set(product, row);
+    }
+    return [...byProduct.values()];
+  }, [cards]);
+
+  async function saveCorrection(product: string) {
+    setSaved(null);
+    setProblem(null);
+    const raw = (drafts[product] ?? "").trim();
+    if (raw === "") {
+      setProblem(`Vul eerst een percentage in bij ${product}.`);
+      return;
+    }
+    const incoming = makeFact({
+      agent: TRAVEL_AGENT,
+      subject: product,
+      key: "cashbackPct",
+      value: raw,
+      source: "user",
+      updatedAt: asOf,
+    });
+    // `learnFacts` en niet `upsertFacts`: dat is dezelfde samenvoeging, maar het
+    // vertelt WAAROM iets geweigerd wordt. Een correctie die stil verdwijnt is
+    // erger dan een correctie die niet kan.
+    const { facts: next, rejected } = learnFacts(facts, [incoming]);
+    if (rejected.length > 0) {
+      setProblem(`${product}: ${rejected[0].reason}.`);
+      return;
+    }
+    try {
+      await storage.putFacts(next);
+    } catch (e) {
+      setProblem(`Opslaan in de kluis lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      return;
+    }
+    setFacts(next);
+    setDrafts((d) => ({ ...d, [product]: "" }));
+    setSaved(product);
+    onRestored();
+  }
+
+  async function clearCorrection(product: string) {
+    setSaved(null);
+    setProblem(null);
+    const id = factId(TRAVEL_AGENT, product, "cashbackPct");
+    const next = facts.filter((f) => f.id !== id);
+    try {
+      await storage.putFacts(next);
+    } catch (e) {
+      setProblem(`Wissen lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      return;
+    }
+    setFacts(next);
+    onRestored();
+  }
+
+  function toggleAssumption(on: boolean) {
+    setCashbackAssumptionEnabled(on);
+    setAssumptionOn(on);
+  }
+
+  return (
+    <section className="card" aria-label="Cashback corrigeren">
+      <div className="card-header">
+        <h2>Cashback corrigeren</h2>
+        <span className="eyebrow">{rows.length} {rows.length === 1 ? "kaart" : "kaarten"}</span>
+      </div>
+      <p className="cell-sub">
+        Bij een gewone Nederlandse betaalpas of grootbankcreditcard neemt LaVega aan dat er geen cashback is.
+        Dat is een aanname van ons en geen zin uit een document, dus je kunt hem hier terugdraaien: vul het
+        percentage in dat jouw kaart echt geeft. Wat jij invult gaat vóór alles wat LaVega zelf vindt, ook na
+        een volgende zoekopdracht.
+      </p>
+      <p className="cell-sub">
+        Er gaat niets naar een server. Je correctie blijft in je eigen kluis, op dit apparaat.
+      </p>
+      {/* DE KEERZIJDE VAN DE REGEL, en die is net zo hard: een uitgesproken nul
+          is een BEKENDE nul. Wie in de voorwaarden van zijn eigen kaart heeft
+          gelezen dat er geen cashback is, hoort dat te kunnen vastleggen — dan
+          staat er geen aanname meer maar zijn eigen vaststelling, en die
+          verdwijnt niet als de aanname ooit wordt teruggedraaid. */}
+      <p className="cell-sub">
+        Weet je zeker dat een kaart niets teruggeeft? Vul dan <strong>0</strong> in. Dat is geen aanname meer
+        maar jouw eigen vaststelling, en die blijft staan ook als je de aanname hieronder uitzet.
+      </p>
+
+      <label>
+        <input
+          type="checkbox"
+          checked={assumptionOn}
+          aria-label="Neem aan dat een gewone kaart geen cashback geeft"
+          onChange={(e) => toggleAssumption(e.target.checked)}
+        />{" "}
+        Neem aan dat een gewone kaart geen cashback geeft
+      </label>
+      <p className="cell-sub">
+        {assumptionOn
+          ? "Staat aan. Zet hem uit om te zien wat er overblijft als LaVega alleen toont wat het echt gelezen heeft — dan staat er bij deze kaarten weer “onbekend”."
+          : "Staat uit. Bij kaarten zonder gelezen cijfer staat nu “onbekend” in plaats van nul, en de vergelijking op Optimalisatie kan daar geen bedrag bij noemen."}
+      </p>
+
+      {loadProblem !== null ? (
+        <p role="alert" className="text-warn">
+          LaVega kon je rekeningen niet uit de kluis lezen: {loadProblem}. Zonder die lijst is er niets om te
+          corrigeren.
+        </p>
+      ) : cards === null ? (
+        <p className="text-muted">Bezig met lezen uit je kluis…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-muted">
+          Nog geen betaalrekening of creditcard in je kluis. Importeer er één, dan verschijnt hij hier.
+        </p>
+      ) : (
+        <ul className="scope-list">
+          {rows.map((row) => {
+            const entry = factEntry(facts, TRAVEL_AGENT, row.product, "cashbackPct");
+            const pctNow = factNumber(facts, TRAVEL_AGENT, row.product, "cashbackPct");
+            const known = heldCashbackOf({
+              issuer: row.bank,
+              kind: row.kind,
+              productName: row.product,
+              fact: pctNow !== null && entry ? { pct: pctNow, source: entry.source, updatedAt: entry.updatedAt } : null,
+              assumptionOn,
+              // Dezelfde omweg als op Optimalisatie: zijn eigen kaart heeft geen
+              // catalogusrij, dus de peildatum komt van de rijen van DEZE bank in
+              // DIT soort product. Zonder die datum heet elke aanname voor altijd
+              // "nog nooit nagekeken" en zegt de jaarlijkse blik niets meer.
+              lastCheckedAt: lastTermsCheckedForIssuer(CATALOGUE_ENTRIES, row.bank, CATALOGUE_KINDS_FOR[row.kind]),
+            });
+            const due = known.tier === "aangenomen" && assumptionDueForReview(known.lastCheckedAt, asOf);
+            return (
+              <li key={row.product} className="scope-item" data-testid={`cashback-fix-${row.product}`}>
+                <div className="scope-item-text">
+                  <span className="scope-item-name">{row.product}</span>
+                  <span className="mp-what">
+                    {describeHeldCashback(known)}
+                    {due && " · een jaar of langer niet nagekeken"}
+                    {row.names.length > 1 && ` · geldt voor ${row.names.length} rekeningen`}
+                  </span>
+                </div>
+                <div>
+                  <label>
+                    <input
+                      className="saldo-input"
+                      inputMode="decimal"
+                      aria-label={`Cashback ${row.product}`}
+                      placeholder={pctNow === null ? "%" : String(pctNow)}
+                      value={drafts[row.product] ?? ""}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [row.product]: e.target.value }))}
+                    />
+                  </label>{" "}
+                  <button type="button" className="btn btn-primary" onClick={() => void saveCorrection(row.product)}>
+                    Opslaan
+                  </button>{" "}
+                  {entry !== null && entry.source === "user" && (
+                    <button type="button" className="btn" onClick={() => void clearCorrection(row.product)}>
+                      Wis mijn correctie
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {problem !== null && (
+        <p role="alert" className="text-warn">
+          {problem}
+        </p>
+      )}
+      {saved !== null && <p data-testid="cashback-opgeslagen">Opgeslagen voor {saved}.</p>}
+    </section>
+  );
+}
+
 export default function Profiel({
   enabledModules,
   onModulesChange,
@@ -91,6 +368,10 @@ export default function Profiel({
   onRestored,
 }: ProfielProps) {
   const modulesRef = useRef<HTMLElement>(null);
+  // The widget preference is read here rather than passed in: the switch lives
+  // on this page and the cards live on the homescreen, two branches of the tree
+  // that share nothing above them but App itself. See moduleRegistry.
+  const [widgets, setWidgets] = useOverviewWidgets();
   // 249 countries; built once rather than on every keystroke elsewhere on the page.
   const countries = useMemo(() => countryList(), []);
   const regions = regionsFor(homeCountry);
@@ -159,6 +440,25 @@ export default function Profiel({
           daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
         </p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
+      </section>
+
+      {/* The homescreen cards that are a choice rather than a fixture. Same
+          switch as the modules above, one screen lower, because "welke tab" and
+          "welke kaart" are the same question asked about a different surface.
+          Both start off: he asked for a widget he can click on "instead of it
+          always being default there". */}
+      <section className="card" aria-label="Widgets">
+        <div className="card-header">
+          <h2>Widgets op je overzicht</h2>
+          <span className="eyebrow">
+            {widgets.length} van {WIDGETS.length} aan
+          </span>
+        </div>
+        <p className="cell-sub">
+          Deze twee kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op je
+          startpagina — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
+        </p>
+        <WidgetPicker enabled={widgets} onChange={setWidgets} />
       </section>
 
       <section className="card" aria-label="Persoonlijk of zakelijk">
@@ -271,6 +571,8 @@ export default function Profiel({
         onRuleCategoryChange={onRuleCategoryChange}
         onSaveRules={onSaveRules}
       />
+
+      <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
 
       <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
 

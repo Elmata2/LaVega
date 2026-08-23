@@ -1,0 +1,135 @@
+/* De twee eigen schermen: de popup in de werkbalk en het optiescherm. Rustig,
+ * licht, dezelfde toon als de rest van LaVega.
+ *
+ * GEEN ANIMATIE, GEEN TRANSITION, GEEN KEYFRAMES. Ook niet op :hover. Wat je
+ * aanwijst verandert van kleur en dat gebeurt meteen.
+ *
+ * Eén bestand voor twee pagina's, omdat het twee kanten van hetzelfde ding zijn
+ * en uit elkaar gelopen stijlen tussen "instellen" en "gebruiken" er meteen uit
+ * zien als twee losse programma's. Het verschil zit in één klasse op <body>. */
+
+:root {
+  --inkt: #1c1c1a;
+  --gedempt: #6f6a5f;
+  --lijn: #e4e0d6;
+  --vlak: #faf8f3;
+  --wit: #ffffff;
+  --groen: #14312a;
+  --waarschuwing: #7a4a12;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--wit);
+  color: var(--inkt);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* De popup krijgt een vaste breedte omdat Chrome hem anders om de inhoud heen
+ * vouwt en de breedte per antwoord verspringt. */
+body.popup { width: 360px; }
+body.opties { max-width: 760px; margin: 0 auto; padding: 28px 20px 60px; }
+
+.merk {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gedempt);
+}
+
+h1 { margin: 4px 0 12px; font-size: 16px; line-height: 1.35; font-weight: 600; }
+h2 { margin: 28px 0 4px; font-size: 14px; font-weight: 600; }
+p { margin: 0 0 8px; }
+.hint { color: var(--gedempt); font-size: 11.5px; }
+
+label { display: block; margin-top: 10px; font-weight: 600; }
+
+input[type="text"], select {
+  width: 100%;
+  margin-top: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--lijn);
+  border-radius: 6px;
+  background: var(--wit);
+  color: var(--inkt);
+  font: inherit;
+}
+input[type="text"]:focus, select:focus { outline: 2px solid var(--groen); outline-offset: 0; }
+
+button {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--groen);
+  border-radius: 6px;
+  background: var(--groen);
+  color: var(--wit);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { background: #0e241f; }
+button:focus-visible { outline: 2px solid var(--inkt); outline-offset: 2px; }
+
+a { color: var(--groen); }
+
+.kaart {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--lijn);
+  border-radius: 8px;
+  background: var(--vlak);
+}
+
+.bedrag { font-size: 20px; font-weight: 600; }
+.kop { font-weight: 600; margin-top: 6px; }
+.noot, .bron { color: var(--gedempt); font-size: 11.5px; }
+
+.groep {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--lijn);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gedempt);
+}
+.rij { margin-top: 8px; }
+.titel { font-weight: 600; }
+
+.fout { color: var(--waarschuwing); }
+
+.vinkrij { display: flex; gap: 9px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--lijn); }
+.vinkrij input { margin-top: 3px; flex: 0 0 auto; }
+.vinkrij .titel { font-weight: 600; }
+
+/* De kaartenlijst is lang (77 producten). Een eigen scrollvlak zodat de twee
+ * secties eronder bereikbaar blijven zonder eerst langs alles te moeten. */
+#kaartenlijst { max-height: 380px; overflow-y: auto; border: 1px solid var(--lijn); border-radius: 8px; padding: 0 12px; }
+
+.grens { margin-top: 10px; padding-left: 18px; }
+.grens li { margin-bottom: 4px; }
+
+/* Stond als style-attribuut in popup.html. Eén inline stijl dwingt
+ * `style-src 'unsafe-inline'` af in de CSP van het manifest, en dat is een
+ * brede uitzondering voor een marge van zestien pixels. */
+.onderaan { margin-top: 16px; }
+
+h3 { margin: 18px 0 4px; font-size: 12.5px; font-weight: 600; }
+
+/* De puntenrijen. Zelfde ritme als .vinkrij, maar met een getalveld in plaats
+ * van een vinkje: een saldo is geen ja/nee. */
+.puntrij { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--lijn); }
+.puntrij .veld { flex: 0 0 110px; }
+.puntrij .veld input { width: 100%; margin-top: 0; }
+.puntrij .tekst { flex: 1 1 auto; }
+.puntrij .weg {
+  flex: 0 0 auto; margin-top: 0; padding: 5px 9px;
+  border: 1px solid var(--lijn); background: var(--wit); color: var(--gedempt); font-weight: 400;
+}
+.puntrij .weg:hover { background: var(--vlak); color: var(--inkt); }

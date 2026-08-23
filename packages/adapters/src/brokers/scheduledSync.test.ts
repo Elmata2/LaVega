@@ -1,0 +1,69 @@
+import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
+import { expect, test, vi } from "vitest";
+import type { BrokerResult } from "./BrokerAccessAdapter.js";
+import { createMemoryBrokerSyncStateStore, syncScheduledBrokers } from "./scheduledSync.js";
+
+const credentials = {
+  async getCredentials(tenantId: string, broker: "ibkr" | "trading212") {
+    return broker === "trading212"
+      ? { broker, tenantId, token: "key", secret: "secret" }
+      : { broker, tenantId, token: "key", queryId: "1" };
+  },
+  async putCredentials() {},
+} as unknown as CredentialStore;
+
+function adapters(sync: () => Promise<BrokerResult>) {
+  return [{ broker: "trading212" as const, adapter: { sync } }];
+}
+
+const empty = (overrides: Partial<BrokerResult>): BrokerResult => ({ positions: [], trades: [], source: "trading-212", problems: [], ...overrides });
+
+function run(sync: () => Promise<BrokerResult>, state: ReturnType<typeof createMemoryBrokerSyncStateStore>, now: Date, force = true) {
+  return syncScheduledBrokers({ adapters: adapters(sync), credentials, state, tenantId: LOCAL_TENANT_ID, entity: "BV", force, now });
+}
+
+test("a rate-limited sync holds off the next run, even a forced one", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const retryAfter = "2026-08-19T12:05:00.000Z";
+  const sync = vi.fn(async () => empty({ problems: ["Trading 212 rate limit reached"], retryAfter }));
+
+  const first = await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  expect(first.outcomes[0]?.status).toBe("problem");
+
+  const second = await run(sync, state, new Date("2026-08-19T12:01:00.000Z"));
+
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(second.outcomes[0]?.status).toBe("skipped");
+  expect(second.problems).toEqual([`trading212: rate-limited by the broker until ${retryAfter}`]);
+});
+
+test("the hold-off expires with the provider window", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({ problems: ["Trading 212 rate limit reached"], retryAfter: "2026-08-19T12:05:00.000Z" }));
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+
+  await run(sync, state, new Date("2026-08-19T12:06:00.000Z"));
+
+  expect(sync).toHaveBeenCalledTimes(2);
+});
+
+test("a problem that is not a rate limit stays immediately retryable", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({ problems: ["credentials are not configured"] }));
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+
+  const second = await run(sync, state, new Date("2026-08-19T12:00:01.000Z"));
+
+  expect(sync).toHaveBeenCalledTimes(2);
+  expect(second.outcomes[0]?.status).toBe("problem");
+});
+
+test("a successful sync clears a stored hold-off", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  await state.put("trading212", { lastSyncedAt: null, retryAfter: "2026-08-19T12:05:00.000Z" });
+  const sync = vi.fn(async () => empty({}));
+
+  await run(sync, state, new Date("2026-08-19T12:06:00.000Z"));
+
+  expect(await state.get("trading212")).toEqual({ lastSyncedAt: "2026-08-19T12:06:00.000Z", retryAfter: null });
+});

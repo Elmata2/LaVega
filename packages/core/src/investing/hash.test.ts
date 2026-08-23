@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { assignTradeIds } from "./hash.js";
 
 const trade = {
+  tenantId: "local",
   entity: "personal",
   date: "2026-08-18",
   symbol: "AAPL",

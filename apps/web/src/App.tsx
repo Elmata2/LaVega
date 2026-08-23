@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
-import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
+import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
+import { pathForView, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
@@ -30,6 +32,8 @@ import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 
+export type { View } from "./appRoutes";
+
 // Single storage instance for the app's lifetime; putAccounts/putTxs upsert
 // (keyPath "key" / "id"), so re-importing the same account/tx is safe. Data is
 // at rest only in the encrypted vault — the app never touches the legacy
@@ -40,20 +44,19 @@ const storage = createEncryptedStorage();
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
-/* "rules" has NO route any more: Regels is a setting, so it renders inline in
+/* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
  * union still lists it only because components/TopBar.tsx types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
- * map is a label lookup, not a way to reach the view.
+ * map is a label lookup, not a way to reach the view. Path `/app/rules` still
+ * resolves for completeness.
  *
  * "koppelingen" and "backup" look equally orphaned and are NOT: Facturen sends
  * you to Koppelingen ("Koppelingen instellen", Facturen.tsx:480), and the
  * post-migration screen sends you to Back-up ("Maak nu een back-up",
  * VaultGate.tsx:284 → onBackup → setView("backup")). Both also render inline in
  * Profiel; these two are the deep links into them, so their branches stay. */
-export type View = "overview" | "transactions" | "accounts" | "rules" | "forecast" | "optimalisatie" | "valuta" | "belasting" | "facturen" | "punten" | "koppelingen" | "backup" | "profiel";
-
 export default function App() {
   const [gate, setGate] = useState<GateState>("loading");
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -164,7 +167,25 @@ export default function App() {
     setAddWidget((n) => n + 1);
   }
 
-  const [view, setView] = useState<View>("overview");
+  const [view, setViewState] = useState<View>(() => viewFromPathname(window.location.pathname) ?? "overview");
+  const setView = useCallback((next: View) => {
+    setViewState(next);
+    const nextPath = pathForView(next);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, "", `${nextPath}${window.location.search}`);
+    }
+  }, []);
+  useEffect(() => {
+    // Unknown `/app/…` still mounts the app; snap URL to the resolved view.
+    const resolved = viewFromPathname(window.location.pathname) ?? "overview";
+    const canonical = pathForView(resolved);
+    if (window.location.pathname !== canonical) {
+      window.history.replaceState({}, "", `${canonical}${window.location.search}`);
+    }
+    const onPop = () => setViewState(viewFromPathname(window.location.pathname) ?? "overview");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
   // everything it has rather than an empty page.
@@ -283,7 +304,7 @@ export default function App() {
   // step. Public data, not user data; failing is harmless (bundled snapshot).
   useEffect(() => {
     let alive = true;
-    createRatesProvider({ url: RATES_URL })
+    createRatesProvider({ url: RATES_URL, catalogueRates: CATALOGUE_RATES })
       .getRates()
       .then((r) => alive && setRates(r))
       .catch(() => {});
@@ -321,14 +342,31 @@ export default function App() {
         const newAccounts: Account[] = [];
         const rawTxs: Array<Omit<Tx, "id">> = [];
         for (const item of data.items ?? []) {
-          const acc = mapEbAccount({ ...item.account, aspsp }, pickEbBalance(item.balances));
+          /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
+           * rekening "stand van <dag>", en zonder deze derde parameter stond daar
+           * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
+           * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
+           * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
+           * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
+           * laten lezen. */
+          const acc = mapEbAccount(
+            { ...item.account, aspsp },
+            pickEbBalance(item.balances),
+            pickEbBalanceDate(item.balances) ?? undefined,
+          );
           acc.entity = entity;
           newAccounts.push(acc);
           const key = ebAccountKey(item.account);
           for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
         }
         const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        const mergedAccounts = mergeImportedAccounts(curAccounts, newAccounts);
+        /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
+         * waarop de rekening binnenkomt, dus dit is de enige plek waar het
+         * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
+         * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
+         * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
+         * was) — zie `withLinkedAt`. */
+        const mergedAccounts = withLinkedAt(curAccounts, mergeImportedAccounts(curAccounts, newAccounts), asOf);
         const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
         await storage.putAccounts(mergedAccounts);
         await storage.putTxs(mergedTxs);
@@ -564,7 +602,11 @@ export default function App() {
       // Re-importing a statement for an account you already have must not wipe
       // the Type/Entiteit/manual saldo you set in Rekeningen — merge those
       // forward. A fresh statement balance (MT940/.STA) still wins.
-      const mergedAccounts = mergeImportedAccounts(accounts, result.accounts);
+      // Bij een import is het koppelmoment het moment van importeren, en `accounts`
+      // is de stand van vlak daarvoor — dus precies wat `withLinkedAt` nodig heeft
+      // om "nieuw" van "stond er al" te onderscheiden. Een her-import van hetzelfde
+      // afschrift verschuift het moment niet: dat is de tweede tak daar.
+      const mergedAccounts = withLinkedAt(accounts, mergeImportedAccounts(accounts, result.accounts), asOf);
       await storage.putAccounts(mergedAccounts);
       await storage.putTxs(mergedTxs);
 
@@ -851,12 +893,16 @@ export default function App() {
       // while the real work was happening, which is exactly what made him guess
       // whether anything was working. So poll the cheap cached endpoint until
       // the pending list drains, and stop rather than spin forever.
+      // A LOOKUP IN PROGRESS IS NOT A PROBLEM. This used to push the pending list
+      // into setProblems, which is the page-wide warning channel — so a yellow
+      // banner about the reisblok followed him onto Rekeningen and Valuta, where
+      // it meant nothing. He called it ugly and he is right: the banner is for
+      // things that need him, and waiting does not.
+      //
+      // The reisblok carries its own searching state (a spinner, and a sentence
+      // when a lookup comes back empty), which is where progress belongs — next
+      // to the thing being looked up.
       if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
-      if (pending.length > 0) {
-        setProblems([
-          `LaVega zoekt de voorwaarden van ${pending.join(", ")} nu op — dat duurt een minuut of twee. Klik daarna nog eens op "Zoek voorwaarden", of vul ze zelf in met "aanpassen".`,
-        ]);
-      }
     } catch (err) {
       setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
@@ -923,6 +969,15 @@ export default function App() {
               asOf={asOf}
               bufferCents={bufferCents}
               scheduledFlows={scopedScheduledFlows}
+              /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
+                 en dat is de bedoeling: de btw-kaart op het overzicht en het
+                 scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
+                 hier iets anders neerzet, laat de twee schermen op dezelfde dag
+                 een ander bedrag noemen. */
+              entities={entityScope ? [entityScope] : entityOptions}
+              vatSettings={vatSettings}
+              invoices={invoices}
+              country={homeCountry}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
               travel={{
@@ -1038,6 +1093,7 @@ export default function App() {
               asOf={asOf}
               vatSettings={vatSettings}
               scheduledFlows={scopedScheduledFlows}
+              invoices={invoices}
               busy={busy}
               onSaveVatSettings={saveVatSettings}
               onSaveScheduledFlows={saveScheduledFlows}

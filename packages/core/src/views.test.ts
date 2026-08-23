@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
+import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, foreignTerminalCategory, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
@@ -90,7 +90,11 @@ test("categorize: a whitespace-only rule match does NOT match everything (guards
   // Use a tx that matches no user rule AND no built-in NL default, so this
   // isolates the whitespace guard (txsForMonths[1] is "Albert Heijn", which now
   // hits a built-in default — that's covered in categories.test.ts).
-  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Jan Jansen", description: "particuliere betaling", category: "", manual: false };
+  // The counterparty must match no user rule, no built-in default AND no
+  // last-resort reading of who it is: "Jan Jansen" used to serve here and is now
+  // read as a person (review 20-08-2026, item 6), so this uses a kiosk number
+  // instead — a digit rules the person reading out.
+  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Quiosc 4412", description: "particuliere betaling", category: "", manual: false };
   expect(categorize(unmatched, bad)).toBe("onbekend");
 });
 
@@ -381,4 +385,103 @@ test("a re-import keeps a bank/name the owner typed, but may fix a stale parser 
   expect(merged[1]).toMatchObject({ bank: "ING", name: "Oranje Spaarrekening" });
   // Entity/type/balance preservation is unchanged.
   expect(merged[0]).toMatchObject({ entity: "Prive", type: "Spaarrekening", balance: 100 });
+});
+
+/* HIS ONBEKEND ROWS, verbatim from the 20 August review.
+ *
+ * Three Barcelona card payments were reaching "onbekend" while the app had
+ * already worked out they were foreign — the detection produced a LABEL and not a
+ * category, so a July he could account for perfectly well sat in a bucket he
+ * could not. And a Rabo Betaalverzoek had no rule at all.
+ */
+describe("onbekend: the rows he showed us", () => {
+  const row = (counterparty: string, description: string, amount: number): Tx => ({
+    id: "t", accountKey: "NL88INGB0793113504", date: "2026-07-19",
+    amount, currency: "EUR", counterparty, description, category: "", manual: false,
+  });
+
+  test("a metro ride in Barcelona is Transport, not onbekend", () => {
+    const t = row("METRO BARCELONA", "METRO BARCELONA BARCELONA ESP Kaartnr: 5238 53** **** 1748 Datum: 18-07-2026 Tijd: 18:43 Transactie: I13241 Term: 86324463 Apple Pay", -7.8);
+    expect(categorize(t, [])).toBe("Transport");
+  });
+
+  test("a campsite abroad is Reizen", () => {
+    const t = row("CAMPER PARK BARCELONA", "CAMPER PARK BARCELONA TEIA ESP Kaartnr: 5238 53** **** 1748 Tijd: 11:36 Term: KJOLH2QT Apple Pay", -30);
+    expect(categorize(t, [])).toBe("Reizen");
+  });
+
+  test("gelato is Café", () => {
+    const t = row("MUST GELATO", "MUST GELATO BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 21:41 Term: 02013791 Apple Pay", -4.2);
+    expect(categorize(t, [])).toBe("Café");
+  });
+
+  test("an unrecognised merchant at a terminal abroad still lands somewhere honest", () => {
+    const t = row("XURRERIA TREBOL", "XURRERIA TREBOL BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 09:12 Term: 11223344", -3.5);
+    expect(categorize(t, [])).toBe("Reizen");
+  });
+
+  test("a Rabo Betaalverzoek is a booking between two people, not an Overboeking", () => {
+    // CHANGED by the 20-08-2026 review, item 6, and deliberately: he is explicit
+    // that money moving from one person to another is its own thing and NOT
+    // "Overboekingen". The person is right there in the counterparty; "via Rabo
+    // Betaalverzoek" is only the mechanism, and the mechanism is what is left
+    // when the requester is not a person (asserted in categories.test.ts).
+    const t = row("T.J. van Wijngaarden via Rabo Betaalverzoek", "Naam: T.J. van Wijngaarden via Rabo Betaalverzoek Omschrijving: Vacance IBAN: NL42RABO0114668043", -52.8);
+    expect(categorize(t, [])).toBe("Tussen personen");
+  });
+
+  test("a FOREIGN ONLINE purchase is NOT called travel — no terminal, no claim", () => {
+    // The discriminator earning its place: calling an order from a foreign webshop
+    // "Reizen" would silently distort the travel total. Asserted on the rule
+    // itself, because an existing rule already places AliExpress under Online
+    // shopping — which is the right answer and not the one under test here.
+    const t = row("ALIEXPRESS", "ALIEXPRESS CHN Kaartnr: 5238 53** **** 1748", -18.4);
+    expect(foreignTerminalCategory(t)).toBeNull();
+    expect(categorize(t, [])).not.toBe("Reizen");
+  });
+
+  test("a foreign card row with NO merchant rule and no terminal stays unknown", () => {
+    const t = row("QUIOSC 4412", "QUIOSC 4412 ESP Kaartnr: 5238 53** **** 1748", -2.1);
+    expect(foreignTerminalCategory(t)).toBeNull();
+    expect(categorize(t, [])).toBe("onbekend");
+  });
+
+  test("a DOMESTIC terminal payment is untouched by the abroad rule", () => {
+    const t = row("ALBERT HEIJN 1234", "ALBERT HEIJN 1234 AMSTERDAM Kaartnr: 5238 53** **** 1748 Term: 8899 Tijd: 12:03", -42.15);
+    expect(categorize(t, [])).toBe("Boodschappen");
+  });
+});
+
+/* TWEE REKENINGEN GEKOPPELD — wat hij op 22 augustus is gaan testen.
+ *
+ * Met één rekening geïmporteerd kon een overboeking naar jezelf niet als zodanig
+ * herkend worden: de tegenrekening was onbekend. Met twee wél, en dan verschijnt
+ * dezelfde overboeking TWEE KEER in de kluis — als afschrijving op de ene en als
+ * bijschrijving op de andere.
+ *
+ * De uitgaande kant werd al uitgesloten van de uitgaven. De INKOMENDE kant is de
+ * kant die niemand test, en juist daar zit het gevaar: een bijschrijving van
+ * € 250 die als inkomen meetelt maakt van geld verplaatsen geld verdienen. */
+test("een overboeking tussen zijn eigen twee rekeningen telt aan GEEN van beide kanten mee", () => {
+  const own = ownAccounts([
+    { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+    { key: "NL91ABNA0417164300", iban: "NL91ABNA0417164300", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: null },
+  ]);
+  const rows: Tx[] = [
+    // De twee kanten van één overboeking, elk op hun eigen rekening.
+    { id: "uit", accountKey: "NL91ABNA0417164300", date: "2026-08-15", amount: -250, currency: "EUR", counterparty: "NL01INGB0001", description: "sparen", category: "", manual: false },
+    { id: "in", accountKey: "NL01INGB0001", date: "2026-08-15", amount: 250, currency: "EUR", counterparty: "NL91ABNA0417164300", description: "sparen", category: "", manual: false },
+    // Een echte uitgave en een echt inkomen, als ijkpunt.
+    { id: "ah", accountKey: "NL91ABNA0417164300", date: "2026-08-03", amount: -70, currency: "EUR", counterparty: "Albert Heijn", description: "", category: "", manual: false },
+    { id: "sal", accountKey: "NL91ABNA0417164300", date: "2026-08-01", amount: 3000, currency: "EUR", counterparty: "Salaris", description: "", category: "", manual: false },
+  ];
+  const rules: Rule[] = [{ id: "b1", match: "albert heijn", category: "Boodschappen" }];
+
+  // Allebei de kanten krijgen dezelfde categorie, en het is niet "Overboekingen".
+  for (const id of ["uit", "in"]) {
+    const tx = rows.find((r) => r.id === id)!;
+    expect(categorize(tx, rules, own)).toBe("Eigen overboeking");
+  }
+  // En het ijkpunt blijft staan: de echte uitgave is geen eigen overboeking.
+  expect(categorize(rows.find((r) => r.id === "ah")!, rules, own)).toBe("Boodschappen");
 });

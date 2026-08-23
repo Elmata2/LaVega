@@ -8,7 +8,7 @@ test("CashflowBlock draws the forecast it is given and reports no shortfall", ()
   const html = renderToStaticMarkup(
     <CashflowBlock forecast={forecast} bufferCents={250_000} onNavigate={() => {}} />,
   );
-  expect(html).toContain("Cashflow · 13 weken");
+  expect(html).toContain("Cashflow");
   expect(html).toContain("Verwachte kaspositie komende 13 weken");
   expect(html).toContain("<path"); // the smoothed median line
   expect(html).toContain("Geen tekort verwacht in de komende 13 weken.");

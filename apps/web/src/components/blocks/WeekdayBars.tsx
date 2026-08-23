@@ -1,3 +1,4 @@
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { barPercent, niceDomain, smoothPath, type Pt } from "../../chart.js";
 
 /* WeekdayBars — `Modules for homescreen7.png`: a bar per day of the week with a
@@ -26,7 +27,37 @@ import { barPercent, niceDomain, smoothPath, type Pt } from "../../chart.js";
  * average" was a claim the picture could not be checked against. That is the
  * `averageValue` reference line — a horizontal baseline at a measured number,
  * drawn only when it was measured. It is not a trend and does not pretend to
- * be. */
+ * be.
+ *
+ * ON THE READING (review 2, item 12). The chart itself is deliberately
+ * unchanged — he called the weekday chart fine as it is — and only the reading
+ * was added: each measured day is a <button> carrying the same chip CategoryBars
+ * uses (charts.css, .lv-tip), so its exact average is reachable by hover, by tap
+ * and by keyboard. A day with no measurement still has no bar and therefore
+ * nothing to read: unknown stays unknown, it does not become "€ 0". (That button
+ * WAS the bar itself until review 4 — zie de sectie hieronder voor waarom dat
+ * niet volstond.)
+ *
+ * WAAROM DE KNOP DE HELE KOLOM IS (review 4, punt 1 — de derde keer dat hij om
+ * deze hover vroeg). De knop wás de staaf zelf, en dat is de reden dat de lezing
+ * niet aankwam. Gemeten in Chromium op dit onderdeel met de echte stylesheets:
+ * de goedkoopste dag is een staafje van 42 bij 6 pixels. Met de muis is dat te
+ * doen zodra de laag erboven de aanwijzer doorlaat (charts.css, .lv-chart-svg),
+ * maar op een telefoon bestaat hover niet en blijft alleen de tik over — en een
+ * tikdoel van 6 pixels hoog is geen tikdoel. De informatie zat dus achter een
+ * beweging die de helft van zijn apparaten niet kan maken.
+ *
+ * Daarom is de <button> nu de hele kolom (`.weekday-column`: volle hoogte van
+ * het plot, volle breedte van één dag) en is de gekleurde staaf een <span>
+ * erbinnen. Eén element, dus één verhaal voor muis, vinger én toetsenbord — de
+ * vorige opzet had hover in CSS en de tik in React, en juist dat verschil is de
+ * plek waar de telefoon stilletjes buiten de boot viel.
+ *
+ * Wat dat kost: met de muis ergens in de grafiek staat er altijd één chip open.
+ * Dat is bij een grafiek met zeven kolommen het gewenste gedrag (je wijst een
+ * dag aan, niet een rechthoek), maar het is wél een gedragsverandering en geen
+ * opmaak. Wat het NIET verandert: een dag zonder meting krijgt nog steeds geen
+ * knop en dus ook geen kolom om aan te wijzen. Onbekend blijft onbekend. */
 
 export type WeekdayBar = {
   label: string;
@@ -54,9 +85,17 @@ export type WeekdayBarsProps = {
  *  simply sit on top of its bar, implying a comparison nobody made. */
 const MIN_DAYS_FOR_AVERAGE = 3;
 
+/** Above this share of the plot a bar's reading is drawn INSIDE it — the peak
+ *  bar's chip would otherwise land on the peak value chip already above it. */
+const TALL_BAR = 72;
+
 export default function WeekdayBars({
   days, format, ariaLabel, peakIndex = -1, averageValue = null, averageLabel = "gemiddelde dag", height = 180,
 }: WeekdayBarsProps) {
+  // Which bar was tapped; hover and focus are handled in CSS. See CategoryBars
+  // for why a tap needs state of its own at all.
+  const [tapped, setTapped] = useState<number | null>(null);
+
   if (days.length === 0) return null;
 
   const known = days.map((d) => d.value).filter((v): v is number => v !== null);
@@ -77,7 +116,10 @@ export default function WeekdayBars({
 
   return (
     <div className="lv-bars lv-chart-withaxis weekday-bars">
-      <div className="lv-bars-plot" style={{ height }} role="img" aria-label={ariaLabel}>
+      {/* role="group" rather than role="img": an image's contents are
+          presentational, which would hide the bar buttons from a screen reader —
+          the reading has to survive the summary. */}
+      <div className="lv-bars-plot" style={{ height }} role="group" aria-label={ariaLabel}>
         {domain.ticks.map((t) => (
           <span
             key={`l${t}`}
@@ -95,17 +137,49 @@ export default function WeekdayBars({
           ))}
 
           <div className="lv-bars-groups">
-            {days.map((d, i) => (
-              <div className="lv-bars-group" key={d.label}>
-                {d.value !== null && (
-                  <div
-                    className={`lv-bar weekday-bar${i === peakIndex ? " weekday-bar-peak" : ""}`}
-                    style={{ height: `${barPercent(d.value, max)}%` }}
-                    title={`${d.label}: ${format(d.value)}`}
-                  />
-                )}
-              </div>
-            ))}
+            {days.map((d, i) => {
+              const pct = d.value === null ? 0 : barPercent(d.value, max);
+              return (
+                <div className="lv-bars-group" key={d.label}>
+                  {d.value !== null && (
+                    <button
+                      type="button"
+                      /* De hele kolom, niet de staaf — zie de kop van dit
+                         bestand voor de meting die dat afdwong. */
+                      className="weekday-column"
+                      aria-label={`${d.label}: ${format(d.value)}`}
+                      data-tip={tapped === i ? "on" : "off"}
+                      onClick={() => setTapped((t) => (t === i ? null : i))}
+                      onPointerLeave={(e: ReactPointerEvent<HTMLButtonElement>) => {
+                        // A touch pointer "leaves" as the finger lifts, which
+                        // would close the chip before it was read; only a mouse
+                        // leaving means "done looking".
+                        if (e.pointerType === "mouse") setTapped(null);
+                      }}
+                      onBlur={() => setTapped((t) => (t === i ? null : t))}
+                    >
+                      {/* De staaf is nu tekening en geen knop meer, maar houdt
+                          zijn klassen: `.lv-bar` geeft hem zijn vorm en het
+                          ankerpunt voor de chip (position: relative), en
+                          `.weekday-bar` zijn breedte en kleur uit blocks.css.
+                          De chip blijft hier ín hangen en niet in de knop: hij
+                          hoort net boven de STAAF te staan, en in een knop van
+                          volle plothoogte zou "bottom: 100%" hem bovenaan de
+                          grafiek parkeren, los van het getal dat hij uitlegt. */}
+                      <span
+                        className={`lv-bar weekday-bar${i === peakIndex ? " weekday-bar-peak" : ""}`}
+                        style={{ height: `${pct}%` }}
+                      >
+                        <span className={`lv-tip${pct > TALL_BAR ? " lv-tip-inside" : ""}`} aria-hidden="true">
+                          <span className="lv-tip-when">{d.label}</span>
+                          <span className="lv-tip-value">{format(d.value)}</span>
+                        </span>
+                      </span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {line && (

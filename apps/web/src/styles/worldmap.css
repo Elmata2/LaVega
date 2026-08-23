@@ -1,0 +1,374 @@
+/* De draaibare wereldbol in de Valuta-tab (components/Globe.tsx).
+ *
+ * De bestandsnaam is worldmap.css gebleven terwijl de platte kaart eruit is. Dat
+ * is geen vergeetachtigheid: main.tsx importeert de stijlbladen op naam, en een
+ * hernoeming is een regel in een bestand van een andere lane. Dit blad hoort bij
+ * de bol en bij niets anders.
+ *
+ * GEEN ENKELE HEX-WAARDE HIER, en op een canvas is dat niet vanzelfsprekend. Een
+ * doek kan geen var(--token) lezen, dus de component moet de kleuren als tekst
+ * kennen. Dat gaat NIET via getComputedStyle op de custom property zelf: de
+ * berekende waarde daarvan is de tekst zoals hij hier staat — "color-mix(in srgb,
+ * var(--accent) 40%, …)", met de var() er nog ongereduceerd in — en daar maakt een
+ * canvas een lege vulling van. Daarom staat er in .lv-globe-inks per rol een
+ * spannetje van nul bij nul met `color:` op het token. `color` is een echte
+ * eigenschap, dus dáár komt een echte rgb() uit. Eén keer gelezen per doek.
+ *
+ * HET BLAUW IS TEAL GEWORDEN (21 augustus, op zijn verzoek: "het blauw mag iets
+ * anders"), en dat was de gelegenheid om een gemeten probleem op te lossen dat
+ * groter was dan het probleem dat hij noemde.
+ *
+ * De landen liepen in één reeks van --accent: euro 24%, koers 48%, hover 68%,
+ * gekozen 100%, met twee grijstinten ertussendoor. Doorgerekend op de tokens
+ * botsten daar drie paren die op de kaart tégen elkaar aan liggen:
+ *
+ *     euro / geen koers   1,07   ← Kroatië–Servië, Griekenland–Albanië, Finland–Rusland
+ *     koers / geen koers  1,50
+ *     euro / koers        1,61
+ *
+ * 1,07 is geen grens meer. Er wordt namelijk geen landsgrens getekend: elk land
+ * krijgt een stroke in zijn EIGEN vulkleur (zie Globe.tsx — dat dicht de haarlijn
+ * tussen twee vereenvoudigde vlakken), dus het kleurverschil is het enige verschil.
+ * Twee landen met contrast 1,07 zijn op het scherm één land.
+ *
+ * Nu doet de HUE het werk in plaats van de helderheid. Wat LaVega kan beantwoorden
+ * is teal (--chart-teal: euro licht, "wij hebben een koers" vol), wat LaVega mist
+ * is neutraal grijs (--muted), en de bediening blijft de kleur van de app zelf
+ * (--ink-soft aangewezen, --accent gekozen). Diezelfde drie paren staan daarmee op
+ * 1,63 / 1,58 / 2,59, en tegen de zee: euro 1,30, koers 3,37, geen koers 2,13.
+ *
+ * ELK GETAL IN DEZE KOP WORDT NAGEREKEND, en dat is niet voor de sier: de vorige
+ * versie van dit blad noemde er ook een stel, en toen de kleuren veranderden bleven
+ * de zinnen staan. Globe.test.tsx leest dit blad plus tokens.css, lost de
+ * color-mix() op en meet de paren opnieuw; staat er hier straks een kleur die de
+ * grens niet haalt, dan valt die test om in plaats van dat deze alinea stil onwaar
+ * wordt.
+ *
+ * Euro tegen de zee blijft 1,30 en dat is krap. Donkerder kan niet: euro moet
+ * lichter blijven dan "geen koers", anders vallen die twee samen — en dat is het
+ * paar dat wél een grens deelt, terwijl de eurozone vooral aan zichzelf en aan
+ * water grenst. Een donkerdere zee is nagerekend en maakt het erger (1,18 bij
+ * --muted 8%): de zee schuift dan naar euro toe. Vandaar --surface-2, ongewijzigd.
+ * Dat een bol als bol leest komt van de rand en de graticule, niet van gekleurd
+ * water.
+ *
+ * GEEN TRANSITION EN GEEN KEYFRAMES. Bewust: bewegen loopt in dit project via een
+ * eigen laag. Slepen is geen animatie — daar beweegt de vinger — maar een bol die
+ * ergens naartoe zweeft of een land dat invloeit, is dat wel. */
+
+.lv-globe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+
+  --lv-globe-sea: var(--surface-2);
+  --lv-globe-grid: color-mix(in srgb, var(--muted) 26%, var(--surface-2));
+  --lv-globe-rim: color-mix(in srgb, var(--ink) 20%, var(--surface));
+
+  /* WAT LAVEGA KAN BEANTWOORDEN: teal, in twee stappen. Dezelfde hue voor euro en
+   * "wij hebben een koers", want dat zijn allebei antwoorden; het verschil tussen
+   * de twee staat in het paneel eronder en niet in een kleur. */
+  --lv-globe-euro: color-mix(in srgb, var(--chart-teal) 34%, var(--surface));
+  --lv-globe-rate: var(--chart-teal);
+
+  /* WAT LAVEGA MIST OF WAT ER NIET IS: neutraal grijs, ook in twee stappen. Geen
+   * teal erin, want dan zou een leemte eruitzien als een half antwoord. */
+  --lv-globe-norate: color-mix(in srgb, var(--muted) 60%, var(--surface));
+  /* "Geen wettig betaalmiddel" — vandaag alleen Antarctica. Een eigen tint, want
+   * dezelfde als "geen koers" zou beweren dat het aan ONS ligt dat daar niets te
+   * wisselen valt, en dat is precies het onderscheid waar deze tab over gaat.
+   *
+   * Hij stond op --muted 46% en haalde 1,21 tegen "geen koers" en 1,24 tegen
+   * "koers" — de eigenaar noemde die twee getallen zelf (1,21 en 1,25) en ze zijn
+   * hier nagerekend; op 100% zijn ze 2,23 en 1,41. Tegen de ZEE, en dat is het paar
+   * dat er voor Antarctica echt toe doet, gaat het van 1,68 naar 4,75.
+   *
+   * Die 1,41 tegen "koers" is het krapste paar dat overblijft en het blijft staan,
+   * om drie redenen. Het is vol teal tegen vol grijs, dus het verschil zit in de
+   * hue en niet in de helderheid die dít getal meet. De twee raken elkaar nergens:
+   * Antarctica grenst alleen aan oceaan, en in de legenda heeft elk vlakje een
+   * --line-rand en zijn eigen tekst. En donkerder is nagerekend en maakt het per
+   * saldo erger: --muted 70% op --ink haalt 2,03 tegen "koers", maar dan is
+   * aangewezen (--ink-soft) op Antarctica nog maar 1,62 — nu 2,34, en dat is al het
+   * zwakste hoverpaar op de bol. Een land dat niet oplicht als je het aanwijst is
+   * een land dat niet meedoet.
+   * Komt er ooit een tweede land met deze tint bij, dan is dit de eerste regel die
+   * opnieuw gemeten moet worden. */
+  --lv-globe-notender: var(--muted);
+
+  /* DE BEDIENING: niet teal en niet grijs, zodat aanwijzen en kiezen nooit voor
+   * een antwoord kunnen doorgaan. Aangewezen is bijna-zwart, en dat is met opzet
+   * het zwaarste dat er los van de selectie op het doek verschijnt: tegen de vier
+   * vullingen haalt --ink-soft 8,51 / 3,29 / 5,21 / 2,34, en die laagste bepaalt
+   * of een hover op de hele wereld te zien is — een hover die je op de halve
+   * wereld niet ziet, is geen hover.
+   *
+   * Alle tokens uit tokens.css zijn hierop nagerekend en er is er precies één die
+   * het beter doet: --ink zelf (laagste 3,17). Die is bezet — de speld is --ink,
+   * en een hover in de kleur van de speld laat juist op het gekozen land niets
+   * meer zien. Daarna houdt het op: --accent is "gekozen" (laagste 1,62), en elke
+   * overgebleven kleur zakt tegen minstens één vulling naar 1,0 à 1,1
+   * (--chart-blue 1,04, --chart-purple 1,12, --pos 1,09, --neg 1,03, --warn 1,03).
+   * Vandaar deze twee, en niet iets vrolijkers. */
+  --lv-globe-hover: var(--ink-soft);
+  --lv-globe-selected: var(--accent);
+  --lv-globe-pin: var(--ink);
+}
+
+/* ---------- De opstelling: één kolom ---------- */
+
+/* De lijst stond NAAST de bol, in een tweede kolom van minstens 240 px. Dat kan
+ * niet meer: de bol staat sinds 21 augustus zelf in de rechterkolom naast de
+ * rekenmachine, en twee kolommen in één kolom is twee keer te smal. De volgorde
+ * is nu bol, legenda, antwoord, zoekveld met de lijst — zie punt 6 in Globe.tsx.
+ *
+ * Er is dus GEEN grid meer en geen breekpunt op 760 px: .lv-globe is al een
+ * flexkolom, dus de kinderen staan vanzelf onder elkaar, op elke breedte
+ * hetzelfde. Dat scheelt de enige plek in dit blad waar de opstelling van de
+ * viewport afhing.
+ *
+ * Wat het kost staat in Globe.tsx en herhaal ik hier omdat het een echte
+ * achteruitgang is: de landenlijst is de enige besturing voor wie het doek niet
+ * ziet, en die begint nu lager op de pagina. */
+.lv-globe-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* ---------- De leesregel (naam + valutacode) ---------- */
+
+/* Vaste hoogte: de regel is leeg tot er iets aangewezen wordt, en de bol mag niet
+ * een paar pixels omhoog springen zodra de muis erover gaat. */
+.lv-globe-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: 0;
+  min-height: 1.5rem;
+  font-size: 0.95rem;
+}
+.lv-globe-readout-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.lv-globe-readout-ccy {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.lv-globe-readout-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- Het doek ---------- */
+
+/* `touch-action: none` is het verschil tussen een bol die draait en een pagina
+ * die scrollt. Zonder deze regel neemt de browser op een telefoon elke
+ * verticale veeg zelf en draait de bol alleen zijwaarts — en dat leek op een bug
+ * in de sleepwiskunde, niet op een ontbrekende CSS-regel.
+ *
+ * De maat komt uit de component (style width/height in px) omdat het aantal
+ * pixels in het doek en de maat op het scherm bij elkaar moeten horen. `max-width`
+ * staat er als vangnet voor het beeld tussen twee metingen in: liever een bol die
+ * een fractie kleiner staat dan een kolom die overloopt. */
+.lv-globe-canvas {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 50%;
+  touch-action: none;
+  cursor: grab;
+}
+.lv-globe-canvas[data-dragging="1"] {
+  cursor: grabbing;
+}
+.lv-globe-canvas:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* De kleuren van het doek, leesbaar gemaakt voor de component. Zie de kop. Geen
+ * display:none maar nul bij nul: zo staat buiten kijf dat de stijl echt berekend
+ * wordt. */
+.lv-globe-inks {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.lv-globe-inks [data-ink="sea"] { color: var(--lv-globe-sea); }
+.lv-globe-inks [data-ink="grid"] { color: var(--lv-globe-grid); }
+.lv-globe-inks [data-ink="rim"] { color: var(--lv-globe-rim); }
+.lv-globe-inks [data-ink="euro"] { color: var(--lv-globe-euro); }
+.lv-globe-inks [data-ink="rate"] { color: var(--lv-globe-rate); }
+.lv-globe-inks [data-ink="norate"] { color: var(--lv-globe-norate); }
+.lv-globe-inks [data-ink="notender"] { color: var(--lv-globe-notender); }
+.lv-globe-inks [data-ink="hover"] { color: var(--lv-globe-hover); }
+.lv-globe-inks [data-ink="selected"] { color: var(--lv-globe-selected); }
+.lv-globe-inks [data-ink="pin"] { color: var(--lv-globe-pin); }
+
+/* ---------- Legenda ---------- */
+
+.lv-globe-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.lv-globe-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lv-globe-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--lv-globe-norate);
+}
+.lv-globe-swatch[data-tone="euro"] {
+  background: var(--lv-globe-euro);
+}
+.lv-globe-swatch[data-tone="rate"] {
+  background: var(--lv-globe-rate);
+}
+.lv-globe-swatch[data-tone="notender"] {
+  background: var(--lv-globe-notender);
+}
+.lv-globe-swatch[data-tone="selected"] {
+  background: var(--lv-globe-selected);
+}
+
+/* ---------- Zoeken en de landenlijst ---------- */
+
+.lv-globe-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.lv-globe-search label {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* De lijst is de tweede besturing en geen suggestiedoosje, dus hij staat er
+ * altijd — ook met een leeg zoekveld, en dan staan alle 250 landen erin. Een
+ * lijst die pas iets laat zien als je het juiste woord al weet, helpt precies
+ * degene niet die de bol niet kan zien. Vandaar de vaste hoogte met eigen
+ * scroll: 250 regels mogen de pagina niet uitrekken.
+ *
+ * Van 22rem naar 18rem sinds de lijst ONDER de bol staat in plaats van ernaast:
+ * naast een bol van 420 px mocht hij die hoogte vullen, eronder telt hij op bij
+ * alles erboven. Acht regels plus de scrollbalk is genoeg om te zien dat het een
+ * lijst is en dat hij verder loopt. */
+.lv-globe-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-1);
+  list-style: none;
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.lv-globe-results li[role="option"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.lv-globe-results li[role="option"]:hover {
+  border-color: var(--accent);
+}
+/* Waar de pijltjes staan. Een rand en niet alleen een achtergrond: op het gekozen
+ * land liggen die twee anders over elkaar en zie je niet meer welke van de twee
+ * je aanwijst. */
+.lv-globe-results li[data-active="1"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.lv-globe-results li[aria-selected="true"] {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.lv-globe-results .cell-sub {
+  margin-top: 0;
+  white-space: nowrap;
+}
+.lv-globe-results-empty {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- Het antwoord ---------- */
+
+.lv-globe-answer {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.lv-globe-answer p {
+  margin: 0 0 var(--sp-2);
+}
+.lv-globe-answer p:last-child {
+  margin-bottom: 0;
+}
+.lv-globe-answer-lead {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+/* Een klik die geen land raakte. Niet rood: er is niets fout gegaan, er is alleen
+ * niets te kiezen op die plek. */
+.lv-globe-miss {
+  color: var(--muted);
+}
+
+.lv-globe-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  list-style: none;
+}
+.lv-globe-choice .btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.lv-globe-source {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}

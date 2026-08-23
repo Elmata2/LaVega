@@ -1,6 +1,10 @@
 import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
-import { NL_CATEGORY_RULES_NORMALIZED, matchNorm } from "./categories.js";
+import {
+  NL_CATEGORY_RULES_NORMALIZED, matchNorm, foreignCodeIn,
+  isPersonName, isMerchantRow, isOwnName, directDebit,
+  PERSON_CATEGORY, DIRECT_DEBIT_CATEGORY, type OwnName,
+} from "./categories.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
  * take the already-loaded accounts/txs and return view-ready data, so the
@@ -74,7 +78,15 @@ export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
  *  and account numbers; `byKey` maps each account.key to its own identifiers so
  *  categorize can skip a transaction's OWN account (e.g. a bank-fee row that
  *  cites its own IBAN in the description). */
-export type OwnAccounts = { all: string[]; byKey: Map<string, string[]> };
+export type OwnAccounts = {
+  all: string[];
+  byKey: Map<string, string[]>;
+  /** The owner's OWN name(s), when he has told the app what they are. USER
+   *  DATA — `ownAccounts()` cannot derive it from a statement, so the UI adds it
+   *  (`{ ...ownAccounts(accounts), names: [parseOwnName(profile.fullName)] }`).
+   *  Absent means no claim: without a name, nothing is matched on one. */
+  names?: readonly OwnName[];
+};
 
 /** Build OwnAccounts from the full accounts list. Only values that contain a
  *  digit and are >= 8 chars qualify as identifiers — this deliberately excludes
@@ -99,9 +111,14 @@ export function ownAccounts(accounts: Account[]): OwnAccounts {
  *  counterparty/description names another of the user's own accounts; else the
  *  first user rule whose match text is a substring of counterparty+description;
  *  else the first built-in Dutch default (NL_CATEGORY_RULES) that matches; else
- *  "onbekend". So internal transfers are separated out and the defaults
- *  categorize the rest out of the box, while a user's own rule or manual label
- *  always takes precedence over the defaults.
+ *  one of the three last-resort readings of WHO the counterparty is (an incasso
+ *  code, another person's name, the payment mechanism — see the block at the end
+ *  of this function); else "onbekend". So internal transfers are separated out
+ *  and the defaults categorize the rest out of the box, while a user's own rule
+ *  or manual label always takes precedence over both.
+ *
+ *  `own.names` extends the "this is me" test from his IBANs to his NAME, which
+ *  is data only he can supply — see OwnAccounts.
  *
  *  This runs at READ time on every transaction, stored or fresh — so improving
  *  the rules improves an existing vault immediately; nothing has to be
@@ -126,6 +143,10 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
       if (hayCompact.includes(id)) return "Eigen overboeking";
     }
   }
+  // HIS OWN NAME on the other side of the row is the same fact as his own IBAN
+  // on it: his own money moving. It sits here, above the rules, for that reason
+  // — and it only ever fires on a name he typed himself (see OwnAccounts.names).
+  if (own?.names?.length && isOwnName(tx.counterparty, own.names)) return "Eigen overboeking";
   for (const r of rules) {
     // Guard on the NORMALIZED match: a whitespace-only (or punctuation-only)
     // match normalizes to "" and would otherwise substring-match every tx,
@@ -137,10 +158,86 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   // its own direction; an entry without a `sign` applies to both.
   const sign = tx.amount >= 0 ? "in" : "out";
   for (const r of NL_CATEGORY_RULES_NORMALIZED) {
+    if (r.weak) continue; // a mechanism, not a merchant — held back to the end
+    if (r.sign && r.sign !== sign) continue;
+    if (hay.includes(r.m)) return r.category;
+  }
+  // LAST, AND ONLY WHERE NOTHING ELSE SPOKE: a card payment made at a terminal
+  // abroad. His three Barcelona rows were reaching "onbekend" while the app had
+  // already worked out they were foreign — the detection existed and produced a
+  // label, not a category, so €4.000 of a July he could account for perfectly well
+  // sat in a bucket he could not.
+  //
+  // The discriminator is a PHYSICAL terminal, not merely a foreign country: a row
+  // carrying both a card number and a terminal or a time was made in person, which
+  // is what makes "spending while travelling" the honest reading. A foreign ONLINE
+  // purchase has no terminal, and calling that travel would be a guess — it stays
+  // unknown, which is the right answer for it.
+  const abroad = foreignTerminalCategory(tx);
+  if (abroad) return abroad;
+
+  /* ── WHO the counterparty is (review 20-08-2026, item 6) ─────────────────
+   * Everything below is a last resort, in order of how much the row proves.
+   *
+   * 1. An INCASSO is read off a code the bank printed — a mandate id, a
+   *    creditor id, or the SEPA phrase. It comes first because it is evidence
+   *    rather than a shape, and because a collection is nearly always a company
+   *    taking money, which is the safe reading when both could fire.
+   * 2. A PERSON'S NAME is a shape, so it is second, and never on a row paid at
+   *    a terminal — a till receipt is a purchase whatever the shop is called.
+   * 3. Only then the mechanism rules (betaalverzoek/tikkie), so a payment
+   *    request from a person lands between people and not in "Overboekingen". */
+  if (directDebit(tx)) return DIRECT_DEBIT_CATEGORY;
+  const raw = `${tx.counterparty} ${tx.description}`;
+  if (isPersonName(tx.counterparty) && !isMerchantRow(raw)) return PERSON_CATEGORY;
+  for (const r of NL_CATEGORY_RULES_NORMALIZED) {
+    if (!r.weak) continue;
     if (r.sign && r.sign !== sign) continue;
     if (hay.includes(r.m)) return r.category;
   }
   return "onbekend";
+}
+
+/** Words that place a foreign in-person payment more precisely than "travel".
+ *  Deliberately short: each entry is a word whose meaning does not shift between
+ *  the languages these exports are printed in, and a wrong category here is worse
+ *  than the general one, because it silently distorts a real total. */
+const ABROAD_WORDS: ReadonlyArray<{ m: string; category: string }> = [
+  { m: "metro", category: "Transport" },
+  { m: "taxi", category: "Transport" },
+  { m: "renfe", category: "Transport" },
+  { m: "sncf", category: "Transport" },
+  { m: "aeroport", category: "Transport" },
+  { m: "airport", category: "Transport" },
+  { m: "parking", category: "Transport" },
+  { m: "camping", category: "Reizen" },
+  { m: "camper park", category: "Reizen" },
+  { m: "hotel", category: "Reizen" },
+  { m: "hostal", category: "Reizen" },
+  { m: "hostel", category: "Reizen" },
+  { m: "gelato", category: "Café" },
+  { m: "heladeria", category: "Café" },
+  { m: "cafe", category: "Café" },
+  { m: "bar ", category: "Café" },
+  { m: "restaurant", category: "Café" },
+  { m: "supermercat", category: "Boodschappen" },
+  { m: "supermercado", category: "Boodschappen" },
+  { m: "mercadona", category: "Boodschappen" },
+  { m: "carrefour", category: "Boodschappen" },
+];
+
+/** The category for a card payment made at a terminal abroad, or null when this
+ *  row is not one. Exported for the tests that pin the discriminator. */
+export function foreignTerminalCategory(tx: Tx): string | null {
+  const raw = `${tx.counterparty} ${tx.description}`;
+  if (!foreignCodeIn(raw)) return null;
+  // "Kaartnr" alone is not enough — an online card payment carries one too. A
+  // terminal id or a time of day is what says someone stood there.
+  const inPerson = /kaartnr/i.test(raw) && /\bterm\b|\bterm:|\btijd:/i.test(raw);
+  if (!inPerson) return null;
+  const hay = matchNorm(raw);
+  for (const w of ABROAD_WORDS) if (hay.includes(w.m)) return w.category;
+  return "Reizen";
 }
 
 /** In/out totals grouped by derived category (via categorize). Pass `own` to

@@ -10,6 +10,7 @@ import "./styles/base.css";
 import "./styles/modules.css";
 import "./styles/charts.css";
 import "./styles/blocks.css";
+import "./styles/worldmap.css";
 import "./styles/landing.css";
 import Root from "./Root";
 

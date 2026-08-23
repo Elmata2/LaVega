@@ -36,9 +36,49 @@ Enable Banking OAuth exchange), it never stores your accounts/transactions.
    Railway's generated `*.up.railway.app` hostname can remain enabled for
    troubleshooting, but do not use it in public integrations.
 6. Verify:
-   - `https://lavega.dev/` → the app loads
+   - `https://lavega.dev/` → landing
+   - `https://lavega.dev/app` → personal vault (Overzicht)
+   - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
    - `https://lavega.dev/api/rates` → the live savings-rate JSON
+   - Landing + app topnav **Investing** → `https://lavega.dev/investing/` (built in)
+
+Personal app paths (SPA; server already serves `index.html` for unknown paths):
+
+| Path | View |
+| --- | --- |
+| `/app` or `/app/overview` | Overzicht |
+| `/app/transactions` | Transacties |
+| `/app/accounts` | Rekeningen |
+| `/app/forecast` | Forecast |
+| `/app/optimalisatie` | Optimalisatie |
+| `/app/valuta` | Valuta |
+| `/app/punten` | Punten |
+| `/app/belasting` | Belasting |
+| `/app/facturen` | Facturen |
+| `/app/profiel` | Profiel |
+| `/app/koppelingen` | Koppelingen |
+| `/app/backup` | Back-up |
+
+Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
+
+## Investing dashboard (same deploy)
+
+The production `Dockerfile` also builds `apps/investing-web` and mounts it on the
+personal server:
+
+- UI: `https://lavega.dev/investing/`
+- API: `/api/investing/*`, `/api/brokers/*`, `/api/prices/*`, `/api/market-data/*`
+- Health probe for the link: `/investing/health`
+
+The personal SPA link is baked as `VITE_INVESTING_URL=/investing`. To point at a
+separate investing host instead, set a Railway **build** variable
+`VITE_INVESTING_URL=https://investing.lavega.dev` and redeploy (or use
+`Dockerfile.investing` as a second Railway service — see `docs/investing/DOCKER.md`).
+
+Optional: mount a Railway volume at `/data` so broker credentials and price cache
+survive redeploys (`INVESTING_PRICE_STORE_FILE`, `LAVEGA_VAULT_FILE` in
+`docs/investing/DOCKER.md`).
 
 ## Environment variables (Railway → Variables)
 - `PORT` — set by Railway automatically; don't hardcode.

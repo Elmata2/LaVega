@@ -1,4 +1,13 @@
-import { HOME_MODULE, MODULES, toggleModule, type ModuleId } from "./moduleRegistry";
+import type { ReactNode } from "react";
+import {
+  HOME_MODULE,
+  MODULES,
+  WIDGETS,
+  toggleModule,
+  toggleWidget,
+  type ModuleId,
+  type WidgetId,
+} from "./moduleRegistry";
 
 /* The module picker: every module in the registry, with its preview, one line
  * of what it does, and a switch. On = it appears in the top nav; off = it
@@ -8,7 +17,65 @@ import { HOME_MODULE, MODULES, toggleModule, type ModuleId } from "./moduleRegis
  * The picker owns no state: it hands the caller the NEXT list (computed by the
  * registry, which is what keeps Overzicht unremovable) and the caller persists
  * it. Reached from the profile, and from "Widget toevoegen" in the header —
- * the same idea from the other end. */
+ * the same idea from the other end.
+ *
+ * Below it, the same picker for the homescreen WIDGETS (Aandacht, Positie per
+ * bedrijf, Betaalagenda). Same list, same switch, same wording — a card you
+ * switch on and a tab you switch on are the same gesture, so they must not look
+ * like two different mechanisms.
+ *
+ * Eén verschil dat wél zichtbaar moet zijn: niet elke kaart begint uit. De
+ * Betaalagenda stond er al voordat er een schakelaar was, dus die begint aan
+ * (moduleRegistry, `defaultOn`). Dat staat als `note` op de rij zelf, want een
+ * schakelaar die aan staat terwijl de tekst erboven zegt dat alles uit begint,
+ * laat de lezer aan zichzelf twijfelen in plaats van aan de tekst. */
+
+/** One row: preview, label, one line, switch. Shared by both pickers so the
+ *  two never drift apart visually. */
+function PickerRow({
+  preview,
+  label,
+  what,
+  note,
+  on,
+  locked,
+  switchLabel,
+  onToggle,
+}: {
+  preview: ReactNode;
+  label: string;
+  what: string;
+  note?: string;
+  on: boolean;
+  locked?: boolean;
+  /** Accessible name of the switch, e.g. "Valuta in de navigatie". */
+  switchLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <li className="mp-item">
+      <div className="mp-preview">{preview}</div>
+
+      <div className="mp-text">
+        <span className="mp-label">{label}</span>
+        <span className="mp-what">{what}</span>
+        {note && <span className="mp-note">{note}</span>}
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={switchLabel}
+        disabled={locked}
+        className={`mp-toggle${on ? " on" : ""}`}
+        onClick={onToggle}
+      >
+        <span className="mp-knob" aria-hidden="true" />
+      </button>
+    </li>
+  );
+}
 
 type ModulePickerProps = {
   enabled: ModuleId[];
@@ -24,27 +91,49 @@ export default function ModulePicker({ enabled, onChange }: ModulePickerProps) {
         const isOn = on.has(m.id);
         const locked = m.id === HOME_MODULE;
         return (
-          <li key={m.id} className="mp-item">
-            <div className="mp-preview">{m.preview}</div>
+          <PickerRow
+            key={m.id}
+            preview={m.preview}
+            label={m.label}
+            what={m.what}
+            note={locked ? "Je startpagina — staat altijd in de navigatie." : undefined}
+            on={isOn}
+            locked={locked}
+            switchLabel={`${m.label} in de navigatie`}
+            onToggle={() => onChange(toggleModule(enabled, m.id, !isOn))}
+          />
+        );
+      })}
+    </ul>
+  );
+}
 
-            <div className="mp-text">
-              <span className="mp-label">{m.label}</span>
-              <span className="mp-what">{m.what}</span>
-              {locked && <span className="mp-note">Je startpagina — staat altijd in de navigatie.</span>}
-            </div>
+type WidgetPickerProps = {
+  enabled: WidgetId[];
+  onChange: (next: WidgetId[]) => void;
+};
 
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isOn}
-              aria-label={`${m.label} in de navigatie`}
-              disabled={locked}
-              className={`mp-toggle${isOn ? " on" : ""}`}
-              onClick={() => onChange(toggleModule(enabled, m.id, !isOn))}
-            >
-              <span className="mp-knob" aria-hidden="true" />
-            </button>
-          </li>
+/** The cards on the homescreen that are a choice rather than a fixture.
+ *  Nothing is locked here: a homescreen without any of them is still a
+ *  homescreen, so every switch is always usable. */
+export function WidgetPicker({ enabled, onChange }: WidgetPickerProps) {
+  const on = new Set<WidgetId>(enabled);
+
+  return (
+    <ul className="module-picker">
+      {WIDGETS.map((w) => {
+        const isOn = on.has(w.id);
+        return (
+          <PickerRow
+            key={w.id}
+            preview={w.preview}
+            label={w.label}
+            what={w.what}
+            note={w.note}
+            on={isOn}
+            switchLabel={`${w.label} op je overzicht`}
+            onToggle={() => onChange(toggleWidget(enabled, w.id, !isOn))}
+          />
         );
       })}
     </ul>

@@ -58,12 +58,33 @@
   inset: 0 0 0 var(--lv-axis-w);
 }
 
+/* De tekening zelf, en NIETS anders: `pointer-events: none` is hier geen
+ * netheid maar de reparatie van een grafiek die drie reviews lang niet te
+ * bedienen was.
+ *
+ * Een <svg> is voor het aanwijzen een gewoon vervangen element: zijn hele vak
+ * vangt de muis op, ook waar de tekening leeg is. In WeekdayBars ligt deze svg
+ * (de stippellijn door de staven) NA `.lv-bars-groups` in de DOM, allebei
+ * `position: absolute; inset: 0`, allebei zonder z-index — dus de svg ligt
+ * bovenop en ving elke aanwijzer die op een staaf gericht was. Gemeten in
+ * Chrome op het echte onderdeel met de echte stylesheets: alle zeven staven
+ * gaven `document.elementFromPoint` → `svg.lv-chart-svg`, in het midden van de
+ * staaf én erboven. Niet één balk was met de muis of met een tik te bereiken;
+ * alleen het toetsenbord kwam erbij, want focus doorloopt geen raakvlaktest.
+ * Dat is waarom de tooltip er wél stond, in de tests wél groen was (jsdom doet
+ * geen raakvlaktest: `.click()` gaat rechtstreeks naar de knop) en op het
+ * scherm nooit verscheen.
+ *
+ * TrendChart merkt hier niets van: daar ligt `.lv-chart-hit` ná de svg en die
+ * vangt sowieso alles. De peak-chip en de gemiddelde-lijn in blocks.css hadden
+ * deze regel al — de svg was de enige laag die hem miste. */
 .lv-chart-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
+  pointer-events: none;
 }
 
 /* Quiet dashed gridlines, the reference's register. */
@@ -142,11 +163,19 @@
   pointer-events: none;
 }
 
-/* The pointer surface sits on top of everything and captures nothing else. */
+/* The pointer surface sits on top of everything and captures nothing else. It
+ * is also the keyboard's way into the chart (role="slider", arrow keys), so it
+ * has to show where the focus is: the cursor line moves, but someone who cannot
+ * see that needs the surface itself to say "you are in here". */
 .lv-chart-hit {
   position: absolute;
   inset: 0;
   cursor: crosshair;
+}
+.lv-chart-hit:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 
 /* ---------- X axis (HTML, so it never scales with the drawing) ---------- */
@@ -215,7 +244,19 @@
   min-width: 0;
   height: 100%;
 }
+/* A bar is a <button> — see "The reading" below — so it has UA chrome to shed
+ * before it can be a bar again. */
 .lv-bar {
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  /* Nothing is navigated to, so no pointing hand: the chip is the whole reward,
+   * and it also appears on plain hover. */
+  cursor: default;
   flex: 1;
   min-width: 0;
   /* Wide enough to read with twelve months in the window, capped so a
@@ -225,6 +266,144 @@
   /* A zero-height bar would vanish; a hairline says "measured, and it's ~0". */
   min-height: 2px;
   transition: height 0.18s ease;
+}
+.lv-bar:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------- The reading: hover · tap · keyboard ----------
+ *
+ * Review 2, item 12: "I want to be able to hover over every statistic and see
+ * the number specifically in the month or whatever time frame." A `title`
+ * attribute answers only the first third of that — a phone has no hover and a
+ * keyboard never fires one — so the number lives in a chip that is revealed
+ * three ways: :hover (mouse), :focus / :focus-visible (keyboard, and the phones
+ * that focus a button on tap) and [data-tip="on"] (the phones that do not, set
+ * from the click handler).
+ *
+ * The chip prints its slice above its number, because "€ 412" alone does not
+ * say whether it is the month, the window or the average.
+ *
+ * It is `visibility: hidden` when idle rather than merely transparent: an
+ * invisible-but-present chip would still swallow the pointer aimed at the bar
+ * behind it. */
+.lv-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 1px;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--on-ink);
+  text-align: center;
+  white-space: nowrap;
+  /* width: max-content is load-bearing, not tidying. An absolutely positioned
+   * box shrink-to-fits against its CONTAINING BLOCK — here a 26px bar — so
+   * without it the chip collapsed to one word per line (measured in Chrome:
+   * four lines for "Kleding & winkelen · Deze periode", covering the bars it
+   * was describing). max-content takes the label's natural width, and the cap
+   * keeps a chip on an edge bar from hanging far off the card. */
+  width: max-content;
+  max-width: 14rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+/* A bar that nearly fills the plot has nothing above it but the legend, so its
+ * chip reads inside the bar instead of over the label it would cover. */
+.lv-tip-inside {
+  bottom: auto;
+  top: 4px;
+}
+.lv-tip-when {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  white-space: normal;
+  opacity: 0.72;
+}
+.lv-tip-value {
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.lv-bar:hover > .lv-tip,
+.lv-bar:focus > .lv-tip,
+.lv-bar:focus-visible > .lv-tip,
+.lv-bar[data-tip="on"] > .lv-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- De weekdagkolom als trefvlak ----------
+ *
+ * De knop is hier de hele kolom en niet de staaf, en dat is geen ruimhartigheid
+ * maar het antwoord op de meting. Gemeten in Chromium op WeekdayBars met deze
+ * stylesheets: de goedkoopste dag is een staafje van 42 bij 6 pixels. Met de
+ * muis is dat te raken zodra de laag erboven de aanwijzer doorlaat (zie
+ * `.lv-chart-svg` bovenaan), maar op een telefoon bestaat hover niet en blijft
+ * alleen de tik over — en 6 pixels hoog is geen tikdoel. Vandaar een knop van de
+ * volle plothoogte en de volle breedte van één dag; de gekleurde staaf is een
+ * <span> erbinnen die alleen nog tekent.
+ *
+ * EERDERE POGING, en waarom die niet volstond: `.lv-bars-group:hover .lv-tip`
+ * maakte de kolom aanwijsbaar met de MUIS, terwijl de tik en de focus via de
+ * knop liepen. Twee mechanismen voor hetzelfde, en de telefoon zat aan de
+ * verkeerde kant van de scheiding. Nu is er één element, dus geen scheiding
+ * meer om aan de verkeerde kant van te vallen.
+ *
+ * Bewust alleen hier en niet op `.lv-bar` in het algemeen: in CategoryBars staan
+ * twee of drie staven in één groep, en een kolombreed trefvlak zou daar alle
+ * chips van die groep tegelijk over elkaar heen openen. WeekdayBars tekent er
+ * per constructie precies één per kolom. */
+.weekday-column {
+  /* Een knop met alle knoppenopmaak eraf: hij is een trefvlak, geen bedieningselement met een rand. */
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  /* Er wordt nergens heen genavigeerd; de chip is de hele beloning. */
+  cursor: default;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+/* De ring om de STAAF en niet om de kolom: een kader van de volle plothoogte
+ * zegt niet welke dag de focus heeft, en dat is precies wat een focusring moet
+ * zeggen. `outline: none` op de knop zelf mag hier omdat de ring een regel
+ * verderop terugkomt — zonder die tweede regel zou dit het toetsenbord blind
+ * maken. */
+.weekday-column:focus-visible {
+  outline: none;
+}
+.weekday-column:focus-visible > .lv-bar {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+/* Dezelfde drie wegen als bij `.lv-bar` hierboven, nu op de kolom: de muis,
+ * het toetsenbord (`:focus` erbij voor de telefoons die op een tik wél
+ * focussen) en de tik die React in [data-tip] zet voor de telefoons die dat
+ * niet doen. */
+.weekday-column:hover .lv-tip,
+.weekday-column:focus .lv-tip,
+.weekday-column:focus-visible .lv-tip,
+.weekday-column[data-tip="on"] .lv-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .lv-bars-xaxis {
@@ -246,6 +425,63 @@
   white-space: nowrap;
 }
 
+/* ITEM 8, the bar charts' own labels: "afgekapte namen zijn onleesbaar — hij
+ * stelt voor naar rechts te kunnen hoveren."
+ *
+ * The cell cannot simply stop clipping: every label keeps its slot so the row
+ * stays aligned with the bars above it, and an unclipped "Kleding & winkelen"
+ * would shove its neighbours out of line. So the full name — which the cell
+ * already carries in `title` — is drawn as a chip that grows RIGHTWARDS out of
+ * the cell's left edge, in the same ink as the bar readings so the two do not
+ * look like two different tooltips. `content: attr(title)` means no markup
+ * changed and nothing can drift out of sync with the label.
+ *
+ * The rightmost cell grows the other way, so the last month or category does not
+ * hang off the card.
+ *
+ * This is the mouse half of item 8. The tap-and-keyboard half already exists in
+ * the same chart and is not duplicated here: every bar is a button carrying
+ * `.lv-tip`, whose first line is that group's FULL name. */
+.lv-bars-xaxis span {
+  position: relative;
+}
+.lv-bars-xaxis span[title]::after {
+  content: attr(title);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 5px);
+  z-index: 5;
+  width: max-content;
+  max-width: 12rem;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+.lv-bars-xaxis span:last-child[title]::after {
+  left: auto;
+  right: 0;
+  text-align: right;
+}
+.lv-bars-xaxis span:hover[title]::after {
+  opacity: 1;
+  visibility: visible;
+}
+/* Not on the weekday chart: "ma" … "zo" are never clipped, so a chip there would
+ * repeat the label it covers. A tooltip that says what you can already read is
+ * noise, and this chart was called fine as it is. */
+.weekday-bars .lv-bars-xaxis span[title]::after {
+  content: none;
+}
+
 /* ---------- Phone ---------- */
 
 @media (max-width: 900px) {
@@ -265,6 +501,12 @@
   .lv-bar {
     max-width: 18px;
   }
+  /* A one-column card is ~330px wide: a 14rem chip centred on the leftmost bar
+   * would hang off it. Narrower here, and the label wraps to two lines instead
+   * of leaving the card. */
+  .lv-tip {
+    max-width: 10rem;
+  }
 }
 
 /* Twelve months in a phone-width card leave about 17px per label and "sep"
@@ -280,5 +522,295 @@
   }
   .lv-bars-many span:nth-child(even) {
     visibility: hidden;
+  }
+}
+
+/* ── SpendPie ─────────────────────────────────────────────────────────────
+ *
+ * Shipped without these rules, which is why it read as "zoomed out and like a
+ * million": an unsized conic-gradient div fills its container, and the legend was
+ * a bare <ul> of unstyled spans. The chart was correct and unwearable.
+ *
+ * The ring has a FIXED pixel size rather than a percentage. A conic-gradient has
+ * no intrinsic aspect ratio, so a width-only rule makes an ellipse as the card
+ * changes width; pinning both dimensions is what keeps it a circle at every
+ * breakpoint.
+ */
+.spend-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.spend-pie-ring {
+  flex: 0 0 auto;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  /* The hole is a smaller circle in the card's own colour rather than a
+   * transparent mask: the block sits on more than one background and a
+   * transparent centre would show whatever is behind the card. */
+}
+
+/* ITEM 5: "het totaal staat gecentreerd zodra hij een categorie kiest, maar niet
+ * in de totaalweergave." Both states were laid out the same way, so the cause was
+ * not the states but the grid: `place-items` centres each item INSIDE ITS OWN
+ * ROW, and auto rows stretch to fill the circle. Reading a slice puts three rows
+ * in the hole, and the amount — the middle one — lands dead centre by luck; the
+ * total view has two rows, so the amount sits centred in the TOP HALF. That is
+ * exactly what he saw.
+ *
+ * `align-content: center` packs the rows as one block and centres THAT, so the
+ * group is centred whether it holds two lines or three. */
+.spend-pie-hole {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: var(--card, #fff);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.spend-pie-total {
+  font-weight: 650;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.spend-pie-caption {
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+/* The share has to live inside a 108px hole (86px on a phone), between the
+ * slice's name and its amount — so it is a size down from the idle caption and
+ * short enough to stay on ONE line. Measured in Chrome: "31% van de uitgaven"
+ * wrapped and pushed the name onto the ring. */
+.spend-pie-share-of {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  max-width: 92%;
+  white-space: nowrap;
+}
+
+/* The name of the slice being read, above its amount. Small and quiet: the
+ * number is the answer, the name only says which question it answers.
+ *
+ * It WRAPS rather than ellipsises (item 8). "Kleding & winkelen" clipped to
+ * "Kleding &…" in a 108px hole names nothing; two short lines name it, and with
+ * the rows now packed and centred the second line pushes the group up rather
+ * than off. */
+.spend-pie-slice {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  max-width: 92%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.spend-pie-legend {
+  flex: 1 1 14rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* The row is the hit target, laid out as a grid so the amounts line up in a
+ * column instead of trailing after names of different lengths. */
+.spend-pie-item {
+  display: grid;
+  grid-template-columns: 0.75rem 1fr auto 2.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.2rem 0.25rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+/* Every row is a button now — that is how a keyboard reaches the numbers — but
+ * only the rows that jump into Transacties point. A pointing hand on a row that
+ * merely lights up its arc would promise a page that never arrives. */
+.spend-pie-item[data-filter="yes"] {
+  cursor: pointer;
+}
+
+.spend-pie-item:hover,
+.spend-pie-item:focus-visible,
+.spend-pie-item[data-active="on"] {
+  background: var(--hover, rgba(0, 0, 0, 0.04));
+}
+.spend-pie-item:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+/* The ring answers the pointer, so it is a live surface rather than a picture —
+ * and where an arc opens its category (item 6) it points, exactly as its legend
+ * row does. Over the hole, or over an "Overig" arc that is several categories,
+ * there is nothing to open and nothing is promised. */
+.spend-pie-ring {
+  cursor: default;
+}
+.spend-pie-ring[data-open="yes"] {
+  cursor: pointer;
+}
+
+.spend-pie-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+}
+
+/* ITEM 8: 'Ik zie "V…" en kan niet zien welke categorie dat is.' A long name is
+ * still clipped at rest — the amounts have to stay in one column, and a legend
+ * of wrapped names is unreadable as a list. But the row being READ un-clips and
+ * wraps, so the full name is reachable three ways, not just by mouse: :hover,
+ * [data-active="on"] (set on tap) and :focus-visible (keyboard). The `title`
+ * stays for the desktop reader who waits, but it was never enough on its own —
+ * a phone has no hover. */
+.spend-pie-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.spend-pie-item:hover .spend-pie-name,
+.spend-pie-item:focus-visible .spend-pie-name,
+.spend-pie-item[data-active="on"] .spend-pie-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.spend-pie-value,
+.spend-pie-share {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.spend-pie-share {
+  opacity: 0.6;
+}
+
+/* On a phone the ring and the legend stack, and the ring shrinks — 168px beside
+ * a full-width legend leaves the names about six characters. */
+@media (max-width: 560px) {
+  .spend-pie {
+    gap: 1rem;
+  }
+  .spend-pie-ring {
+    width: 132px;
+    height: 132px;
+  }
+  .spend-pie-hole {
+    width: 86px;
+    height: 86px;
+  }
+}
+
+/* ── Percentiel per categorie ─────────────────────────────────────────────
+ *
+ * Het bijschrift onder de categoriestaven: wat deze maand aan een categorie is
+ * uitgegeven, en waar dat ligt in zijn eigen eerdere maanden.
+ *
+ * Bewust geen balk, geen meter en geen gekleurde badge. Een balk van 80% leest
+ * als "80% van iets", en dat is precies wat een percentiel NIET is — het is een
+ * plaats in een rij van tien maanden. Drie kolommen tekst dus, met de zin als
+ * derde kolom, want de zin is het antwoord. De hairline erboven scheidt het van
+ * de notities over weggelaten categorieën; verder heeft dit blok geen chroom.
+ *
+ * Geen transitions en geen animatie hier, op afspraak: er beweegt niets, dus er
+ * valt niets te bewegen. */
+.lv-percentiel {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.lv-percentiel-basis {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* De maand die vergeleken wordt, in de tekstkleur: de rest van de regel is de
+ * verantwoording, dit is waar hij naar kijkt. */
+.lv-percentiel-basis strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lv-percentiel-lijst {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.lv-percentiel-rij {
+  display: grid;
+  /* Naam en bedrag zo smal als ze mogen zijn, de zin krijgt de rest: bij een
+   * lange categorienaam mag de naam afbreken, maar de zin nooit — een halve zin
+   * ("hoger dan 8 van je…") is een bewering zonder haar noemer. */
+  grid-template-columns: minmax(0, 9rem) minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--sp-3);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.lv-percentiel-naam {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.lv-percentiel-bedrag {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+}
+
+.lv-percentiel-positie {
+  color: var(--muted);
+}
+/* Een positie die niet te bepalen was, staat er als reden en niet als getal.
+ * Cursief houdt hem zichtbaar anders dan een telling zonder hem weg te dimmen
+ * tot iets dat over het hoofd te zien is — de reden is hier de informatie. */
+.lv-percentiel-positie[data-onbekend="ja"] {
+  font-style: italic;
+}
+
+/* Op een smal scherm past de zin niet naast naam en bedrag; dan zakt hij naar
+ * een eigen regel onder het paar in plaats van tot twee woorden per regel te
+ * verkruimelen. */
+@media (max-width: 560px) {
+  .lv-percentiel-rij {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 1px;
+    padding-bottom: var(--sp-1);
+  }
+  .lv-percentiel-positie {
+    grid-column: 1 / -1;
   }
 }

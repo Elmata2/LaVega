@@ -1,5 +1,5 @@
 import { expect, test, beforeEach } from "vitest";
-import { getCardTerms, resetCardTerms, ingestCardTerms } from "./cardTerms.js";
+import { getCardTerms, resetCardTerms, ingestCardTerms, ingestCatalogue } from "./cardTerms.js";
 import type { TravelInput } from "./agent/travel.js";
 import type { BankNlTable } from "@lavega/core";
 
@@ -387,4 +387,100 @@ test("a provider with no cashback figure is not re-asked forever", async () => {
   await settle();
 
   expect(calls).toBe(1);
+});
+
+test("a catalogue figure enters at its own route's precedence, and carries its conditions", () => {
+  // The catalogue is a FILE, so it is instant and free — it should fill the cache
+  // before anything is looked up, and it must not be outranked by an agent guess
+  // when it came from the provider's own PDF.
+  ingestCatalogue([{
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 1.4, route: "provider-pdf",
+        sourceUrl: "https://assets.ing.com/…/kostenoverzicht.pdf",
+        checkedAt: "2026-06-15", conditions: null, conditionsKnown: true,
+      },
+    },
+  }], "NL", "USD");
+
+  const held = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never });
+  expect(held.terms[0].fxFeePct).toBe(1.4);
+  expect(held.terms[0].checkedAt).toBe("2026-06-15"); // the SOURCE's date, not today's
+});
+
+test("a catalogue figure whose conditions were never established does not enter", () => {
+  // Revolut's 0% was true inside a EUR 1.000 monthly cap. A figure we never
+  // checked for a cap is not an answer, and letting it in is how it shipped.
+  const res = ingestCatalogue([{
+    id: "revolut-betaalpas",
+    product: "Revolut betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 0, route: "provider-page", sourceUrl: "https://revolut.com/x",
+        checkedAt: "2026-08-18", conditions: null, conditionsKnown: false,
+      },
+    },
+  }], "NL", "USD");
+
+  expect(res.accepted).toBe(0);
+  expect(res.rejected).toContain("Revolut betaalpas");
+  // ...and nothing was served in its place. Unknown is never zero.
+  const held = getCardTerms(input(["Revolut betaalpas"]), "k", { lookup: (async () => []) as never });
+  expect(held.terms).toEqual([]);
+});
+
+test("the conditions travel with the figure, because a capped rate shown bare is the whole bug", () => {
+  // "0% tot € 1.000 p/m, daarna 1%" ranked as a flat 0% is what told him the trip
+  // would cost nothing. The cap has to arrive at the screen attached to the rate,
+  // not be dropped on the way in.
+  ingestCatalogue([{
+    id: "revolut-betaalpas",
+    product: "Revolut betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 0, route: "provider-page", sourceUrl: "https://revolut.com/nl/fees",
+        checkedAt: "2026-08-18", conditions: "0% tot € 1.000 p/m, daarna 1%", conditionsKnown: true,
+      },
+    },
+  }], "NL", "USD");
+
+  const row = getCardTerms(input(["Revolut betaalpas"]), "k", { lookup: (async () => []) as never }).terms[0];
+  expect(row.fxFeePct).toBe(0);
+  expect(row.note).toBe("0% tot € 1.000 p/m, daarna 1%");
+});
+
+test("the catalogue goes THROUGH the precedence ladder, not around it", () => {
+  // The ladder is the only reason a shared cache of public figures is safe to
+  // read: it is what stops a tidy-looking source from overwriting something
+  // better or newer. A catalogue that wrote straight into the cache would be a
+  // fourth source with no rank — and the owner's own correction, which sits one
+  // layer further out in upsertFacts, would be the next thing to lose.
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.2, checkedAt: "2026-08-18" }], "agent");
+
+  const res = ingestCatalogue([{
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    fields: {
+      fxFeePct: {
+        value: 1.4, route: "provider-pdf", sourceUrl: "https://assets.ing.com/x.pdf",
+        checkedAt: "2026-01-15", conditions: null, conditionsKnown: true,
+      },
+    },
+  }], "NL", "USD");
+
+  // Seven months older than what is held. Refused however tidy its source —
+  // exactly as bank.nl's January table is refused today.
+  expect(res.accepted).toBe(0);
+  expect(res.rejected).toEqual(["ING betaalpas"]);
+  const row = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never }).terms[0];
+  expect(row.fxFeePct).toBe(1.2);
+});
+
+test("a product the catalogue has no fxFeePct for is reported, never served as a zero", () => {
+  const res = ingestCatalogue([{ id: "bybit-card", product: "Bybit Card", fields: {} }], "NL", "USD");
+
+  expect(res).toEqual({ accepted: 0, rejected: ["Bybit Card"] });
+  expect(getCardTerms(input(["Bybit Card"]), "k", { lookup: (async () => []) as never }).terms).toEqual([]);
 });

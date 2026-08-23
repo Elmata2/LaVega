@@ -142,7 +142,18 @@ test("cashback in euro's is the one value shown — the balance itself, no rate"
 
 test("nothing on the screen adds two programmes together", () => {
   render([mr(245_000, ASOF), fb(60_000, ASOF)]);
-  expect(container!.textContent).toContain("telt programma's niet bij elkaar op");
+  /* DE ZIN IS WEG, DE EIGENSCHAP NIET. Hij liet de inleidende alinea verwijderen
+   * (22 augustus), en die alinea was tot nu het enige bewijs dat er niets wordt
+   * opgeteld — een test die op een uitleg leunt, toetst de uitleg en niet het
+   * gedrag. Nu wordt het gedrag zelf gemeten: er zijn twee kaarten met elk hun
+   * eigen eenheid, en nergens staat de som van de twee. */
+  // Allebei apart zichtbaar, met hun eigen getal, en nergens de som ervan.
+  expect(container!.textContent).toContain("American Express Membership Rewards");
+  expect(container!.textContent).toContain("Flying Blue");
+  expect(container!.textContent).toContain("245.000");
+  expect(container!.textContent).toContain("60.000");
+  expect(container!.textContent).not.toContain("305.000"); // 245.000 + 60.000
+  expect(container!.textContent).not.toContain("305000");
   expect(container!.textContent).not.toContain("305.000");
 });
 
@@ -223,7 +234,12 @@ test("with nothing tracked the screen explains what to do, and claims nothing", 
   render([]);
   expect(container!.querySelector(".empty-guide")!.textContent).toContain("Nog geen punten- of cashback-saldi");
   expect(container!.querySelectorAll(".punt-card")).toHaveLength(0);
-  expect(container!.querySelector(".view-head .eyebrow")!.textContent).toBe("0 programma's");
+  /* "0 SALDI" EN NIET "0 PROGRAMMA'S", en dat is een correctie en geen
+   * naamswijziging. Sinds hij vroeg om ALLE programma's te tonen — ook ING, ook
+   * die waar hij niets heeft staan — is de lijst eronder nooit meer leeg. "0
+   * programma's" zou dus onwaar zijn boven een scherm dat er een stuk of tien
+   * opsomt. Wat er nul is, is het aantal saldi dat hij heeft ingevuld. */
+  expect(container!.querySelector(".view-head .eyebrow")!.textContent).toBe("0 saldi");
 });
 
 test("busy disables every control that would write", () => {

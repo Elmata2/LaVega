@@ -1,14 +1,21 @@
 import { useMemo, useState } from "react";
-import type { OwnAccounts, Rule, Tx } from "@lavega/core";
+import { categorize, categorySpendPercentiles } from "@lavega/core";
+import type { CategoryPercentile, OwnAccounts, Rule, SpendPercentiles, SpendRow, Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import CategoryBars from "../CategoryBars.js";
 import Module, { ModulePeriod } from "../Module.js";
 import WeekdayBars from "./WeekdayBars.js";
 import { dayLabelYearNL, rangeLabelNL } from "./dates.js";
 import { monthLabelNL } from "../../format.js";
+import SpendPie from "../SpendPie.js";
+import ToonMeer from "../ToonMeer.js";
 import {
+  categoryGrowth,
+  categoryShare,
   categoryPerWindow,
+  isMovedCategory,
   MIN_WEEKDAY_DAYS,
+  movedTotals,
   newestTxDate,
   presetWindow,
   weekdaySpend,
@@ -46,7 +53,56 @@ import {
  *
  * Every number is derived from the transactions; the block holds only the
  * chosen view and period. Nothing is defaulted — an unmeasured weekday shows no
- * bar, and a period the data does not reach into says so. */
+ * bar, and a period the data does not reach into says so.
+ *
+ * WHAT AN EXPENSE IS, decided once (review 3, item 1). Money that only changed
+ * place — between his own accounts, or into his own savings and investments — is
+ * not spending, and every view here leaves it out; the rule and its price are
+ * written down at MOVED_CATEGORIES in statistics.ts. It is left out VISIBLY: one
+ * line under the chart names the amount, the category and the reason, in every
+ * view, because a diagram that quietly drops € 20.000 is worse than one that
+ * mis-sorts it. */
+
+/* SAMENVATTING VOORAAN, ONDERBOUWING OPGEVOUWEN (review 4, punten 2 en 3).
+ * "The usual should be just the graphs and the numbers, and all the text below
+ * it should be a show more." Dat is hier uitgevoerd met ToonMeer, en de
+ * scheidslijn ligt niet bij "lange tekst" maar bij WAT DE ZIN IS:
+ *
+ *   BLIJFT STAAN  de uitkomst zelf. De piekdagzin, de grootste stijger, de
+ *                 percentiellijst ("hoger dan 8 van je laatste 10 maanden"), de
+ *                 twee totalen — en elke WEIGERING ("te weinig maanden om dit
+ *                 te kunnen zeggen", "nog geen uitgaven in deze periode"). Een
+ *                 weigering opvouwen laat het scherm leeg lijken terwijl er
+ *                 iets te zeggen valt; dat is een leugen met minder letters.
+ *   VOUWT OP      de onderbouwing: waartegen vergeleken is, welke dagen naast
+ *                 welke liggen, waarom een categorie niet in de grafiek staat.
+ *
+ * En wat opgevouwen wordt, wordt niet gewist: het label van elke regel draagt
+ * de FEITEN mee die je zonder hem zou missen — hoeveel categorieën weggelaten
+ * zijn, hoeveel maanden zonder afschrift, welk bedrag buiten de cijfers is
+ * gehouden. Zo staat het cijfer op de voorgrond en is de herkomst één klik weg
+ * in plaats van zoek. Vandaar ook dat geen enkel label "meer informatie" heet:
+ * een regel die niets belooft is een regel waar niemand op klikt, en dan is de
+ * onderbouwing niet opgevouwen maar kwijt. */
+
+/** Het label van de opgevouwen regel onder de categoriegrafiek: wat er buiten
+ *  de grafiek is gebleven, geteld, met de uitleg erachter.
+ *
+ *  De TELLINGEN staan met opzet in het label en niet in het paneel. Drie
+ *  weggelaten categorieën en twee maanden zonder afschrift zijn geen
+ *  onderbouwing maar een gat in het beeld; wie de regel dichtlaat moet nog
+ *  steeds weten dát het er is. Puur en geëxporteerd, zodat de telling los van
+ *  een render te controleren is.
+ *
+ *  Geeft `null` terug als er niets weggelaten is — dan hoort er ook geen regel
+ *  te staan die belooft dat er iets te zien valt. */
+export function weggelatenLabelNL(counts: { maanden: number; klein: number; gecapt: number }): string | null {
+  const delen: string[] = [];
+  if (counts.maanden > 0) delen.push(`${counts.maanden} maand${counts.maanden === 1 ? "" : "en"} zonder afschrift`);
+  if (counts.klein > 0) delen.push(`${counts.klein} kleinere categorie${counts.klein === 1 ? "" : "ën"}`);
+  if (counts.gecapt > 0) delen.push(`${counts.gecapt} categorie${counts.gecapt === 1 ? "" : "ën"} buiten de grafiek`);
+  return delen.length === 0 ? null : `Wat hier niet in staat: ${delen.join(" · ")}`;
+}
 
 export type StatPeriod = StatPreset | "aangepast";
 
@@ -59,10 +115,16 @@ export const STAT_PERIODS: { value: StatPeriod; label: string }[] = [
   { value: "aangepast", label: "Aangepast" },
 ];
 
-export type StatView = "categorie" | "weekdag";
+export type StatView = "categorie" | "verdeling" | "gegroeid" | "weekdag";
 
 export const STAT_VIEWS: { value: StatView; label: string }[] = [
   { value: "categorie", label: "Categorieën" },
+  /* Two views added 20 August. "Categorieën" shows levels per bucket, which lets a
+   * careful reader infer a trend by eye; these two state it outright — what the
+   * spending is made OF, and what is climbing. All three consume the same window
+   * and the same category split, so they cannot disagree about a period. */
+  { value: "verdeling", label: "Verdeling" },
+  { value: "gegroeid", label: "Gegroeid" },
   { value: "weekdag", label: "Weekdagen" },
 ];
 
@@ -74,6 +136,13 @@ const TOP_CATEGORIES = 4;
 /** One token per category slot. Cycled, never invented. */
 const CATEGORY_COLORS = ["var(--accent)", "var(--chart-teal)", "var(--chart-purple)", "var(--warn)"];
 
+/** Everything that comes out of statistics.ts as a SHARE or a DELTA is in
+ *  CENTS; `formatEuro` takes euros. Feeding one to the other is what printed
+ *  € 2.033.540 over € 20.335 — a hundredfold, on the very figure he read first.
+ *  One named function, used everywhere a cents figure is shown, so the two units
+ *  cannot meet again by accident. */
+const euroFromCents = (cents: number): string => formatEuro(cents / 100);
+
 /** Whole euros on the axis; the exact number is in each bar's tooltip. */
 const wholeEuro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
@@ -83,6 +152,139 @@ export function customWindow(start: string, end: string): StatWindow | null {
   if (start === "" || end === "") return null;
   if (start > end) return null;
   return { start, end };
+}
+
+/* ── Percentiel per categorie ─────────────────────────────────────────────
+ *
+ * "Waar ligt wat ik deze maand aan boodschappen uitgaf, in wat ik er in eerdere
+ * maanden aan uitgaf." Het rekenwerk staat in packages/core/src/spendPercentile.ts
+ * — inclusief de drie manieren waarop zo'n cijfer kan liegen, en wat elk ervan
+ * tegenhoudt. Hier staat alleen hoe de uitkomst in woorden komt.
+ *
+ * Geen "P80" en geen balkje. Een percentiel is een plaats in een rij, geen
+ * cijfer op een rapport, dus het blok noemt de rij: "hoger dan 8 van je laatste
+ * 10 maanden" is na te tellen tegen de staven erboven, "80e percentiel" niet.
+ *
+ * De vergelijking loopt per KALENDERMAAND, ook wanneer de grafiek erboven op
+ * een andere periode staat. Huur, salaris, verzekering en elk abonnement lopen
+ * per maand, en de gekozen periode is een keuze over de gráfiek — niet over de
+ * lengte waarin zijn uitgaven zich herhalen. Welke dagen er precies naast welke
+ * zijn gelegd, staat in de regel erboven; stil vergelijken mag niet.
+ *
+ * Een vergelijking met het Nederlandse gemiddelde stond hier NIET tegenover: die
+ * is onderzocht en afgewezen (docs/research/2026-08-20-categorie-gemiddelden.md).
+ * Het CBS deelt in naar product waar LaVega naar tegenpartij deelt, het nieuwste
+ * cijfer per categorie is van 2020, en er wordt alleen een gemiddelde met een
+ * betrouwbaarheidsinterval gepubliceerd — geen verdeling, dus daar valt sowieso
+ * geen percentiel uit te halen. */
+
+/** De positie van één categorie, in woorden. Elke tak is een letterlijke
+ *  telling of een reden — geen enkele tak verzint een cijfer, en geen enkele
+ *  toont een streepje dat als nul te lezen is. */
+function positionNL(r: CategoryPercentile): string {
+  const n = r.historyCents.length;
+  switch (r.reason) {
+    case "geen-gegevens":
+      return "deze maand is nog niet gemeten";
+    case "te-weinig-geschiedenis":
+      return "te weinig eerdere maanden om in te plaatsen";
+    case "nieuwe-categorie":
+      // Nadrukkelijk geen "hoogste ooit": vóór deze maand bestond de categorie
+      // niet, en die nullen zijn geen maanden waarin hij niets uitgaf.
+      return "nieuw — geen eerdere maand met deze categorie";
+    case "te-kort-bekend":
+      return `pas ${n} ${n === 1 ? "maand" : "maanden"} bekend, te weinig om in te plaatsen`;
+    case "geen-verschil":
+      return r.currentCents === 0
+        ? `hier geen uitgaven, in je laatste ${n} maanden ook niet`
+        : `even hoog als in al je laatste ${n} maanden`;
+    default:
+      if (r.higher === n) return `hoger dan al je laatste ${n} maanden`;
+      if (r.lower === n) return `lager dan al je laatste ${n} maanden`;
+      // Gelijke maanden staan bewust in geen van beide tellingen: ze optellen
+      // bij "hoger" of bij "lager" is precies hoe dezelfde reeks als 0% én als
+      // 100% gerapporteerd wordt. De kant met de meeste maanden is de kant die
+      // iets zegt.
+      return r.higher >= r.lower
+        ? `hoger dan ${r.higher} van je laatste ${n} maanden`
+        : `lager dan ${r.lower} van je laatste ${n} maanden`;
+  }
+}
+
+/** De lijst onder de grafiek: per getekende categorie het bedrag van deze maand
+ *  en waar dat ligt in zijn eigen eerdere maanden. */
+function PercentielLijst({ result, categories }: { result: SpendPercentiles; categories: string[] }) {
+  // De volgorde van de grafiek, niet die van core: de lijst leest als bijschrift
+  // bij de staven erboven.
+  const rows = categories
+    .map((c) => result.rows.find((r) => r.category === c))
+    .filter((r): r is CategoryPercentile => r !== undefined);
+  if (rows.length === 0) return null;
+
+  const month = monthLabelNL(result.current.start.slice(0, 7));
+  const through = result.measuredThrough;
+  const n = result.compared.length;
+
+  // Te weinig maanden om ook maar één categorie in te plaatsen. Dan wordt de
+  // lijst vier keer dezelfde zin, dus staat er één regel die de echte oorzaak
+  // noemt — en alleen advies dat in déze toestand ook werkt.
+  if (through === null || n < result.minHistory) {
+    return (
+      <p className="cell-sub">
+        {through === null
+          ? `Nog geen vergelijking met je eigen maanden — er staat nog geen transactie in ${month}.`
+          : `Nog geen vergelijking met je eigen maanden: ${
+              n === 0
+                ? `er is geen volledige maand vóór ${month}`
+                : n === 1
+                  ? `er is 1 volledige maand vóór ${month}`
+                  : `er zijn ${n} volledige maanden vóór ${month}`
+            } geïmporteerd, en een plaats in je eigen geschiedenis vraagt er minstens ${result.minHistory}. Oudere afschriften importeren vult dit aan.`}
+      </p>
+    );
+  }
+
+  return (
+    <div className="lv-percentiel">
+      {/* De KOP blijft staan, de telling gaat achter het ⓘ. Welke maand met
+          welke maanden vergeleken wordt, mag niet opvouwen — "hoger dan 8 van
+          je laatste 10 maanden" is zonder die noemer een zwevende bewering, en
+          stil vergelijken was hier vanaf het begin verboden. Wát er precies
+          naast gelegd is (de eerste 14 dagen van elke maand, welke maanden
+          afvielen) is de onderbouwing daarvan en die vouwt wel op. */}
+      <ToonMeer
+        variant="info"
+        className="lv-percentiel-basis"
+        heading={<strong>{month} tegenover je eerdere maanden.</strong>}
+        summary="Welke dagen naast welke zijn gelegd"
+      >
+        <p>
+          {result.comparedDays === null
+            ? `De hele maand, naast de ${n} volledige maanden ervoor.`
+            : `Deze maand loopt nog: ${rangeLabelNL(result.current.start, through)} is ${result.comparedDays} dagen, en daar liggen dezelfde eerste ${result.comparedDays} dagen van de ${n} maanden ervoor naast.`}
+          {result.shortPeriods > 0 &&
+            ` ${result.shortPeriods} ${result.shortPeriods === 1 ? "maand telt" : "maanden tellen"} niet mee — korter dan ${result.comparedDays} dagen.`}
+        </p>
+      </ToonMeer>
+      <ul className="lv-percentiel-lijst">
+        {rows.map((r) => (
+          <li key={r.category} className="lv-percentiel-rij">
+            <span className="lv-percentiel-naam">{r.category}</span>
+            <span className="lv-percentiel-bedrag">{euroFromCents(r.currentCents)}</span>
+            {/* "geen-verschil" telt hier als een gewoon antwoord: er is geen
+                percentiel, maar "even hoog als al je laatste 10 maanden" is een
+                meting en geen weigering. */}
+            <span
+              className="lv-percentiel-positie"
+              data-onbekend={r.reason !== null && r.reason !== "geen-verschil" ? "ja" : undefined}
+            >
+              {positionNL(r)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /** The reference's segmented view switch, in the module's control slot. */
@@ -150,9 +352,90 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
     () => (range === null ? null : weekdaySpend(txs, rules, own, range)),
     [txs, rules, own, range],
   );
+  const share = useMemo(
+    () => (range === null ? { slices: [], totalCents: 0, covered: null } : categoryShare(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+  const growth = useMemo(
+    () => (range === null ? { rows: [], before: { start: "", end: "" } } : categoryGrowth(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+  const windowDays = useMemo(
+    () =>
+      range === null
+        ? 0
+        : Math.round((Date.parse(range.end) - Date.parse(range.start)) / 86_400_000) + 1,
+    [range],
+  );
+  /* Only the movers, and both directions. A category that did not budge says
+     nothing and would crowd out the ones that did; a FALL is as worth seeing as a
+     rise, which is why this is not filtered to increases only. The threshold is a
+     euro, not a percentage: a 300% rise on € 2 is noise. */
+  const growthGroups = useMemo(
+    () =>
+      growth.rows
+        .filter((r) => Math.abs(r.deltaCents) >= 500)
+        .slice(0, TOP_CATEGORIES)
+        .map((r) => ({
+          label: r.category,
+          values: [r.deltaCents / 100],
+          title: `${r.category}: ${euroFromCents(r.beforeCents)} → ${euroFromCents(r.nowCents)}`,
+        })),
+    [growth],
+  );
   const totals = useMemo(
     () => (range === null ? null : windowTotals(txs, rules, own, range)),
     [txs, rules, own, range],
+  );
+  /* What every figure in this block deliberately leaves out. Money moving
+     between his own accounts — or into his own savings and investments — is not
+     spending, but it IS his money leaving a bank account, so it has to be named
+     rather than silently dropped: he has to be able to see that something is
+     outside the diagram, and why. See MOVED_CATEGORIES in statistics.ts. */
+  const moved = useMemo(
+    () => (range === null ? [] : movedTotals(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
+
+  /* De rijen waar het percentiel op rust: uitgaven, en zonder het geld dat
+     alleen van plek veranderde — exact dezelfde definitie als de rest van dit
+     blok hanteert (MOVED_CATEGORIES in statistics.ts), want twee definities van
+     "uitgave" op één scherm is een blok dat het met zichzelf oneens is.
+     Bewust over de HELE geschiedenis en niet over de gekozen periode: de
+     verdeling waar deze maand in geplaatst wordt ligt per definitie buiten het
+     venster van de grafiek. */
+  const spendRows = useMemo<SpendRow[]>(() => {
+    const rows: SpendRow[] = [];
+    for (const t of txs) {
+      if (!t.date || t.amount >= 0) continue;
+      const category = categorize(t, rules, own);
+      if (isMovedCategory(category)) continue;
+      rows.push({ date: t.date, category, cents: Math.round(-t.amount * 100) });
+    }
+    return rows;
+  }, [txs, rules, own]);
+
+  /* Wat er aan gegevens ÍS, gemeten over alle transacties en niet alleen over de
+     uitgaven: een maand met alleen salaris erin is een gemeten maand waarin niets
+     is uitgegeven, en die telt als waarneming. Zou dit uit `spendRows` komen, dan
+     verdween zo'n maand uit de vergelijking in plaats van er een nul in te zijn. */
+  const coverage = useMemo(() => {
+    let start: string | null = null;
+    let end: string | null = null;
+    for (const t of txs) {
+      if (!t.date) continue;
+      if (start === null || t.date < start) start = t.date;
+      if (end === null || t.date > end) end = t.date;
+    }
+    return start === null || end === null ? null : { start, end };
+  }, [txs]);
+
+  /* Peildatum is de nieuwste transactie, net als bij elk ander venster in dit
+     blok: op de klok kijken zou van een geïmporteerd historisch afschrift een
+     lege maand maken en dat als "niets uitgegeven" laten lezen. */
+  const percentiles = useMemo(
+    () => (anchor === null ? null : categorySpendPercentiles(spendRows, { asOf: anchor, coverage })),
+    [spendRows, coverage, anchor],
   );
 
   const categorySeries = (perCategory?.categories ?? []).map((c, i) => ({
@@ -180,6 +463,24 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   const small = hidden.filter((h) => h.belowThreshold);
   const capped = hidden.filter((h) => !h.belowThreshold);
   const smallOut = small.reduce((s, h) => s + h.out, 0);
+
+  /* Het label van de opgevouwen regel onder de categoriegrafiek. De telling van
+     de kleine categorieën staat er alleen in als de zin eronder ook echt komt:
+     die zin noemt het venster waarvoor de grens geldt, en zonder `covered` is er
+     geen venster om te noemen — dan zou het label iets beloven wat het paneel
+     niet levert. Dezelfde voorwaarde dus als bij de <p> zelf. */
+  const weggelaten = weggelatenLabelNL({
+    maanden: emptyMonths.length,
+    klein: perCategory?.covered ? small.length : 0,
+    gecapt: capped.length,
+  });
+
+  /* Wat er in totaal buiten elk cijfer in dit blok is gebleven. Dit bedrag hoort
+     op de voorgrond en niet in het paneel: de reden dat deze regel bestaat is
+     dat een ring die stil € 20.000 laat vallen erger is dan een die het
+     verkeerd sorteert, en dat blijft waar als je de reden opvouwt. Opgevouwen
+     wordt dus alleen het WAAROM, niet het HOEVEEL. */
+  const movedOut = moved.reduce((sum, m) => sum + m.outCents, 0);
 
   return (
     <Module
@@ -290,30 +591,91 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     height={196}
                   />
                 </div>
-                {emptyMonths.length > 0 && (
-                  <p className="cell-sub">
-                    Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} — daar is geen afschrift van
-                    geïmporteerd. Een lege maand is geen maand zonder uitgaven.
-                  </p>
+                {/* Drie notities die alle drie hetzelfde zeggen — "dit zie je
+                    niet in de grafiek" — dus één regel, met de telling in het
+                    label en de reden erachter. Los van elkaar opvouwen zou drie
+                    regels onder de grafiek zetten en dat is precies de drukte
+                    waar dit vanaf moest. In het paneel houden ze wél hun eigen
+                    zin: te klein tegen DIT venster (de grens schaalt mee, dus de
+                    zin noemt het venster en de grens), voorbij de cap van de
+                    grafiek, en een maand waar geen afschrift van is — drie
+                    verschillende feiten, drie zinnen, één regel. */}
+                {weggelaten !== null && (
+                  <ToonMeer summary={weggelaten}>
+                    {emptyMonths.length > 0 && (
+                      <p className="cell-sub">
+                        Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} — daar is geen afschrift
+                        van geïmporteerd. Een lege maand is geen maand zonder uitgaven.
+                      </p>
+                    )}
+                    {small.length > 0 && perCategory.covered && (
+                      <p className="cell-sub">
+                        {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet getoond in{" "}
+                        {rangeLabelNL(perCategory.covered.start, perCategory.covered.end)}: samen{" "}
+                        {formatEuro(smallOut)}, elk onder {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over
+                        deze {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
+                      </p>
+                    )}
+                    {capped.length > 0 && (
+                      <p className="cell-sub">
+                        Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de grafiek:{" "}
+                        {capped.map((h) => h.category).join(", ")}.
+                      </p>
+                    )}
+                  </ToonMeer>
                 )}
-                {/* What was folded away, split the way core splits it: too
-                    small against THIS window (the floor scales with the window,
-                    so the sentence names the window and the floor), or simply
-                    past the chart's cap. Two different facts, two sentences. */}
-                {small.length > 0 && perCategory.covered && (
+                {/* Waar deze maand ligt in zijn eigen eerdere maanden. Alleen in
+                    deze weergave: hier staan de maanden al als staven, dus de
+                    lijst is het bijschrift bij wat hij ziet. */}
+                {percentiles && <PercentielLijst result={percentiles} categories={perCategory.categories} />}
+              </>
+            )
+          ) : view === "verdeling" ? (
+            share.slices.length === 0 ? (
+              <p className="block-empty">Geen uitgaven in deze periode — kies een langere periode.</p>
+            ) : (
+              <SpendPie
+                slices={share.slices}
+                totalCents={share.totalCents}
+                euro={euroFromCents}
+                onSelect={onSelectCategory}
+              />
+            )
+          ) : view === "gegroeid" ? (
+            growth.rows.length === 0 ? (
+              <p className="block-empty">Nog niets om te vergelijken — kies een langere periode.</p>
+            ) : (
+              <>
+                <p className="stat-insight">
+                  {/* The sentence carries the finding; the bars are the evidence.
+                      Naming the comparison window matters: "gestegen" is
+                      meaningless without saying against what. */}
+                  {growth.rows[0].deltaCents > 0 ? (
+                    <>
+                      <strong>{growth.rows[0].category}</strong> steeg het hardst:{" "}
+                      {euroFromCents(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen ervoor
+                      {growth.rows[0].deltaPct !== null ? <> ({Math.round(growth.rows[0].deltaPct * 100)}%)</> : <> (nieuw)</>}.
+                    </>
+                  ) : (
+                    <>Niets is gestegen tegenover de {windowDays} dagen ervoor.</>
+                  )}
+                </p>
+                <CategoryBars
+                  series={[{ label: "Verschil", color: "var(--neg)" }]}
+                  groups={growthGroups}
+                  format={formatEuro}
+                  ariaLabel={`Verschil per categorie tegenover de ${windowDays} dagen ervoor`}
+                />
+                {/* De zin boven de staven zegt WAT er gestegen is en met
+                    hoeveel; dit zegt welke dagen dat "ervoor" precies zijn en
+                    dat alleen uitgaven meetellen. Dat tweede is de onderbouwing
+                    van het eerste, dus het staat eronder en het staat dicht. */}
+                <ToonMeer summary="Welke periode ernaast ligt, en wat er meetelt">
                   <p className="cell-sub">
-                    {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet getoond in{" "}
-                    {rangeLabelNL(perCategory.covered.start, perCategory.covered.end)}: samen {formatEuro(smallOut)},
-                    elk onder {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over deze{" "}
-                    {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
+                    Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
+                    dezelfde lengte als de gekozen periode. Alleen uitgaven.
                   </p>
-                )}
-                {capped.length > 0 && (
-                  <p className="cell-sub">
-                    Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de grafiek:{" "}
-                    {capped.map((h) => h.category).join(", ")}.
-                  </p>
-                )}
+                </ToonMeer>
               </>
             )
           ) : !enoughWeekdayHistory ? (
@@ -336,15 +698,7 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                         {Math.round(peak.pctVsAverage)}% meer dan een gewone dag
                       </>
                     )}
-                    {". "}
-                    {/* What "gemiddeld" means, in the sentence itself rather
-                        than in a footnote: per OCCURRENCE of that weekday, so
-                        the day that happened most often does not win by
-                        happening. */}
-                    <span className="stat-insight-basis">
-                      Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt mee, ook de dagen
-                      zonder transactie.
-                    </span>
+                    {"."}
                   </>
                 )}
               </p>
@@ -364,13 +718,61 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                 averageLabel="gewone dag"
                 height={196}
               />
+              {/* Wat "gemiddeld" hier betekent: per VOORKOMEN van die weekdag,
+                  zodat de dag die het vaakst langskwam niet wint door langs te
+                  komen. Dat is de definitie van het getal en niet het getal
+                  zelf, dus het zakt achter de regel — met het aantal dagen in
+                  het label, want dat is waar de betrouwbaarheid van het
+                  gemiddelde aan af te lezen is. Alleen als er een piek IS: bij
+                  "geen enkele weekdag springt eruit" valt er niets te
+                  onderbouwen. */}
+              {peak !== null && (
+                <ToonMeer summary={`Waarop dit gemiddelde rust: ${weekdays?.spanDays} dagen`}>
+                  <p className="stat-insight-basis">
+                    Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt mee, ook de dagen
+                    zonder transactie.
+                  </p>
+                </ToonMeer>
+              )}
             </>
           )}
 
+          {/* WHAT IS NOT IN ANY OF THE ABOVE. One line for the whole block, in
+              every view, because the exclusion is the same in every view: the
+              ring, the bars, the weekdays and the two totals all treat moved
+              money as neither spending nor income. Amount first — it is the
+              number he was looking for — then the reason. */}
+          {moved.length > 0 && (
+            <ToonMeer
+              className="stat-moved"
+              /* Het BEDRAG staat in het label en niet in het paneel. Dit is de
+                 regel die bestaat omdat € 20.000 ooit stil uit de ring viel; als
+                 het bedrag mee naar binnen zou vouwen, valt het opnieuw stil weg
+                 en is er niets gewonnen behalve rust. Wat wél opvouwt is de
+                 verdeling over de categorieën, de reden per categorie en het
+                 deel dat weer terugkwam. */
+              summary={`Buiten deze cijfers gehouden: ${euroFromCents(movedOut)}`}
+            >
+              <p className="cell-sub">
+                {moved.map((m, i) => (
+                  <span key={m.category}>
+                    {i > 0 && " · "}
+                    {euroFromCents(m.outCents)} aan {m.category} — {m.why}
+                    {m.inCents > 0 && <> (waarvan {euroFromCents(m.inCents)} weer terugkwam)</>}
+                  </span>
+                ))}
+                . Dat is geen uitgave: het is dezelfde euro op een andere plek.
+              </p>
+            </ToonMeer>
+          )}
+
           {/* Totals over the window, not a monthly average: with a one-week
-              window a "per maand" figure would be an extrapolation. */}
+              window a "per maand" figure would be an extrapolation. No title
+              attribute on them any more either: what they leave out is said out
+              loud in the line above, and a mouse-only tooltip repeating half of
+              it was the version he could not see. */}
           {totals && (
-            <div className="stat-figures" title="Overboekingen tussen je eigen rekeningen tellen niet mee.">
+            <div className="stat-figures">
               <div className="stat-figure">
                 <div className="eyebrow">Inkomsten in deze periode</div>
                 <div className="module-figure">

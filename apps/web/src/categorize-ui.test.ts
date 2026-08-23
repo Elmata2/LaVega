@@ -1,48 +1,15 @@
 import { expect, test } from "vitest";
-import type { Tx } from "@lavega/core";
-import { buildCategorizeItems, toDecisions } from "./categorize-ui.js";
+import { toDecisions } from "./categorize-ui.js";
 
-function tx(over: Partial<Tx>): Tx {
-  return {
-    id: "t1",
-    date: "2026-08-01",
-    amount: -12.5,
-    counterparty: "Albert Heijn",
-    description: "pinbetaling",
-    bank: "ING",
-    accountKey: "NL01",
-    entity: "Prive",
-    ...over,
-  } as Tx;
-}
-
-test("buildCategorizeItems maps to {id,text,sign} only — no amount/account/date leaks", () => {
-  const items = buildCategorizeItems([tx({})]);
-  expect(items).toEqual([{ id: "t1", text: "Albert Heijn pinbetaling", sign: "out" }]);
-  // The redaction boundary: nothing beyond the three allowlisted fields.
-  expect(Object.keys(items[0]).sort()).toEqual(["id", "sign", "text"]);
-});
-
-test("buildCategorizeItems scrubs IBANs, dates and amounts hiding in the free-text", () => {
-  const items = buildCategorizeItems([
-    tx({ description: "SEPA NL12ABNA0123456789 factuurdatum 2026-08-01 bedrag 45,00" }),
-  ]);
-  const text = items[0].text;
-  expect(text).not.toMatch(/NL12ABNA/i);
-  expect(text).not.toMatch(/2026-08-01/);
-  expect(text).not.toMatch(/45,00/);
-  expect(text).toContain("Albert Heijn"); // merchant name is preserved
-});
-
-test("buildCategorizeItems derives sign from amount and trims text to 200 chars", () => {
-  const long = "X".repeat(300);
-  const items = buildCategorizeItems([
-    tx({ id: "in", amount: 2000, counterparty: "Salaris", description: "" }),
-    tx({ id: "big", counterparty: long, description: long }),
-  ]);
-  expect(items[0]).toEqual({ id: "in", text: "Salaris", sign: "in" });
-  expect(items[1].text.length).toBe(200);
-});
+/* The redaction tests that used to live here have moved with the code they test.
+ * They pinned `buildCategorizeItems`, whose IBAN pattern hopped across whitespace
+ * and deleted the merchant name along with the IBAN — so the tests passed while
+ * blanking 747 of 1.394 of his onbekend rows. Passing tests around a broken
+ * function are worse than no tests: they invite the next person to trust it.
+ *
+ * The working implementation is packages/core/src/categorize.ts →
+ * aiCategorizeItems, and its guarantees ("geen IBANs, bedragen of datums") are
+ * asserted there, in the package that owns the transform. */
 
 test("toDecisions drops rows left on 'Sla over' (empty category)", () => {
   const decisions = toDecisions([

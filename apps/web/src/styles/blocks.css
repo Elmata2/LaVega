@@ -191,6 +191,15 @@
   background: var(--ink);
   color: var(--on-ink);
 }
+/* ZWART OP ZWART, gemeten in Chromium: `.module-tab:hover` (specificiteit 0,2,0)
+ * staat NA `.module-tab-on` (0,1,0), dus zodra de muis op de actieve tab staat
+ * wint hover en wordt de kleur --ink op een achtergrond --ink. Het label was
+ * daarmee weg bij elke wisseling van weergave, tot je de muis wegbewoog. Deze
+ * regel geeft de actieve tab zijn eigen hover terug in plaats van de volgorde
+ * om te gooien - dat laatste zou elke andere tabstijl in dit bestand raken. */
+.module-tab-on:hover {
+  color: var(--on-ink);
+}
 
 /* ---------- SaldoBlock (Totale positie) ---------- */
 
@@ -509,7 +518,7 @@
 /* A row that came from pattern detection rather than a committed date. Muted
  * on purpose: it is a prediction, and it must never look like a bill. */
 .pay-tag {
-  margin-left: var(--sp-2);
+  flex: none;
   border-radius: var(--pill);
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -542,6 +551,94 @@
   border-radius: var(--r);
   color: var(--on-ink);
   box-shadow: var(--shadow-sm);
+  /* Voor de glans: `relative` geeft hem iets om zich aan te hangen, en `hidden`
+   * houdt hem binnen de afgeronde hoeken - anders steekt er een lichte cirkel
+   * buiten de kaart uit zodra de cursor bij de rand komt. */
+  position: relative;
+  overflow: hidden;
+}
+
+/* DE HOVER-TOESTAND (review 4, punt 10: "and that I can hover over it").
+ *
+ * Een toestand, geen overgang — regel 12 van deze ronde. Er staat dus geen
+ * transition en er is niets te easen: de kaart ziet er onder de muis anders uit
+ * en dat is het.
+ *
+ * WAT ER VERANDERT IS BEWUST NIET DE KLEUR. Het vlak zelf is de huisstijl van de
+ * bank, en die is precies zo donker gemaakt als nodig om het saldo op 4,5:1 te
+ * houden (brandFace.ts). Een lichtende sluier eroverheen zou dat weer opeten —
+ * dan wint de hover van de leesbaarheid, en dat is de verkeerde volgorde. Wat er
+ * bijkomt is dus diepte (een zwaardere schaduw) en een haarlijn van licht net
+ * binnen de rand: allebei zichtbaar, geen van beide raakt de tekst.
+ *
+ * :focus-within zit erbij omdat de kaart geen knop is maar wel focusbare inhoud
+ * kan krijgen; zonder dat zou wie met het toetsenbord door de strip loopt de
+ * kaart niet zien oplichten die hij aan het lezen is.
+ *
+ * De schaduw staat hier voluit en niet als token, omdat er geen token voor deze
+ * toestand is: `--shadow-sm` is de rust en `--shadow-float` hoort bij het
+ * app-frame, dus dat lenen zou de kaart laten zweven als een venster. Wel
+ * dezelfde inkt (rgba(26, 26, 23, …)) als beide tokens, want een tweede grijs
+ * naast het bestaande grijs valt op als een fout. */
+/* DE GLANS DIE DE CURSOR VOLGT.
+ *
+ * Een eigen laag en geen CSS-variabele op de kaart zelf: een variabele op de
+ * ouder laat de stijl van elk kind hertekenen bij elke muisbeweging, en een
+ * kaart heeft er een stuk of acht. Deze laag beweegt met `transform`, dus hij
+ * blijft op de GPU en raakt de rest van de kaart niet aan.
+ *
+ * De alpha is 0.14 en dat getal staat OOK in brandFace.ts (SHEEN_PEAK_ALPHA),
+ * want de kaartkleur wordt net zo lang verdonkerd tot wit ook MET deze glans
+ * erop nog 4,5:1 haalt. Zet je hem hier hoger, dan zakt het contrast precies
+ * onder de cursor - en daar leest iemand. Er staat een test op die deze twee
+ * getallen tegen elkaar houdt.
+ *
+ * Alleen de dekking heeft een korte overgang; de POSITIE krijgt een langere,
+ * zodat het licht de cursor met een klein beetje traagheid volgt in plaats van
+ * eraan vastgeplakt te zitten. Een transitie en geen keyframes, want de muis
+ * verandert voortdurend van richting en een transitie richt zich onderweg
+ * gewoon opnieuw. */
+.bank-card-sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 180px;
+  height: 180px;
+  margin: -90px 0 0 -90px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Aanwijsapparaat met een fijne punt, dus geen aanraakscherm: daar zet een tik
+ * de hover aan en blijft de glans hangen op een plek waar geen vinger meer is. */
+@media (hover: hover) and (pointer: fine) {
+  .bank-card-sheen {
+    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .bank-card:hover .bank-card-sheen {
+    opacity: 1;
+  }
+}
+
+/* Minder beweging: het licht blijft, maar het volgt niets meer. De glans zit dan
+ * stil in de linkerbovenhoek waar de gradient ook vandaan komt, dus de kaart
+ * houdt zijn diepte zonder dat er iets meebeweegt. */
+@media (prefers-reduced-motion: reduce) {
+  .bank-card-sheen {
+    transition: opacity 160ms linear;
+    transform: translate3d(30%, 20%, 0) !important;
+  }
+}
+
+.bank-card:hover,
+.bank-card:focus-within {
+  box-shadow:
+    0 2px 4px rgba(26, 26, 23, 0.08),
+    0 22px 44px -26px rgba(26, 26, 23, 0.34),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32);
 }
 .bank-card-top {
   display: flex;
@@ -586,12 +683,27 @@
   text-transform: uppercase;
   opacity: 0.7;
 }
+/* De kolom met "Op naam van". Krijgt `min-width: 0` omdat een flexvak anders
+ * nooit kleiner wordt dan zijn langste woord en de naam dan naast het saldo
+ * schuift in plaats van eronder door te lopen. */
+.bank-card-who {
+  min-width: 0;
+}
+/* TWEE REGELS IN PLAATS VAN DERTIEN TEKENS. `max-width: 13ch` op één regel kapte
+ * elke echte entiteitsnaam af ("Steunenberg Holding B.V." is er 24), en op een
+ * kaart is er geen hover of tik om de rest alsnog te lezen — anders dan in de
+ * betaalagenda hiernaast, waar de rij een knop is. De kaart heeft de ruimte wel:
+ * twee regels passen binnen de 148 px die hij toch al hoog is, dus de naam kan
+ * gewoon doorlopen. Boven twee regels wordt het weer afgekapt, want een kaart die
+ * meegroeit met één lange naam trekt de hele strip scheef. */
 .bank-card-holder {
   font-weight: 600;
-  max-width: 13ch;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .bank-card-saldo {
   text-align: right;
@@ -628,12 +740,32 @@
   display: flex;
   flex-direction: column;
 }
+
+/* DE RIJ IS EEN KNOP (review 4, punt 7). Niet om ergens heen te gaan — de agenda
+ * gaat nergens heen — maar omdat de volle naam anders alleen met een muis te
+ * bereiken is. Een knop geeft in één keer alle drie de wegen: hover, focus met
+ * het toetsenbord, en een tik op een telefoon. Dezelfde oplossing als de
+ * taartlegenda in charts.css, en om dezelfde reden.
+ *
+ * De knop-eigen opmaak wordt teruggezet naar wat de rij was: geen rand behalve
+ * de haarlijn eronder, geen eigen achtergrond, de tekst links. De horizontale
+ * padding met een negatieve marge ernaast laat de hover-vulling doorlopen tot in
+ * de rand van de kaart, zodat de highlight een rij is en geen zwevend blokje. */
 .pay-row {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) 0;
+  width: calc(100% + 2 * var(--sp-2));
+  margin: 0 calc(-1 * var(--sp-2));
+  padding: var(--sp-3) var(--sp-2);
+  border: 0;
   border-bottom: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .pay-row:first-child {
   padding-top: 0;
@@ -641,6 +773,21 @@
 .pay-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+/* `:not(:disabled)` staat er voor de SPECIFICITEIT, niet voor de toestand: de
+ * basisregel `button:hover:not(:disabled)` in base.css kleurt elke knoprand
+ * accent-blauw, en die zou hier de haarlijn ONDER de rij blauw maken bij hover.
+ * Met dezelfde pseudo-klasse erbij wint deze regel en blijft de scheidingslijn
+ * een scheidingslijn. */
+.pay-row:hover:not(:disabled),
+.pay-row:focus-visible,
+.pay-row[data-open="on"] {
+  background: var(--surface-2);
+  border-bottom-color: var(--line);
+}
+.pay-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
 }
 /* The reference's little date tile. Warn-tinted once the date has passed. */
 .pay-date {
@@ -672,15 +819,47 @@
   letter-spacing: 0.06em;
   color: var(--muted);
 }
+/* Kolom, want de twee regels eronder zijn spans geworden toen de rij een knop
+ * werd (een <button> mag alleen inline-inhoud dragen). Zonder deze kolom lopen
+ * de naam en de eyebrow op één regel door elkaar. */
 .pay-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
+/* De naam en de "voorspeld"-pil naast elkaar, elk met hun eigen ruimte. */
 .pay-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
   font-weight: 600;
+}
+/* HET AFKAPPEN ZIT ALLEEN OP DE NAAM. Toen het op `.pay-label` zat, deelde de
+ * pil dezelfde regel en viel hij bij een lange naam buiten beeld — dan zag een
+ * voorspelde regel eruit als een bevestigde afspraak. */
+.pay-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Wordt de rij gelezen, dan mag de naam alle regels nemen die hij nodig heeft.
+ * `anywhere` omdat een tegenpartij één woord van veertig tekens kan zijn en een
+ * naam die buiten de kaart hangt net zo onleesbaar is als een afgekapte. */
+.pay-row:hover .pay-name,
+.pay-row:focus-visible .pay-name,
+.pay-row[data-open="on"] .pay-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.pay-meta {
+  width: 100%;
 }
 .pay-amount {
   flex: none;

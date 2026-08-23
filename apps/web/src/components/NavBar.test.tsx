@@ -40,6 +40,17 @@ test("the profile entry sits in the app bar's right-hand slot", () => {
   expect(right).toContain("profile-avatar");
 });
 
+test("the investing link is always a real href out of the SPA when configured", () => {
+  const html = renderToStaticMarkup(
+    <NavBar view="overview" modules={[]} onNavigate={() => {}} onOpenProfile={() => {}} />,
+  );
+  expect(html).toContain("Investing");
+  const nav = readFileSync(new URL("./NavBar.tsx", import.meta.url), "utf8");
+  expect(nav).toContain("href={INVESTING_URL}");
+  expect(nav).toContain('INVESTING_URL.startsWith("http")');
+  expect(nav).toContain("pathForView");
+});
+
 test("the chrome no longer asserts 'lokaal & privé', and no longer holds Vergrendel", () => {
   const html = renderToStaticMarkup(
     <NavBar view="overview" modules={navModules(enabledModules(null))} onNavigate={() => {}} onOpenProfile={() => {}} />,

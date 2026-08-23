@@ -49,6 +49,33 @@ type Profile = {
  * is a substring of the other). */
 const PROFILES: Profile[] = [
   {
+    /* ING'S ENGLISH EXPORT, and it is the one that mattered most: it is his main
+     * history file and no profile covered it, so every row fell through to the
+     * generic profile, which has no `dc` column and no `acc` column — the sign came
+     * out wrong and the per-row account was lost. A large share of the "onbekend"
+     * category traced back to here rather than to the categoriser.
+     *
+     * ING localises the HEADERS but not the file: "Af Bij" becomes "Debit/credit"
+     * and its values become Debit/Credit, "Naam / Omschrijving" becomes
+     * "Name / Description", "Mededelingen" becomes "Notifications". Kept as a
+     * separate profile rather than widening the Dutch one's `test`, because a
+     * single test matching either language would also match a file that mixes
+     * them — which is exactly what a hand-edited export looks like. */
+    bank: "ING",
+    test: (h) => h.includes("debit/credit") && (h.includes("amount (eur)") || h.includes("amount")),
+    map: {
+      date: ["date"],
+      cp: ["name / description", "name/description"],
+      desc: ["notifications", "notification"],
+      amount: ["amount (eur)", "amount"],
+      acc: ["account"],
+      dc: ["debit/credit"],
+      // "Debit" also satisfies the /^d/ fallback below, but naming it is what
+      // makes this profile readable next to its Dutch twin.
+      dcNeg: ["debit"],
+    },
+  },
+  {
     bank: "ING",
     test: (h) => h.includes("af bij") && h.includes("bedrag (eur)"),
     map: {

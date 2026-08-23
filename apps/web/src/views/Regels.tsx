@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import type { Rule } from "@lavega/core";
+import { CATEGORY_OPTIONS } from "@lavega/core";
 
 type RegelsProps = {
   rules: Rule[];
@@ -19,6 +21,32 @@ export default function Regels({
   onRuleCategoryChange,
   onSaveRules,
 }: RegelsProps) {
+  // Case-insensitive, so "boodschappen" is recognised as the existing category
+  // rather than warned about — the warning is for a genuinely new name.
+  const typed = ruleCategory.trim();
+  const isNewCategory =
+    typed !== "" && !CATEGORY_OPTIONS.some((c) => c.toLowerCase() === typed.toLowerCase());
+
+  /* ALPHABETICAL FOR READING, ORIGINAL ORDER FOR MATCHING.
+   *
+   * categorize() walks the rules in stored order and returns the FIRST match, so
+   * the order is semantic: a specific rule has to sit ahead of a general one.
+   * Sorting the array itself would therefore change which rule wins without
+   * anything on screen saying so. This sorts a COPY, and the delete button still
+   * filters the original, so nothing here can reorder what matches.
+   *
+   * localeCompare with "nl" so accented merchant names land where a Dutch reader
+   * expects, and numeric so "Regel 2" precedes "Regel 10". */
+  const sortedRules = useMemo(
+    () =>
+      [...rules].sort(
+        (a, b) =>
+          a.match.localeCompare(b.match, "nl", { sensitivity: "base", numeric: true }) ||
+          a.category.localeCompare(b.category, "nl", { sensitivity: "base" }),
+      ),
+    [rules],
+  );
+
   return (
     <section className="card" aria-label="Regels">
       <h2>Regels</h2>
@@ -27,6 +55,12 @@ export default function Regels({
         lijst (Albert Heijn → Boodschappen, NS → Transport, Netflix → Entertainment,
         enz.). Je eigen regels hieronder gaan vóór die automatische categorieën.
       </p>
+      <p className="cell-sub">
+        Een regel matcht als de <em>match</em>-tekst ergens in de tegenpartij of de omschrijving
+        voorkomt, en de <strong>eerste</strong> regel die past wint — een korte match als "spar"
+        raakt dus ook "sparen". Zie je een transactie als <em>onbekend</em> staan bij Transacties?
+        Daar staat er ook bij wáárom, en dat is meestal de tekst waar je hier een regel op maakt.
+      </p>
       <label>
         Match{" "}
         <input value={ruleMatch} onChange={(e) => onRuleMatchChange(e.target.value)} disabled={busy} />
@@ -34,7 +68,25 @@ export default function Regels({
       {" "}
       <label>
         Categorie{" "}
-        <input value={ruleCategory} onChange={(e) => onRuleCategoryChange(e.target.value)} disabled={busy} />
+        {/* A list-backed input, not a plain text field: typing a category by hand
+            is how a second, near-identical bucket appears in every total
+            ("Boodschappen" next to "boodschappen"). The list offers the
+            taxonomy the rest of the app already uses — the same one
+            applyCategorizations validates the AI's answers against — while
+            still allowing a genuinely new category, with the consequence
+            spelled out below rather than silently accepted. */}
+        <input
+          list="regel-categorieen"
+          value={ruleCategory}
+          onChange={(e) => onRuleCategoryChange(e.target.value)}
+          disabled={busy}
+          placeholder="Kies of typ een categorie"
+        />
+        <datalist id="regel-categorieen">
+          {CATEGORY_OPTIONS.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
       </label>
       {" "}
       <button
@@ -53,6 +105,13 @@ export default function Regels({
         Toevoegen
       </button>
 
+      {isNewCategory && (
+        <p className="cell-sub" role="status">
+          "{ruleCategory.trim()}" staat niet in de lijst. Dat mag, maar het wordt dan een aparte
+          categorie in élk overzicht — ook als je een bestaande bedoelde met een andere spelling.
+        </p>
+      )}
+
       {rules.length === 0 ? (
         <p>Nog geen regels.</p>
       ) : (
@@ -66,7 +125,7 @@ export default function Regels({
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule) => (
+              {sortedRules.map((rule) => (
                 <tr key={rule.id}>
                   <td>{rule.match}</td>
                   <td>{rule.category}</td>
@@ -84,6 +143,12 @@ export default function Regels({
               ))}
             </tbody>
           </table>
+          {rules.length > 1 && (
+            <p className="cell-sub" style={{ marginTop: ".5rem" }}>
+              Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint de
+              regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.
+            </p>
+          )}
         </div>
       )}
     </section>

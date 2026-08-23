@@ -1,0 +1,16 @@
+<!-- KUNSTMATIG. Een Offer ZONDER eigen price, met alleen een
+     UnitPriceSpecification van € 18,50 per kilo. Het pak weegt 500 gram en kost
+     € 9,25, maar dat getal staat nergens machineleesbaar op de pagina.
+
+     Voor de reparatie dook de lezer één niveau in dat geneste object, pakte
+     daar "price" en las {"ok":true,"amountCents":1850} — een factor twee, want
+     een kiloprijs is de prijs van een kilo en niet van dit pak. -->
+<!doctype html><html lang="nl"><head><title>Oude kaas 500 g</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"G",
+ "offers":{"@type":"Offer","priceCurrency":"EUR",
+   "priceSpecification":{"@type":"UnitPriceSpecification","price":"18.50",
+     "priceCurrency":"EUR",
+     "referenceQuantity":{"@type":"QuantitativeValue","value":1,"unitCode":"KGM"}}}}
+</script>
+</head><body><h1>Oude kaas 500 g &mdash; &euro; 9,25</h1></body></html>

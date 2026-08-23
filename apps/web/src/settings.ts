@@ -92,6 +92,49 @@ export function setAiCategorizeEnabled(on: boolean): void {
   }
 }
 
+/* --- De cashback-aanname (app review 4, punt 22; packages/core/src/
+ * assumedCashback.ts).
+ *
+ * Zijn woorden: "for most cards — ING, ABN, most normal ones — they don't have
+ * cashback… if there's no case then it's zero." Dat is de enige plek waar LaVega
+ * een nul invult die geen enkel document noemt, en daarom is het een SCHAKELAAR
+ * en geen vaste keuze in de code.
+ *
+ * DE STANDAARD IS AAN, en dat is de afwijking van elke andere opt-in hierboven:
+ * AI-extractie, chat en AI-categorisatie staan uit tot hij ze aanzet omdat ze
+ * gegevens de deur uit sturen. Hier gaat er niets de deur uit; hier wordt een
+ * regel gebogen die hij zelf gebogen wil hebben. Aan zetten wat hij vroeg is dan
+ * de eerlijke stand.
+ *
+ * WAAROM DE SCHAKELAAR ER TÓCH IS: de regel die gebogen wordt ("onbekend is nooit
+ * nul") heeft deze app meerdere keren voor een verkeerd cijfer behoed. Wie ooit
+ * twijfelt aan een nul op zijn scherm moet in één klik terug kunnen naar
+ * "onbekend" en zien wat er dan overblijft. Een aanname die je niet kunt uitzetten
+ * is niet te controleren. --- */
+
+const CASHBACK_ASSUMPTION_KEY = "lavega.cashbackAssumption";
+
+/** Mag LaVega bij een gewone Nederlandse betaalpas of grootbankcreditcard nul
+ *  cashback aannemen? Standaard ja (hij vroeg erom); alleen een expliciet
+ *  opgeslagen "0" zet hem uit. Let op de vergelijking: `!== "0"` en niet
+ *  `=== "1"`, want "nooit ingesteld" moet hier AAN betekenen en niet uit. */
+export function getCashbackAssumptionEnabled(): boolean {
+  try {
+    if (typeof localStorage === "undefined") return true;
+    return localStorage.getItem(CASHBACK_ASSUMPTION_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setCashbackAssumptionEnabled(on: boolean): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 /* --- The owner's own n8n invoice webhook (see docs/n8n/FACTUREN.md).
  * URL and token are HIS, for HIS n8n: they live in this browser only — never in
  * the vault-synced data (a back-up file would then carry a live token), never
@@ -191,7 +234,23 @@ const FORWARD_KEY = "lavega.invoiceForwardAddress";
 /** Zo veel willekeur dat niemand hem kan raden, kort genoeg om over te typen. */
 const FORWARD_RANDOM_CHARS = 10;
 const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: dit adres wordt overgetikt
-const FORWARD_PATTERN = new RegExp(`^lavega-[a-z0-9]{4,32}@${INVOICE_FORWARD_DOMAIN.replace(/\./g, "\\.")}$`);
+/* WELK ADRES GELDIG IS, en dit is bijgesteld nadat de echte er was.
+ *
+ * LaVega genereerde `lavega-<random>@invoices.lavega.dev` en accepteerde alleen die
+ * vorm. Het adres dat Cloudflare werkelijk routeert is `invoices@lavega.dev` —
+ * ander lokaal deel, ander domein. Een adres dat wij verzinnen en dat Cloudflare
+ * niet routeert is erger dan geen adres: de post komt nergens aan en het scherm
+ * beweert van wel.
+ *
+ * Het adres is dus een feit van BUITEN, uit de Cloudflare-configuratie, en niet
+ * iets waar wij over gaan. Daarom mag hij het intypen en wint zijn invoer — dezelfde
+ * rangorde als LearnedFacts overal aanhoudt. De generator blijft bestaan voor wie
+ * er nog geen heeft.
+ *
+ * Wat de validatie nog wél doet: het moet één adres zijn, met een @ en een domein,
+ * zonder spaties. Dat houdt een half overgetikt adres tegen zonder te doen alsof wij
+ * weten welk adres zijn provider aanvaardt. */
+const FORWARD_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
 /** Het opgeslagen adres, of "" als er nog nooit een gemaakt is. "" betekent
  *  "nog geen", nooit "gebruik maar iets" — er wordt hier niets verzonnen. */
@@ -217,6 +276,25 @@ function randomLocalSuffix(): string {
 /** Het adres van deze kluis-browser: bestaat hij al, dan komt precies díe terug.
  *  `makeSuffix` is injecteerbaar zodat een test kan bewijzen dat een tweede
  *  aanroep met ándere willekeur tóch hetzelfde adres oplevert. */
+/** Zijn eigen adres, zoals Cloudflare het routeert. Leeg maakt het adres leeg —
+ *  dat is een echte keuze en geen fout. Ongeldig wordt geweigerd en niet stil
+ *  genegeerd: een adres dat niet wordt opgeslagen terwijl het scherm zegt van wel,
+ *  is precies de fout waar dit project overal op let. */
+export function setInvoiceForwardAddress(address: string): boolean {
+  const trimmed = address.trim().toLowerCase();
+  try {
+    if (trimmed === "") {
+      localStorage.removeItem(FORWARD_KEY);
+      return true;
+    }
+    if (!FORWARD_PATTERN.test(trimmed)) return false;
+    localStorage.setItem(FORWARD_KEY, trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function ensureInvoiceForwardAddress(makeSuffix: () => string = randomLocalSuffix): string {
   const existing = getInvoiceForwardAddress();
   if (existing) return existing;

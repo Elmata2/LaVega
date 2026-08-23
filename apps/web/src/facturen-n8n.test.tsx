@@ -2,7 +2,7 @@
 import { StrictMode, act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Invoice } from "@lavega/core";
+import type { Invoice, Tx } from "@lavega/core";
 import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
 import { getHandledInvoiceMessageIds, setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
@@ -58,14 +58,14 @@ function serving(bodies: unknown[]) {
 
 /** Facturen gets its pending rows from App (they must survive the view
  *  unmounting), so the test owns that state exactly like App does. */
-function Harness({ fetchImpl, invoices }: { fetchImpl: typeof fetch; invoices: Invoice[] }) {
+function Harness({ fetchImpl, invoices, txs, entities }: { fetchImpl: typeof fetch; invoices: Invoice[]; txs: Tx[]; entities: string[] }) {
   const [pending, setPending] = useState<PendingInvoice[]>([]);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
-      entities={["BV1"]}
+      entities={entities}
       invoices={invoices}
-      txs={[]}
+      txs={txs}
       asOf="2026-08-16"
       busy={false}
       defaultEntity="BV1"
@@ -80,12 +80,12 @@ function Harness({ fetchImpl, invoices }: { fetchImpl: typeof fetch; invoices: I
   );
 }
 
-function render(fetchImpl: typeof fetch, invoices: Invoice[] = []) {
+function render(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Harness fetchImpl={fetchImpl} invoices={invoices} />);
+    root!.render(<Harness fetchImpl={fetchImpl} invoices={invoices} txs={txs} entities={entities} />);
   });
   return container;
 }
@@ -117,10 +117,10 @@ function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string)
 
 /** Fresh tree, one press of "Ophalen uit n8n". Each call replaces the previous
  *  render so a test that fetches twice isn't reading a stale DOM. */
-async function fetchOnce(fetchImpl: typeof fetch, invoices: Invoice[] = []) {
+async function fetchOnce(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
   if (root) act(() => root!.unmount());
   container?.remove();
-  const c = render(fetchImpl, invoices);
+  const c = render(fetchImpl, invoices, txs, entities);
   await clickAsync(byText("button", "Ophalen uit n8n"));
   return c;
 }
@@ -359,7 +359,7 @@ function renderStrict(fetchImpl: typeof fetch, invoices: Invoice[] = []) {
   act(() => {
     root!.render(
       <StrictMode>
-        <Harness fetchImpl={fetchImpl} invoices={invoices} />
+        <Harness fetchImpl={fetchImpl} invoices={invoices} txs={[]} entities={["BV1"]} />
       </StrictMode>,
     );
   });
@@ -459,4 +459,140 @@ test("een regel die hij bevestigt terwijl er een ophaalactie loopt, wordt niet o
   await flush();
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
   expect(saved).toHaveLength(1); // en er is niets dubbel geboekt
+});
+
+/* ── Wat zichzelf mag boeken ───────────────────────────────────────────────
+ *
+ * "I don't want the user to click on any of them or link it themselves." Dat
+ * zijn twee dingen. KOPPELEN aan een transactie ging al zonder klik. BOEKEN
+ * niet — en dat blijft een voorstel, behalve als er niets meer te beslissen
+ * valt: de afzender is aantoonbaar echt, er is één onderneming, en de factuur
+ * is compleet. Alles wat die grens niet haalt wacht en zegt waarom.
+ */
+
+/** Een mail die via het doorstuuradres binnenkwam en de SPF/DKIM-controle
+ *  doorstond — het pad dat op Cloudflare gebouwd is. */
+const FORWARDED = {
+  ...ROW,
+  messageId: "fwd-1",
+  from: "facturen@acme.nl",
+  deliveredTo: "facturen@lavega.dev",
+  queueKey: "facturen",
+  senderCheck: "passed",
+  senderChecks: { spf: "pass", dkim: "pass", dmarc: "none" },
+};
+
+const bankTx = (o: Partial<Tx> = {}): Tx => ({
+  id: "t1", accountKey: "A", date: "2026-07-30", amount: -121, currency: "EUR",
+  counterparty: "ACME BV", description: "", category: "", manual: false, ...o,
+});
+
+test("een geverifieerde, complete factuur boekt zichzelf — hij hoeft niets in te drukken", async () => {
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]));
+
+  expect(saved).toHaveLength(1);
+  const inv = saved[0][0];
+  expect(inv.counterparty).toBe("ACME BV");
+  expect(inv.amount).toBe(121);
+  expect(inv.status).toBe("expected");
+  // Geen wachtende regel: er was niets meer te beslissen.
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+  // En het staat er met zoveel woorden, want stil zijn boeken veranderen mag niet.
+  expect(c.textContent).toContain("automatisch geboekt");
+  // Afgehandeld, dus n8n's volgende ronde biedt hem niet opnieuw aan.
+  expect(getHandledInvoiceMessageIds()).toContain("fwd-1");
+});
+
+test("wat zichzelf boekt, koppelt zichzelf ook aan een transactie die er al staat", async () => {
+  await fetchOnce(serving([{ invoices: [FORWARDED] }]), [], [bankTx()]);
+  const inv = saved[0][0];
+  expect(inv.status).toBe("paid");
+  expect(inv.matchedTxId).toBe("t1");
+});
+
+test("bevestigen koppelt óók meteen — niet pas bij de volgende import", async () => {
+  // Dezelfde regel, maar zonder afzendercontrole: die blijft een voorstel.
+  const c = await fetchOnce(serving([{ invoices: [ROW] }]), [], [bankTx()]);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  click(byText(".n8n-row button", "Bevestigen"));
+  expect(saved[0][0].status).toBe("paid");
+  expect(saved[0][0].matchedTxId).toBe("t1");
+});
+
+test("een afzender die de controle niet haalde blijft een voorstel, met de echte reden erbij", async () => {
+  const c = await fetchOnce(serving([{ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] }]));
+  expect(saved).toHaveLength(0);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  // De regel zelf noemt de echte uitslag, en noemt hem nergens geverifieerd:
+  // 'failed' is een markering, geen goedkeuring en geen weggegooide regel.
+  const row = c.querySelector(".n8n-row")!.textContent ?? "";
+  expect(row).toContain("SPF");
+  expect(row).toContain("nagemaakte afzender");
+  expect(row).not.toContain("geverifieerd");
+});
+
+test("zonder afzendercontrole wacht hij, en de melding zegt dat geen controle geen goedkeuring is", async () => {
+  const c = await fetchOnce(serving([{ invoices: [ROW] }]));
+  expect(saved).toHaveLength(0);
+  expect(c.textContent).toContain("geen afzendercontrole");
+});
+
+test("bij meer dan één onderneming boekt niets zichzelf — de BV is een echte keuze", async () => {
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), [], [], ["BV1", "BV2"]);
+  expect(saved).toHaveLength(0);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  expect(c.textContent).toContain("meer dan één onderneming");
+});
+
+test("zonder ondernemingen boekt hij wél — nul keuzes is geen openstaande vraag", async () => {
+  // De zzp'er met één rekening. De poort eiste "precies één entiteit" en hield
+  // hem hier tegen op een keuze die niet bestaat. Er valt niets te gokken, dus
+  // boekt de factuur op de standaard van de app — en het scherm legt de
+  // automatische boeking uit zonder het woord "onderneming" te gebruiken.
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), [], [], []);
+  expect(saved).toHaveLength(1);
+  expect(saved[0][0].entity).toBe("BV1");
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+  expect(c.textContent).toContain("automatisch geboekt");
+  expect(c.textContent).not.toContain("onderneming");
+});
+
+test("een geverifieerde maar incomplete factuur wacht, en noemt wat er mist", async () => {
+  const c = await fetchOnce(serving([{ invoices: [{ ...FORWARDED, dueDate: null }] }]));
+  expect(saved).toHaveLength(0);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
+  expect(c.textContent).toContain("vervaldatum");
+});
+
+test("een automatisch geboekte factuur is als zodanig te zien en met één klik terug te draaien", async () => {
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]));
+  const booked = saved[0];
+  expect(booked).toHaveLength(1);
+
+  // Opnieuw gemonteerd met de factuur in de kluis: de markering komt uit
+  // localStorage, dus hij overleeft een herlaad.
+  const c2 = await fetchOnce(serving([{ invoices: [] }]), booked);
+  const row = byText("tr", "ACME BV");
+  expect(row.textContent).toContain("automatisch");
+
+  saved = [];
+  click(byText("tr button", "Terugdraaien"));
+  expect(saved).toHaveLength(1);
+  expect(saved[0][0].status).toBe("cancelled");
+  expect(c2).toBe(container);
+  expect(c).toBeTruthy();
+});
+
+test("twee keer dezelfde factuur boekt één keer, ook automatisch", async () => {
+  await fetchOnce(serving([{ invoices: [FORWARDED] }]));
+  const booked = saved[0];
+  saved = [];
+  // Zelfde mail, browser die het messageId vergeten is, factuur al in de kluis.
+  localStorage.clear();
+  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
+  setN8nInvoiceToken("sekret");
+  const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), booked);
+  expect(saved).toHaveLength(0);
+  expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
+  expect(c.textContent).toContain("stond al in LaVega");
 });
