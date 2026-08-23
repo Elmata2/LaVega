@@ -29,11 +29,11 @@ test("persists price bars across store instances and purges them", async () => {
   ]);
 
   const second = createFilePriceStore(filePath);
-  await expect(second.getRange("AAPL", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]);
-  await expect(second.getRange("MSFT", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]);
-  await expect(second.lastDate("AAPL")).resolves.toBe("2026-01-02");
+  await expect(second.getRange("local", "AAPL", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]);
+  await expect(second.getRange("local", "MSFT", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]);
+  await expect(second.lastDate("local", "AAPL")).resolves.toBe("2026-01-02");
   await second.purgeAll();
-  await expect(second.getRange("AAPL", "0000-01-01", "9999-12-31")).resolves.toEqual([]);
+  await expect(second.getRange("local", "AAPL", "0000-01-01", "9999-12-31")).resolves.toEqual([]);
   await expect(readFile(filePath, "utf8")).resolves.toBe("[]");
 });
 
@@ -43,5 +43,5 @@ test("rejects malformed cache rows instead of serving invalid prices", async () 
   const filePath = join(directory, "prices.json");
   await writeFile(filePath, JSON.stringify([{ symbol: "AAPL", close: "not-a-number" }]));
 
-  await expect(createFilePriceStore(filePath).getRange("AAPL", "0000-01-01", "9999-12-31")).rejects.toThrow("Invalid price cache file");
+  await expect(createFilePriceStore(filePath).getRange("local", "AAPL", "0000-01-01", "9999-12-31")).rejects.toThrow("Invalid price cache file");
 });

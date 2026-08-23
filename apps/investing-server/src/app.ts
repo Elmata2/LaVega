@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { emptyInvestingDashboard, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
+import { emptyInvestingDashboard, LOCAL_TENANT_ID, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import { LocalKeySource, MarketDataRouter, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, searchYahooBenchmarks, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
@@ -44,7 +44,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         }
         request = { ...target, ticker: identifier.value.match.ticker, exchange: identifier.value.match.exchange };
       }
-      const result = await syncPrices({ store, router, request });
+      const result = await syncPrices({ store, tenantId: LOCAL_TENANT_ID, router, request });
       if (result.fetched) dependencies.onPriceDataChanged?.();
       return result;
     },

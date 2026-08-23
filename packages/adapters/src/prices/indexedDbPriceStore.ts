@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
-import { LOCAL_TENANT_ID, type PriceBar } from "@lavega/core";
+import type { PriceBar } from "@lavega/core";
 import type { PriceStore } from "./PriceStore.js";
 
 const DEFAULT_DB_NAME = "lavega-prices";
@@ -21,17 +21,17 @@ function openPriceDb(dbName: string): Promise<IDBPDatabase> {
 /** IndexedDB price store. Uses a composite tenant/symbol/date key and index. */
 export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore {
   return {
-    async getRange(symbol, from, to) {
+    async getRange(tenantId, symbol, from, to) {
       const db = await openPriceDb(dbName);
       const index = db.transaction(STORE_NAME).store.index("tenant-symbol-date");
-      const rows = await index.getAll(IDBKeyRange.bound([LOCAL_TENANT_ID, symbol, from], [LOCAL_TENANT_ID, symbol, to]));
+      const rows = await index.getAll(IDBKeyRange.bound([tenantId, symbol, from], [tenantId, symbol, to]));
       db.close();
       return rows;
     },
-    async lastDate(symbol) {
+    async lastDate(tenantId, symbol) {
       const db = await openPriceDb(dbName);
       const index = db.transaction(STORE_NAME).store.index("tenant-symbol-date");
-      const rows = await index.getAll(IDBKeyRange.bound([LOCAL_TENANT_ID, symbol, ""], [LOCAL_TENANT_ID, symbol, "\uffff"]));
+      const rows = await index.getAll(IDBKeyRange.bound([tenantId, symbol, ""], [tenantId, symbol, "\uffff"]));
       db.close();
       return rows.at(-1)?.date ?? null;
     },
@@ -39,7 +39,7 @@ export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore 
       if (bars.length === 0) return;
       const db = await openPriceDb(dbName);
       const tx = db.transaction(STORE_NAME, "readwrite");
-      await Promise.all(bars.map((bar) => tx.store.put({ ...bar, tenantId: LOCAL_TENANT_ID } satisfies StoredPriceBar)));
+      await Promise.all(bars.map((bar) => tx.store.put({ ...bar } satisfies StoredPriceBar)));
       await tx.done;
       db.close();
     },

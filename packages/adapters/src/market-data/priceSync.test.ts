@@ -26,7 +26,7 @@ test.each(["Yahoo Finance rate-limited price request", "Yahoo Finance blocked pr
     price: [{ sourceKey: "yahoo", priority: 10, get: async () => ({ bars: [], problems: [problem] }) }],
     fx: [], identifier: [],
   });
-  await expect(syncPrices({ store, router, request: { symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", today: "2026-01-01" } })).resolves.toMatchObject({ problems: [problem] });
+  await expect(syncPrices({ store, tenantId: "local", router, request: { symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", today: "2026-01-01" } })).resolves.toMatchObject({ problems: [problem] });
 });
 
 test.each([
@@ -53,8 +53,8 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
   const store = createInMemoryPriceStore();
   const provider = createYahooPriceProvider({ client });
   const r = router(provider);
-  await expect(syncPrices({ store, router: r, request: { ...request, today: "2026-01-01" } })).resolves.toMatchObject({ problems: [], fetched: true });
-  await expect(syncPrices({ store, router: r, request: { ...request, today: "2026-01-02" } })).resolves.toMatchObject({ problems: [], fetched: true });
+  await expect(syncPrices({ store, tenantId: "local", router: r, request: { ...request, today: "2026-01-01" } })).resolves.toMatchObject({ problems: [], fetched: true });
+  await expect(syncPrices({ store, tenantId: "local", router: r, request: { ...request, today: "2026-01-02" } })).resolves.toMatchObject({ problems: [], fetched: true });
   expect(urls[0]).toContain("range=5y");
   expect(urls[1]).toContain("period1=1767312000");
 });

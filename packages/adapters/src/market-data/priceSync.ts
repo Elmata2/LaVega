@@ -5,11 +5,11 @@ import type { PriceProviderResult, YahooPriceRequest } from "./yahoo/priceProvid
 export type PriceSyncInput = Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string };
 export type PriceSyncResult = { bars: Awaited<ReturnType<PriceStore["getRange"]>>; problems: string[]; fetched: boolean };
 
-export async function syncPrices(input: { store: PriceStore; router: MarketDataRouter<YahooPriceRequest, PriceProviderResult, unknown, unknown, unknown, unknown>; request: PriceSyncInput }): Promise<PriceSyncResult> {
+export async function syncPrices(input: { store: PriceStore; tenantId: string; router: MarketDataRouter<YahooPriceRequest, PriceProviderResult, unknown, unknown, unknown, unknown>; request: PriceSyncInput }): Promise<PriceSyncResult> {
   const today = input.request.today ?? new Date().toISOString().slice(0, 10);
-  const lastDate = await input.store.lastDate(input.request.symbol);
+  const lastDate = await input.store.lastDate(input.tenantId, input.request.symbol);
   const from = lastDate ? nextDate(lastDate) : input.request.backfillFrom;
-  const cached = () => input.store.getRange(input.request.symbol, input.request.backfillFrom ?? "0000-01-01", today);
+  const cached = () => input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom ?? "0000-01-01", today);
   if (from && from > today) return { bars: await cached(), problems: [], fetched: false };
   const result = await input.router.getPrice({ ...input.request, from, to: today });
   if (!result) return { bars: await cached(), problems: ["No price provider returned data"], fetched: true };

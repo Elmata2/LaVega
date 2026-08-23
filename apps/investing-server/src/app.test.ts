@@ -255,6 +255,6 @@ test("price cache delete purges store and returns success", async () => {
   const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
-  expect(await store.getRange("ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(await store.getRange("local", "ASML", "2026-01-01", "2026-01-01")).toEqual([]);
   expect(onPriceDataChanged).toHaveBeenCalledOnce();
 });

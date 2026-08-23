@@ -53,13 +53,13 @@ export function createFilePriceStore(filePath: string): PriceStore {
   };
 
   return {
-    async getRange(symbol, from, to) {
+    async getRange(tenantId, symbol, from, to) {
       return (await readRows(filePath))
-        .filter((bar) => bar.symbol === symbol && bar.date >= from && bar.date <= to)
+        .filter((bar) => bar.tenantId === tenantId && bar.symbol === symbol && bar.date >= from && bar.date <= to)
         .sort((left, right) => left.date.localeCompare(right.date));
     },
-    async lastDate(symbol) {
-      const rows = (await readRows(filePath)).filter((bar) => bar.symbol === symbol).sort((left, right) => left.date.localeCompare(right.date));
+    async lastDate(tenantId, symbol) {
+      const rows = (await readRows(filePath)).filter((bar) => bar.tenantId === tenantId && bar.symbol === symbol).sort((left, right) => left.date.localeCompare(right.date));
       return rows.at(-1)?.date ?? null;
     },
     async upsert(bars) {
