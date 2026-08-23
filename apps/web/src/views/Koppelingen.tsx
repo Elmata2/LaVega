@@ -113,12 +113,18 @@ export default function Koppelingen() {
         <h2>Doorstuuradres voor facturen</h2>
         <span className="eyebrow">stuur een factuur hiernaartoe en hij komt in de wachtrij</span>
       </div>
-      {/* INTYPEN GAAT VOOR GENEREREN. Het adres dat Cloudflare routeert is
-          invoices@lavega.dev, niet het lavega-<random>@invoices.lavega.dev dat
-          LaVega verzon — ander lokaal deel, ander domein. Een adres dat wij
-          bedenken en dat niets routeert is erger dan geen adres: de post komt
-          nergens aan terwijl het scherm zegt van wel. Dus typt hij het in, en de
-          generator staat ernaast voor wie nog niets heeft. */}
+      {/* INTYPEN GAAT VOOR GENEREREN, en dit commentaar noemt met opzet GEEN
+          concreet adres meer. Het heeft er nu twee genoemd die geen van beide
+          klopten: eerst het zelfverzonnen lavega-<random>@invoices.lavega.dev,
+          daarna invoices@lavega.dev — terwijl het zijne op 23 augustus
+          ale@invoices.lavega.dev bleek te zijn, dat hij zelf draait.
+
+          Dat is het patroon en niet de pech: welk adres routeert bepaalt
+          Cloudflare, niet deze code, en elk adres dat wij hier hardop noemen is
+          een gok die op een dag onwaar wordt. Een adres dat wij bedenken en dat
+          niets routeert is erger dan geen adres — de post komt nergens aan
+          terwijl het scherm zegt van wel. Dus typt hij het in, en de generator
+          staat ernaast voor wie nog niets heeft. */}
       <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
         Adres
         <input
