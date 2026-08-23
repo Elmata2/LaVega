@@ -108,6 +108,12 @@ if (manifest) {
    * geregistreerd (zie background.ts). Chrome merkt een ontbrekend bestand dan
    * pas als de gebruiker een winkel aanzet, dus controleren we het hier. */
   verwijzingen.push("content.js");
+  /* Idem voor het script op zijn Amex-aanbiedingenpagina: dat staat ook niet in
+   * het manifest en wordt pas geregistreerd als hij die schakelaar aanzet. Een
+   * ontbrekend bestand zou hij dan pas merken doordat er nooit iets gelezen
+   * wordt — zonder foutmelding, want een registratie naar een bestand dat er
+   * niet is, faalt stil op de pagina zelf. */
+  verwijzingen.push("amex-content.js");
 
   const voorVerwijzingen = fouten.length;
   for (const p of verwijzingen) {
@@ -178,8 +184,15 @@ if (manifest) {
 /* ── 4. loopt de sitelijst gelijk met sites.ts? ────────────────────────────── */
 
 const sites = await import(pathToFileURL(join(DIST, "sites.js")).href);
+/* De aanbiedingenpagina hoort in dezelfde vergelijking. Hij staat niet in
+ * SITE_MATCHES omdat hij geen WINKEL is — het is zijn eigen account, met een
+ * eigen schakelaar en een eigen vraag — maar hij vraagt wel een hostrecht, en
+ * dat recht moet net zo hard gelijklopen met het manifest. Vergeet je hem hier,
+ * dan merkt hij het pas doordat Chrome zijn toestemmingsverzoek weigert met een
+ * melding die niets over de oorzaak zegt. */
+const amex = await import(pathToFileURL(join(DIST, "amex.js")).href);
 const voorSitelijst = fouten.length;
-const uitCode = [...sites.SITE_MATCHES].sort();
+const uitCode = [...sites.SITE_MATCHES, amex.AMEX_MATCH].sort();
 const uitManifest = [...(manifest?.optional_host_permissions ?? [])].sort();
 eis(
   JSON.stringify(uitCode) === JSON.stringify(uitManifest),
@@ -204,22 +217,26 @@ for (const patroon of uitCode) {
 
 if (fouten.length === voorSitelijst) {
   gedaan.push(
-    `sitelijst gelijk aan het manifest, en elk patroon wijst een pad aan ` +
-      `(${uitCode.length} winkel(s): ${uitCode.join(", ") || "geen"})`,
+    `hostrechten gelijk aan het manifest, en elk patroon wijst een pad aan ` +
+      `(${uitCode.length}: ${uitCode.join(", ") || "geen"})`,
   );
 }
 
 /* ── 5. is content.js nog een klassiek script? ─────────────────────────────── */
 
-const contentPad = join(DIST, "content.js");
-if (existsSync(contentPad)) {
-  const bron = readFileSync(contentPad, "utf8");
+/* Allebei de content scripts, want de fout is dezelfde en hij is even
+ * onzichtbaar: bij amex-content.js zou hij alleen in de console van zijn
+ * Amex-pagina staan. */
+for (const naam of ["content.js", "amex-content.js"]) {
+  const pad = join(DIST, naam);
+  if (!existsSync(pad)) continue;
+  const bron = readFileSync(pad, "utf8");
   const moduleRegel = bron.split("\n").findIndex((r) => /^\s*(import|export)\b/.test(r));
   eis(
     moduleRegel === -1,
-    `content.js bevat op regel ${moduleRegel + 1} een import of export. Een content script in MV3 is\n` +
+    `${naam} bevat op regel ${moduleRegel + 1} een import of export. Een content script in MV3 is\n` +
       `        een KLASSIEK script; Chrome weigert het bestand dan met "Cannot use import statement\n` +
-      `        outside a module", en die fout staat alleen in de console van de winkelpagina.`,
+      `        outside a module", en die fout staat alleen in de console van de pagina zelf.`,
   );
 }
 

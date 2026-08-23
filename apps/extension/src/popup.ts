@@ -16,10 +16,10 @@
 
 import { parseAmountToCents, reasonTextHandmatig } from "./read.js";
 import { rankCheckout } from "./rank.js";
-import { panelRows, POPUP_CAPS, footer, puntenBlok } from "./panel.js";
-import { headline } from "./lines.js";
+import { panelRows, POPUP_CAPS, footer, puntenBlok, aanbodLijst } from "./panel.js";
+import { headline, aanbodGrensRegel } from "./lines.js";
 import { euro } from "./money.js";
-import { getHeldIds, getPointsBalances } from "./store.js";
+import { getHeldIds, getPointsBalances, getAmexAan, getAanbiedingen, getAmexLezing } from "./store.js";
 import { pointsCoverage } from "./points.js";
 import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -113,8 +113,36 @@ async function bereken(): Promise<void> {
   const kaart = el("div", "kaart");
   if (bedragCenten !== null) kaart.appendChild(el("div", "bedrag", euro(bedragCenten)));
 
-  /* Punten eerst, net als in het paneel. Dit is wat hij al heeft liggen; de
-   * kaartrangschikking eronder gaat over wat hij zou kunnen doen. */
+  /* De aanbiedingen bovenaan, net als in het paneel, en om dezelfde reden: dit
+   * is het enige blok met een einddatum erin. Hier staat de HELE lijst en niet
+   * de selectie voor één winkel — dit venster weet niet op welke pagina hij
+   * staat en vraagt dat ook niet, dus er wordt niets aan een winkel gekoppeld.
+   * Zie `aanbodLijst` voor waarom dat geen inconsistentie is met het paneel. */
+  const aanbod = aanbodLijst(
+    { aan: await getAmexAan(), lezing: await getAmexLezing(), aanbiedingen: await getAanbiedingen() },
+    asOf,
+  );
+  if (aanbod.kop) {
+    kaart.appendChild(el("div", "groep", aanbod.kop));
+    if (aanbod.regels.length === 0) {
+      kaart.appendChild(el("div", "noot", aanbod.toestand));
+    } else {
+      for (const r of aanbod.regels) {
+        const rij = el("div", "rij");
+        rij.appendChild(el("div", "titel", r.titel));
+        rij.appendChild(el("div", "regel", r.regel));
+        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
+        kaart.appendChild(rij);
+      }
+    }
+    /* De grensregel staat hier wél en in het paneel niet. Dit venster opent hij
+     * zelf en er is ruimte; het paneel staat over een winkel heen terwijl hij
+     * afrekent, en daar hoort een antwoord en geen verantwoording. */
+    kaart.appendChild(el("div", "bron", aanbodGrensRegel()));
+  }
+
+  /* Punten daarna. Dit is wat hij al heeft liggen; de kaartrangschikking
+   * eronder gaat over wat hij zou kunnen doen. */
   const blok = puntenBlok(punten, munt === "EUR" ? bedragCenten : null, munt);
   if (blok.leeg) {
     kaart.appendChild(el("div", "groep", PUNTENKOP));

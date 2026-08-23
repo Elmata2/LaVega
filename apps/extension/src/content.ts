@@ -134,6 +134,30 @@
     balk.appendChild(sluit);
     paneel.appendChild(balk);
 
+    /* Het aanbiedingenblok staat BOVEN de punten, en dat is een uitspraak over
+     * wat er hier het meest toe doet. Een Amex-aanbieding hangt aan DEZE winkel
+     * en aan een einddatum; een puntensaldo hangt aan geen van beide en is er
+     * volgende week nog. Wat aan deze kassa iets verandert, staat boven wat
+     * overal hetzelfde is.
+     *
+     * Een lege `kop` betekent zwijgen: dan heeft hij de schakelaar niet
+     * aangezet, en dan hoort er bij het afrekenen geen uitnodiging te staan. */
+    function toonAanbod(aanbod: PaneelAanbod): void {
+      if (!aanbod.kop) return;
+      paneel.appendChild(el("div", "groep", aanbod.kop));
+      if (aanbod.regels.length === 0) {
+        paneel.appendChild(el("div", "uitleg", aanbod.toestand));
+        return;
+      }
+      for (const r of aanbod.regels) {
+        const rij = el("div", "rij");
+        rij.appendChild(el("div", "titel", r.titel));
+        rij.appendChild(el("div", "regel", r.regel));
+        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
+        paneel.appendChild(rij);
+      }
+    }
+
     /* Het puntenblok staat BOVEN de kaarten, in allebei de toestanden. Dat is
      * geen opmaakvoorkeur: dit is wat hij al heeft liggen, en het is het enige
      * deel dat ook nog iets zegt als het bedrag op deze pagina niet te lezen
@@ -159,11 +183,13 @@
     if (antwoord.soort === "geen-bedrag") {
       paneel.appendChild(el("div", "kop", antwoord.kop));
       paneel.appendChild(el("div", "uitleg", antwoord.uitleg));
+      toonAanbod(antwoord.aanbod);
       toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "voet", antwoord.voet));
     } else {
       if (antwoord.bedrag) paneel.appendChild(el("div", "bedrag", antwoord.bedrag));
       if (antwoord.bedragNoot) paneel.appendChild(el("div", "noot", antwoord.bedragNoot));
+      toonAanbod(antwoord.aanbod);
       toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "kop", antwoord.kop));
 

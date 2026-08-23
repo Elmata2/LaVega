@@ -37,7 +37,10 @@
 
   "host_permissions": [],
 
-  "optional_host_permissions": ["https://www.ikea.com/nl/nl/p/*"],
+  "optional_host_permissions": [
+    "https://www.ikea.com/nl/nl/p/*",
+    "https://global.americanexpress.com/offers/eligible*"
+  ],
 
   "content_security_policy": {
     "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; font-src 'none'; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'self'; form-action 'none'; base-uri 'none'"

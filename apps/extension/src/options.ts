@@ -35,7 +35,20 @@ import {
   setEnabledSiteIds,
   getPointsBalances,
   setPointsBalances,
+  getAmexAan,
+  setAmexAan,
+  getAanbiedingen,
+  getAmexLezing,
+  wisAmex,
 } from "./store.js";
+import {
+  AMEX_MATCH,
+  AMEX_LABEL,
+  AMEX_WAT_WEL,
+  AMEX_WAT_NIET,
+  type AanbodToestand,
+} from "./amex.js";
+import { aanbodLijst } from "./panel.js";
 import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
 import { pct, dateNL, euro, eurosToCents, getal } from "./money.js";
@@ -453,6 +466,166 @@ function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
   }
 }
 
+/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+
+/* ── WAAROM DIT EEN TWEEDE VRAAG IS EN GEEN TWEEDE VINKJE IN DE EERSTE LIJST ─
+ *
+ * De lijst hierboven gaat over winkels: "mag LaVega de prijs op deze pagina
+ * lezen". Dit gaat over zijn ACCOUNT bij een bank. Dat is een ander soort ja, en
+ * het hoort ook een ander soort vraag te zijn — met een eigen kop, een eigen
+ * uitleg van wat er wel en niet gelezen wordt, en een eigen schakelaar die niets
+ * aanzet wat hij hierboven heeft aangevinkt.
+ *
+ * Wat de schakelaar bij UITZETTEN doet, is de helft van het ontwerp. De volgorde:
+ *
+ *   1. de schakelaar in de opslag uit. Vanaf dat moment zwijgt het paneel over
+ *      aanbiedingen en weigert de service worker een nieuwe lezing, ook al staat
+ *      de host-toestemming er nog. Dat is de "onmiddellijke" in "onmiddellijk
+ *      effect";
+ *   2. het opgeslagene weg — `wisAmex` haalt de sleutels ECHT weg en zet ze niet
+ *      op leeg;
+ *   3. pas dan de host-toestemming intrekken.
+ *
+ * Die volgorde is niet willekeurig. Andersom zou de toestemming al weg zijn
+ * terwijl de schakelaar nog aanstaat, en dan mislukt een lezing met een fout in
+ * plaats van dat er netjes niets gebeurt — precies de omgekeerde volgorde van
+ * het AANZETTEN, waar de toestemming juist eerst moet komen omdat het vinkje
+ * anders iets belooft wat Chrome niet toestaat. */
+
+const amexSchakelaar = document.getElementById("amexschakelaar") as HTMLDivElement;
+const amexMelding = document.getElementById("amex-melding") as HTMLParagraphElement;
+const amexStatus = document.getElementById("amex-status") as HTMLParagraphElement;
+const amexLijstVlak = document.getElementById("amexlijst") as HTMLDivElement;
+
+function meldAmex(tekst: string, fout = false): void {
+  amexMelding.textContent = tekst;
+  amexMelding.className = fout ? "hint fout" : "hint";
+}
+
+function vulLijstje(id: string, items: readonly string[]): void {
+  const ul = document.getElementById(id);
+  if (!ul) return;
+  leeg(ul as HTMLElement);
+  for (const t of items) {
+    const li = document.createElement("li");
+    li.textContent = t;
+    ul.appendChild(li);
+  }
+}
+
+async function tekenAanbiedingen(): Promise<void> {
+  const toestand: AanbodToestand = {
+    aan: await getAmexAan(),
+    lezing: await getAmexLezing(),
+    aanbiedingen: await getAanbiedingen(),
+  };
+  leeg(amexLijstVlak);
+
+  if (!toestand.aan) {
+    /* Uit is uit. Er staat hier geen laatst bekende lijst meer, want die is bij
+     * het uitzetten weggegooid — en als er niets is weggegooid omdat hij nooit
+     * aan heeft gestaan, is "er is nog niets gelezen" ook waar. */
+    amexStatus.textContent =
+      "De schakelaar staat uit. Er is niets gelezen en er staat niets opgeslagen.";
+    amexStatus.className = "hint";
+    return;
+  }
+
+  const blok = aanbodLijst(toestand, vandaag());
+  amexStatus.textContent =
+    blok.regels.length === 0
+      ? blok.toestand
+      : `${blok.regels.length} aanbieding(en) opgeslagen. Bij elke staat de dag waarop LaVega hem las; ` +
+        `wat er daarna bij Amex veranderd is, zien we niet.`;
+  amexStatus.className = "hint";
+
+  for (const r of blok.regels) {
+    const rij = el("div", "rij");
+    rij.appendChild(el("div", "titel", r.titel));
+    rij.appendChild(el("div", "noot", r.regel));
+    if (r.bron) rij.appendChild(el("div", "noot", r.bron));
+    amexLijstVlak.appendChild(rij);
+  }
+}
+
+async function zetAmexUit(vink: HTMLInputElement): Promise<void> {
+  await setAmexAan(false);
+  await wisAmex();
+  await chrome.permissions.remove({ origins: [AMEX_MATCH] });
+  vink.checked = false;
+  meldAmex(
+    "Uit. De leestoestemming is ingetrokken en de gelezen aanbiedingen zijn weggehaald.",
+  );
+  await tekenAanbiedingen();
+}
+
+function tekenAmexSchakelaar(aan: boolean, toegestaan: boolean): void {
+  leeg(amexSchakelaar);
+  const rij = el("div", "vinkrij");
+  const vink = document.createElement("input");
+  vink.type = "checkbox";
+  vink.id = "amex-aan";
+  /* Aan is aan ALS beide waar zijn — zijn schakelaar én Chrome's toestemming.
+   * Dezelfde regel als bij de winkels, en om dezelfde reden: een vinkje dat
+   * aanstaat terwijl er niets gebeurt, laat hem zoeken naar een fout die er niet
+   * is. */
+  vink.checked = aan && toegestaan;
+
+  vink.addEventListener("change", () => {
+    if (!vink.checked) {
+      void zetAmexUit(vink);
+      return;
+    }
+    /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
+     * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
+    chrome.permissions
+      .request({ origins: [AMEX_MATCH] })
+      .then(async (gegeven) => {
+        if (!gegeven) {
+          vink.checked = false;
+          meldAmex(
+            `Zonder toestemming voor ${AMEX_MATCH} kan LaVega je aanbiedingen niet lezen. Er verandert verder niets.`,
+            true,
+          );
+          return;
+        }
+        await setAmexAan(true);
+        meldAmex(
+          "Aan. Open je aanbiedingenpagina bij American Express; LaVega leest hem dan en zet " +
+            "onderin een regel neer met wat er gelezen is.",
+        );
+        await tekenAanbiedingen();
+      })
+      .catch(() => {
+        vink.checked = false;
+        meldAmex("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
+      });
+  });
+
+  const tekst = document.createElement("label");
+  tekst.htmlFor = vink.id;
+  tekst.appendChild(el("div", "titel", AMEX_LABEL));
+  tekst.appendChild(el("div", "noot", `${AMEX_MATCH} — alleen dit ene adres. Je rekeningoverzicht, je transacties en je saldo staan op andere paden en vallen erbuiten.`));
+  /* DIT MOET ERBIJ STAAN EN HET IS ONGEMAKKELIJK. De lezer is gebouwd op HTML
+   * die met de hand is gemaakt: er is geen manier om vanaf onze kant in zijn
+   * account te komen, dus de echte ingelogde pagina is nooit gezien. Dat hoort
+   * te staan waar hij ja zegt, niet in een README. */
+  tekst.appendChild(
+    el(
+      "div",
+      "noot",
+      "Eerlijk over de grens: de echte, ingelogde aanbiedingenpagina is bij het bouwen nooit " +
+        "gezien — dat kan niet zonder jouw account. De lezer is gemaakt op nagebouwde HTML. " +
+        "Vindt hij bij jou niets, dan zegt hij dát, met de reden erbij, en blijft er geen oude " +
+        "lijst staan die vers lijkt.",
+    ),
+  );
+
+  rij.appendChild(vink);
+  rij.appendChild(tekst);
+  amexSchakelaar.appendChild(rij);
+}
+
 /* ────────────────────────────── opstarten ────────────────────────────────── */
 
 async function start(): Promise<void> {
@@ -462,6 +635,14 @@ async function start(): Promise<void> {
 
   saldi = await getPointsBalances();
   tekenPunten();
+
+  vulLijstje("amex-wel", AMEX_WAT_WEL);
+  vulLijstje("amex-niet", AMEX_WAT_NIET);
+  tekenAmexSchakelaar(
+    await getAmexAan(),
+    await chrome.permissions.contains({ origins: [AMEX_MATCH] }),
+  );
+  await tekenAanbiedingen();
 
   const aangevinkteSites = new Set(await getEnabledSiteIds());
   const toegestaan = new Set<string>();

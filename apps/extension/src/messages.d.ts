@@ -92,6 +92,9 @@ declare type PaneelAntwoord =
        *  artikelprijs is geen ordertotaal. Null als er geen bedrag is. */
       bedragNoot: string | null;
       punten: PaneelPunten;
+      /** Wat er over zijn Amex-aanbiedingen gezegd mag worden. Zie
+       *  PaneelAanbod: een lege `kop` betekent zwijgen. */
+      aanbod: PaneelAanbod;
       regels: PaneelRegel[];
       /** De regel onderaan: peildatum van de gegevens en wat er níét gebeurt. */
       voet: string;
@@ -105,8 +108,65 @@ declare type PaneelAntwoord =
    *  deze pagina af. Voorheen zweeg het paneel hier volledig — juist op de
    *  IKEA-pagina's met een actieprijs, waar het bedrag een bereik is en dus niet
    *  te lezen. Nu staat er nog steeds iets waars en bruikbaars. */
-  | { soort: "geen-bedrag"; kop: string; uitleg: string; punten: PaneelPunten; voet: string }
+  | {
+      soort: "geen-bedrag";
+      kop: string;
+      uitleg: string;
+      punten: PaneelPunten;
+      aanbod: PaneelAanbod;
+      voet: string;
+    }
   /** Niets tonen. `reden` is voor de console van de ontwikkelaar, niet voor het
    *  scherm — een paneel dat verschijnt om te melden dat het er niet hoort te
    *  zijn, is erger dan geen paneel. */
   | { soort: "zwijg"; reden: string };
+
+/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+
+/** Van het script op zijn aanbiedingenpagina naar de service worker. Eén soort,
+ *  zonder inhoud — net als PaneelVerzoek, en om dezelfde reden: de worker weet
+ *  uit `sender.url` waar het bericht vandaan komt, en dat is het enige veld dat
+ *  niet door de pagina te zetten is. */
+declare type AanbodVerzoek = { soort: "aanbod-vragen" };
+
+/** Terug naar die pagina: één zin over wat er gelezen is, en niets anders.
+ *
+ *  GEEN AANBIEDINGEN IN DIT ANTWOORD. Het script op de Amex-pagina hoeft ze niet
+ *  te kennen — het zet één regel neer dat er gelezen is en hoeveel. Zo kan de
+ *  bevestigingsstrook niet per ongeluk iets tonen wat er niet in hoort, en is er
+ *  op die pagina geen tweede plek waar zijn gegevens langskomen.
+ *
+ *  `gelukt` bepaalt alleen de toon van de regel, niet of hij verschijnt: een
+ *  mislukte lezing hoort hij juist te zien, met de oorzaak. Stil falen op de
+ *  pagina die hij net voor ons heeft opengedaan, is de slechtste uitkomst. */
+declare type AanbodAntwoord =
+  | {
+      soort: "melding";
+      /** Kwam er een aanbieding uit? Bepaalt de toon van de regel, niet of hij
+       *  verschijnt. */
+      gelukt: boolean;
+      /** Mag het script het over een paar seconden nog eens vragen? De pagina
+       *  bouwt haar aanbiedingen NA het laden op, dus "nog niets gevonden" kan
+       *  gewoon "nog niet klaar" betekenen. Bij een inlogformulier is het
+       *  antwoord definitief en staat hier false: dan is doorvragen zinloos. */
+      opnieuw: boolean;
+      regel: string;
+      noot: string;
+    }
+  /** Niets tonen: de toestemming staat uit of de afzender klopt niet. `reden`
+   *  is voor de console van de ontwikkelaar en niet voor het scherm. */
+  | { soort: "zwijg"; reden: string };
+
+/** Het aanbiedingenblok in het paneel en in het werkbalkvenster.
+ *
+ *  `kop` LEEG BETEKENT: HELEMAAL NIETS TONEN. Dat is de toestand waarin hij de
+ *  schakelaar niet heeft aangezet. Een uitnodiging om een leestoestemming aan te
+ *  zetten, neergezet op het moment dat hij aan het afrekenen is, is reclame op
+ *  het slechtste moment; die vraag hoort in het optiescherm. */
+declare type PaneelAanbod = {
+  kop: string;
+  regels: PaneelPuntRegel[];
+  /** De ene zin als er geen regels zijn: de echte oorzaak, niet een leeg blok.
+   *  "" als er wél regels zijn. */
+  toestand: string;
+};

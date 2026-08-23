@@ -1,0 +1,23 @@
+<!-- KUNSTMATIG. Het aanbiedingenblok staat er, maar de kaarten zien er anders
+     uit dan de lezer verwacht: de korting staat in een afbeelding en de
+     winkelnaam in een alt-tekst. Dat is precies de vorm die een lezer op
+     klassenamen en tekstpatronen niet aankan.
+
+     Deze fixture staat er om te bewijzen dat de extensie dan de JUISTE oorzaak
+     noemt: niet "je hebt geen aanbiedingen" (dat weten we niet) en niet "je bent
+     niet ingelogd" (daar is geen aanwijzing voor), maar dat het blok er wel is
+     en er niets uit te lezen valt. En vooral: dat een eerder gelezen lijst niet
+     wordt bijgewerkt en dus zijn eigen, oudere datum houdt. -->
+<!doctype html><html lang="nl"><head><title>Aanbiedingen</title></head>
+<body>
+<div id="root">
+  <main id="mainContent">
+    <div data-module-name="axp-offers-container" class="_offersHub_zz11_3">
+      <ul class="_offerList_zz11_9">
+        <li class="_offerCard_zz11_21"><img src="tile-1.png" alt="JBL"></li>
+        <li class="_offerCard_zz11_21"><img src="tile-2.png" alt="Nike"></li>
+      </ul>
+    </div>
+  </main>
+</div>
+</body></html>

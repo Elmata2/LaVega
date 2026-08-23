@@ -24,6 +24,16 @@
 
 import type { Row, Ranking, UnknownRow, Caveat, Veld } from "./rank.js";
 import type { PuntenRij } from "./points.js";
+import {
+  AANBOD_OUD_NA_DAGEN,
+  AANBOD_TE_OUD_NA_DAGEN,
+  AMEX_WAT_WEL,
+  AMEX_WAT_NIET,
+  dagenTussen,
+  type Aanbieding,
+  type AanbodUitkomst,
+  type Lezing,
+} from "./amex.js";
 import type { CheckoutCard } from "./types.js";
 import { euro, pct, dateNL, eurosToCents, getal } from "./money.js";
 
@@ -665,4 +675,219 @@ export function headline(r: Ranking): string {
   }
   if (cents === 0) return `Betaal met ${name}. Die kost je hier niets extra.${staart}`;
   return `Van jouw kaarten is ${name} de goedkoopste, en ook die kost je ${euro(-cents)}.`;
+}
+
+/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+
+/* WAT HIER NOOIT MAG STAAN, en per geval de fout die eronder ligt:
+ *
+ *  1. "Je hebt hier 30% korting." Dat is een belofte over de kassa waar hij
+ *     staat, en wij hebben alleen gelezen dat de aanbieding op zijn Amex-lijst
+ *     STOND, op een dag in het verleden. Tussen die dag en nu kan hij verlopen
+ *     zijn, opgezegd zijn, of al gebruikt.
+ *  2. "Gebruik hem hier." Een Amex-aanbieding moet eerst aan de kaart worden
+ *     TOEGEVOEGD, en dat gebeurt bij American Express en niet in deze kassa. Of
+ *     hij al toegevoegd is, kunnen we niet zien. Advies dat in de toestand waarin
+ *     het verschijnt niet kan werken, is precies wat huisregel 3 verbiedt — dus
+ *     staat er waar het wél kan.
+ *  3. Een lijst zonder de dag waarop hij gelezen is. Die dag is het enige waarop
+ *     hij de betrouwbaarheid kan afmeten, net als bij de kaartcijfers en de
+ *     puntensaldi.
+ *  4. Een lege plek als er niets voor deze winkel is. "Geen aanbieding gevonden"
+ *     is een uitspraak die alleen mag als we ook echt gekeken hebben, en dan
+ *     hoort erbij WANNEER en in HOEVEEL aanbiedingen. */
+
+/** Wat er van een aanbiedingskaart op het scherm komt.
+ *
+ *  De korting staat er ZOALS AMEX HEM SCHRIJFT. Niet omgerekend, niet
+ *  samengevat, niet naar euro's vertaald: "30% korting met 500 punten" blijft
+ *  die zin. Zodra we er een bedrag van maken, staat er een getal op het scherm
+ *  dat op deze pagina nergens vandaan komt. */
+export function aanbodRegel(a: Aanbieding, asOf: string): string {
+  const delen: string[] = [a.korting];
+
+  if (a.tot !== null && a.tot < asOf) {
+    delen.push(`Liep tot ${dateNL(a.tot)}, en die datum is voorbij.`);
+  } else if (a.tot !== null) {
+    delen.push(`Loopt tot ${dateNL(a.tot)}.`);
+  } else if (a.totRuw !== "") {
+    /* Een cijferdatum als 05/03/2026 is twee datums tegelijk zolang niet
+     * vaststaat of de pagina dd/mm of mm/dd schrijft, en twee maanden verschil
+     * in een einddatum is het verschil tussen geldig en verlopen. Dan liever de
+     * tekst laten zien en er niet mee rekenen. */
+    delen.push(
+      `Er stond "${a.totRuw}" bij en dat is niet eenduidig te lezen — ` +
+        `LaVega rekent er daarom niet mee.`,
+    );
+  } else {
+    delen.push("Er stond geen einddatum bij. Dat is niet hetzelfde als onbeperkt geldig; we weten het niet.");
+  }
+
+  /* Punt 2 uit de kop hierboven, en hij mag nooit weg. De tweede helft staat er
+   * omdat de lezer met PATRONEN werkt: hij knipt de kortingsvorm en de
+   * einddatum uit de kaart en laat de rest staan. Wat er aan voorwaarden op die
+   * kaart stond in een vorm die wij niet herkennen, staat hier dus niet — en
+   * een korting zonder haar voorwaarden is precies de bewering die een
+   * onvolledige lezing niet kan dragen. Dus zeggen we waar de volledige tekst
+   * staat, in plaats van te doen alsof dit hem is. */
+  delen.push(
+    "Toevoegen aan je kaart en de volledige voorwaarden staan bij American Express, niet in deze " +
+      "kassa; of je hem al hebt toegevoegd, kan LaVega niet zien.",
+  );
+  return delen.join(" ");
+}
+
+/** Waar deze regel vandaan komt en van wanneer. */
+export function aanbodBron(a: Aanbieding, asOf: string): string {
+  const dagen = dagenTussen(a.gelezenOp, asOf);
+  const bits = [`Gelezen van je Amex-aanbiedingenpagina op ${dateNL(a.gelezenOp)}.`];
+  if (Number.isNaN(dagen)) {
+    bits.push("Hoe lang geleden dat is, is hier niet uit te rekenen.");
+  } else if (dagen > AANBOD_OUD_NA_DAGEN) {
+    bits.push(
+      `Dat is ${dagen} dagen geleden — open die pagina nog eens als je erop wilt afgaan, ` +
+        `want een aanbieding kan intussen weg zijn.`,
+    );
+  }
+  return bits.join(" ");
+}
+
+/** De regel die er staat in plaats van een lijst, met de echte oorzaak.
+ *
+ *  Zeven toestanden, zeven zinnen, en geen daarvan is "er zijn geen
+ *  aanbiedingen". Dat is namelijk in zes van de zeven gevallen onwaar. */
+export function aanbodToestandRegel(u: AanbodUitkomst, adres: string): string {
+  switch (u.soort) {
+    case "uit":
+      return "";
+    case "nooit-gelezen":
+      return (
+        "LaVega heeft je Amex-aanbiedingen nog niet gelezen. Dat gebeurt zodra je zelf je " +
+        "aanbiedingenpagina bij American Express opent; er wordt niets opgehaald."
+      );
+    case "lezing-mislukt":
+      switch (u.lezing.uitkomst) {
+        case "niet-ingelogd":
+          return (
+            `Op ${dateNL(u.lezing.op)} stond er op je aanbiedingenpagina een inlogformulier, ` +
+            `dus je was daar niet ingelogd. Er zijn geen aanbiedingen gelezen en LaVega verzint ze niet.`
+          );
+        case "geen-aanbiedingenblok":
+          return (
+            `Op ${dateNL(u.lezing.op)} stond op dat adres geen aanbiedingenblok. LaVega leest ` +
+            `${adres} — staat er in je adresbalk iets anders als je je aanbiedingen bekijkt, dan is dat de reden.`
+          );
+        case "uitgesproken-geen-aanbiedingen":
+          return (
+            `Op ${dateNL(u.lezing.op)} zei je aanbiedingenpagina zelf ${citaat(u.lezing.citaat)} ` +
+            `Er stond dus niets klaar — dat is een uitgesproken nul en geen gat in onze meting.`
+          );
+        case "blok-zonder-kaarten":
+          return (
+            `Op ${dateNL(u.lezing.op)} stond het aanbiedingenblok er wel, maar LaVega heeft er geen ` +
+            `enkele aanbieding uit kunnen lezen. De pagina ziet er anders uit dan de lezer verwacht.`
+          );
+        /* "gelezen" komt hier niet: aanbodVoorWinkel stuurt die tak niet deze
+         * kant op. Staat er toch, dan is de code veranderd en hoort er geen
+         * geruststellende zin te staan. */
+        default:
+          return `De laatste lezing van ${dateNL(u.lezing.op)} is niet te duiden.`;
+      }
+    case "te-oud":
+      return Number.isNaN(u.dagen)
+        ? `De laatste lezing van je aanbiedingen draagt geen leesbare datum, dus hoe oud die is weten we niet. LaVega zet hem hier daarom niet neer.`
+        : `Je aanbiedingen zijn voor het laatst gelezen op ${dateNL(u.op)}, ${u.dagen} dagen geleden. ` +
+            `Na ${AANBOD_TE_OUD_NA_DAGEN} dagen zet LaVega ze aan een kassa niet meer neer: een aanbieding kan ` +
+            `intussen weg zijn en dat zouden we hier niet zien. Open je aanbiedingenpagina om ze te verversen.`;
+    case "winkel-zonder-domein":
+      return (
+        `Van "${u.host}" kan LaVega geen webadres afleiden om op te vergelijken, dus er wordt hier ` +
+        `geen aanbieding aan gekoppeld. In het LaVega-venster staat je hele lijst.`
+      );
+    case "geen-voor-deze-winkel":
+      return u.totaal === 0
+        ? `In wat LaVega op ${dateNL(u.op)} van je aanbiedingenpagina las, stond geen enkele aanbieding.`
+        : `In de ${u.totaal} aanbiedingen die LaVega op ${dateNL(u.op)} van je aanbiedingenpagina las, ` +
+            `staat er geen voor deze winkel. De koppeling gaat op het webadres van de winkel en niet op de ` +
+            `naam — een aanbieding zonder webadres blijft hier dus weg, en staat wel in het LaVega-venster.`;
+    case "gevonden":
+      return "";
+  }
+}
+
+/** De kop boven het blok bij een winkel. */
+export const AANBOD_KOP_WINKEL = "Amex-aanbiedingen";
+
+/** En in het werkbalkvenster, waar de hele lijst staat en niet de selectie. */
+export const AANBOD_KOP_LIJST = "Jouw Amex-aanbiedingen";
+
+/** De zin onder de lijst in het werkbalkvenster en in het optiescherm: wat er
+ *  van die pagina meekomt en wat niet. Staat NIET in het paneel op de
+ *  winkelpagina — daar hoort een antwoord en geen verantwoording, en de plek
+ *  waar hij die vraag stelt is het scherm waar hij de schakelaar omzet. */
+export function aanbodGrensRegel(): string {
+  return (
+    `Van je aanbiedingenpagina komt alleen ${AMEX_WAT_WEL.join(", ")} mee. ` +
+    `Niet ${AMEX_WAT_NIET.join(", niet ")}. Er gaat niets naar een server.`
+  );
+}
+
+/** De twee regels in de strook op zijn eigen aanbiedingenpagina.
+ *
+ *  ELKE UITKOMST KRIJGT EEN ZIN, ook de geslaagde. Dit is het moment waarop de
+ *  extensie zijn ingelogde accountpagina leest; dat hoort zichtbaar te zijn, en
+ *  wat er NIET gelezen is hoort er in dezelfde adem bij te staan.
+ *
+ *  Bij "niet ingelogd" staat er een advies dat op DEZE pagina uit te voeren is —
+ *  inloggen en herladen. Dat is de enige toestand waarin een advies hier kan
+ *  werken; bij de andere twee zou "probeer het opnieuw" een lus zijn. */
+export function aanbodStrook(lezing: Lezing, winkels: readonly string[], adres: string): { regel: string; noot: string } {
+  const noot = aanbodGrensRegel();
+  switch (lezing.uitkomst) {
+    case "gelezen": {
+      const namen = winkels.slice(0, 6).join(", ");
+      const rest = winkels.length > 6 ? ` en ${winkels.length - 6} andere` : "";
+      return {
+        regel:
+          lezing.aantal === 1
+            ? `LaVega heeft één aanbieding van deze pagina gelezen: ${namen}.`
+            : `LaVega heeft ${lezing.aantal} aanbiedingen van deze pagina gelezen: ${namen}${rest}.`,
+        noot,
+      };
+    }
+    case "niet-ingelogd":
+      return {
+        regel:
+          "Op deze pagina staat een inlogformulier, dus je bent hier niet ingelogd. " +
+          "LaVega heeft niets gelezen en niets opgeslagen. Log in en herlaad de pagina.",
+        noot,
+      };
+    case "uitgesproken-geen-aanbiedingen":
+      /* Dit is de keerzijde van "onbekend is nooit nul". De pagina zegt het
+       * zélf, dus dit is een bekende nul en geen mislukte lezing — en dan hoort
+       * er niet te staan dat LaVega niets kon lezen, want dat zou een antwoord
+       * van Amex tot een fout van ons maken. Het citaat staat erbij zodat te
+       * zien is waar de nul vandaan komt. */
+      return {
+        regel:
+          `Je aanbiedingenpagina zegt zelf ${citaat(lezing.citaat)} Er staat dus niets voor je klaar; ` +
+          `dat is een antwoord en geen mislukte lezing. Er is niets opgeslagen.`,
+        noot,
+      };
+    case "geen-aanbiedingenblok":
+      return {
+        regel:
+          `LaVega vindt op deze pagina geen aanbiedingenblok en heeft dus niets gelezen. ` +
+          `Het adres dat LaVega leest is ${adres}.`,
+        noot,
+      };
+    case "blok-zonder-kaarten":
+      return {
+        regel:
+          "Het aanbiedingenblok staat er wel, maar LaVega leest er geen enkele aanbieding uit. " +
+          "De pagina ziet er anders uit dan de lezer verwacht; er is niets opgeslagen en een " +
+          "eerdere lijst is niet bijgewerkt.",
+        noot,
+      };
+  }
 }

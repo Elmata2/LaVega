@@ -1,0 +1,431 @@
+{
+ "lane": "kaartkosten",
+ "question": "Wat kost het om een kaart te HOUDEN? De vaste maand- of jaarkosten van de kaarten in de catalogus — inclusief de gevallen waar dat nul is omdat een gedateerd document dat zelf zegt. Aanleiding: geen van de gebundelde kaarten draagt zowel een cashbackcijfer als een prijs, dus de extensie kan geen enkele kaart netto rangschikken.",
+ "generatedAt": "2026-08-22",
+ "usedApiCredits": false,
+ "field": "accountFee",
+ "warning": "Dit bestand is een STAGING-voorstel. Het wijzigt docs/catalog/catalog.json niet. value en unit horen bij elkaar: er is nergens omgerekend tussen maand en jaar, want het document bepaalt in welke eenheid het bedrag staat. LEES DE VIER LIJSTEN APART: alleen 'entries' is bedoeld om ongewijzigd samen te voegen. 'entriesMetTierpoort' bevat echte, gedateerde nullen die NIET als prijs geserveerd mogen worden, omdat het niveau dat de cashback draagt een prijs heeft die in dat document niet staat. Een samenvoeging die die vier zonder hun poort overneemt, laat de extensie beweren dat 5% cashback gratis is.",
+ "legend": {
+  "value": "Het bedrag zoals het in de bron staat.",
+  "unit": "'EUR per maand' of 'EUR per jaar' — wat de bron zegt. Nooit omgerekend.",
+  "evidence": {
+   "stated-rate": "de aanbieder noemt het bedrag zelf, letterlijk geciteerd",
+   "stated-zero": "de aanbieder zegt zelf 'gratis', 'None', 'free' of 'no monthly fee'. Dit is een BEKENDE nul, geen ontbrekend cijfer."
+  },
+  "sourceDate": "De datum die het document zelf noemt. Bij helpcentra en CMS-pagina's is dat de updatedAt/lastUpdated uit de eigen JSON van de site; dat staat er dan bij. Staat er nergens een datum, dan hoort de vondst niet in 'entries' maar in 'strandtOpDatum'.",
+  "catalogId": "De id in catalog.json waar dit tarief bij hoort.",
+  "entries": "Waarde + bron + datum + voorwaarden compleet, en de rij is eenduidig. Klaar voor de toelatingspoort.",
+  "entriesMetTierpoort": "Idem compleet, maar de nul geldt de KAART terwijl het cashbackcijfer aan een NIVEAU hangt dat geld kost. Niet netto rangschikken zonder de prijs van dat niveau. AANBEVOLEN LANDING: packages/core/src/netBenefit.ts heeft deze toestand al — voer ze in als { kind: 'unknown', reason: 'needs-another-product' } en NIET als KnownHoldingCost met bedrag nul. Die reden is daar letterlijk omschreven als 'de bron noemt wel een bedrag, maar het is de prijs van dit product BINNEN een ander product ... het genoemde bedrag doorgeven zou een te lage prijs zijn, wat erger is dan geen prijs'. Er hoeft dus niets nieuws gebouwd te worden.",
+  "strandtOpDatum": "Waarde, bron en voorwaarden staan er; het document noemt geen datum. Een gedateerd stuk haalt deze alsnog binnen.",
+  "strandtOpRijtoewijzing": "Waarde, bron en datum staan er; welke catalogusrij het is, is een beslissing en geen meting."
+ },
+ "entries": [
+  {
+   "id": "bleap-card",
+   "product": "Bleap Card",
+   "issuer": "Bleap SIA (Latvia) — LET OP: dit document noemt Unlimit EU Ltd als kaartuitgever, niet Bleap SIA",
+   "kind": "crypto",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://bleap.finance/legal-agreements/bleap-cardholder-terms-eea-bleap-sia",
+   "sourceDate": "28 juni 2026 ('Updated: 28 June 2026' bovenaan het document)",
+   "sourceKind": "Cardholder Terms (losse gedateerde pagina)",
+   "conditions": "Artikel 6.1 zegt de nul met zoveel woorden en noemt alle drie de soorten tegelijk: geen uitgiftekosten, geen maandkosten, geen gebruikskosten. Artikel 6.2 zegt wat WEL blijft: 'Mastercard scheme fees, network FX rates, merchant surcharges, ATM operator fees and government taxes may apply and are your responsibility.' De oudere versie van hetzelfde stuk (bleap-cardholder-terms-eea, 'Updated: 25 May 2026') bevat clausule 6.1 woordelijk gelijk — twee opeenvolgende versies zeggen hetzelfde, dus dit is geen eenmalige formulering. DIT IS NIET DE SLOGAN: bleap.finance zegt op zijn landingspagina 'No fees (really!)' zonder datum en zonder eenheid; die zin is hier NIET de bron en is ook niet gebruikt. De cashback van 1% in de catalogus komt uit een ander stuk (help.bleap.finance) met een eigen datum, dus prijs en opbrengst komen uit twee gedateerde bronnen.",
+   "quote": "6.1 No Bleap card fees. Cards are free. Bleap charges no issuance, monthly, usage or exchange fees for Card activity."
+  },
+  {
+   "id": "wirex-card-wirex-one",
+   "product": "Wirex Card (Wirex One) — X-tras Standard, Entry-tier",
+   "issuer": "Wirex",
+   "kind": "crypto",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+   "sourceDate": "11 januari 2024 (updatedAt uit de eigen JSON van de site; createdAt 27 april 2023)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (wx-om-state / api-help.wirexapp.com)",
+   "conditions": "DIT IS PRECIES DE RIJ DIE BIJ DE 0,5% HOORT: hetzelfde artikel geeft zowel het abonnementsbedrag als het cashbackpercentage, en de 0,5% Cryptoback in de catalogus is de Standard-Entry-tier. Het document hangt geen periode aan het woord 'free'; de eenheid staat hier op maand omdat het dezelfde tabelrij is waarin de buurplannen per maand geprijsd zijn ('a monthly fee of €9.99', 'a monthly fee of €29.99'). Bij een nul maakt de periode niets uit, maar dat is een leesbeslissing en geen citaat. Alles boven 0,5% kost wel iets: Standard Enhanced vereist 150.000 WXT 180 dagen vastgezet (1%), Premium is EUR 9,99 per maand of EUR 102 per jaar, Elite EUR 29,99 per maand of EUR 306 per jaar. Uitgifte apart bevestigd in het losse artikel 'Wirex Fees' (api-help.wirexapp.com, updatedAt 14 december 2023): 'Card Issuance | EEA | Free', met kaartbezorging EEA 5 EUR (DHLWorldMail, niet volgbaar) of 15 EUR (DHL Express). HOUDBAARHEID: dit is met afstand het oudste cijfer in deze lijst — twee en een half jaar — en het Wirex Fees-artikel waarschuwt zelf: 'Please note that these fees are subject to change, and it is always recommended to check the Wirex website or app for the most up-to-date fee information.' De catalogus tekende eerder al aan dat Wirex zijn EEA-uitgifte sindsdien heeft verbouwd (vorige uitgever UAB PayrNet, huidige niet genoemd). Hercontroleer voor je hem serveert.",
+   "quote": "The Standard plan is the most basic X-tras subscription plan, and it is available to all Wirex users for free. The Entry tier is the basic tier and offers 0.5% Cryptoback™ on card purchases. / [tabelkop] Standard 0 | Premium 9.99/102 | Elite 29.99/306"
+  },
+  {
+   "id": "bybit-card",
+   "product": "Bybit Card",
+   "issuer": "Bybit EU",
+   "kind": "betaalpas",
+   "value": 0,
+   "unit": "EUR per jaar",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+   "sourceDate": "3 juni 2026 ('Last updated on 2026-06-03 14:03:11' op de pagina zelf)",
+   "sourceKind": "helpcentrum-tarievenoverzicht met eigen datumregel",
+   "conditions": "De eenheid is die van het document: het is een rij met het opschrift 'Annual Fee', dus per jaar, en er is niet omgerekend. Dezelfde tabel zegt ook 'Inactivity Fee | None' en 'Card Cancellation Fee | None' — de nul is dus niet ergens anders verstopt als slaapkosten. WAT NIET NUL IS: FX 0,5% bovenop de Mastercard-koers, cryptoconversie 0,9%, geldopname 2% na de eerste 100 EUR per maand, vervanging van een fysieke kaart 5 EUR. TIJDELIJK: bij de uitgiftekosten staat een sterretje met 'No fee is required for the issuance of Bybit Card until further notice' — dat is een opgeschorte prijs en geen vaste nul. Bij 'Annual Fee | None' staat dat voorbehoud NIET, dus die nul draagt de tijdelijkheid niet mee. Deze kaart heeft geen cashbackcijfer in de catalogus, dus hij zet de nettotak niet aan; hij vult alleen de prijskant.",
+   "quote": "Annual Fee | None / Inactivity Fee | None / Card Cancellation Fee | None"
+  },
+  {
+   "id": "crypto-com-prepaid-card-basic-midnight-blue",
+   "product": "Crypto.com Prepaid Card — Basic (Midnight Blue)",
+   "issuer": "Crypto.com (EEA-entiteit; prepaid Visa)",
+   "kind": "prepaid",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+   "sourceDate": "22 april 2026 (lastUpdatedDate uit de eigen JSON van het helpcentrum)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (__NEXT_DATA__)",
+   "conditions": "DE ENIGE VAN DE VIJF CRYPTO.COM-NIVEAUS WAARBIJ DE NUL COMPLEET IS. Het sterretje bij 'No monthly fee*' verwijst naar de Level Up-abonnementskosten, en juist Basic heeft die niet: het gedateerde artikel 'How do I join Level Up?' (help.crypto.com/en/articles/12017604, lastUpdatedDate 18 juni 2026) zet in zijn eigen tabel 'Basic | No subscription or CRO Lockup/Stake required'. Er is dus geen niveaupoort achter deze nul. WAT WEL GELD KOST, uit het aparte tarievenstuk (help.crypto.com/en/articles/5977463, lastUpdatedDate 31 juli 2026): fysieke kaart Midnight EUR 4,99 eenmalig, vervanging EUR 45,01, rekening sluiten EUR 50, en slaapkosten van EUR 5 per maand na 12 maanden zonder eigen transactie (per 1 oktober 2026 EUR 6). Die slaapkosten zijn een voorwaardelijke maandpost, geen vaste prijs, en staan daarom niet in value. Deze kaart heeft geen cashbackcijfer in de catalogus.",
+   "quote": "Unlike traditional banks that often charge hundreds of dollars annually for metal cards, you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee"
+  },
+  {
+   "id": "nexo-card",
+   "product": "Nexo Card",
+   "issuer": "Nexo",
+   "kind": "creditcard",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://nexo.com/crypto-card",
+   "sourceDate": "31 juli 2026 (pageUpdateDate voor pageSlug 'crypto-card' uit de eigen JSON-payload van de pagina)",
+   "sourceKind": "productpagina met eigen pageUpdateDate in de JSON-payload",
+   "conditions": "DE ZWAKSTE VAN DE VIJF, EN DAAROM MET DE REDEN EROP: dit is een verkooppagina en geen tarievenoverzicht. Hij komt hier alleen binnen omdat (a) de zin drie soorten kosten met naam noemt in plaats van 'geen kosten' te roepen, en (b) de pagina zelf een machineleesbare wijzigingsdatum in zijn eigen payload draagt — dezelfde route als het Trade Republic-veld dat op 21 augustus wel is toegelaten. nexo.com/legal geeft HTTP 404; er is geen los tarievenstuk gevonden. VOORWAARDEN: de virtuele kaart vraagt minimaal USD 50 op de Nexo-rekening; een fysieke kaart vraagt meer dan USD 5.000 aan digitale activa EN minimaal Gold Loyalty Tier, verzending gratis. Geldopname kost 2% (minimaal 1,99 EUR/GBP) boven de vrije maandruimte van je tier (Base EUR 200, Silver EUR 400, Gold EUR 1.000, Platinum EUR 2.000). Alleen voor inwoners van geselecteerde Europese landen (EER en VK). BIJVANGST BUITEN DEZE LANE: dezelfde pagina zegt 'Base: 0.5% in NEXO Tokens or 0.1% in BTC' — de catalogus heeft voor nexo-card nog geen cashbackPct.",
+   "quote": "Enjoy daily spending with no monthly, annual, or inactivity card fees."
+  }
+ ],
+ "entriesMetTierpoort": [
+  {
+   "id": "crypto-com-prepaid-card-plus-ruby-steel",
+   "product": "Crypto.com Prepaid Card — Plus (Ruby Steel)",
+   "issuer": "Crypto.com (EEA-entiteit; prepaid Visa)",
+   "kind": "prepaid",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+   "sourceDate": "22 april 2026 (lastUpdatedDate uit de eigen JSON van het helpcentrum)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (__NEXT_DATA__)",
+   "netRankingSafe": false,
+   "blockReason": "De nul geldt de KAART. De 2% cashback in de catalogus hangt aan het niveau Plus, en Plus is alleen bereikbaar met een betaald Level Up-abonnement of een CRO-inleg. Het document zegt dat zelf in de voetnoot, maar noemt het bedrag niet. Netto rangschikken met 0 hier maakt van '2% cashback' een gratis 2%, en dat is precies wat de voetnoot ontkent. Het bedrag zelf staat in strandtOpDatum onder crypto-com-level-up-plus.",
+   "conditions": "De nul is echt en gedateerd, maar incompleet zolang de prijs van het niveau niet uit een gedateerd stuk komt. Uit hetzelfde artikel: '*While the Crypto.com Prepaid Card itself does not have any monthly or annual fees, please note that subscribing to the Level Up program to access certain tiers or benefits may require a monthly or annual subscription fee.' Het gedateerde 'How do I join Level Up?' (12017604, 18 juni 2026) bevestigt de poort — 'Plus | Subscription or CRO Lockup/Stake' — zonder een euro te noemen. FYSIEKE KAART is bij dit niveau ook niet zomaar gratis, uit het tarievenstuk 5977463 (31 juli 2026): 'Ruby: €24.99 for Level Up Plus plan monthly subscribers with less than 6 months of consecutive subscription. Free for Level Up Plus plan annual subscribers, monthly subscribers with at least 6 months of consecutive subscription, or users with an active Level Up lockup/stake.' Verder: slaapkosten EUR 5 per maand na 12 maanden (EUR 6 per 1 oktober 2026), rekening sluiten EUR 50, vervanging EUR 50.",
+   "quote": "Unlike traditional banks that often charge hundreds of dollars annually for metal cards, you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee",
+   "suggestedHoldingCost": {
+    "kind": "unknown",
+    "reason": "needs-another-product"
+   }
+  },
+  {
+   "id": "crypto-com-prepaid-card-pro-jade-green-royal-indigo",
+   "product": "Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)",
+   "issuer": "Crypto.com (EEA-entiteit; prepaid Visa)",
+   "kind": "prepaid",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+   "sourceDate": "22 april 2026 (lastUpdatedDate uit de eigen JSON van het helpcentrum)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (__NEXT_DATA__)",
+   "netRankingSafe": false,
+   "blockReason": "Zelfde poort als Plus, maar zwaarder: de 3% hangt aan Level Up Pro, dat volgens het gedateerde artikel 12017604 alleen via abonnement of CRO-inleg te bereiken is. Het bedrag staat in strandtOpDatum onder crypto-com-level-up-pro.",
+   "conditions": "Zie de voetnoot bij Plus; die geldt woordelijk ook hier. 'Pro | Subscription or CRO Lockup/Stake' (12017604, 18 juni 2026). Het tarievenstuk 5977463 (31 juli 2026) noemt voor Jade/Indigo GEEN uitgiftebedrag — dat is een gat in de bron, geen bevestigde nul. Slaapkosten, sluitkosten en vervangingskosten als bij Plus.",
+   "quote": "Unlike traditional banks that often charge hundreds of dollars annually for metal cards, you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee",
+   "suggestedHoldingCost": {
+    "kind": "unknown",
+    "reason": "needs-another-product"
+   }
+  },
+  {
+   "id": "crypto-com-prepaid-card-private-icy-white-rose-gold",
+   "product": "Crypto.com Prepaid Card — Private (Icy White / Rose Gold)",
+   "issuer": "Crypto.com (EEA-entiteit; prepaid Visa)",
+   "kind": "prepaid",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+   "sourceDate": "22 april 2026 (lastUpdatedDate uit de eigen JSON van het helpcentrum)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (__NEXT_DATA__)",
+   "netRankingSafe": false,
+   "blockReason": "Hier is de poort GEEN prijs maar een inleg, en dat is erger voor een nettoberekening dan een ontbrekend bedrag. Het gedateerde artikel 12017604 zet in zijn tabel 'Private | CRO Lockup/Stake' — er is geen abonnementsroute naar dit niveau. Een maandprijs bestaat dus niet, en 0 invullen zou de extensie 4% cashback laten presenteren als kosteloos terwijl de toegang een vastzetting van tienduizenden euro's is. Een vastgezet bedrag is geen tarief; het hoort niet in accountFee en het hoort ook niet weggelaten te worden.",
+   "conditions": "De nul over de kaart zelf is echt en gedateerd. De toegangseis staat in twee bronnen: het gedateerde 12017604 (18 juni 2026) zegt dat Private alleen via CRO Lockup/Stake gaat, en crypto.com/nl/cards (ongedateerd) noemt het bedrag '€45,000 12-month CRO staking'. Zolang dat bedrag geen gedateerde bron heeft is de eis wel bekend en de omvang niet. Vrije geldopname per maand EUR 800, daarboven 2% (tarievenstuk 5977463, 31 juli 2026).",
+   "quote": "Unlike traditional banks that often charge hundreds of dollars annually for metal cards, you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee",
+   "suggestedHoldingCost": {
+    "kind": "unknown",
+    "reason": "needs-another-product"
+   }
+  },
+  {
+   "id": "crypto-com-prepaid-card-private-obsidian",
+   "product": "Crypto.com Prepaid Card — Private (Obsidian)",
+   "issuer": "Crypto.com (EEA-entiteit; prepaid Visa)",
+   "kind": "prepaid",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+   "sourceDate": "22 april 2026 (lastUpdatedDate uit de eigen JSON van het helpcentrum)",
+   "sourceKind": "helpcentrum-artikel via de eigen JSON van de site (__NEXT_DATA__)",
+   "netRankingSafe": false,
+   "blockReason": "Als Icy White / Rose Gold, en dit is de rij waar een onbewaakte nul het meeste kwaad doet: 5% is het hoogste cashbackcijfer in de hele catalogus, dus met accountFee 0 komt Obsidian bovenaan elke nettolijst te staan. De toegang is een CRO-inleg, geen abonnement.",
+   "conditions": "'Private | CRO Lockup/Stake' (12017604, 18 juni 2026); crypto.com/nl/cards (ongedateerd) noemt '€450,000 12-month CRO staking'. Vrije geldopname per maand EUR 1.000, daarboven 2%; kaartsaldo maximaal EUR 25.000 (tarievenstuk 5977463, 31 juli 2026).",
+   "quote": "Unlike traditional banks that often charge hundreds of dollars annually for metal cards, you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee",
+   "suggestedHoldingCost": {
+    "kind": "unknown",
+    "reason": "needs-another-product"
+   }
+  }
+ ],
+ "strandtOpDatum": [
+  {
+   "id": "paysafecard-prepaid-code-paysafewallet",
+   "product": "paysafecard (prepaid code)",
+   "issuer": "Paysafe",
+   "kind": "prepaid",
+   "value": 3.0,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://www.paysafecard.com/nl-nl/kosten-limieten/",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026)",
+   "sourceKind": "kostenpagina van de aanbieder, Nederlandstalig",
+   "conditions": "De pagina heet 'Kosten en limieten' en is dus wel het juiste soort stuk, maar er staat nergens een ingangsdatum, versie of laatste wijziging in — ook niet in de HTML. De rij is bovendien nog niet eenduidig: de catalogusrij bundelt twee producten ('prepaid code / PaysafeWallet') en de pagina prijst ze apart. Voor de prepaid code: EUR 3 per maand vanaf de tweede maand, afgetrokken van het resterende tegoed. Voor de PaysafeCard-rekening: 'vanaf de 13e maand wordt een maandelijkse vergoeding van 5 EUR van de PaysafeCard-rekening afgetrokken als de klant binnen 12 maanden geen transacties op de PaysafeCard-rekening heeft uitgevoerd' — dat is slaapkosten, geen vaste prijs. Inruilen kost 7,50 EUR. De pagina verwijst naar 'alg. voorw.' voor het detail; die link is client-side en zat niet in de opgehaalde HTML — dat is de volgende stap voor de datum.",
+   "quote": "Activeringskosten: Vanaf de 2e maand worden maandelijkse activeringskosten van 3 EUR van het resterende tegoed van de PaysafeCard prepaid code afgetrokken."
+  },
+  {
+   "id": "crypto-com-level-up-plus",
+   "product": "Crypto.com Level Up Plus (het niveau dat Ruby Steel en zijn 2% ontsluit)",
+   "issuer": "Crypto.com",
+   "kind": "prepaid",
+   "value": 3.99,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://crypto.com/nl/cards",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026) — de pagina bevat geen enkele ISO-datum, geen 'effective', geen lastUpdated en geen __NEXT_DATA__",
+   "sourceKind": "verkooppagina",
+   "conditions": "Dit is de ontbrekende helft van crypto-com-prepaid-card-plus-ruby-steel. De rij op de pagina heet 'Subscription fee / Lockup'. Naast de maandprijs staan twee alternatieven die geen maandprijs zijn: EUR 39,90 per jaar (16% korting) of EUR 450 twaalf maanden CRO vastzetten. GEZOCHT EN NIET GEVONDEN: het helpcentrum van Crypto.com kent twee gedateerde Level Up-artikelen (12017604 van 18 juni 2026 en 12017612 van 14 juli 2026); allebei beschrijven ze de plannen en de CRO-tredes in dollars, en geen van beide drukt het eurobedrag af. Zoekopdrachten op '3.99', '24.99' en 'subscription price' in datzelfde helpcentrum leverden geen artikel met het bedrag op. crypto.com/document/<slug> geeft HTTP 403.",
+   "quote": "Subscription fee / Lockup — Free — €3.99/month or €39.90 yearly (16% off) or €450 12-month CRO staking — €24.99/month or €249.90 yearly (16% off) or €4,500 12-month CRO staking — €45,000 12-month CRO staking — €450,000 12-month CRO staking"
+  },
+  {
+   "id": "crypto-com-level-up-pro",
+   "product": "Crypto.com Level Up Pro (het niveau dat Jade Green / Royal Indigo en zijn 3% ontsluit)",
+   "issuer": "Crypto.com",
+   "kind": "prepaid",
+   "value": 24.99,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://crypto.com/nl/cards",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026)",
+   "sourceKind": "verkooppagina",
+   "conditions": "Zelfde rij en zelfde probleem als Level Up Plus. Alternatieven: EUR 249,90 per jaar (16% korting) of EUR 4.500 twaalf maanden CRO vastzetten. Let op wat dit bedrag met de rangschikking doet zodra het wel binnenkomt: 3% cashback tegen EUR 24,99 per maand is pas gunstig boven ongeveer EUR 833 kaartbesteding per maand, en het rewardsartikel begrenst de beloonbare besteding op USD 2.500 per maand — die twee getallen horen samen op het scherm.",
+   "quote": "€24.99/month or €249.90 yearly (16% off) or €4,500 12-month CRO staking"
+  }
+ ],
+ "strandtOpRijtoewijzing": [
+  {
+   "id": "bunq-eerste-mastercard",
+   "product": "bunq Mastercard — eerste pas, inbegrepen in het abonnement",
+   "issuer": "bunq B.V.",
+   "kind": "betaalpas",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+   "sourceDate": "03/08/2026 (op het titelblad van het document)",
+   "sourceKind": "bunq Tarieven - Informatie over kosten (PDF)",
+   "conditions": "KOLOMMEN GECONTROLEERD, NIET GESCHAT: de kop op dezelfde bladzijde luidt 'Beschrijving | bunq Elite | bunq Pro | bunq Core | bunq Free | bunq Elite Business | bunq Pro Business | bunq Core Business | bunq Free Business' en de tekenposities van de acht kolommen zijn tegen de datarijen gelegd voordat deze waarden zijn opgeschreven. Uitkomst per kolom: Elite en Pro 'Een combinatie van 3 passen is gratis inbegrepen'; Core '1 pas is gratis inbegrepen'; Free 'n.v.t.'; en dezelfde vier waarden nog eens voor de Business-kolommen. WAAROM HIJ NIET WORDT TOEGEWEZEN: bunq heeft in dit document EEN kaartrij, en de catalogus heeft NEGEN bunq-kaartrijen (vier bunq-*-betaalpas, vier bunq-*-business-betaalpas en bunq-creditcard). Bovendien noemt bunq zijn eigen plastic hier 'creditcard' terwijl de catalogus dezelfde kaart 'betaalpas' noemt. Welke rij dit is, is een beslissing en geen meting — precies de fout waar state.json op 18 augustus voor waarschuwde. WAT DE NUL BETEKENT ALS HIJ WORDT TOEGEWEZEN: het is de marginale prijs van de kaart BOVENOP een abonnement dat zelf geld kost (die abonnementsprijzen staan al in staging-account-fees.json). 'Gratis inbegrepen' is geen gratis kaart. EN LET OP bunq Free: daar staat 'n.v.t.', en dat is geen nul en geen prijs — onder deze rij krijgt bunq Free deze kaart helemaal niet.",
+   "quote": "Verstrekking van een creditcard: Wereldwijd de beste acceptatie (Mastercard) | Een combinatie van 3 passen is gratis inbegrepen | Een combinatie van 3 passen is gratis inbegrepen | 1 pas is gratis inbegrepen | n.v.t. | ..."
+  },
+  {
+   "id": "bunq-extra-mastercard",
+   "product": "bunq Mastercard — elke extra pas, direct besteld",
+   "issuer": "bunq B.V.",
+   "kind": "betaalpas",
+   "value": 3.49,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://static.bunq.com/website/documents/bunq-information-sheet-pricing-nl-nl.pdf",
+   "sourceDate": "03/08/2026 (op het titelblad van het document)",
+   "sourceKind": "bunq Tarieven - Informatie over kosten (PDF)",
+   "conditions": "EUR 3,49 per maand per pas geldt de kolommen bunq Elite en bunq Pro; voor bunq Elite Business en bunq Pro Business is hetzelfde bedrag EUR 3,99 per maand per pas. Bij alle vier komt eenmalig EUR 9,99 per pas. Voor Core, Free, Core Business en Free Business staat 'n.v.t.' — die kunnen geen extra Mastercard direct bestellen. Dit is een echte, gedateerde maandprijs voor een kaart, maar hij hoort bij de TWEEDE en volgende pas; er is geen catalogusrij voor 'extra pas'. Personalisatie kost apart EUR 9,99 per pas (Elite, Pro en Core, en hun Business-varianten; Free n.v.t.).",
+   "quote": "Verstrekking van een extra creditcard: Direct bestellen van extra Mastercards | € 9,99 per pas + € 3,49 per maand per pas | € 9,99 per pas + € 3,49 per maand per pas | n.v.t. | n.v.t. | € 9,99 per pas + € 3,99 per maand per pas | € 9,99 per pas + € 3,99 per maand per pas | n.v.t. | n.v.t."
+  },
+  {
+   "id": "plutus-starter",
+   "product": "Plutus — abonnement Starter",
+   "issuer": "Block Code Ltd (handelsnaam Plutus)",
+   "kind": "betaalpas",
+   "value": 6.99,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://plutus.it/plans",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026); de voettekst zegt alleen '© Plutus 2025'",
+   "sourceKind": "abonnementenpagina",
+   "conditions": "De catalogus heeft EEN rij (plutus-card) en Plutus verkoopt DRIE abonnementen. Een van de drie kiezen is geen meting. Bij elk bedrag staat een sterretje op de pagina waarvan de voetnoot niet in de opgehaalde tekst zat. Aan het abonnement hangt de beloonbare besteding: Starter GBP/EUR 250 per maand, Everyday 500, Premium 1.000 — dus prijs en plafond horen bij dezelfde rij en moeten samen worden overgenomen. Het losse tarievenstuk plutus.it/fees draagt evenmin een datum en bevat de abonnementsprijs niet; plutus.it/legal/subscription-terms geeft HTTP 200 maar rendert client-side (524 tekens tekst), dus daar is niets uit te halen zonder de pagina uit te voeren.",
+   "quote": "Starter (£/€) 6.99 / month*"
+  },
+  {
+   "id": "plutus-everyday",
+   "product": "Plutus — abonnement Everyday",
+   "issuer": "Block Code Ltd (handelsnaam Plutus)",
+   "kind": "betaalpas",
+   "value": 9.99,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://plutus.it/plans",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026)",
+   "sourceKind": "abonnementenpagina",
+   "conditions": "Zie plutus-starter. Beloonbare besteding GBP/EUR 500 per maand.",
+   "quote": "Everyday(£/€) 9.99 / month*"
+  },
+  {
+   "id": "plutus-premium",
+   "product": "Plutus — abonnement Premium",
+   "issuer": "Block Code Ltd (handelsnaam Plutus)",
+   "kind": "betaalpas",
+   "value": 19.99,
+   "unit": "EUR per maand",
+   "evidence": "stated-rate",
+   "sourceUrl": "https://plutus.it/plans",
+   "sourceDate": "geen datum in het document (opgehaald 22-08-2026)",
+   "sourceKind": "abonnementenpagina",
+   "conditions": "Zie plutus-starter. Beloonbare besteding GBP/EUR 1.000 per maand.",
+   "quote": "Premium (£/€) 19.99 / month*"
+  }
+ ],
+ "eenmaligeKosten": {
+  "warning": "GEEN accountFee. Deze bedragen zijn eenmalig of voorwaardelijk en mogen niet in een maand- of jaarveld terechtkomen; ze staan hier omdat ze in dezelfde gedateerde documenten stonden en anders opnieuw opgezocht moeten worden.",
+  "items": [
+   {
+    "catalogId": "gnosis-pay-card-direct-consumer",
+    "wat": "kaart bestellen",
+    "waarde": "30,23 EURe",
+    "bron": "https://help.gnosispay.com/hc/en-us/articles/39407300570772-How-To-Pay-for-Your-Gnosis-Card",
+    "datum": "updated_at 28 juni 2026 (created_at 17 juli 2025)",
+    "citaat": "✅ 30.23 EURe Ready — You will need exactly 30.23 EURe in your wallet",
+    "let_op": "SPREEKT HET ANDERE GEDATEERDE STUK TEGEN, zie hieronder. Niet zelf beslissen wie gelijk heeft."
+   },
+   {
+    "catalogId": "gnosis-pay-card-direct-consumer",
+    "wat": "kaart bestellen",
+    "waarde": "FREE",
+    "bron": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+    "datum": "updated_at 12 augustus 2026 (edited_at 27 april 2026, created_at 21 juli 2025)",
+    "citaat": "Card Order | FREE | FREE shipping of your physical card",
+    "let_op": "TEGENSPRAAK: twee gedateerde documenten van dezelfde uitgever zeggen iets anders over dezelfde handeling. Het tarievenstuk is het jongste, maar zijn toelichtingskolom gaat over verzending, niet over de bestelling zelf — dus het is niet eens zeker dat ze over hetzelfde gaan."
+   },
+   {
+    "catalogId": "gnosis-pay-card-direct-consumer",
+    "wat": "vervangende kaart",
+    "waarde": "4,99 EURe/GBPe/USDCe",
+    "bron": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+    "datum": "updated_at 12 augustus 2026",
+    "citaat": "Card Replacement | 4.99 EURe/GBPe/USDCe | Fee for lost/stolen cards, includes replacement shipping"
+   },
+   {
+    "catalogId": "crypto-com-prepaid-card-basic-midnight-blue",
+    "wat": "fysieke kaart",
+    "waarde": "EUR 4,99",
+    "bron": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+    "datum": "lastUpdatedDate 31 juli 2026",
+    "citaat": "Physical Card Issuance: Midnight: €4.99"
+   },
+   {
+    "catalogId": "crypto-com-prepaid-card-plus-ruby-steel",
+    "wat": "fysieke kaart",
+    "waarde": "EUR 24,99 of gratis",
+    "bron": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+    "datum": "lastUpdatedDate 31 juli 2026",
+    "citaat": "Ruby: €24.99 for Level Up Plus plan monthly subscribers with less than 6 months of consecutive subscription. Free for Level Up Plus plan annual subscribers, monthly subscribers with at least 6 months of consecutive subscription, or users with an active Level Up lockup/stake"
+   },
+   {
+    "catalogId": "crypto-com-prepaid-card-*",
+    "wat": "slaapkosten",
+    "waarde": "EUR 5 per maand na 12 maanden, EUR 6 per 1 oktober 2026",
+    "bron": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
+    "datum": "lastUpdatedDate 31 juli 2026",
+    "citaat": "Inactivity: €5 per month of inactivity will be charged after 12 months of no cardholder-initiated financial activity on the card unless activity resumes.",
+    "let_op": "Wel per maand, maar voorwaardelijk. Een voorwaardelijke maandpost is geen prijs; hij hoort in de voorwaarden en niet in value."
+   },
+   {
+    "catalogId": "wirex-card-wirex-one",
+    "wat": "uitgifte en bezorging",
+    "waarde": "uitgifte gratis; bezorging EEA 5 EUR (niet volgbaar) of 15 EUR (DHL Express)",
+    "bron": "https://help.wirexapp.com/article/wirex-fees-1379",
+    "datum": "updatedAt 14 december 2023 (createdAt 1 juni 2023)",
+    "citaat": "Card Issuance | Free (EEA) / European Economic Area | DHLWorldMail (not trackable) | 5 EUR"
+   },
+   {
+    "catalogId": "krak-card-kraken",
+    "wat": "rekening en kaarten",
+    "waarde": "rekening openen gratis, rekening sluiten gratis, virtuele kaart gratis, plastic kaart gratis (vervanging EUR 4,99), metalen kaart gratis (vervanging EUR 60)",
+    "bron": "https://krak.app/pricing",
+    "datum": "7 augustus 2026 (updatedAt uit window.__INITIAL_PROPS__ van de pagina zelf)",
+    "citaat": "Card Issuance | Virtual Debit Card | Free / Plastic Debit Card | Free; replacement €4.99 / Metal Debit Card | Free; replacement €60.",
+    "let_op": "Allemaal eenmalig. De EEA-tabel van Krak heeft GEEN rij voor maand- of jaarkosten — dat is een ontbrekende rij, geen uitgesproken nul."
+   },
+   {
+    "catalogId": "bybit-card",
+    "wat": "vervanging fysieke kaart",
+    "waarde": "5 EUR",
+    "bron": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+    "datum": "3 juni 2026",
+    "citaat": "First Issuance: No fee / Replacement: 5 EUR (for physical Bybit Card)"
+   },
+   {
+    "catalogId": "plutus-card",
+    "wat": "kaart bestellen",
+    "waarde": "virtueel gratis, fysiek EUR 9,99 / GBP 9,99",
+    "bron": "https://plutus.it/fees",
+    "datum": "geen datum in het document (opgehaald 22-08-2026)",
+    "citaat": "1.4 Virtual Card Order Fee | Free ... 1.6 Physical Card Order Fee | €9.99 / £9.99"
+   }
+  ]
+ },
+ "doodlopendeWegen": [
+  {
+   "catalogId": "gnosis-pay-card-direct-consumer",
+   "route": "1 (eigen tarievenstuk), plus de Zendesk-API van het helpcentrum",
+   "watGeprobeerd": "Het tarievenstuk 'Understanding Your Card's Fees and Limits' (39533569163284) is gevonden, leesbaar en gedateerd. Daarnaast gelezen: Monavate Cardholder Terms (EEA) 39726634253076, Gnosis Pay Terms of Service 43350967419412, How To Pay for Your Gnosis Card 39407300570772. Verder de Zendesk-zoek-API afgelopen op fee, pricing, subscription, monthly, free, issuance en order — 23 artikelen doorzocht op zinnen met 'monthly fee', 'annual fee' of 'subscription fee'.",
+   "waaromNiet": "Geen enkel gedateerd Gnosis Pay-document noemt een maand- of jaarprijs voor de kaart, en geen enkel document zegt dat die nul is. De afwezigheid van een rij in een tarievenoverzicht is geen uitgesproken nul. Dit blijft dus onbekend, en onbekend is nooit nul. WAT WEL BINNEN IS: eenmalige bedragen, en een tegenspraak tussen twee gedateerde stukken over de bestelkosten (zie eenmaligeKosten)."
+  },
+  {
+   "catalogId": "zeal-card-gnosis-pay-rails",
+   "route": "1, en daarna de verwijzing van de uitgever gevolgd",
+   "watGeprobeerd": "zeal.app opgehaald (HTTP 200, 178 kB). Zeal noemt zelf geen enkel tarief; de enige kostenzin op de pagina gaat over wisselkoersen ('Spend abroad with no exchange fees'). De enige tariefverwijzing op zeal.app gaat naar help.gnosispay.com/en/articles/8663251-fees-and-limits.",
+   "waaromNiet": "Die URL geeft HTTP 404. Het is DEZELFDE dode URL die de Monavate Cardholder Terms vier keer aanhalen met de zin 'You can see all fees applicable to you here.' — de contractuele tariefverwijzing van de kaartuitgever wijst dus naar een pagina die niet meer bestaat, sinds Gnosis Pay van Intercom naar Zendesk is verhuisd. Dat is op zichzelf een bevinding en niet alleen een mislukking: de voorwaarden verwijzen naar een tarievenblad dat niemand meer kan lezen. Wayback zou hier het aangewezen vervolg zijn, maar de CDX-API gaf vier keer HTTP 429 Too Many Requests (één keer direct, drie keer met 20 seconden pauze ertussen). Een 429 is een antwoord; er is niet omheen gewerkt."
+  },
+  {
+   "catalogId": "krak-card-kraken",
+   "route": "1 en 2",
+   "watGeprobeerd": "krak.app/pricing (HTTP 200, 1,1 MB) heeft een volledige EEA-tarieventabel en de eigen payload window.__INITIAL_PROPS__ draagt updatedAt = 7 augustus 2026.",
+   "waaromNiet": "De EEA-tabel heeft rijen voor rekening openen, rekening sluiten, kaartuitgifte, besteden, geldopname, FX en overboekingen — maar geen rij voor maand- of jaarkosten. Alle 'Free' die er staat is eenmalig of per transactie. Dus: geen uitgesproken nul voor accountFee."
+  },
+  {
+   "catalogId": "tria-card",
+   "route": "1",
+   "watGeprobeerd": "tria.so (HTTP 200, 308 kB) en www.tria.so/card (HTTP 404).",
+   "waaromNiet": "Geen tarievenpagina gevonden en geen kostenzin op de landingspagina. Deze aanbieder publiceert voor zover te zien niets over kaartkosten."
+  },
+  {
+   "catalogId": "crypto-com-level-up-plus / crypto-com-level-up-pro",
+   "route": "1, 2 en 3 geprobeerd voor de datum",
+   "watGeprobeerd": "crypto.com/document/<slug> (403), crypto.com/legal (404), crypto.com/eea/level-up (404), crypto.com/nl/level-up (404). In het helpcentrum gezocht op 'Level Up plans pricing', 'subscription price', '3.99', '24.99' en 'Level Up terms and conditions'; de twee gedateerde Level Up-artikelen gelezen.",
+   "waaromNiet": "Het eurobedrag staat alleen op crypto.com/nl/cards en die pagina draagt geen enkele datum. De 403 op /document/<slug> is genoteerd en niet omzeild — daar zou het gedateerde stuk kunnen staan, want het helpcentrum verwijst zelf naar crypto.com/document/us_credit_card."
+  },
+  {
+   "catalogId": "bleap-card (route-aantekening)",
+   "route": "1",
+   "watGeprobeerd": "bleap.finance/legal, /terms, /fees, /pricing, /terms-of-service en /legal/terms geven allemaal HTTP 404 met een SPA-body van ongeveer 492 kB.",
+   "waaromNiet": "Niet doodlopend, maar wel een valstrik: het juiste pad is /legal-agreements, en dat staat alleen in de linklijst van de homepage. Wie de gebruikelijke paden probeert en opgeeft, mist het gedateerde stuk waar deze hele sweep om draaide."
+  },
+  {
+   "catalogId": "nexo-card (route-aantekening)",
+   "route": "1",
+   "watGeprobeerd": "nexo.com/legal (404), support.nexo.com/en/collections/3568836-nexo-card (404). De eerste ophaalpoging van nexo.com/crypto-card liep vast (meer dan 2 minuten, geen antwoord); met --max-time 30 kwam hij binnen op 657 kB.",
+   "waaromNiet": "Geen los tarievenstuk gevonden. De enige kostenzin staat op de productpagina, en die is daarom als bron gebruikt — met de reden erbij."
+  },
+  {
+   "catalogId": "wayback (route-aantekening)",
+   "route": "4",
+   "watGeprobeerd": "http://web.archive.org/cdx/search/cdx?... voor help.gnosispay.com/en/articles/8663251-fees-and-limits, vier keer.",
+   "waaromNiet": "Vier keer HTTP 429 Too Many Requests, ook met 20 seconden pauze tussen de pogingen. Route 4 was deze sessie niet beschikbaar. Dat is geen uitspraak over de route zelf — hij is op 21 augustus wel gebruikt voor Revolut."
+  }
+ ]
+}

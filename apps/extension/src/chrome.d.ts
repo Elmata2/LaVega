@@ -69,6 +69,13 @@ declare namespace chrome {
     const local: {
       get(keys: string[] | string | null): Promise<Items>;
       set(items: Items): Promise<void>;
+      /** Sleutels ECHT weghalen. Staat hier omdat het intrekken van de
+       *  Amex-toestemming het opgeslagene moet WISSEN en niet leegmaken: een
+       *  lege lijst is nog steeds een sleutel, en in chrome://extensions is dat
+       *  het verschil tussen "deze extensie weet niets van mij" en "deze
+       *  extensie heeft een leeg vakje met mijn naam erop". Zie `wisAmex` in
+       *  store.ts. */
+      remove(keys: string[] | string): Promise<void>;
     };
     const onChanged: {
       addListener(cb: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void;

@@ -1,0 +1,84 @@
+<!-- KUNSTMATIG, en dat is hier geen detail maar de belangrijkste zin van dit
+     bestand. De echte, INGELOGDE aanbiedingenpagina van American Express is bij
+     het bouwen nooit gezien: die zit achter zijn account en er is van onze kant
+     geen weg naartoe.
+
+     Wat er WEL aan de echte pagina gemeten is (22 augustus 2026, kale curl,
+     gewone browser-UA, redirects gevolgd):
+       https://global.americanexpress.com/offers/eligible → HTTP 200, 676.522 bytes
+     Daarin staat geen enkele aanbieding. Wat er wel in staat is de schil van de
+     app met de modulelijst: axp-offers-container 2.6.6, axp-offers-hub 2.12.2,
+     axp-offers 6.9.1 — die bouwen de lijst na het inloggen in de browser op.
+
+     Twee dingen uit die meting zijn hier nagebouwd omdat ze WEL waarneembaar
+     waren, en ze bepalen of de lezer een kans maakt:
+       1. `data-module-name="axp-offers-container"` staat er letterlijk in;
+       2. de klassenamen zijn CSS-modules die de betekenisvolle naam vóór de
+          hash bewaren (`_globalHeader_n0dcp_11`, `_navSticky_n0dcp_468`),
+          vandaar `_offerCard_zz11_21` hieronder.
+     De rest — de indeling van een kaart, de plek van de winkelnaam, de
+     bewoording van de einddatum — is met de hand bedacht.
+
+     Er staan met opzet drie dingen in die er NIET uit mogen komen: een naam, een
+     saldo en een kaartnummer. amex.test.ts controleert dat geen van die drie in
+     de uitkomst van collectAanbod terechtkomt. -->
+<!doctype html><html lang="nl"><head><title>Aanbiedingen</title></head>
+<body class="color-surface-bg dls7-us">
+<div id="root">
+  <header class="_globalHeader_n0dcp_11">
+    <span class="_accountName_n0dcp_44">Alexander Steunenberg</span>
+    <span class="_balance_n0dcp_51">Openstaand saldo &euro; 12.345,67</span>
+    <span class="_cardArt_n0dcp_60">Platinum Card &middot;&middot;&middot;&middot; 91007</span>
+  </header>
+
+  <main id="mainContent">
+    <div data-module-name="axp-offers-container" class="_offersHub_zz11_3">
+      <h2 class="_hubTitle_zz11_5">Aanbiedingen voor jou</h2>
+      <ul class="_offerList_zz11_9">
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">JBL</h3>
+          <p class="_offerText_zz11_30">30% korting met 500 Membership Rewards punten</p>
+          <p class="_expiry_zz11_40">Geldig tot en met 31 december 2026</p>
+          <a href="https://www.jbl.nl/audio/hoofdtelefoons">Naar de winkel</a>
+          <button type="button">Toevoegen aan kaart</button>
+        </li>
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">Nike</h3>
+          <p class="_offerText_zz11_30">20% korting op je bestelling</p>
+          <p class="_expiry_zz11_40">Verloopt op 30 november 2026</p>
+          <a href="https://global.americanexpress.com/offers/detail/nike-najaar">Bekijk deze aanbieding</a>
+        </li>
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">bol.com</h3>
+          <p class="_offerText_zz11_30">Besteed &euro; 100 en ontvang &euro; 20 terug</p>
+          <p class="_expiry_zz11_40">Verloopt over 5 dagen</p>
+        </li>
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">Zalando</h3>
+          <p class="_offerText_zz11_30">15% korting</p>
+          <p class="_expiry_zz11_40">Geldig tot 05/03/2026</p>
+          <a href="https://www.zalando.nl/heren-home/">Naar de winkel</a>
+        </li>
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">HEMA</h3>
+          <p class="_offerText_zz11_30">&euro; 10 terug bij besteding van &euro; 50</p>
+          <p class="_expiry_zz11_40">Geldig tot en met 1 juli 2026</p>
+          <a href="https://www.hema.nl/aanbieding">Naar de winkel</a>
+        </li>
+
+        <li class="_offerCard_zz11_21">
+          <h3 class="_merchantName_zz11_25">Rituals</h3>
+          <p class="_offerText_zz11_30">Nieuwe collectie</p>
+          <a href="https://www.rituals.com/nl-nl/">Naar de winkel</a>
+        </li>
+
+      </ul>
+    </div>
+  </main>
+</div>
+</body></html>
