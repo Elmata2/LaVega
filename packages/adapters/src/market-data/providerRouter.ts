@@ -24,6 +24,11 @@ export function cacheState(record: CachedRecord<unknown>, now: number): CacheSta
   return "expired";
 }
 
+/** Lane results carry their problems; a non-empty array means the source fell short. */
+export function hasProblems(value: { problems?: unknown }): boolean {
+  return Array.isArray(value.problems) && value.problems.length > 0;
+}
+
 /** Query providers in priority order. A failed source cannot break its lane. */
 export async function firstProviderResult<Request, Result>(
   providers: readonly Provider<Request, Result>[],
@@ -80,37 +85,4 @@ export function sortCachedRecords<Value>(
     || (priorities[b.sourceKey] ?? 0) - (priorities[a.sourceKey] ?? 0)
     || b.fetchedAt - a.fetchedAt,
   );
-}
-
-export type MarketDataProviders<PriceRequest, Price, FxRequest, Fx, IdentifierRequest, Identifier> = {
-  price: readonly Provider<PriceRequest, Price>[];
-  fx: readonly Provider<FxRequest, Fx>[];
-  identifier: readonly Provider<IdentifierRequest, Identifier>[];
-};
-
-export class MarketDataRouter<PriceRequest, Price, FxRequest, Fx, IdentifierRequest, Identifier> {
-  constructor(
-    private readonly providers: MarketDataProviders<PriceRequest, Price, FxRequest, Fx, IdentifierRequest, Identifier>,
-    private readonly log: (sourceKey: string, error: unknown) => void = () => undefined,
-  ) {}
-
-  getPrice(request: PriceRequest): Promise<ProviderResult<Price> | null> {
-    return firstProviderResult(this.providers.price, request, this.log, (value) => {
-      const problems = (value as { problems?: unknown }).problems;
-      return Array.isArray(problems) && problems.length > 0;
-    }, (problems) => ({ bars: [], problems } as Price));
-  }
-
-  getFx(request: FxRequest): Promise<ProviderResult<Fx> | null> {
-    return firstProviderResult(this.providers.fx, request, this.log, resultHasProblems, (problems) => ({ rate: 0, problems } as Fx));
-  }
-
-  mapIdentifier(request: IdentifierRequest): Promise<ProviderResult<Identifier> | null> {
-    return firstProviderResult(this.providers.identifier, request, this.log, resultHasProblems, (problems) => ({ match: { isin: (request as { isin?: string }).isin ?? "", ticker: "" }, problems } as Identifier));
-  }
-}
-
-function resultHasProblems(value: unknown): boolean {
-  const problems = (value as { problems?: unknown }).problems;
-  return Array.isArray(problems) && problems.length > 0;
 }
