@@ -27,9 +27,9 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
 
   // ponytail: process-local parse cache; external file edits need a restart.
   let cache: T | null = null;
+  let inflight: Promise<T> | null = null;
 
-  const read = async (): Promise<T> => {
-    if (cache !== null) return cache;
+  const doRead = async (): Promise<T> => {
     let contents: string;
     try {
       contents = await readFile(filePath, "utf8");
@@ -39,6 +39,16 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
     }
     cache = options.validate(contents);
     return cache;
+  };
+
+  // Single-flight: concurrent callers share one read instead of each loading
+  // the whole file (N x fileSize memory spike on large state files).
+  const read = (): Promise<T> => {
+    if (cache !== null) return Promise.resolve(cache);
+    if (!inflight) {
+      inflight = doRead().finally(() => { inflight = null; });
+    }
+    return inflight;
   };
 
   const queue = <R>(operation: () => Promise<R>): Promise<R> => {
