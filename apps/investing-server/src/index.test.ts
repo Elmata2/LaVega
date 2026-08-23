@@ -173,13 +173,15 @@ test("runtime dashboard separates selected symbols and returns unknown detail wi
   expect(unknownData.position).toBeNull();
 });
 
-test("problem result cannot overwrite last successful broker snapshot", () => {
+test("a partial result with fresh broker data updates the snapshot, a null result does not", () => {
   const cache = createRuntimeBrokerDataCache();
   const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: result("AAPL") }], problems: [] });
   cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { ...result("MSFT"), problems: ["partial sync"] } }], problems: ["trading212: partial sync"] });
 
-  expect(cache.read().positions[0]?.symbol).toBe("AAPL");
+  expect(cache.read().positions[0]?.symbol).toBe("MSFT");
+  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: "2026-08-19T14:05:00.000Z", result: null }], problems: ["trading212: down"] });
+  expect(cache.read().positions[0]?.symbol).toBe("MSFT");
 });
 
 test("runtime unlocks persisted broker credentials after restart", async () => {
