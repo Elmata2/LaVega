@@ -1,9 +1,11 @@
 import { Hono } from "hono";
-import { emptyInvestingDashboard, LOCAL_TENANT_ID, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
+import { emptyInvestingDashboard, LOCAL_TENANT_ID, buildSectorExposure, computePortfolioMetrics, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type YahooPriceRequest } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
+import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
+import { createInMemorySectorProfileStore, type SectorProfileStore } from "./fileSectorProfileStore.js";
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase: string };
@@ -18,7 +20,7 @@ export type BrokerSyncProgress = {
   message: string | null;
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -31,6 +33,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const benchmarkSelectionStore = dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const benchmarkSearch = dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore = dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
+  const sectorProfile = dependencies.sectorProfile ?? fetchYahooSectorProfile;
+  const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   const priceProviders = [provider];
   const fxProviders = [fxProvider];
   const identifierProviders = [identifierProvider];
@@ -58,6 +62,30 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (await hasYahooConsent()) return priceOrchestrator.run("local");
   };
   investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
+  investingApp.get("/api/investing/summary", async (c) => {
+    try {
+      const data = await dashboardReader({});
+      const priced = data.positions.filter((position): position is typeof position & { marketValue: number } => position.marketValue !== null && position.marketValue > 0);
+      const totalValue = priced.reduce((sum, position) => sum + position.marketValue, 0);
+      const topPositions = [...priced].sort((left, right) => right.marketValue - left.marketValue).slice(0, 5).map((position) => ({ symbol: position.symbol, weight: totalValue > 0 ? position.marketValue / totalValue : 0 }));
+      const sectorBySymbol = new Map<string, string>();
+      for (const position of priced) {
+        let profile = await sectorStore.get(position.symbol);
+        if (!profile) {
+          profile = await sectorProfile(position.symbol);
+          if (profile) await sectorStore.set(position.symbol, profile);
+        }
+        sectorBySymbol.set(position.symbol.toUpperCase(), profile?.sector ?? "Unknown");
+      }
+      return c.json({
+        metrics: computePortfolioMetrics({ valuePoints: data.portfolio.All.map((point) => ({ date: point.date, value: point.value })), benchmarkPoints: data.benchmarks[0]?.points }),
+        sectors: buildSectorExposure(data.positions, sectorBySymbol),
+        topPositions,
+      });
+    } catch {
+      return c.json({ problems: ["Portefeuillesamenvatting kon niet worden samengesteld"] }, 503);
+    }
+  });
   investingApp.get("/api/investing/dashboard", async (c) => {
     try {
       return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));

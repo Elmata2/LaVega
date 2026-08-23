@@ -1,5 +1,7 @@
-import { app } from "./app.js";
-import { createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "./app.js";
+import { randomUUID } from "node:crypto";
+import { app, createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "./app.js";
+import { createFileAgentRunStore, type AgentRunRecord, type AgentRunStore } from "./fileAgentRunStore.js";
+import { createPortfolioAgentTools, runPortfolioAgent } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
 import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
@@ -15,6 +17,7 @@ import {
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
 import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
+import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
 import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
 import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
 
@@ -68,7 +71,15 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore };
+export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore; agentRunStore?: AgentRunStore; runAgent?: typeof runPortfolioAgent };
+
+export type RuntimeApp = ReturnType<typeof createApp> & { runPortfolioAgentOnce: () => Promise<AgentRunRecord> };
+
+const PORTFOLIO_AGENT_PROMPT = [
+  "You are the portfolio health assistant of a personal investing dashboard.",
+  "Use the read-only tools to look at the current positions, prices and total portfolio value, then summarize the portfolio's health in at most five sentences:",
+  "total value, largest position, and anything that looks off such as missing prices or empty broker data.",
+].join(" ");
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
@@ -100,7 +111,9 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
   return {
     apply(result: ScheduledSyncResult) {
       for (const outcome of result.outcomes) {
-        if (outcome.status !== "synced" || outcome.result === null) continue;
+        // Partial results with problems still carry fresh broker data; discarding
+        // them left the vault stale while the UI showed only the problem.
+        if (outcome.result === null) continue;
         positionsByBroker.set(outcome.broker, outcome.result.positions);
         tradesByBroker.set(outcome.broker, outcome.result.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
         dividendsByBroker.set(outcome.broker, outcome.result.dividends ?? []);
@@ -108,7 +121,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         cashFlowsByBroker.set(outcome.broker, outcome.result.cashFlows ?? []);
       }
       problems = result.problems;
-      if (result.outcomes.some((outcome) => outcome.status === "synced" && outcome.result !== null)) dataVersion += 1;
+      if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;
     },
     read() {
       return {
@@ -228,8 +241,45 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     },
   };
   const onPriceDataChanged = () => { priceDataVersion += 1; };
-  if (!dsn) return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged });
+  const agentRunStore = options.agentRunStore ?? createFileAgentRunStore();
+  let agentInFlight: Promise<AgentRunRecord> | null = null;
+  const runPortfolioAgentOnce = async (): Promise<AgentRunRecord> => {
+    if (agentInFlight) return agentInFlight;
+    const record: AgentRunRecord = { id: randomUUID(), startedAt: new Date().toISOString(), finishedAt: null, status: "running", summary: null, error: null };
+    void agentRunStore.put(record);
+    const run = (async () => {
+      try {
+        if ((await credentials.status()) === "unlocked") await restoreBrokerData();
+        const summary = await (options.runAgent ?? runPortfolioAgent)({ prompt: PORTFOLIO_AGENT_PROMPT, tools: createPortfolioAgentTools({ readBrokerData: () => brokerData.read(), priceStore }) });
+        const done: AgentRunRecord = { ...record, finishedAt: new Date().toISOString(), status: "done", summary };
+        await agentRunStore.put(done);
+        return done;
+      } catch (error) {
+        const failed: AgentRunRecord = { ...record, finishedAt: new Date().toISOString(), status: "error", error: error instanceof Error ? error.message : "Portfolio agent run failed" };
+        await agentRunStore.put(failed);
+        throw error;
+      }
+    })();
+    agentInFlight = run;
+    try {
+      return await run;
+    } finally {
+      if (agentInFlight === run) agentInFlight = null;
+    }
+  };
+  const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
+    honoApp.post("/api/agents/portfolio/run", async (c) => {
+      try {
+        return c.json({ summary: (await runPortfolioAgentOnce()).summary });
+      } catch (error) {
+        return c.json({ problems: [error instanceof Error ? error.message : "Portfolio agent run failed"] }, 502);
+      }
+    });
+    return Object.assign(honoApp, { runPortfolioAgentOnce });
+  };
+  const sectorDependencies = { sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()) };
+  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged }));
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return createApp({ brokerSync, ...credentialDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) });
+  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) }));
 }
