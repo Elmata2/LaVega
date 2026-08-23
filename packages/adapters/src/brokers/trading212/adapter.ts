@@ -185,16 +185,12 @@ function mapCashBalance(raw: Trading212Order, entity: string, asOf: string): { b
   const cash = object(raw.cash, "account summary cash");
   const currency = string(raw.currency, "account summary currency");
   const available = number(cash.availableToTrade, "account summary available cash");
-  const inPies = nullableNumber(cash.inPies) ?? 0;
-  const reserved = nullableNumber(cash.reservedForOrders) ?? 0;
-  if (inPies !== 0 || reserved !== 0) {
-    return {
-      balance: null,
-      problems: ["Trading 212 account cash has non-zero inPies or reservedForOrders; documented fields do not define a safe total cash balance"],
-    };
-  }
+  // Live verification (#88): accounts with pie investments always report a
+  // non-zero inPies, and pending orders set reservedForOrders. Both are cash
+  // the owner still holds, so they count toward the balance instead of
+  // discarding the record. pieCash on /account/cash is the same pie money.
   return {
-    balance: { tenantId: LOCAL_TENANT_ID, entity, broker: "trading212", currency, amount: available, asOf },
+    balance: { tenantId: LOCAL_TENANT_ID, entity, broker: "trading212", currency, amount: available + (nullableNumber(cash.inPies) ?? 0) + (nullableNumber(cash.reservedForOrders) ?? 0), asOf },
     problems: [],
   };
 }
@@ -348,7 +344,7 @@ function result(
 async function accountSummary(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Order> {
   const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 account-summary request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json();
+  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Trading 212 account-summary response is malformed");
   }
@@ -358,7 +354,7 @@ async function accountSummary(url: string, config: Trading212Config, limiter: Ra
 async function historyPage(url: string, label: "transaction" | "dividend", config: Trading212Config, limiter: RateLimiter): Promise<Trading212Page> {
   const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 ${label}-history request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json();
+  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
     throw new Error(`Trading 212 ${label}-history response is malformed`);
   }
@@ -380,7 +376,7 @@ async function page(url: string, config: Trading212Config, limiter: RateLimiter)
   // window between cursors, so sync stays one sequential request per cursor.
   const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json();
+  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
     throw new Error("Trading 212 order-history response is malformed");
   }
@@ -423,7 +419,7 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
 async function positions(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Positions> {
   const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json();
+  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
   // The published schema returns a bare array. The envelope forms are kept as a
   // tolerated fallback; everything else becomes a visible problem.
   const items = Array.isArray(payload)

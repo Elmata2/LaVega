@@ -297,12 +297,12 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
   expect(paths).toContain("/cash-page-2?cursor=opaque");
 });
 
-test("surfaces ambiguous transfers, unknown kinds, malformed rows, and unsafe summary cash", async () => {
+test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) return json(response, 200, { items: [] });
     if (isPositions(request)) return json(response, 200, []);
     if (request.url === "/api/v0/equity/account/summary") {
-      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 5, reservedForOrders: 0 } });
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 5, reservedForOrders: 2 } });
     }
     if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
       return json(response, 200, { items: [
@@ -316,10 +316,11 @@ test("surfaces ambiguous transfers, unknown kinds, malformed rows, and unsafe su
 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
 
-  expect(result.cashBalances).toEqual([]);
+  expect(result.cashBalances).toEqual([
+    expect.objectContaining({ broker: "trading212", currency: "EUR", amount: 107 }),
+  ]);
   expect(result.cashFlows).toMatchObject([{ brokerFlowId: "future-1", amount: -4, kind: "other" }]);
   expect(result.problems).toEqual(expect.arrayContaining([
-    expect.stringContaining("do not define a safe total cash balance"),
     "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
     "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
     "Trading 212 transaction amount is missing or invalid",
