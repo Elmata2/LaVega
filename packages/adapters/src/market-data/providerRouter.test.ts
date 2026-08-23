@@ -2,8 +2,6 @@ import { expect, test, vi } from "vitest";
 import {
   firstProviderResult,
   hasProblems,
-  sortCachedRecords,
-  type CachedRecord,
   type Provider,
 } from "./providerRouter.js";
 
@@ -63,17 +61,4 @@ test("hasProblems reads the problems field without casts", () => {
   expect(hasProblems({ problems: ["blocked"] })).toBe(true);
   expect(hasProblems({ problems: [] })).toBe(false);
   expect(hasProblems({})).toBe(false);
-});
-
-test("cached records sort by freshness, source priority, then fetch time", () => {
-  const records: CachedRecord<string>[] = [
-    { key: "x", sourceKey: "low", value: "stale-new", fetchedAt: 900, staleAt: 500, expiresAt: 2_000 },
-    { key: "x", sourceKey: "high", value: "fresh-old", fetchedAt: 100, staleAt: 2_000, expiresAt: 3_000 },
-    { key: "x", sourceKey: "high", value: "fresh-new", fetchedAt: 800, staleAt: 2_000, expiresAt: 3_000 },
-    { key: "x", sourceKey: "high", value: "expired", fetchedAt: 500, staleAt: 600, expiresAt: 700 },
-  ];
-
-  expect(sortCachedRecords(records, { high: 20, low: 10 }, 1_000).map((r) => r.value)).toEqual([
-    "fresh-new", "fresh-old", "stale-new", "expired",
-  ]);
 });

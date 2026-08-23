@@ -19,6 +19,6 @@ export function createFrankfurterFxProvider(input: { client?: FxHttpClient; now?
   };
   return { sourceKey: "frankfurter", priority: 10, getLatestRate, async get(request) {
     try { return { rate: crossRate(request.from, request.to, await loadRate()), problems: [] }; }
-    catch (error) { const message = error instanceof Error ? error.message : String(error); try { return { rate: crossRate(request.from, request.to, FX_RATE_FALLBACK), problems: [`Frankfurter FX request failed: ${message}`] }; } catch { return { rate: 0, problems: [`Frankfurter has no rate for ${request.from} to ${request.to}`] }; } }
+    catch (error) { const message = error instanceof Error ? error.message : String(error); try { return { rate: crossRate(request.from, request.to, FX_RATE_FALLBACK), problems: [`Frankfurter FX request failed: ${message}`] }; } catch { return null; } }
   } };
 }

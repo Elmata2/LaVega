@@ -1,11 +1,19 @@
+import { mkdtempSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
+import { registerPriceStoreContract } from "@lavega/adapters/src/prices/priceStore.contract.js";
 import { createFilePriceStore, runtimePriceStoreFile } from "./filePriceStore.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
+
+registerPriceStoreContract("file", () => {
+  const directory = mkdtempSync(join(tmpdir(), "lavega-price-store-contract-"));
+  temporaryDirectories.push(directory);
+  return createFilePriceStore(join(directory, "prices.json"));
+});
 
 test("runtime price store file prefers INVESTING_PRICE_STORE_FILE", () => {
   const previous = process.env.INVESTING_PRICE_STORE_FILE;
