@@ -847,3 +847,58 @@ describe("merchantTallies — wat de detector zag, op zijn eigen grondslag", () 
     expect(t[0].merchant).toBe("");
   });
 });
+
+/* UIT ZIJN EIGEN DATA, 24 augustus. Hij stuurde de meettabel terug en daar stonden
+ * twee dingen in die geen van beide klopten. */
+describe("wat zijn eigen afschrift blootlegde", () => {
+  const tx = (cp: string, date: string, amount: number): Tx => ({
+    id: `${cp}-${date}`, accountKey: "A", date, amount, currency: "EUR",
+    counterparty: cp, description: "", category: "", manual: false,
+  });
+
+  it("Simyo: twaalf keer, ritme 29 dagen, spreiding 0,36 — en tóch gevonden", () => {
+    /* DE MEETWAARDEN KOMEN UIT ZIJN TABEL: SIMYO, 12 keer, EUR 190,55, 29 dg,
+     * spreiding 0,36 tegen een grens van 0,35. Het abonnement is EUR 11,89 met
+     * drie maanden waarin er een bundel bij kwam.
+     *
+     * Waarom het faalde is subtieler dan de grens: de splitsing per bedrag mocht
+     * alleen winnen als ze STRIKT MEER afschrijvingen verklaarde, en dat was 12
+     * tegen 12. Dus won de hele winkel — die vervolgens zelf op de bedragspreiding
+     * sneuvelde. De lezing die het wél haalde verloor van een lezing die daarna
+     * werd afgekeurd. */
+    const bedragen = [11.89, 11.89, 27.85, 11.89, 11.89, 11.89, 27.85, 11.89, 11.89, 27.86, 11.89, 11.89];
+    const rows = bedragen.map((b, i) => {
+      const d = new Date(Date.UTC(2025, 8, 14 + Math.round(i * 29.5)));
+      return tx("SIMYO", d.toISOString().slice(0, 10), -b);
+    });
+    const found = detectSubscriptions(rows);
+    expect(found).toHaveLength(1);
+    expect(found[0].monthlyCents).toBe(1189);
+    expect(found[0].occurrences).toBe(9);
+    expect(found[0].cadenceDays).toBe(30);
+  });
+
+  it("een restaurant met wisselende rekeningen komt er nog steeds niet in", () => {
+    // De tegenproef bij de vorige: de grendel is verplaatst, niet versoepeld.
+    const rows = [
+      tx("Restaurant De Kade", "2026-01-10", -42.5),
+      tx("Restaurant De Kade", "2026-02-11", -18.9),
+      tx("Restaurant De Kade", "2026-03-09", -71),
+      tx("Restaurant De Kade", "2026-04-12", -33.25),
+    ];
+    expect(detectSubscriptions(rows)).toEqual([]);
+  });
+
+  it("een naam met een filiaalnummer eraan vast houdt zijn naam", () => {
+    /* "MONOP4767" gaf een LEGE sleutel: negen afschrijvingen, EUR 763,54, en het
+     * scherm meldde "geen naam op de regel" terwijl de naam er staat. Met een
+     * spatie ertussen ging het al goed, dus het hing op de schrijfwijze van de
+     * betaalautomaat. */
+    expect(merchantKey("monop4767")).toBe("monop");
+    expect(merchantKey("monop 4767")).toBe("monop");
+    // En wat NIET mag meeveranderen: namen waar het cijfer deel van de naam is.
+    expect(merchantKey("n26")).toBe("n26");
+    // Een kaal klant- of factuurnummer blijft ruis.
+    expect(merchantKey("m0123456")).toBe("");
+  });
+});

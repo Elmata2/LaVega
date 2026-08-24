@@ -151,6 +151,21 @@ export function merchantKey(counterparty: string): string {
   for (const t of h.replace(/[^a-z0-9]+/g, " ").split(" ")) {
     if (t.length < 2) continue;                     // initials, "b" + "v" of b.v.
     if (/^\d+$/.test(t)) continue;                  // invoice / customer number
+    /* EEN NAAM MET EEN FILIAALNUMMER ERAAN VAST verliest alleen het nummer, niet
+     * zichzelf. Gemeten in zijn eigen data (24 augustus): "MONOP4767" leverde een
+     * LEGE sleutel op — negen afschrijvingen, EUR 763,54, en het scherm meldde
+     * "geen naam op de regel" terwijl de naam er gewoon staat. Met een spatie
+     * ertussen ("MONOP 4767") ging het al goed, dus het hing puur op de schrijfwijze
+     * van de betaalautomaat.
+     *
+     * Minstens DRIE letters en minstens TWEE cijfers, en in die volgorde. Dat laat
+     * "n26" met rust (twee letters) en "212" ook (geen letters vooraan) — namen
+     * waar het cijfer deel van de naam IS. */
+    const gesplitst = /^([a-z]{3,})\d{2,}$/.exec(t);
+    if (gesplitst) {
+      if (!NAME_NOISE_TOKENS.has(gesplitst[1])) kept.push(gesplitst[1]);
+      continue;
+    }
     if (/\d/.test(t) && t.length >= 4) continue;     // "m0123456", "20260115"
     if (NAME_NOISE_TOKENS.has(t)) continue;
     kept.push(t);
@@ -596,10 +611,47 @@ export type MerchantStreams = {
  *  `sortedDates` must be ascending and `amountsCents` positive and aligned to
  *  it. Returns no streams at all when the merchant looks like a shop — see the
  *  budget in the comment above; it is a whole-merchant veto on purpose. */
-export function fitMerchantStreams(sortedDates: string[], amountsCents: number[]): MerchantStreams {
+/** Houden de bedragen van deze leden genoeg verband om samen ÉÉN stroom te zijn?
+ *
+ *  Dezelfde toets die `detectSubscriptions` verderop doet, maar hier al nodig —
+ *  zie de uitleg bij `useSplit` hieronder. De drempel wordt meegegeven zodat er
+ *  geen tweede getal ontstaat dat op een dag afwijkt van het eerste. */
+function amountsCoherent(members: number[], amountsCents: number[], maxCv: number): boolean {
+  if (members.length < 2) return true;
+  const xs = members.map((i) => amountsCents[i]);
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+  if (mean <= 0) return false;
+  const sd = Math.sqrt(xs.reduce((a, c) => a + (c - mean) ** 2, 0) / xs.length);
+  return sd / mean <= maxCv;
+}
+
+export function fitMerchantStreams(
+  sortedDates: string[],
+  amountsCents: number[],
+  maxAmountCv = 0.35,
+): MerchantStreams {
   const days = sortedDates.map(dayNumber);
   const whole = fitCadenceDays(days);
-  const wholeClaimed = whole === null ? 0 : whole.members.length;
+
+  /* WAT "VERKLAREN" BETEKENT, en hier zat de fout die zijn Simyo twaalf keer op
+   * rij onzichtbaar hield.
+   *
+   * Zijn eigen cijfers: 12 afschrijvingen, ritme 29 dagen, bedragspreiding 0,36
+   * tegen een grens van 0,35. Negen keer het abonnement en drie keer met een
+   * bundel erbij — twee keurige maandstromen. De splitsing verklaarde 9 + 3 = 12
+   * en de hele winkel ook 12, dus "strikt meer" was onwaar en de hele winkel won.
+   * Waarna diezelfde hele winkel verderop op de bedragspreiding sneuvelde en er
+   * NIETS overbleef. De lezing die het wél zou halen verloor van een lezing die
+   * daarna zelf werd afgekeurd.
+   *
+   * Een stroom waarvan de bedragen niet bij elkaar horen verklaart die
+   * afschrijvingen dus niet, en telt hier niet mee. De grendel zelf blijft staan:
+   * een splitsing moet nog steeds strikt meer verklaren, alleen meet dat nu het
+   * juiste. Er komt hierdoor niets nieuws binnen dat niet ook op eigen kracht door
+   * de bedragstoets komt — een restaurant met wisselende rekeningen faalt in
+   * beide lezingen. */
+  const wholeClaimed =
+    whole === null || !amountsCoherent(whole.members, amountsCents, maxAmountCv) ? 0 : whole.members.length;
 
   const split: CadenceFit[] = [];
   let splitClaimed = 0;
@@ -608,7 +660,9 @@ export function fitMerchantStreams(sortedDates: string[], amountsCents: number[]
     if (fit === null) continue;
     // Back to the merchant's own indices; everything downstream reads rows, not
     // amount groups.
-    split.push({ ...fit, members: fit.members.map((i) => idx[i]) });
+    const members = fit.members.map((i) => idx[i]);
+    if (!amountsCoherent(members, amountsCents, maxAmountCv)) continue;
+    split.push({ ...fit, members });
     splitClaimed += fit.members.length;
   }
 
@@ -868,7 +922,7 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
      * not at every row the merchant produced, so the price is read off the
      * stream and `occurrences` counts what was actually billed on the cadence. */
     const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts);
+    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts, maxAmountCv);
 
     for (const fit of streams) {
       const band = fit.band;
