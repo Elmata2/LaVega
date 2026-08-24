@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21",
+  "generatedAt": "2026-08-24",
   "entries": [
     {
       "id": "ing-betaalpas",
@@ -64,7 +64,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
@@ -88,7 +88,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
@@ -121,7 +121,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
@@ -154,7 +154,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-08-20",
@@ -178,7 +178,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-08-20",
@@ -186,7 +186,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 2.0,
+          "value": 2,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
@@ -211,7 +211,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260420213121id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard/visa-merchant-offer-program",
           "checkedAt": "2026-08-20",
@@ -235,7 +235,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
           "checkedAt": "2026-08-20",
@@ -259,7 +259,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
           "checkedAt": "2026-08-20",
@@ -292,7 +292,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -316,7 +316,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -349,7 +349,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -373,7 +373,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -422,7 +422,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.knab.nl/particulier/betalen/creditcard",
           "checkedAt": "2026-08-20",
@@ -462,7 +462,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -486,7 +486,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -510,7 +510,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -534,7 +534,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -558,7 +558,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -603,7 +603,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -627,7 +627,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -651,7 +651,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -675,7 +675,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -745,7 +745,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -769,7 +769,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -793,7 +793,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -817,7 +817,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -983,7 +983,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
           "checkedAt": "2024-07-01",
@@ -1024,7 +1024,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 0.0,
+          "value": 0,
           "period": "jaar",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1049,7 +1049,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
           "checkedAt": "2026-08-20",
@@ -1082,7 +1082,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
           "checkedAt": "2026-08-20",
@@ -1090,7 +1090,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 20.0,
+          "value": 20,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1115,7 +1115,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
           "checkedAt": "2026-08-20",
@@ -1147,7 +1147,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 3.0,
+          "value": 3,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1205,7 +1205,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/",
           "checkedAt": "2026-08-20",
@@ -1246,7 +1246,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 55.0,
+          "value": 55,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1271,7 +1271,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/cards/business-entry-card/",
           "checkedAt": "2026-08-20",
@@ -1295,7 +1295,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/green/",
           "checkedAt": "2026-08-20",
@@ -1319,7 +1319,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/gold/",
           "checkedAt": "2026-08-20",
@@ -1327,7 +1327,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 270.0,
+          "value": 270,
           "period": "jaar",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/zakelijk/kaarten/business-gold-card/pdf/xsell-26Q2-actievoorwaarden-business-gold-card.pdf",
@@ -1344,7 +1344,7 @@
       "kind": "creditcard",
       "fields": {
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-card/",
           "checkedAt": "2026-08-20",
@@ -1368,7 +1368,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-gold-card/",
           "checkedAt": "2026-08-20",
@@ -1392,7 +1392,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-klm-card/",
           "checkedAt": "2026-08-20",
@@ -1416,7 +1416,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
           "checkedAt": "2026-08-20",
@@ -1449,7 +1449,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold",
           "checkedAt": "2026-08-20",
@@ -1482,7 +1482,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
           "checkedAt": "2026-08-20",
@@ -1490,7 +1490,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 175.0,
+          "value": 175,
           "period": "jaar",
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/tips/wat-kost-een-creditcard",
@@ -1515,7 +1515,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
           "checkedAt": "2026-08-20",
@@ -1548,7 +1548,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
           "checkedAt": "2026-08-20",
@@ -1581,7 +1581,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-gold",
           "checkedAt": "2026-08-20",
@@ -1589,7 +1589,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 45.0,
+          "value": 45,
           "period": "jaar",
           "route": "wayback",
           "sourceUrl": "http://web.archive.org/web/20260210001645id_/https://www.icscards.nl/info/ics-mastercard-gold-jaarbijdrage",
@@ -1614,7 +1614,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
           "checkedAt": "2026-08-20",
@@ -1622,7 +1622,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 225.0,
+          "value": 225,
           "period": "jaar",
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/nieuwe-reisservices-en-jaarbijdrage-mastercard-black",
@@ -1711,7 +1711,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
           "checkedAt": "2026-08-20",
@@ -1744,7 +1744,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
           "checkedAt": "2026-08-20",
@@ -1777,7 +1777,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
           "checkedAt": "2026-08-20",
