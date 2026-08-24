@@ -33,15 +33,15 @@
 import type { Ranking, Row } from "./rank.js";
 import type { Reading } from "./read.js";
 import type { PuntenRij } from "./points.js";
-import { AMEX_MATCH, type AanbodToestand, type AanbodUitkomst, type Aanbieding } from "./amex.js";
+import type { AanbodToestand, AanbodUitkomst, Aanbieding, Bron } from "./aanbod-kern.js";
 import type { CheckoutCard } from "./types.js";
 import { reasonText } from "./read.js";
 import {
   aanbodRegel,
   aanbodBron,
   aanbodToestandRegel,
-  AANBOD_KOP_WINKEL,
-  AANBOD_KOP_LIJST,
+  aanbodKopWinkel,
+  aanbodKopLijst,
   rowLine,
   sourceLine,
   unknownLine,
@@ -182,7 +182,7 @@ export function puntenBlok(rijen: readonly PuntenRij[], amountCents: number | nu
  *  In alle ANDERE gevallen staat er wél iets, ook als er niets te tonen valt:
  *  "voor deze winkel staat er geen aanbieding in wat we op 12 augustus lazen" is
  *  een antwoord, en een leeg blok is dat niet. */
-export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string): PaneelAanbod {
+export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string, bron: Bron): PaneelAanbod {
   if (uitkomst.soort === "uit") return { kop: "", regels: [], toestand: "" };
 
   if (uitkomst.soort === "gevonden") {
@@ -190,16 +190,16 @@ export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string): PaneelAanbod
      * verlopen aanbieding de plek geven van een bruikbare. */
     const regels = [...uitkomst.geldig, ...uitkomst.verlopen].map((a) => ({
       titel: a.winkel,
-      regel: aanbodRegel(a, asOf),
-      bron: aanbodBron(a, asOf),
+      regel: aanbodRegel(a, asOf, bron),
+      bron: aanbodBron(a, asOf, bron),
     }));
-    return { kop: AANBOD_KOP_WINKEL, regels, toestand: "" };
+    return { kop: aanbodKopWinkel(bron), regels, toestand: "" };
   }
 
   return {
-    kop: AANBOD_KOP_WINKEL,
+    kop: aanbodKopWinkel(bron),
     regels: [],
-    toestand: aanbodToestandRegel(uitkomst, AMEX_MATCH),
+    toestand: aanbodToestandRegel(uitkomst, bron),
   };
 }
 
@@ -224,7 +224,7 @@ export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string): PaneelAanbod
  *  einddatum eerst — een deadline is wat een aanbieding dringend maakt. Wat geen
  *  einddatum draagt komt onderaan die groep; dat is geen "onbeperkt geldig",
  *  alleen "we weten het niet", en dat staat ook in de regel zelf. */
-export function aanbodLijst(toestand: AanbodToestand, asOf: string): PaneelAanbod {
+export function aanbodLijst(toestand: AanbodToestand, asOf: string, bron: Bron): PaneelAanbod {
   if (!toestand.aan) return { kop: "", regels: [], toestand: "" };
 
   if (toestand.aanbiedingen.length === 0) {
@@ -233,7 +233,7 @@ export function aanbodLijst(toestand: AanbodToestand, asOf: string): PaneelAanbo
       : toestand.lezing.uitkomst === "gelezen"
         ? { soort: "geen-voor-deze-winkel", op: toestand.lezing.op, dagen: 0, totaal: 0 }
         : { soort: "lezing-mislukt", lezing: toestand.lezing };
-    return { kop: AANBOD_KOP_LIJST, regels: [], toestand: aanbodToestandRegel(uitkomst, AMEX_MATCH) };
+    return { kop: aanbodKopLijst(bron), regels: [], toestand: aanbodToestandRegel(uitkomst, bron) };
   }
 
   const verlopen = (a: Aanbieding): boolean => a.tot !== null && a.tot < asOf;
@@ -245,11 +245,11 @@ export function aanbodLijst(toestand: AanbodToestand, asOf: string): PaneelAanbo
   });
 
   return {
-    kop: AANBOD_KOP_LIJST,
+    kop: aanbodKopLijst(bron),
     regels: gesorteerd.map((a) => ({
       titel: a.winkel,
-      regel: aanbodRegel(a, asOf),
-      bron: aanbodBron(a, asOf),
+      regel: aanbodRegel(a, asOf, bron),
+      bron: aanbodBron(a, asOf, bron),
     })),
     toestand: "",
   };
@@ -269,15 +269,19 @@ export type PanelInput = {
    *  peildatum zou de leeftijd van een aanbieding niet kunnen noemen, en dat is
    *  het enige waarop hij haar kan beoordelen. Weglaten betekent: de schakelaar
    *  staat uit, en dan staat er niets over aanbiedingen op het scherm. */
-  aanbod?: { uitkomst: AanbodUitkomst; asOf: string };
+  aanbod?: { uitkomsten: readonly { bron: Bron; uitkomst: AanbodUitkomst }[]; asOf: string };
   caps?: Caps;
 };
 
 export function buildPanel(input: PanelInput): PaneelAntwoord {
   const voet = footer(input.cards);
-  const aanbod = input.aanbod
-    ? aanbodBlok(input.aanbod.uitkomst, input.aanbod.asOf)
-    : aanbodBlok({ soort: "uit" }, "");
+  /* Eén blok per bron, en de bronnen die zwijgen vallen eruit. `kop` leeg
+   * betekent bij `aanbodBlok` "helemaal niets tonen" — dat is de toestand waarin
+   * hij die schakelaar niet heeft aangezet, en dan hoort er aan een kassa geen
+   * lege kop te staan en al helemaal geen uitnodiging. */
+  const aanbod: PaneelAanbod[] = (input.aanbod?.uitkomsten ?? [])
+    .map((u) => aanbodBlok(u.uitkomst, input.aanbod!.asOf, u.bron))
+    .filter((b) => b.kop !== "");
   /* De munt van de LEZING, niet die van de rangschikking: de voetnoot van het
    * puntenblok gaat over de winkel waar hij nu staat. Kon er niets gelezen
    * worden, dan weten we de munt niet en blijft die zin bij het algemene deel. */

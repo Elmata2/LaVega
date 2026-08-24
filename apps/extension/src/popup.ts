@@ -19,7 +19,14 @@ import { rankCheckout } from "./rank.js";
 import { panelRows, POPUP_CAPS, footer, puntenBlok, aanbodLijst } from "./panel.js";
 import { headline, aanbodGrensRegel } from "./lines.js";
 import { euro } from "./money.js";
-import { getHeldIds, getPointsBalances, getAmexAan, getAanbiedingen, getAmexLezing } from "./store.js";
+import { BRONNEN } from "./bronnen.js";
+import {
+  getHeldIds,
+  getPointsBalances,
+  getBronAan,
+  getBronAanbiedingen,
+  getBronLezing,
+} from "./store.js";
 import { pointsCoverage } from "./points.js";
 import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -118,11 +125,17 @@ async function bereken(): Promise<void> {
    * de selectie voor één winkel — dit venster weet niet op welke pagina hij
    * staat en vraagt dat ook niet, dus er wordt niets aan een winkel gekoppeld.
    * Zie `aanbodLijst` voor waarom dat geen inconsistentie is met het paneel. */
-  const aanbod = aanbodLijst(
-    { aan: await getAmexAan(), lezing: await getAmexLezing(), aanbiedingen: await getAanbiedingen() },
-    asOf,
-  );
-  if (aanbod.kop) {
+  for (const bron of BRONNEN) {
+    const aanbod = aanbodLijst(
+      {
+        aan: await getBronAan(bron),
+        lezing: await getBronLezing(bron),
+        aanbiedingen: await getBronAanbiedingen(bron),
+      },
+      asOf,
+      bron,
+    );
+    if (!aanbod.kop) continue;
     kaart.appendChild(el("div", "groep", aanbod.kop));
     if (aanbod.regels.length === 0) {
       kaart.appendChild(el("div", "noot", aanbod.toestand));
@@ -137,8 +150,12 @@ async function bereken(): Promise<void> {
     }
     /* De grensregel staat hier wél en in het paneel niet. Dit venster opent hij
      * zelf en er is ruimte; het paneel staat over een winkel heen terwijl hij
-     * afrekent, en daar hoort een antwoord en geen verantwoording. */
-    kaart.appendChild(el("div", "bron", aanbodGrensRegel()));
+     * afrekent, en daar hoort een antwoord en geen verantwoording.
+     *
+     * PER BRON, want de belofte verschilt: bij ING staat "je puntensaldo" in de
+     * niet-lijst en bij Amex "je kaartnummer". Eén samengevatte zin zou van twee
+     * verschillende beloftes één vage maken. */
+    kaart.appendChild(el("div", "bron", aanbodGrensRegel(bron)));
   }
 
   /* Punten daarna. Dit is wat hij al heeft liggen; de kaartrangschikking

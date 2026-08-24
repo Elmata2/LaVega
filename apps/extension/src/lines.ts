@@ -27,13 +27,12 @@ import type { PuntenRij } from "./points.js";
 import {
   AANBOD_OUD_NA_DAGEN,
   AANBOD_TE_OUD_NA_DAGEN,
-  AMEX_WAT_WEL,
-  AMEX_WAT_NIET,
   dagenTussen,
   type Aanbieding,
   type AanbodUitkomst,
+  type Bron,
   type Lezing,
-} from "./amex.js";
+} from "./aanbod-kern.js";
 import type { CheckoutCard } from "./types.js";
 import { euro, pct, dateNL, eurosToCents, getal } from "./money.js";
 
@@ -677,34 +676,88 @@ export function headline(r: Ranking): string {
   return `Van jouw kaarten is ${name} de goedkoopste, en ook die kost je ${euro(-cents)}.`;
 }
 
-/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+/* ──────────────────── de aanbiedingen, per bron ───────────────────────────── */
 
 /* WAT HIER NOOIT MAG STAAN, en per geval de fout die eronder ligt:
  *
  *  1. "Je hebt hier 30% korting." Dat is een belofte over de kassa waar hij
- *     staat, en wij hebben alleen gelezen dat de aanbieding op zijn Amex-lijst
- *     STOND, op een dag in het verleden. Tussen die dag en nu kan hij verlopen
- *     zijn, opgezegd zijn, of al gebruikt.
+ *     staat, en wij hebben alleen gelezen dat de aanbieding op zijn lijst STOND,
+ *     op een dag in het verleden. Tussen die dag en nu kan hij verlopen zijn,
+ *     opgezegd zijn, of al gebruikt.
  *  2. "Gebruik hem hier." Een Amex-aanbieding moet eerst aan de kaart worden
  *     TOEGEVOEGD, en dat gebeurt bij American Express en niet in deze kassa. Of
- *     hij al toegevoegd is, kunnen we niet zien. Advies dat in de toestand waarin
- *     het verschijnt niet kan werken, is precies wat huisregel 3 verbiedt — dus
- *     staat er waar het wél kan.
+ *     hij al toegevoegd is, kunnen we niet zien. Advies dat in de toestand
+ *     waarin het verschijnt niet kan werken, is precies wat huisregel 3
+ *     verbiedt — dus staat er waar het wél kan.
  *  3. Een lijst zonder de dag waarop hij gelezen is. Die dag is het enige waarop
  *     hij de betrouwbaarheid kan afmeten, net als bij de kaartcijfers en de
  *     puntensaldi.
- *  4. Een lege plek als er niets voor deze winkel is. "Geen aanbieding gevonden"
- *     is een uitspraak die alleen mag als we ook echt gekeken hebben, en dan
- *     hoort erbij WANNEER en in HOEVEEL aanbiedingen. */
+ *  4. Een lege plek als er niets voor deze winkel is. "Geen aanbieding
+ *     gevonden" is een uitspraak die alleen mag als we ook echt gekeken hebben,
+ *     en dan hoort erbij WANNEER en in HOEVEEL aanbiedingen.
+ *  5. EN, SINDS DE ING WINKEL ERBIJ IS: een regel uit de ING Winkel die klinkt
+ *     als een korting bij de winkel waar hij staat. "1.250 punten voor een
+ *     JBL-speaker" is een AANKOOP BIJ ING, geen aanbieding bij JBL. Dat is geen
+ *     woordkeuze maar een ander soort ding, en daarom heeft `prijsSoort` hier
+ *     eigen zinnen in plaats van een ander zelfstandig naamwoord. */
 
-/** Wat er van een aanbiedingskaart op het scherm komt.
+/** De prijs zoals hij op het scherm komt.
  *
- *  De korting staat er ZOALS AMEX HEM SCHRIJFT. Niet omgerekend, niet
- *  samengevat, niet naar euro's vertaald: "30% korting met 500 punten" blijft
- *  die zin. Zodra we er een bedrag van maken, staat er een getal op het scherm
- *  dat op deze pagina nergens vandaan komt. */
-export function aanbodRegel(a: Aanbieding, asOf: string): string {
-  const delen: string[] = [a.korting];
+ *  BIJ EEN KORTINGBRON STAAT HIJ ER ZOALS DE AANBIEDER HEM SCHRIJFT. Niet
+ *  omgerekend, niet samengevat, niet naar euro's vertaald: "30% korting met 500
+ *  punten" blijft die zin. Zodra we er een bedrag van maken, staat er een getal
+ *  op het scherm dat op die pagina nergens vandaan komt.
+ *
+ *  BIJ EEN PUNTENBRON WORDT DE ONTBREKENDE BIJBETALING GENOEMD. Dat is de hele
+ *  reden dat deze tak bestaat. ING zegt zelf: "Je betaalt de meeste producten
+ *  met Punten, plus een bij te betalen bedrag. Soms wissel je alleen Punten in".
+ *  Lazen wij geen bedrag, dan weten we niet welke van die twee het is — en het
+ *  weglaten van die zin zou het artikel laten lezen als "alleen deze punten",
+ *  wat het goedkoper voorstelt dan het misschien is. Onbekend is niet nul. */
+function prijsRegel(a: Aanbieding, bron: Bron): string {
+  if (bron.prijsSoort !== "punten") return a.prijsTekst;
+  const p = a.prijs ?? null;
+  if (p === null) {
+    /* Komt via de zeef niet voor bij een puntenbron; staat er voor het geval de
+     * code verandert, en dan hoort er geen prijs te worden gesuggereerd. */
+    return `${a.prijsTekst} (het aantal punten is hier niet uit te lezen).`;
+  }
+  const punten = `${getal(p.punten)} punten`;
+  return p.bij === null
+    ? `${punten}. Of je er nog een bedrag bij betaalt, stond er niet bij — dat is niet hetzelfde als niets.`
+    : `${punten} plus ${p.bij} bijbetalen.`;
+}
+
+/** Waar hij deze aanbieding kan gebruiken, en waar juist niet.
+ *
+ *  Punt 2 en punt 5 uit de kop hierboven, en ze mogen nooit weg. De tweede helft
+ *  van de Amex-zin staat er omdat de lezer met PATRONEN werkt: hij knipt de
+ *  kortingsvorm en de einddatum uit de kaart en laat de rest staan. Wat er aan
+ *  voorwaarden op die kaart stond in een vorm die wij niet herkennen, staat hier
+ *  dus niet — en een korting zonder haar voorwaarden is precies de bewering die
+ *  een onvolledige lezing niet kan dragen.
+ *
+ *  Bij ING is het een ander voorbehoud en het komt uit hun eigen voorwaarden:
+ *  bestellen kan alleen via Mijn ING, het aanbod is tijdelijk met op=op, en het
+ *  aantal punten per artikel mag ING wijzigen. Die drie staan er omdat ze alle
+ *  drie betekenen dat wat wij gelezen hebben vandaag anders kan zijn — en dat is
+ *  niet aan de kaart te zien. */
+function gebruikRegel(bron: Bron): string {
+  if (bron.prijsSoort === "punten") {
+    return (
+      `Dit bestel je in de ING Winkel via Mijn ING, niet in deze kassa. ING zegt er zelf bij dat het ` +
+      `aanbod tijdelijk is en op=op, en dat het aantal punten per artikel kan veranderen.`
+    );
+  }
+  return (
+    `Toevoegen aan je kaart en de volledige voorwaarden staan bij ${bron.merk}, niet in deze ` +
+    `kassa; of je hem al hebt toegevoegd, kan LaVega niet zien.`
+  );
+}
+
+/** Wat er van een aanbiedingskaart op het scherm komt. */
+export function aanbodRegel(a: Aanbieding, asOf: string, bron: Bron): string {
+  const delen: string[] = [prijsRegel(a, bron)];
 
   if (a.tot !== null && a.tot < asOf) {
     delen.push(`Liep tot ${dateNL(a.tot)}, en die datum is voorbij.`);
@@ -723,24 +776,14 @@ export function aanbodRegel(a: Aanbieding, asOf: string): string {
     delen.push("Er stond geen einddatum bij. Dat is niet hetzelfde als onbeperkt geldig; we weten het niet.");
   }
 
-  /* Punt 2 uit de kop hierboven, en hij mag nooit weg. De tweede helft staat er
-   * omdat de lezer met PATRONEN werkt: hij knipt de kortingsvorm en de
-   * einddatum uit de kaart en laat de rest staan. Wat er aan voorwaarden op die
-   * kaart stond in een vorm die wij niet herkennen, staat hier dus niet — en
-   * een korting zonder haar voorwaarden is precies de bewering die een
-   * onvolledige lezing niet kan dragen. Dus zeggen we waar de volledige tekst
-   * staat, in plaats van te doen alsof dit hem is. */
-  delen.push(
-    "Toevoegen aan je kaart en de volledige voorwaarden staan bij American Express, niet in deze " +
-      "kassa; of je hem al hebt toegevoegd, kan LaVega niet zien.",
-  );
+  delen.push(gebruikRegel(bron));
   return delen.join(" ");
 }
 
 /** Waar deze regel vandaan komt en van wanneer. */
-export function aanbodBron(a: Aanbieding, asOf: string): string {
+export function aanbodBron(a: Aanbieding, asOf: string, bron: Bron): string {
   const dagen = dagenTussen(a.gelezenOp, asOf);
-  const bits = [`Gelezen van je Amex-aanbiedingenpagina op ${dateNL(a.gelezenOp)}.`];
+  const bits = [`Gelezen van ${bron.paginaNaam} op ${dateNL(a.gelezenOp)}.`];
   if (Number.isNaN(dagen)) {
     bits.push("Hoe lang geleden dat is, is hier niet uit te rekenen.");
   } else if (dagen > AANBOD_OUD_NA_DAGEN) {
@@ -756,36 +799,38 @@ export function aanbodBron(a: Aanbieding, asOf: string): string {
  *
  *  Zeven toestanden, zeven zinnen, en geen daarvan is "er zijn geen
  *  aanbiedingen". Dat is namelijk in zes van de zeven gevallen onwaar. */
-export function aanbodToestandRegel(u: AanbodUitkomst, adres: string): string {
+export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
+  const adres = bron.match;
   switch (u.soort) {
     case "uit":
       return "";
     case "nooit-gelezen":
       return (
-        "LaVega heeft je Amex-aanbiedingen nog niet gelezen. Dat gebeurt zodra je zelf je " +
-        "aanbiedingenpagina bij American Express opent; er wordt niets opgehaald."
+        `LaVega heeft ${bron.paginaNaam} nog niet gelezen. Dat gebeurt zodra je die zelf opent bij ` +
+        `${bron.merk}; er wordt niets opgehaald.`
       );
     case "lezing-mislukt":
       switch (u.lezing.uitkomst) {
         case "niet-ingelogd":
           return (
-            `Op ${dateNL(u.lezing.op)} stond er op je aanbiedingenpagina een inlogformulier, ` +
-            `dus je was daar niet ingelogd. Er zijn geen aanbiedingen gelezen en LaVega verzint ze niet.`
+            `Op ${dateNL(u.lezing.op)} was je op ${bron.paginaNaam} niet ingelogd — er stond een ` +
+            `inlogscherm. Er is niets gelezen en LaVega verzint geen aanbiedingen.`
           );
         case "geen-aanbiedingenblok":
           return (
             `Op ${dateNL(u.lezing.op)} stond op dat adres geen aanbiedingenblok. LaVega leest ` +
-            `${adres} — staat er in je adresbalk iets anders als je je aanbiedingen bekijkt, dan is dat de reden.`
+            `${adres} — staat er in je adresbalk iets anders, dan is dat de reden.`
           );
         case "uitgesproken-geen-aanbiedingen":
           return (
-            `Op ${dateNL(u.lezing.op)} zei je aanbiedingenpagina zelf ${citaat(u.lezing.citaat)} ` +
+            `Op ${dateNL(u.lezing.op)} zei ${bron.paginaNaam} zelf ${citaat(u.lezing.citaat)} ` +
             `Er stond dus niets klaar — dat is een uitgesproken nul en geen gat in onze meting.`
           );
         case "blok-zonder-kaarten":
           return (
-            `Op ${dateNL(u.lezing.op)} stond het aanbiedingenblok er wel, maar LaVega heeft er geen ` +
-            `enkele aanbieding uit kunnen lezen. De pagina ziet er anders uit dan de lezer verwacht.`
+            `Op ${dateNL(u.lezing.op)} stond het blok er wel, maar LaVega heeft er geen enkele regel ` +
+            `uit kunnen lezen. De pagina ziet er anders uit dan de lezer verwacht. Wat er eerder is ` +
+            `gelezen staat er nog, met zijn eigen datum — het is niet bijgewerkt.`
           );
         /* "gelezen" komt hier niet: aanbodVoorWinkel stuurt die tak niet deze
          * kant op. Staat er toch, dan is de code veranderd en hoort er geen
@@ -795,19 +840,29 @@ export function aanbodToestandRegel(u: AanbodUitkomst, adres: string): string {
       }
     case "te-oud":
       return Number.isNaN(u.dagen)
-        ? `De laatste lezing van je aanbiedingen draagt geen leesbare datum, dus hoe oud die is weten we niet. LaVega zet hem hier daarom niet neer.`
-        : `Je aanbiedingen zijn voor het laatst gelezen op ${dateNL(u.op)}, ${u.dagen} dagen geleden. ` +
-            `Na ${AANBOD_TE_OUD_NA_DAGEN} dagen zet LaVega ze aan een kassa niet meer neer: een aanbieding kan ` +
-            `intussen weg zijn en dat zouden we hier niet zien. Open je aanbiedingenpagina om ze te verversen.`;
+        ? `De laatste lezing van ${bron.paginaNaam} draagt geen leesbare datum, dus hoe oud die is weten we niet. LaVega zet hem hier daarom niet neer.`
+        : `${hoofdletter(bron.paginaNaam)} is voor het laatst gelezen op ${dateNL(u.op)}, ${u.dagen} dagen geleden. ` +
+            `Na ${AANBOD_TE_OUD_NA_DAGEN} dagen zet LaVega dat aan een kassa niet meer neer: er kan intussen ` +
+            `iets weg zijn en dat zouden we hier niet zien. Open die pagina om te verversen.`;
     case "winkel-zonder-domein":
       return (
         `Van "${u.host}" kan LaVega geen webadres afleiden om op te vergelijken, dus er wordt hier ` +
-        `geen aanbieding aan gekoppeld. In het LaVega-venster staat je hele lijst.`
+        `niets aan gekoppeld. In het LaVega-venster staat je hele lijst.`
       );
     case "geen-voor-deze-winkel":
-      return u.totaal === 0
-        ? `In wat LaVega op ${dateNL(u.op)} van je aanbiedingenpagina las, stond geen enkele aanbieding.`
-        : `In de ${u.totaal} aanbiedingen die LaVega op ${dateNL(u.op)} van je aanbiedingenpagina las, ` +
+      if (u.totaal === 0) {
+        return `In wat LaVega op ${dateNL(u.op)} van ${bron.paginaNaam} las, stond geen enkele regel.`;
+      }
+      /* BIJ EEN PUNTENBRON IS DIT DE NORMALE UITKOMST EN NIET EEN TEKORT, en dat
+       * hoort er te staan. Een productkaart in de winkel van ING wijst naar ING
+       * en niet naar de fabrikant, dus er is bijna nooit een webadres om op te
+       * koppelen. Zonder deze zin zou hij denken dat de lezer iets mist; met
+       * deze zin weet hij waar zijn lijst dan wél staat. */
+      return bron.prijsSoort === "punten"
+        ? `LaVega las op ${dateNL(u.op)} ${u.totaal} regel(s) in de ING Winkel, en geen daarvan hoort ` +
+            `bij deze winkel. Dat is ook niet te verwachten: wat in de ING Winkel staat, koop je bij ING ` +
+            `en niet hier. Je hele lijst staat in het LaVega-venster.`
+        : `In de ${u.totaal} aanbiedingen die LaVega op ${dateNL(u.op)} van ${bron.paginaNaam} las, ` +
             `staat er geen voor deze winkel. De koppeling gaat op het webadres van de winkel en niet op de ` +
             `naam — een aanbieding zonder webadres blijft hier dus weg, en staat wel in het LaVega-venster.`;
     case "gevonden":
@@ -815,24 +870,32 @@ export function aanbodToestandRegel(u: AanbodUitkomst, adres: string): string {
   }
 }
 
+function hoofdletter(s: string): string {
+  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
+}
+
 /** De kop boven het blok bij een winkel. */
-export const AANBOD_KOP_WINKEL = "Amex-aanbiedingen";
+export function aanbodKopWinkel(bron: Bron): string {
+  return bron.prijsSoort === "punten" ? "In de ING Winkel" : `${bron.merk}-aanbiedingen`;
+}
 
 /** En in het werkbalkvenster, waar de hele lijst staat en niet de selectie. */
-export const AANBOD_KOP_LIJST = "Jouw Amex-aanbiedingen";
+export function aanbodKopLijst(bron: Bron): string {
+  return bron.prijsSoort === "punten" ? "Jouw ING Winkel" : `Jouw ${bron.merk}-aanbiedingen`;
+}
 
 /** De zin onder de lijst in het werkbalkvenster en in het optiescherm: wat er
  *  van die pagina meekomt en wat niet. Staat NIET in het paneel op de
  *  winkelpagina — daar hoort een antwoord en geen verantwoording, en de plek
  *  waar hij die vraag stelt is het scherm waar hij de schakelaar omzet. */
-export function aanbodGrensRegel(): string {
+export function aanbodGrensRegel(bron: Bron): string {
   return (
-    `Van je aanbiedingenpagina komt alleen ${AMEX_WAT_WEL.join(", ")} mee. ` +
-    `Niet ${AMEX_WAT_NIET.join(", niet ")}. Er gaat niets naar een server.`
+    `Van ${bron.paginaNaam} komt alleen ${bron.watWel.join(", ")} mee. ` +
+    `Niet ${bron.watNiet.join(", niet ")}. Er gaat niets naar een server.`
   );
 }
 
-/** De twee regels in de strook op zijn eigen aanbiedingenpagina.
+/** De twee regels in de strook op zijn eigen pagina.
  *
  *  ELKE UITKOMST KRIJGT EEN ZIN, ook de geslaagde. Dit is het moment waarop de
  *  extensie zijn ingelogde accountpagina leest; dat hoort zichtbaar te zijn, en
@@ -840,53 +903,63 @@ export function aanbodGrensRegel(): string {
  *
  *  Bij "niet ingelogd" staat er een advies dat op DEZE pagina uit te voeren is —
  *  inloggen en herladen. Dat is de enige toestand waarin een advies hier kan
- *  werken; bij de andere twee zou "probeer het opnieuw" een lus zijn. */
-export function aanbodStrook(lezing: Lezing, winkels: readonly string[], adres: string): { regel: string; noot: string } {
-  const noot = aanbodGrensRegel();
+ *  werken; bij de andere zou "probeer het opnieuw" een lus zijn. */
+export function aanbodStrook(
+  lezing: Lezing,
+  namen: readonly string[],
+  bron: Bron,
+): { regel: string; noot: string } {
+  const noot = aanbodGrensRegel(bron);
+  /* Bij een puntenbron zijn dit ARTIKELnamen en geen winkelnamen. De zin noemt
+   * ze daarom anders; hetzelfde woord zou hier van een productlijst een lijst
+   * winkels maken. */
+  const wat = bron.prijsSoort === "punten" ? "artikel" : "aanbieding";
+  const watMv = bron.prijsSoort === "punten" ? "artikelen" : "aanbiedingen";
+
   switch (lezing.uitkomst) {
     case "gelezen": {
-      const namen = winkels.slice(0, 6).join(", ");
-      const rest = winkels.length > 6 ? ` en ${winkels.length - 6} andere` : "";
+      const lijst = namen.slice(0, 6).join(", ");
+      const rest = namen.length > 6 ? ` en ${namen.length - 6} andere` : "";
       return {
         regel:
           lezing.aantal === 1
-            ? `LaVega heeft één aanbieding van deze pagina gelezen: ${namen}.`
-            : `LaVega heeft ${lezing.aantal} aanbiedingen van deze pagina gelezen: ${namen}${rest}.`,
+            ? `LaVega heeft één ${wat} van deze pagina gelezen: ${lijst}.`
+            : `LaVega heeft ${lezing.aantal} ${watMv} van deze pagina gelezen: ${lijst}${rest}.`,
         noot,
       };
     }
     case "niet-ingelogd":
       return {
         regel:
-          "Op deze pagina staat een inlogformulier, dus je bent hier niet ingelogd. " +
-          "LaVega heeft niets gelezen en niets opgeslagen. Log in en herlaad de pagina.",
+          `Je bent hier niet ingelogd — LaVega ziet een inlogscherm. Er is niets gelezen en niets ` +
+          `opgeslagen. Log in en herlaad de pagina.`,
         noot,
       };
     case "uitgesproken-geen-aanbiedingen":
       /* Dit is de keerzijde van "onbekend is nooit nul". De pagina zegt het
        * zélf, dus dit is een bekende nul en geen mislukte lezing — en dan hoort
        * er niet te staan dat LaVega niets kon lezen, want dat zou een antwoord
-       * van Amex tot een fout van ons maken. Het citaat staat erbij zodat te
-       * zien is waar de nul vandaan komt. */
+       * van de aanbieder tot een fout van ons maken. Het citaat staat erbij
+       * zodat te zien is waar de nul vandaan komt. */
       return {
         regel:
-          `Je aanbiedingenpagina zegt zelf ${citaat(lezing.citaat)} Er staat dus niets voor je klaar; ` +
+          `Deze pagina zegt zelf ${citaat(lezing.citaat)} Er staat dus niets voor je klaar; ` +
           `dat is een antwoord en geen mislukte lezing. Er is niets opgeslagen.`,
         noot,
       };
     case "geen-aanbiedingenblok":
       return {
         regel:
-          `LaVega vindt op deze pagina geen aanbiedingenblok en heeft dus niets gelezen. ` +
-          `Het adres dat LaVega leest is ${adres}.`,
+          `LaVega vindt op deze pagina geen ${watMv} en heeft dus niets gelezen. ` +
+          `Het adres dat LaVega leest is ${bron.match}.`,
         noot,
       };
     case "blok-zonder-kaarten":
       return {
         regel:
-          "Het aanbiedingenblok staat er wel, maar LaVega leest er geen enkele aanbieding uit. " +
-          "De pagina ziet er anders uit dan de lezer verwacht; er is niets opgeslagen en een " +
-          "eerdere lijst is niet bijgewerkt.",
+          `Het blok staat er wel, maar LaVega leest er geen enkel ${wat} uit. ` +
+          `De pagina ziet er anders uit dan de lezer verwacht; er is niets opgeslagen en een ` +
+          `eerdere lijst is niet bijgewerkt.`,
         noot,
       };
   }

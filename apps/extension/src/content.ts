@@ -183,13 +183,13 @@
     if (antwoord.soort === "geen-bedrag") {
       paneel.appendChild(el("div", "kop", antwoord.kop));
       paneel.appendChild(el("div", "uitleg", antwoord.uitleg));
-      toonAanbod(antwoord.aanbod);
+      for (const blok of antwoord.aanbod) toonAanbod(blok);
       toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "voet", antwoord.voet));
     } else {
       if (antwoord.bedrag) paneel.appendChild(el("div", "bedrag", antwoord.bedrag));
       if (antwoord.bedragNoot) paneel.appendChild(el("div", "noot", antwoord.bedragNoot));
-      toonAanbod(antwoord.aanbod);
+      for (const blok of antwoord.aanbod) toonAanbod(blok);
       toonPunten(antwoord.punten);
       paneel.appendChild(el("div", "kop", antwoord.kop));
 

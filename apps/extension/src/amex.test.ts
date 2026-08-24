@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   AMEX_MATCH,
+  AMEX_BRON,
   AANBOD_OUD_NA_DAGEN,
   AANBOD_TE_OUD_NA_DAGEN,
   aanbodVoorWinkel,
@@ -49,7 +50,7 @@ function lees(naam: string, asOf = NU) {
 }
 
 function aanbieding(p: Partial<Aanbieding> & { winkel: string }): Aanbieding {
-  return { korting: "10% korting", tot: null, totRuw: "", domein: null, gelezenOp: NU, ...p };
+  return { prijsTekst: "10% korting", tot: null, totRuw: "", domein: null, gelezenOp: NU, ...p };
 }
 
 /* ─────────────────────── waar de extensie mag kijken ─────────────────────── */
@@ -97,15 +98,15 @@ describe("de nagebouwde aanbiedingenpagina", () => {
   it("neemt de korting mee zoals hij er staat, met de drempel erbij", () => {
     const { aanbiedingen } = lees("kunstmatig-amex-aanbiedingen.html");
     const jbl = aanbiedingen.find((a) => a.winkel === "JBL")!;
-    expect(jbl.korting).toBe("30% korting · 500 Membership Rewards punten");
+    expect(jbl.prijsTekst).toBe("30% korting · 500 Membership Rewards punten");
 
     /* "€ 10 terug" zonder "bij besteding van € 50" zou een korting zijn zonder
      * de voorwaarde waaronder hij geldt — dezelfde fout als een cashbackcijfer
      * zonder plafond. En de volgorde volgt de kaart, niet onze patroonlijst. */
     const hema = aanbiedingen.find((a) => a.winkel === "HEMA")!;
-    expect(hema.korting).toBe("€ 10 terug · bij besteding van € 50");
+    expect(hema.prijsTekst).toBe("€ 10 terug · bij besteding van € 50");
     const bol = aanbiedingen.find((a) => a.winkel === "bol.com")!;
-    expect(bol.korting).toBe("Besteed € 100 · € 20 terug");
+    expect(bol.prijsTekst).toBe("Besteed € 100 · € 20 terug");
   });
 
   it("leest de einddatum, ook de relatieve, en weigert de dubbelzinnige", () => {
@@ -146,7 +147,7 @@ describe("de nagebouwde aanbiedingenpagina", () => {
     /* En de velden zelf zijn de hele lijst: geen paginatekst, geen titel, geen
      * pad. Verandert deze lijst, dan verandert de belofte onder de schakelaar. */
     for (const k of ruw.kandidaten) {
-      expect(Object.keys(k).sort()).toEqual(["hosts", "korting", "totRuw", "winkel"]);
+      expect(Object.keys(k).sort()).toEqual(["hosts", "prijsTekst", "totRuw", "winkel"]);
     }
     expect(Object.keys(ruw).sort()).toEqual([
       "geenAanbiedingen",
@@ -194,7 +195,7 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
     const { lezing, aanbiedingen } = lees("kunstmatig-amex-uitgelogd.html");
     expect(lezing.uitkomst).toBe("niet-ingelogd");
     expect(aanbiedingen).toHaveLength(0);
-    const strook = aanbodStrook(lezing, [], AMEX_MATCH);
+    const strook = aanbodStrook(lezing, [], AMEX_BRON);
     expect(strook.regel).toContain("niet ingelogd");
     /* En het advies dat er staat, is op DEZE pagina uit te voeren. */
     expect(strook.regel).toContain("Log in");
@@ -203,7 +204,7 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
   it("het blok is er maar onleesbaar: dat is iets anders dan geen aanbiedingen", () => {
     const { lezing } = lees("kunstmatig-amex-blok-veranderd.html");
     expect(lezing.uitkomst).toBe("blok-zonder-kaarten");
-    const strook = aanbodStrook(lezing, [], AMEX_MATCH);
+    const strook = aanbodStrook(lezing, [], AMEX_BRON);
     expect(strook.regel).toContain("anders uit dan de lezer verwacht");
     /* Nooit de bewering dat er niets voor hem klaarstaat: dat weten we niet. */
     expect(strook.regel).not.toContain("geen aanbiedingen voor je");
@@ -215,7 +216,7 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
     const { lezing } = lees("kunstmatig-amex-geen-aanbiedingen.html");
     expect(lezing.uitkomst).toBe("uitgesproken-geen-aanbiedingen");
     expect(lezing.citaat).toContain("geen aanbiedingen beschikbaar");
-    const strook = aanbodStrook(lezing, [], AMEX_MATCH);
+    const strook = aanbodStrook(lezing, [], AMEX_BRON);
     expect(strook.regel).toContain("zegt zelf");
     expect(strook.regel).toContain("geen mislukte lezing");
   });
@@ -228,7 +229,7 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
       "kunstmatig-amex-geen-aanbiedingen.html",
     ]) {
       const { lezing, aanbiedingen } = lees(naam);
-      const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), AMEX_MATCH);
+      const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), AMEX_BRON);
       expect(strook.noot).toContain("saldo");
       expect(strook.noot).toContain("transacties");
       expect(strook.noot).toContain("kaartnummer");
@@ -315,7 +316,7 @@ describe("een aanbieding wordt op domein gekoppeld, nooit op naam", () => {
   it("kiest niet als twee links in dezelfde kaart naar verschillende winkels wijzen", () => {
     const domein = domeinVanKaart({
       winkel: "Onduidelijk",
-      korting: "10% korting",
+      prijsTekst: "10% korting",
       totRuw: "",
       hosts: ["www.jbl.nl", "www.nike.com", "global.americanexpress.com"],
     });
@@ -335,7 +336,7 @@ describe("het blok bij een winkel", () => {
      * leestoestemming die hij niet wilde, is geen melding maar een aansporing. */
     const u = aanbodVoorWinkel(toestand({ aan: false }), "www.jbl.nl", NU);
     expect(u.soort).toBe("uit");
-    const blok = aanbodBlok(u, NU);
+    const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.kop).toBe("");
     expect(blok.regels).toHaveLength(0);
     expect(blok.toestand).toBe("");
@@ -345,7 +346,7 @@ describe("het blok bij een winkel", () => {
     const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl" })] });
     const u = aanbodVoorWinkel(t, "www.ikea.com", NU);
     expect(u.soort).toBe("geen-voor-deze-winkel");
-    const blok = aanbodBlok(u, NU);
+    const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.regels).toHaveLength(0);
     expect(blok.toestand).toContain("1 aanbieding");
     expect(blok.toestand).toContain("geen voor deze winkel");
@@ -355,11 +356,11 @@ describe("het blok bij een winkel", () => {
 
   it("toont de aanbieding die er wel is, met de datum en zonder een belofte over deze kassa", () => {
     const t = toestand({
-      aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", korting: "30% korting", tot: "2026-12-31" })],
+      aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", prijsTekst: "30% korting", tot: "2026-12-31" })],
     });
     const u = aanbodVoorWinkel(t, "www.jbl.nl", NU);
     expect(u.soort).toBe("gevonden");
-    const blok = aanbodBlok(u, NU);
+    const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.regels).toHaveLength(1);
     expect(blok.regels[0]!.titel).toBe("JBL");
     expect(blok.regels[0]!.regel).toContain("30% korting");
@@ -380,18 +381,18 @@ describe("het blok bij een winkel", () => {
     if (u.soort !== "gevonden") return;
     expect(u.geldig).toHaveLength(0);
     expect(u.verlopen).toHaveLength(1);
-    expect(aanbodBlok(u, NU).regels[0]!.regel).toContain("die datum is voorbij");
+    expect(aanbodBlok(u, NU, AMEX_BRON).regels[0]!.regel).toContain("die datum is voorbij");
   });
 
   it("zegt bij een onleesbare einddatum wat er stond, en rekent er niet mee", () => {
     const a = aanbieding({ winkel: "Zalando", domein: "zalando.nl", tot: null, totRuw: "Geldig tot 05/03/2026" });
-    const regel = aanbodRegel(a, NU);
+    const regel = aanbodRegel(a, NU, AMEX_BRON);
     expect(regel).toContain("Geldig tot 05/03/2026");
     expect(regel).toContain("niet eenduidig te lezen");
   });
 
   it("zegt bij een ontbrekende einddatum dat dat niet hetzelfde is als onbeperkt", () => {
-    const regel = aanbodRegel(aanbieding({ winkel: "JBL", domein: "jbl.nl" }), NU);
+    const regel = aanbodRegel(aanbieding({ winkel: "JBL", domein: "jbl.nl" }), NU, AMEX_BRON);
     expect(regel).toContain("geen einddatum");
     expect(regel).toContain("niet hetzelfde als onbeperkt");
   });
@@ -404,7 +405,7 @@ describe("het blok bij een winkel", () => {
     });
     const u = aanbodVoorWinkel(toestand({ aanbiedingen: [oud] }), "www.jbl.nl", NU);
     expect(u.soort).toBe("te-oud");
-    const blok = aanbodBlok(u, NU);
+    const blok = aanbodBlok(u, NU, AMEX_BRON);
     /* GEEN regels: de laatst bekende lijst blijven tonen alsof hij vers is, is
      * precies wat hier niet mag. Wel de datum en de reden. */
     expect(blok.regels).toHaveLength(0);
@@ -420,7 +421,7 @@ describe("het blok bij een winkel", () => {
     expect(u.dagen).toBe(21);
     expect(u.dagen).toBeGreaterThan(AANBOD_OUD_NA_DAGEN);
     expect(u.oud).toBe(true);
-    expect(aanbodBlok(u, NU).regels[0]!.bron).toContain("21 dagen geleden");
+    expect(aanbodBlok(u, NU, AMEX_BRON).regels[0]!.bron).toContain("21 dagen geleden");
   });
 
   it("gaat op de datum van de LIJST af en niet op die van de laatste poging", () => {
@@ -441,7 +442,7 @@ describe("het blok bij een winkel", () => {
   it("noemt bij een lege opslag de oorzaak uit de laatste poging", () => {
     const nooit = aanbodVoorWinkel(toestand({ lezing: null }), "www.jbl.nl", NU);
     expect(nooit.soort).toBe("nooit-gelezen");
-    expect(aanbodToestandRegel(nooit, AMEX_MATCH)).toContain("nog niet gelezen");
+    expect(aanbodToestandRegel(nooit, AMEX_BRON)).toContain("nog niet gelezen");
 
     const mislukt = aanbodVoorWinkel(
       toestand({ lezing: { uitkomst: "niet-ingelogd", aantal: 0, op: NU, citaat: "" } }),
@@ -449,35 +450,35 @@ describe("het blok bij een winkel", () => {
       NU,
     );
     expect(mislukt.soort).toBe("lezing-mislukt");
-    expect(aanbodToestandRegel(mislukt, AMEX_MATCH)).toContain("niet ingelogd");
+    expect(aanbodToestandRegel(mislukt, AMEX_BRON)).toContain("niet ingelogd");
   });
 
   it("behandelt een lijst zonder leesbare leeftijd als te oud, niet als vers", () => {
     const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", gelezenOp: "geen-datum" })] });
     const u = aanbodVoorWinkel(t, "www.jbl.nl", NU);
     expect(u.soort).toBe("te-oud");
-    expect(aanbodToestandRegel(u, AMEX_MATCH)).toContain("geen leesbare datum");
+    expect(aanbodToestandRegel(u, AMEX_BRON)).toContain("geen leesbare datum");
   });
 });
 
 describe("de hele lijst in het werkbalkvenster", () => {
   it("toont ook de aanbiedingen zonder webadres, want daar is het geen bewering", () => {
     const { aanbiedingen } = lees("kunstmatig-amex-aanbiedingen.html");
-    const blok = aanbodLijst({ aan: true, lezing: null, aanbiedingen }, NU);
+    const blok = aanbodLijst({ aan: true, lezing: null, aanbiedingen }, NU, AMEX_BRON);
     expect(blok.regels).toHaveLength(5);
     expect(blok.regels.map((r) => r.titel)).toContain("Nike");
   });
 
   it("zet de vroegste einddatum bovenaan en de verlopen onderaan", () => {
     const { aanbiedingen } = lees("kunstmatig-amex-aanbiedingen.html");
-    const blok = aanbodLijst({ aan: true, lezing: null, aanbiedingen }, NU);
+    const blok = aanbodLijst({ aan: true, lezing: null, aanbiedingen }, NU, AMEX_BRON);
     /* bol.com verloopt over vijf dagen, HEMA is verlopen. */
     expect(blok.regels[0]!.titel).toBe("bol.com");
     expect(blok.regels[blok.regels.length - 1]!.titel).toBe("HEMA");
   });
 
   it("zwijgt ook hier als de schakelaar uitstaat", () => {
-    expect(aanbodLijst({ aan: false, lezing: null, aanbiedingen: [] }, NU).kop).toBe("");
+    expect(aanbodLijst({ aan: false, lezing: null, aanbiedingen: [] }, NU, AMEX_BRON).kop).toBe("");
   });
 });
 
@@ -487,14 +488,14 @@ describe("wat er uit de opslag terugkomt, gaat door een zeef", () => {
   it("gooit een aanbieding zonder leesdatum weg", () => {
     /* Zonder leesdatum is er geen manier om te zeggen hoe oud hij is, en dat is
      * de enige eigenschap die hem beoordeelbaar maakt. */
-    expect(_schoonAanbod([{ winkel: "JBL", korting: "30%", gelezenOp: "" }])).toHaveLength(0);
-    expect(_schoonAanbod([{ winkel: "JBL", korting: "30%", gelezenOp: "gisteren" }])).toHaveLength(0);
-    expect(_schoonAanbod([{ winkel: "", korting: "30%", gelezenOp: NU }])).toHaveLength(0);
+    expect(_schoonAanbod([{ winkel: "JBL", prijsTekst: "30%", gelezenOp: "" }])).toHaveLength(0);
+    expect(_schoonAanbod([{ winkel: "JBL", prijsTekst: "30%", gelezenOp: "gisteren" }])).toHaveLength(0);
+    expect(_schoonAanbod([{ winkel: "", prijsTekst: "30%", gelezenOp: NU }])).toHaveLength(0);
   });
 
   it("gooit rommel in het domeinveld weg in plaats van het aan de koppelregel te voeren", () => {
     const uit = _schoonAanbod([
-      { winkel: "JBL", korting: "30%", gelezenOp: NU, domein: "niet eens een host" },
+      { winkel: "JBL", prijsTekst: "30%", gelezenOp: NU, domein: "niet eens een host" },
     ]);
     expect(uit).toHaveLength(1);
     expect(uit[0]!.domein).toBe(null);

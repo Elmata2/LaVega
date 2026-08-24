@@ -35,19 +35,14 @@ import {
   setEnabledSiteIds,
   getPointsBalances,
   setPointsBalances,
-  getAmexAan,
-  setAmexAan,
-  getAanbiedingen,
-  getAmexLezing,
-  wisAmex,
+  getBronAan,
+  setBronAan,
+  getBronAanbiedingen,
+  getBronLezing,
+  wisBron,
 } from "./store.js";
-import {
-  AMEX_MATCH,
-  AMEX_LABEL,
-  AMEX_WAT_WEL,
-  AMEX_WAT_NIET,
-  type AanbodToestand,
-} from "./amex.js";
+import type { AanbodToestand, Bron } from "./aanbod-kern.js";
+import { BRONNEN } from "./bronnen.js";
 import { aanbodLijst } from "./panel.js";
 import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -466,23 +461,29 @@ function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
   }
 }
 
-/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+/* ─────────────────── de aanbiedingenbronnen, één blok per bron ────────────── */
 
-/* ── WAAROM DIT EEN TWEEDE VRAAG IS EN GEEN TWEEDE VINKJE IN DE EERSTE LIJST ─
+/* ── WAAROM DIT APARTE VRAGEN ZIJN EN GEEN VINKJES IN DE EERSTE LIJST ───────
  *
  * De lijst hierboven gaat over winkels: "mag LaVega de prijs op deze pagina
  * lezen". Dit gaat over zijn ACCOUNT bij een bank. Dat is een ander soort ja, en
  * het hoort ook een ander soort vraag te zijn — met een eigen kop, een eigen
  * uitleg van wat er wel en niet gelezen wordt, en een eigen schakelaar die niets
- * aanzet wat hij hierboven heeft aangevinkt.
+ * aanzet wat hij ergens anders heeft aangevinkt.
+ *
+ * EN HET ZIJN ER TWEE, MET TWEE ANTWOORDEN. Amex en de ING Winkel staan hier
+ * allebei, en de een zet de ander niet aan. Dat is niet alleen een belofte in de
+ * tekst: elke bron heeft zijn eigen opslagsleutels (`bron.sleutels`) en zijn
+ * eigen hostrecht, dus het uitzetten van de ene kan de gegevens van de andere
+ * niet meenemen, ook niet per ongeluk.
  *
  * Wat de schakelaar bij UITZETTEN doet, is de helft van het ontwerp. De volgorde:
  *
  *   1. de schakelaar in de opslag uit. Vanaf dat moment zwijgt het paneel over
- *      aanbiedingen en weigert de service worker een nieuwe lezing, ook al staat
- *      de host-toestemming er nog. Dat is de "onmiddellijke" in "onmiddellijk
+ *      deze bron en weigert de service worker een nieuwe lezing, ook al staat de
+ *      host-toestemming er nog. Dat is de "onmiddellijke" in "onmiddellijk
  *      effect";
- *   2. het opgeslagene weg — `wisAmex` haalt de sleutels ECHT weg en zet ze niet
+ *   2. het opgeslagene weg — `wisBron` haalt de sleutels ECHT weg en zet ze niet
  *      op leeg;
  *   3. pas dan de host-toestemming intrekken.
  *
@@ -492,79 +493,106 @@ function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
  * het AANZETTEN, waar de toestemming juist eerst moet komen omdat het vinkje
  * anders iets belooft wat Chrome niet toestaat. */
 
-const amexSchakelaar = document.getElementById("amexschakelaar") as HTMLDivElement;
-const amexMelding = document.getElementById("amex-melding") as HTMLParagraphElement;
-const amexStatus = document.getElementById("amex-status") as HTMLParagraphElement;
-const amexLijstVlak = document.getElementById("amexlijst") as HTMLDivElement;
+const bronnenVlak = document.getElementById("bronnen") as HTMLDivElement;
 
-function meldAmex(tekst: string, fout = false): void {
-  amexMelding.textContent = tekst;
-  amexMelding.className = fout ? "hint fout" : "hint";
-}
+/** De vier vlakken die één bron in dit scherm heeft. Bewaard per bron-id, zodat
+ *  het hertekenen na een schakelaarwissel alleen dat ene blok raakt. */
+type BronVlakken = {
+  melding: HTMLParagraphElement;
+  status: HTMLParagraphElement;
+  lijst: HTMLDivElement;
+  vink: HTMLInputElement;
+};
+const vlakken = new Map<string, BronVlakken>();
 
-function vulLijstje(id: string, items: readonly string[]): void {
-  const ul = document.getElementById(id);
-  if (!ul) return;
-  leeg(ul as HTMLElement);
+function lijstje(items: readonly string[]): HTMLUListElement {
+  const ul = document.createElement("ul");
+  ul.className = "grens";
   for (const t of items) {
     const li = document.createElement("li");
     li.textContent = t;
     ul.appendChild(li);
   }
+  return ul;
 }
 
-async function tekenAanbiedingen(): Promise<void> {
+function meldBron(bron: Bron, tekst: string, fout = false): void {
+  const v = vlakken.get(bron.id);
+  if (!v) return;
+  v.melding.textContent = tekst;
+  v.melding.className = fout ? "hint fout" : "hint";
+}
+
+async function tekenBronLijst(bron: Bron): Promise<void> {
+  const v = vlakken.get(bron.id);
+  if (!v) return;
+
   const toestand: AanbodToestand = {
-    aan: await getAmexAan(),
-    lezing: await getAmexLezing(),
-    aanbiedingen: await getAanbiedingen(),
+    aan: await getBronAan(bron),
+    lezing: await getBronLezing(bron),
+    aanbiedingen: await getBronAanbiedingen(bron),
   };
-  leeg(amexLijstVlak);
+  leeg(v.lijst);
 
   if (!toestand.aan) {
     /* Uit is uit. Er staat hier geen laatst bekende lijst meer, want die is bij
      * het uitzetten weggegooid — en als er niets is weggegooid omdat hij nooit
      * aan heeft gestaan, is "er is nog niets gelezen" ook waar. */
-    amexStatus.textContent =
+    v.status.textContent =
       "De schakelaar staat uit. Er is niets gelezen en er staat niets opgeslagen.";
-    amexStatus.className = "hint";
+    v.status.className = "hint";
     return;
   }
 
-  const blok = aanbodLijst(toestand, vandaag());
-  amexStatus.textContent =
+  const blok = aanbodLijst(toestand, vandaag(), bron);
+  const wat = bron.prijsSoort === "punten" ? "artikel(en)" : "aanbieding(en)";
+  v.status.textContent =
     blok.regels.length === 0
       ? blok.toestand
-      : `${blok.regels.length} aanbieding(en) opgeslagen. Bij elke staat de dag waarop LaVega hem las; ` +
-        `wat er daarna bij Amex veranderd is, zien we niet.`;
-  amexStatus.className = "hint";
+      : `${blok.regels.length} ${wat} opgeslagen. Bij elke staat de dag waarop LaVega hem las; ` +
+        `wat er daarna bij ${bron.merk} veranderd is, zien we niet.`;
+  v.status.className = "hint";
 
   for (const r of blok.regels) {
     const rij = el("div", "rij");
     rij.appendChild(el("div", "titel", r.titel));
     rij.appendChild(el("div", "noot", r.regel));
     if (r.bron) rij.appendChild(el("div", "noot", r.bron));
-    amexLijstVlak.appendChild(rij);
+    v.lijst.appendChild(rij);
   }
 }
 
-async function zetAmexUit(vink: HTMLInputElement): Promise<void> {
-  await setAmexAan(false);
-  await wisAmex();
-  await chrome.permissions.remove({ origins: [AMEX_MATCH] });
-  vink.checked = false;
-  meldAmex(
-    "Uit. De leestoestemming is ingetrokken en de gelezen aanbiedingen zijn weggehaald.",
+async function zetBronUit(bron: Bron): Promise<void> {
+  const v = vlakken.get(bron.id);
+  await setBronAan(bron, false);
+  await wisBron(bron);
+  await chrome.permissions.remove({ origins: [bron.match] });
+  if (v) v.vink.checked = false;
+  meldBron(
+    bron,
+    "Uit. De leestoestemming is ingetrokken en wat er gelezen was, is weggehaald. " +
+      "Je andere schakelaars zijn niet aangeraakt.",
   );
-  await tekenAanbiedingen();
+  await tekenBronLijst(bron);
 }
 
-function tekenAmexSchakelaar(aan: boolean, toegestaan: boolean): void {
-  leeg(amexSchakelaar);
+function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
+  const kop = document.createElement("h3");
+  kop.textContent = bron.label;
+  bronnenVlak.appendChild(kop);
+
+  bronnenVlak.appendChild(el("p", "hint", bron.uitleg));
+
+  bronnenVlak.appendChild(el("p", "hint", "Wat er van die pagina meekomt:"));
+  bronnenVlak.appendChild(lijstje(bron.watWel));
+  bronnenVlak.appendChild(el("p", "hint", "En wat niet:"));
+  bronnenVlak.appendChild(lijstje(bron.watNiet));
+
+  const schakelaar = el("div", "");
   const rij = el("div", "vinkrij");
   const vink = document.createElement("input");
   vink.type = "checkbox";
-  vink.id = "amex-aan";
+  vink.id = `bron-aan-${bron.id}`;
   /* Aan is aan ALS beide waar zijn — zijn schakelaar én Chrome's toestemming.
    * Dezelfde regel als bij de winkels, en om dezelfde reden: een vinkje dat
    * aanstaat terwijl er niets gebeurt, laat hem zoeken naar een fout die er niet
@@ -573,57 +601,70 @@ function tekenAmexSchakelaar(aan: boolean, toegestaan: boolean): void {
 
   vink.addEventListener("change", () => {
     if (!vink.checked) {
-      void zetAmexUit(vink);
+      void zetBronUit(bron);
       return;
     }
     /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
      * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
     chrome.permissions
-      .request({ origins: [AMEX_MATCH] })
+      .request({ origins: [bron.match] })
       .then(async (gegeven) => {
         if (!gegeven) {
           vink.checked = false;
-          meldAmex(
-            `Zonder toestemming voor ${AMEX_MATCH} kan LaVega je aanbiedingen niet lezen. Er verandert verder niets.`,
+          meldBron(
+            bron,
+            `Zonder toestemming voor ${bron.match} kan LaVega hier niets lezen. Er verandert verder niets.`,
             true,
           );
           return;
         }
-        await setAmexAan(true);
-        meldAmex(
-          "Aan. Open je aanbiedingenpagina bij American Express; LaVega leest hem dan en zet " +
-            "onderin een regel neer met wat er gelezen is.",
+        await setBronAan(bron, true);
+        meldBron(
+          bron,
+          `Aan. Open ${bron.paginaNaam} bij ${bron.merk}; LaVega leest hem dan en zet onderin een ` +
+            `regel neer met wat er gelezen is.`,
         );
-        await tekenAanbiedingen();
+        await tekenBronLijst(bron);
       })
       .catch(() => {
         vink.checked = false;
-        meldAmex("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
+        meldBron(bron, "Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
       });
   });
 
   const tekst = document.createElement("label");
   tekst.htmlFor = vink.id;
-  tekst.appendChild(el("div", "titel", AMEX_LABEL));
-  tekst.appendChild(el("div", "noot", `${AMEX_MATCH} — alleen dit ene adres. Je rekeningoverzicht, je transacties en je saldo staan op andere paden en vallen erbuiten.`));
-  /* DIT MOET ERBIJ STAAN EN HET IS ONGEMAKKELIJK. De lezer is gebouwd op HTML
-   * die met de hand is gemaakt: er is geen manier om vanaf onze kant in zijn
-   * account te komen, dus de echte ingelogde pagina is nooit gezien. Dat hoort
-   * te staan waar hij ja zegt, niet in een README. */
+  tekst.appendChild(el("div", "titel", bron.label));
   tekst.appendChild(
     el(
       "div",
       "noot",
-      "Eerlijk over de grens: de echte, ingelogde aanbiedingenpagina is bij het bouwen nooit " +
-        "gezien — dat kan niet zonder jouw account. De lezer is gemaakt op nagebouwde HTML. " +
-        "Vindt hij bij jou niets, dan zegt hij dát, met de reden erbij, en blijft er geen oude " +
-        "lijst staan die vers lijkt.",
+      `${bron.match} — alleen dit ene adres. Je rekeningoverzicht, je transacties en je saldo staan ` +
+        `op andere paden en vallen erbuiten.`,
     ),
   );
+  /* DIT MOET ERBIJ STAAN EN HET IS ONGEMAKKELIJK. De lezer is bij beide bronnen
+   * gebouwd op HTML die met de hand is gemaakt: de echte ingelogde pagina is
+   * nooit gezien. Dat hoort te staan waar hij ja zegt, niet in een README. */
+  tekst.appendChild(el("div", "noot", bron.voorbehoud));
 
   rij.appendChild(vink);
   rij.appendChild(tekst);
-  amexSchakelaar.appendChild(rij);
+  schakelaar.appendChild(rij);
+  bronnenVlak.appendChild(schakelaar);
+
+  const melding = el("p", "hint") as HTMLParagraphElement;
+  bronnenVlak.appendChild(melding);
+
+  const wat = document.createElement("h4");
+  wat.textContent = "Wat er is gelezen";
+  bronnenVlak.appendChild(wat);
+  const status = el("p", "hint") as HTMLParagraphElement;
+  bronnenVlak.appendChild(status);
+  const lijst = el("div", "") as HTMLDivElement;
+  bronnenVlak.appendChild(lijst);
+
+  vlakken.set(bron.id, { melding, status, lijst, vink });
 }
 
 /* ────────────────────────────── opstarten ────────────────────────────────── */
@@ -636,15 +677,18 @@ async function start(): Promise<void> {
   saldi = await getPointsBalances();
   tekenPunten();
 
-  vulLijstje("amex-wel", AMEX_WAT_WEL);
-  vulLijstje("amex-niet", AMEX_WAT_NIET);
-  tekenAmexSchakelaar(
-    await getAmexAan(),
-    await chrome.permissions.contains({ origins: [AMEX_MATCH] }),
-  );
-  await tekenAanbiedingen();
+  leeg(bronnenVlak);
+  vlakken.clear();
+  for (const bron of BRONNEN) {
+    tekenBronBlok(
+      bron,
+      await getBronAan(bron),
+      await chrome.permissions.contains({ origins: [bron.match] }),
+    );
+    await tekenBronLijst(bron);
+  }
 
-  const aangevinkteSites = new Set(await getEnabledSiteIds());
+  const aangevinkteSites = new Set<string>(await getEnabledSiteIds());
   const toegestaan = new Set<string>();
   for (const site of SITES) {
     if (await chrome.permissions.contains({ origins: [site.match] })) toegestaan.add(site.id);

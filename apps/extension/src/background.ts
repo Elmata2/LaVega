@@ -47,21 +47,20 @@ import {
   getEnabledSiteIds,
   setEnabledSiteIds,
   getPointsBalances,
-  getAmexAan,
-  getAanbiedingen,
-  getAmexLezing,
-  setAmexLezing,
-  wisAmex,
+  getBronAan,
+  getBronAanbiedingen,
+  getBronLezing,
+  setBronLezing,
+  wisBron,
 } from "./store.js";
 import {
-  AMEX_ID,
-  AMEX_MATCH,
-  amexUrlIsAanbiedingen,
-  collectAanbod,
   leesAanbod,
   aanbodVoorWinkel,
+  type AanbodUitkomst,
+  type Bron,
   type RuweLezing,
-} from "./amex.js";
+} from "./aanbod-kern.js";
+import { BRONNEN, bronVoorUrl, AANBOD_CONTENT_JS } from "./bronnen.js";
 import { aanbodStrook } from "./lines.js";
 import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -107,13 +106,18 @@ async function syncRegistraties(): Promise<void> {
   }
   const gewensteIds = new Set(gewenst.map(regId));
 
-  /* Zijn eigen aanbiedingenpagina hangt aan een APARTE schakelaar en een aparte
-   * toestemming. Hij loopt hier mee in dezelfde registratielus omdat het
-   * dezelfde twee voorwaarden zijn — vinkje én host-toestemming — maar het is
-   * een tweede vraag met een tweede antwoord, en de een zet de ander niet aan.
-   * Zie de kop van amex.ts. */
-  if ((await getAmexAan()) && (await chrome.permissions.contains({ origins: [AMEX_MATCH] }))) {
-    gewensteIds.add(`${REG_PREFIX}${AMEX_ID}`);
+  /* Zijn eigen accountpagina's hangen aan APARTE schakelaars en aparte
+   * toestemmingen — één per bron. Ze lopen hier mee in dezelfde registratielus
+   * omdat het dezelfde twee voorwaarden zijn (vinkje én host-toestemming), maar
+   * het zijn aparte vragen met aparte antwoorden: wie ja zei tegen zijn
+   * Amex-account heeft daarmee geen ja gezegd tegen zijn ING-account. Zie de kop
+   * van amex.ts en van ing.ts. */
+  const bronnenAan: Bron[] = [];
+  for (const bron of BRONNEN) {
+    if (!(await getBronAan(bron))) continue;
+    if (!(await chrome.permissions.contains({ origins: [bron.match] }))) continue;
+    bronnenAan.push(bron);
+    gewensteIds.add(`${REG_PREFIX}${bron.id}`);
   }
 
   const wegHalen = [...bestaandeIds].filter((id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id));
@@ -124,9 +128,13 @@ async function syncRegistraties(): Promise<void> {
   const bijZetten: { id: string; match: string; js: string }[] = gewenst
     .filter((s) => !bestaandeIds.has(regId(s)))
     .map((s) => ({ id: regId(s), match: s.match, js: "content.js" }));
-  const amexRegId = `${REG_PREFIX}${AMEX_ID}`;
-  if (gewensteIds.has(amexRegId) && !bestaandeIds.has(amexRegId)) {
-    bijZetten.push({ id: amexRegId, match: AMEX_MATCH, js: "amex-content.js" });
+  for (const bron of bronnenAan) {
+    const id = `${REG_PREFIX}${bron.id}`;
+    if (bestaandeIds.has(id)) continue;
+    /* ÉÉN content script voor alle bronnen. Het hoeft niet te weten op welke
+     * pagina het draait: het stuurt "ik ben er" en krijgt afgemaakte zinnen
+     * terug. Zie de uitleg bij AANBOD_CONTENT_JS in bronnen.ts. */
+    bijZetten.push({ id, match: bron.match, js: AANBOD_CONTENT_JS });
   }
   if (bijZetten.length > 0) {
     await chrome.scripting.registerContentScripts(
@@ -193,7 +201,7 @@ chrome.permissions.onRemoved.addListener(() => {
     }
     if (blijft.length !== aangevinkt.length) await setEnabledSiteIds(blijft);
 
-    /* EN DE AMEX-KANT, en die doet meer dan een vinkje omzetten: het opgeslagene
+    /* EN DE BRONNEN, en die doen meer dan een vinkje omzetten: het opgeslagene
      * gaat weg.
      *
      * Dit is de route die buiten ons scherm om loopt. Trekt hij de toestemming
@@ -201,9 +209,15 @@ chrome.permissions.onRemoved.addListener(() => {
      * optiescherm — en zou de gelezen lijst blijven staan terwijl hij zojuist
      * heeft gezegd dat LaVega daar niet meer mag kijken. Een intrekking die
      * alleen toekomstig gedrag verandert, is geen intrekking; dat staat in de
-     * kop van amex.ts en het moet dus ook langs deze kant waar zijn. */
-    if ((await getAmexAan()) && !(await chrome.permissions.contains({ origins: [AMEX_MATCH] }))) {
-      await wisAmex();
+     * kop van amex.ts en het moet dus ook langs deze kant waar zijn.
+     *
+     * PER BRON, en alleen die ene. Trekt hij de ING-toestemming in, dan hoort
+     * zijn Amex-lijst te blijven staan: dat waren twee vragen en dit is één
+     * antwoord. `wisBron` raakt alleen de sleutels uit die ene descriptor. */
+    for (const bron of BRONNEN) {
+      if (!(await getBronAan(bron))) continue;
+      if (await chrome.permissions.contains({ origins: [bron.match] })) continue;
+      await wisBron(bron);
     }
 
     await planSync();
@@ -219,7 +233,8 @@ chrome.runtime.onStartup.addListener(() => void planSync());
  * waar registratie gebeurt. */
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (!("enabledSiteIds" in changes) && !("amexAan" in changes)) return;
+  const bronSleutel = BRONNEN.some((b) => b.sleutels.aan in changes);
+  if (!("enabledSiteIds" in changes) && !bronSleutel) return;
   void planSync();
 });
 
@@ -354,66 +369,87 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
    * wat er in de opslag staat is al gelezen en er wordt hier geen tweede pagina
    * voor aangeraakt. Wel wordt de winkel gekoppeld op het DOMEIN van deze
    * pagina — nooit op de naam in de aanbieding; zie `hoortBijWinkel`. */
-  const aanbod = aanbodVoorWinkel(
-    { aan: await getAmexAan(), lezing: await getAmexLezing(), aanbiedingen: await getAanbiedingen() },
-    evidence.host,
-    asOf,
-  );
+  const uitkomsten: { bron: Bron; uitkomst: AanbodUitkomst }[] = [];
+  for (const bron of BRONNEN) {
+    uitkomsten.push({
+      bron,
+      uitkomst: aanbodVoorWinkel(
+        {
+          aan: await getBronAan(bron),
+          lezing: await getBronLezing(bron),
+          aanbiedingen: await getBronAanbiedingen(bron),
+        },
+        evidence.host,
+        asOf,
+      ),
+    });
+  }
 
   return buildPanel({
     reading,
     ranking,
     cards: CHECKOUT_CARDS,
     punten,
-    aanbod: { uitkomst: aanbod, asOf },
+    aanbod: { uitkomsten, asOf },
     caps: PANEEL_CAPS,
   });
 }
 
 /* ───────────────────── zijn eigen Amex-aanbiedingen lezen ─────────────────── */
 
-/** Hoort dit bericht bij zijn aanbiedingenpagina?
+/** Welke BRON hoort bij de afzender van dit bericht? Null als het er geen is.
  *
  *  Dezelfde drie eisen als bij een winkel (`siteVanAfzender`) en om dezelfde
  *  reden: `sender.url` en `sender.origin` worden door Chrome gezet en niet door
  *  de pagina, dus dat zijn de enige velden waarop dit mag rusten. Een origin
  *  heeft geen pad, dus alleen de origin controleren zou "alles op
- *  global.americanexpress.com" betekenen — inclusief het rekeningoverzicht met
- *  zijn saldo en zijn transacties erop. Dat is precies wat er NIET gelezen
- *  wordt, en het staat hier in code en niet alleen in de belofte. */
-function afzenderIsAanbiedingenpagina(sender: chrome.runtime.MessageSender): boolean {
+ *  global.americanexpress.com" of "alles op www.ing.nl" betekenen — inclusief
+ *  het rekeningoverzicht met zijn saldo en zijn transacties erop. Dat is precies
+ *  wat er NIET gelezen wordt, en het staat hier in code en niet alleen in de
+ *  belofte.
+ *
+ *  HIER WORDT OOK BESLIST WELKE BRON HET IS, en dat gebeurt met opzet aan DEZE
+ *  kant. Het content script is één bestand voor beide pagina's en zegt niet wie
+ *  het is; als het dat wel deed, zou een pagina zich voor de andere bron kunnen
+ *  uitgeven en de lijst van de verkeerde bron laten overschrijven. Nu komt het
+ *  antwoord uit `sender.url`, en dat veld zet Chrome. */
+function bronVanAfzender(sender: chrome.runtime.MessageSender): Bron | null {
   const url = sender.url;
-  if (!url) return false;
-  if (!amexUrlIsAanbiedingen(url)) return false;
+  if (!url) return null;
+
+  const bron = bronVoorUrl(url);
+  if (!bron) return null;
 
   if (sender.origin) {
     let origin: string;
     try {
       origin = new URL(url).origin;
     } catch {
-      return false;
+      return null;
     }
-    if (sender.origin !== origin) return false;
+    if (sender.origin !== origin) return null;
   }
 
   const tabUrl = sender.tab?.url;
-  if (tabUrl !== undefined && !amexUrlIsAanbiedingen(tabUrl)) return false;
-  return true;
+  if (tabUrl !== undefined && bronVoorUrl(tabUrl)?.id !== bron.id) return null;
+  return bron;
 }
 
 async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<AanbodAntwoord> {
-  if (!afzenderIsAanbiedingenpagina(sender)) {
-    return { soort: "zwijg", reden: "afzender is niet de aanbiedingenpagina" };
-  }
+  const bron = bronVanAfzender(sender);
+  if (!bron) return { soort: "zwijg", reden: "afzender hoort niet bij een aanbiedingenbron" };
 
   /* TWEE SCHAKELAARS, ALLEBEI NODIG, en in deze volgorde. Het vinkje is van hem
    * en de host-toestemming is van Chrome; de tweede wint altijd, maar de eerste
    * hoort te kunnen zonder de tweede in te trekken. Beide worden hier opnieuw
    * gelezen en niet gecachet: tussen het registreren van het script en dit
-   * bericht kan hij ze allebei hebben omgezet. */
-  if (!(await getAmexAan())) return { soort: "zwijg", reden: "amex staat uit" };
-  if (!(await chrome.permissions.contains({ origins: [AMEX_MATCH] }))) {
-    return { soort: "zwijg", reden: "geen toestemming voor de aanbiedingenpagina" };
+   * bericht kan hij ze allebei hebben omgezet.
+   *
+   * EN ZE GELDEN PER BRON. De schakelaar van Amex zegt niets over de ING Winkel
+   * en andersom; daarom staat `bron` hier in beide regels. */
+  if (!(await getBronAan(bron))) return { soort: "zwijg", reden: `${bron.id} staat uit` };
+  if (!(await chrome.permissions.contains({ origins: [bron.match] }))) {
+    return { soort: "zwijg", reden: `geen toestemming voor ${bron.id}` };
   }
 
   const tabId = sender.tab?.id;
@@ -425,10 +461,12 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
   try {
     const uitkomst = await chrome.scripting.executeScript({
       target: { tabId },
-      func: collectAanbod,
+      /* De lezer van DEZE bron. Chrome verstuurt hem als tekst naar de pagina;
+       * zie de uitleg bij `Bron.collect`. */
+      func: bron.collect,
       args: [null],
     });
-    ruw = uitkomst[0]?.result;
+    ruw = uitkomst[0]?.result as RuweLezing | undefined;
   } catch {
     /* Tabblad weg, of de toestemming een seconde geleden ingetrokken. Geen van
      * beide is iets waar hij op deze pagina iets aan heeft. */
@@ -436,15 +474,15 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
   }
   if (!ruw) return { soort: "zwijg", reden: "geen lezing" };
 
-  const { lezing, aanbiedingen } = leesAanbod(ruw, asOf);
-  await setAmexLezing(lezing, aanbiedingen);
+  const { lezing, aanbiedingen } = leesAanbod(ruw, asOf, bron);
+  await setBronLezing(bron, lezing, aanbiedingen);
 
-  const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), AMEX_MATCH);
+  const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), bron);
   return {
     soort: "melding",
     gelukt: lezing.uitkomst === "gelezen",
     /* Alleen doorvragen als de pagina nog aan het opbouwen KAN zijn. Bij een
-     * inlogformulier is het antwoord definitief: nog vier keer een uitgelogde
+     * inlogscherm is het antwoord definitief: nog vier keer een uitgelogde
      * pagina lezen levert vier keer hetzelfde op, en een strook die pas na tien
      * seconden zegt dat je moet inloggen is tien seconden te laat. */
     opnieuw: lezing.uitkomst === "geen-aanbiedingenblok" || lezing.uitkomst === "blok-zonder-kaarten",
