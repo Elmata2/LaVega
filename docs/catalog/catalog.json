@@ -404,6 +404,14 @@
           "checkedAt": "2025-10-01",
           "conditions": "SCOPE IS DE VOORWAARDE: het Informatiedocument is gekopt \"Naam van de rekening: Knab Betaalrekening\" — het particuliere pakket (Privérekening € 6 p/m, één rekeninghouder; Gezamenlijke rekening € 7 p/m, twee rekeninghouders). Zakelijke Knab-rekeningen hebben een eigen tarievenpagina en vallen hier niet onder. Dezelfde 1,4% staat op knab.nl/tarieven (\"Tarieven per 18-02-2026\") met de geografische inkadering erbij: \"Betalen en opname van contant geld in eurolanden Gratis*\" tegenover \"Betalen en opname van contant geld buiten eurolanden Mastercard wisselkoers + 1,4% koersopslag in euro*\", met voetnoot \"* Let op: buitenlandse banken kunnen kosten rekenen voor het gebruik van een geldautomaat.\" De 1,4% komt dus bovenop de Mastercard-wisselkoers. Geen plafond, staffel, vrij bedrag of promo bij deze regel; het document schrijft samengestelde voorwaarden wél uit waar ze bestaan (\"Overboeking in andere valuta buiten SEPA € 15 + koersopslag van 0,1%\", en de pakketsplitsing Privé € 72 / Gezamenlijk € 84 totale jaarlijkse vergoeding), dus de onvoorwaardelijke 1,4%-regel is informatief. Dezelfde 1,4% geldt in het FID ook voor \"Opname van contant geld met een betaalpas in vreemde valuta\".",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -443,6 +451,14 @@
           "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
           "checkedAt": "2026-05-01",
           "conditions": "SCOPE IS DE VOORWAARDE: \"Naam van de rekening: Triodos Internet Betaalrekening\" — Triodos' enige particuliere betaalrekening, met een pakketprijs die per leeftijd/soort verschilt (18 t/m 22 jaar € 0,00 p/m; 23 t/m 25 jaar € 3,50; vanaf 26 jaar € 5,00; en/of-rekening € 8,00) maar de 1% is voor alle vier gelijk — één regel voor de hele rekening. Geldt alleen bij BETALEN met de betaalpas in vreemde valuta; geldopname is een aparte, duurdere regel: \"Opname van contant geld met een betaalpas in vreemde valuta — € 2,25 voor elke opname + 1% koersopslag over het opgenomen bedrag\". Creditcard is niet van toepassing (\"Aanbieden van een creditcard — Dienst niet beschikbaar\"). Geen minimum, maximum, staffel of vrij bedrag bij de 1%-regel; het document schrijft min/max wél uit waar ze bestaan (\"0,1% van het bedrag met minimum van € 7,50 en maximum van € 75,00\"), dus de kale 1% is informatief. De Triodos servicepagina voegt toe dat Visa de koers zet: \"Visa bepaalt de wisselkoersen en opslagen.\"",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -909,6 +925,14 @@
           "sourceUrl": "https://traderepublic.com/nl-nl/kaart/_payload.json",
           "checkedAt": "2025-09-10",
           "conditions": "Eenmalige kosten voor de fysieke kaart komen er wel: virtuele kaart gratis, Classic kaart € 5 eenmalig, Mirror kaart € 50 eenmalig. De pagina zegt daarnaast 'Wij rekenen geen kosten voor onze betaalrekening'. De payload noemt geen ingangsdatum, alleen een updatedAt per veld. Uitgesproken nul.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -1645,6 +1669,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1660,6 +1692,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -1677,6 +1717,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1692,6 +1740,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }

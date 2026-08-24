@@ -356,6 +356,17 @@ Amex-aanbiedingen lezen. Gebouwd op 22–23 augustus: aparte vraag, standaard ui
 er ligt, en `host_permissions` blijft leeg zodat Chrome het pad afdwingt. Wat nog niet is gezien is
 de echte pagina — dat kan alleen hij.
 
+**V2 — de zeven `enumerated-absence`-regels staan op nul, maar op een ANDERE grond dan gevraagd.**
+Zijn woorden: *"ik weet dat er voor die banken geen puntenschema's zijn en verwacht niet dat die
+binnenkort zullen komen."* Dat is geen instemming met de bewijssoort maar iets sterkers: een
+uitspraak van de eigenaar, en in deze app verslaat een gebruikersfeit elke agent. De zeven dragen
+daarom `sourceUrl: user:eigenaar-2026-08-24` en zeggen in hun voorwaarden dat de nul op zijn gezag
+rust en niet op een zin van de aanbieder. `enumerated-absence` als losstaande bewijssoort is dus nog
+steeds NIET aanvaard — er is alleen geen zaak meer die erop wacht.
+
+Het waren er zeven en niet zes; deze backlog telde er een te weinig. Het gaat om vier ICS-zakenkaarten,
+Knab, Triodos en Trade Republic.
+
 **De vier verdachte datums (§2.3): later.** Zijn woorden: *"datum kunnen we later testen."*
 
 **De euro-waarde van een punt: niet belangrijk.** *"Eurowaarde is niet per se belangrijk."* Dat maakt
