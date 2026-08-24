@@ -331,6 +331,7 @@ function result(
   cashFlows: CashFlow[],
   problems: string[],
   retryAfterMs: number | null,
+  tradesComplete = true,
 ): BrokerResult {
   return {
     positions,
@@ -340,6 +341,7 @@ function result(
     cashFlows,
     source: SOURCE,
     problems,
+    tradesComplete,
     ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
   };
 }
@@ -467,6 +469,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let nextUrl = historyUrl.toString();
       let historyPages = 0;
       let ordersRead = 0;
+      let historyComplete = true;
       try {
         while (nextUrl) {
           const current = await page(nextUrl, config, limiter);
@@ -484,6 +487,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
         }
       } catch (error) {
+        historyComplete = false;
         noteRateLimit(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
       }
@@ -561,7 +565,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
         }
       }
-      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs);
+      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete);
     },
   };
 }

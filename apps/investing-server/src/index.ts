@@ -9,6 +9,7 @@ import {
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   syncScheduledBrokers,
+  tradesComplete,
   type BrokerSyncStateStore,
   type PriceStore,
   type ScheduledSyncResult,
@@ -115,7 +116,9 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         // them left the vault stale while the UI showed only the problem.
         if (outcome.result === null) continue;
         positionsByBroker.set(outcome.broker, outcome.result.positions);
-        tradesByBroker.set(outcome.broker, outcome.result.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
+        // A truncated trade history (pagination failed mid-chain) must not wipe
+        // good stored trades; keep the previous set until a complete sync lands.
+        if (tradesComplete(outcome.result)) tradesByBroker.set(outcome.broker, outcome.result.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
         dividendsByBroker.set(outcome.broker, outcome.result.dividends ?? []);
         cashBalancesByBroker.set(outcome.broker, outcome.result.cashBalances ?? []);
         cashFlowsByBroker.set(outcome.broker, outcome.result.cashFlows ?? []);

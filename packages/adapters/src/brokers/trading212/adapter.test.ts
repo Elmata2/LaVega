@@ -138,6 +138,7 @@ test("sync returns collected trades and problem when later page fails", async ()
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
 
   expect(result.trades).toHaveLength(1);
+  expect(result.tradesComplete).toBe(false);
   expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
 });
 
