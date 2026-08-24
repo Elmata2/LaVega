@@ -151,7 +151,13 @@ function buttonLike(selector: string, text: string): HTMLButtonElement {
 
 const scopeButton = (label: string) => button("button.scope-option", label);
 
-async function click(el: HTMLButtonElement) {
+/* HTMLElement en niet HTMLButtonElement: sinds de navigatie <a href> is (commit
+ * edea871) levert `button()` een anker op, en dan klopt het nauwere type niet
+ * meer. Klikken doet hier niets buttonspecifieks — het stuurt een MouseEvent —
+ * dus het bredere type is ook het eerlijkere. Dit stond rood in tsc terwijl de
+ * tests groen waren; vitest typecheckt niet, en dat is precies hoe deze fout
+ * eerder deze week ook al een keer is gepusht. */
+async function click(el: HTMLElement) {
   await act(async () => {
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });

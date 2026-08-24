@@ -174,7 +174,23 @@ test("een weigering wordt nooit opgevouwen — ook niet als het scherm er leeg v
   tab(kaal, "Weekdagen");
   staatVooraan(kaal, "2 dagen geschiedenis");
   staatVooraan(kaal, "minstens 14 dagen");
-  expect(kaal.querySelectorAll("details")).toHaveLength(0);
+
+  /* Hier stond `expect(kaal.querySelectorAll("details")).toHaveLength(0)`, en
+     dat was een aanname over het hele blok waar deze test alleen iets over de
+     WEIGERING beweert. Sinds de gemiddelden erbij staan is die aanname onwaar
+     en de bewering nog steeds waar: twee dagen zijn te weinig voor een
+     weekdagpatroon (elke weekdag komt hooguit één keer voor) en genoeg voor een
+     daggemiddelde (twee waarnemingen), dus het scherm weigert het ene en toont
+     het andere. Wat de test moet vasthouden is dat de weigering zelf niet in een
+     paneel zit — niet dat er nergens een paneel is. */
+  expect(node(kaal, "minstens 14 dagen").closest("details"), "een weigering hoort niet in een paneel").toBeNull();
+  // Het enige paneel dat er mág staan is de onderbouwing van het gemiddelde, en
+  // dat is er een die zijn telling in het LABEL draagt.
+  const panelen = [...kaal.querySelectorAll("details")];
+  expect(panelen.map((d) => d.querySelector("summary")?.textContent)).toEqual([
+    "Waarover deze twee gemiddelden gaan: 2 hele dagen",
+  ]);
+  for (const d of panelen) expect(d.open).toBe(false);
 });
 
 test("gegroeid: de stijger blijft staan, de vergelijkingsperiode vouwt op", () => {

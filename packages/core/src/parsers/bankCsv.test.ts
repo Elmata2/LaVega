@@ -319,7 +319,7 @@ test("ING (NL): het saldo komt uit 'Saldo na mutatie', en de laatste regel wint"
     '"20260801","SIMYO","NL01INGB0001234567","","ID","Af","11,89","Incasso","","1234,56",""',
     '"20260815","Albert Heijn","NL01INGB0001234567","","BA","Af","23,45","Betaalautomaat","","1211,11",""',
   ].join("\n");
-  const r = parseBankCsv(csv);
+  const r = parseBankCsv(csv, "fallback");
   expect(r.accounts[0].bank).toBe("ING");
   expect(r.accounts[0].balance).toBe(1211.11);
   // En het saldo draagt de dag waarop het gold, niet de dag van importeren.
@@ -331,7 +331,7 @@ test("ING (EN): dezelfde kolom onder zijn Engelse naam", () => {
     '"Date","Name / Description","Account","Counterparty","Code","Debit/credit","Amount (EUR)","Transaction type","Notifications","Balance after mutation","Tag"',
     '"20260801","SIMYO","NL01INGB0001234567","","ID","Debit","11,89","Direct Debit","","900,00",""',
   ].join("\n");
-  expect(parseBankCsv(csv).accounts[0].balance).toBe(900);
+  expect(parseBankCsv(csv, "fallback").accounts[0].balance).toBe(900);
 });
 
 test("een export zonder saldokolom houdt zijn saldo ONBEKEND", () => {
@@ -342,5 +342,5 @@ test("een export zonder saldokolom houdt zijn saldo ONBEKEND", () => {
     '"Datum","Naam / Omschrijving","Rekening","Tegenrekening","Code","Af Bij","Bedrag (EUR)","Mutatiesoort","Mededelingen"',
     '"20260801","SIMYO","NL01INGB0001234567","","ID","Af","11,89","Incasso",""',
   ].join("\n");
-  expect(parseBankCsv(csv).accounts[0].balance).toBeNull();
+  expect(parseBankCsv(csv, "fallback").accounts[0].balance).toBeNull();
 });

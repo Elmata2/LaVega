@@ -6,11 +6,14 @@ import {
   categoryGrowth,
   categoryPerWindow,
   categoryShare,
+  MIN_AVERAGE_UNITS,
   MIN_WEEKDAY_DAYS,
   monthAxisLabel,
   movedTotals,
   newestTxDate,
+  periodAverages,
   presetWindow,
+  unitPluralNL,
   weekdaySpend,
   windowTotals,
 } from "./statistics";
@@ -338,4 +341,141 @@ test("een geldopname telt mee als uitgave, een storting op de eigen spaarrekenin
   const moved = movedTotals(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
   expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen"]);
   expect(moved[0].outCents).toBe(1500000);
+});
+
+/* ─────────────────────────────── gemiddelde inkomsten en gemiddelde uitgaven
+ *
+ * De val die hier eerder is gevallen staat in de kop van statistics.ts: een
+ * gemiddelde dat overboekingen meetelt is het cijfer van twee miljoen, gedeeld
+ * door een paar maanden. Deze tests bewaken de drie regels eromheen — verplaatst
+ * geld telt niet mee, er wordt alleen over HELE eenheden gemiddeld, en de eenheid
+ * komt uit het venster en wordt nooit omhoog geëxtrapoleerd. */
+
+const drieMaanden: Tx[] = [
+  parkTx("d1", "2026-06-01", 3_000, "Klant BV", "Managementfee juni"),
+  parkTx("d2", "2026-06-15", -1_000, "Albert Heijn", "Boodschappen"),
+  parkTx("d3", "2026-07-10", -500, "Vattenfall", "Energie"),
+  parkTx("d4", "2026-07-20", 3_000, "Klant BV", "Managementfee juli"),
+  parkTx("d5", "2026-08-05", -700, "Albert Heijn", "Boodschappen"),
+  parkTx("d6", "2026-08-31", 3_000, "Klant BV", "Managementfee augustus"),
+];
+const KWARTAAL = { start: "2026-06-01", end: "2026-08-31" };
+
+test("periodAverages middelt per hele kalendermaand als het venster er genoeg bevat", () => {
+  const a = periodAverages(drieMaanden, [], own, KWARTAAL);
+  if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
+  expect(a.unit).toBe("maand");
+  expect(a.askedUnit).toBe("maand");
+  expect(a.units).toBe(3);
+  expect(a.span).toEqual({ start: "2026-06-01", end: "2026-08-31" });
+  // Drie hele maanden, geen aanloop en geen staart om weg te laten.
+  expect(a.restDays).toBe(0);
+  expect(a.inAverage).toBeCloseTo(9_000 / 3, 6);
+  expect(a.outAverage).toBeCloseTo(2_200 / 3, 6);
+});
+
+test("een aangebroken maand telt in de teller noch in de noemer mee", () => {
+  // Het echte geval: twaalf maanden gekozen, negen weken afschrift. Van
+  // 4 juni t/m 11 augustus is alleen JULI een hele maand — één is geen
+  // gemiddelde, dus de eenheid zakt naar de week.
+  const a = periodAverages(txs, rules, own, YEAR);
+  if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
+  expect(a.askedUnit).toBe("maand");
+  expect(a.unit).toBe("week");
+  expect(a.units).toBe(9);
+  // Maandag t/m zondag, allebei binnen het gedekte deel van het venster.
+  expect(a.span).toEqual({ start: "2026-06-08", end: "2026-08-09" });
+  // 4 t/m 7 juni en 10 t/m 11 augustus vallen erbuiten: zes dagen, en het scherm
+  // noemt ze in plaats van ze stil mee te delen.
+  expect(a.restDays).toBe(6);
+  expect(a.covered).toEqual({ start: "2026-06-04", end: "2026-08-11" });
+
+  // DE TELLER BESLAAT EXACT DE DAGEN DIE DE NOEMER TELT. Zou de teller over het
+  // hele gedekte venster gaan, dan zaten de € 12.000 van 4 juni en de € 1.100
+  // van 11 augustus in een gemiddelde over negen weken die ze niet beslaan.
+  const overSpan = windowTotals(txs, rules, own, a.span);
+  expect(a.inTotal).toBeCloseTo(overSpan.inTotal, 6);
+  expect(a.outTotal).toBeCloseTo(overSpan.outTotal, 6);
+  expect(a.inTotal).toBeCloseTo(9_500, 6);
+  expect(a.outTotal).toBeCloseTo(420.5 + 1_880 + 250, 6);
+  expect(a.inAverage).toBeCloseTo(9_500 / 9, 6);
+});
+
+test("een gemiddelde telt geen geld mee dat alleen van plaats veranderde", () => {
+  const a = periodAverages(parked, [], own, AUG);
+  if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
+  // 1 t/m 9 augustus draagt maar één hele week, dus per dag.
+  expect(a.unit).toBe("dag");
+  expect(a.units).toBe(9);
+  expect(a.outAverage).toBeCloseTo((85.4 + 250) / 9, 6);
+  expect(a.inAverage).toBeCloseTo(6_000 / 9, 6);
+  // Waar het zonder de uitsluiting op uit zou komen — het cijfer van ronde 3,
+  // alleen gedeeld door negen.
+  expect(a.outAverage).not.toBeCloseTo((85.4 + 250 + 15_000 + 5_000 + 1_000) / 9, 6);
+});
+
+test("de eenheid zakt wel, maar stijgt nooit: een week wordt geen maandbedrag", () => {
+  const week = periodAverages(drieMaanden, [], own, presetWindow("1w", "2026-08-31"));
+  if (week.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${week.reason}`);
+  // Zeven dagen: `bucketUnit` zegt dag, en daar wordt niets uit geëxtrapoleerd.
+  expect(week.askedUnit).toBe("dag");
+  expect(week.unit).toBe("dag");
+  expect(week.units).toBe(7);
+  // Zeven gemeten dagen, waarvan er zes leeg zijn: die tellen mee in de noemer,
+  // want een dag binnen de gemeten reeks waarop niets gebeurde is een dag waarop
+  // niets gebeurde — niet een dag waar we niets van weten. Zo komt de € 3.000
+  // van de 31e uit op € 428,57 per dag in plaats van op een maandinkomen.
+  expect(week.span).toEqual({ start: "2026-08-25", end: "2026-08-31" });
+  expect(week.inAverage).toBeCloseTo(3_000 / 7, 6);
+  expect(week.outAverage).toBe(0);
+});
+
+test("een uitgesproken nul is wel een gemiddelde: niets ontvangen is € 0,00", () => {
+  const alleenUit: Tx[] = [
+    parkTx("u1", "2026-07-06", -40, "Albert Heijn", "Boodschappen"),
+    parkTx("u2", "2026-07-20", -60, "Albert Heijn", "Boodschappen"),
+    parkTx("u3", "2026-08-02", -100, "Albert Heijn", "Boodschappen"),
+  ];
+  // 6 juli t/m 2 augustus is precies vier hele weken, maandag tot zondag.
+  const a = periodAverages(alleenUit, [], own, { start: "2026-07-06", end: "2026-08-02" });
+  if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
+  expect(a.unit).toBe("week");
+  expect(a.units).toBe(4);
+  expect(a.restDays).toBe(0);
+  // Gemeten, niet onbekend: er is vier weken lang niets binnengekomen.
+  expect(a.inAverage).toBe(0);
+  expect(a.outAverage).toBeCloseTo(200 / 4, 6);
+});
+
+test("te weinig om te middelen is een weigering met de echte oorzaak, geen nul", () => {
+  const eenDag = [parkTx("x1", "2026-08-05", -30, "Albert Heijn", "Boodschappen")];
+  const kort = periodAverages(eenDag, [], own, AUG);
+  expect(kort.kind).toBe("geen");
+  if (kort.kind !== "geen") throw new Error("verwachtte een weigering");
+  expect(kort.reason).toBe("te-kort");
+  // De weigering draagt wat er wél lag, zodat de melding dat kan noemen.
+  expect(kort.coveredDays).toBe(1);
+  expect(kort.covered).toEqual({ start: "2026-08-05", end: "2026-08-05" });
+
+  // Een venster waar het afschrift niet in reikt is een ANDER feit: daar is niet
+  // te weinig gemeten, daar is niets gemeten.
+  const leeg = periodAverages(txs, rules, own, { start: "2025-01-01", end: "2025-02-01" });
+  if (leeg.kind !== "geen") throw new Error("verwachtte een weigering");
+  expect(leeg.reason).toBe("geen-gegevens");
+  expect(leeg.covered).toBeNull();
+  expect(leeg.coveredDays).toBe(0);
+
+  // En zonder enige transactie is er ook niets — geen 0 en geen NaN.
+  const geen = periodAverages([], [], own, AUG);
+  expect(geen.kind).toBe("geen");
+});
+
+test("unitPluralNL houdt de eenheid leesbaar in de zin die eromheen staat", () => {
+  expect(unitPluralNL("dag", 1)).toBe("dag");
+  expect(unitPluralNL("dag", 9)).toBe("dagen");
+  expect(unitPluralNL("week", 1)).toBe("week");
+  expect(unitPluralNL("week", 9)).toBe("weken");
+  expect(unitPluralNL("maand", 1)).toBe("maand");
+  expect(unitPluralNL("maand", 3)).toBe("maanden");
+  expect(MIN_AVERAGE_UNITS).toBe(2);
 });
