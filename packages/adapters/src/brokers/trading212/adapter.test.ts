@@ -198,6 +198,19 @@ test("malformed order-history payload becomes a problem without throwing", async
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
+test("maps sell fills with negative quantities to positive quantity and side sell", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      json(response, 200, { items: [{ fill: { id: 3, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 12, quantity: -1.5 }, order: { id: 3, ticker: "AAPL", side: "SELL", currency: "USD", instrument: { ticker: "AAPL", currency: "USD" } } }] });
+    } else standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
+});
+
 test("ignores non-trade fill rows and maps nested instruments", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) {

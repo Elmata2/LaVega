@@ -274,7 +274,9 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   const instrument = optionalObject(order.instrument, "historical order instrument") ?? {};
   const symbol = string(value(order, "ticker") ?? value(instrument, "ticker"), "order symbol");
   const fillPrice = number(fill.price, "order fill price");
-  const fillQuantity = number(fill.quantity, "order fill quantity");
+  // Trading 212 reports sell fills as negative quantities; the trade model
+  // carries direction in `side`, so magnitudes stay positive.
+  const fillQuantity = Math.abs(number(fill.quantity, "order fill quantity"));
   const brokerTradeId = value(fill, "id") ?? value(order, "id");
   const walletImpact = optionalObject(fill.walletImpact, "order fill wallet impact");
   const isin = optionalString(value(instrument, "isin"));
