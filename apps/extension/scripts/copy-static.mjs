@@ -108,12 +108,13 @@ if (manifest) {
    * geregistreerd (zie background.ts). Chrome merkt een ontbrekend bestand dan
    * pas als de gebruiker een winkel aanzet, dus controleren we het hier. */
   verwijzingen.push("content.js");
-  /* Idem voor het script op zijn Amex-aanbiedingenpagina: dat staat ook niet in
-   * het manifest en wordt pas geregistreerd als hij die schakelaar aanzet. Een
-   * ontbrekend bestand zou hij dan pas merken doordat er nooit iets gelezen
-   * wordt — zonder foutmelding, want een registratie naar een bestand dat er
-   * niet is, faalt stil op de pagina zelf. */
-  verwijzingen.push("amex-content.js");
+  /* Idem voor het script op zijn accountpagina's (Amex en de ING Winkel): dat
+   * staat ook niet in het manifest en wordt pas geregistreerd als hij zo'n
+   * schakelaar aanzet. Eén bestand voor beide bronnen — zie bronnen.ts. Een
+   * ontbrekend bestand zou hij pas merken doordat er nooit iets gelezen wordt —
+   * zonder foutmelding, want een registratie naar een bestand dat er niet is,
+   * faalt stil op de pagina zelf. */
+  verwijzingen.push("aanbod-content.js");
 
   const voorVerwijzingen = fouten.length;
   for (const p of verwijzingen) {
@@ -184,15 +185,19 @@ if (manifest) {
 /* ── 4. loopt de sitelijst gelijk met sites.ts? ────────────────────────────── */
 
 const sites = await import(pathToFileURL(join(DIST, "sites.js")).href);
-/* De aanbiedingenpagina hoort in dezelfde vergelijking. Hij staat niet in
- * SITE_MATCHES omdat hij geen WINKEL is — het is zijn eigen account, met een
- * eigen schakelaar en een eigen vraag — maar hij vraagt wel een hostrecht, en
- * dat recht moet net zo hard gelijklopen met het manifest. Vergeet je hem hier,
- * dan merkt hij het pas doordat Chrome zijn toestemmingsverzoek weigert met een
- * melding die niets over de oorzaak zegt. */
-const amex = await import(pathToFileURL(join(DIST, "amex.js")).href);
+/* De accountpagina's horen in dezelfde vergelijking. Ze staan niet in
+ * SITE_MATCHES omdat het geen WINKELS zijn — het zijn zijn eigen accounts, elk
+ * met een eigen schakelaar en een eigen vraag — maar ze vragen wel een
+ * hostrecht, en dat recht moet net zo hard gelijklopen met het manifest.
+ * Vergeet je er een, dan merkt hij het pas doordat Chrome zijn
+ * toestemmingsverzoek weigert met een melding die niets over de oorzaak zegt.
+ *
+ * DIT KOMT UIT BRONNEN.TS EN NIET UIT EEN TWEEDE LIJSTJE HIER. Zodra er een
+ * derde bron bij komt, loopt hij automatisch mee; een lijst die hier met de hand
+ * wordt bijgehouden is precies de plek waar de vorige er een zou vergeten. */
+const bronnen = await import(pathToFileURL(join(DIST, "bronnen.js")).href);
 const voorSitelijst = fouten.length;
-const uitCode = [...sites.SITE_MATCHES, amex.AMEX_MATCH].sort();
+const uitCode = [...sites.SITE_MATCHES, ...bronnen.BRON_MATCHES].sort();
 const uitManifest = [...(manifest?.optional_host_permissions ?? [])].sort();
 eis(
   JSON.stringify(uitCode) === JSON.stringify(uitManifest),
@@ -227,7 +232,7 @@ if (fouten.length === voorSitelijst) {
 /* Allebei de content scripts, want de fout is dezelfde en hij is even
  * onzichtbaar: bij amex-content.js zou hij alleen in de console van zijn
  * Amex-pagina staan. */
-for (const naam of ["content.js", "amex-content.js"]) {
+for (const naam of ["content.js", "aanbod-content.js"]) {
   const pad = join(DIST, naam);
   if (!existsSync(pad)) continue;
   const bron = readFileSync(pad, "utf8");

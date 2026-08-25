@@ -14,12 +14,16 @@ import {
   categoryShare,
   categoryPerWindow,
   isMovedCategory,
+  MIN_AVERAGE_UNITS,
   MIN_WEEKDAY_DAYS,
   movedTotals,
   newestTxDate,
+  periodAverages,
   presetWindow,
+  unitPluralNL,
   weekdaySpend,
   windowTotals,
+  type AverageRefusal,
   type StatPreset,
   type StatWindow,
 } from "./statistics.js";
@@ -48,8 +52,14 @@ import {
  *
  * The block states the window it is showing in one line and then never repeats
  * itself: the old footer explaining what Δ meant is gone (it earned nothing),
- * and the two figures under the chart are the window's own totals rather than a
- * per-month average that a one-week window could not support.
+ * and the two figures under the chart are the window's own totals.
+ *
+ * Onder elk van die twee staat sinds deze ronde het GEMIDDELDE. Dat is niet de
+ * terugkeer van het maandbedrag dat hier ooit weg is gehaald: dat middelde over
+ * een eenheid die het venster niet droeg ("per maand" bij een week is
+ * extrapolatie). `periodAverages` kiest de eenheid uit het venster, middelt
+ * alleen over HELE eenheden, zet die eenheid op het scherm en weigert als er
+ * niets te middelen valt. De drie regels eromheen staan boven die functie.
  *
  * Every number is derived from the transactions; the block holds only the
  * chosen view and period. Nothing is defaulted — an unmeasured weekday shows no
@@ -102,6 +112,34 @@ export function weggelatenLabelNL(counts: { maanden: number; klein: number; geca
   if (counts.klein > 0) delen.push(`${counts.klein} kleinere categorie${counts.klein === 1 ? "" : "ën"}`);
   if (counts.gecapt > 0) delen.push(`${counts.gecapt} categorie${counts.gecapt === 1 ? "" : "ën"} buiten de grafiek`);
   return delen.length === 0 ? null : `Wat hier niet in staat: ${delen.join(" · ")}`;
+}
+
+/** De regel die er staat als er NIETS te middelen valt.
+ *
+ *  Dit is een weigering en geen onderbouwing, dus hij vouwt niet op: een lege
+ *  plek onder de twee totalen laat het scherm leeg lijken terwijl er iets te
+ *  zeggen valt, en dat is een leugen met minder letters.
+ *
+ *  `meerBuitenVenster` bestaat omdat het ADVIES anders niet klopt in de toestand
+ *  waarin het verschijnt. Ligt er afschrift buiten het gekozen venster, dan
+ *  helpt een langere periode en is dat de zin. Is dit alles wat er is, dan
+ *  helpt een langere periode niet — dan laat je hem klikken tot hij het opgeeft,
+ *  en is importeren het enige dat werkt. Puur en geëxporteerd, zodat beide
+ *  takken los van een render te controleren zijn. */
+export function gemiddeldeWeigeringNL(
+  reason: AverageRefusal,
+  coveredDays: number,
+  meerBuitenVenster: boolean,
+): string {
+  const advies = meerBuitenVenster
+    ? "Een langere periode pakt de rest van je afschriften mee."
+    : "Oudere afschriften importeren vult dit aan.";
+  if (reason === "geen-gegevens") {
+    return `Nog geen gemiddelde: in deze periode staat geen enkele transactie. ${advies}`;
+  }
+  return `Nog geen gemiddelde: deze periode bevat ${coveredDays} dag${
+    coveredDays === 1 ? "" : "en"
+  } afschrift, en middelen vraagt er minstens ${MIN_AVERAGE_UNITS}. ${advies}`;
 }
 
 export type StatPeriod = StatPreset | "aangepast";
@@ -387,6 +425,16 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
     () => (range === null ? null : windowTotals(txs, rules, own, range)),
     [txs, rules, own, range],
   );
+  /* De twee totalen zeggen wat er in deze periode gebeurde; deze zeggen wat een
+     periode HEM normaal kost en oplevert. Twee cijfers uit dezelfde bron dus, en
+     bewust uit dezelfde functie: `periodAverages` deelt door `windowTotals`
+     heen, zodat de gemiddelden geen tweede definitie van "uitgave" kunnen
+     krijgen. Over welke eenheid gemiddeld wordt is een keuze van het venster —
+     zie de kop boven `periodAverages`. */
+  const averages = useMemo(
+    () => (range === null ? null : periodAverages(txs, rules, own, range)),
+    [txs, rules, own, range],
+  );
   /* What every figure in this block deliberately leaves out. Money moving
      between his own accounts — or into his own savings and investments — is not
      spending, but it IS his money leaving a bank account, so it has to be named
@@ -481,6 +529,18 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
      verkeerd sorteert, en dat blijft waar als je de reden opvouwt. Opgevouwen
      wordt dus alleen het WAAROM, niet het HOEVEEL. */
   const movedOut = moved.reduce((sum, m) => sum + m.outCents, 0);
+
+  /* Uit elkaar getrokken in plaats van in de JSX vertakt, zodat TypeScript de
+     unie hier één keer uitpakt: `gemiddeld.inAverage` bestaat alleen op de tak
+     die er ook een heeft, en op de andere is er niets om per ongeluk als nul te
+     lezen. Zie de unie bij PeriodAverages. */
+  const gemiddeld = averages !== null && averages.kind === "gemiddeld" ? averages : null;
+  const geenGemiddelde = averages !== null && averages.kind === "geen" ? averages : null;
+  /* Of een langere periode nog iets zou toevoegen. Alleen als er afschrift
+     BUITEN het gekozen venster ligt is dat waar; anders is "kies een langere
+     periode" advies dat in deze toestand niet werkt. */
+  const meerBuitenVenster =
+    coverage !== null && range !== null && (coverage.start < range.start || coverage.end > range.end);
 
   return (
     <Module
@@ -772,20 +832,83 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
               loud in the line above, and a mouse-only tooltip repeating half of
               it was the version he could not see. */}
           {totals && (
-            <div className="stat-figures">
-              <div className="stat-figure">
-                <div className="eyebrow">Inkomsten in deze periode</div>
-                <div className="module-figure">
-                  <span className="module-figure-value">{formatEuro(totals.inTotal)}</span>
+            <>
+              <div className="stat-figures">
+                <div className="stat-figure">
+                  <div className="eyebrow">Inkomsten in deze periode</div>
+                  <div className="module-figure">
+                    <span className="module-figure-value">{formatEuro(totals.inTotal)}</span>
+                  </div>
+                  {/* Het gemiddelde staat ONDER zijn eigen totaal en niet in een
+                      eigen tegel: het is hetzelfde geld, anders gedeeld, en twee
+                      tegels ernaast zouden lezen als vier losse metingen. De
+                      eenheid staat er altijd bij — "gemiddeld € 283,39" zonder
+                      "per week" is geen cijfer maar een raadsel, en bij een
+                      venster van een week zou "per maand" er een verzinsel van
+                      maken. */}
+                  {gemiddeld && (
+                    <p className="module-figure-label">
+                      gemiddeld {formatEuro(gemiddeld.inAverage)} per {gemiddeld.unit}
+                    </p>
+                  )}
+                </div>
+                <div className="stat-figure">
+                  <div className="eyebrow">Uitgaven in deze periode</div>
+                  <div className="module-figure">
+                    <span className="module-figure-value">{formatEuro(totals.outTotal)}</span>
+                  </div>
+                  {gemiddeld && (
+                    <p className="module-figure-label">
+                      gemiddeld {formatEuro(gemiddeld.outAverage)} per {gemiddeld.unit}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="stat-figure">
-                <div className="eyebrow">Uitgaven in deze periode</div>
-                <div className="module-figure">
-                  <span className="module-figure-value">{formatEuro(totals.outTotal)}</span>
-                </div>
-              </div>
-            </div>
+
+              {/* De WEIGERING is de uitkomst zelf en vouwt dus niet op; de
+                  onderbouwing van een gemiddelde dat er wél is, wel. */}
+              {geenGemiddelde && (
+                <p className="stat-insight-basis">
+                  {gemiddeldeWeigeringNL(geenGemiddelde.reason, geenGemiddelde.coveredDays, meerBuitenVenster)}
+                </p>
+              )}
+              {gemiddeld && (
+                <ToonMeer
+                  /* Het AANTAL eenheden staat in het label en niet in het paneel:
+                     daaraan leest hij af hoeveel een gemiddelde waard is, en dat
+                     is geen onderbouwing maar de helft van het cijfer. Zelfde
+                     afweging als bij het weekdaggemiddelde erboven.
+                     "deze twee" en niet "dit": in de weekdagweergave staat er al
+                     een regel over EEN gemiddelde ("Waarop dit gemiddelde rust"),
+                     en twee bijna gelijke labels op één scherm laten de lezer de
+                     verkeerde opendoen. */
+                  summary={`Waarover deze twee gemiddelden gaan: ${gemiddeld.units} hele ${unitPluralNL(
+                    gemiddeld.unit,
+                    gemiddeld.units,
+                  )}`}
+                >
+                  <p className="cell-sub">
+                    Gedeeld door {gemiddeld.units} hele {unitPluralNL(gemiddeld.unit, gemiddeld.units)}:{" "}
+                    {rangeLabelNL(gemiddeld.span.start, gemiddeld.span.end)}. Geld dat alleen van plaats
+                    veranderde telt er niet in mee, net als in de rest van dit blok.
+                  </p>
+                  {gemiddeld.restDays > 0 && (
+                    <p className="cell-sub">
+                      {gemiddeld.restDays} dag{gemiddeld.restDays === 1 ? "" : "en"} aan de randen tellen niet
+                      mee — een aangebroken {gemiddeld.unit} is geen {gemiddeld.unit}. Zouden ze meetellen, dan
+                      hing dit gemiddelde ervan af of een vaste afschrijving nog net vóór het einde van de
+                      periode viel.
+                    </p>
+                  )}
+                  {gemiddeld.unit !== gemiddeld.askedUnit && (
+                    <p className="cell-sub">
+                      Niet per {gemiddeld.askedUnit}: deze periode bevat er geen {MIN_AVERAGE_UNITS} hele. Over
+                      één {gemiddeld.askedUnit} middelen levert dat {gemiddeld.askedUnit}bedrag zelf op.
+                    </p>
+                  )}
+                </ToonMeer>
+              )}
+            </>
           )}
         </>
       )}

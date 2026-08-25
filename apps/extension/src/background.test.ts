@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AMEX_MATCH } from "./amex.js";
+import { ING_MATCH } from "./ing.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const IKEA_MATCH = "https://www.ikea.com/nl/nl/p/*";
@@ -133,6 +134,12 @@ const AMEX_SENDER = {
   origin: "https://global.americanexpress.com",
 };
 
+const ING_SENDER = {
+  tab: { id: 8, url: "https://mijn.ing.nl/punten/overview" },
+  url: "https://mijn.ing.nl/punten/overview",
+  origin: "https://mijn.ing.nl",
+};
+
 beforeEach(reset);
 
 describe("welk script waar geregistreerd staat", () => {
@@ -150,7 +157,7 @@ describe("welk script waar geregistreerd staat", () => {
 
     toegestaan.add(AMEX_MATCH);
     await sync();
-    expect(scripts.map((s) => s.js?.[0])).toEqual(["amex-content.js"]);
+    expect(scripts.map((s) => s.js?.[0])).toEqual(["aanbod-content.js"]);
     expect(scripts[0]!.matches).toEqual([AMEX_MATCH]);
   });
 
@@ -160,7 +167,7 @@ describe("welk script waar geregistreerd staat", () => {
     opslag.set("amexAan", true);
     toegestaan.add(AMEX_MATCH);
     await sync();
-    expect(scripts.map((s) => s.js?.[0])).toEqual(["amex-content.js"]);
+    expect(scripts.map((s) => s.js?.[0])).toEqual(["aanbod-content.js"]);
 
     reset();
     opslag.set("enabledSiteIds", ["ikea-nl"]);
@@ -188,7 +195,7 @@ describe("intrekken doet het opgeslagene weg, ook buiten ons scherm om", () => {
      * net heeft gezegd dat LaVega daar niet meer mag kijken. */
     opslag.set("amexAan", true);
     opslag.set("amexAanbiedingen", [
-      { winkel: "JBL", korting: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-22" },
+      { winkel: "JBL", prijsTekst: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-22" },
     ]);
     opslag.set("amexLezing", { uitkomst: "gelezen", aantal: 1, op: "2026-08-22", citaat: "" });
     toegestaan.add(AMEX_MATCH);
@@ -284,7 +291,7 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     opslag.set("amexAan", true);
     toegestaan.add(AMEX_MATCH);
     opslag.set("amexAanbiedingen", [
-      { winkel: "JBL", korting: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-19" },
+      { winkel: "JBL", prijsTekst: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-19" },
     ]);
     await sync();
 
@@ -311,5 +318,125 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as { opnieuw: boolean; regel: string };
     expect(a.opnieuw).toBe(false);
     expect(a.regel).toContain("zegt zelf");
+  });
+});
+
+/* ──────────────── twee bronnen die elkaar niet aanzetten ──────────────────── */
+
+describe("de ING Winkel staat naast Amex en niet in plaats van", () => {
+  it("registreert per bron apart, en de een zet de ander niet aan", async () => {
+    /* DE KERN VAN DE OPDRACHT. Wie ja zei tegen zijn Amex-account heeft geen ja
+     * gezegd tegen zijn ING-account. Twee schakelaars, twee hostrechten, en geen
+     * van beide zet de ander aan. */
+    opslag.set("ingAan", true);
+    toegestaan.add(ING_MATCH);
+    await sync();
+    expect(scripts.map((s) => s.matches?.[0])).toEqual([ING_MATCH]);
+    /* Eén content script voor beide bronnen: geen tweede kopie van dezelfde
+     * strook. */
+    expect(scripts.map((s) => s.js?.[0])).toEqual(["aanbod-content.js"]);
+
+    reset();
+    opslag.set("amexAan", true);
+    toegestaan.add(AMEX_MATCH);
+    await sync();
+    expect(scripts.map((s) => s.matches?.[0])).toEqual([AMEX_MATCH]);
+  });
+
+  it("registreert er twee zodra allebei aanstaan", async () => {
+    opslag.set("amexAan", true);
+    opslag.set("ingAan", true);
+    toegestaan.add(AMEX_MATCH);
+    toegestaan.add(ING_MATCH);
+    await sync();
+    expect(scripts.map((s) => s.matches?.[0]).sort()).toEqual([AMEX_MATCH, ING_MATCH].sort());
+    /* En elk maar één keer, ook al draait sync twee keer achter elkaar. */
+    expect(new Set(scripts.map((s) => s.id)).size).toBe(2);
+  });
+
+  it("staat de ING-schakelaar niet toe zonder de ING-toestemming", async () => {
+    opslag.set("ingAan", true);
+    toegestaan.add(AMEX_MATCH);
+    await sync();
+    expect(scripts).toEqual([]);
+  });
+
+  it("leest de ING Winkel en slaat alleen ING-sleutels op", async () => {
+    document.body.innerHTML = readFileSync(
+      join(FIXTURES, "kunstmatig-ing-winkel.html"),
+      "utf8",
+    );
+    opslag.set("ingAan", true);
+    toegestaan.add(ING_MATCH);
+    await sync();
+
+    const antwoord = (await stuur({ soort: "aanbod-vragen" }, ING_SENDER)) as {
+      soort: string;
+      gelukt: boolean;
+      regel: string;
+    };
+    expect(antwoord.soort).toBe("melding");
+    expect(antwoord.gelukt).toBe(true);
+    expect(antwoord.regel).toContain("artikelen");
+
+    /* De ING-lijst staat in de opslag en de Amex-sleutels zijn niet aangeraakt. */
+    expect(opslag.has("ingAanbiedingen")).toBe(true);
+    expect(opslag.has("amexAanbiedingen")).toBe(false);
+    expect(opslag.has("amexLezing")).toBe(false);
+
+    /* En zijn saldo zit er niet in — de hele weg door, niet alleen in de lezer. */
+    const alles = JSON.stringify([...opslag.entries()]);
+    expect(alles).not.toContain("3.450");
+    expect(alles).not.toContain("Alexander");
+    expect(alles).not.toContain("NL02");
+  });
+
+  it("antwoordt niet op een ING-pagina als alleen Amex aanstaat", async () => {
+    /* De afzendercontrole gaat op `sender.url`, en de schakelaar wordt per bron
+     * opnieuw gelezen. Een pagina kan zich dus niet voor de andere bron uitgeven
+     * om diens lijst te laten overschrijven. */
+    opslag.set("amexAan", true);
+    toegestaan.add(AMEX_MATCH);
+    await sync();
+
+    const antwoord = (await stuur({ soort: "aanbod-vragen" }, ING_SENDER)) as { soort: string };
+    expect(antwoord.soort).toBe("zwijg");
+    expect(opslag.has("ingAanbiedingen")).toBe(false);
+  });
+
+  it("wist bij een ingetrokken ING-toestemming alleen de ING-gegevens", async () => {
+    /* De route die buiten ons scherm om loopt: hij trekt de toestemming in via
+     * chrome://extensions. Dan hoort de ING-lijst weg te zijn — en de Amex-lijst
+     * te blijven staan, want dat was een andere vraag met een ander antwoord. */
+    opslag.set("amexAan", true);
+    opslag.set("amexAanbiedingen", [
+      { winkel: "JBL", prijsTekst: "30% korting", gelezenOp: "2026-08-22", tot: null, totRuw: "", domein: "jbl.nl" },
+    ]);
+    opslag.set("ingAan", true);
+    opslag.set("ingAanbiedingen", [
+      {
+        winkel: "JBL Flip 6",
+        prijsTekst: "1.250 punten",
+        prijs: { punten: 1250, bij: null },
+        gelezenOp: "2026-08-22",
+        tot: null,
+        totRuw: "",
+        domein: null,
+      },
+    ]);
+    toegestaan.add(AMEX_MATCH);
+    toegestaan.add(ING_MATCH);
+    await sync();
+
+    /* Chrome meldt dat de ING-toestemming weg is. */
+    toegestaan.delete(ING_MATCH);
+    for (const cb of luister.verwijderd) cb();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(opslag.has("ingAan")).toBe(false);
+    expect(opslag.has("ingAanbiedingen")).toBe(false);
+    /* En Amex is niet aangeraakt. */
+    expect(opslag.get("amexAan")).toBe(true);
+    expect(opslag.has("amexAanbiedingen")).toBe(true);
   });
 });

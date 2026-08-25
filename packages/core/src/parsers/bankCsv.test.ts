@@ -72,7 +72,12 @@ test("Rabobank: profile detected, ISO dates, signed amounts (incl. thousands sep
   });
 
   expect(result.accounts).toHaveLength(1);
-  expect(result.accounts[0]).toMatchObject({ key: "NL39RABO0300065264", iban: "NL39RABO0300065264", bank: "Rabobank", balance: null });
+  /* HET SALDO STOND HIER OP null EN DAT WAS DE PARSER, NIET DE DATA. Deze fixture
+   * draagt de kolom "Saldo na trn" met 2234,56 op de laatste regel — het
+   * Rabobank-profiel declareerde alleen geen `bal`, dus er werd nooit gezocht.
+   * De verwachting pinde daarmee een gemis vast in plaats van een eigenschap. */
+  expect(result.accounts[0]).toMatchObject({ key: "NL39RABO0300065264", iban: "NL39RABO0300065264", bank: "Rabobank", balance: 2234.56 });
+  expect(result.accounts[0].balanceDate).toBe("2026-01-06");
 });
 
 /* --- Knab: semicolon-delimited, CreditDebet column drives the sign. --- */
@@ -299,4 +304,43 @@ describe("ING English CSV export", () => {
     expect(out.txs[0].amount).toBeCloseTo(-42.15, 2);
     expect(Object.values(out.accounts)[0].bank).toBe("ING");
   });
+});
+
+/* HET SALDO STAAT IN DE EXPORT EN WERD NIET GELEZEN.
+ *
+ * Gemeld op 24 augustus: "Positie onbekend (alleen CSV-rekeningen zonder saldo)".
+ * Dat was waar en onnodig — ING schrijft "Saldo na mutatie" in elke regel, maar
+ * het ING-profiel declareerde geen `bal`, dus `pick` kreeg een lege lijst en er
+ * werd nooit gezocht. Zonder saldo kan de positiegrafiek geen lijn tekenen en
+ * valt de hele rekening buiten elk totaal. */
+test("ING (NL): het saldo komt uit 'Saldo na mutatie', en de laatste regel wint", () => {
+  const csv = [
+    '"Datum","Naam / Omschrijving","Rekening","Tegenrekening","Code","Af Bij","Bedrag (EUR)","Mutatiesoort","Mededelingen","Saldo na mutatie","Tag"',
+    '"20260801","SIMYO","NL01INGB0001234567","","ID","Af","11,89","Incasso","","1234,56",""',
+    '"20260815","Albert Heijn","NL01INGB0001234567","","BA","Af","23,45","Betaalautomaat","","1211,11",""',
+  ].join("\n");
+  const r = parseBankCsv(csv, "fallback");
+  expect(r.accounts[0].bank).toBe("ING");
+  expect(r.accounts[0].balance).toBe(1211.11);
+  // En het saldo draagt de dag waarop het gold, niet de dag van importeren.
+  expect(r.accounts[0].balanceDate).toBe("2026-08-15");
+});
+
+test("ING (EN): dezelfde kolom onder zijn Engelse naam", () => {
+  const csv = [
+    '"Date","Name / Description","Account","Counterparty","Code","Debit/credit","Amount (EUR)","Transaction type","Notifications","Balance after mutation","Tag"',
+    '"20260801","SIMYO","NL01INGB0001234567","","ID","Debit","11,89","Direct Debit","","900,00",""',
+  ].join("\n");
+  expect(parseBankCsv(csv, "fallback").accounts[0].balance).toBe(900);
+});
+
+test("een export zonder saldokolom houdt zijn saldo ONBEKEND", () => {
+  /* De tegenproef, en de belangrijkste: het saldo mag niet uit het niets komen.
+   * Geen kolom betekent geen saldo — niet nul, en niet het laatste bedrag dat
+   * toevallig in beeld was. */
+  const csv = [
+    '"Datum","Naam / Omschrijving","Rekening","Tegenrekening","Code","Af Bij","Bedrag (EUR)","Mutatiesoort","Mededelingen"',
+    '"20260801","SIMYO","NL01INGB0001234567","","ID","Af","11,89","Incasso",""',
+  ].join("\n");
+  expect(parseBankCsv(csv, "fallback").accounts[0].balance).toBeNull();
 });

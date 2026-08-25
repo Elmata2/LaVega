@@ -501,7 +501,7 @@ function BrokerConnect() {
 export function HealthStatus() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { fetch("/health").then(async (response) => { if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`); return await response.json() as Health; }).then(setHealth).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt")); }, []);
+  useEffect(() => { fetch(`${import.meta.env.BASE_URL}health`).then(async (response) => { if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`); return await response.json() as Health; }).then(setHealth).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt")); }, []);
   if (error) return <span className="text-negative">Server niet beschikbaar: {error}</span>;
   if (!health) return <span>Verbinden met investeringsserver…</span>;
   return <span>{health.service}: {health.ok ? "beschikbaar" : "niet beschikbaar"}</span>;

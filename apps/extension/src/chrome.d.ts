@@ -29,10 +29,14 @@
  *                      resourcepositie. Een poort in de build, geen belofte van
  *                      het manifest.
  *
- * De vier namespaces die er wél in staan zijn runtime, storage, permissions en
- * scripting, en elk daarvan alleen in de vorm die we gebruiken: de
+ * De vijf namespaces die er wél in staan zijn runtime, storage, permissions,
+ * scripting en dom, en elk daarvan alleen in de vorm die we gebruiken: de
  * Promise-vorm. De callback-varianten staan er niet in, zodat een halve
- * migratie tussen die twee stijlen niet stilletjes kan ontstaan. */
+ * migratie tussen die twee stijlen niet stilletjes kan ontstaan.
+ *
+ * `dom` IS OP 24 AUGUSTUS 2026 TOEGEVOEGD en is de enige regel in dit bestand
+ * met een ongeverifieerde belofte eronder — zie de uitleg bij de namespace
+ * zelf. Dat die toevoeging opvalt, is precies waarvoor dit bestand bestaat. */
 
 declare namespace chrome {
   namespace runtime {
@@ -117,5 +121,30 @@ declare namespace chrome {
     function registerContentScripts(scripts: RegisteredContentScript[]): Promise<void>;
     function unregisterContentScripts(filter?: { ids?: string[] }): Promise<void>;
     function getRegisteredContentScripts(filter?: { ids?: string[] }): Promise<RegisteredContentScript[]>;
+  }
+
+  /** ÉÉN FUNCTIE, EN ZE STAAT HIER MET HAAR VOORBEHOUD ERBIJ.
+   *
+   *  `openOrClosedShadowRoot(el)` geeft de schaduwwortel van een element ook als
+   *  die met `mode: "closed"` is aangehangen. Alleen beschikbaar in een content
+   *  script (de ISOLATED wereld), zonder enige extra toestemming, sinds
+   *  Chrome 88 — ruim onder de `minimum_chrome_version` 102 van dit manifest.
+   *
+   *  WAAROM DIT MAG. Hij geeft geen toegang tot iets nieuws: dezelfde pagina,
+   *  dezelfde wereld, dezelfde toestemming. Wat er van die pagina AF komt wordt
+   *  niet hier bepaald maar door de patronen in ing.ts, en die zijn met deze
+   *  wijziging niet ruimer maar STRENGER geworden (drie saldo-zeven in plaats
+   *  van één). Wat hij verandert is bereik binnen die ene pagina.
+   *
+   *  WAAROM HIJ NIET RECHTSTREEKS WORDT AANGEROEPEN. Hij is NIET geverifieerd in
+   *  Brave, de browser van de eigenaar, en dat is vanaf deze machine ook niet te
+   *  controleren. `collectIngWinkel` leest hem daarom van `globalThis` en
+   *  controleert eerst of het een functie is: die functie draait ook in jsdom
+   *  (geen `chrome`) en wordt door Chrome uit haar eigen tekst opgebouwd, dus een
+   *  kale naam zou daar een ReferenceError zijn die alleen in zijn console te
+   *  zien is. Ontbreekt hij, dan blijft een gesloten wortel onbereikbaar en zegt
+   *  de strook dát — de uitkomst "afgeschermd" in aanbod-kern.ts. */
+  namespace dom {
+    function openOrClosedShadowRoot(element: Element): ShadowRoot | null;
   }
 }

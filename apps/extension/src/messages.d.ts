@@ -92,9 +92,17 @@ declare type PaneelAntwoord =
        *  artikelprijs is geen ordertotaal. Null als er geen bedrag is. */
       bedragNoot: string | null;
       punten: PaneelPunten;
-      /** Wat er over zijn Amex-aanbiedingen gezegd mag worden. Zie
-       *  PaneelAanbod: een lege `kop` betekent zwijgen. */
-      aanbod: PaneelAanbod;
+      /** Wat er over zijn aanbiedingen gezegd mag worden, ÉÉN BLOK PER BRON.
+       *
+       *  Een lijst en niet één blok, omdat er twee bronnen zijn (Amex en de ING
+       *  Winkel) met elk een eigen schakelaar. Ze samenvoegen tot één blok zou
+       *  betekenen dat een regel uit de ING Winkel onder de kop van Amex kan
+       *  staan — en dat is precies de verwarring die hier niet mag ontstaan: het
+       *  ene is een korting bij deze winkel, het andere een aankoop bij ING.
+       *
+       *  Bronnen die zwijgen (schakelaar uit) staan er niet in; de lijst is dan
+       *  leeg en er verschijnt niets. */
+      aanbod: PaneelAanbod[];
       regels: PaneelRegel[];
       /** De regel onderaan: peildatum van de gegevens en wat er níét gebeurt. */
       voet: string;
@@ -113,7 +121,7 @@ declare type PaneelAntwoord =
       kop: string;
       uitleg: string;
       punten: PaneelPunten;
-      aanbod: PaneelAanbod;
+      aanbod: PaneelAanbod[];
       voet: string;
     }
   /** Niets tonen. `reden` is voor de console van de ontwikkelaar, niet voor het

@@ -1,0 +1,60 @@
+{
+  "lane": "fx-gaten-zeven-kaarten",
+  "question": "Zeven producten in de catalogus zijn een kaart die reist en dragen geen fxFeePct, waardoor apps/server ze weigert (79 accepted, 113 refused van 192 voor NL|USD). Welke van de zeven zijn een GAT en welke zijn een ANTWOORD?",
+  "generatedAt": "2026-08-24",
+  "usedApiCredits": false,
+  "field": "fxFeePct",
+  "warning": "STAGING. Wijzigt niets uit zichzelf. Vier rijen kunnen erin, drie horen LEEG te blijven en dat is per stuk een gemeten antwoord en geen gebrek. Vul bij die drie NOOIT een nul in: bij Wise zou dat hem elke reisranglijst laten winnen van kaarten die hun percentage eerlijk publiceren.",
+  "entries": [
+    {
+      "id": "ing-creditcard-more",
+      "value": 2,
+      "route": "provider-pdf",
+      "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "checkedAt": "2026-06-15",
+      "conditions": "Vlakke 2,00% koersopslag, zonder plafond. Uit de tabel \"ING Creditcards / Koersopslag non-euro\" van het Kostenoverzicht (geldig vanaf 15 juni 2026): in de kolommen ING Go en ING More staat \"ING Creditcard More 2,00%\". LET OP DE NAAMVAL: de ING STUDENTEN Creditcard More is een ANDER product en staat in hetzelfde document op \"in vreemde valuta tot EUR 500 per creditcardperiode 0,00% koersopslag\" en daarboven 2,00%. Die 0% hoort dus NIET bij deze rij. Volgens noot 1 rekent ING de koersopslag als percentage ten opzichte van de ECB-referentiekoers, verwerkt in het bestede bedrag.",
+      "conditionsKnown": true
+    },
+    {
+      "id": "ing-creditcard-extra",
+      "value": 0,
+      "route": "provider-pdf",
+      "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "checkedAt": "2026-06-15",
+      "conditions": "VOORWAARDELIJKE NUL, en het plafond hoort bij het cijfer: 0,00% koersopslag tot EUR 1.000 per creditcardperiode, DAARBOVEN 2,00%. Letterlijk uit de tabel \"ING Creditcards / Koersopslag non-euro\": \"ING Creditcard Extra tot EUR 1000*** per maand 0,00%\", met noot ***: \"Tot EUR 1000 geen koersopslag per maandcyclus per creditcard contract, daarboven 2,00%\". Twee keer bevestigd in hetzelfde document: de opnamesectie zet \"Vreemde valuta opnemen tot EUR 1000 euro per creditcardperiode\" op 0,00% koersopslag en daarboven op 2,00%. Dezelfde vorm als ing-platinumcard, en dezelfde reden dat het plafond meereist: een 0% die als onvoorwaardelijk wordt getoond zet deze kaart bovenaan een reisranglijst terwijl er boven EUR 1.000 wel wordt gerekend. Het cijfer geldt bij ING Go, ING More en ING Extra.",
+      "conditionsKnown": true
+    },
+    {
+      "id": "ing-creditcard-max",
+      "value": 0,
+      "route": "provider-pdf",
+      "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      "checkedAt": "2026-06-15",
+      "conditions": "Onvoorwaardelijke 0,00% koersopslag, en dat is hier gemeten in plaats van aangenomen: in de tabel \"ING Creditcards / Koersopslag non-euro\" staat in de ING Max-kolom \"0,00% ING Creditcard Max\" ZONDER het plafond en ZONDER noot *** die de Extra-cel wel draagt, en de opnamesectie zegt onafhankelijk daarvan \"Met een ING Creditcard Max - Vreemde valuta opnemen: 4,00% van het opgenomen bedrag met een minimum van EUR 4,50 + 0,00% koersopslag\", ook zonder plafond. DE KAART IS ALLEEN BINNEN HET ING MAX-PAKKET TE KRIJGEN (EUR 44,99 per maand); deze nul is dus geen gratis nul maar een nul binnen een pakket dat geld kost, en dat staat ook zo in accountFee van dezelfde rij. Bij geldopname komt bovenop deze nul nog 4,00% van het opgenomen bedrag.",
+      "conditionsKnown": true
+    },
+    {
+      "id": "bleap-card",
+      "value": 0,
+      "route": "provider-page",
+      "sourceUrl": "https://bleap.finance/legal-agreements/bleap-cardholder-terms-eea-bleap-sia",
+      "checkedAt": "2026-06-28",
+      "conditions": "Uitgesproken nul die de eigen toeslag noemt en de koers bij het netwerk laat: artikel 6 van de Cardholder Terms EEA zegt \"Bleap charges no issuance, monthly, usage or exchange fees for Card activity\", en 6.3 \"Currency conversion - If you transact in a different currency, the amount is converted at the Mastercard network rate applicable at processing time\". DE NUL IS DUS BLEAPS EIGEN OPSLAG, NIET DE KOERS: hetzelfde artikel zegt dat \"Mastercard scheme fees, network FX rates, merchant surcharges, ATM operator fees and government taxes may apply and are your responsibility\". Zelfde vorm als gnosis-pay-card-direct-consumer en trade-republic-betaalpas, waar de nul ook de opslag van de uitgever is en de koers die van het kaartnetwerk. Dit is hetzelfde document en dezelfde datum als de accountFee van deze rij, die uit artikel 6.1 komt.",
+      "conditionsKnown": true
+    }
+  ],
+  "blijftLeeg": [
+    {
+      "id": "wise-betaalpas",
+      "reden": "Wise PUBLICEERT GEEN KAART-FX-PERCENTAGE. Al vastgesteld in docs/BACKLOG.md 5.3: wise.com/nl/pricing geeft 200 maar noemt geen percentage per corridor, card-fees rekent live, en het wettelijk gestandaardiseerde tarievendocument op wise.com/pricing/fees-documents geeft 403 op curl met browser-UA. Een nul zou hier de gevaarlijkste fout zijn. De eerlijke ingang is api.wise.com/v4/comparisons als LIVE bron, zoals de Valuta-tab de ECB al gebruikt - niet een cijfer in dit bestand."
+    },
+    {
+      "id": "wirex-card-wirex-one",
+      "reden": "GEEN BEREIKBARE BRON. Het artikel dat de catalogus voor deze rij al citeert (help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337, HTTP 200, 610 kB) bevat NUL treffers op FX, foreign exchange, exchange fee, conversion of OTC - het gaat alleen over abonnementsprijzen en Cryptoback. Drie andere voor de hand liggende paden gemeten op 24 augustus 2026: wirexapp.com/en/fees, wirexapp.com/fees en help.wirexapp.com/article/wirex-fees-1263 geven alle drie HTTP 404. Dit is dus een ontbrekend cijfer met een gemeten reden, geen nul."
+    },
+    {
+      "id": "bunq-crypto",
+      "reden": "VERKEERD VELD, GEEN GAT. bunq crypto is geen betaalkaart maar handelen in crypto via Payward Europe Solutions (Kraken); er is geen kaarttransactie waarop een koersopslag van toepassing is. Hetzelfde geldt voor de 34 spaarrekeningen, 34 betaalrekeningen, 33 betaalpakketten en 5 beleggingsrekeningen die de loader ook weigert. Een fxFeePct hier zou de travel-block een handelsproduct als reiskaart laten rangschikken."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, NetBasis, NetBenefit, OwnAccounts, RateBenchmark, Rule } from "@lavega/core";
+import type { Account, Tx, AccountRate, CatalogueEntryLike, FeeAmount, LearnedFact, NetBasis, NetBenefit, OwnAccounts, RateBenchmark, Rule, Subscription } from "@lavega/core";
 import {
   merchantTallies,
   accountCosts,
@@ -42,7 +42,7 @@ import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { getCashbackAssumptionEnabled } from "../settings";
 import { formatEuro, monthLabelNL } from "../format";
-import Module from "../components/Module";
+import Module, { ModulePeriod } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import "../styles/views.css";
@@ -145,6 +145,154 @@ const EXAMPLE_SUBS = [
   { name: "Adobe Creative Cloud", fn: "Software", monthly: 6899, last: 6899, change: 0 },
   { name: "Odido", fn: "Telecom", monthly: 3500, last: 3500, change: -0.05 },
 ] as const;
+
+/* ── DE PERIODESCHAKELAAR OP ABONNEMENTEN ─────────────────────────────────
+ *
+ * Hier stond overal "per maand" als vaste eenheid, en die vaste eenheid verborg
+ * TWEE STILLE OMREKENINGEN die allebei fout waren. Gemeten, niet beredeneerd:
+ *
+ *  1. DE JAARKOLOM WAS `monthlyCents * 12`, en `monthlyCents` is bij een
+ *     jaarabonnement zelf al een deling: core rekent `bedrag × 30 / ritme`. Een
+ *     abonnement van € 120,00 per jaar kwam daardoor uit op € 9,86 per maand en
+ *     op € 118,32 per jaar — terwijl het bedrag dat op zijn afschrift staat
+ *     € 120,00 is. Een kolom die "per jaar" heet en het jaarbedrag mist met
+ *     € 1,68, terwijl het jaarbedrag het énige is dat werkelijk is afgeschreven.
+ *  2. DE PRIJSSTIJGINGSZIN REKENDE ELK VERSCHIL × 12. `fromCents`/`toCents` zijn
+ *     de afgeschreven bedragen in hun eigen ritme, dus een verhoging van € 10,00
+ *     op een JAARabonnement werd gemeld als "€ 120,00 per jaar extra". Twaalf
+ *     keer te veel, op de regel die hem juist moet laten opzeggen.
+ *
+ * Allebei dezelfde fout: rekenen met een getal dat al een omrekening wás. Dus
+ * geldt hier de regel die `accountCosts` in packages/core al aanhoudt met
+ * `period` en `perYearDerived` — ER WORDT NERGENS STIL OMGEREKEND:
+ *
+ *   - er wordt altijd gerekend vanaf `lastAmountCents`, het bedrag dat ÍS
+ *     afgeschreven, en nooit vanaf een afgeleide;
+ *   - is de getoonde eenheid niet die van de afschrijving, dan draagt de cel de
+ *     som zichtbaar mee ("12 × € 9,99", "€ 120,00 ÷ 12") — precies zoals de
+ *     kostentabel verderop `perYearDerived` toont;
+ *   - en de eenheid van de afschrijving verdwijnt NOOIT achter de schakelaar:
+ *     de kolom "Op je afschrift" staat er in elke stand, met het ritme erbij.
+ *
+ * DE DRIE STANDEN, en waarom er geen vierde is. "Per kwartaal" is overwogen en
+ * afgewezen: maand en jaar zijn de eenheden die de rest van deze app draagt
+ * (`FeePeriod` in accountCosts is letterlijk `"maand" | "jaar"`), en een vierde
+ * eenheid toevoegen die nergens anders bestaat maakt van elke vergelijking met
+ * de kosten- en rentemodules weer een omrekening. */
+
+export type SubPeriod = "eigen" | "maand" | "jaar";
+
+export const SUB_PERIODS: { value: SubPeriod; label: string }[] = [
+  { value: "eigen", label: "Zoals afgeschreven" },
+  { value: "maand", label: "Per maand" },
+  { value: "jaar", label: "Per jaar" },
+];
+
+/** Hoeveel MAANDEN één afschrijving beslaat, per ritme dat de detector kent
+ *  (CADENCE_BANDS in core). Kalendermaanden, geen dagen: een maandabonnement
+ *  wordt twaalf keer per jaar afgeschreven en niet 365/30 = 12,17 keer. Op die
+ *  dagbenadering ging het mis — zie de kop hierboven.
+ *
+ *  Het spiegelt `FEE_PERIOD_MONTHS` in accountCosts, en om dezelfde reden: "een
+ *  jaar is twaalf maanden" hoort op één plek te staan, zodat een zesde ritme er
+ *  hier bijkomt en niet in elke aanroeper. */
+export const CADENCE_MONTHS: Readonly<Record<number, number>> = { 30: 1, 61: 2, 91: 3, 182: 6, 365: 12 };
+
+/** Het ritme in woorden, met een terugval die het ritme noemt in plaats van het
+ *  te verzwijgen. Op moduleniveau zodat de tabel, de zinnen en de tests hem
+ *  delen. */
+export const cadenceName = (days: number) => CADENCE_LABEL_NL[days] ?? `elke ${days} dagen`;
+
+/** Een bedrag in de gevraagde eenheid — of de mededeling dat het niet kan.
+ *
+ *  Een unie en geen `cents: number | null`, om dezelfde reden als
+ *  `AccountCostTotal` in packages/core: dat laatste nodigt uit tot `?? 0`, en
+ *  een abonnement waarvan we het ritme niet kennen mag nooit als € 0,00 in een
+ *  som of in een kolom belanden. */
+export type SubAmount =
+  | {
+      kind: "bedrag";
+      /** In centen, in de gevraagde eenheid. */
+      cents: number;
+      /** true als `cents` ONZE rekensom is en niet het bedrag dat is afgeschreven. */
+      derived: boolean;
+      /** Die rekensom in woorden ("12 × € 9,99"), of null als er niets is
+       *  omgerekend. Hier gemaakt en niet in de JSX, zodat beide takken zonder
+       *  render te controleren zijn. */
+      sum: string | null;
+    }
+  | {
+      /** Het ritme zit niet in CADENCE_MONTHS, dus omrekenen zou raden zijn. */
+      kind: "onbekend-ritme";
+      cadenceDays: number;
+    };
+
+/** Reken `cents`, afgeschreven op ritme `cadenceDays`, om naar `period`.
+ *
+ *  Naar JAAR wordt alleen VERMENIGVULDIGD (12/1, 12/2, 12/3, 12/6, 12/12 zijn
+ *  allemaal hele getallen), dus dat bedrag is exact. Naar MAAND wordt gedeeld en
+ *  dus afgerond, en precies daarom draagt die cel `derived` en de som: € 120,00
+ *  per jaar is € 10,00 per maand, maar dat tientje staat op geen enkel
+ *  afschrift. */
+export function amountInPeriod(cents: number, cadenceDays: number, period: SubPeriod): SubAmount {
+  if (period === "eigen") return { kind: "bedrag", cents, derived: false, sum: null };
+  const months = CADENCE_MONTHS[cadenceDays];
+  if (months === undefined) return { kind: "onbekend-ritme", cadenceDays };
+  if (period === "jaar") {
+    const times = 12 / months;
+    return { kind: "bedrag", cents: cents * times, derived: times !== 1, sum: times === 1 ? null : `${times} × ${euro(cents)}` };
+  }
+  return {
+    kind: "bedrag",
+    cents: Math.round(cents / months),
+    derived: months !== 1,
+    sum: months === 1 ? null : `${euro(cents)} ÷ ${months}`,
+  };
+}
+
+/** Wat één abonnement in de gekozen eenheid kost. Altijd vanaf het AFGESCHREVEN
+ *  bedrag (`lastAmountCents`) en nooit vanaf `monthlyCents` — dat laatste is
+ *  zelf al een omrekening, en rekenen met een omrekening is hoe de jaarkolom
+ *  € 1,68 kwijtraakte. */
+export function subAmountIn(sub: Subscription, period: SubPeriod): SubAmount {
+  return amountInPeriod(sub.lastAmountCents, sub.cadenceDays, period);
+}
+
+export type SubTotal = {
+  cents: number;
+  /** De eenheid waarin het totaal staat, en die de zin eromheen moet noemen. */
+  unit: "maand" | "jaar";
+  /** Abonnementen die NIET in dit totaal zitten omdat hun ritme niet om te
+   *  rekenen was. Geteld en niet stil als nul meegeteld — een totaal met een gat
+   *  erin hoort te zeggen dat het een gat heeft. */
+  onbekend: number;
+};
+
+/** Het totaal van een lijst, in één eenheid.
+ *
+ *  "Zoals afgeschreven" valt hier terug op het JAARBEDRAG, en dat is geen
+ *  slordigheid maar de enige mogelijkheid: een totaal heeft een gedeelde noemer
+ *  nodig, en een maandbedrag bij een jaarbedrag optellen levert een getal op dat
+ *  niets betekent. Dezelfde afweging die `accountFees` maakt als het op het
+ *  jaarbedrag sorteert. De zin eromheen noemt `unit`, dus de lezer ziet welke
+ *  noemer het geworden is. */
+export function subsTotalIn(subs: readonly Subscription[], period: SubPeriod): SubTotal {
+  const unit = period === "maand" ? "maand" : "jaar";
+  let cents = 0;
+  let onbekend = 0;
+  for (const s of subs) {
+    const a = subAmountIn(s, unit);
+    if (a.kind !== "bedrag") {
+      onbekend++;
+      continue;
+    }
+    cents += a.cents;
+  }
+  return { cents, unit, onbekend };
+}
+
+/** "per maand" / "per jaar", voor in een lopende zin. */
+export const perUnit = (unit: "maand" | "jaar") => `per ${unit}`;
 
 /** Money moved between his own accounts is not spending. Same string core's
  *  `annualSpendCents` excludes, and for the same reason: a €50k sweep to savings
@@ -424,7 +572,53 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   const subs = useMemo(() => detectSubscriptions(txs), [txs]);
   const increases = useMemo(() => subscriptionPriceIncreases(subs), [subs]);
   const overlaps = useMemo(() => subscriptionOverlaps(subs), [subs]);
-  const totalMonthlyCents = useMemo(() => subs.reduce((s, x) => s + x.monthlyCents, 0), [subs]);
+
+  /* De eenheid waarin de abonnementen worden getoond. "Per maand" is de stand
+     waarin dit scherm altijd stond, dus dat blijft de opening — de schakelaar
+     voegt keuze toe en verplaatst niemand. Zie de kop bij SUB_PERIODS voor wat
+     er wel en niet mag verschuiven als hij wisselt. */
+  const [subPeriod, setSubPeriod] = useState<SubPeriod>("maand");
+
+  /* Gesorteerd op het MAANDBEDRAG, in élke stand. Twee redenen om dat vast te
+     zetten in plaats van op de getoonde eenheid te sorteren: per maand en per
+     jaar geven exact dezelfde volgorde (het jaarbedrag is twaalf keer het
+     maandbedrag, voor elke rij), en op "zoals afgeschreven" sorteren zou de
+     lijst herschikken zodra hij wisselt — dat leest als ruis waar hij een
+     eenheid verwachtte te zien veranderen.
+     Kern's eigen volgorde staat op `monthlyCents`, en dat is de dagbenadering
+     die hierboven is afgeschaft; op de duurdere-per-jaar-maar-lagere-monthlyCents
+     rij zou de lijst dus niet meer aflopend lezen in de cijfers die ernaast
+     staan. `key` breekt gelijke bedragen, net als in core, zodat er niets
+     verspringt tussen twee renders. */
+  const subRows = useMemo(() => {
+    const perMaand = (x: Subscription) => {
+      const a = subAmountIn(x, "maand");
+      // -1 is een sorteerplek en geen bedrag: een onbekend ritme zakt naar
+      // onderen in plaats van als nul tussen de echte bedragen te gaan staan.
+      return a.kind === "bedrag" ? a.cents : -1;
+    };
+    return [...subs].sort((a, b) => perMaand(b) - perMaand(a) || a.key.localeCompare(b.key));
+  }, [subs]);
+
+  const subTotal = useMemo(() => subsTotalIn(subs, subPeriod), [subs, subPeriod]);
+  /* Eén keer opgezocht, want dit label staat op TWEE plekken: in de kolomkop én
+     in `data-label`. Op een smal scherm klapt de tabel om in kaarten en is
+     `data-label` het énige dat de cel nog benoemt (base.css, `.table-cards
+     td::before`) — daar "Bedrag" neerzetten laat de eenheid op mobiel alsnog
+     achter de schakelaar verdwijnen, en dat is precies wat hier niet mag. */
+  const subPeriodLabel = SUB_PERIODS.find((x) => x.value === subPeriod)?.label ?? "Bedrag";
+  /* Hoeveel rijen er in DEZE stand een rekensom onder zich hebben staan. Dat
+     getal hoort in het label van de opgevouwen regel: wie hem dichtlaat moet
+     nog steeds weten dat er is omgerekend. */
+  const omgerekend = useMemo(
+    () => subRows.filter((x) => { const a = subAmountIn(x, subPeriod); return a.kind === "bedrag" && a.derived; }).length,
+    [subRows, subPeriod],
+  );
+  /* De eenheid waarin die rekensommen staan, of null in de stand waarin er per
+     definitie niets is omgerekend. Expliciet null en geen terugval op "maand":
+     een stand als "maand" lezen omdat het toevallig niet uitmaakt is precies het
+     soort stille aanname dat hier verderop al een keer € 1,68 heeft gekost. */
+  const omgerekendUnit: "maand" | "jaar" | null = subPeriod === "eigen" ? null : subPeriod;
   const seen = useMemo(() => outflowFacts(txs), [txs]);
 
   // Why a subscription can be MISSING. His Simeo is the case: a charge that
@@ -433,7 +627,6 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
   // can carry at all (`subscriptionCoverage`) — this view only says it out loud,
   // so an empty list is a stated limit rather than a shrug.
   const coverage = useMemo(() => subscriptionCoverage(txs), [txs]);
-  const cadenceName = (days: number) => CADENCE_LABEL_NL[days] ?? `elke ${days} dagen`;
 
   // WOONLASTEN REMOVED 20 Aug (app review 2). The derivation was right — core's
   // `resolveHousingCost` read the rent off his own transactions — and it still
@@ -803,7 +996,14 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
         <div className="kpi highlight">
           <div className="kpi-label">Abonnementen</div>
           <div className="kpi-value">{subs.length}</div>
-          <div className="eyebrow">{euro(totalMonthlyCents)}/mnd</div>
+          {/* Volgt de schakelaar, want "/mnd" laten staan naast een tabel in
+              jaarbedragen is een scherm dat het met zichzelf oneens is. De
+              eenheid staat er voluit bij en niet als afkorting: dit is de tegel
+              die hij als eerste leest. */}
+          <div className="eyebrow">
+            {euro(subTotal.cents)} {perUnit(subTotal.unit)}
+            {subTotal.onbekend > 0 && ` · ${subTotal.onbekend} zonder ritme niet meegeteld`}
+          </div>
         </div>
         {/* Only when there is something to report. A tile reading 0 is a module
             telling you it has nothing to say, and it costs a column to say it —
@@ -842,11 +1042,30 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
         <Module
           title="Abonnementen"
           height="tall"
+          period={
+            subs.length > 0 ? (
+              <ModulePeriod
+                value={subPeriod}
+                options={SUB_PERIODS}
+                onChange={(v) => setSubPeriod(v as SubPeriod)}
+                label="Eenheid van de abonnementsbedragen"
+              />
+            ) : undefined
+          }
           footer={
             subs.length > 0 ? (
               <span>
-                {subs.length} {subs.length === 1 ? "abonnement" : "abonnementen"} · samen {euro(totalMonthlyCents)} per
-                maand, {euro(totalMonthlyCents * 12)} per jaar.
+                {subs.length} {subs.length === 1 ? "abonnement" : "abonnementen"} · samen {euro(subTotal.cents)}{" "}
+                {perUnit(subTotal.unit)}
+                {/* Eén eenheid en niet meer twee. Hier stond "samen X per maand,
+                    Y per jaar", waarbij Y werd berekend als X × 12 — en X was
+                    bij een jaarabonnement zelf al een deling, dus Y miste het
+                    bedrag dat werkelijk is afgeschreven. Nu noemt de voet de
+                    eenheid die hij heeft gekozen, gerekend vanaf de
+                    afschrijvingen. */}
+                {subTotal.onbekend > 0 &&
+                  ` · ${subTotal.onbekend} ${subTotal.onbekend === 1 ? "abonnement zit" : "abonnementen zitten"} hier niet in: ritme niet om te rekenen`}
+                {"."}
                 {increases.length === 0 && overlaps.length === 0 && " Geen prijsstijging en geen dubbele dienst gezien."}
               </span>
             ) : (
@@ -1010,56 +1229,159 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
             <>
               {increases.length > 0 || overlaps.length > 0 ? (
                 <div className="reason-list" style={{ marginBottom: "var(--sp-4)" }}>
-                  {increases.map((p) => (
-                    <p key={`inc-${p.sub.key}`} className="reason">
-                      <strong>{p.sub.name}</strong> ging van {euro(p.fromCents)} naar {euro(p.toCents)} (+
-                      {Math.round(p.changePct * 100)}%) — dat is{" "}
-                      <span className="reason-figure text-warn">{euro((p.toCents - p.fromCents) * 12)}</span> per jaar
-                      extra.
-                    </p>
-                  ))}
-                  {overlaps.map((o) => (
-                    <p key={`ov-${o.function}`} className="reason">
-                      {o.subs.length} × <strong>{o.function}</strong>: {o.subs.map((s) => s.name).join(" + ")} — samen{" "}
-                      {euro(o.monthlyCents)}/mnd. Eén opzeggen scheelt tot{" "}
-                      <span className="reason-figure text-warn">
-                        {euro(Math.max(...o.subs.map((s) => s.monthlyCents)) * 12)}
-                      </span>{" "}
-                      per jaar.
-                    </p>
-                  ))}
+                  {/* HET VERSCHIL WORDT NIET MEER × 12 GEREKEND. `fromCents` en
+                      `toCents` zijn de afgeschreven bedragen in het ritme van dát
+                      abonnement, dus × 12 maakte van een verhoging van € 10,00 op
+                      een JAARabonnement "€ 120,00 per jaar extra" — twaalf keer te
+                      veel, op precies de regel die hem moet laten opzeggen. Nu
+                      gaat het verschil door dezelfde omrekening als de tabel, en
+                      staat de eenheid erbij.
+                      Deze zinnen volgen de eenheid van het TOTAAL en niet de stand
+                      "zoals afgeschreven": ze tellen op en vergelijken, en daar
+                      heb je een gedeelde noemer voor nodig. */}
+                  {increases.map((p) => {
+                    const extra = amountInPeriod(p.toCents - p.fromCents, p.sub.cadenceDays, subTotal.unit);
+                    return (
+                      <p key={`inc-${p.sub.key}`} className="reason">
+                        <strong>{p.sub.name}</strong> ging van {euro(p.fromCents)} naar {euro(p.toCents)} (+
+                        {Math.round(p.changePct * 100)}%){" "}
+                        {extra.kind === "bedrag" ? (
+                          <>
+                            — dat is <span className="reason-figure text-warn">{euro(extra.cents)}</span>{" "}
+                            {perUnit(subTotal.unit)} extra
+                            {extra.sum && <> ({extra.sum})</>}.
+                          </>
+                        ) : (
+                          <>
+                            — per {cadenceName(p.sub.cadenceDays)} afgeschreven, dus wat dat {perUnit(subTotal.unit)}{" "}
+                            scheelt valt hier niet uit te rekenen.
+                          </>
+                        )}
+                      </p>
+                    );
+                  })}
+                  {overlaps.map((o) => {
+                    const samen = subsTotalIn(o.subs, subTotal.unit);
+                    const grootste = o.subs.reduce((best, x) => {
+                      const a = subAmountIn(x, subTotal.unit);
+                      const b = subAmountIn(best, subTotal.unit);
+                      const av = a.kind === "bedrag" ? a.cents : -1;
+                      const bv = b.kind === "bedrag" ? b.cents : -1;
+                      return av > bv ? x : best;
+                    }, o.subs[0]);
+                    const opzegbaar = subAmountIn(grootste, subTotal.unit);
+                    return (
+                      <p key={`ov-${o.function}`} className="reason">
+                        {o.subs.length} × <strong>{o.function}</strong>: {o.subs.map((s) => s.name).join(" + ")} — samen{" "}
+                        {euro(samen.cents)} {perUnit(samen.unit)}.
+                        {opzegbaar.kind === "bedrag" && (
+                          <>
+                            {" "}Eén opzeggen scheelt tot{" "}
+                            <span className="reason-figure text-warn">{euro(opzegbaar.cents)}</span>{" "}
+                            {perUnit(subTotal.unit)}.
+                          </>
+                        )}
+                      </p>
+                    );
+                  })}
                 </div>
               ) : null}
+              {/* TWEE KOLOMMEN WAAR ER DRIE STONDEN, en de tweede is de reden
+                  dat deze schakelaar mag bestaan.
+                    - de eerste is het bedrag in de eenheid die HIJ koos, met de
+                      rekensom eronder zodra het onze deling of vermenigvuldiging
+                      is (dezelfde vorm als `perYearDerived` in de kostentabel
+                      verderop);
+                    - de tweede is "Op je afschrift", en die staat er in ELKE
+                      stand: het bedrag zoals het is afgeschreven, met het ritme
+                      erbij. De eenheid van de afschrijving mag niet achter een
+                      schakelaar verdwijnen, want dat is precies wat "Per maand"
+                      als vaste kolomkop deed met zijn jaarabonnementen.
+                  De oude kolommen "Per maand" en "Per jaar" stonden er samen, en
+                  de tweede was de eerste × 12 — een jaarbedrag dat in geen enkel
+                  afschrift staat. */}
               <div className="table-wrap table-cards">
                 <table className="table">
                   <thead>
                     <tr>
                       <th>Dienst</th>
                       <th>Functie</th>
-                      <th className="num">Per maand</th>
-                      <th className="num">Per jaar</th>
+                      <th className="num">{subPeriodLabel}</th>
+                      <th className="num">Op je afschrift</th>
                       <th className="num">Verandering</th>
                       <th>Laatst</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {subs.map((s) => (
-                      <tr key={s.key}>
-                        <td data-label="Dienst" style={{ fontWeight: 600 }}>{s.name}</td>
-                        <td data-label="Functie">
-                          <span className="badge">{s.function}</span>
-                        </td>
-                        <td className="num" data-label="Per maand">{euro(s.monthlyCents)}</td>
-                        <td className="num" data-label="Per jaar">{euro(s.monthlyCents * 12)}</td>
-                        <td data-label="Verandering" className={`num ${s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : ""}`}>
-                          {s.changePct === 0 ? "—" : `${s.changePct > 0 ? "+" : ""}${Math.round(s.changePct * 100)}%`}
-                        </td>
-                        <td className="cell-sub" data-label="Laatst">{s.lastDate}</td>
-                      </tr>
-                    ))}
+                    {subRows.map((s) => {
+                      const bedrag = subAmountIn(s, subPeriod);
+                      return (
+                        <tr key={s.key}>
+                          <td data-label="Dienst" style={{ fontWeight: 600 }}>{s.name}</td>
+                          <td data-label="Functie">
+                            <span className="badge">{s.function}</span>
+                          </td>
+                          <td className="num" data-label={subPeriodLabel}>
+                            {bedrag.kind === "bedrag" ? (
+                              <>
+                                {euro(bedrag.cents)}
+                                {bedrag.sum && <div className="cell-sub">{bedrag.sum}</div>}
+                              </>
+                            ) : (
+                              /* Geen streepje: een em dash naast euro's leest als
+                                 nul. Zelfde keuze als bij een onbekende
+                                 rekeningprijs in de kostentabel. */
+                              <span className="cell-sub">niet om te rekenen</span>
+                            )}
+                          </td>
+                          <td className="num" data-label="Op je afschrift">
+                            {euro(s.lastAmountCents)}
+                            <div className="cell-sub">{cadenceName(s.cadenceDays)}</div>
+                          </td>
+                          <td data-label="Verandering" className={`num ${s.changePct > 0 ? "text-neg" : s.changePct < 0 ? "text-pos" : ""}`}>
+                            {s.changePct === 0 ? "—" : `${s.changePct > 0 ? "+" : ""}${Math.round(s.changePct * 100)}%`}
+                          </td>
+                          <td className="cell-sub" data-label="Laatst">{s.lastDate}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* WAT ER IS OMGEREKEND, geteld in het label en per rij uitgeschreven
+                  in het paneel. De telling hoort vooraan en niet erin: wie de regel
+                  dichtlaat moet nog steeds weten dát er onder deze bedragen een
+                  deling zit. Staat er niets omgerekend — de stand "zoals
+                  afgeschreven", of alleen maandabonnementen op "per maand" — dan
+                  staat er ook geen regel die iets belooft wat het paneel niet
+                  levert. */}
+              {omgerekend > 0 && omgerekendUnit !== null && (
+                <ToonMeer
+                  summary={`${omgerekend} van de ${subRows.length} bedragen ${
+                    omgerekend === 1 ? "is" : "zijn"
+                  } omgerekend uit een ander ritme`}
+                >
+                  <p className="cell-sub">
+                    Een abonnement houdt de eenheid van zijn eigen afschrijving; wat je hierboven ziet is die
+                    afschrijving {perUnit(omgerekendUnit)} gerekend. Naar jaar wordt
+                    alleen vermenigvuldigd, dus dat bedrag is exact. Naar maand wordt gedeeld, en dan bestaat het
+                    bedrag in de kolom op geen enkel afschrift.
+                  </p>
+                  <ul>
+                    {subRows.map((s) => {
+                      const bedrag = subAmountIn(s, subPeriod);
+                      if (bedrag.kind !== "bedrag" || !bedrag.derived) return null;
+                      return (
+                        <li key={`om-${s.key}`} className="cell-sub">
+                          <strong>{s.name}</strong>: {euro(s.lastAmountCents)} {cadenceName(s.cadenceDays)} →{" "}
+                          {bedrag.sum} = {euro(bedrag.cents)} {perUnit(omgerekendUnit)}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </ToonMeer>
+              )}
             </>
           )}
         </Module>

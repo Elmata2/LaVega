@@ -208,23 +208,24 @@ test("het opzetblok verdwijnt, de reden waarom er geen testknop is niet", () => 
 
 test("hij kan het adres intypen dat Cloudflare werkelijk routeert", () => {
   /* Het adres komt van buiten: zijn cofounder heeft in Cloudflare
-   * invoices@lavega.dev aangemaakt, niet het lavega-<random>@invoices.lavega.dev
+   * ale@invoices.lavega.dev aangemaakt (23 augustus, door hem bevestigd), niet
+   * het lavega-<random>@invoices.lavega.dev
    * dat LaVega verzon. Een adres dat wij bedenken en dat niets routeert is erger
    * dan geen adres — de post komt nergens aan terwijl het scherm zegt van wel. */
   const c = render();
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
-  setValue(input, "invoices@lavega.dev");
+  setValue(input, "ale@invoices.lavega.dev");
   blur(input);
-  expect(getInvoiceForwardAddress()).toBe("invoices@lavega.dev");
+  expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
 });
 
 test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", () => {
   const c = render();
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
-  setValue(input, "invoices@lavega.dev");
+  setValue(input, "ale@invoices.lavega.dev");
   blur(input);
   setValue(input, "invoices@lavega");
   blur(input);
-  expect(getInvoiceForwardAddress()).toBe("invoices@lavega.dev");
+  expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
   expect(c.textContent).toContain("Dat is geen e-mailadres");
 });

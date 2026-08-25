@@ -2,9 +2,9 @@
  * geval niet zou hebben gevonden. */
 
 import { describe, it, expect } from "vitest";
-import { rankCheckout } from "./rank.js";
+import { rankCheckout, leesVoorwaarden, leesZin, type Veld } from "./rank.js";
 import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
-import type { CheckoutCard, CardFee } from "./types.js";
+import type { CheckoutCard, CardFee, Sourced } from "./types.js";
 
 const ASOF = "2026-08-21";
 
@@ -608,13 +608,42 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
   const metAllebei = CHECKOUT_CARDS.filter((c) => c.cashbackPct !== null && c.fee !== null);
 
   it("de groepsaantallen staan vast", () => {
-    expect(CHECKOUT_CARDS).toHaveLength(77);
+    /* DEZE DRIE GETALLEN ZIJN EEN TRIPWIRE en geen eigenschap: ze horen om te
+     * vallen zodra de catalogus verandert, zodat een sweep niet stil de bundel
+     * verschuift. Dat is op 24 augustus 2026 ook gebeurd en dit is de stand
+     * daarna. 81 -> 84 en 38 -> 41 komen van de FX-gatenronde: ING Creditcard
+     * More, Extra en Max kregen hun koersopslag uit ING's eigen kostenoverzicht
+     * (15 juni 2026) en zijn daarmee kaarten waarmee je kunt afrekenen. Bleap
+     * kreeg in diezelfde ronde ook een koersopslag maar zat er al in.
+     * Cashback bleef op 8: die ronde raakte dat veld niet. */
+    expect(CHECKOUT_CARDS).toHaveLength(84);
     expect(metCashback).toHaveLength(8);
-    expect(metPrijs).toHaveLength(27);
+    expect(metPrijs).toHaveLength(41);
   });
 
-  it("GEEN ENKELE kaart heeft cashback én een prijs, dus de netto-tak wordt niet bereikt", () => {
-    expect(metAllebei).toEqual([]);
+  it("de netto-tak wordt nog steeds niet bereikt, maar niet meer om dezelfde reden", () => {
+    /* HIER STOND "GEEN ENKELE KAART HEEFT CASHBACK ÉN EEN PRIJS", en dat is niet
+     * langer waar: er zijn er twee. Dat verschil is het hele punt van deze test,
+     * dus hij is herschreven en niet weggehaald.
+     *
+     * TOEN was de netto-tak onbereikbaar door de DATA: `if (!card.fee)` sloeg
+     * elke rij af voordat er iets te verrekenen was. NU zijn er twee kaarten met
+     * allebei de cijfers, en houdt de VOORWAARDENLEZER ze tegen — en bij die
+     * twee is dat de juiste uitkomst, elk om zijn eigen reden:
+     *
+     *   Bleap — artikel 6.2 van dezelfde bron zegt "Mastercard scheme fees …
+     *           may apply and are your responsibility". Er kunnen dus kosten
+     *           bijkomen die we niet kennen; die nul is geen volledige prijs.
+     *   Wirex — de uitkering is 0,5% Cryptoback, dus de OPBRENGST is niet in
+     *           euro's. Er valt geen prijs van af te trekken, hoe goed we die
+     *           prijs ook kennen.
+     *
+     * EN DAT IS DE EERLIJKE KOP VAN DEZE HELE VERANDERING: een echte
+     * netto-vergelijking in euro's vraagt nog steeds een kaart die cashback IN
+     * EURO'S geeft én een prijs draagt. Die staat niet in de catalogus. Wat er
+     * wél is opgelost, staat in het blok "herkomstnotitie of beperking"
+     * hieronder: de tak is niet langer dood door een herkomstnotitie. */
+    expect(metAllebei.map((c) => c.id)).toEqual(["bleap-card", "wirex-card-wirex-one"]);
 
     const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
     expect(r.openWorthIt).toEqual([]);
@@ -622,6 +651,12 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
     expect(r.openUnknownCost).toHaveLength(8);
     expect(r.mine).toEqual([]);
     expect(r.unknowns).toEqual([]);
+
+    const bleap = r.openUnknownCost.find((row) => row.card.id === "bleap-card")!;
+    expect(bleap.basis).toBe("bruto");
+    const wirex = r.openUnknownCost.find((row) => row.card.id === "wirex-card-wirex-one")!;
+    expect(wirex.basis).toBe("voorwaardelijk");
+    expect(wirex.claim).toEqual({ soort: "niet-in-euro", token: "crypto" });
   });
 
   it("de acht kaarten die een aanbeveling kunnen dragen, dragen allemaal een voorwaarde", () => {
@@ -664,9 +699,15 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
   });
 
   it("elke gelezen voorwaarde in de bundel is van een soort die we kunnen benoemen", () => {
-    /* Valt hier een "onbeoordeeld" uit, dan is er nieuwe voorwaardentekst in de
-     * catalogus gekomen die deze lezer niet kent. Dat is geen ramp — het cijfer
-     * wordt dan juist NIET als bedrag getoond — maar het hoort op te vallen. */
+    /* Valt hier een NIEUWE soort uit, dan is er voorwaardentekst in de catalogus
+     * gekomen die deze lezer anders leest dan voorheen. Dat is geen ramp — het
+     * cijfer wordt dan juist NIET als bedrag getoond — maar het hoort op te
+     * vallen.
+     *
+     * "onbeoordeeld" staat er sinds de bundel van 24 augustus 2026 bij, en het
+     * is precies de bedoelde uitkomst: het is Bleap en Wirex, waarvan de
+     * prijstekst een echte beperking draagt die we niet in één woord kunnen
+     * navertellen. Zie de test hierboven. */
     const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
     const soorten = new Set(r.openUnknownCost.flatMap((row) => row.caveats.map((c) => c.soort)));
     expect([...soorten].sort()).toEqual([
@@ -675,10 +716,368 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
       "geen-plafond",
       "herzien",
       "in-token",
+      "onbeoordeeld",
       "plafond",
       "plafond-onbekend",
       "plafond-zonder-bedrag",
       "uitsluitingen",
     ]);
+  });
+});
+
+/* ─── herkomstnotitie of beperking, op ECHTE voorwaardentekst uit de bundel ── */
+
+describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herkomstnotitie", () => {
+  /* WAAROM ELKE STRING IN DIT BLOK UIT DE BUNDEL KOMT, en waarom dat niet
+   * vanzelfsprekend was.
+   *
+   * De fout die deze tests vangen heeft 286 groene tests overleefd, en de reden
+   * is in één regel te zien: elke `fee()`-hulpfunctie in dit bestand, in
+   * lines.test.ts, in horizon.test.ts en in panel.test.ts zet
+   * `conditions: null`. De enige test die `basis === "netto"` beweerde, bouwde
+   * zijn kaart met die hulpfunctie. Er is dus nooit een echte
+   * voorwaardentekst door de kaartkosten-tak gegaan.
+   *
+   * Daarom staat hier geen bedachte tekst maar catalogusproza, en bewijst
+   * `verbatim()` dat ook: staat een string niet meer letterlijk in de bundel,
+   * dan valt de test om op de string en niet op de bewering. */
+  const ALLE_PRIJSTEKSTEN = CHECKOUT_CARDS.map((c) => c.fee?.conditions ?? "").join("\n");
+
+  function verbatim(zin: string): string {
+    expect(ALLE_PRIJSTEKSTEN).toContain(zin);
+    return zin;
+  }
+
+  function echteFee(id: string): CardFee {
+    const kaart = CHECKOUT_CARDS.find((c) => c.id === id);
+    expect(kaart?.fee ?? null).not.toBeNull();
+    return kaart!.fee!;
+  }
+
+  function feeMetVoorwaarde(value: number, period: "maand" | "jaar", voorwaarde: string): CardFee {
+    return { ...fee(value, period), conditions: voorwaarde };
+  }
+
+  /** Eén kaart met een SCHONE cashback en de opgegeven prijs, gerangschikt als
+   *  kaart die hij nog niet heeft. Zo hangt de uitkomst aan de voorwaardentekst
+   *  van de PRIJS en aan niets anders — en alleen bij een kaart die hij zou
+   *  moeten openen bestaat de aftreksom (zie de kop van rank.ts). */
+  function rijMetPrijs(f: CardFee) {
+    const proef = card({ id: "proef", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: f });
+    const r = rankCheckout({ cards: [proef], heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    return [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost][0]!;
+  }
+
+  function prijsvoorbehouden(rij: { caveats: readonly { soort: string; veld: string }[] }): string[] {
+    return rij.caveats.filter((c) => c.veld === "kaartkosten").map((c) => c.soort);
+  }
+
+  /* ── de bug zelf ──────────────────────────────────────────────────────── */
+
+  it("DE ONTBREKENDE TEST: een prijs met alleen een herkomstnotitie erbij komt op netto uit", () => {
+    /* Dit is de test die er niet was. Vóór deze verandering leverde ELKE
+     * niet-lege voorwaardentekst een voorbehoud op — ook een zin die alleen zegt
+     * wat een EXTRA kaart kost — en dus kon `bepaalClaim` voor de kaartkosten
+     * nooit "vast" teruggeven en was de netto-tak van buildRow onbereikbaar. */
+    const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.")));
+    expect(prijsvoorbehouden(rij)).toEqual([]);
+    expect(rij.basis).toBe("netto");
+    expect(rij.charge).not.toBeNull();
+    expect(rij.charge!.cents).toBe(5340);
+    /* 1% van € 300 is € 3,00; de kaart kost € 53,40 over een jaar. */
+    expect(rij.resultCents).toBe(300 - 5340);
+  });
+
+  it("en dat geldt ook voor de hele herkomstparagraaf van Amex, met versiestempel en al", () => {
+    const rij = rijMetPrijs(echteFee("american-express-green-card"));
+    expect(prijsvoorbehouden(rij)).toEqual([]);
+    expect(rij.basis).toBe("netto");
+    expect(rij.charge!.cents).toBe(7800);
+    expect(rij.resultCents).toBe(300 - 7800);
+  });
+
+  /* ── de zuurtest: de vijf rijen die er op 24 augustus bij kwamen ───────── */
+
+  /* ALLE VIJF ZEGGEN HETZELFDE, en het is geen herkomst: de prijs die de bron
+   * noemt komt BOVENOP de rekening of het pakket. In de catalogus staat dat als
+   * `pricedOnItsOwn: false`. Zulke prijzen mogen nooit als kaal nettobedrag op
+   * het scherm komen, want dan lijkt de kaart goedkoper dan hij is — precies de
+   * fout die deze catalogus twee keer eerder heeft gevangen. */
+  const VIJF_NIEUWE = [
+    "abn-amro-betaalpas",
+    "ing-creditcard",
+    "ing-platinumcard",
+    "rabo-goldcard",
+    "knab-creditcard",
+  ];
+
+  it.each(VIJF_NIEUWE)("%s: de prijs komt bovenop de rekening, dus geen kaal nettobedrag", (id) => {
+    const rij = rijMetPrijs(echteFee(id));
+    expect(prijsvoorbehouden(rij)).toContain("bovenop");
+    expect(rij.basis).toBe("bruto");
+    expect(rij.charge).toBeNull();
+    expect(rij.resultCents).toBe(rij.euroCents);
+  });
+
+  it("de vijf nieuwe rijen halen samen nul netto-uitkomsten", () => {
+    /* Niet per rij maar als groep, zodat één rij die er stilletjes doorheen
+     * glipt hier ook omvalt. */
+    const kaarten = VIJF_NIEUWE.map((id) =>
+      card({ id, cashbackPct: sourced(1), fxFeePct: sourced(0), fee: echteFee(id) }),
+    );
+    const r = rankCheckout({ cards: kaarten, heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    expect(r.openWorthIt).toEqual([]);
+    expect(r.openBackwards).toEqual([]);
+    expect(r.openUnknownCost.map((x) => x.basis)).toEqual(["bruto", "bruto", "bruto", "bruto", "bruto"]);
+  });
+
+  /* ── de twee valse voorbehouden, met naam ─────────────────────────────── */
+
+  it("Bleap: 'geen eenmalige formulering' is geen eenmalige kostenpost", () => {
+    /* De oude /\beenmalig/ vuurde op een woord dat de FORMULERING van de bron
+     * beschrijft, en nog ontkennend ook, en zette "er komen eenmalige kosten
+     * bij" op het scherm. */
+    const rij = rijMetPrijs(echteFee("bleap-card"));
+    expect(prijsvoorbehouden(rij)).not.toContain("eenmalig");
+    /* En tóch niet vrijgegeven, want artikel 6.2 van dezelfde bron zegt dat er
+     * andere kosten "may apply". Dat is een echte beperking. */
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+  });
+
+  it("Wirex: een PRIJS wordt niet in crypto uitgekeerd", () => {
+    /* De herkomstnotitie bij de prijs citeert de merknaam van de CASHBACK
+     * ("het niveau waar de 0,5% Cryptoback bij hoort"), en daaruit kwam "de
+     * uitkering is in crypto en niet in euro's" — over een prijs. */
+    const rij = rijMetPrijs(echteFee("wirex-card-wirex-one"));
+    expect(prijsvoorbehouden(rij)).not.toContain("in-token");
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+  });
+
+  /* ── elke beperkingsvorm die de lezer kent, met een echte zin erbij ───── */
+
+  const BEPERKINGEN: ReadonlyArray<readonly [string, string]> = [
+    ["geschiktheid", "Uitsluitend voor inwoners van geselecteerde Europese landen (EER en Verenigd Koninkrijk)."],
+    ["pakketkoppeling", "Bovenop de € 4,00 per maand van het ING OranjePakket."],
+    ["ander-tarief", "Tarief bij Betaalrekening Plus Betalen."],
+    /* Dezelfde vorm aan het BEGIN van een tekst, met een hoofdletter-B. Dat is
+     * een aparte regel in de vormherkenning en dus een aparte zin hier. */
+    ["ander-tarief", "Bij een SNS Studentenrekening € 27,50 per jaar."],
+    ["drempel", "Bij een minimale besteding van € 3.000 per jaar."],
+    ["tijdelijk", "Het eerste jaar kosteloos zolang je een American Express consumentenkaart blijft gebruiken;"],
+    ["aangekondigd", "Per 15 september 2026 gaat de jaarbijdrage naar € 59,50"],
+    ["extra-kosten", "Eenmalige kosten voor de fysieke kaart komen er wel:"],
+    ["gesloten", "de tekst 'Dienst niet beschikbaar' met de voetnoot dat alle kosten aan ICS worden betaald"],
+    ["onzeker-product", "Zie 'openstaandeVragen' in het verslag."],
+    ["plafond-of-uitsluiting", "daglimiet € 400."],
+  ];
+
+  it.each(BEPERKINGEN)("een %s-zin houdt de prijs tegen", (vorm, zin) => {
+    expect(leesZin(verbatim(zin))).toEqual({ zin, soort: "restrictie", vorm });
+    const rij = rijMetPrijs(feeMetVoorwaarde(3, "maand", zin));
+    expect(prijsvoorbehouden(rij).length).toBeGreaterThan(0);
+    expect(rij.basis).toBe("bruto");
+    expect(rij.charge).toBeNull();
+  });
+
+  /* ── en waarom dit behoudend is ──────────────────────────────────────── */
+
+  it("een zin die we niet herkennen houdt de prijs óók tegen: onbekend is geen groen licht", () => {
+    const nieuw = "De kaart is paars en het pasje is van gerecycled plastic.";
+    expect(leesZin(nieuw).soort).toBe("onbekend");
+    const rij = rijMetPrijs(feeMetVoorwaarde(3, "maand", nieuw));
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+  });
+
+  it("één onbekende zin naast louter herkomst is genoeg om tegen te houden", () => {
+    const tekst = `${verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.")} De kaart is paars.`;
+    const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", tekst));
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+  });
+
+  it("een bedrag zonder eigenaar in de zin is geen herkomstnotitie", () => {
+    /* De echte Amex-zin komt door omdat er "inclusief 2 extra kaarten" bij
+     * staat: dan blijkt van WIE het tweede bedrag is. Haal die halve zin weg —
+     * dit is de enige geknipte string in dit blok, en met opzet — en de zin valt
+     * naar "onbekend". Bedragen zijn de gevaarlijke inhoud van dit veld, dus
+     * zonder eigenaar geen herkomst. */
+    const heel = verbatim(
+      '"Overzicht Kaartlidmaatschapsbijdragen", rij "The Green Card € 6,50 per maand", inclusief 2 extra kaarten;',
+    );
+    expect(leesZin(heel).soort).toBe("herkomst");
+    const geknipt = '"Overzicht Kaartlidmaatschapsbijdragen", rij "The Green Card € 6,50 per maand".';
+    expect(leesZin(geknipt).soort).toBe("onbekend");
+  });
+
+  it("een nul die alleen buiten een abonnement geldt, blijft een voorwaardelijke nul", () => {
+    /* Regel 2 van de opdracht, in de lezer. "€ 0 zolang Travel+ uit staat" is
+     * geen uitgesproken nul, en de zinslezer mag daar niet langs. Stap 7 leest
+     * daarom de VOLLEDIGE tekst en niet de ingekorte. */
+    const zin = verbatim(
+      "Abonnementskosten zijn € 0 zolang Travel+ uit staat; met Travel+ ingeschakeld € 4,99 per maand.",
+    );
+    const rij = rijMetPrijs(feeMetVoorwaarde(0, "maand", zin));
+    expect(prijsvoorbehouden(rij)).toContain("voorwaardelijke-nul");
+    expect(rij.basis).toBe("bruto");
+  });
+
+  it("de ontsnapping geldt alleen voor de kaartkosten, en dat is een dosering en geen principe", () => {
+    /* Gemeten: veldonafhankelijk zouden 29 fxFeePct-velden in één stap van
+     * "onbeoordeeld" naar "vast" schuiven, en dat zet euro-bedragen aan bij elke
+     * aankoop in een vreemde munt. Die verbreding verdient zijn eigen ronde. */
+    const zin = verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.");
+    expect(leesVoorwaarden(zin, "kaartkosten", 4.45, ASOF)).toEqual([]);
+    expect(leesVoorwaarden(zin, "koersopslag", 1.4, ASOF)).toEqual([{ soort: "onbeoordeeld", veld: "koersopslag" }]);
+    expect(leesVoorwaarden(zin, "cashback", 1, ASOF)).toEqual([{ soort: "onbeoordeeld", veld: "cashback" }]);
+  });
+
+  /* ── één herkomstwoord is niet genoeg: de HELE zin moet gelezen zijn ──── */
+
+  /* WAT DEZE VIJF TESTS VANGEN. De eerste versie van de zinslezer las de zin PER
+   * WOORD: één herkomstwoord ergens in de zin maakte de hele zin herkomst, en de
+   * rest werd niet meer bekeken. Elke beperking die de vormenlijst nog niet kende
+   * viel dus weg zodra de zin ook een brondocument noemde — en dan is de uitkomst
+   * geen voorbehoud maar een KAAL nettobedrag met een aanbeveling erbij. */
+
+  it("de rabo-zin uit de bundel haalt op zichzelf geen netto-uitspraak", () => {
+    /* Deze zin staat letterlijk in de bundel, bij rabo-goldcard. Gemeten vóór de
+     * reparatie: leesZin → herkomst/vindplaats, geen enkel voorbehoud, basis
+     * netto, en de rij kwam in openWorthIt — een aanbeveling op een prijs die
+     * alleen BOVENOP Rabo Standaard bestaat. Dat de echte rij toch behoudend
+     * uitkwam, hing er alleen aan dat de BUURZIN het woord "bovenop" gebruikt;
+     * deze test knipt die buurzin er met opzet af. */
+    const zin = verbatim("dit document is het Informatiedocument van dat pakket en noemt de kaart bij naam.");
+    expect(leesZin(zin).soort).toBe("onbekend");
+    const rij = rijMetPrijs(feeMetVoorwaarde(2, "maand", zin));
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+    expect(rij.charge).toBeNull();
+  });
+
+  it("en de Wirex-waarschuwing over de ONTBREKENDE periode ook niet", () => {
+    /* Óók letterlijk uit de bundel, en het is precies een waarschuwing bij regel
+     * 3: de bron hangt geen periode aan het woord "free", dus dat de eenheid op
+     * "maand" staat is een gevolgtrekking en geen citaat. Die zin las als
+     * herkomst/vindplaats, op het woord "document". */
+    const zin = verbatim('HET DOCUMENT HANGT GEEN PERIODE AAN HET WOORD "FREE";');
+    expect(leesZin(zin).soort).toBe("onbekend");
+    const rij = rijMetPrijs(feeMetVoorwaarde(2, "maand", zin));
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+  });
+
+  /* Zeven vormen die de beperkingslijst NIET kent, elk met een brondocument in
+   * dezelfde zin. Gemeten vóór de reparatie: alle zeven herkomst/vindplaats,
+   * alle zeven basis=netto. Dit is de categorie waarvan we per definitie niet
+   * weten wat er nog in zit, dus de test is er niet om de zeven te dekken maar
+   * om te bewijzen dat een onbekende bewering náást een vindplaats de zin niet
+   * meer vrijgeeft. */
+  const NIET_GEKENDE_BEPERKINGEN = [
+    "De prijs staat in de tarieventabel van het Compleet Pakket.",
+    "Volgens de tarievenwijzer stijgt de jaarbijdrage volgend jaar.",
+    "De prijslijst vermeldt dit bedrag vanaf het tweede jaar.",
+    "Het informatieblad zet dit bedrag in de kolom voor studenten.",
+    "De tarieventabel hangt dit bedrag aan een spaartegoed boven de grens.",
+    "De prijslijst zet dit bedrag in de kolom van het instapniveau.",
+    "De productpagina neemt de kaart niet langer op in het aanbod.",
+  ];
+
+  it.each(NIET_GEKENDE_BEPERKINGEN)("een vindplaats naast een onbekende bewering geeft niets vrij: %s", (zin) => {
+    expect(leesZin(zin).soort).toBe("onbekend");
+    const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", zin));
+    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+    expect(rij.basis).toBe("bruto");
+    expect(rij.charge).toBeNull();
+  });
+
+  it("en één onbekend woord in een zin die verder louter herkomst is, is al genoeg", () => {
+    /* De echte zin komt door; met één woord erbij dat niet in het gesloten
+     * woordenboek staat, niet meer. Dat is de hele reparatie in één regel. */
+    const echt = verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.");
+    expect(leesZin(echt).soort).toBe("herkomst");
+    expect(leesZin("Extra ABN AMRO Gold Card € 2,10 per maand voor studenten.").soort).toBe("onbekend");
+  });
+
+  /* ── een ONTKENDE uitgesproken nul is geen nul ──────────────────────────── */
+
+  it("'geen uitgesproken nul' blijft een voorwaardelijke nul, ontkenning en al", () => {
+    /* HET MINIMALE PAAR, en het verschil is één woord. Vóór de reparatie werd op
+     * de substring "uitgesproken nul" getoetst, dus de ONTKENNING onderdrukte
+     * stap 7, en de herkomstvorm maakte van dezelfde zin een herkomstnotitie —
+     * waardoor stap 10 ook geen "onbeoordeeld" meer toevoegde. Wat er uitkwam was
+     * een kale € 0,00 in de nettosom: regel 2 van de opdracht, precies de valse
+     * nul van RegioBank en Trade Republic.
+     *
+     * De formulering is niet bedacht. docs/catalog/staging-kaartkosten.json
+     * schrijft haar drie keer uit, op regel 361, 386 en 398. */
+    const bevestigd = rijMetPrijs(feeMetVoorwaarde(0, "maand", "Uitgesproken nul."));
+    expect(prijsvoorbehouden(bevestigd)).toEqual([]);
+    expect(bevestigd.basis).toBe("netto");
+    expect(bevestigd.charge!.cents).toBe(0);
+
+    const ontkend = rijMetPrijs(feeMetVoorwaarde(0, "maand", "Dit is geen uitgesproken nul."));
+    expect(leesZin("Dit is geen uitgesproken nul.").soort).toBe("onbekend");
+    expect(prijsvoorbehouden(ontkend)).toContain("voorwaardelijke-nul");
+    expect(ontkend.basis).toBe("bruto");
+    expect(ontkend.charge).toBeNull();
+  });
+
+  it("en dat geldt ook voor de staging-formulering waar hij vandaan komt", () => {
+    /* Letterlijk docs/catalog/staging-kaartkosten.json regel 361. Eén merge van
+     * een accountFee-rij verwijderd, en dan gaat hij door deze lezer heen. */
+    const tekst =
+      "Allemaal eenmalig. De EEA-tabel van Krak heeft GEEN rij voor maand- of jaarkosten " +
+      "— dat is een ontbrekende rij, geen uitgesproken nul.";
+    const rij = rijMetPrijs(feeMetVoorwaarde(0, "maand", tekst));
+    expect(prijsvoorbehouden(rij)).toContain("voorwaardelijke-nul");
+    expect(rij.basis).toBe("bruto");
+    expect(rij.charge).toBeNull();
+  });
+
+  /* ── de teller die elke verbreding zichtbaar maakt ────────────────────── */
+
+  it("hoeveel velden in de BUNDEL geen enkel voorbehoud dragen, staat vast", () => {
+    /* Elke regel die aan de herkomstlijst wordt toegevoegd, verplaatst velden
+     * van "geen uitspraak" naar "vaste uitspraak". Dit is de teller die dat
+     * zichtbaar maakt, per veld, met de zeven bij naam. */
+    const zonderVoorbehoud: Record<Veld, string[]> = { cashback: [], koersopslag: [], kaartkosten: [] };
+    for (const c of CHECKOUT_CARDS) {
+      const bronnen: ReadonlyArray<readonly [Veld, Sourced | null]> = [
+        ["cashback", c.cashbackPct],
+        ["koersopslag", c.fxFeePct],
+        ["kaartkosten", c.fee],
+      ];
+      for (const [veld, bron] of bronnen) {
+        if (!bron) continue;
+        if (leesVoorwaarden(bron.conditions, veld, bron.value, ASOF).length === 0) zonderVoorbehoud[veld].push(c.id);
+      }
+    }
+    expect(zonderVoorbehoud.cashback).toEqual([]);
+    expect(zonderVoorbehoud.koersopslag).toHaveLength(9);
+    expect(zonderVoorbehoud.kaartkosten).toEqual([
+      "abn-amro-gold-card",
+      "american-express-green-card",
+      "american-express-gold-card",
+      "flying-blue-american-express-entry-card",
+      "flying-blue-american-express-silver-card",
+      "flying-blue-american-express-gold-card",
+      "flying-blue-american-express-platinum-card",
+    ]);
+  });
+
+  it("en tóch komt er op de ECHTE bundel geen enkele netto-rij uit, en dat is de eerlijke kop", () => {
+    /* De zeven hierboven zijn allemaal Amex- en ABN-kaarten ZONDER cashbackcijfer,
+     * dus ze halen de kaartkosten-tak van buildRow niet eens. De twee kaarten die
+     * allebei de cijfers hebben — Bleap en Wirex — worden om hun eigen, juiste
+     * reden tegengehouden. Netto op de echte data: 0 vóór deze verandering, 0 na.
+     * Wat deze verandering oplost is dat er geen ONWARE voorbehouden meer bij
+     * staan en dat de tak niet langer bij ongeluk dood is; een netto-bedrag
+     * vraagt DATA die er niet is: een kaart met cashback in euro's én een prijs. */
+    const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const alle = [...r.mine, ...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost];
+    expect(alle.filter((row) => row.basis === "netto")).toEqual([]);
   });
 });

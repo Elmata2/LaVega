@@ -254,6 +254,387 @@ function zoekCap(tekst: string): GelezenCap {
   return { capCents: cents, basis };
 }
 
+/* ──────────── herkomstnotitie of beperking: de tekst per ZIN ──────────────── */
+
+/* WAT DIT REPAREERT, en het is gemeten en niet bedacht.
+ *
+ * Elk cijfer in de catalogus draagt zijn HERKOMST mee in hetzelfde veld als zijn
+ * VOORWAARDEN: welke rij in welk tarievenblad, welk versiestempel, welke
+ * Wayback-kopie, wat een EXTRA kaart kost. Dat is proza over onze gegevens en
+ * geen voorwaarde bij dit cijfer. De lezer hieronder kon dat verschil niet zien,
+ * en las herkomstproza als een specifieke beperking. Drie gemeten gevolgen:
+ *
+ *   1. BLEAP. In "dit is geen eenmalige formulering van een marketingtekst"
+ *      vuurde /\beenmalig/, en er kwam "Bij de kaartkosten hoort een voorwaarde:
+ *      er komen eenmalige kosten bij" op het scherm — over een woord dat de
+ *      FORMULERING van de bron beschrijft en dat daar ontkennend staat.
+ *   2. WIREX. De herkomstnotitie bij de PRIJS citeert de merknaam van de
+ *      cashback ("precies het niveau waar de 0,5% Cryptoback bij hoort"), en
+ *      daaruit kwam "de uitkering is in crypto en niet in euro's" — over een
+ *      prijs. Een prijs is geen uitkering; die zin was onzin.
+ *   3. EN HET GEVOLG VOOR DE RANGSCHIKKING. Van de 38 fee-cijfers in de bundel
+ *      hadden er 0 een lege voorwaardenlijst. bepaalClaim kon voor kaartkosten
+ *      dus NOOIT "vast" teruggeven, en de netto-tak van buildRow was
+ *      onbereikbaar — niet omdat de prijs onbekend was, maar omdat er een
+ *      herkomstnotitie naast stond.
+ *
+ * DE REGEL, in één zin: lees de tekst ZIN VOOR ZIN, en laat een zin alleen weg
+ * als hij POSITIEF als herkomst herkend wordt. Een zin die ook maar één
+ * beperkingsvorm draagt, blijft staan — beperking wint van herkomst, binnen
+ * dezelfde zin, voor elke beperkingsvorm die in de lijst hieronder staat. Een
+ * zin die we in geen van beide lijsten terugvinden blijft óók staan, en dan is
+ * de uitkomst "onbeoordeeld", precies als vandaag.
+ *
+ * EN DIT IS DE PLEK WAAR DE EERSTE VERSIE VAN DEZE ONTSNAPPING FOUT ZAT, gemeten
+ * en niet bedacht. "Positief herkend" was PER WOORD: één herkomstwoord ergens in
+ * de zin maakte de HELE zin herkomst, en de rest van de zin werd niet meer
+ * gelezen. Elke beperking die de lijst hierboven nog niet kende, viel dus weg
+ * zodra de zin ook een brondocument noemde. Zeven gemeten voorbeelden, allemaal
+ * "herkomst/vindplaats" en allemaal een kale netto-uitspraak:
+ *
+ *   "De prijs staat in de tarieventabel van het Compleet Pakket."
+ *   "Volgens de tarievenwijzer stijgt de jaarbijdrage volgend jaar."
+ *   "De prijslijst vermeldt dit bedrag vanaf het tweede jaar."
+ *   "Het informatieblad zet dit bedrag in de kolom voor studenten."
+ *   "De tarieventabel hangt dit bedrag aan een spaartegoed boven de grens."
+ *   "De prijslijst zet dit bedrag in de kolom van het instapniveau."
+ *   "De productpagina neemt de kaart niet langer op in het aanbod."
+ *
+ * En één die niet bedacht is maar in de bundel staat, bij rabo-goldcard: "dit
+ * document is het Informatiedocument van dat pakket en noemt de kaart bij naam."
+ * Die zin haalde basis=netto op een prijs die alleen BOVENOP Rabo Standaard
+ * bestaat; dat de rij vandaag toch behoudend uitkomt, hangt er alleen aan dat de
+ * buurzin het woord "bovenop" gebruikt.
+ *
+ * DAAROM IS DE HERKENNING NU PER ZIN EN NIET PER WOORD, en dat is wat de
+ * ontsnapping behoudend maakt. Een zin is herkomst als (a) er een herkomstvorm
+ * in matcht ÉN (b) er na het wegstrepen van die vormen geen woord overblijft dat
+ * niet in `HERKOMST_WOORDEN` staat — een GESLOTEN woordenboek van lidwoorden,
+ * voorzetsels, neutrale meldwerkwoorden en de vindplaatswoorden zelf. "pakket",
+ * "studenten", "instapniveau", "vanaf", "stijgt", "aanbod": geen daarvan staat
+ * erin, dus geen van de acht zinnen hierboven komt nog door. Onbekende proza
+ * valt naar de kant van de beperking en niet naar een netto-uitspraak, en dat
+ * geldt nu voor elk woord dat we niet eerder hebben gezien.
+ *
+ * DE PRIJS DAARVAN, eerlijk: nieuwe herkomstproza van een bank die we nog niet
+ * hebben gelezen valt naar "onbeoordeeld" tot iemand het woordenboek uitbreidt.
+ * Dat is de goede kant om op te falen — het levert een voorbehoud op en geen
+ * kaal bedrag — maar het betekent ook dat dit woordenboek onderhoud vraagt, en
+ * dat elke toevoeging eraan velden van "geen uitspraak" naar "vaste uitspraak"
+ * verplaatst. De teller in rank.test.ts maakt dat zichtbaar.
+ *
+ * EN NOG EEN SLOT OP DE DEUR: een zin met een BEDRAG erin is alleen herkomst als
+ * uit dezelfde zin blijkt van WIE dat bedrag is — een extra kaart, een
+ * jaartotaal van hetzelfde bedrag, of een bevestiging uit een tweede bron.
+ * Bedragen zijn de gevaarlijke inhoud van dit veld: "Bij een SNS
+ * Studentenrekening € 27,50 per jaar" staat vol herkomstwoorden en is toch een
+ * ander tarief. Zonder die eigenaar valt de zin naar "onbekend".
+ *
+ * WAT DIT NIET IS. Het is regex-vormherkenning over proza — dezelfde soort
+ * gereedschap, met dezelfde faalvormen, als de lezer die het repareert. Het
+ * koopt correctheid door MOEILIJKER TE BEVREDIGEN te zijn, niet door iets te
+ * begrijpen. Elke regel die aan de herkomstlijst wordt toegevoegd, verplaatst
+ * velden van "geen uitspraak" naar "vaste uitspraak" en hoort dus gemeten te
+ * worden, niet geraden. */
+
+export type ZinSoort = "restrictie" | "herkomst" | "onbekend";
+
+/** Eén zin met zijn oordeel en de naam van de vorm die dat oordeel gaf. De naam
+ *  is er voor de test: "welke beperkingscategorie ving deze zin" is de vraag die
+ *  rank.test.ts per categorie stelt. */
+export type GelezenZin = { zin: string; soort: ZinSoort; vorm: string | null };
+
+/* DE BEPERKINGSLIJST. Deze wordt EERST gelopen, want een zin die zowel een
+ * herkomstwoord als een beperking draagt is een beperking. Dat is niet
+ * theoretisch: "Bovenop de € 3,45 per maand van Rabo Standaard; dit document is
+ * het Informatiedocument van dat pakket" is één zin met allebei erin. */
+const RESTRICTIE_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
+  /* Voor wie het cijfer geldt. */
+  ["geschiktheid", /\balleen\s+(?:voor|bij|binnen|met|aan te vragen|geldig|bestaande)/i],
+  ["geschiktheid", /\buitsluitend\b|\binwoners van\b|\bgeselecteerde\b|\bresidents? of\b|\bavailable only\b/i],
+  ["geschiktheid", /\bvanaf \d{1,2} jaar\b|\bleeftijd\b|\btot en met \d{1,2} jaar\b/i],
+  /* Het cijfer hangt aan een ander product dat óók geld kost. Regel 2 van de
+   * opdracht woont hier: "inbegrepen in het pakket" is geen nul. */
+  ["pakketkoppeling", /\b(?:daar)?bovenop\b|\bexclusief de kosten\b|\bgekoppelde dienst\b/i],
+  ["pakketkoppeling", /\bbinnen\s+(?:het|de|dat|die|een)\b|\bbinnen\s+[A-Z]/],
+  ["pakketkoppeling", /\bin de pakketprijs\b|\bpakketprijs\b|\binbegrepen\b|\bbankpakket\b/i],
+  ["pakketkoppeling", /\bverplicht\b|\bvereist\b|\bis nodig\b|\bkorting\b/i],
+  /* Een tarief dat bij een ander segment of pakket hoort dan dit cijfer. */
+  ["ander-tarief", /\b(?:tarief|prijs)\s+bij\b/i],
+  /* Hoofdletterongevoelig op "bij", want zo'n zin staat ook aan het BEGIN van
+   * een tekst ("Bij een SNS Studentenrekening € 27,50 per jaar"), en dan is de
+   * b een hoofdletter. De eigennaam erachter blijft wel een hoofdletter: "bij
+   * betalen in vreemde valuta" is geen ander tarief maar een omschrijving. */
+  ["ander-tarief", /\b[Bb]ij\s+(?:een|het|de|uw|je)?\s*[A-Z][a-zA-Z]/],
+  /* Iets wat de gebruiker eerst moet halen, houden of afsluiten. */
+  ["drempel", /\bminimale?\s+(?:besteding|inleg|saldo)\b|\bminimaal\b|\bminimum\b/i],
+  ["drempel", /\bat least\b|\bmust hold\b|\brequires?\b|\btier gate\b/i],
+  ["drempel", /\bstak(?:e|ed|ing)\b|\block-?up\b|\b(?:X-tras-)?tiers?\b/i],
+  ["drempel", /\babonnement|\bsubscription|\bvast blijven staan\b|\bWXT\b|\bCRO\b/i],
+  /* Tijdelijk, en dus geen vaste prijs. */
+  ["tijdelijk", /\beerste jaar (?:gratis|kosteloos)\b|\bkosteloos\b|\btijdelijk\b/i],
+  ["tijdelijk", /\bactievoorwaarden?\b|\bactieaanbod\b|\bpromo\b|\buntil further notice\b/i],
+  ["tijdelijk", /\bopgeschort\b|\bverlopen\b/i],
+  /* Aangekondigd, tegengesproken of oud: het cijfer is dan een ondergrens en
+   * geen actuele prijs. */
+  ["aangekondigd", /\b(?:per|vanaf)\s+\d{1,2}\s+[a-zA-Z]+\s+\d{4}\b/i],
+  ["aangekondigd", /\bwijzig|\bverhoog|\bverhoging|\bverhogen|\bverhoogd|\bverhoogt|\bprijsstijging\b/i],
+  ["aangekondigd", /\bgaat\b[^.]{0,40}\bnaar\s*€|\bondergrens\b|\bgeen actuele prijs\b/i],
+  ["aangekondigd", /\bhercontroleer\b|\bhoudbaarheid\b|\bveroudering\b|\bachterhaald\b/i],
+  ["aangekondigd", /\bstaleness\b|re-check|\bspreekt[^.]{0,25}\btegen\b|\btegenspraak\b|\bnieuwer\b/i],
+  /* Kosten die er nog bij komen: eenmalig, verzending, vervanging, "may apply". */
+  ["extra-kosten", /\beenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i],
+  ["extra-kosten", /\bone-off\b|\bone-time\b|\bmay apply\b|\bkomen er\b|\bper keer\b/i],
+  ["extra-kosten", /\bvervanging\b|\bvervangende?\b|\bverzendkosten\b|\bbezorging\b|\bissuance\b/i],
+  ["extra-kosten", /\bwat wel geld kost\b|\bwat niet nul is\b/i],
+  /* Niet meer te krijgen, of onder een andere naam. Een prijs die je niet meer
+   * kunt afnemen is geen prijs waar een netto-uitkomst op mag leunen. */
+  ["gesloten", /\bniet meer\b|\bniet beschikbaar\b|\bouder pakket\b/i],
+  /* De catalogus zegt zelf dat hij niet zeker weet WELK product dit is. Bij ING
+   * staat "LET OP DE NAAMOVERLAP: … kent deze naam niet meer" bij twee kaarten.
+   * Een prijs waarvan het product wankelt, kan geen netto-uitkomst dragen. */
+  ["onzeker-product", /\bnaamoverlap\b|\bvermoedelijk\b|\bopenstaande ?vra/i],
+  /* De vormen die de detectoren hieronder zelf al kennen. Ze staan hier zodat
+   * een zin die er een draagt NOOIT als herkomst wordt weggefilterd — anders
+   * zou de detector zijn eigen bewijs niet meer zien. */
+  ["plafond-of-uitsluiting", /\bcap\b|\bcapped\b|\bplafond\b|\blimiet\b|\blimit\b|\bdaglimiet\b/i],
+  ["plafond-of-uitsluiting", /\bmaximum\b|\bmaximaal\b|\bexclusions?\b|\bineligible\b|\bexcluded\b/i],
+  ["plafond-of-uitsluiting", /\buitgesloten\b|\buitsluiting|\bin crypto\b|\bniet in euro/i],
+];
+
+/* DE HERKOMSTLIJST, en dit is de gevaarlijke helft. Alles wat hier binnen valt,
+ * mag uit de tekst worden weggelaten, en een tekst die daarna leeg is levert een
+ * KALE prijs op. Daarom staat er niets in dat ook maar iets over de PRIJS zelf
+ * zegt, en daarom is de lijst kort. */
+const HERKOMST_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
+  /* Waar het cijfer staat. */
+  [
+    "vindplaats",
+    /\b(?:tabelrij|rij|tabel|kolom(?:men)?|opschrift|voetnoot|noot \d|artikel \d|clausule \d)\b/i,
+  ],
+  [
+    "vindplaats",
+    /\b(?:het|dit|hetzelfde) document\b|\binformatiedocument\b|\binformatieblad\b|\btarievenwijzer\b/i,
+  ],
+  [
+    "vindplaats",
+    /\btarievenstuk\b|\btarieventabel\b|\bkostenoverzicht\b|\bkostenpagina\b|\bprijslijst\b|\boverzicht\b/i,
+  ],
+  ["vindplaats", /\bproductpagina\b|\blandingspagina\b|\blegal-pagina\b|\baanvraagbrochure\b|\bde bron\b|\bpayload\b/i],
+  /* Wanneer het gelezen is, en waaraan die datum hangt. */
+  ["datering", /\bversiestempel\b|\bFEE_[A-Z0-9_]+\b|\bde datum is\b|\bdateert\b|\bgedateerd\b/i],
+  ["datering", /\bgepubliceerd op\b|\blaatst bijgewerkt\b|\bbijwerkdatum\b|\bingangsdatum\b/i],
+  ["datering", /\blastUpdatedDate\b|\bupdatedAt\b|\bpageUpdateDate\b|\baanmaakdatum\b|\bvolgnummer\b/i],
+  ["datering", /\bdraagt geen datum\b|\bzonder datum\b/i],
+  /* Hoe we eraan zijn gekomen toen de bron verdween. */
+  ["archief", /\bwayback\b|\bsnapshot\b|\b404\b|\bHTTP \d{3}\b|\bgelezen is de\b|\blive URL\b/i],
+  /* Een tweede bron die hetzelfde zegt. Dit is de enige vorm die een BEDRAG mag
+   * dragen zonder van een ander product te zijn: hij zegt dat het bedrag
+   * hetzelfde is, niet dat het iets anders is. */
+  ["bevestiging", /\bhetzelfde bedrag\b|\bwoordelijk gelijk\b|\bhetzelfde stempel\b|\bstaat ook op\b/i],
+  ["bevestiging", /\bzegt hetzelfde\b|\bnog steeds zo\b|\bbevestigt\b|\bnoemt ook\b/i],
+  /* Het jaartotaal van dít bedrag. MET OPZET HERKOMST: zo kan het nooit als
+   * waarde worden gebruikt, en blijft regel 3 (de bron bepaalt de eenheid)
+   * overeind. Er wordt hier niets omgerekend en er mag hier niets omgerekend. */
+  ["jaartotaal", /\bhet jaartotaal\b|\bjaarprijs\b|\bin jaarvorm\b|\bniet omgerekend\b/i],
+  ["jaartotaal", /\bzowel de maand- als de jaar/i],
+  /* Het bedrag van een ANDER product uit dezelfde tabel. */
+  ["ander-product", /\b(?:extra|additionele|tweede)\s+(?:kaart|kaarten|card|betaalpas|kaarthouder)\b/i],
+  /* "extra Green Cards", "extra Platinum Card": het woord "extra" met een
+   * EIGENNAAM erachter. Drie van de vier Flying Blue-teksten zeggen dit met een
+   * kleine letter en één met een hoofdletter; dat is spelling en geen betekenis,
+   * en de vorm mocht daar niet van afhangen. */
+  /* De eigennaam wordt HELEMAAL meegenomen — `[A-Z][a-zA-Z]*` en niet `[A-Z]` —
+   * omdat deze vormen straks ook worden weggestreept om te kijken wat er van de
+   * zin overblijft. Met één hoofdletter bleef er "reen" van "Green" staan, en dan
+   * zou dat brokstuk in het woordenboek moeten. Aan WAT er matcht verandert het
+   * niets: een hoofdletter met letters erachter is nog steeds een hoofdletter. */
+  ["ander-product", /\b(?:[Ee]xtra|[Aa]dditionele|[Tt]weede)\s+[A-Z][a-zA-Z]*|\bper extra kaart\b|\bkaarthouder\b/],
+  /* Wie de rekening stuurt. */
+  ["uitgever", /\buitgegeven door\b|\bis een product van\b|\bde uitgever\b|\bICS-product\b/i],
+  /* Wat er in de prijs zit. Let op de buurman in de beperkingslijst:
+   * "inbegrepen in het pakket" is een KOPPELING en geen inhoud, en die staat
+   * daarom hierboven — beperking wint. */
+  ["inhoud", /\binclusief\b|\bbestaat uit\b/i],
+  /* De catalogus schrijft een uitgesproken nul met zoveel woorden uit. LET OP DE
+   * ONTKENNING: die staat er in de catalogus even vaak, en dan betekent de zin
+   * het tegenovergestelde — zie `UITGESPROKEN_NUL_ONTKEND` hieronder, dat zowel
+   * deze vorm als stap 7 afdekt. */
+  ["uitgesproken-nul", /\buitgesproken nul\b/i],
+];
+
+/* EEN ONTKENDE UITGESPROKEN NUL IS HET TEGENDEEL VAN EEN UITGESPROKEN NUL, en
+ * dat is precies de fout die deze commit bij Bleap repareerde ("dit is geen
+ * eenmalige formulering" → "er komen eenmalige kosten bij"), één veld verderop.
+ *
+ * Het is geen bedachte formulering. `grep -rn "geen uitgesproken nul"
+ * docs/catalog/` geeft drie treffers in staging-kaartkosten.json: "dat is een
+ * ontbrekende rij, geen uitgesproken nul", "De afwezigheid van een rij in een
+ * tarievenoverzicht is geen uitgesproken nul", "Dus: geen uitgesproken nul voor
+ * accountFee". Dat is deze catalogus die zijn eigen regel 2 uitschrijft, en het
+ * is één merge van een accountFee-rij verwijderd.
+ *
+ * Op de substring toetsen laat zo'n zin twee keer verkeerd landen: stap 7 ziet
+ * de woorden staan en houdt het voorbehoud "voorwaardelijke-nul" binnen, en de
+ * herkomstvorm hierboven maakt van dezelfde zin een herkomstnotitie, zodat stap
+ * 10 ook geen "onbeoordeeld" meer toevoegt. Wat er dan uitkomt is een kale
+ * € 0,00 in de nettosom — precies de valse nul van RegioBank en Trade Republic.
+ *
+ * Daarom wordt de ontkenning apart gelezen, PER ZIN (de puntkomma-splitsing doet
+ * hier het werk: "De tarievenwijzer noemt hier geen bedrag; dit is geen
+ * uitgesproken nul" is één tekst met twee beweringen), en valt de zin bij een
+ * ontkenning naar "onbekend" — niet naar herkomst, en niet naar een nul. */
+const UITGESPROKEN_NUL = /\buitgesproken nul\b/i;
+const UITGESPROKEN_NUL_ONTKEND = /\b(?:geen|niet|nooit|no|not)\b[^.;!?]{0,40}?\buitgesproken nul\b/i;
+
+/** Zegt deze tekst ergens BEVESTIGEND dat de nul uitgesproken is? */
+function bevestigtUitgesprokenNul(tekst: string): boolean {
+  return splitsZinnen(tekst).some((z) => UITGESPROKEN_NUL.test(z) && !UITGESPROKEN_NUL_ONTKEND.test(z));
+}
+
+/* HET GESLOTEN WOORDENBOEK, en dit is de helft die de ontsnapping per ZIN maakt
+ * in plaats van per woord. Zie de kop van dit blok voor de acht gemeten zinnen
+ * die hier op stuklopen.
+ *
+ * WAT ER WEL IN MAG: lidwoorden, voornaamwoorden, voegwoorden, voorzetsels,
+ * neutrale meldwerkwoorden ("staat", "noemt", "draagt"), de woorden waarmee een
+ * vindplaats zichzelf beschrijft ("titel", "voettekst", "voorganger"), de
+ * maandnamen, en de eigennamen van de kaarten waarvan we de herkomstproza al
+ * gelezen hebben.
+ *
+ * WAT ER NIET IN MAG, en dit is de hele afweging: elk woord dat iets zegt over
+ * WANNEER, VOOR WIE of WAARBINNEN de prijs geldt. Dus geen "pakket", geen
+ * "vanaf", geen "tweede", geen "alleen", geen "boven een besteding", geen
+ * "studenten", geen "niveau". Wie hier een woord bijzet, verplaatst velden van
+ * "geen uitspraak" naar "vaste uitspraak", en dat hoort gemeten te worden.
+ *
+ * "daarna" staat er wél in, en dat is de enige twijfelgeval: het is temporeel.
+ * Het komt uit "inclusief 2 extra kaarten; daarna € 30 per jaar per extra kaart"
+ * bij Amex. Het slot op de deur eronder houdt dat geval vast: een zin met een
+ * bedrag erin heeft een EIGENAAR nodig, en "per extra kaart" is die eigenaar.
+ * Zonder eigenaar valt "daarna € 59,50" alsnog naar "onbekend". */
+const HERKOMST_WOORDEN: ReadonlySet<string> = new Set<string>([
+  /* Lidwoorden, voornaamwoorden, voegwoorden, voorzetsels. */
+  "de", "het", "een", "dit", "dat", "die", "deze", "dezelfde", "zelf", "u",
+  "en", "als", "maar", "daarna", "niet", "geen",
+  "in", "op", "van", "voor", "uit", "boven", "per",
+  /* Neutrale meldwerkwoorden: ze zeggen dat de bron iets STAAT, niet onder welke
+   * voorwaarde het geldt. */
+  "is", "was", "staat", "staan", "heeft", "hebben", "draagt", "dragen",
+  "noemt", "noemen", "zegt", "zeggen", "blijkt", "betaalt",
+  /* Hoe een vindplaats zichzelf beschrijft. */
+  "titel", "voettekst", "datum", "voorganger", "toepassing",
+  /* De eenheid en het voorwerp van de prijs. Regel 3 blijft overeind: er wordt
+   * hier niets omgerekend, deze woorden mogen alleen MEEKOMEN in een zin. */
+  "kaart", "kaarten", "kaarthouder", "card", "cards", "maand", "jaar",
+  "jaarbijdrage", "kaartlidmaatschapsbijdragen",
+  /* Eigennamen uit de herkomstproza die we hebben gelezen. */
+  "abn", "amro", "american", "express", "flying", "blue",
+  "the", "green", "gold", "silver", "platinum", "entry",
+  /* Maandnamen, uit dezelfde tabellen als `leesDatum` — één bron van waarheid. */
+  ...Object.keys(MAANDEN_NL), ...Object.keys(MAANDEN_EN),
+]);
+
+/* Dezelfde herkomstvormen, maar globaal, zodat ze uit een zin kunnen worden
+ * weggestreept in plaats van alleen geteld. Afgeleid en niet apart onderhouden:
+ * één lijst, twee toepassingen. */
+const HERKOMST_GLOBAAL: readonly RegExp[] = HERKOMST_VORMEN.map(
+  ([, re]) => new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`),
+);
+
+/** Wat er van een zin overblijft als je alles wegstreept wat we als herkomst
+ *  herkennen. Getallen, bedragen, percentages en versienummers gaan er ook uit:
+ *  die zeggen niets over de VORM van de zin, en van wie een bedrag is wordt
+ *  apart afgedwongen door `BEDRAG_MET_EIGENAAR`. */
+function restwoorden(zin: string): string[] {
+  let s = zin;
+  for (const re of HERKOMST_GLOBAAL) s = s.replace(re, " ");
+  s = s
+    .replace(/[€$]\s?\d[\d.,]*/g, " ")
+    .replace(/\b[Vv]\d+\b/g, " ")
+    .replace(/\d[\d.,]*\s*%?/g, " ");
+  return s
+    .split(/[^A-Za-zÀ-ÖØ-öø-ÿ]+/)
+    .filter((w) => w !== "")
+    .map((w) => w.toLowerCase());
+}
+
+/** Een bedrag in de zin. Percentages horen hier niet bij: die zeggen niets over
+ *  wat de kaart kost om te hebben. */
+const BEDRAG_IN_ZIN = /(?:€|EUR\b|USD\b|\$)\s?\d/i;
+
+/** De enige drie vormen waaruit blijkt van WIE een bedrag in de zin is. */
+const BEDRAG_MET_EIGENAAR: ReadonlySet<string> = new Set(["ander-product", "jaartotaal", "bevestiging"]);
+
+/** De tekst in zinnen. Splitst op punt, puntkomma, uitroep- en vraagteken, met
+ *  een eventueel afsluitend aanhalingsteken erbij.
+ *
+ *  DE PUNTKOMMA DOET HIER HET WERK: de catalogus hangt losse feiten aan een
+ *  puntkomma ("Uitgegeven door ICS; de voorwaarden zijn van toepassing"), en die
+ *  twee halen apart een ander oordeel dan samen.
+ *
+ *  ER WORDT NIET OP DE DUBBELE PUNT GESPLITST, en dat is gemeten: bij Amex Gold
+ *  staat "zegt hetzelfde in jaarvorm: '… € 240 per jaar (€ 20 per maand)'", en
+ *  door die dubbele punt te splitsen raakt het bedrag los van de bevestiging die
+ *  zegt dat het hetzelfde bedrag is. Dan valt de helft met het bedrag naar
+ *  "onbekend" en verdwijnt de uitspraak — behoudend, maar zonder reden.
+ *
+ *  "€ 1.250" wordt niet gesplitst: het scheidingsteken heeft daar een cijfer
+ *  achter zich en geen witruimte. Overhoudt een splitsing een fragment dat
+ *  nergens op matcht, dan is dat "onbekend", en dat is de veilige kant. */
+export function splitsZinnen(tekst: string): string[] {
+  return tekst
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.;!?]["”')\]]?)\s+/)
+    .map((z) => z.trim())
+    .filter((z) => z !== "");
+}
+
+/** Eén zin wegen. Beperking eerst, dan herkomst, anders onbekend. */
+export function leesZin(zin: string): GelezenZin {
+  for (const [vorm, re] of RESTRICTIE_VORMEN) {
+    if (re.test(zin)) return { zin, soort: "restrictie", vorm };
+  }
+  const gevonden: string[] = [];
+  for (const [vorm, re] of HERKOMST_VORMEN) {
+    if (re.test(zin) && !gevonden.includes(vorm)) gevonden.push(vorm);
+  }
+  if (gevonden.length === 0) return { zin, soort: "onbekend", vorm: null };
+  /* Een ONTKENDE uitgesproken nul is geen herkomstnotitie maar de mededeling dat
+   * er juist géén nul staat. Zo'n zin mag onder geen enkele vorm wegvallen. */
+  if (gevonden.includes("uitgesproken-nul") && UITGESPROKEN_NUL_ONTKEND.test(zin)) {
+    return { zin, soort: "onbekend", vorm: null };
+  }
+  /* Staat er een bedrag in, dan moet uit dezelfde zin blijken van wie het is. */
+  if (BEDRAG_IN_ZIN.test(zin) && !gevonden.some((v) => BEDRAG_MET_EIGENAAR.has(v))) {
+    return { zin, soort: "onbekend", vorm: null };
+  }
+  /* EN DE HELE ZIN MOET GELEZEN ZIJN, niet alleen het woord dat matchte. Blijft
+   * er na het wegstrepen van de herkomstvormen een woord over dat niet in het
+   * gesloten woordenboek staat, dan staat er in deze zin iets waarover we geen
+   * uitspraak kunnen doen — en dan is hij onbekend en geen herkomst. */
+  if (restwoorden(zin).some((w) => !HERKOMST_WOORDEN.has(w))) {
+    return { zin, soort: "onbekend", vorm: null };
+  }
+  return { zin, soort: "herkomst", vorm: gevonden[0]! };
+}
+
+export function leesZinnen(tekst: string): GelezenZin[] {
+  return splitsZinnen(tekst).map(leesZin);
+}
+
+/* WAAROM ALLEEN DE KAARTKOSTEN, en dit is een doseringsbeslissing en geen
+ * principe — de opmerking hoort erbij, anders leest het als een principe.
+ *
+ * Een herkomstnotitie is een herkomstnotitie bij elk cijfer. De reden om de
+ * lijn hier te houden is gemeten: bij `fxFeePct` zouden in één stap 29 velden
+ * van "onbeoordeeld" naar "vast" schuiven, en dat zet via rank.ts (`fxOnzeker`)
+ * de euro-bedragen aan bij ELKE aankoop in een vreemde munt. Die verbreding
+ * verdient zijn eigen gemeten ronde. Bij `cashbackPct` valt er niets te
+ * beslissen: alle 8 velden in de bundel dragen echte voorwaarden. */
+const PER_ZIN_GELEZEN: ReadonlySet<Veld> = new Set<Veld>(["kaartkosten"]);
+
 /** De vormherkenning zelf. Zie de kop: dit is geen begrip van de tekst, het is
  *  het herkennen van vormen die we hebben gezien, met de behoudende uitkomst
  *  eraan vast. */
@@ -266,15 +647,40 @@ export function leesVoorwaarden(
   const t = (tekst ?? "").trim();
   if (t === "") return [];
 
+  /* DE TEKST ZOALS DE DETECTOREN HEM ZIEN. Zinnen die positief als herkomst zijn
+   * herkend, worden eruit gelaten: die zeggen waar het cijfer STAAT en niet
+   * onder welke voorwaarde het geldt. Alle andere zinnen — beperking én
+   * onbekend — blijven staan, dus geen detector raakt zijn eigen bewijs kwijt.
+   *
+   * Draait de zinslezer niet op dit veld, dan is `tv` de hele tekst en gedraagt
+   * deze functie zich precies als voorheen. Stap 7 leest met opzet `t` en niet
+   * `tv`: een nul mag nooit langs een herkomstlezing glippen. */
+  const perZin = PER_ZIN_GELEZEN.has(veld);
+  const zinnen = perZin ? leesZinnen(t) : [];
+  const tv = perZin
+    ? zinnen.filter((z) => z.soort !== "herkomst").map((z) => z.zin).join(" ")
+    : t;
+
   const uit: Caveat[] = [];
 
   /* 1. Uitkering in iets anders dan euro's. Eerst het woord "crypto" zelf, want
-   *    "PAID IN CRYPTO" zou anders als het ticker-symbool CRYPT worden gelezen. */
-  const inCrypto = /\bin\s+crypto\b/i.test(t) || /cryptoback/i.test(t) || /a digital currency/i.test(t);
-  const ticker = /\b(?:paid|PAID|Paid|credited|Credited)\b[^.]{0,60}?\b(?:in|IN|In)\s+(?!CRYPTO\b)([A-Z]{2,5})\b/.exec(t);
-  if (ticker) uit.push({ soort: "in-token", veld, token: ticker[1]! });
-  else if (inCrypto || /\bnot euro\b/i.test(t) || /niet in euro/i.test(t)) {
-    uit.push({ soort: "in-token", veld, token: "crypto" });
+   *    "PAID IN CRYPTO" zou anders als het ticker-symbool CRYPT worden gelezen.
+   *
+   *    NIET BIJ DE KAARTKOSTEN, en dat is gemeten. Een uitkering is iets wat je
+   *    KRIJGT; kaartkosten zijn iets wat je BETAALT. lines.ts zet deze bevinding
+   *    om in "de uitkering is in crypto en niet in euro's", en die zin is over
+   *    een prijs geen voorbehoud maar onzin. In de bundel vuurde hij precies één
+   *    keer op dit veld — bij Wirex, omdat de herkomstnotitie bij de PRIJS de
+   *    merknaam van de CASHBACK citeert ("het niveau waar de 0,5% Cryptoback bij
+   *    hoort"). De zinslezer hierboven vangt dat geval nu ook al; deze grens
+   *    zorgt ervoor dat de detector de fout niet meer KÁN maken. */
+  if (veld !== "kaartkosten") {
+    const inCrypto = /\bin\s+crypto\b/i.test(tv) || /cryptoback/i.test(tv) || /a digital currency/i.test(tv);
+    const ticker = /\b(?:paid|PAID|Paid|credited|Credited)\b[^.]{0,60}?\b(?:in|IN|In)\s+(?!CRYPTO\b)([A-Z]{2,5})\b/.exec(tv);
+    if (ticker) uit.push({ soort: "in-token", veld, token: ticker[1]! });
+    else if (inCrypto || /\bnot euro\b/i.test(tv) || /niet in euro/i.test(tv)) {
+      uit.push({ soort: "in-token", veld, token: "crypto" });
+    }
   }
 
   /* 2. Plafond. "No cap … is stated" is géén afwezigheid van een plafond — de
@@ -282,14 +688,14 @@ export function leesVoorwaarden(
    *    de volgorde van regel 1: eerst het bedrag als we het zeker weten, dan het
    *    uitgesproken ontbreken, dan het uitgesproken niet-weten, en pas daarna
    *    de kale vaststelling dat er íéts is. */
-  const cap = zoekCap(t);
+  const cap = zoekCap(tv);
   if (cap) {
     uit.push({ soort: "plafond", veld, capCents: cap.capCents, basis: cap.basis });
-  } else if (CAP_ONBEKEND.test(t) || CAP_ONBEKEND_TOELICHTING.test(t)) {
+  } else if (CAP_ONBEKEND.test(tv) || CAP_ONBEKEND_TOELICHTING.test(tv)) {
     uit.push({ soort: "plafond-onbekend", veld });
-  } else if (GEEN_CAP.test(t)) {
+  } else if (GEEN_CAP.test(tv)) {
     uit.push({ soort: "geen-plafond", veld });
-  } else if (CAP_AANWEZIG.test(t)) {
+  } else if (CAP_AANWEZIG.test(tv)) {
     uit.push({ soort: "plafond-zonder-bedrag", veld });
   }
 
@@ -304,15 +710,15 @@ export function leesVoorwaarden(
    *    dat er met zoveel woorden bij. Een drempel verzinnen bij een kaart die er
    *    geen heeft, is dezelfde fout als er een verzwijgen. */
   if (
-    /tier gate/i.test(t) ||
-    /requires? an active[^.]{0,60}subscription/i.test(t) ||
-    /requires? (?:holding|at least)/i.test(t) ||
-    /must hold/i.test(t) ||
-    /\bstak(e|ed|ing)\b/i.test(t) ||
-    /entry tier (?:needs|requires)/i.test(t) ||
-    /minimale besteding/i.test(t) ||
-    /abonnement (?:is )?(?:vereist|verplicht|nodig)/i.test(t) ||
-    /verplicht/i.test(t)
+    /tier gate/i.test(tv) ||
+    /requires? an active[^.]{0,60}subscription/i.test(tv) ||
+    /requires? (?:holding|at least)/i.test(tv) ||
+    /must hold/i.test(tv) ||
+    /\bstak(e|ed|ing)\b/i.test(tv) ||
+    /entry tier (?:needs|requires)/i.test(tv) ||
+    /minimale besteding/i.test(tv) ||
+    /abonnement (?:is )?(?:vereist|verplicht|nodig)/i.test(tv) ||
+    /verplicht/i.test(tv)
   ) {
     uit.push({ soort: "drempel", veld });
   }
@@ -321,9 +727,9 @@ export function leesVoorwaarden(
    *    staat "promo until 31 May 2026" bij een tarief dat we niet serveren, en
    *    die datum aan het 1%-cijfer plakken zou een verzinsel zijn. */
   const eind =
-    /\bactive until\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(t) ??
-    /\bgeldig tot\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(t) ??
-    /\bloopt tot\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(t);
+    /\bactive until\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(tv) ??
+    /\bgeldig tot\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(tv) ??
+    /\bloopt tot\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i.exec(tv);
   if (eind) {
     const datum = leesDatum(eind[1]!, eind[2]!, eind[3]!);
     if (datum) uit.push({ soort: "einddatum", veld, datum, verlopen: datum < asOf });
@@ -337,30 +743,71 @@ export function leesVoorwaarden(
    *    op oud-stakers en bij Plus op besteding boven het plafond, en allebei
    *    zijn dat geen uitsluiting van winkelcategorieën. Een voorwaarde met de
    *    verkeerde uitleg erbij is geen voorwaarde meer maar een verzinsel. */
-  if (/exclusions/i.test(t) || /ineligible/i.test(t) || /\bexcluded\b/i.test(t) || /uitgesloten/i.test(t) || /uitsluiting/i.test(t)) {
+  if (
+    /exclusions/i.test(tv) ||
+    /ineligible/i.test(tv) ||
+    /\bexcluded\b/i.test(tv) ||
+    /uitgesloten/i.test(tv) ||
+    /uitsluiting/i.test(tv)
+  ) {
     uit.push({ soort: "uitsluitingen", veld });
   }
 
   /* 6. De bron zegt zelf: opnieuw meten. */
-  if (/re-check before serving/i.test(t) || /staleness warning/i.test(t)) {
+  if (/re-check before serving/i.test(tv) || /staleness warning/i.test(tv)) {
     uit.push({ soort: "herzien", veld });
   }
 
   /* 7. Een nul die geen uitgesproken nul is. De catalogus schrijft die twee uit
    *    elkaar: waar de nul echt uitgesproken is, staat "Uitgesproken nul" in de
    *    voorwaarde. Staat dat er niet bij een waarde van nul, dan is het een nul
-   *    onder voorwaarden — en dat is geen nul. */
-  if (waarde === 0 && !/uitgesproken nul/i.test(t)) {
+   *    onder voorwaarden — en dat is geen nul.
+   *
+   *    OP DE WOORDEN TOETSEN IS HIER NIET GENOEG, en dat is dezelfde fout als
+   *    bij Bleap één stap verderop: "dat is een ontbrekende rij, geen
+   *    uitgesproken nul" bevat de woorden en beweert het tegendeel. Er wordt
+   *    daarom per zin gekeken of de nul BEVESTIGD wordt, over de VOLLEDIGE tekst
+   *    `t` en niet over de ingekorte `tv`: een nul mag nooit langs een
+   *    herkomstlezing glippen. */
+  if (waarde === 0 && !bevestigtUitgesprokenNul(t)) {
     uit.push({ soort: "voorwaardelijke-nul", veld });
   }
 
-  /* 8/9. Kosten die er nog bij komen. */
-  if (/\beenmalig/i.test(t) || /one-off/i.test(t) || /one-time/i.test(t)) uit.push({ soort: "eenmalig", veld });
-  if (/\bbovenop\b/i.test(t) || /komt.{0,40}lidmaatschap/i.test(t)) uit.push({ soort: "bovenop", veld });
+  /* 8/9. Kosten die er nog bij komen.
+   *
+   *    HET LOSSE WOORD "EENMALIG" IS HIER TE WEINIG, en dat is gemeten: bij
+   *    Bleap staat "dus dit is geen eenmalige formulering van een
+   *    marketingtekst" — een uitspraak over de FORMULERING van de bron, en nog
+   *    ontkennend ook — en daaruit kwam "er komen eenmalige kosten bij" op het
+   *    scherm. Er moet dus een KOSTENWOORD achter staan. Deze verscherping mag
+   *    niet los landen: zonder de zinslezer hierboven zou Bleap er een
+   *    voorwaardeVRIJE netto-uitspraak aan overhouden, en dan is artikel 6.2
+   *    ("other fees may apply") ongezien weg. Samen doen ze het werk. */
+  if (
+    /eenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i.test(tv) ||
+    /one-off fee/i.test(tv) ||
+    /one-time fee/i.test(tv)
+  ) {
+    uit.push({ soort: "eenmalig", veld });
+  }
+  if (/\bbovenop\b/i.test(tv) || /komt.{0,40}lidmaatschap/i.test(tv)) uit.push({ soort: "bovenop", veld });
 
-  /* 10. Er staat iets, en we herkenden er niets in. Dat is onbekend, en onbekend
-   *     is geen groen licht. */
-  if (uit.length === 0) uit.push({ soort: "onbeoordeeld", veld });
+  /* 10. Er staat iets, en we herkenden er niets in.
+   *
+   *     TWEE UITKOMSTEN, EN HET VERSCHIL IS DE HELE REPARATIE. Bestond de tekst
+   *     UITSLUITEND uit zinnen die we positief als herkomst herkennen, dan staat
+   *     er geen voorwaarde bij dit cijfer — alleen waar het cijfer vandaan komt.
+   *     Dan is de lijst leeg, en bepaalClaim maakt daar "vast" van. Dat is de
+   *     enige manier waarop de netto-tak van buildRow bereikbaar wordt.
+   *
+   *     In elk ander geval — één beperkingszin, of één zin die we niet konden
+   *     plaatsen — blijft de uitkomst "onbeoordeeld", en onbeoordeeld is geen
+   *     groen licht. De ontsnapping vraagt dus een positieve herkenning van
+   *     ELKE zin. Onbekende proza valt naar de behoudende kant. */
+  if (uit.length === 0) {
+    const alleenHerkomst = perZin && zinnen.length > 0 && zinnen.every((z) => z.soort === "herkomst");
+    if (!alleenHerkomst) uit.push({ soort: "onbeoordeeld", veld });
+  }
 
   return uit;
 }

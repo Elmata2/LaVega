@@ -94,7 +94,13 @@ test("the thin subscriptions half reports what was actually measured, and seeds 
   expect(html).toContain("<details");
 });
 
-test("a detected subscription is priced per year as well as per month", () => {
+/* HIER STONDEN DE KOLOMMEN "Per maand" EN "Per jaar" NAAST ELKAAR, en de tweede
+ * was de eerste × 12. Voor dít abonnement klopte dat — Netflix wordt maandelijks
+ * afgeschreven — maar voor een jaarabonnement niet, want dan is "per maand" zelf
+ * al een deling. Sinds de periodeschakelaar toont de tabel één eenheid, de eenheid
+ * die hij kiest, en ernaast wat er werkelijk is afgeschreven. Het omschakelen zelf
+ * heeft een echte DOM nodig en staat in optimalisatie-periode.test.tsx. */
+test("a detected subscription is priced in the chosen unit, next to what was actually charged", () => {
   const html = render([
     tx("n1", "2026-05-08", -15.99, "Netflix"),
     tx("n2", "2026-06-08", -15.99, "Netflix"),
@@ -103,10 +109,20 @@ test("a detected subscription is priced per year as well as per month", () => {
   ]);
   expect(html).toContain("Netflix");
   expect(html).not.toContain("Nog geen abonnement herkend");
-  // Per-year column: € 17,99 × 12 = € 215,88.
-  expect(html).toContain("215,88");
-  // The price rise is reasoned to a yearly number too: € 2,00 × 12 = € 24,00.
-  expect(html).toContain("24,00");
+  // De schakelaar opent op "Per maand" — de stand waarin dit scherm altijd stond.
+  expect(html).toContain('aria-label="Eenheid van de abonnementsbedragen"');
+  expect(html).toContain('<option value="maand" selected="">Per maand</option>');
+  expect(html).toContain("17,99");
+  // En de eenheid van de AFSCHRIJVING staat er in elke stand naast, met het ritme
+  // erbij: die mag niet achter de schakelaar verdwijnen.
+  expect(html).toContain("Op je afschrift");
+  expect(html).toContain("maandelijks");
+  // Een maandbedrag is niet omgerekend, dus er staat geen rekensom onder en geen
+  // regel die er een belooft.
+  expect(html).not.toContain("omgerekend uit een ander ritme");
+  // De prijsstijging in dezelfde eenheid: € 2,00 per maand, niet × 12.
+  expect(html).toContain("per maand extra");
+  expect(html).toContain("2,00");
   // No example rows leak into a filled block.
   expect(html).not.toContain("Voorbeeld — niet jouw data");
 });

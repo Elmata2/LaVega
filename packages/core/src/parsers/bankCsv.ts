@@ -73,6 +73,8 @@ const PROFILES: Profile[] = [
       // "Debit" also satisfies the /^d/ fallback below, but naming it is what
       // makes this profile readable next to its Dutch twin.
       dcNeg: ["debit"],
+      // Dezelfde kolom als "Saldo na mutatie" in de Nederlandse export.
+      bal: ["balance after mutation", "balance"],
     },
   },
   {
@@ -86,6 +88,17 @@ const PROFILES: Profile[] = [
       acc: ["rekening"],
       dc: ["af bij"],
       dcNeg: ["af"],
+      /* ING SCHRIJFT HET SALDO IN ELKE REGEL en dit profiel las het niet.
+       * Gemeld op 24 augustus: "Positie onbekend (alleen CSV-rekeningen zonder
+       * saldo)". Dat was waar en onnodig — de kolom "Saldo na mutatie" staat
+       * gewoon in de export. Zonder deze regel heeft een geïmporteerde
+       * ING-rekening geen saldo, en dan kan de positiegrafiek geen lijn tekenen
+       * en valt de hele rekening buiten elk totaal.
+       *
+       * De kale "saldo" staat er als tweede omdat `pick` ook op bevatten matcht:
+       * een export die de kolom anders noemt maar wel "saldo" bevat komt er zo
+       * alsnog door, zonder dat we per bank een nieuwe naam moeten raden. */
+      bal: ["saldo na mutatie", "saldo"],
     },
   },
   {
@@ -98,6 +111,9 @@ const PROFILES: Profile[] = [
       amount: ["bedrag"],
       acc: ["iban/bban"],
       cur: ["munt"],
+      // Rabobank noemt hem "Saldo na trn". De kale "saldo" staat er als vangnet
+      // achter, want `pick` matcht ook op bevatten.
+      bal: ["saldo na trn", "saldo"],
     },
   },
   {

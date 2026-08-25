@@ -434,3 +434,27 @@ Opgeschreven zodat het besluit omkeerbaar is op bewijs en niet op stemming.
 
 **Beslist en niet meer open:** de browser (§6 — Chrome en Edge, één MV3-bundel), en dat punten de kop
 zijn en cashback niet (§0, §3).
+
+
+---
+
+## Zijn antwoord op de vraag die dit plan blokkeerde (23 augustus)
+
+**"Zou je een gevulde winkelwagen echt verlaten voor 8,5%?" — JA.**
+
+Dat was de enige invoer die niet te meten viel, en het antwoord draait de opzet om. Aanbiedingen
+zijn de **kop** van de extensie, geen voetnoot. De volgorde op een afrekenpagina is daarmee:
+
+1. **een aanbieding die hij hier kan gebruiken** — het duurste en het schaarste signaal;
+2. **welke kaart het meest oplevert**, netto na kaartkosten;
+3. **welke punten hij heeft liggen**, als herinnering.
+
+Wat dat betekent voor het werk: de Amex-aanbiedingenlezer (gebouwd 22–23 augustus, achter expliciete
+toestemming) is niet langer een extraatje naast de kaartrangschikking maar de reden dat de extensie
+bestaat. En de kaartrangschikking, die nu op nul netto-vergelijkingen staat omdat geen enkele kaart
+zowel een cashbackcijfer als een prijs draagt, is daarmee **niet langer de blokkade voor het geheel** —
+hij is de tweede regel op het paneel.
+
+Het gat dat blijft staan en dat we niet mogen dichtpraten: wij kennen zijn saldo en zijn eigen
+aanbiedingen, niet wat een willekeurige winkel accepteert. Een aanbieding die Amex hem geeft is een
+feit; "deze winkel neemt je punten aan" is dat niet.

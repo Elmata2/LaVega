@@ -137,17 +137,18 @@ samengevoegd, mist de app cijfers die in huis zijn.
 
 ### 2.2 Wat de catalogus vandaag dekt, gemeten
 
-122 producten in `catalog.json` (gegenereerd 19-08). Per veld: **73** `fxFeePct`, **51**
-`pointsPerEuro`, **32** `interestPct`, **8** `cashbackPct`.
+**185 producten** in `catalog.json` (gegenereerd 2026-08-21). Per veld:
+**73** `fxFeePct`, **89** `accountFee`, **51** `pointsPerEuro`,
+**32** `interestPct`, **8** `cashbackPct`.
 
 Twee dingen die daarin verstopt zitten en die elke agent raken:
 
-- **Van de 51 puntencijfers zijn er 37 een bewezen nul en 14 groter dan nul — en die 14 zijn
-  állemaal American Express.** Buiten Amex heeft geen enkel product in de catalogus een aantoonbare
-  koers per bestede euro. Dat is de belangrijkste input voor het extensieplan en het staat daar nu
-  ook in.
-- **Cashback staat op 8 van de 122.** Elk cashback-antwoord dat de app geeft rust dus op een heel
-  smalle basis.
+- **Van de puntencijfers zijn er 14 groter dan nul, en die 14 zijn állemaal American Express.**
+  Buiten Amex heeft geen enkel product een aantoonbare koers per bestede euro.
+- **Cashback staat op 8.** Elk cashback-antwoord rust dus op een smalle basis — en van die 8
+  draagt er geen enkele óók een prijs, wat de nettotak van de extensie blokkeert tot de
+  kaartkosten-sweep is samengevoegd (§2.1).
+
 
 ### 2.3 Vier datums dragen mogelijk de dag dat wij keken
 
@@ -343,11 +344,45 @@ drie hoort.
 
 ## 6. Wacht op zijn beslissing
 
+### Beantwoord op 23 augustus
+
+**V1 — JA, hij zou een gevulde winkelwagen verlaten voor 8,5%.** Dat is het antwoord waar het
+extensieplan op wachtte, en het draait de opzet om: aanbiedingen zijn de KOP van de extensie, geen
+voetnoot. De volgorde op een afrekenpagina is daarmee (1) een aanbieding die hij hier kan gebruiken,
+(2) welke kaart het meest oplevert, (3) welke punten hij heeft liggen.
+
+**V3 — JA op optie B, mét expliciete toestemming.** De extensie mag zijn eigen, ingelogde
+Amex-aanbiedingen lezen. Gebouwd op 22–23 augustus: aparte vraag, standaard uit, uitzetten wist wat
+er ligt, en `host_permissions` blijft leeg zodat Chrome het pad afdwingt. Wat nog niet is gezien is
+de echte pagina — dat kan alleen hij.
+
+**V2 — de zeven `enumerated-absence`-regels staan op nul, maar op een ANDERE grond dan gevraagd.**
+Zijn woorden: *"ik weet dat er voor die banken geen puntenschema's zijn en verwacht niet dat die
+binnenkort zullen komen."* Dat is geen instemming met de bewijssoort maar iets sterkers: een
+uitspraak van de eigenaar, en in deze app verslaat een gebruikersfeit elke agent. De zeven dragen
+daarom `sourceUrl: user:eigenaar-2026-08-24` en zeggen in hun voorwaarden dat de nul op zijn gezag
+rust en niet op een zin van de aanbieder. `enumerated-absence` als losstaande bewijssoort is dus nog
+steeds NIET aanvaard — er is alleen geen zaak meer die erop wacht.
+
+Het waren er zeven en niet zes; deze backlog telde er een te weinig. Het gaat om vier ICS-zakenkaarten,
+Knab, Triodos en Trade Republic.
+
+**De vier verdachte datums (§2.3): later.** Zijn woorden: *"datum kunnen we later testen."*
+
+**De euro-waarde van een punt: niet belangrijk.** *"Eurowaarde is niet per se belangrijk."* Dat maakt
+§5.1 en §5.2 minder zwaar: een saldo in punten is een feit, en de omrekening was altijd de zwakste
+schakel. Het scherm toont geen euro-waarde meer.
+
+**Het doorstuuradres bestaat: `ale@invoices.lavega.dev`**, en hij draait het zelf. Daarmee vervalt de
+blokkade uit §4.3 zodra het loopt — de mailketen is dan end-to-end te testen. Let op wat er dan nog
+overblijft: de CORS-preflight op de ophaalkant is een ANDER probleem en gaat hier niet mee weg.
+
+### Nog open
+
+
 | # | De vraag | Waarom niemand anders hem kan beantwoorden |
 |---|---|---|
-| **V1** | **Zou hij een gevulde winkelwagen echt verlaten voor 8,5%?** Klarna's percentages zijn echt en gemeten, maar ze gelden alleen bij afrekenen in de Klarna-app, met een Klarna-saldo, en de winkel moet het goedkeuren | Dit beslist of koopjes in de extensie een kop zijn of een voetnoot — en daarmee de waarde van het hele plan. Het is de enige invoer die niet te meten valt. Staat bovenaan in het extensieplan |
 | **V2** | **Is `enumerated-absence` sterk genoeg bewijs?** Zes regels in `staging-points.json` leunen erop: een complete eigen productopsomming waarin punten ontbreken, terwijl de aanbieder nergens zegt "wij hebben geen punten" | Consistent met hoe ICS, ABN en Rabobank al op 0.0 staan. Accepteert hij het niet, dan blijven die zes leeg — één regel werk, maar het is zijn lat |
-| **V3** | **Optie B van de extensie** — inloggen bij Amex/Klarna om zijn persoonlijke aanbiedingen te lezen | Andere risicohouding, geen latere fase van A. Mag niet per ongeluk beginnen |
 | **V4** | **De belastingoptimalisatie** (R2-15). Er ligt een voorstel: `docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md` | Zijn woorden waren *"I'm thinking I do something here"* — een open brief, nog geen opdracht |
 | **V5** | **Kleuren en fontgroottes** | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop |
 | **V6** | **Wat de chatwidget wordt** | Uit de chrome gehaald, zijn `[later]` |

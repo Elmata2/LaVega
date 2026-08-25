@@ -445,6 +445,201 @@ export function windowTotals(
   return { inTotal, outTotal, covered };
 }
 
+/* ─────────────────────────────── gemiddelde inkomsten en gemiddelde uitgaven
+ *
+ * `windowTotals` geeft de TOTALEN over het venster. Wat er nooit was: "wat kost
+ * een maand mij gemiddeld, en wat komt er gemiddeld binnen". Het
+ * weekdaggemiddelde bestond wel, dit niet.
+ *
+ * DRIE DINGEN LIGGEN HIER VAST. De eerste twee zijn hier eerder misgegaan.
+ *
+ * 1. GELD DAT ALLEEN VAN PLAATS VERANDERT TELT NIET MEE — en dat is geen tweede
+ *    regel maar dezelfde. Dit rekent DOOR `windowTotals` HEEN, dus door
+ *    MOVED_CATEGORIES heen, in plaats van hier opnieuw te bepalen wat een uitgave
+ *    is. Een blok met twee definities van "uitgave" is een blok dat het met
+ *    zichzelf oneens is, en een gemiddelde dat de storting naar zijn eigen
+ *    beleggingsrekening meetelt is precies het cijfer van twee miljoen dat hij in
+ *    ronde 3 op zijn scherm zag — gedeeld door drie maanden, wat het
+ *    geloofwaardiger maakt en niet minder onwaar.
+ *
+ * 2. ER WORDT ALLEEN OVER HELE EENHEDEN GEMIDDELD. Een venster van 4 juni tot
+ *    11 augustus bevat één hele maand (juli) en twee aangebroken. Zou de staart
+ *    meetellen — totaal gedeeld door 69/30,44 "maanden" — dan hangt het antwoord
+ *    ervan af of de huur van augustus net wél of net niet vóór de 11e werd
+ *    afgeschreven. Huur, salaris, verzekering en elk abonnement komen één keer
+ *    per maand en niet uitgesmeerd over de dagen; een deelmaand meetellen maakt
+ *    het gemiddelde dus een functie van waar het venster toevallig is
+ *    afgesneden. De aanloop en de staart vallen daarom buiten de teller ÉN
+ *    buiten de noemer, en het scherm zegt hoeveel dagen dat waren.
+ *
+ * 3. DE EENHEID KOMT UIT HET VENSTER. "Per maand" bij een venster van een week
+ *    is een extrapolatie, en een extrapolatie is geen meting — dezelfde reden
+ *    waarom `windowTotals` totalen geeft en geen maandbedrag. Welke eenheid bij
+ *    welk venster hoort weet `bucketUnit` al, want de staafgrafiek kiest zijn
+ *    emmers zo; die keuze wordt hier HERGEBRUIKT en niet opnieuw uitgevonden,
+ *    zodat de grafiek en het gemiddelde het niet oneens kunnen zijn over wat een
+ *    periode is.
+ *
+ *    Past die eenheid niet — twaalf maanden gekozen, maar er is pas negen weken
+ *    afschrift, dus één hele maand — dan zakt hij één stap: maand → week → dag.
+ *    Dat is de keuze tussen twee kwaden en de andere was erger: weigeren terwijl
+ *    er negen hele weken gemeten liggen, zet een lege regel boven gegevens die
+ *    wél iets zeggen. Naar BOVEN stappen gebeurt nooit; dat zou de extrapolatie
+ *    van punt 3 alsnog binnenhalen. Welke eenheid het geworden is staat op het
+ *    scherm, en waarom de grotere niet kon staat achter de regel eronder.
+ *
+ * Valt er ook op dagen niets te middelen — één dag afschrift in het venster, of
+ * geen enkele — dan is er geen getal maar een weigering. Nooit 0. De keerzijde
+ * geldt ook: wie in drie hele weken niets ontving heeft € 0,00 gemiddelde
+ * inkomsten, en dat is een uitgesproken nul, dus een meting die gewoon op het
+ * scherm hoort. Vandaar de unie hieronder in plaats van `inAverage: number |
+ * null`: dat laatste nodigt uit tot `?? 0`, en dan zijn die twee nullen weer
+ * hetzelfde geworden. */
+
+/** Minder dan twee eenheden is geen gemiddelde maar het totaal onder een andere
+ *  naam. Twee is dus de ondergrens waarop het wóórd iets betekent — hoeveel het
+ *  waard is bij precies twee, leest hij af aan het aantal dat er op het scherm
+ *  naast staat, net als bij het weekdaggemiddelde. */
+export const MIN_AVERAGE_UNITS = 2;
+
+/** Van groot naar klein: de volgorde waarin `periodAverages` terugvalt. */
+const UNIT_STEPS: readonly StatBucketUnit[] = ["maand", "week", "dag"];
+
+/** Meervoud van de eenheden, want "2 hele maand" leest als een fout. */
+export function unitPluralNL(unit: StatBucketUnit, n: number): string {
+  if (n === 1) return unit;
+  return unit === "dag" ? "dagen" : unit === "week" ? "weken" : "maanden";
+}
+
+/** Waarom er niets te middelen viel. Twee verschillende feiten, en de melding op
+ *  het scherm hangt ervan af: geen enkele transactie in het venster is iets
+ *  anders dan één dag afschrift erin. */
+export type AverageRefusal = "geen-gegevens" | "te-kort";
+
+/** Een unie en geen record met nullen erin, om dezelfde reden als
+ *  `AccountCostTotal` in packages/core: wie `averages.inAverage` schrijft zonder
+ *  na te denken hoort een typefout te krijgen in plaats van een nul die als een
+ *  meting op het scherm belandt. */
+export type PeriodAverages =
+  | {
+      kind: "gemiddeld";
+      /** De eenheid waarover gemiddeld is — en die het scherm moet noemen. */
+      unit: StatBucketUnit;
+      /** Wat `bucketUnit` bij dit venster koos. Verschilt van `unit` als er
+       *  teruggestapt is; dan kan het scherm zeggen waarom. */
+      askedUnit: StatBucketUnit;
+      /** Hele eenheden waarover gemiddeld is, minstens MIN_AVERAGE_UNITS. */
+      units: number;
+      /** Precies de dagen die die hele eenheden beslaan — de teller én de
+       *  noemer komen hier allebei vandaan. */
+      span: StatWindow;
+      /** Het deel van het venster dat het afschrift dekt. `span` ligt hierin. */
+      covered: StatWindow;
+      /** Dagen binnen `covered` die buiten `span` vielen: de aangebroken eenheid
+       *  aan het begin plus die aan het eind. Niet stil weggelaten — het scherm
+       *  noemt ze. */
+      restDays: number;
+      /** Totalen over `span`, positieve euro's, verplaatst geld eruit. */
+      inTotal: number;
+      outTotal: number;
+      /** Die totalen gedeeld door `units`. Een uitgesproken nul mag hier 0 zijn. */
+      inAverage: number;
+      outAverage: number;
+    }
+  | {
+      kind: "geen";
+      reason: AverageRefusal;
+      askedUnit: StatBucketUnit;
+      /** Wat er wél lag, zodat de melding de echte oorzaak kan noemen in plaats
+       *  van "niet genoeg gegevens". */
+      covered: StatWindow | null;
+      coveredDays: number;
+    };
+
+/** De hele eenheden binnen `covered`, en precies de dagen die ze beslaan.
+ *  `null` als er geen enkele hele in past.
+ *
+ *  Een week begint hier op maandag (`mondayOf`), net als in `buildBuckets` en in
+ *  het weekdagblok — één weekbegrip per app, anders staat er straks een
+ *  weekgemiddelde onder een grafiek die de week ergens anders knipt. */
+function wholeUnits(covered: StatWindow, unit: StatBucketUnit): { units: number; span: StatWindow } | null {
+  if (unit === "dag") {
+    // Elke dag in het venster is een hele dag; er valt niets af te knippen.
+    const units = daysBetween(covered.start, covered.end) + 1;
+    return units < 1 ? null : { units, span: covered };
+  }
+
+  if (unit === "week") {
+    // De eerste maandag ÍN het venster. Ligt de maandag van de eerste dag
+    // ervóór, dan is die week aangebroken en telt hij niet mee.
+    let start = mondayOf(covered.start);
+    if (start < covered.start) start = shiftDate(start, 7);
+    const units = Math.floor((daysBetween(start, covered.end) + 1) / 7);
+    return units < 1 ? null : { units, span: { start, end: shiftDate(start, units * 7 - 1) } };
+  }
+
+  // Idem per kalendermaand: begint het venster op de 4e, dan is die maand geen
+  // maand. shiftMonth telt terug, dus een stap vooruit is -1 (zie dates.ts).
+  let month = monthOf(covered.start);
+  if (monthFirstDay(month) < covered.start) month = shiftMonth(month, -1);
+  const first = month;
+  let last = month;
+  let units = 0;
+  while (monthLastDay(month) <= covered.end) {
+    last = month;
+    units++;
+    month = shiftMonth(month, -1);
+  }
+  return units < 1 ? null : { units, span: { start: monthFirstDay(first), end: monthLastDay(last) } };
+}
+
+/** Gemiddelde inkomsten en gemiddelde uitgaven per eenheid van `window`.
+ *  Zie de kop hierboven voor de drie regels waar dit op rust. */
+export function periodAverages(
+  txs: Tx[],
+  rules: Rule[],
+  own: OwnAccounts | undefined,
+  window: StatWindow,
+): PeriodAverages {
+  const askedUnit = bucketUnit(window);
+  // Op ALLE gedateerde transacties geklemd en niet alleen op de uitgaven, net
+  // als `windowTotals`: een maand met alleen salaris erin is een gemeten maand
+  // waarin niets is uitgegeven, en die hoort in de noemer.
+  const covered = coveredWindow(
+    txs.filter((t) => t.date).map((t) => t.date),
+    window,
+  );
+  if (covered === null) return { kind: "geen", reason: "geen-gegevens", askedUnit, covered: null, coveredDays: 0 };
+
+  const coveredDays = daysBetween(covered.start, covered.end) + 1;
+
+  // Van de gevraagde eenheid naar beneden tot er genoeg hele eenheden in passen.
+  for (let i = UNIT_STEPS.indexOf(askedUnit); i < UNIT_STEPS.length; i++) {
+    const unit = UNIT_STEPS[i];
+    const whole = wholeUnits(covered, unit);
+    if (whole === null || whole.units < MIN_AVERAGE_UNITS) continue;
+    // Door windowTotals heen, over de HELE eenheden en niet over het venster:
+    // de teller moet dezelfde dagen beslaan als de noemer telt.
+    const { inTotal, outTotal } = windowTotals(txs, rules, own, whole.span);
+    const spanDays = daysBetween(whole.span.start, whole.span.end) + 1;
+    return {
+      kind: "gemiddeld",
+      unit,
+      askedUnit,
+      units: whole.units,
+      span: whole.span,
+      covered,
+      restDays: coveredDays - spanDays,
+      inTotal,
+      outTotal,
+      inAverage: inTotal / whole.units,
+      outAverage: outTotal / whole.units,
+    };
+  }
+
+  return { kind: "geen", reason: "te-kort", askedUnit, covered, coveredDays };
+}
+
 export type WeekdayRow = {
   /** "Maandag" … "Zondag". */
   label: string;

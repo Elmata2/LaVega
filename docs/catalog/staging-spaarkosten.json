@@ -1,0 +1,293 @@
+{
+ "lane": "spaarkosten-datums",
+ "question": "Wat kost het om een SPAARREKENING aan te houden? Aanleiding: de meting van 22 augustus 2026 (docs/research/2026-08-22-spaarrekening-kosten.md) vond negen uitgesproken nullen en kreeg er nul in de catalogus, omdat het allemaal productpagina's zonder eigen datum waren. Dit is verificatiewerk: het bedrag stond vast, de datum ontbrak.",
+ "generatedAt": "2026-08-24",
+ "usedApiCredits": false,
+ "field": "accountFee",
+ "warning": "Dit bestand is een STAGING-voorstel. Het wijzigt docs/catalog/catalog.json niet en heeft state.json niet aangeraakt. LEES DE DRIE LIJSTEN APART: alleen 'entries' is bedoeld om samen te voegen. 'gedateerdMaarAndereKostenpost' bevat ECHTE, GEDATEERDE nullen die GEEN accountFee zijn: het document prijst het openen, het opnemen of het opzeggen, en zwijgt over het aanhouden. Een samenvoeging die die vier als accountFee overneemt, zet een openingsnul neer als maandprijs — dezelfde fout als de Trade Republic-treffer van 22 augustus, die over de betaalrekening ging in plaats van de spaarrekening.",
+ "legend": {
+  "value": "Het bedrag zoals het in de bron staat.",
+  "unit": "'EUR per maand' of 'EUR per jaar'. LET OP: geen van de zeven bronnen hangt een periode aan de nul — ze zeggen 'gratis' of 'geen kosten'. readPeriod weigert een rij zonder eenheid omdat de verkeerde eenheid bij een bedrag een factor twaalf scheelt; bij NUL scheelt hij niets (0 x 12 = 0). De eenheid staat daarom op maand, de eenheid waarin de overige doorlopende kosten in de catalogus staan, en elke entry zegt in conditions dat het document zelf geen periode noemt. Zelfde behandeling als de Wirex-rij in staging-kaartkosten.json.",
+  "evidence": {
+   "stated-zero": "de aanbieder zegt zelf 'gratis', 'kosteloos', 'GRATIS' of 'geen kosten' over het AANHOUDEN van deze rekening. Dit is een BEKENDE nul, geen ontbrekend cijfer."
+  },
+  "sourceDate": "De datum die het document zelf noemt, nooit de dag waarop wij keken. Maandprecisie mag (catalogArtifact.test.ts staat '2026-01' toe).",
+  "datumSoort": {
+   "in-document": "de datum staat in de tekst die de lezer opent — op de omslag, in de voettekst of als 'geldig vanaf'.",
+   "cms-datum": "de datum komt uit de eigen JSON van de site en hangt aan de inhoudsknoop zelf (Drupal 'changed', JSON-LD 'dateModified'). Precedent: staging-kaartkosten.json, 22 augustus 2026, dat updatedAt/lastUpdated uit de eigen JSON van de site als sourceDate accepteerde. NIET hetzelfde als PDF-metadata, die op 21 augustus wel is geweigerd: een ModDate is een eigenschap van het bestand, deze datums hangen aan de tekst. Wie strenger wil zijn, laat de drie cms-datum-rijen buiten de merge en houdt er vier over."
+  },
+  "catalogId": "De id in catalog.json waar dit tarief bij hoort.",
+  "entries": "Waarde + bron + datum + voorwaarden compleet, en de nul geldt het AANHOUDEN. Klaar voor de toelatingspoort.",
+  "gedateerdMaarAndereKostenpost": "Waarde + bron + datum + voorwaarden compleet, maar de nul prijst het openen, het opnemen of het opzeggen. GEEN accountFee. Zie de note per rij voor welke handelingen het document wel dekt.",
+  "strandtOpDatum": "De nul voor het aanhouden staat er letterlijk; het document draagt geen datum. Een gedateerd stuk haalt deze alsnog binnen."
+ },
+ "entries": [
+  {
+   "id": "santander-consumer-bank-spaarrekening",
+   "product": "Santander Consumer Bank Spaarrekening",
+   "issuer": "Open Bank, S.A. - bijkantoor in België, in Nederland handelend onder de naam Santander Consumer Bank. Het document noemt die entiteit zelf ('Verhandeld door Open Bank, S.A. - bijkantoor in België') en bevestigt daarmee de spanning die state.json signaleerde tussen de Belgische voettekst en het Spaanse DGS-label van geld.nl.",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.santanderconsumerbank.nl/nl/document/tinl20260723tarieven-en-interestenpdf",
+   "sourceDate": "2026-07-23",
+   "datumSoort": "in-document",
+   "sourceKind": "Tarieven en Intresten (PDF, 3 pagina's) — een gedateerde tarievenwijzer, de sterkste vorm die deze ronde is tegengekomen",
+   "route": "provider-pdf",
+   "conditions": "De nul dekt alle drie de handelingen tegelijk en noemt het aanhouden met zoveel woorden: 'Beheerskosten: Openen, sluiten, beheer'. Het document hangt er geen periode aan; de eenheid staat op maand omdat 0 x 12 = 0 (zie legend.unit). Wat in hetzelfde stuk NIET nul is: de Belgische roerende voorheffing wordt genoemd op 0,00% met de voetnoot dat die niet van toepassing is als de klant geen fiscaal inwoner van België is. Rentecontext op dezelfde pagina: basisintrest 2,10% tot een maximum van EUR 1.000.000 per rekening (max. 6 rekeningen per persoon), plus een actierente van 3,01% voor nieuwe klanten gedurende maximaal 6 maanden tot EUR 250.000.",
+   "quote": "1. Spaarrekening / Beheerskosten: Openen, sluiten, beheer: GRATIS",
+   "vindplaats": "Gevonden via https://www.santanderconsumerbank.nl/nl/documenten, dat elke versie van 'Tarieven en interesten' en 'Informatiefiche spaarrekening' met de datum in de linktekst bewaart, terug tot 18.12.2023. Versiestempel in de voettekst van de PDF: TINL20260723."
+  },
+  {
+   "id": "argenta-internetspaarrekening",
+   "product": "Argenta Internetspaarrekening",
+   "issuer": "Argenta Spaarbank N.V., Nederlands bijkantoor — Belgisch DGS per geld.nl",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.argenta.nl/sites/default/files/documents/Argenta_Voorwaarden_spaarrekening.pdf",
+   "sourceDate": "2025-09",
+   "datumSoort": "in-document",
+   "sourceKind": "Algemene voorwaarden van de Argenta spaarrekening (PDF) — voettekst op alle twaalf pagina's: 'De Argenta spaarrekening - September 2025'",
+   "route": "provider-pdf",
+   "conditions": "Het document zegt de nul twee keer: in de samenvatting vooraan en als eigen artikel 1.7, dat 'De kosten.' heet. Geen doorverwijzing naar een tarievenlijst — het bedrag staat in het gedateerde stuk zelf. Het document noemt geen periode; eenheid op maand, zie legend.unit. LET OP BIJ DE RIJTOEWIJZING: de catalogusrij heet 'Argenta Internetspaarrekening', maar argenta.nl noemt het product vandaag 'De Argenta spaarrekening'; het is het enige vrij opneembare spaarproduct voor particulieren naast de Jongeren spaarrekening. Dit voorstel wijzigt geen productnaam. WAT NIET NUL IS: als de bank de herkomst van het geld moet controleren, zijn '(extra) kosten die hierbij horen … voor jou als klant' (art. bij Belastingdienst/klantonderzoek), tenzij achteraf blijkt dat de controle onterecht was.",
+   "quote": "1.7 De kosten. Er zijn geen kosten voor jouw spaarrekening.",
+   "tweedeCitaat": "Welke kosten zijn er? De Argenta spaarrekening kost niets. (uit 'Voorwaarden in het kort', eerste pagina)",
+   "vindplaats": "Gevonden via https://www.argenta.nl/voorwaarden, waar dit stuk staat als 'De algemene voorwaarden van de Argenta spaarrekening'. De kenmerkentabel op https://www.argenta.nl/sparen/spaarrente-overzicht bevestigt het ongedateerd ('Kosten openen Gratis', 'Kosten (vroegtijdig) beëindigen Gratis', 'Internetbankieren Gratis') en levert dus de datum niet."
+  },
+  {
+   "id": "lloyds-bank-spaarrekening",
+   "product": "Lloyds Bank Spaarrekening",
+   "issuer": "Lloyds Bank GmbH — Duits DGS per geld.nl",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.lloydsbank.nl/dam/jcr:b788ce38-3eb6-43c6-88c7-065d77c7239f/voorwaarden-lloyds-bank-sparen.pdf",
+   "sourceDate": "2024-12-15",
+   "datumSoort": "in-document",
+   "sourceKind": "Voorwaarden Lloyds Bank Sparen (PDF) — omslag: 'Versie december 2024', en daaronder 'Voorwaarden Lloyds Bank Internet Spaarrekening / Geldig vanaf 15 december 2024'",
+   "route": "provider-pdf",
+   "conditions": "Artikel 3 heet 'Wat zijn de kosten van de spaarrekening?' en dekt het gebruik expliciet, niet alleen het openen. De aangehouden datum is 15 december 2024, de 'geldig vanaf' die aan dít onderdeel hangt, en niet de omslagdatum 'december 2024' van de bundel. Het document noemt geen periode; eenheid op maand, zie legend.unit. VOORWAARDEN VOOR WIE: alleen voor wie in Nederland woont en 18 jaar of ouder is, alleen op eigen naam, geen en/of-rekening, geen volmacht, en maximaal één spaarrekening tegelijk bij Lloyds Bank (artikel 2). RIJTOEWIJZING: lloydsbank.nl noemt het product op de spaarpagina 'Internet Spaarrekening'; het is het enige spaarproduct van Lloyds in Nederland en dezelfde pagina draagt de zin 'Geen minimuminleg en geen kosten' die de meting van 22 augustus vond.",
+   "quote": "3. Wat zijn de kosten van de spaarrekening? U hoeft ons niets te betalen om uw spaarrekening te openen en te gebruiken. U kunt bijvoorbeeld gratis geld opnemen en storten. Ook zijn al onze standaarddiensten voor het online bekijken en beheren van uw spaarrekening gratis. Als wij u een tekstbericht (sms) versturen, dan rekenen wij geen kosten. Uw telefoonaanbieder kan hiervoor wel kosten rekenen.",
+   "vindplaats": "Rechtstreeks gelinkt vanaf https://www.lloydsbank.nl/sparen/. lloydsbank.nl heeft geen leesbare sitemap.xml en geeft 404 op /robots.txt; de PDF-link uit de productpagina was de hele route."
+  },
+  {
+   "id": "openbank-welkom-spaarrekening",
+   "product": "Openbank Welkom Spaarrekening",
+   "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spaans DGS",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.openbank.nl/page-data/spaarrekening/page-data.json",
+   "sourceDate": "2023-06-14",
+   "datumSoort": "cms-datum",
+   "sourceKind": "eigen page-data JSON van de site (Gatsby/Drupal) — FAQ-knoop 'Zijn er kosten aan verbonden? - Welkom Spaarrekening', changed 1686740029 = 2023-06-14, created 1666011042 = 2022-10-17",
+   "route": "provider-page",
+   "conditions": "DE ASTERISK IS UITGEZOCHT EN HANGT NIET AAN 'GRATIS'. De meting van 22 augustus noteerde 'Gratis spaarrekening met 2,80% rente*' met de waarschuwing 'let op de asterisk'. In dezelfde page-data staat de voetnoot voluit: '*Voorbeeld rente-uitkering over de eerste zes maanden bij een startsaldo van EUR 10.000,00 en 2,80% jaarlijkse nominale rente: EUR 139,65 bruto.' Het sterretje hoort dus bij het rentepercentage en de looptijd van zes maanden, niet bij de prijs. WAT ER VERDER GELDT: exclusief voor nieuwe klanten; de 2,80% geldt zes maanden over saldi t/m EUR 1.000.000 (daarboven 0,00%); na zes maanden wordt de rekening automatisch een Open Spaarrekening, die ook gratis is (zie de rij openbank-open-spaarrekening). Bij het aanmelden wordt tegelijk een Open Betaalrekening met Я42 Betaalpas geopend, ook 'zonder kosten voor het openen, aanhouden of annuleren'. Het document noemt geen periode; eenheid op maand, zie legend.unit.",
+   "quote": "Deze rekening is gratis! Aan het openen, aanhouden of opzeggen van de Welkom spaarrekening zijn geen kosten of commissies verbonden, het is gratis! Bovendien kun je ieder moment opzeggen. Je kunt je geld en de rente opnemen wanneer je maar wilt en zonder extra kosten van welke aard dan ook.",
+   "tweedeCitaat": "Een tweede knoop op dezelfde pagina zegt hetzelfde en is recenter: highlight 'Zonder kosten' — 'Het openen, aanhouden en opzeggen van je online spaarrekening is gratis.' (cmsId HL_landing_cta_ahorro_bienvenida_CL_gratis, changed 1738327879 = 2025-01-31). De FAQ-knoop is aangehouden omdat die het product bij naam noemt; wie de recentste datum wil, kan 2025-01-31 nemen.",
+   "vindplaats": "De HTML van https://www.openbank.nl/spaarrekening draagt geen datumveld; de datums zitten alleen in page-data.json, per inhoudsknoop."
+  },
+  {
+   "id": "openbank-open-spaarrekening",
+   "product": "Openbank Open Spaarrekening",
+   "issuer": "Open Bank S.A. (Santander Group, Madrid) — Spaans DGS",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.openbank.nl/page-data/gratis-spaarrekening/page-data.json",
+   "sourceDate": "2023-02-28",
+   "datumSoort": "cms-datum",
+   "sourceKind": "eigen page-data JSON van de site (Gatsby/Drupal) — FAQ-knoop 'Zijn er kosten aan verbonden?', changed 1677592559 = 2023-02-28",
+   "route": "provider-page",
+   "conditions": "DEZE RIJ WERD OP 22 AUGUSTUS TERECHT AFGEWEZEN EN KOMT NU OP EEN ANDERE GROND BINNEN. De afwijzing was: de treffer zat in een URL-pad (/gratis-spaarrekening) en niet in een zin. Dat klopte. In de page-data van diezelfde pagina staat wél een zin, in een knoop met een eigen datum. Er is dus niets herzien aan het oordeel van 22 augustus; er is een bron bij gekomen. Aan te vragen door zowel nieuwe als bestaande klanten (anders dan de Welkom Spaarrekening). Het document noemt geen periode; eenheid op maand, zie legend.unit.",
+   "quote": "Het openen, aanhouden en opzeggen van je Openbank Spaarrekening is gratis. Je kunt op ieder gewenst moment en zonder kosten opzeggen en je geld en rendement opnemen.",
+   "tweedeCitaat": "Twee andere knopen op dezelfde pagina zeggen het opnieuw en zijn recenter: highlight 'Helemaal gratis' — 'Het openen, aanhouden en opzeggen van je spaarrekening is volledig gratis.' (changed 1746019229 = 2025-04-30), en FAQ 'Wat is de Open Spaarrekening?' — 'Dit is een spaarrekening zonder kosten, waarop je elke maand de rente ontvangt die je spaargeld oplevert.' (changed = 2025-08-19).",
+   "vindplaats": "Zelfde route als de Welkom Spaarrekening: de HTML draagt geen datumveld, page-data.json wel."
+  },
+  {
+   "id": "nexent-bank-spaarrekening",
+   "product": "Nexent Bank Spaarrekening",
+   "issuer": "Nexent Bank N.V. — Nederlands DGS per geld.nl",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://www.nexentbank.nl/media/bo5hagoi/tarieven-en-renteoverzicht.pdf",
+   "sourceDate": "2026-07-02",
+   "datumSoort": "in-document",
+   "sourceKind": "Tarieven en Renteoverzicht (PDF) — kopregel 'Geldig vanaf 02.07.2026 tot nader order', versiestempel 10170_20260702 in de kantlijn",
+   "route": "provider-pdf",
+   "conditions": "Deze rij zat NIET bij de negen van 22 augustus; hij is erbij gezocht en is compleet. Het document zegt de nul voor de rekening en zet er meteen bij wat wél geld kost, wat de nul juist scherper maakt in plaats van zwakker: 'Voor het uitvoeren van bepaalde opdrachten worden wel kosten in rekening gebracht.' WAT NIET NUL IS, uit dezelfde tabel: schriftelijke bevestiging tegenrekening EUR 10, schriftelijke bevestiging saldo EUR 10, kopie van een rekeningafschrift/contract/jaaropgave per post EUR 10 (met de voetnoot dat je dit gratis kunt downloaden in Digitaal Bankieren), administratiekosten slapende rekening tot EUR 25 op basis van de benodigde werkzaamheden. Geen daarvan is een doorlopende prijs voor het aanhouden. Het document noemt geen periode bij de nul; eenheid op maand, zie legend.unit.",
+   "quote": "3. Tarieven — Heb je een Spaarrekening bij Nexent Bank, dan hoef je daarvoor geen kosten te betalen. Voor het uitvoeren van bepaalde opdrachten worden wel kosten in rekening gebracht. Welke dat zijn, zie je in het onderstaande overzicht.",
+   "vindplaats": "Gevonden via https://www.nexentbank.nl/service-contact/formulieren-documenten/, waar naast dit stuk ook de 'Productvoorwaarden Nexent Bank Spaarrekening' (bestandsnaam 10030-nl-…_20260611.pdf) staat."
+  },
+  {
+   "id": "brand-new-day-de-spaarrekening",
+   "product": "Brand New Day De Spaarrekening",
+   "issuer": "Brand New Day Bank N.V. — Nederlands DGS",
+   "kind": "spaarrekening",
+   "value": 0,
+   "unit": "EUR per maand",
+   "evidence": "stated-zero",
+   "sourceUrl": "https://new.brandnewday.nl/spaarrekening/kosten-spaarrekening/",
+   "sourceDate": "2025-02-25",
+   "datumSoort": "cms-datum",
+   "sourceKind": "eigen JSON-LD van de pagina — WebPage-knoop met @id https://new.brandnewday.nl/spaarrekening/kosten-spaarrekening/#webpage, dateModified 2025-02-25T09:53:51+01:00 (datePublished 2022-08-18T08:49:21+02:00)",
+   "route": "provider-page",
+   "conditions": "Deze rij zat NIET bij de negen van 22 augustus. De pagina heet 'Kosten van de spaarrekening' en heeft geen ander onderwerp; de datum hoort bij precies deze URL en niet bij een sitebrede knoop. Het document noemt geen periode; eenheid op maand, zie legend.unit. De pagina verwijst voor toekomstige wijzigingen door naar een aparte pagina over tariefswijzigingen; die is niet gelezen en verandert niets aan het huidige bedrag.",
+   "quote": "Kosten — Er zijn geen kosten verbonden aan onze spaarrekening. Echt helemaal niks. Noppes. Nada. We hebben nog eens goed gekeken, maar u hoeft echt helemaal nergens voor te betalen. Is gratis. Het bestaat nog.",
+   "vindplaats": "Gevonden via de kostenlinks op https://new.brandnewday.nl/rentestanden/, die per product een eigen kostenpagina hebben."
+  }
+ ],
+ "gedateerdMaarAndereKostenpost": [
+  {
+   "id": "nibc-spaarrekening",
+   "product": "NIBC Spaarrekening",
+   "issuer": "NIBC Bank N.V. — Nederlands DGS",
+   "waardeInBron": 0,
+   "watDeNulDekt": "openen en opzeggen/beëindigen — niet het aanhouden",
+   "sourceUrl": "https://nibc.nl/media/z4knypan/voorwaarden-sparen-juni-2026.pdf",
+   "sourceDate": "2026-06-20",
+   "datumSoort": "in-document",
+   "sourceKind": "Voorwaarden Sparen (PDF), voettekst 'Voorwaarden Sparen – juni 2026'; nibc.nl noemt hem in de linktekst 'Voorwaarden Sparen per 20 juni 2026'",
+   "quotes": [
+    "Aan het openen van je rekening zijn geen kosten verbonden.",
+    "Je mag je spaarrekening altijd opzeggen. Hiervoor hoef je geen reden op te geven en er worden geen kosten in rekening gebracht.",
+    "Wij brengen geen kosten in rekening voor het beëindigen van de rekening."
+   ],
+   "waaromNietSamenvoegen": "Het woord 'kosten' komt zeven keer voor in het document en geen van die zeven gaat over het aanhouden. De inhoudsopgave heeft geen kostenhoofdstuk. De ongedateerde bronnen zeggen het wel: 'Geen minimum inleg. Geen kosten' op nibc.nl/particulieren/sparen/spaarrentes, dat zes keer 'Geen kosten' in een vergelijkingstabel zet en zelf geen datum draagt.",
+   "extra": "De openingszin is NIEUW in juni 2026. De vorige twee versies (voorwaarden-sparen-2026.pdf 'per 1 januari 2026' en voorwaarden-sparen-januari-2025.pdf) noemen 'kosten' maar één keer, en dan over vroegtijdige beëindiging van een termijndeposito. NIBC is dus bezig zijn nullen op te schrijven; een volgende versie kan het aanhouden alsnog noemen."
+  },
+  {
+   "id": "nibc-kwartaalspaarrekening",
+   "product": "NIBC Kwartaalspaarrekening",
+   "issuer": "NIBC Bank N.V. — Nederlands DGS",
+   "waardeInBron": 0,
+   "watDeNulDekt": "openen en opzeggen/beëindigen — niet het aanhouden",
+   "sourceUrl": "https://nibc.nl/media/z4knypan/voorwaarden-sparen-juni-2026.pdf",
+   "sourceDate": "2026-06-20",
+   "datumSoort": "in-document",
+   "sourceKind": "zelfde document als nibc-spaarrekening — 'Dit zijn de voorwaarden voor je spaarrekening bij NIBC' dekt beide vrij opneembare rekeningen",
+   "quotes": [
+    "Aan het openen van je rekening zijn geen kosten verbonden.",
+    "Wij brengen geen kosten in rekening voor het beëindigen van de rekening."
+   ],
+   "waaromNietSamenvoegen": "Zelfde reden als de zusterrij. De ongedateerde productpagina https://nibc.nl/particulieren/sparen/kwartaalspaarrekening zegt 'Geen minimum inleg en geen kosten' en 'Het openen van een NIBC Kwartaalspaarrekening is gratis', dus ook daar gaat de expliciete zin over openen."
+  },
+  {
+   "id": "ayvens-bank-flexibel-sparen",
+   "product": "Ayvens Bank Flexibel Sparen",
+   "issuer": "Ayvens Bank N.V. (voorheen LeasePlan Bank, hernoemd okt 2024) — Nederlands DGS",
+   "waardeInBron": 0,
+   "watDeNulDekt": "alleen het openen",
+   "sourceUrl": "https://edge.sitecorecloud.io/leaseplancoefbf-ayvensbankf667-prd5a57-4c08/media/project/ayvens-bank/public/files/voorwaarden/20260706_ayvens-bank_voorwaarden_online_spaarrekening.pdf",
+   "sourceDate": "2026-07",
+   "datumSoort": "in-document",
+   "sourceKind": "Voorwaarden Online Spaarrekening (PDF), omslag 'Juli 2026'",
+   "quotes": [
+    "Aan het openen van een Online Spaarrekening zijn geen kosten verbonden.",
+    "Ayvens Bank berekent geen kosten voor het beëindigen van uw Online Spaarrekening (…) indien dit op het initiatief van Ayvens Bank gebeurt."
+   ],
+   "waaromNietSamenvoegen": "De inhoudsopgave telt vijf hoofdstukken en 26 artikelen en heeft geen artikel over kosten. Artikel 2.4 ('Uw Online Spaarrekening gebruiken') gaat uitsluitend over verantwoordelijkheid, beveiliging en blokkade en noemt geen prijs. De tweede nul hierboven geldt bovendien alleen als de BANK opzegt, niet als de klant dat doet. De zin uit de meting van 22 augustus ('opent u een gratis Online Spaarrekening', op ayvensbank.nl/actuele-rentestanden) gaat over dezelfde handeling: openen. Die pagina draagt geen datum en geen datumveld.",
+   "extra": "Wat WEL geld kost volgens hetzelfde document: tussentijdse beëindiging van een termijndeposito buiten de bedenktijd — 'Tevens betaalt u hiervoor kosten. U vindt deze kosten op de website van Ayvens Bank.' Dat is een doorverwijzing naar een ongedateerde pagina, dus dat bedrag is hier niet vast te stellen."
+  },
+  {
+   "id": "dhb-bank-saveonlinerekening",
+   "product": "DHB Bank S@veOnlinerekening",
+   "issuer": "Demir-Halk Bank (Nederland) N.V. — Nederlands DGS",
+   "waardeInBron": 0,
+   "watDeNulDekt": "openen, opnemen en beëindigen — niet het aanhouden",
+   "sourceUrl": "https://www.dhbbank.nl/getmedia/aa0d25c8-f0a7-4bdc-afff-88b9840fad40/Voorwaarden-DHB-S@veOnlinerekening-30-september-2025",
+   "sourceDate": "2026-07-01",
+   "datumSoort": "in-document",
+   "sourceKind": "Voorwaarden DHB S@veOnlinerekening (PDF, 4 pagina's) — het URL-pad zegt '30-september-2025', maar het document zelf zegt 'Deze voorwaarden zijn geldig vanaf 1 juli 2026'. De datum IN het stuk is aangehouden.",
+   "quotes": [
+    "U kunt slechts één DHB S@veOnlinerekening openen en aanhouden. Aan het openen hiervan zijn geen kosten verbonden.",
+    "U mag altijd uw spaargeld opnemen. Aan het opnemen zijn geen kosten verbonden.",
+    "U kunt uw DHB S@veOnlinerekening beëindigen wanneer u wilt. Aan het beëindigen zijn geen kosten verbonden."
+   ],
+   "waaromNietSamenvoegen": "Deze rij zat niet bij de negen; hij is erbij gezocht. Hij dekt drie handelingen en daarmee het meest van de vier in deze bak, maar over een doorlopende prijs voor het aanhouden zegt hij niets. Als de eigenaar besluit dat openen + opnemen + opzeggen samen genoeg is, is dit de eerste rij die alsnog binnenkomt, daarna NIBC (openen + opzeggen) en dan Ayvens (alleen openen). Die volgorde is de sterkte van het bewijs.",
+   "extra": "De bank mag de rekening beëindigen bij een saldo onder EUR 100 gedurende 24 maanden of onder EUR 500 gedurende 60 maanden; dat is een voorwaarde, geen kostenpost."
+  }
+ ],
+ "strandtOpDatum": [
+  {
+   "id": "bigbank-flexibel-sparen",
+   "product": "Bigbank Flexibel Sparen",
+   "issuer": "Bigbank AS (Estland) — Estisch DGS per geld.nl",
+   "waardeInBron": 0,
+   "watDeNulDekt": "het aanhouden, en dan volledig uitgesplitst",
+   "sourceUrl": "https://www.bigbank.nl/documenten/?main=12&sec&doc=7313",
+   "sourceKind": "Prijslijst — een echte tarievenwijzer, met een eigen regel per kostenpost",
+   "quote": "Flexibel Sparen — Kosten voor het openen van een rekening € 0 · Rekening beëindiging € 0 · Jaarlijkse kosten € 0 · Administratiekosten € 0 / maand · Opnamekosten € 0 / opname – geen opnamebeperkingen · Kosten voor wijziging van rekening Geen kosten · Bankafschrift Gratis, beschikbaar via de Self-Service van Bigbank",
+   "watOntbreekt": "Een datum. De Prijslijst draagt er nergens één: niet in de tekst, niet in de voettekst, niet als versiestempel, en de pagina heeft geen datumveld in de HTML.",
+   "watIsGeprobeerd": "DIT IS DE ICS-SITUATIE VAN 21 AUGUSTUS, ZONDER DE UITWEG DIE ICS HAD. De twee gedateerde stukken — 'Algemene Voorwaarden van Bigbank AS' en 'Algemene Voorwaarden van de Flexibel Sparen Overeenkomst', allebei 'geldig vanaf 15 oktober 2025' — definiëren de Prijslijst ('een document van de Bank met het overzicht van de tarieven van de door de Bank verleende diensten') en verwijzen er voor de bedragen naar door, precies zoals artikel 8.1 van ICS naar 'de Documentatie' verwees. Waar ICS per kaart een gedateerde wijzigingspagina had, heeft Bigbank die niet: de enige gedateerde aankondiging op de site (/blog/nieuwe-algemene-voorwaarden-vanaf-31-maart-2024/, 'Gepubliceerd 15 maart 2024') somt de wijzigingen op zonder één bedrag te noemen. Wayback CDX over het hele domein op prijs|price|tarief levert één URL op, uit 2012 (/deposito/voorwaarden-en-prijslijst). De WP-achtige API achter /documenten/ is niet gevonden: /wp-json/ en /api/documents geven 404 respectievelijk een redirect naar /404.",
+   "leesnotitie": "De Prijslijst wordt client-side ingeladen; een gewone curl krijgt alleen de lege Nuxt-schil (de __NUXT_DATA__-knoop 'documents' is een lege array). r.jina.ai rendert hem wel volledig. Dat is een leesprobleem en niet het datumprobleem — ook de gerenderde pagina draagt geen datum."
+  },
+  {
+   "id": "triodos-bank-internet-sparen",
+   "product": "Triodos Bank Internet Sparen",
+   "issuer": "Triodos Bank N.V. — Nederlands DGS",
+   "waardeInBron": 0,
+   "watDeNulDekt": "het aanhouden — 'Een spaarrekening bij Triodos Bank is gratis'",
+   "sourceUrl": "https://www.triodos.nl/veelgestelde-vragen/wat-betaal-ik-voor-een-particuliere-spaarrekening-bij-triodos-bank?id=665276b32737",
+   "sourceKind": "veelgestelde vraag op triodos.nl",
+   "quote": "Wat betaal ik voor een particuliere spaarrekening bij Triodos Bank? — Een spaarrekening bij Triodos Bank is gratis. Wil je een spaarrekening openen? Start dan je aanvraag op onze website.",
+   "watOntbreekt": "Een datum. De pagina draagt er geen, en anders dan bij Openbank en Brand New Day staat er ook geen datumveld in de HTML: geen JSON-LD, geen dateModified, geen eigen JSON.",
+   "watIsGeprobeerd": "Triodos heeft juist een voorbeeldig gedateerd documentenhuis, en dat is hier de teleurstelling. 'Kenmerken Triodos Internet Sparen · mei 2026' (het productblad van precies dit product, /downloads/kenmerken-internet-sparen?id=c45f0b039182) noemt één bedrag in het hele stuk — 'Wil je toch papieren afschriften? Dan kost het € 2,20 per afschrift' — en zwijgt over een prijs voor het aanhouden. 'Voorwaarden Sparen · mei 2026' (/downloads/voorwaarden-sparen?id=2700a4410404) heeft 36 artikelen en geen kostenartikel; alleen 9.2 en 9.3 noemen 'zonder kosten' annuleren en opzeggen. De vorige versies van allebei ('geldig tot 1 juli 2026', Kenmerken november 2025) zwijgen net zo goed. Wayback CDX op triodos.nl voor PDF's met tarief|tarieven|kosten in de naam geeft niets. De enige gedateerde vergoedingenstukken op de site zijn de Informatiedocumenten betreffende de vergoedingen voor de BETAALrekening en de jongerenrekening, niet voor sparen.",
+   "leesnotitie": "Een .html-achtig pad dat een PDF serveert: /downloads/<slug>?id=<hex> geeft een application/pdf-body. Sniffen op %PDF- en pdftotext -layout. Let ook op de sitemap: triodos.nl serveert <ns2:loc> in plaats van <loc>, waardoor een naïeve grep nul URL's teruggeeft in plaats van 2.082.",
+   "extra": "De zin die de meting van 22 augustus vond — 'een gratis spaarrekening bij Triodos Bank openen' — gaat over openen. Ook mét een datum zou die in gedateerdMaarAndereKostenpost zijn geland. De FAQ hierboven is de sterkere zin en de reden dat deze rij hier staat."
+  }
+ ],
+ "geblokkeerd": [
+  {"host": "rabobank.nl", "status": "HTTP 403", "opgevraagd": "https://www.rabobank.nl/particulieren/sparen/alles-over-rente/actuele-rentes", "rij": "rabobank-rabo-spaarrekening", "note": "Niet omzeild. state.json noteerde readable=bot-blocked al op 18 augustus; dat is bevestigd."},
+  {"host": "revolut.com", "status": "HTTP 403", "opgevraagd": "https://www.revolut.com/en-NL/legal/pre-contractual-information-instant-access-savings-account/", "rij": "revolut-dagelijkse-spaarrekening", "note": "De vervelendste van de vier: state.json noemt voor precies dit stuk een docDate van 2026-07-09, dus het bestaat en het is gedateerd. Het is vandaag alleen niet te lezen zonder botdetectie te omzeilen, en dat gebeurt niet."},
+  {"host": "klarna.com", "status": "HTTP 202 met 0 bytes", "opgevraagd": "https://www.klarna.com/nl/flex-rekening/", "rij": "klarna-flex-rekening", "note": "Een botcheck die met een lege body antwoordt. Een 202 zonder inhoud is een antwoord, geen fout."},
+  {"host": "garantibank.nl", "status": "HTTP 403", "opgevraagd": "https://garantibank.nl/products/gouden-internet-rekening", "rij": "garanti-bbva-international-gouden-internet-rekening", "note": "Bevestigt readable=bot-blocked uit state.json."}
+ ],
+ "gedateerdMaarZwijgtOverKosten": [
+  {"document": "ING Kostenoverzicht betaalproducten particulieren", "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf", "sourceDate": "2026-06-15", "rij": "ing-oranje-spaarrekening", "bevinding": "Het document dat op 21 augustus vier ING-pakketten dateerde, prijst de Oranje Spaarrekening niet. Sparen komt er alleen in voor als pakketvoordeel ('0,50% extra spaarrente', '1,00% extra spaarrente')."},
+  {"document": "Nationale-Nederlanden, Productvoorwaarden Internetsparen", "sourceUrl": "https://www.nn.nl/Download/Productvoorwaarden-Internetsparen-per-1-augustus-2026.htm", "sourceDate": "2026-08-01", "rij": "nationale-nederlanden-internetsparen", "bevinding": "Draagt 'Datum 1 augustus 2026' op de omslag en heeft twaalf artikelen, waarvan geen enkele over kosten gaat. Het woord 'gratis' staat er één keer, over de NN App."},
+  {"document": "Centraal Beheer, Voorwaarden RentePlús Rekening", "sourceUrl": "https://www.centraalbeheer.nl/-/media/files/prive/sparen/productvoorwaarden-renteplus-rekening.pdf", "sourceDate": "2025-08", "rij": "centraal-beheer-rentepl-s-rekening", "bevinding": "Gedateerd in de voettekst van elke pagina ('Voorwaarden RentePlús Rekening augustus 2025'), maar noemt geen nul. Wel het omgekeerde: in bepaalde situaties mag de bank 'administratiekosten in rekening brengen'."},
+  {"document": "Knab, rente en tarieven", "sourceUrl": "https://www.knab.nl/particulier/rente-tarieven", "sourceDate": null, "rij": "knab-flexibel-sparen", "bevinding": "Geen datum en geen datumveld. De spaarsectie noemt alleen rentes en de kosten van vroegtijdige opname bij een deposito (renteverschil + EUR 50 administratiekosten). BELANGRIJKER VOOR DE MERGE: Flexibel Sparen zit binnen een pakket — 'de saldolimiet geldt voor het totale saldo van alle Flexibele Spaarrekeningen binnen je pakket' — en dat pakket kost EUR 6 per maand (EUR 7 gezamenlijk). Ook mét een gedateerde nul hoort deze rij op pricedOnItsOwn: false. De 'Tijdelijk 12 maanden gratis' die op 22 augustus is afgewezen, zit op dat pakket en niet op de spaarrekening."}
+ ],
+ "bevestigdeAfwijzingenVan22Augustus": [
+  {"rij": "trade-republic-spaarrekening-rente-op-kassaldo", "bevinding": "Nagelezen op de eigen payload-JSON (https://traderepublic.com/nl-nl/rente/_payload.json, HTTP 200): 'We rekenen geen kosten voor onze betaalrekening' staat er nog steeds, en de rentesectie noemt geen prijs voor het kassaldo. De afwijzing van 22 augustus klopt."},
+  {"rij": "abn-amro-direct-sparen", "bevinding": "Nagelezen op https://www.abnamro.nl/nl/prive/sparen/rente.html (HTTP 200): de enige 'gratis' op de pagina is 'Gratis oriëntatiegesprek' in de pensioennavigatie. De afwijzing van 22 augustus klopt."},
+  {"rij": "openbank-open-spaarrekening", "bevinding": "De afwijzing klopte ook: de treffer zat inderdaad in een URL-pad. De rij staat nu in entries op een ANDERE bron — een zin met een eigen datum in de page-data van dezelfde pagina."}
+ ],
+ "opgehaaldGeenKostenzin": [
+  {"rij": "sns-internet-sparen", "sourceUrl": "https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html", "status": "HTTP 200", "bevinding": "Geen kostenzin op de pagina en geen datumveld in de HTML."},
+  {"rij": "regiobank-spaar-op-maat-vrij", "sourceUrl": "https://www.regiobank.nl/sparen/actuele-rentes.html", "status": "HTTP 200", "bevinding": "Geen kostenzin op de pagina en geen datumveld in de HTML."},
+  {"rij": "trading-212-interest-on-cash", "sourceUrl": "https://helpcentre.trading212.com/hc/en-us/articles/15475153380637-What-is-interest-on-cash", "status": "HTTP 200", "bevinding": "Geen kostenzin en geen datumveld."},
+  {"rij": "n26-instant-savings", "sourceUrl": "https://n26.com/en-eu/savings-account", "status": "HTTP 200", "bevinding": "Geen kostenzin en geen datumveld."},
+  {"rij": "bunq-spaarrekening-massinterest", "sourceUrl": "https://help.bunq.com/articles/what-massinterest-rate-applies-to-me", "status": "HTTP 200", "bevinding": "Geen datum en geen datumveld. De spaarrekening zit bovendien in een abonnement (bunq Free/Core/Pro/Elite), dus dit wordt hoe dan ook eerst een pricedOnItsOwn-vraag."}
+ ],
+ "telling": {
+  "vanDeNegenVan22Augustus": {
+   "gedateerdEnCompleet": 4,
+   "gedateerdMaarAndereKostenpost": 3,
+   "nulZonderDatum": 2
+  },
+  "erbijGezochtBuitenDeNegen": {
+   "entries": 2,
+   "gedateerdMaarAndereKostenpost": 1
+  },
+  "totaal": {
+   "entries": 7,
+   "gedateerdMaarAndereKostenpost": 4,
+   "strandtOpDatum": 2,
+   "geblokkeerd": 4,
+   "spaarproductenInDeCatalogus": 34
+  },
+  "geenBedragGewijzigd": true,
+  "catalogJsonAangeraakt": false,
+  "stateJsonAangeraakt": false
+ }
+}

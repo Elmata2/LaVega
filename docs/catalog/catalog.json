@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21",
+  "generatedAt": "2026-08-24",
   "entries": [
     {
       "id": "ing-betaalpas",
@@ -30,6 +30,15 @@
           "checkedAt": "2022-10-01",
           "conditions": "Geldt bij betalen met een creditcard bij winkels, tankstations, restaurants, etc. \"In vreemde valuta\" (betalen \"In euro's\" is € 0,00); volgens voetnoot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag, met de wisselkoersen van MasterCard International voor haar creditcards. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Bovenop de € 4,00 per maand van het ING OranjePakket: dit document is het Informatiedocument van die betaalrekening en de kaart is er een 'aan uw betaalrekening gekoppelde dienst'. Een extra Creditcard kost € 1,25 per maand. Koersopslag 2,00% per transactie in vreemde valuta; geldopname met de creditcard 4,00% van het opgenomen bedrag met een minimum van € 4,50, in vreemde valuta plus 2,00% koersopslag; daglimiet € 400. LET OP DE NAAMOVERLAP: het ING Kostenoverzicht van 15 juni 2026 kent deze naam niet meer en zet op precies dezelfde twee bedragen 'ING Creditcard More € 2,00' en 'extra ING Creditcard More € 1,25'. Zie 'openstaandeVragen' in het verslag — dit is vermoedelijk dezelfde kaart onder een oude naam.",
+          "conditionsKnown": true
         }
       }
     },
@@ -45,6 +54,15 @@
           "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
           "checkedAt": "2026-01-01",
           "conditions": "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 4.35,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Bovenop de € 4,00 per maand van het ING OranjePakket. Een extra Platinumcard kost € 2,60 per maand. Hetzelfde document draagt al de koersopslag van deze rij: 0% voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% per transactie; opnamelimiet € 1.000 per dag in plaats van € 400. LET OP DE NAAMOVERLAP: het ING Kostenoverzicht van 15 juni 2026 kent de naam Platinumcard niet meer en zet op precies dezelfde twee bedragen 'ING Creditcard Extra € 4,35' en 'additionele ING Creditcard Extra € 2,60', met dezelfde 0%-tot-€1.000-clausule. Zie 'openstaandeVragen' in het verslag.",
           "conditionsKnown": true
         }
       }
@@ -64,11 +82,20 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 1.5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "DIT IS DE ENIGE VAN DE ACHT BANKEN DIE ZIJN BETAALPAS APART PRIJST. Het bedrag geldt voor de eerste betaalpas als je géén BasisPakket Betalen en géén Studenten Pakket hebt; binnen die twee pakketten zit één betaalpas in de pakketprijs. Een extra betaalpas kost hetzelfde: € 1,50 per maand (€ 18,00 per jaar). Bovenop de € 4,30 per maand van de losse ABN AMRO betaalrekening — wie geen pakket heeft betaalt dus rekening én pas, en daarom is pricedOnItsOwn false. Een vervangende betaalpas bij verlies kost € 5,00 per keer; dat is eenmalig en geen doorlopende post. Een digitale betaalpas, Apple Pay en Google Pay zijn gratis. Het document noemt zowel de maand- als de jaarprijs; er is niet omgerekend, de maandregel is aangehouden zoals de tariefregel hem zet.",
           "conditionsKnown": true
         }
       }
@@ -88,7 +115,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
@@ -121,7 +148,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
@@ -154,7 +181,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-08-20",
@@ -178,7 +205,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260412125233id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard",
           "checkedAt": "2026-08-20",
@@ -186,7 +213,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 2.0,
+          "value": 2,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://media.rabobank.com/m/58242d90fc02d281/original/Tarieven-en-limieten-particulier-betalingsverkeer-per-dec-2025.pdf",
@@ -211,11 +238,20 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "wayback",
           "sourceUrl": "https://web.archive.org/web/20260420213121id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard/visa-merchant-offer-program",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/asset/34bbb881-8b03-425c-a2bd-3d6cafbb1d06/Informatiedocument-betreffende-de-vergoedingen-Rabo-Standaard.pdf",
+          "checkedAt": "2026-07-01",
+          "conditions": "Bovenop de € 3,45 per maand van Rabo Standaard; dit document is het Informatiedocument van dat pakket en noemt de kaart bij naam. Binnen Rabo Comfort (€ 6,95 per maand) zit één Rabo GoldCard in de pakketprijs en kost een extra kaart € 0,75 per maand (Informatiedocument Rabo Comfort, 7 januari 2026). Bij Rabo Free is dezelfde kaart € 1,25 per maand en bij Rabo RiantPakket kost een extra GoldCard € 0,50 per maand (Tarieven en limieten, december 2025). Koersopslag 2,0% bij betalen in vreemde valuta; geldopname € 4,50, in vreemde valuta € 4,50 + 2,0%. Het document noemt zowel de maand- als de jaarprijs; er is niet omgerekend.",
           "conditionsKnown": true
         }
       }
@@ -235,7 +271,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
           "checkedAt": "2026-08-20",
@@ -259,7 +295,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.snsbank.nl/particulier/betalen/creditcard.html",
           "checkedAt": "2026-08-20",
@@ -292,7 +328,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -316,7 +352,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.asnbank.nl/betalen/asn-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -349,7 +385,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -373,7 +409,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.regiobank.nl/betalen/regiobank-creditcard.html",
           "checkedAt": "2026-08-20",
@@ -404,6 +440,14 @@
           "checkedAt": "2025-10-01",
           "conditions": "SCOPE IS DE VOORWAARDE: het Informatiedocument is gekopt \"Naam van de rekening: Knab Betaalrekening\" — het particuliere pakket (Privérekening € 6 p/m, één rekeninghouder; Gezamenlijke rekening € 7 p/m, twee rekeninghouders). Zakelijke Knab-rekeningen hebben een eigen tarievenpagina en vallen hier niet onder. Dezelfde 1,4% staat op knab.nl/tarieven (\"Tarieven per 18-02-2026\") met de geografische inkadering erbij: \"Betalen en opname van contant geld in eurolanden Gratis*\" tegenover \"Betalen en opname van contant geld buiten eurolanden Mastercard wisselkoers + 1,4% koersopslag in euro*\", met voetnoot \"* Let op: buitenlandse banken kunnen kosten rekenen voor het gebruik van een geldautomaat.\" De 1,4% komt dus bovenop de Mastercard-wisselkoers. Geen plafond, staffel, vrij bedrag of promo bij deze regel; het document schrijft samengestelde voorwaarden wél uit waar ze bestaan (\"Overboeking in andere valuta buiten SEPA € 15 + koersopslag van 0,1%\", en de pakketsplitsing Privé € 72 / Gezamenlijk € 84 totale jaarlijkse vergoeding), dus de onvoorwaardelijke 1,4%-regel is informatief. Dezelfde 1,4% geldt in het FID ook voor \"Opname van contant geld met een betaalpas in vreemde valuta\".",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -422,11 +466,20 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.knab.nl/particulier/betalen/creditcard",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 28,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260415102754id_/https://www.icscards.nl/ics-info/faq-jaarbijdrage-verhoging-knab",
+          "checkedAt": "2025-11-01",
+          "conditions": "PRIJSSTIJGING AL AANGEKONDIGD: dezelfde URL toont vandaag (24 augustus 2026) de volgende ronde — 'de jaarbijdrage van uw Knab Creditcard vanaf 1 november 2026' met 'Waarom wordt de jaarbijdrage voor de Knab Creditcard € 31?' en 'Ook de jaarbijdrage voor uw Extra Card wijzigt van € 28 in € 31'. Die zin bevestigt tegelijk dat € 28 het bedrag is dat vandaag geldt. Vanaf 1 november 2026 is het € 31 per jaar, ook voor een Extra Card. Alleen aan te vragen bij een Knab bankpakket (de eigen productpagina is gekopt 'Creditcard aanvragen bij je bankpakket'), dus bovenop de € 6,00 per maand van de Knab Privérekening of € 7,00 van de Gezamenlijke rekening. De kaart is een ICS-product: het Informatiedocument van Knab (01-10-2025) zet bij 'Aanbieden van een creditcard' de tekst 'Dienst niet beschikbaar' met de voetnoot dat alle kosten aan ICS worden betaald en 'daarom staan die kosten niet in dit overzicht'. Koersopslag 2%, geldopname 4% van het opgenomen bedrag (knab.nl/tarieven, Tarieven per 18-02-2026).",
           "conditionsKnown": true
         }
       }
@@ -443,6 +496,14 @@
           "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
           "checkedAt": "2026-05-01",
           "conditions": "SCOPE IS DE VOORWAARDE: \"Naam van de rekening: Triodos Internet Betaalrekening\" — Triodos' enige particuliere betaalrekening, met een pakketprijs die per leeftijd/soort verschilt (18 t/m 22 jaar € 0,00 p/m; 23 t/m 25 jaar € 3,50; vanaf 26 jaar € 5,00; en/of-rekening € 8,00) maar de 1% is voor alle vier gelijk — één regel voor de hele rekening. Geldt alleen bij BETALEN met de betaalpas in vreemde valuta; geldopname is een aparte, duurdere regel: \"Opname van contant geld met een betaalpas in vreemde valuta — € 2,25 voor elke opname + 1% koersopslag over het opgenomen bedrag\". Creditcard is niet van toepassing (\"Aanbieden van een creditcard — Dienst niet beschikbaar\"). Geen minimum, maximum, staffel of vrij bedrag bij de 1%-regel; het document schrijft min/max wél uit waar ze bestaan (\"0,1% van het bedrag met minimum van € 7,50 en maximum van € 75,00\"), dus de kale 1% is informatief. De Triodos servicepagina voegt toe dat Visa de koers zet: \"Visa bepaalt de wisselkoersen en opslagen.\"",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -462,7 +523,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -486,7 +547,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -510,7 +571,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -534,7 +595,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -558,7 +619,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -603,7 +664,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -627,7 +688,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -651,7 +712,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -675,7 +736,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://help.bunq.com/articles/bunq-points",
           "checkedAt": "2026-08-20",
@@ -721,14 +782,32 @@
       "product": "Revolut Premium betaalpas",
       "issuer": "Revolut Bank UAB",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://www.revolut.com/nl-NL/legal/premium-fees/",
+          "checkedAt": "2026-07-09",
+          "conditions": "Geen wissellimiet en geen fair usage-kosten op het Premium-plan: \"Premium, Metal en Ultra: Geen wissellimiet. Geen fair usage-kosten.\" Dezelfde bulletlijst zet Standard op 1% en Plus op 0,5%, dus de rijtoewijzing rust op dezelfde vorm als die twee al gepinde cijfers. DE WEEKENDCLAUSULE IS NIET OPTIONEEL, want zonder haar is de nul niet waar: hij is aan de klok gebonden en niet aan de limiet. \"Er gelden geen kosten als je geld wisselt op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd) en binnen de limieten van je plan. Als je in het weekend geld wisselt (tussen 17:00 uur op vrijdag en 18:00 uur op zondag, New York tijd) geldt er een kost van 1%.\" Kaartbetalingen in vreemde valuta waarvoor in realtime gewisseld moet worden vallen hieronder, en Revolut waarschuwt zelf dat juist daar de totale kosten niet vooraf te tonen zijn. Het abonnementsgeld van het plan is een aparte post en staat op de rij revolut-premium. De datum is de eigen ingangsdatum van het document: \"Deze versie van de voorwaarden is van toepassing vanaf 9 juli 2026, tenzij anders aangegeven is.\" Route: elk plan heeft nu zijn eigen per-plan-URL; revolut.com weigert curl en node fetch met 403, maar r.jina.ai geeft deze pagina volledig terug (200, 16.444 bytes).",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "revolut-metal-betaalpas",
       "product": "Revolut Metal betaalpas",
       "issuer": "Revolut Bank UAB",
       "kind": "betaalpas",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://www.revolut.com/nl-NL/legal/metal-fees/",
+          "checkedAt": "2026-07-09",
+          "conditions": "Zelfde cijfer en zelfde voorwaarden als Revolut Premium, maar uit de EIGEN tarievenpagina van het Metal-plan; die is apart opgehaald en niet uit de Premium-pagina afgeleid. \"Premium, Metal en Ultra: Geen wissellimiet. Geen fair usage-kosten.\" DE WEEKENDCLAUSULE STAAT OOK OP DEZE PAGINA en hoort erbij: \"Er gelden geen kosten als je geld wisselt op weekdagen (tussen 18:00 uur op zondag en 17:00 uur op vrijdag, New York tijd) en binnen de limieten van je plan. Als je in het weekend geld wisselt (tussen 17:00 uur op vrijdag en 18:00 uur op zondag, New York tijd) geldt er een kost van 1%.\" Het abonnementsgeld van het plan staat op de rij revolut-metal. De datum is de eigen ingangsdatum van het document (9 juli 2026). Route: r.jina.ai geeft de pagina volledig terug (200, 16.552 bytes) waar curl 403 krijgt.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "n26-standard-betaalpas",
@@ -745,7 +824,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -769,7 +848,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -793,7 +872,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -817,7 +896,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://docs.n26.com/legal/06+EU/01+Account/en/13account-pricelist-en.pdf",
           "checkedAt": "2026-06-26",
@@ -910,6 +989,14 @@
           "checkedAt": "2025-09-10",
           "conditions": "Eenmalige kosten voor de fysieke kaart komen er wel: virtuele kaart gratis, Classic kaart € 5 eenmalig, Mirror kaart € 50 eenmalig. De pagina zegt daarnaast 'Wij rekenen geen kosten voor onze betaalrekening'. De payload noemt geen ingangsdatum, alleen een updatedAt per veld. Uitgesproken nul.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -983,7 +1070,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-pdf",
           "sourceUrl": "https://www.openbank.nl/assets/static/nl/pdf/Products/Precontractuele_informatie_Betaalpas_Maestro_Mastercard_NL.pdf",
           "checkedAt": "2024-07-01",
@@ -1024,7 +1111,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 0.0,
+          "value": 0,
           "period": "jaar",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1049,7 +1136,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
           "checkedAt": "2026-08-20",
@@ -1082,7 +1169,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
           "checkedAt": "2026-08-20",
@@ -1090,7 +1177,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 20.0,
+          "value": 20,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1115,11 +1202,20 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 65,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
+          "checkedAt": "2024-07-04",
+          "conditions": "\"Overzicht Kaartlidmaatschapsbijdragen\", rij \"The Platinum Card € 65,00 per maand / Inclusief: 4 extra Green Cards\", met daarnaast \"Extra Platinum kaart (maximum 1 kaart): € 10 per maand\" en \"Extra Green kaart € 10 per maand\". Amex noemt deze bijdrage zelf per maand; er is niet omgerekend. De datum is het versiestempel FEE_CONS_V7_240704_NL dat boven de titel en in de voettekst van het document staat — hetzelfde stempel dat de zeven andere Amex-consumentenkaarten in deze catalogus dateert. LET OP HET VERSCHIL MET DE PRODUCTPAGINA: americanexpress.com/nl-nl/creditcard/platinum-card zegt \"Kosten: € 75 per maand\", maar die pagina draagt geen enkele datum (alleen \"Copyright © 2026\") en kwam daarom niet door de eis. Amex heeft de bijdrage dus vermoedelijk verhoogd van 65 naar 75 en dit bedrag is een ONDERGRENS, geen actuele prijs. Het gedateerde stuk is aangehouden omdat de eis de documentdatum voorschrijft; wie een nieuwer gedateerd tarievenblad vindt, hoort dit veld te vervangen. De rest van beide bronnen spreekt elkaar niet tegen: de extra Platinum-kaart staat op beide plaatsen op € 10 per maand en vier extra Green Cards zijn op beide plaatsen inbegrepen.",
           "conditionsKnown": true
         }
       }
@@ -1147,7 +1243,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 3.0,
+          "value": 3,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1205,7 +1301,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/",
           "checkedAt": "2026-08-20",
@@ -1246,7 +1342,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 55.0,
+          "value": 55,
           "period": "maand",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/bedrijf/legaal/website-regels-en-voorschriften/FEE_CONS_V7_240704_NL.pdf",
@@ -1271,7 +1367,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/cards/business-entry-card/",
           "checkedAt": "2026-08-20",
@@ -1295,7 +1391,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/green/",
           "checkedAt": "2026-08-20",
@@ -1319,7 +1415,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-companion-card/gold/",
           "checkedAt": "2026-08-20",
@@ -1327,7 +1423,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 270.0,
+          "value": 270,
           "period": "jaar",
           "route": "provider-pdf",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl-nl/zakelijk/kaarten/business-gold-card/pdf/xsell-26Q2-actievoorwaarden-business-gold-card.pdf",
@@ -1344,11 +1440,19 @@
       "kind": "creditcard",
       "fields": {
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Alleen als de werkgever het toestaat en na aparte inschrijving, tegen een eigen jaarbijdrage: ‘If the company allows it, you can participate in the Membership Rewards Programme for an annual fee of €25.’ en ‘It is required to register for the Membership Rewards Programme.’ Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "fxFeePct": {
+          "value": 2.5,
+          "route": "agent",
+          "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
+          "checkedAt": "2022-12-15",
+          "conditions": "Wisselkoersopslag van 2,5% op de American Express-wisselkoers, verschuldigd zodra een Transactie of creditering niet in euro's is: \"Een wisselkoersopslag van 2,5% is verschuldigd wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro.\" Artikel 11 (Transacties in vreemde valuta) zegt het een tweede keer: \"Deze koers wordt de ‘American Express-wisselkoers’ genoemd en wordt vermeerderd met een wisselkoersopslag van 2,5%.\" DIT IS HET DOCUMENT VAN DE CORPORATE CARD ZELF — de kop luidt \"AMERICAN EXPRESS® CORPORATE CARD / Kaarthouder Algemene Voorwaarden\" — en de rij stond leeg terwijl de Corporate Gold Card al uit ditzelfde stuk was gepind. De opslag valt weg bij DCC (\"Aangezien een Transactie die via de derde wordt omgerekend, bij ons wordt ingediend in de Euro's, zullen we geen wisselkoersopslag in rekening brengen\") — dat is Amex' eigen tekst en geen advies om DCC te kiezen, want de derde partij rekent dan zijn eigen koers en commissie. Transacties buiten de dollar lopen via Amerikaanse dollars en de opslag wordt dan slechts eenmaal gerekend. Contante opnames zijn een aparte post: 3,8% van het opgenomen bedrag met een minimum van € 4,50. De datum is die van het document: het URL-pad zegt 2022-12-15 en de PDF-CreationDate 7 december 2022. BESCHIKBAARHEID: dit is een kaart die een werkgever uitgeeft, en state.json zet availableToNL op false. Dat is een reden om hem niet aan te raden, geen reden om het cijfer onbekend te laten.",
           "conditionsKnown": true
         }
       }
@@ -1363,12 +1467,12 @@
           "value": 2.5,
           "route": "agent",
           "sourceUrl": "https://www.americanexpress.com/content/dam/amex/nl/assets/pdf/voorwaarden-en-overeenkomsten/2022-12-15/NL_Proprietary_Corporate_Cardmember_TCs_Dec2022.pdf",
-          "checkedAt": "2026-08-19",
+          "checkedAt": "2022-12-15",
           "conditions": null,
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-gold-card/",
           "checkedAt": "2026-08-20",
@@ -1392,7 +1496,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 1.0,
+          "value": 1,
           "route": "provider-page",
           "sourceUrl": "https://www.americanexpress.com/en-nl/business/welcome/corporate-klm-card/",
           "checkedAt": "2026-08-20",
@@ -1416,7 +1520,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card",
           "checkedAt": "2026-08-20",
@@ -1449,7 +1553,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold",
           "checkedAt": "2026-08-20",
@@ -1482,7 +1586,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum",
           "checkedAt": "2026-08-20",
@@ -1490,7 +1594,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 175.0,
+          "value": 175,
           "period": "jaar",
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/tips/wat-kost-een-creditcard",
@@ -1515,7 +1619,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda",
           "checkedAt": "2026-08-20",
@@ -1548,7 +1652,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-classic",
           "checkedAt": "2026-08-20",
@@ -1581,7 +1685,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-gold",
           "checkedAt": "2026-08-20",
@@ -1589,7 +1693,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 45.0,
+          "value": 45,
           "period": "jaar",
           "route": "wayback",
           "sourceUrl": "http://web.archive.org/web/20260210001645id_/https://www.icscards.nl/info/ics-mastercard-gold-jaarbijdrage",
@@ -1614,7 +1718,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/creditcard-aanvragen/mastercard-black",
           "checkedAt": "2026-08-20",
@@ -1622,7 +1726,7 @@
           "conditionsKnown": true
         },
         "accountFee": {
-          "value": 225.0,
+          "value": 225,
           "period": "jaar",
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/nieuwe-reisservices-en-jaarbijdrage-mastercard-black",
@@ -1645,6 +1749,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1660,6 +1772,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/679/VISA-27-NL-072026%20AV%20Visa%20Worldcard%20Business%20Gold",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -1677,6 +1797,14 @@
           "checkedAt": "2026-08-19",
           "conditions": null,
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1692,6 +1820,14 @@
           "sourceUrl": "https://www.icscards.nl/webdocuments/677/MC-206-NL-072026%20AV%20ICS%20Mastercard%20Corporate",
           "checkedAt": "2026-08-19",
           "conditions": null,
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0.0,
+          "route": "agent",
+          "sourceUrl": "user:eigenaar-2026-08-24",
+          "checkedAt": "2026-08-24",
+          "conditions": "Nul op gezag van de eigenaar (24 augustus 2026): hij weet dat deze aanbieder geen puntenprogramma voert. De eigen productpagina somt de kaart volledig op zonder loyaliteitsrubriek, wat daarmee strookt — maar de nul rust op zijn uitspraak en niet op een zin van de aanbieder. Een programma dat later alsnog verschijnt wordt hier niet vanzelf opgemerkt; de jaarlijkse sweep is de correctie.",
           "conditionsKnown": true
         }
       }
@@ -1711,7 +1847,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
           "checkedAt": "2026-08-20",
@@ -1744,7 +1880,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-silver-card",
           "checkedAt": "2026-08-20",
@@ -1777,7 +1913,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "provider-page",
           "sourceUrl": "https://www.icscards.nl/anwb/creditcard-aanvragen/anwb-visa-card",
           "checkedAt": "2026-08-20",
@@ -1807,6 +1943,15 @@
           "sourceUrl": "https://help.crypto.com/en/articles/5977463-crypto-com-prepaid-visa-card-fees-and-limits-europe-for-users-with-a-residential-address-in-europe",
           "checkedAt": "2026-08-19",
           "conditions": "Midnight tier: 0.2% applies to non-EUR purchases and ATM transactions made within the EU and UK (rate schedule stated as applying till 30 September 2026; same 0.2% restated as effective 1 October 2026)",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://help.crypto.com/en/articles/1345769-how-to-apply-for-a-crypto-com-prepaid-card",
+          "checkedAt": "2026-04-22",
+          "conditions": "Uitgesproken nul: \"you can get your Crypto.com Prepaid Card for free: - No monthly fee* - No annual fee* - No setup fee\". VAN DE VIJF CRYPTO.COM-NIVEAUS IS DIT HET ENIGE WAARBIJ DIE NUL COMPLEET IS, en dat is de reden dat de vier hogere niveaus geen prijs in de catalogus hebben. Het sterretje verwijst naar de abonnementskosten van Level Up, en juist Basic heeft die niet: het gedateerde artikel \"How do I join Level Up?\" (help.crypto.com/en/articles/12017604, lastUpdatedDate 18 juni 2026) zet in zijn eigen tabel \"Basic | No subscription or CRO Lockup/Stake required\". Er zit dus geen niveaupoort achter deze nul. Wat wel geld kost, uit het aparte tarievenstuk (help.crypto.com/en/articles/5977463, lastUpdatedDate 31 juli 2026): de fysieke Midnight-kaart EUR 4,99, vervanging EUR 45,01, rekening sluiten EUR 50, en EUR 5 per maand na twaalf maanden zonder eigen transactie (EUR 6 per 1 oktober 2026). Die laatste is een voorwaardelijke maandpost en geen vaste prijs; hij hoort in deze tekst en niet in het bedrag. Deze kaart heeft geen cashbackcijfer in de catalogus.",
           "conditionsKnown": true
         }
       }
@@ -1920,6 +2065,15 @@
           "checkedAt": "2026-08-18",
           "conditions": "FX Fees on Weekdays, EEA/UK/CH",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://nexo.com/crypto-card",
+          "checkedAt": "2026-07-31",
+          "conditions": "Uitgesproken nul: \"Enjoy daily spending with no monthly, annual, or inactivity card fees.\" DIT IS DE ZWAKSTE BRON VAN DEZE RONDE EN DAAROM MET DE REDEN EROP: het is een verkooppagina en geen tarievenoverzicht. Hij komt hier binnen omdat de zin drie soorten kosten met naam noemt in plaats van \"geen kosten\" te roepen, en omdat de pagina zelf een machineleesbare wijzigingsdatum draagt (pageUpdateDate voor pageSlug \"crypto-card\" in de eigen JSON-payload) — dezelfde route waarmee het Trade Republic-veld op 21 augustus 2026 is toegelaten. nexo.com/legal geeft HTTP 404 en er is geen los tarievenstuk gevonden. Voorwaarden: een virtuele kaart vraagt minimaal USD 50 op de Nexo-rekening, een fysieke kaart meer dan USD 5.000 aan digitale activa en minstens Gold Loyalty Tier (verzending gratis). Geldopname kost 2% met een minimum van 1,99 EUR boven de vrije maandruimte van je tier (Base EUR 200, Silver EUR 400, Gold EUR 1.000, Platinum EUR 2.000). Uitsluitend voor inwoners van geselecteerde Europese landen (EER en Verenigd Koninkrijk).",
+          "conditionsKnown": true
         }
       }
     },
@@ -1961,12 +2115,29 @@
       "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
       "kind": "crypto",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://bleap.finance/legal-agreements/bleap-cardholder-terms-eea-bleap-sia",
+          "checkedAt": "2026-06-28",
+          "conditions": "Uitgesproken nul die de eigen toeslag noemt en de koers bij het netwerk laat: artikel 6 van de Cardholder Terms EEA zegt \"Bleap charges no issuance, monthly, usage or exchange fees for Card activity\", en 6.3 \"Currency conversion - If you transact in a different currency, the amount is converted at the Mastercard network rate applicable at processing time\". DE NUL IS DUS BLEAPS EIGEN OPSLAG, NIET DE KOERS: hetzelfde artikel zegt dat \"Mastercard scheme fees, network FX rates, merchant surcharges, ATM operator fees and government taxes may apply and are your responsibility\". Zelfde vorm als gnosis-pay-card-direct-consumer en trade-republic-betaalpas, waar de nul ook de opslag van de uitgever is en de koers die van het kaartnetwerk. Dit is hetzelfde document en dezelfde datum als de accountFee van deze rij, die uit artikel 6.1 komt.",
+          "conditionsKnown": true
+        },
         "cashbackPct": {
           "value": 1,
           "route": "agent",
           "sourceUrl": "https://help.bleap.finance/en/articles/14655112-why-didn-t-i-receive-cashback",
           "checkedAt": "2026-04-20",
           "conditions": "Default ongoing rate on all eligible purchases, with a fair-usage cap of €500 per transaction and €3,000 per month in transaction value. Everything above 1% is MERCHANT-SPECIFIC and belongs in a per-merchant table, not this field: 'Uber, Bolt 3%' and 'Just Eat, Deliveroo, Uber Eats, Glovo, Bolt Food 3%' (each €50 per transaction, €500/month), and 20% on named subscriptions with tight value caps — Netflix €20/month, YouTube Premium €20/month, Amazon Prime €10/month, ChatGPT €30/month, Gemini €20/month, Claude €250/year, Disney+ €200/year, Steam €80/year, PlayStation Plus €220/year, Xbox Game Pass €30/month, Nintendo Switch Online €80/year. EXPIRED PROMO: the row 'Restaurants & supermarkets (promo until 31 May 2026) 2%' has lapsed as of today — do not serve it. EXCLUSIONS are extensive: cash/quasi-cash, stored-value loads, financial institutions, securities, insurance, gambling, taxes and fines, government services, utilities, postal, gift shops, software and IT services (5734, 7372), professional services, charities, hospitals, art dealers, business services. Payments routed through Curve earn nothing even on a Bleap card.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://bleap.finance/legal-agreements/bleap-cardholder-terms-eea-bleap-sia",
+          "checkedAt": "2026-06-28",
+          "conditions": "Uitgesproken nul. Artikel 6.1 noemt de drie soorten kosten met naam in plaats van \"geen kosten\" te roepen: \"Cards are free. Bleap charges no issuance, monthly, usage or exchange fees for Card activity.\" Artikel 6.2 zegt wat er WEL is: \"Mastercard scheme fees, network FX rates, merchant surcharges, ATM operator fees and government taxes may apply and are your responsibility.\" De vorige versie van hetzelfde stuk (Updated: 25 May 2026) heeft clausule 6.1 woordelijk gelijk, dus dit is geen eenmalige formulering van een marketingtekst. DE BRON IS BEWUST NIET DE LANDINGSPAGINA: bleap.finance zegt daar \"No fees (really!)\" zonder datum en zonder eenheid, en die zin draagt geen van de vier eisen. De 1% cashback op deze rij komt uit een ander gedateerd stuk (help.bleap.finance), dus prijs en opbrengst leunen hier niet op dezelfde pagina.",
           "conditionsKnown": true
         }
       }
@@ -1981,7 +2152,7 @@
           "value": 0,
           "route": "agent",
           "sourceUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
-          "checkedAt": "2026-04-27",
+          "checkedAt": "2026-08-12",
           "conditions": "SCOPE — READ BEFORE SERVING. This document is GNOSIS PAY'S, and it talks about 'your Gnosis Pay Card' throughout. It never mentions Zeal. Zeal runs on Gnosis Pay rails but publishes nothing of its own (zeal.app has no fee page), so this is evidence about the rails, not proof that Zeal passes them through unmarked. See askUserInstead. On the rails themselves: no added FX fee, Visa's rate applied at purchase, and the issuer's own advice is 'When travelling, always select the local currency at payment terminals for better rates.' Spending is 1:1 against stablecoin ('a €10 purchase = 10 EURe'). ATM is NOT free past a small allowance: 'You can make up to 5 free ATM withdrawals per month or withdraw up to 200 EURe/GBPe/USDCe—whichever comes first' then '2% fee per additional withdrawal'; daily ATM cap 500, single 250. Daily spend cap 8,000, single transaction 5,000. Card replacement 4.99. No gas fees on card transactions. WORDING CAVEAT — the 0 is written as 'No added fees'; no numeral appears.",
           "conditionsKnown": true
         },
@@ -2008,6 +2179,14 @@
           "checkedAt": "2026-07-15",
           "conditions": "TEMPORARY PROGRAMME — this is the dominant caveat: 'This article details the Gnosis Pay interim cashback programme, starting on the 9 November 2025 and active until 30 September 2026 (previously it was the 31st January and 31st March).' After 30 September 2026 'new partner-led incentive programmes will be introduced'; the 1% is not guaranteed past that date, six weeks out. ENTRY TIER requires holding at least 0.1 GNO in the Gnosis Pay Card Safe — below 0.1 GNO there is no cashback at all — and at 0.1 GNO the maximum weekly spend eligible for cashback is $250, with 'No rollover: unused cap doesn't carry over.' The rest of the ladder: 1 GNO → 2% ($375/week), 10 GNO → 3% ($500/week), 100 GNO → 4% ($1250/week); the further +1% (to the advertised 'up to 5%') needs the OG NFT as well as ≥0.1 GNO. PAID WEEKLY IN GNO to the Safe, not euro; holdings are measured as 'Lowest GNO amount within the snapshot period', Sunday→Saturday, paid the following Thursday. INELIGIBLE: ATM withdrawals and cash advances, bank/wallet top-ups (Revolut, Wise, PayPal), investments, interest and insurance premiums, taxes/fines/government charges, postal services, donations, utilities, direct technology services and software, and any transaction routed through Curve.",
           "conditionsKnown": true
+        },
+        "fxFeePct": {
+          "value": 0,
+          "route": "agent",
+          "sourceUrl": "https://help.gnosispay.com/hc/en-us/articles/39533569163284-Understanding-Your-Card-s-Fees-and-Limits",
+          "checkedAt": "2026-08-12",
+          "conditions": "Uitgesproken nul, in woorden en niet in cijfers: \"No added fees from Gnosis Pay for currency conversions / Visa's exchange rate is applied automatically at the time of purchase.\" De nul is dus de eigen toeslag van de uitgever; de koers is die van Visa. Dezelfde bron waarschuwt zelf voor DCC: \"When travelling, always select the local currency at payment terminals for better rates.\" Kaartbetalen is verder kosteloos en 1:1 in stablecoin (\"No transaction fees when spending with your card\"; \"1:1 stablecoin usage — a €10 purchase = 10 EURe\"). Geldopnames zijn een aparte post: tot 5 gratis opnames per maand óf tot 200 EURe/GBPe/USDCe, wat het eerst komt, daarna 2% per extra opname; een vervangende kaart 4,99. DIT IS HETZELFDE DOCUMENT DAT zeal-card-gnosis-pay-rails GEBRUIKT, maar dit is het product waar het over gaat: het stuk spreekt over \"your Gnosis Pay Card\" en noemt Zeal nergens. De afgeleide rij had het cijfer en de rij van het eigen product niet. De datum is de updated_at van het artikel in de eigen Zendesk-API van de site (created_at 21 juli 2025). BESCHIKBAARHEID: state.json zet availableToNL op false en gnosispay.com/card, /pricing en /personal geven alle drie 404; het tarief is aangetoond, de bereikbaarheid voor Nederland niet.",
+          "conditionsKnown": true
         }
       }
     },
@@ -2023,6 +2202,15 @@
           "sourceUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
           "checkedAt": "2026-06-03",
           "conditions": "Trigger, in the document's own words: \"Foreign exchange (FX) Fee applies to transactions that are performed in a currency other than the currency your card is denominated in. For example, a Bybit Card is denominated in EUR for USD transactions.\" De 0,5% komt bovenop de Mastercard-koers en er is geen padding: \"FX Padding 0%\". STAPELT met de crypto-kant: \"Crypto Conversion Fee 0.9% (On top of Bybit EU's One-Click Sell Exchange Rate)\" en \"Crypto Conversion Fee applies to all transactions funded with non-fiat assets in your Bybit EU Funding Account\" — wie vanuit crypto betaalt, betaalt in de praktijk 0,5% + 0,9%. Geldopname is een aparte regel: \"ATM Withdrawal Fee 2% (after the first 100 EUR monthly)\". Geen vrij bedrag of plafond op de FX-fee zelf, en dat is positief vastgesteld: diezelfde tabel schrijft vrijstellingen wél uit waar ze bestaan (\"2% (after the first 100 EUR monthly)\", \"None (for virtual Bybit Card)\", \"Replacement: 5 EUR\"). Wel bestedingslimieten per tier: Tier 1 5.000 EUR per transactie / 5.000 daily / 10.000 monthly / 60.000 annual, oplopend tot Tier 3 15.000 / 15.000 / 50.000 / 250.000; en \"the Virtual Card Lite will be subjected to a Lifetime Spending Limit of 150 EUR\". Scope: Bybit EU (EEA), kaart luidt in EUR. Disclaimer van de uitgever zelf: \"Bybit EU reserves the right to introduce or amend the Fees and Limits according to market conditions.\"",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "jaar",
+          "route": "provider-page",
+          "sourceUrl": "https://www.bybit.eu/en-EU/help-center/article/Fees-and-Spending-Limits-Bybit-Card",
+          "checkedAt": "2026-06-03",
+          "conditions": "Uitgesproken nul. DE EENHEID IS DIE VAN HET DOCUMENT: het is de tabelrij met het opschrift \"Annual Fee\", dus per jaar, en er is niet omgerekend — maand tegen jaar scheelt een factor twaalf. Dezelfde tabel zet ook \"Inactivity Fee | None\" en \"Card Cancellation Fee | None\", dus de nul is niet elders verstopt als slaapkosten. Wat niet nul is: 0,5% opslag op de Mastercard-koers, 0,9% voor cryptoconversie, 2% geldopname na de eerste 100 EUR per maand, en 5 EUR voor een vervangende fysieke kaart. TIJDELIJK EN DAAROM NIET IN DE WAARDE: bij de uitgiftekosten staat een sterretje met \"No fee is required for the issuance of Bybit Card until further notice\" — dat is een opgeschorte prijs en geen vaste nul. Bij \"Annual Fee | None\" staat dat voorbehoud niet, dus deze nul draagt de tijdelijkheid niet mee. Deze kaart heeft geen cashbackcijfer in de catalogus; hij vult de prijskant en zet de nettotak niet aan.",
           "conditionsKnown": true
         }
       }
@@ -2040,6 +2228,15 @@
           "checkedAt": "2024-01-11",
           "conditions": "Standard plan, Entry tier — the free tier: 'The Standard plan is the most basic X-tras subscription plan, and it is available to all Wirex users for free.' The article's summary table confirms it across all eight tiers: 'WXT Lock 0 150,000 0 250,00 750,000 0 1.5m 7.5m' against 'Cryptoback™ 0.5% 1% 1% 2% 3% 4% 6% 8%'. PAID IN CRYPTO (Cryptoback™), not euro. Everything above 0.5% costs money or locked tokens: Standard Enhanced needs 150,000 WXT locked for 180 days → 1%; Premium is '€9.99, or €102 annually' → 1% entry, 2% with 250,000 WXT, 3% with 750,000 WXT; Elite is '€29.99 monthly or €306 annually' → 4% entry, 6% with 1,500,000 WXT, 8% with 7,500,000 WXT. No cap on the cashback is stated anywhere in this article — that is a gap in the source, not a confirmed absence of a cap. STALENESS WARNING: this is much the oldest figure in the lane; the article's own metadata gives updatedAt 2024-01-11, more than two and a half years ago, and Wirex has restructured its EEA card issuing since (the catalogue itself records the previous issuer UAB PayrNet as defunct with no current EEA issuer stated). Re-check before serving.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://help.wirexapp.com/article/x-tras-pricing-plans-and-tiers-1337",
+          "checkedAt": "2024-01-11",
+          "conditions": "Uitgesproken nul voor het X-tras-plan Standard, Entry-tier — precies het niveau waar de 0,5% Cryptoback op deze rij bij hoort, en dat is de reden dat deze rij hier wel binnenkomt: één artikel geeft zowel het abonnementsbedrag als het beloningspercentage. \"The Standard plan is the most basic X-tras subscription plan, and it is available to all Wirex users for free. The Entry tier is the basic tier and offers 0.5% Cryptoback on card purchases.\" HET DOCUMENT HANGT GEEN PERIODE AAN HET WOORD \"FREE\"; de eenheid staat hier op maand omdat de buurplannen in dezelfde tabelrij per maand geprijsd zijn (Premium EUR 9,99 per maand of EUR 102 per jaar, Elite EUR 29,99 per maand of EUR 306 per jaar). Bij een nul maakt de periode niets uit, maar dat is een leesbeslissing en geen citaat, en daarom staat het er. Alles boven 0,5% kost wel iets: Standard Enhanced vraagt 150.000 WXT die 180 dagen vast blijven staan. Uitgifte is apart bevestigd in het losse artikel \"Wirex Fees\" (updatedAt 14 december 2023): \"Card Issuance | EEA | Free\", met kaartbezorging EEA 5 EUR (DHLWorldMail, niet volgbaar) of 15 EUR (DHL Express). HOUDBAARHEID: dit is met afstand het oudste cijfer in dit veld — twee en een half jaar — en het tarievenartikel waarschuwt zelf dat de tarieven kunnen wijzigen; Wirex heeft zijn EEA-uitgifte sinds die datum verbouwd (de eerdere uitgever UAB PayrNet staat er niet meer, de huidige wordt niet genoemd). Hercontroleer hem voordat je hem serveert.",
+          "conditionsKnown": true
         }
       }
     },
@@ -2048,14 +2245,32 @@
       "product": "paysafecard (prepaid code / PaysafeWallet)",
       "issuer": "Paysafe",
       "kind": "prepaid",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 3,
+          "route": "provider-page",
+          "sourceUrl": "https://www.paysafecard.com/nl-nl/alg-vw/",
+          "checkedAt": "2026-05-26",
+          "conditions": "Omrekeningskosten van 3% van het transactievolume bij elke betaling in een andere valuta dan die van de PaysafeCard, en die wordt in euro's uitgegeven. Artikel 7.2: \"Voor elke betaling gedaan in een andere valuta dan de valuta van uw PaysafeCard (zogenaamde kruisvaluta transacties) rekenen we omrekeningskosten. Deze kosten bedragen 3% van het transactievolume.\" Artikel 7.1 stelt vast dat het een europroduct is: \"De PaysafeCard wordt uitgegeven in Euro (€).\" DE 3 IS NIET HET MAXIMUM: dezelfde clausule zet een tweede, hoger tarief neer als de euro helemaal niet in de transactie voorkomt — \"Voor kruisvaluta transacties, waarbij de euro niet is betrokken in de betalingstransactie, zal een wisselkoers van 6,09% van de betalingstransactie worden toegepast.\" Los van de omrekening: terugbetalingsvergoeding € 7,50 en maandelijkse beschikbaarheidskosten na de eerste 30 dagen. De datum komt uit de bestandsnaam van het document zelf (nl_paysafecard_26-05-2026.htm). TEGENSPRAAK OM MEE TE DRAGEN, NIET OM WEG TE LATEN: de marketingkostenpagina (paysafecard.com/nl-nl/kosten-limieten) zegt \"Vanaf de 2e maand worden maandelijkse activeringskosten van 3 EUR ... afgetrokken\", terwijl deze voorwaarden zeggen \"de eerste 30 (dertig) dagen na aankoop van uw PaysafeCard GRATIS. Daarna € 4 per maand.\" Twee bronnen van dezelfde uitgever, twee bedragen, en dat gaat over de maandkosten en niet over de omrekening — daarom heeft dit product nog geen accountFee. MEETPUNT OM NIET TE HERHALEN: het detail-eindpunt levert voor alle drie de tx_pscterms_pi3-bestandsnamen hetzelfde document van 100.518 bytes, byte-identiek; de mypaysafecard- en mastercard-varianten zijn langs die route dus niet te bereiken en over die twee zegt dit cijfer niets.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "tria-card",
       "product": "Tria Card",
       "issuer": "Tria (self-custodial Visa; issuing EMI not stated)",
       "kind": "crypto",
-      "fields": {}
+      "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://help.tria.so/en/articles/13513481-what-are-tria-cards",
+          "checkedAt": "2026-06-14",
+          "conditions": "Uitgesproken nul die de valutakosten met naam noemt, en die voor alle drie de tiers geldt — dus geen toewijzingsprobleem: \"Tria offers three tiers to match how you use your crypto. Every tier enjoys zero deposit fees and zero foreign exchange fees.\" DE NUL DEKT DE VALUTAKOSTEN VAN TRIA EN NIET DE CONVERSIE ZELF: de kaart zet crypto om op het moment van betalen (\"Real-time conversion: Your crypto is converted at payment time\") en welke spread daarbij wordt gerekend staat in geen enkel leesbaar document. De 0 is dus een tarief en geen totale prijs. De datum is de eigen dateModified uit de JSON-LD van het artikel. BESCHIKBAARHEID: state.json zet availableToNL op \"unverified\" en de uitgevende instelling wordt op geen enkele pagina genoemd; een aangetoond tarief bewijst niet dat hij de kaart kan houden.",
+          "conditionsKnown": true
+        }
+      }
     },
     {
       "id": "bigbank-flexibel-sparen",
@@ -2729,6 +2944,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Vlakke 2,00% koersopslag, zonder plafond. Uit de tabel \"ING Creditcards / Koersopslag non-euro\" van het Kostenoverzicht (geldig vanaf 15 juni 2026): in de kolommen ING Go en ING More staat \"ING Creditcard More 2,00%\". LET OP DE NAAMVAL: de ING STUDENTEN Creditcard More is een ANDER product en staat in hetzelfde document op \"in vreemde valuta tot EUR 500 per creditcardperiode 0,00% koersopslag\" en daarboven 2,00%. Die 0% hoort dus NIET bij deze rij. Volgens noot 1 rekent ING de koersopslag als percentage ten opzichte van de ECB-referentiekoers, verwerkt in het bestede bedrag.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 2,
           "period": "maand",
@@ -2746,6 +2969,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "VOORWAARDELIJKE NUL, en het plafond hoort bij het cijfer: 0,00% koersopslag tot EUR 1.000 per creditcardperiode, DAARBOVEN 2,00%. Letterlijk uit de tabel \"ING Creditcards / Koersopslag non-euro\": \"ING Creditcard Extra tot EUR 1000*** per maand 0,00%\", met noot ***: \"Tot EUR 1000 geen koersopslag per maandcyclus per creditcard contract, daarboven 2,00%\". Twee keer bevestigd in hetzelfde document: de opnamesectie zet \"Vreemde valuta opnemen tot EUR 1000 euro per creditcardperiode\" op 0,00% koersopslag en daarboven op 2,00%. Dezelfde vorm als ing-platinumcard, en dezelfde reden dat het plafond meereist: een 0% die als onvoorwaardelijk wordt getoond zet deze kaart bovenaan een reisranglijst terwijl er boven EUR 1.000 wel wordt gerekend. Het cijfer geldt bij ING Go, ING More en ING Extra.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 4.35,
           "period": "maand",
@@ -2763,6 +2994,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Onvoorwaardelijke 0,00% koersopslag, en dat is hier gemeten in plaats van aangenomen: in de tabel \"ING Creditcards / Koersopslag non-euro\" staat in de ING Max-kolom \"0,00% ING Creditcard Max\" ZONDER het plafond en ZONDER noot *** die de Extra-cel wel draagt, en de opnamesectie zegt onafhankelijk daarvan \"Met een ING Creditcard Max - Vreemde valuta opnemen: 4,00% van het opgenomen bedrag met een minimum van EUR 4,50 + 0,00% koersopslag\", ook zonder plafond. DE KAART IS ALLEEN BINNEN HET ING MAX-PAKKET TE KRIJGEN (EUR 44,99 per maand); deze nul is dus geen gratis nul maar een nul binnen een pakket dat geld kost, en dat staat ook zo in accountFee van dezelfde rij. Bij geldopname komt bovenop deze nul nog 4,00% van het opgenomen bedrag.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 0,
           "period": "maand",
@@ -2770,6 +3009,23 @@
           "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
           "checkedAt": "2026-06-15",
           "conditions": "Alleen binnen het ING Max-pakket (€ 44,99 per maand); de kaart zelf kost daarbovenop niets. Een additionele ING Creditcard Max kost € 10,00 per maand. Dit is dus geen gratis kaart, maar een kaart zonder aparte cardfee binnen een betaald pakket.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "abn-basispakket-betalen",
+      "product": "ABN AMRO BasisPakket Betalen",
+      "issuer": "ABN AMRO Bank N.V.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4.3,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+          "checkedAt": "2026-01",
+          "conditions": "Inclusief 1 betaalrekening, 1 betaalpas, Internet Bankieren en Mobiel Bankieren. Het document noemt ook het jaartotaal: € 51,60. Maximaal 1 betaalpakket voor jezelf en 1 gezamenlijk. Het document noemt alleen de maand (\"1 januari 2026\" als ingangsdatum), dus de datum houdt maanddagprecisie zoals hij er staat.",
           "conditionsKnown": true
         }
       }
@@ -2838,6 +3094,23 @@
           "sourceUrl": "https://assets.abnamro.com/api/public/content/informatieblad-betaaldiensten-particulieren.pdf",
           "checkedAt": "2026-01",
           "conditions": "Geldt als je geen BasisPakket Betalen of Studenten Pakket hebt. Een extra betaalrekening kost € 1,90 per maand. Maximaal 3 betaalrekeningen en 3 gezamenlijke.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "rabo-standaard",
+      "product": "Rabo Standaard",
+      "issuer": "Coöperatieve Rabobank U.A.",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 3.45,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/asset/34bbb881-8b03-425c-a2bd-3d6cafbb1d06/Informatiedocument-betreffende-de-vergoedingen-Rabo-Standaard.pdf",
+          "checkedAt": "2026-07-01",
+          "conditions": "Inclusief Rabo Online Bankieren, 1 Rabo WereldPas, digitale betaalpas en rekeningafschriften. Het document noemt ook het jaartotaal: € 41,40. Woont minimaal één rekeninghouder buiten Nederland, dan komt er € 2,00 per maand buitenlandtoeslag bij (€ 24,00 per jaar).",
           "conditionsKnown": true
         }
       }
@@ -2979,6 +3252,23 @@
       }
     },
     {
+      "id": "sns-compleet",
+      "product": "SNS Compleet",
+      "issuer": "SNS Bank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 5.35,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.snsbank.nl/downloads/tarievenwijzer-betalen.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Prijs per maand voor het aanhouden van de betaalrekening. Een extra betaalpas kost € 1,35 per maand, en binnen SNS Compleet € 0,00.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
       "id": "sns-basis",
       "product": "SNS Basis",
       "issuer": "SNS Bank (de Volksbank N.V.)",
@@ -3064,6 +3354,23 @@
       }
     },
     {
+      "id": "asn-bankrekening",
+      "product": "ASN Bankrekening",
+      "issuer": "ASN Bank (de Volksbank N.V.)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.asnbank.nl/downloads/tarievenwijzer-1.html",
+          "checkedAt": "2026-07-01",
+          "conditions": "Per rekening per kalendermaand, inclusief één betaalpas. Het document noemt ook het jaartotaal: € 48,00 per jaar. Een extra betaalpas kost € 1,35 per kalendermaand. Dit is de gewone ASN Bankrekening, niet de ASN Basisbankrekening: die staat op hetzelfde bedrag maar is beperkt tot één rekeninghouder en staat geen roodstand toe.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
       "id": "asn-basisbankrekening",
       "product": "ASN Basisbankrekening",
       "issuer": "ASN Bank (de Volksbank N.V.)",
@@ -3115,6 +3422,23 @@
       }
     },
     {
+      "id": "regiobank-plus-betalen",
+      "product": "RegioBank Betaalrekening Plus Betalen",
+      "issuer": "RegioBank (de Volksbank N.V.)",
+      "kind": "betaalpakket",
+      "fields": {
+        "accountFee": {
+          "value": 4,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html",
+          "checkedAt": "2026-02-01",
+          "conditions": "Inclusief Mijn RegioBank en de RegioBank app, een betaalpas en een aankoopverzekering. Een extra betaalpas kost € 1,35 per maand; een vervangende betaalpas € 4,50.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
       "id": "regiobank-jongwijs",
       "product": "RegioBank JongWijs Betaalrekening",
       "issuer": "RegioBank (de Volksbank N.V.)",
@@ -3149,6 +3473,23 @@
       }
     },
     {
+      "id": "knab-priverekening",
+      "product": "Knab Privérekening",
+      "issuer": "Knab (Aegon Bank N.V. / BAWAG Group)",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 6,
+          "period": "maand",
+          "route": "provider-page",
+          "sourceUrl": "https://www.knab.nl/tarieven",
+          "checkedAt": "2026-02-18",
+          "conditions": "Één rekeninghouder. Het informatiedocument van 1 oktober 2025 noemt hetzelfde bedrag plus het jaartotaal € 72. Op de tarievenpagina staat een tijdelijke actie (\"Tijdelijk 12 maanden gratis\") waarvan de voorwaarden en de looptijd apart staan en niet in dit document; die 12 maanden zijn dus een actie en geen structureel tarief, en er staat geen einddatum bij die we kunnen aanhouden.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
       "id": "knab-gezamenlijke-rekening",
       "product": "Knab Gezamenlijke rekening",
       "issuer": "Knab (Aegon Bank N.V. / BAWAG Group)",
@@ -3161,6 +3502,23 @@
           "sourceUrl": "https://www.knab.nl/tarieven",
           "checkedAt": "2026-02-18",
           "conditions": "Twee rekeninghouders. Het informatiedocument van 01-10-2025 noemt hetzelfde bedrag plus het jaartotaal € 84. Betaalpas en vervangende betaalpas zijn gratis.",
+          "conditionsKnown": true
+        }
+      }
+    },
+    {
+      "id": "triodos-betaalrekening-18-22",
+      "product": "Triodos Internet Betaalrekening (18 t/m 22 jaar)",
+      "issuer": "Triodos Bank N.V.",
+      "kind": "betaalrekening",
+      "fields": {
+        "accountFee": {
+          "value": 0,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://www.triodos.nl/downloads/informatiedocument-vergoedingen-betaalrekening?id=1c5f1621483d",
+          "checkedAt": "2026-05",
+          "conditions": "Uitgesproken nul, met een leeftijdseis: rekening voor één persoon van 18 tot en met 22 jaar. Het document zet zowel € 0,00 per maand als € 0,00 totale jaarlijkse kosten. Dat is een bekende nul en geen ontbrekend cijfer — maar hij geldt alleen voor die leeftijdsgroep, en daarna gaat de rekening over naar de trap van 23 t/m 25 jaar (€ 3,50 per maand) en vervolgens 26 jaar en ouder (€ 5,00 per maand). Het document noemt alleen de maand \"mei 2026\".",
           "conditionsKnown": true
         }
       }

@@ -1,9 +1,22 @@
-/* De strook op zijn eigen Amex-aanbiedingenpagina.
+/* De strook op zijn eigen accountpagina — die van Amex én die van de ING Winkel.
+ *
+ * ÉÉN BESTAND VOOR BEIDE, en dat is de belangrijkste eigenschap ervan. Een
+ * `amex-content.js` en een `ing-content.js` zouden voor negenennegentig procent
+ * hetzelfde bestand zijn, en ze zouden NIET samen te voegen zijn zoals de rest
+ * van de code: een content script in Manifest V3 is een klassiek script en kan
+ * niets importeren, dus de gedeelde helft zou er letterlijk twee keer in staan
+ * zonder dat de een de ander kan aanroepen. Dat is de duurste soort kopie die
+ * er is — precies wat er hier niet nog een keer moest gebeuren.
+ *
+ * Dat hoeft ook niet, want dit script hoeft niet te weten waar het draait. Het
+ * stuurt "ik ben er" en krijgt AFGEMAAKTE ZINNEN terug. Welke bron het is, leidt
+ * de service worker af uit `sender.url` — het enige veld dat de pagina niet zelf
+ * kan zetten. Zou dit script zichzelf benoemen, dan zou een pagina zich voor de
+ * andere bron kunnen uitgeven en de lijst van die bron laten overschrijven.
  *
  * DIT BESTAND HEEFT GEEN ENKELE IMPORT, om precies dezelfde reden als
- * src/content.ts: een content script in Manifest V3 wordt als KLASSIEK script
- * geladen, en één `import` maakt het stil onwerkzaam met de fout alleen in de
- * console van de Amex-pagina. De gedeelde typen staan als ambient globals in
+ * src/content.ts: één `import` maakt het stil onwerkzaam, met de fout alleen in
+ * de console van de pagina zelf. De gedeelde typen staan als ambient globals in
  * src/messages.d.ts.
  *
  * ── WAAROM ER ÜBERHAUPT IETS OP DIE PAGINA VERSCHIJNT ──────────────────────
@@ -20,23 +33,23 @@
  * er niet gelezen is. Ook als er niets uitkwam — juist dan, want dan hoort hij
  * de echte oorzaak te horen in plaats van te denken dat het werkt.
  *
- * ── WAAROM ER DRIE KEER GEVRAAGD WORDT ────────────────────────────────────
+ * ── WAAROM ER VIER KEER GEVRAAGD WORDT ────────────────────────────────────
  *
- * De aanbiedingen staan niet in de HTML die de server stuurt. Op 22 augustus
- * 2026 gemeten: het adres geeft 676.522 bytes met alleen de schil erin, en de
- * bundels `axp-offers-container` en `axp-offers-hub` bouwen de lijst daarna in
- * de browser op. `document_idle` is dus te vroeg. Eén poging zou bij bijna elk
- * bezoek "de pagina is veranderd" opleveren, en dat is een onware oorzaak.
+ * De gegevens staan niet in de HTML die de server stuurt. Bij Amex gemeten
+ * (676.541 bytes met alleen de schil erin, 24 augustus 2026) en bij de ING
+ * Winkel ook: https://www.ing.nl/punten geeft de kop "Welkom in de ING Winkel"
+ * en verder niets — de lijst wordt daarna in de browser opgebouwd.
+ * `document_idle` is dus te vroeg. Eén poging zou bij bijna elk bezoek "de
+ * pagina is veranderd" opleveren, en dat is een onware oorzaak.
  *
  * Dus wordt er opnieuw gevraagd, maar alleen als de service worker zegt dat het
- * zin heeft (`opnieuw`). Bij een inlogformulier is het antwoord definitief en
- * wordt er niet doorgevraagd: nog vier keer een uitgelogde pagina lezen levert
- * vier keer hetzelfde op.
- *
- * GEEN ANIMATIE, GEEN TRANSITION. De strook staat er of hij staat er niet. */
+ * zin heeft (`opnieuw`). Bij een inlogscherm is het antwoord definitief en wordt
+ * er niet doorgevraagd: nog vier keer een uitgelogde pagina lezen levert vier
+ * keer hetzelfde op.
+ */
 
 (() => {
-  const GASTHEER_ID = "lavega-amex";
+  const GASTHEER_ID = "lavega-aanbod";
 
   if (document.getElementById(GASTHEER_ID)) return;
 
@@ -85,8 +98,8 @@
     const gastheer = document.createElement("div");
     gastheer.id = GASTHEER_ID;
     /* Gesloten schaduw-DOM, net als het paneel: de pagina kan er niet in kijken
-     * en er niets aan stukmaken. Dat de pagina hier van Amex zelf is, maakt dat
-     * niet minder waar — er draait op zo'n pagina van alles mee. */
+     * en er niets aan stukmaken. Dat de pagina hier van Amex of van ING zelf is,
+     * maakt dat niet minder waar — er draait op zo'n pagina van alles mee. */
     const schaduw = gastheer.attachShadow({ mode: "closed" });
 
     const stijl = document.createElement("style");
@@ -96,7 +109,7 @@
     const strook = document.createElement("div");
     strook.className = "strook";
     strook.setAttribute("role", "status");
-    strook.setAttribute("aria-label", "LaVega heeft je aanbiedingen gelezen");
+    strook.setAttribute("aria-label", "LaVega heeft deze pagina gelezen");
 
     const balk = document.createElement("div");
     balk.className = "balk";
@@ -104,7 +117,7 @@
     merk.className = "merk";
     /* textContent en nooit innerHTML: in `regel` staat een winkelnaam die van
      * deze pagina komt, en die is niet van ons. */
-    merk.textContent = "LaVega · aanbiedingen";
+    merk.textContent = "LaVega · gelezen";
     balk.appendChild(merk);
     const sluit = document.createElement("button");
     sluit.type = "button";

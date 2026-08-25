@@ -1,0 +1,100 @@
+<!-- KUNSTMATIG, en hier nog nadrukkelijker dan bij de Amex-fixtures.
+
+     De ING Winkel is bij het bouwen NOOIT GEZIEN. Niet ingelogd — daar is zijn
+     account voor nodig — en ook niet uitgelogd: www.ing.nl weigert verzoeken van
+     deze machine (24 augustus 2026). DNS lost op, de TCP-verbinding komt tot
+     stand en de TLS-handshake wordt compleet afgerond met een echt
+     ING-certificaat (O=ING Groep N.V., CN=www.ing.nl), waarna de server de
+     HTTP/2-stroom verbreekt met INTERNAL_ERROR. Met HTTP/1.1 loopt het verzoek
+     in een time-out. Dat is botbeheer van Akamai en dus een WEIGERING, geen
+     storing — en hij is niet omzeild.
+
+     Er is dus GEEN gemeten klassenaam om op te bouwen, anders dan bij Amex.
+     Wat hier wél op rust is de VORM van de gegevens, en die komt uit de
+     voorwaarden van ING zelf (assets.ing.com, HTTP 200, 127.289 bytes):
+
+       "Je betaalt de meeste producten met Punten, plus een bij te betalen
+        bedrag. Soms wissel je alleen Punten in, zoals bij kortingsbonnen. Het
+        aantal Punten en het bij te betalen bedrag vermelden we bij het product"
+
+       "Aanbiedingen zijn tijdelijk. Ze zijn geldig tot de datum die bij de
+        aanbieding staat, maar op=op"
+
+     Daarom staat er bij elk artikel een aantal punten, soms een bij te betalen
+     bedrag, en soms een einddatum.
+
+     WAT ER MET OPZET IN STAAT EN ER NIET UIT MAG KOMEN:
+       1. zijn naam en zijn rekeningnummer in de koptekst;
+       2. zijn PUNTENSALDO — twee keer, en dat is de scherpe: in een banner
+          ("Je hebt 3.450 punten") en binnen een productkaart ("dan houd je nog
+          2.200 punten over"). Dat tweede geval is het gevaarlijke, want daar
+          staat een saldo in exact dezelfde vorm als een puntenPRIJS, binnen een
+          knoop die op de selectorlijst past. ing.test.ts controleert dat geen
+          van die getallen in de uitkomst staat. -->
+<!doctype html><html lang="nl"><head><title>ING Winkel</title></head>
+<body>
+<div id="app">
+  <header class="site-header">
+    <span class="klantnaam">Alexander Steunenberg</span>
+    <span class="rekening">NL02 INGB 0123 4567 89</span>
+    <span class="saldo">Saldo &euro; 4.812,03</span>
+  </header>
+
+  <section class="puntenbanner">
+    <p>Je hebt 3.450 punten</p>
+  </section>
+
+  <main>
+    <h1>Welkom in de ING Winkel</h1>
+
+    <section class="productoverzicht">
+      <ul class="productlijst">
+
+        <li class="productkaart">
+          <h3 class="product-title">JBL Flip 6 bluetoothspeaker</h3>
+          <p class="product-prijs">1.250 punten + &euro; 19,95 bijbetalen</p>
+          <p class="product-geldig">Geldig tot en met 31 december 2026</p>
+          <a href="https://www.ing.nl/punten/artikel/jbl-flip-6">Bekijk artikel</a>
+        </li>
+
+        <li class="productkaart">
+          <h3 class="product-title">Cadeaubon boekhandel</h3>
+          <p class="product-prijs">2.500 punten</p>
+          <p class="product-geldig">Geldig tot en met 30 november 2026</p>
+          <a href="https://www.ing.nl/punten/artikel/cadeaubon-boeken">Bekijk artikel</a>
+        </li>
+
+        <li class="productkaart">
+          <h3 class="product-title">Philips Airfryer XXL</h3>
+          <p class="product-prijs">3.000 punten + &euro; 49,00 bijbetalen</p>
+          <p class="product-geldig">Geldig tot 05/03/2026</p>
+          <a href="https://www.ing.nl/punten/artikel/philips-airfryer">Bekijk artikel</a>
+        </li>
+
+        <li class="productkaart">
+          <h3 class="product-title">Sonos Era 100</h3>
+          <p class="product-prijs">4.100 punten + &euro; 89,00 bijbetalen</p>
+          <p class="product-geldig">Geldig tot en met 31 oktober 2026</p>
+          <p class="product-restsaldo">Bestel je dit, dan houd je nog 2.200 punten over.</p>
+          <a href="https://www.ing.nl/punten/artikel/sonos-era-100">Bekijk artikel</a>
+        </li>
+
+        <li class="productkaart">
+          <h3 class="product-title">Tuinstoel van hout</h3>
+          <p class="product-prijs">&euro; 79,00</p>
+          <p class="product-geldig">Geldig tot en met 31 december 2026</p>
+          <a href="https://www.ing.nl/punten/artikel/tuinstoel">Bekijk artikel</a>
+        </li>
+
+        <li class="productkaart">
+          <h3 class="product-title">JBL Tune 770NC koptelefoon</h3>
+          <p class="product-prijs">2.100 punten + &euro; 24,95 bijbetalen</p>
+          <p class="product-geldig">Geldig tot en met 31 december 2026</p>
+          <a href="https://www.jbl.nl/koptelefoons/tune-770nc.html">Naar de fabrikant</a>
+        </li>
+
+      </ul>
+    </section>
+  </main>
+</div>
+</body></html>

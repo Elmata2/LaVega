@@ -237,7 +237,11 @@ const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: di
 /* WELK ADRES GELDIG IS, en dit is bijgesteld nadat de echte er was.
  *
  * LaVega genereerde `lavega-<random>@invoices.lavega.dev` en accepteerde alleen die
- * vorm. Het adres dat Cloudflare werkelijk routeert is `invoices@lavega.dev` —
+ * vorm. Welk adres Cloudflare werkelijk routeert bepaalt hij, niet deze code —
+ * op 23 augustus is dat `ale@invoices.lavega.dev`, en dáárvoor stond hier een
+ * ander adres dat óók niet klopte. Vandaar dat dit veld elk geldig e-mailadres
+ * accepteert en er geen vorm meer wordt afgedwongen: elke vorm die wij hier
+ * vastleggen is een gok die op een dag zijn post tegenhoudt —
  * ander lokaal deel, ander domein. Een adres dat wij verzinnen en dat Cloudflare
  * niet routeert is erger dan geen adres: de post komt nergens aan en het scherm
  * beweert van wel.

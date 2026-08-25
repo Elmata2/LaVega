@@ -68,7 +68,14 @@
  * wordt er gefilterd, en wat niet door de zeef komt bestaat niet. */
 
 import type { PointsBalance } from "./points.js";
-import type { Aanbieding, Lezing, LezingUitkomst } from "./amex.js";
+import type {
+  Aanbieding,
+  Bron,
+  Lezing,
+  LezingUitkomst,
+  PrijsSoort,
+  Puntenprijs,
+} from "./aanbod-kern.js";
 
 const KEY_KAARTEN = "heldIds";
 const KEY_SITES = "enabledSiteIds";
@@ -178,61 +185,97 @@ export async function setPointsBalances(saldi: readonly PointsBalance[]): Promis
 export const _schoonLijst = schoonLijst;
 export const _schoonSaldi = schoonSaldi;
 
-/* ─────────────────────── de Amex-aanbiedingen ─────────────────────────────── */
+/* ───────────────────── de gelezen aanbiedingen, per bron ─────────────────── */
 
 /* ── WAAROM HIER WÉL EEN DATUM VAN EEN BEZOEK STAAT ──────────────────────────
  *
  * De kop van dit bestand zegt: niets dat aan een BEZOEK vastzit. Hieronder komt
- * `amexLezing` te staan, en daar zit de dag in waarop zijn aanbiedingenpagina
+ * per bron een `lezing` te staan, en daar zit de dag in waarop die pagina
  * gelezen is. Dat verdient uitleg, want zonder uitleg is het een uitzondering
  * die de regel opeet.
  *
  * Het verschil is wat het ding IS. Een lijstje "wanneer stond het paneel aan bij
  * welke winkel" is een GESCHIEDENIS: het groeit, en wie het leest weet waar hij
- * is geweest. `amexLezing` is één waarde die bij elke lezing wordt OVERSCHREVEN,
- * en hij zegt niet waar hij is geweest maar hoe oud onze kopie is. Zonder die
- * datum zou het paneel een aanbieding van twee maanden geleden neerzetten alsof
- * hij vers is, en dat is precies de fout die hier nergens mag voorkomen: een
- * bewering die de gegevens niet kunnen dragen.
+ * is geweest. Een `lezing` is één waarde die bij elke lezing wordt
+ * OVERSCHREVEN, en hij zegt niet waar hij is geweest maar hoe oud onze kopie is.
+ * Zonder die datum zou het paneel een aanbieding van twee maanden geleden
+ * neerzetten alsof hij vers is, en dat is precies de fout die hier nergens mag
+ * voorkomen: een bewering die de gegevens niet kunnen dragen.
  *
- * Hij gaat ook over ÉÉN pagina, en wel de ene waar hij expliciet ja tegen heeft
- * gezegd, met de tekst uit `AMEX_WAT_WEL` erbij. Dat is iets anders dan een
- * spoor van winkels dat als bijvangst ontstaat.
+ * Hij gaat ook over ÉÉN pagina per bron, en wel de ene waar hij expliciet ja
+ * tegen heeft gezegd, met de tekst uit `watWel` erbij. Dat is iets anders dan
+ * een spoor van winkels dat als bijvangst ontstaat.
  *
- * En hij is weg zodra hij de schakelaar omzet: `wisAmex` hieronder haalt de
+ * En hij is weg zodra hij de schakelaar omzet: `wisBron` hieronder haalt de
  * sleutels ECHT weg in plaats van ze op leeg te zetten. Een lege lijst is nog
- * steeds een sleutel met een geschiedenis eraan vast. */
+ * steeds een sleutel met een geschiedenis eraan vast.
+ *
+ * ── WAAROM ELKE BRON ZIJN EIGEN SLEUTELS HEEFT ─────────────────────────────
+ *
+ * Ze staan in `bron.sleutels` en niet hier, en dat is met opzet: zo is er geen
+ * gedeelde sleutel waar twee bronnen elkaars gegevens in kunnen overschrijven,
+ * en haalt het uitzetten van de ene bron gegarandeerd niets van de andere weg.
+ * Wie zijn ING-schakelaar omzet, hoort zijn Amex-lijst te houden — dat is
+ * dezelfde gedachte als "aparte toestemming", een laag lager. */
 
-const KEY_AMEX_AAN = "amexAan";
-const KEY_AMEX_AANBOD = "amexAanbiedingen";
-const KEY_AMEX_LEZING = "amexLezing";
-
-/** Standaard UIT, en dat is de belangrijkste regel van deze functie. Alles wat
- *  geen letterlijke `true` is — ontbrekend, null, de string "true", een 1 —
- *  levert false op. Een leestoestemming die "aan" wordt door een kapotte waarde
- *  is geen toestemming. */
-export async function getAmexAan(): Promise<boolean> {
-  const items = await chrome.storage.local.get([KEY_AMEX_AAN]);
-  return items[KEY_AMEX_AAN] === true;
-}
-
-export async function setAmexAan(aan: boolean): Promise<void> {
-  await chrome.storage.local.set({ [KEY_AMEX_AAN]: aan === true });
-}
-
+/* DE UITKOMSTEN DIE UIT DE OPSLAG MOGEN TERUGKOMEN. Alles wat hier niet in
+ * staat, valt uit `schoonLezing` en leest als "nog nooit gelezen".
+ *
+ * DEZE LIJST IS EEN OPSLAGSCHEMA, en op 24 augustus 2026 is er één waarde bij
+ * gekomen ("afgeschermd"). Vooruit is dat veilig: een oude opgeslagen waarde
+ * staat er nog steeds in. Achteruit niet: schrijft deze build "afgeschermd" weg
+ * en leest een OUDERE build hem terug, dan valt hij eruit en ziet die build
+ * "nog nooit gelezen" in plaats van de echte uitkomst. Dat is de goede kant om
+ * op te falen — een onbekende uitkomst als bekend behandelen zou erger zijn —
+ * maar het staat hier zodat de volgende toevoeging met open ogen gebeurt. */
 const UITKOMSTEN: readonly LezingUitkomst[] = [
   "gelezen",
   "niet-ingelogd",
   "uitgesproken-geen-aanbiedingen",
+  "afgeschermd",
   "geen-aanbiedingenblok",
   "blok-zonder-kaarten",
 ];
+
+/** Standaard UIT, en dat is de belangrijkste regel van deze functie. Alles wat
+ *  geen letterlijke `true` is — ontbrekend, null, de string "true", een 1 —
+ *  levert false op. Een leestoestemming die "aan" wordt door een kapotte waarde
+ *  is geen toestemming.
+ *
+ *  Geldt per bron. Er is geen sleutel die twee bronnen tegelijk aanzet, en dat
+ *  is geen toeval: één schakelaar voor twee accounts zou betekenen dat één ja
+ *  twee vragen beantwoordt. */
+export async function getBronAan(bron: Bron): Promise<boolean> {
+  const items = await chrome.storage.local.get([bron.sleutels.aan]);
+  return items[bron.sleutels.aan] === true;
+}
+
+export async function setBronAan(bron: Bron, aan: boolean): Promise<void> {
+  await chrome.storage.local.set({ [bron.sleutels.aan]: aan === true });
+}
+
+/** De puntenprijs door de zeef.
+ *
+ *  `bij` MAG ONTBREKEN EN WORDT DAN NULL, nooit "" of nul. Zie de uitleg bij
+ *  `Puntenprijs` in aanbod-kern.ts: dat we geen bij te betalen bedrag lazen,
+ *  betekent niet dat er geen is, en het als nul opslaan zou een product
+ *  goedkoper laten lijken dan het is. */
+function schoonPrijs(v: unknown): Puntenprijs | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  const punten = typeof r.punten === "number" ? r.punten : Number.NaN;
+  if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten <= 0 || punten > 100_000_000) {
+    return null;
+  }
+  const bijRuw = typeof r.bij === "string" ? r.bij.trim().slice(0, 20) : "";
+  return { punten, bij: bijRuw === "" ? null : bijRuw };
+}
 
 /** Dezelfde zeef-gedachte als bij de puntensaldi: wat er in de opslag staat kan
  *  van een oudere versie zijn, en `as Aanbieding[]` erop plakken maakt het niet
  *  waar. Wat niet door de zeef komt bestaat niet.
  *
- *  Strenger op twee punten dan de andere zeven hier, en allebei met reden:
+ *  Strenger op drie punten dan de andere zeven hier, en alle drie met reden:
  *
  *   - `gelezenOp` MOET een geldige ISO-datum zijn. Een aanbieding zonder
  *     leesdatum kan aan een kassa niet worden neergezet, want dan is er geen
@@ -240,8 +283,17 @@ const UITKOMSTEN: readonly LezingUitkomst[] = [
  *     hem beoordeelbaar maakt. Geen datum, geen aanbieding.
  *   - `domein` moet een hostnaamvorm hebben of null zijn. Rommel in dat veld
  *     zou aan de koppelregel worden gevoerd, en die regel is de enige die
- *     tegenhoudt dat een aanbieding van Nike op nike-outlet-fake.nl verschijnt. */
-function schoonAanbod(v: unknown, max = 200): Aanbieding[] {
+ *     tegenhoudt dat een aanbieding van Nike op nike-outlet-fake.nl verschijnt.
+ *   - bij een PUNTENBRON moet er een leesbare puntenprijs in staan. Een regel
+ *     uit de ING Winkel zonder aantal punten is geen aanbieding maar een halve:
+ *     dan zou er een artikel op het scherm komen zonder wat het kost, en dat
+ *     leest als gratis. Dezelfde regel als bij de ontbrekende datum, en om
+ *     dezelfde reden.
+ *
+ *  `prijsSoort` staat er los in en niet als hele `Bron`, zodat deze functie ook
+ *  te draaien is zonder descriptor — en zodat er niets van een bron in kan
+ *  lekken wat hier niet hoort. */
+function schoonAanbod(v: unknown, prijsSoort: PrijsSoort = "korting", max = 200): Aanbieding[] {
   if (!Array.isArray(v)) return [];
   const uit: Aanbieding[] = [];
   for (const x of v) {
@@ -249,11 +301,14 @@ function schoonAanbod(v: unknown, max = 200): Aanbieding[] {
     const r = x as Record<string, unknown>;
 
     const winkel = typeof r.winkel === "string" ? r.winkel.trim().slice(0, 60) : "";
-    const korting = typeof r.korting === "string" ? r.korting.trim().slice(0, 120) : "";
-    if (winkel === "" || korting === "") continue;
+    const prijsTekst = typeof r.prijsTekst === "string" ? r.prijsTekst.trim().slice(0, 120) : "";
+    if (winkel === "" || prijsTekst === "") continue;
 
     const gelezenOp = typeof r.gelezenOp === "string" ? r.gelezenOp.trim() : "";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(gelezenOp)) continue;
+
+    const prijs = schoonPrijs(r.prijs);
+    if (prijsSoort === "punten" && prijs === null) continue;
 
     const totRuw = typeof r.totRuw === "string" ? r.totRuw.trim().slice(0, 40) : "";
     const totKandidaat = typeof r.tot === "string" ? r.tot.trim() : "";
@@ -264,7 +319,7 @@ function schoonAanbod(v: unknown, max = 200): Aanbieding[] {
       ? domeinKandidaat
       : null;
 
-    uit.push({ winkel, korting, tot, totRuw, domein, gelezenOp });
+    uit.push({ winkel, prijsTekst, prijs, tot, totRuw, domein, gelezenOp });
     if (uit.length >= max) break;
   }
   return uit;
@@ -282,51 +337,63 @@ function schoonLezing(v: unknown): Lezing | null {
   return { uitkomst: uitkomst as LezingUitkomst, aantal, op, citaat };
 }
 
-export async function getAanbiedingen(): Promise<Aanbieding[]> {
-  const items = await chrome.storage.local.get([KEY_AMEX_AANBOD]);
-  return schoonAanbod(items[KEY_AMEX_AANBOD]);
+export async function getBronAanbiedingen(bron: Bron): Promise<Aanbieding[]> {
+  const items = await chrome.storage.local.get([bron.sleutels.aanbod]);
+  return schoonAanbod(items[bron.sleutels.aanbod], bron.prijsSoort);
 }
 
-export async function getAmexLezing(): Promise<Lezing | null> {
-  const items = await chrome.storage.local.get([KEY_AMEX_LEZING]);
-  return schoonLezing(items[KEY_AMEX_LEZING]);
+export async function getBronLezing(bron: Bron): Promise<Lezing | null> {
+  const items = await chrome.storage.local.get([bron.sleutels.lezing]);
+  return schoonLezing(items[bron.sleutels.lezing]);
 }
 
 /** De uitkomst van één lezing wegschrijven.
  *
  *  DE AANBIEDINGEN WORDEN VERVANGEN EN NIET AANGEVULD. Samenvoegen met wat er al
  *  stond zou aantrekkelijk lijken — dan blijft een aanbieding staan die deze
- *  keer toevallig niet geladen was. Maar dan kan een aanbieding die Amex heeft
- *  WEGGEHAALD nooit meer verdwijnen, en groeit de lijst met dingen die niet
- *  meer bestaan. Wat er nu op zijn pagina staat, is de lijst.
+ *  keer toevallig niet geladen was. Maar dan kan een aanbieding die van de
+ *  pagina is WEGGEHAALD nooit meer verdwijnen, en groeit de lijst met dingen die
+ *  niet meer bestaan. Wat er nu op zijn pagina staat, is de lijst.
  *
  *  Een MISLUKTE lezing raakt de lijst met opzet niet aan: die zegt niets over
  *  welke aanbiedingen er zijn, alleen dat we ze deze keer niet konden lezen. De
  *  lijst blijft dan staan mét zijn oude leesdatum, en die datum is precies wat
  *  het paneel gebruikt om te zeggen dat hij oud is. */
-export async function setAmexLezing(lezing: Lezing, aanbiedingen: readonly Aanbieding[]): Promise<void> {
+export async function setBronLezing(
+  bron: Bron,
+  lezing: Lezing,
+  aanbiedingen: readonly Aanbieding[],
+): Promise<void> {
   if (lezing.uitkomst === "gelezen") {
     await chrome.storage.local.set({
-      [KEY_AMEX_LEZING]: lezing,
-      [KEY_AMEX_AANBOD]: schoonAanbod(aanbiedingen),
+      [bron.sleutels.lezing]: lezing,
+      [bron.sleutels.aanbod]: schoonAanbod(aanbiedingen, bron.prijsSoort),
     });
     return;
   }
-  await chrome.storage.local.set({ [KEY_AMEX_LEZING]: lezing });
+  await chrome.storage.local.set({ [bron.sleutels.lezing]: lezing });
 }
 
-/** Alles van de Amex-kant weg. Wordt aangeroepen zodra hij de schakelaar uitzet
- *  én zodra Chrome meldt dat de host-toestemming is ingetrokken — die tweede
- *  route loopt buiten ons scherm om en mag daarom niet vergeten worden.
+/** Alles van deze bron weg. Wordt aangeroepen zodra hij de schakelaar uitzet én
+ *  zodra Chrome meldt dat de host-toestemming is ingetrokken — die tweede route
+ *  loopt buiten ons scherm om en mag daarom niet vergeten worden.
  *
  *  `remove` en niet `set({ …: [] })`: een lege lijst is nog steeds een sleutel,
  *  en de vraag "wat weet deze extensie van mij" hoort na het uitzetten met
  *  "niets" beantwoord te worden in plaats van met "een lege lijst". Dat is te
- *  zien in chrome://extensions, dus het verschil is niet theoretisch. */
-export async function wisAmex(): Promise<void> {
-  await chrome.storage.local.remove([KEY_AMEX_AAN, KEY_AMEX_AANBOD, KEY_AMEX_LEZING]);
+ *  zien in chrome://extensions, dus het verschil is niet theoretisch.
+ *
+ *  RAAKT ALLEEN DEZE BRON. De sleutels komen uit de descriptor, dus het uitzetten
+ *  van ING kan de Amex-lijst niet meenemen, ook niet per ongeluk. */
+export async function wisBron(bron: Bron): Promise<void> {
+  await chrome.storage.local.remove([
+    bron.sleutels.aan,
+    bron.sleutels.aanbod,
+    bron.sleutels.lezing,
+  ]);
 }
 
 /* Voor de test, net als de zeven hierboven. */
 export const _schoonAanbod = schoonAanbod;
 export const _schoonLezing = schoonLezing;
+export const _schoonPrijs = schoonPrijs;
