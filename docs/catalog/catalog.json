@@ -30,6 +30,15 @@
           "checkedAt": "2022-10-01",
           "conditions": "Geldt bij betalen met een creditcard bij winkels, tankstations, restaurants, etc. \"In vreemde valuta\" (betalen \"In euro's\" is € 0,00); volgens voetnoot 1 berekent ING een koersopslag op alle transacties in vreemde valuta, verwerkt in het bestede bedrag, met de wisselkoersen van MasterCard International voor haar creditcards. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
           "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Bovenop de € 4,00 per maand van het ING OranjePakket: dit document is het Informatiedocument van die betaalrekening en de kaart is er een 'aan uw betaalrekening gekoppelde dienst'. Een extra Creditcard kost € 1,25 per maand. Koersopslag 2,00% per transactie in vreemde valuta; geldopname met de creditcard 4,00% van het opgenomen bedrag met een minimum van € 4,50, in vreemde valuta plus 2,00% koersopslag; daglimiet € 400. LET OP DE NAAMOVERLAP: het ING Kostenoverzicht van 15 juni 2026 kent deze naam niet meer en zet op precies dezelfde twee bedragen 'ING Creditcard More € 2,00' en 'extra ING Creditcard More € 1,25'. Zie 'openstaandeVragen' in het verslag — dit is vermoedelijk dezelfde kaart onder een oude naam.",
+          "conditionsKnown": true
         }
       }
     },
@@ -45,6 +54,15 @@
           "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
           "checkedAt": "2026-01-01",
           "conditions": "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 4.35,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/a4631974e5e7bab1/original/ING_Informatiedocument-OranjePakket.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "Bovenop de € 4,00 per maand van het ING OranjePakket. Een extra Platinumcard kost € 2,60 per maand. Hetzelfde document draagt al de koersopslag van deze rij: 0% voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% per transactie; opnamelimiet € 1.000 per dag in plaats van € 400. LET OP DE NAAMOVERLAP: het ING Kostenoverzicht van 15 juni 2026 kent de naam Platinumcard niet meer en zet op precies dezelfde twee bedragen 'ING Creditcard Extra € 4,35' en 'additionele ING Creditcard Extra € 2,60', met dezelfde 0%-tot-€1.000-clausule. Zie 'openstaandeVragen' in het verslag.",
           "conditionsKnown": true
         }
       }
@@ -69,6 +87,15 @@
           "sourceUrl": "https://www.abnamro.nl/nl/prive/betalen/creditcards/index.html",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op deze betaalpas.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 1.5,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-basispakket-betalen.pdf",
+          "checkedAt": "2026-01-01",
+          "conditions": "DIT IS DE ENIGE VAN DE ACHT BANKEN DIE ZIJN BETAALPAS APART PRIJST. Het bedrag geldt voor de eerste betaalpas als je géén BasisPakket Betalen en géén Studenten Pakket hebt; binnen die twee pakketten zit één betaalpas in de pakketprijs. Een extra betaalpas kost hetzelfde: € 1,50 per maand (€ 18,00 per jaar). Bovenop de € 4,30 per maand van de losse ABN AMRO betaalrekening — wie geen pakket heeft betaalt dus rekening én pas, en daarom is pricedOnItsOwn false. Een vervangende betaalpas bij verlies kost € 5,00 per keer; dat is eenmalig en geen doorlopende post. Een digitale betaalpas, Apple Pay en Google Pay zijn gratis. Het document noemt zowel de maand- als de jaarprijs; er is niet omgerekend, de maandregel is aangehouden zoals de tariefregel hem zet.",
           "conditionsKnown": true
         }
       }
@@ -216,6 +243,15 @@
           "sourceUrl": "https://web.archive.org/web/20260420213121id_/https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard/visa-merchant-offer-program",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 2,
+          "period": "maand",
+          "route": "provider-pdf",
+          "sourceUrl": "https://media.rabobank.com/asset/34bbb881-8b03-425c-a2bd-3d6cafbb1d06/Informatiedocument-betreffende-de-vergoedingen-Rabo-Standaard.pdf",
+          "checkedAt": "2026-07-01",
+          "conditions": "Bovenop de € 3,45 per maand van Rabo Standaard; dit document is het Informatiedocument van dat pakket en noemt de kaart bij naam. Binnen Rabo Comfort (€ 6,95 per maand) zit één Rabo GoldCard in de pakketprijs en kost een extra kaart € 0,75 per maand (Informatiedocument Rabo Comfort, 7 januari 2026). Bij Rabo Free is dezelfde kaart € 1,25 per maand en bij Rabo RiantPakket kost een extra GoldCard € 0,50 per maand (Tarieven en limieten, december 2025). Koersopslag 2,0% bij betalen in vreemde valuta; geldopname € 4,50, in vreemde valuta € 4,50 + 2,0%. Het document noemt zowel de maand- als de jaarprijs; er is niet omgerekend.",
           "conditionsKnown": true
         }
       }
@@ -435,6 +471,15 @@
           "sourceUrl": "https://www.knab.nl/particulier/betalen/creditcard",
           "checkedAt": "2026-08-20",
           "conditions": "Geen puntenprogramma op dit product; de kaartvoordelen zijn verzekeringen, acceptatie en app-inzicht.",
+          "conditionsKnown": true
+        },
+        "accountFee": {
+          "value": 28,
+          "period": "jaar",
+          "route": "wayback",
+          "sourceUrl": "http://web.archive.org/web/20260415102754id_/https://www.icscards.nl/ics-info/faq-jaarbijdrage-verhoging-knab",
+          "checkedAt": "2025-11-01",
+          "conditions": "PRIJSSTIJGING AL AANGEKONDIGD: dezelfde URL toont vandaag (24 augustus 2026) de volgende ronde — 'de jaarbijdrage van uw Knab Creditcard vanaf 1 november 2026' met 'Waarom wordt de jaarbijdrage voor de Knab Creditcard € 31?' en 'Ook de jaarbijdrage voor uw Extra Card wijzigt van € 28 in € 31'. Die zin bevestigt tegelijk dat € 28 het bedrag is dat vandaag geldt. Vanaf 1 november 2026 is het € 31 per jaar, ook voor een Extra Card. Alleen aan te vragen bij een Knab bankpakket (de eigen productpagina is gekopt 'Creditcard aanvragen bij je bankpakket'), dus bovenop de € 6,00 per maand van de Knab Privérekening of € 7,00 van de Gezamenlijke rekening. De kaart is een ICS-product: het Informatiedocument van Knab (01-10-2025) zet bij 'Aanbieden van een creditcard' de tekst 'Dienst niet beschikbaar' met de voetnoot dat alle kosten aan ICS worden betaald en 'daarom staan die kosten niet in dit overzicht'. Koersopslag 2%, geldopname 4% van het opgenomen bedrag (knab.nl/tarieven, Tarieven per 18-02-2026).",
           "conditionsKnown": true
         }
       }
@@ -2070,6 +2115,14 @@
       "issuer": "Bleap SIA (Latvia), Mastercard debit, self-custodial",
       "kind": "crypto",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://bleap.finance/legal-agreements/bleap-cardholder-terms-eea-bleap-sia",
+          "checkedAt": "2026-06-28",
+          "conditions": "Uitgesproken nul die de eigen toeslag noemt en de koers bij het netwerk laat: artikel 6 van de Cardholder Terms EEA zegt \"Bleap charges no issuance, monthly, usage or exchange fees for Card activity\", en 6.3 \"Currency conversion - If you transact in a different currency, the amount is converted at the Mastercard network rate applicable at processing time\". DE NUL IS DUS BLEAPS EIGEN OPSLAG, NIET DE KOERS: hetzelfde artikel zegt dat \"Mastercard scheme fees, network FX rates, merchant surcharges, ATM operator fees and government taxes may apply and are your responsibility\". Zelfde vorm als gnosis-pay-card-direct-consumer en trade-republic-betaalpas, waar de nul ook de opslag van de uitgever is en de koers die van het kaartnetwerk. Dit is hetzelfde document en dezelfde datum als de accountFee van deze rij, die uit artikel 6.1 komt.",
+          "conditionsKnown": true
+        },
         "cashbackPct": {
           "value": 1,
           "route": "agent",
@@ -2891,6 +2944,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 2,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Vlakke 2,00% koersopslag, zonder plafond. Uit de tabel \"ING Creditcards / Koersopslag non-euro\" van het Kostenoverzicht (geldig vanaf 15 juni 2026): in de kolommen ING Go en ING More staat \"ING Creditcard More 2,00%\". LET OP DE NAAMVAL: de ING STUDENTEN Creditcard More is een ANDER product en staat in hetzelfde document op \"in vreemde valuta tot EUR 500 per creditcardperiode 0,00% koersopslag\" en daarboven 2,00%. Die 0% hoort dus NIET bij deze rij. Volgens noot 1 rekent ING de koersopslag als percentage ten opzichte van de ECB-referentiekoers, verwerkt in het bestede bedrag.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 2,
           "period": "maand",
@@ -2908,6 +2969,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "VOORWAARDELIJKE NUL, en het plafond hoort bij het cijfer: 0,00% koersopslag tot EUR 1.000 per creditcardperiode, DAARBOVEN 2,00%. Letterlijk uit de tabel \"ING Creditcards / Koersopslag non-euro\": \"ING Creditcard Extra tot EUR 1000*** per maand 0,00%\", met noot ***: \"Tot EUR 1000 geen koersopslag per maandcyclus per creditcard contract, daarboven 2,00%\". Twee keer bevestigd in hetzelfde document: de opnamesectie zet \"Vreemde valuta opnemen tot EUR 1000 euro per creditcardperiode\" op 0,00% koersopslag en daarboven op 2,00%. Dezelfde vorm als ing-platinumcard, en dezelfde reden dat het plafond meereist: een 0% die als onvoorwaardelijk wordt getoond zet deze kaart bovenaan een reisranglijst terwijl er boven EUR 1.000 wel wordt gerekend. Het cijfer geldt bij ING Go, ING More en ING Extra.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 4.35,
           "period": "maand",
@@ -2925,6 +2994,14 @@
       "issuer": "ING Bank N.V.",
       "kind": "creditcard",
       "fields": {
+        "fxFeePct": {
+          "value": 0,
+          "route": "provider-pdf",
+          "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+          "checkedAt": "2026-06-15",
+          "conditions": "Onvoorwaardelijke 0,00% koersopslag, en dat is hier gemeten in plaats van aangenomen: in de tabel \"ING Creditcards / Koersopslag non-euro\" staat in de ING Max-kolom \"0,00% ING Creditcard Max\" ZONDER het plafond en ZONDER noot *** die de Extra-cel wel draagt, en de opnamesectie zegt onafhankelijk daarvan \"Met een ING Creditcard Max - Vreemde valuta opnemen: 4,00% van het opgenomen bedrag met een minimum van EUR 4,50 + 0,00% koersopslag\", ook zonder plafond. DE KAART IS ALLEEN BINNEN HET ING MAX-PAKKET TE KRIJGEN (EUR 44,99 per maand); deze nul is dus geen gratis nul maar een nul binnen een pakket dat geld kost, en dat staat ook zo in accountFee van dezelfde rij. Bij geldopname komt bovenop deze nul nog 4,00% van het opgenomen bedrag.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 0,
           "period": "maand",
