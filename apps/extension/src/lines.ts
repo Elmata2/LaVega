@@ -404,6 +404,8 @@ export function voorwaardenZin(row: Row): string {
  *  niet worden afgedrukt. Bij Obsidian staat er "€450,000 12-month CRO staking",
  *  en de oude regel stuurde de gebruiker daarvoor naar de website van de
  *  uitgever. */
+/** Alleen nog gelezen als `row.fee` LEEG is: staat de prijs er wel, dan noemt
+ *  grossUnknownCostLine hem zelf en komt deze tak er niet aan te pas. */
 function kostenStaanInVoorwaarden(row: Row): boolean {
   return row.caveats.some(
     (c) => c.soort === "drempel" || c.soort === "bovenop" || c.soort === "eenmalig",
@@ -528,6 +530,31 @@ export function netLine(row: Row): string {
  *  weten. Bruto, met de onbekendheid erbij. Het woord netto komt hier niet in
  *  voor, en lines.test.ts houdt dat tegen. */
 export function grossUnknownCostLine(row: Row): string {
+  /* DE PRIJS STAAT ER WEL, we mogen er alleen niet MEE REKENEN — en die twee
+   * dingen liepen hier door elkaar.
+   *
+   * Een bruto-rij ontstaat op twee manieren: er is geen prijs in de catalogus,
+   * óf er is er wel een maar bij dat cijfer staat een voorwaarde die we niet als
+   * "vast" kunnen lezen (zie de kaartkosten-tak van buildRow in rank.ts).
+   * Alleen de eerste manier rechtvaardigt "dat staat niet in onze gegevens".
+   * In de tweede stond dat er tot nu toe ook, en dan sprak de regel zichzelf
+   * twee bijzinnen later tegen: gemeten stond er "wat deze kaart kost om te
+   * hebben, staat niet in onze gegevens ... Bij de kaartkosten hoort een
+   * voorwaarde: dit bedrag komt bovenop een ander product" onder een rij waarvan
+   * `row.fee` € 2,00 per maand was.
+   *
+   * Dus: is de prijs er, dan wordt hij GENOEMD, met erbij waarom hij niet van de
+   * opbrengst af gaat. De voorwaarde zelf komt er via metVoorwaarden achteraan
+   * en zegt WELKE voorwaarde het is. Het woord netto valt hier nog steeds niet. */
+  if (row.fee) {
+    return metVoorwaarden(
+      row,
+      grossLine(row),
+      `Dat is het brutobedrag: deze kaart staat bij ons op ${euro(eurosToCents(row.fee.value))} per ` +
+        `${row.fee.period}, maar bij dat bedrag hoort een voorwaarde, dus het gaat hier niet van de opbrengst af.`,
+    );
+  }
+
   if (kostenStaanInVoorwaarden(row)) {
     /* Hier stond eerst "wat deze kaart kost om te hebben, staat niet in onze
      * gegevens", met een verwijzing naar de website van de uitgever. Dat was bij
@@ -816,10 +843,18 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
             `Op ${dateNL(u.lezing.op)} was je op ${bron.paginaNaam} niet ingelogd — er stond een ` +
             `inlogscherm. Er is niets gelezen en LaVega verzint geen aanbiedingen.`
           );
+        case "afgeschermd":
+          return (
+            `Op ${dateNL(u.lezing.op)} bouwde die pagina een deel van zichzelf op in onderdelen ` +
+            `waar LaVega niet in kan kijken. Er is dus niets gelezen — niet omdat er niets stond, ` +
+            `maar omdat het achter een afscherming stond die alleen de pagina zelf kan openen. Wat ` +
+            `er eerder is gelezen staat er nog, met zijn eigen datum.`
+          );
         case "geen-aanbiedingenblok":
           return (
-            `Op ${dateNL(u.lezing.op)} stond op dat adres geen aanbiedingenblok. LaVega leest ` +
-            `${adres} — staat er in je adresbalk iets anders, dan is dat de reden.`
+            `Op ${dateNL(u.lezing.op)} heeft LaVega op dat adres geen aanbiedingenblok gevonden. ` +
+            `Dat is iets anders dan dat er niets stond: het kan het adres zijn (LaVega leest ` +
+            `${adres}) of de pagina was nog aan het opbouwen. Welke van de twee, weet LaVega niet.`
           );
         case "uitgesproken-geen-aanbiedingen":
           return (
@@ -947,19 +982,61 @@ export function aanbodStrook(
           `dat is een antwoord en geen mislukte lezing. Er is niets opgeslagen.`,
         noot,
       };
+    /* DEZE ZIN IS OP 24 AUGUSTUS 2026 HERSCHREVEN, en waarom staat hier omdat de
+     * oude versie de eigenaar een ronde gekost heeft.
+     *
+     * Er stond: "LaVega vindt op deze pagina geen artikelen en heeft dus niets
+     * gelezen. Het adres dat LaVega leest is https://mijn.ing.nl/punten*." Hij
+     * stond op zijn eigen ingelogde winkelpagina, mét artikelen. Twee dingen
+     * waren mis. Het eerste is een BEWERING OVER ZIJN PAGINA die wij niet kunnen
+     * doen: dat wij niets vinden zegt iets over onze lezer, niet over de winkel
+     * van ING. Het tweede is de wijzende vinger: door alleen het adres te noemen
+     * kreeg hij de ene oorzaak aangeboden die er die dag NIET was — en dat was
+     * uitgerekend de oorzaak van de rónde ervoor, dus hij klonk plausibel.
+     *
+     * Wat er nu staat is wat er vaststaat (wij hebben niets gevonden) plus de
+     * twee oorzaken die daar even goed op passen, met erbij dat we niet weten
+     * welke. Een derde — de catalogus in een iframe — staat er niet: die is
+     * gemeten als mogelijk maar niet als waarschijnlijk, en drie oorzaken in een
+     * strook van 340 pixels leest niemand meer. */
     case "geen-aanbiedingenblok":
       return {
         regel:
-          `LaVega vindt op deze pagina geen ${watMv} en heeft dus niets gelezen. ` +
-          `Het adres dat LaVega leest is ${bron.match}.`,
+          `LaVega heeft hier geen blok met ${watMv} gevonden — ook niet in de onderdelen die deze ` +
+          `pagina zelf opbouwt. Dat betekent niet dat er niets staat. Het kan het adres zijn ` +
+          `(LaVega leest ${bron.match}) of de pagina was nog aan het opbouwen; welke van de twee, ` +
+          `weet LaVega niet. Er is niets gelezen en niets opgeslagen.`,
+        noot,
+      };
+    /* De tegenhanger, en het verschil met de zin hierboven is een MEETBAAR
+     * verschil en geen nuance: daar paste geen enkele knoop op de lijst, hier
+     * pasten er wel. Dat is precies wat er staat. */
+    case "afgeschermd":
+      return {
+        regel:
+          `Deze pagina bouwt een deel van zichzelf op in onderdelen waar LaVega niet in kan ` +
+          `kijken — dicht, of nog niet gebouwd toen LaVega keek. Er is dus niets gelezen en niets ` +
+          `opgeslagen; niet omdat er niets staat, maar omdat het daar niet te lezen valt.`,
         noot,
       };
     case "blok-zonder-kaarten":
       return {
         regel:
-          `Het blok staat er wel, maar LaVega leest er geen enkel ${wat} uit. ` +
-          `De pagina ziet er anders uit dan de lezer verwacht; er is niets opgeslagen en een ` +
-          `eerdere lijst is niet bijgewerkt.`,
+          `Het blok staat er wel — LaVega vond hier knopen die erop lijken — maar er kwam geen ` +
+          `enkel ${wat} uit. De pagina ziet er anders uit dan de lezer verwacht` +
+          /* BIJ EEN PUNTENBRON IS ER EEN TWEEDE OORZAAK, en die verzwijgen zou
+           * hier het duurste zijn: LaVega laat een kaart in zijn geheel vallen
+           * zodra er iets in staat dat op zijn puntensaldo lijkt. Dat is de
+           * grens die onder het vinkje beloofd is, dus als hij hier bijt hoort
+           * hij genoemd te worden en niet weggemoffeld als "de pagina is
+           * veranderd". Welke van de twee het was, weten we niet — dat staat er
+           * dan ook zo. Bij Amex bestaat die zeef niet en staat deze zin er
+           * daarom niet. */
+          (bron.prijsSoort === "punten"
+            ? `, of LaVega heeft de kaart laten vallen omdat er iets in stond dat op je ` +
+              `puntensaldo leek; welke van de twee, weet LaVega niet`
+            : "") +
+          `. Er is niets opgeslagen en een eerdere lijst is niet bijgewerkt.`,
         noot,
       };
   }

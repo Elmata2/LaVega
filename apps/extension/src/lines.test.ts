@@ -268,6 +268,48 @@ describe('"staat niet in onze gegevens" moet waar zijn', () => {
     const r = rank([kaal], [], 30000);
     expect(rowLine(r.openUnknownCost[0]!)).toContain("staat niet in onze gegevens");
   });
+
+  it("staat de prijs er WEL maar mag hij niet in de som, dan noemt de regel hem", () => {
+    /* DE DERDE ONWAARHEID, en de assertie die haar heeft laten zitten was deze:
+     * er was er geen. Een bruto-rij ontstaat óók als de prijs bekend is maar er
+     * een voorwaarde bij dat cijfer staat (de kaartkosten-tak van buildRow), en
+     * dan stond hier "wat deze kaart kost om te hebben, staat niet in onze
+     * gegevens" boven een rij waarvan `row.fee` € 4,45 per maand was — met twee
+     * bijzinnen later de voorwaarde die bewees dat we het cijfer wél hadden.
+     *
+     * De voorwaardentekst is woordelijk uit de catalogus (ING Platinumcard), want
+     * dit geval kon alleen ontstaan doordat elke test hier `conditions: null`
+     * meegaf en de kaartkosten-tak dus nooit een echte tekst zag. */
+    const bovenop = card({
+      id: "bovenop",
+      product: "Kaart Binnen Een Pakket",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+      fee: {
+        value: 4.45,
+        period: "maand",
+        sourceUrl: "https://voorbeeld.nl/tarieven",
+        checkedAt: "2026-01-15",
+        conditions: "Bovenop de € 4,00 per maand van het ING OranjePakket.",
+      },
+    });
+    const r = rank([bovenop], [], 30000);
+    const rij = r.openUnknownCost[0]!;
+    expect(rij.basis).toBe("bruto");
+    expect(rij.fee).not.toBeNull();
+
+    const regel = rowLine(rij);
+    /* De prijs staat er, met de reden dat hij niet van de opbrengst af gaat. */
+    expect(regel).toContain("€ 4,45 per maand");
+    expect(regel).toContain("brutobedrag");
+    /* En de twee onwaarheden staan er niet. */
+    expect(regel).not.toContain("staat niet in onze gegevens");
+    expect(regel).not.toContain("er staat geen bedrag-met-periode");
+    /* Het woord netto valt hier nog steeds niet: er is niets afgetrokken. */
+    expect(regel.toLowerCase()).not.toContain("netto");
+    /* En de voorwaarde zelf wordt genoemd, niet weggelaten. */
+    expect(regel).toContain("bovenop een ander product");
+  });
 });
 
 describe("de uitgeversnaam past in een Nederlandse zin", () => {
