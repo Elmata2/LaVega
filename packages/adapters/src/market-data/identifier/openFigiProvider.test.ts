@@ -34,6 +34,7 @@ test("non-retryable errors surface as problems without retry", async () => {
   const provider = createOpenFigiIdentifierProvider({ client: { postJson: post }, ...instant });
 
   const result = await provider.get({ isin: "NL0000" });
+  if (!result) throw new Error("openfigi provider unexpectedly returned null");
   expect(result.problems).toHaveLength(1);
   expect(calls()).toBe(1);
 });

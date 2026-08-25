@@ -107,8 +107,16 @@ function isInvestingServerEntry(file: string): boolean {
 /**
  * Node-only stores the entry point injects into otherwise portable code. Each
  * is a default argument, so a Workers build supplies its own implementation.
+ * Grows with every new file-backed store index.ts wires in directly — each
+ * one shares jsonFileStore.ts underneath, so allowing the store file here is
+ * what keeps that shared helper's own `node:fs` out of the walk.
  */
-const INVESTING_SERVER_NODE_ADAPTERS = new Set(["./fileCredentialStore.js", "./fileBrokerSyncStateStore.js"]);
+const INVESTING_SERVER_NODE_ADAPTERS = new Set([
+  "./fileCredentialStore.js",
+  "./fileBrokerSyncStateStore.js",
+  "./fileAgentRunStore.js",
+  "./fileSectorProfileStore.js",
+]);
 
 function isInvestingServerNodeAdapter(file: string, specifier: string): boolean {
   return file === "apps/investing-server/src/index.ts" && INVESTING_SERVER_NODE_ADAPTERS.has(specifier);

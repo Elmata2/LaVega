@@ -1,11 +1,8 @@
-import { join } from "node:path";
 import type { SectorProfile } from "@lavega/adapters";
 import { createJsonFileStore, runtimeDataFile } from "./jsonFileStore.js";
+import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
-export type SectorProfileStore = {
-  get(symbol: string): Promise<SectorProfile | null>;
-  set(symbol: string, profile: SectorProfile): Promise<void>;
-};
+export type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 export function runtimeSectorStoreFile(): string {
   return runtimeDataFile("INVESTING_SECTOR_STORE_FILE", "sectors.json");
@@ -35,19 +32,6 @@ export function createFileSectorProfileStore(filePath: string): SectorProfileSto
     },
     async set(symbol, profile) {
       await store.update((current) => ({ ...current, [key(symbol)]: profile }));
-    },
-  };
-}
-
-/** Non-persistent store for tests and the dev tier. */
-export function createInMemorySectorProfileStore(): SectorProfileStore {
-  const profiles = new Map<string, SectorProfile>();
-  return {
-    async get(symbol) {
-      return profiles.get(symbol.toUpperCase()) ?? null;
-    },
-    async set(symbol, profile) {
-      profiles.set(symbol.toUpperCase(), profile);
     },
   };
 }

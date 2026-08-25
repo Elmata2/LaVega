@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { app, createApp, type BrokerCredentialInput, type BrokerSyncProgress } from "./app.js";
 import { createFileAgentRunStore, type AgentRunRecord, type AgentRunStore } from "./fileAgentRunStore.js";
 import { createPortfolioAgentTools, runPortfolioAgent } from "./portfolioAgent.js";
@@ -248,7 +247,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   let agentInFlight: Promise<AgentRunRecord> | null = null;
   const runPortfolioAgentOnce = async (): Promise<AgentRunRecord> => {
     if (agentInFlight) return agentInFlight;
-    const record: AgentRunRecord = { id: randomUUID(), startedAt: new Date().toISOString(), finishedAt: null, status: "running", summary: null, error: null };
+    const record: AgentRunRecord = { id: crypto.randomUUID(), startedAt: new Date().toISOString(), finishedAt: null, status: "running", summary: null, error: null };
     void agentRunStore.put(record);
     const run = (async () => {
       try {

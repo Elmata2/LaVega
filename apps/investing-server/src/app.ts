@@ -5,7 +5,7 @@ import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPr
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
-import { createInMemorySectorProfileStore, type SectorProfileStore } from "./fileSectorProfileStore.js";
+import { createInMemorySectorProfileStore, type SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase: string };
