@@ -449,6 +449,38 @@ verdubbelen een oversteek; de woordwacht mist verbogen vormen) staan in §0b. **
 | **V7** | **Meldingen in het profiel** | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie |
 | **V8** | **Disclaimers en voorwaarden** | Bij lancering, niet in het werkscherm |
 | **V9** | **Enable Banking met meerdere rekeningen** | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst |
+| **V10** | **Een agent die op basis van merknaam meldt: "op mijn.ing.nl staat een voucher voor dit merk"** (26 augustus). Zie de uitleg hieronder | Verzilveringsmechaniek van ING zelf niet uitgezocht, en dat is de kern van de vraag — zie hieronder |
+
+### V10 — een zachte, merknaam-gebaseerde melding op basis van de ING-lezing
+
+De echte ING Winkel is nu gelezen en werkt: 9 kortingsvouchers, waaronder "JBL Tune Flex 2 (zwart)
+voor € 55 kortingsvoucher". Zijn vraag: als hij op jbl.nl of bol.com afrekent, kan de extensie dan
+melden dat er op zijn ING-punten een voucher voor DIT merk klaarstaat?
+
+**De domeinkoppeling (`hoortBijWinkel`, `aanbod-kern.ts:281`) kan dit niet — met opzet.** Die matcht
+op een echte link IN de kaart, en de ING-kaarten linken naar `ing.nl`, niet naar de fabrikant. Dat is
+bewust: "korting hier" zou een aankoop BIJ ING presenteren als inwisselbaar bij de winkel waar hij
+staat, en dat is de fout die de code al eens afwees.
+
+**Maar een ZACHTERE claim is iets anders, en dat is waar deze V10 om vraagt.** "Je kunt hier korting
+krijgen door naar mijn.ing.nl/punten te gaan en daar een voucher te halen" claimt geen directe
+inwisseling op déze kassa — het is een verwijzing, niet een belofte over wat hier gebeurt. Dat is geen
+onwaarheid op dezelfde manier als de domeinclaim.
+
+**Wat dit vraagt, en waarom het niet vandaag gebouwd is:**
+1. **Merknaam-matching in plaats van domeinmatching.** "JBL" uit de titel halen en vergelijken met de
+   host van de kassa. Dat is een ander en kleiner risico dan de domeinclaim, geen risicoloos
+   mechanisme — een merk dat toevallig ook een woord is, of twee merken met dezelfde naam in
+   verschillende categorieën, kan een foutieve melding geven.
+2. **De echte onbeantwoorde vraag: verzilvert die voucher zich bij de fabrikant zelf, of blijft de
+   hele transactie bij ING?** Als ING het product gewoon zelf toestuurt zonder dat er ooit iets bij
+   JBL gebeurt, is zelfs de gehesde zin nog een overclaim — er is dan niets om "hier" te krijgen.
+   Niet te beantwoorden zonder een echte bestelling door te zetten of ING's voorwaarden er specifiek
+   op na te lezen (de voorwaarden die al gelezen zijn gaan over "een product kopen", niet specifiek
+   over de verzilvering van een "kortingsvoucher"-categorie).
+3. **Of dit een "agent" wordt** (een los proces dat proactief meekijkt) of gewoon een tweede,
+   zwakkere match binnen de bestaande extensie-architectuur, is een ontwerpkeuze die pas zin heeft
+   zodra punt 2 beantwoord is.
 
 ---
 
