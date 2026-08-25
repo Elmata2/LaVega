@@ -201,6 +201,23 @@ FX-cijfers staan op `2022-03-01` en zijn `route: "agent"` (§0b), terwijl Amex d
 waar alle veertien puntencijfers groter dan nul van komen (§2.2). Eén Amex-sweep zou dit hele blok in
 één keer meenemen.
 
+### 2.4 Verkoopfacturen tellen niet mee in de btw-positie (25 augustus, niet bevestigd)
+
+Bij BV1 telde een inkoopfactuur wél mee in de btw-module, een verkoopfactuur (de Penshee-factuur,
+btw verlegd wegens export naar UK) niet — het scherm gaf zelf de reden: `omzetfacturen-onbekend`,
+*"In deze periode staan alleen inkoopfacturen"*.
+
+**Al uitgesloten als oorzaak, met de code erbij:** de vertaling van n8n's `"income"|"expense"` naar
+`Invoice.direction` (`"in"|"out"`) staat correct in `apps/web/src/n8n.ts:277`
+(`row.direction === "income" ? "in" : "out"`), en `invoiceVatInWindow` in `packages/core/src/invoices.ts:166`
+telt `direction === "in"` terecht als omzet. Geen vertaalfout in die laag.
+
+**Leidende hypothese, niet gecontroleerd:** de Penshee-factuur staat waarschijnlijk nog in de
+wachtrij ter beoordeling in Facturen en is nooit bevestigd — dan telt hij nergens mee, en is er geen
+bug. Niet verder onderzocht omdat cache/browserstaat het testen nu kon vertroebelen. Eerste stap
+zodra dat weer schoon te testen is: checken of die factuur al als bevestigde rij in de lijst staat
+("AR · inkomend") of nog in de beoordelingssectie.
+
 ---
 
 ## 3. Blokkeert de oplevering van de MVP
