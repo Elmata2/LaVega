@@ -11,6 +11,7 @@ import {
 } from "@lavega/core";
 import { formatEuro } from "../format";
 import Module from "../components/Module";
+import ToonMeer from "../components/ToonMeer";
 
 /* ── PRIVÉ EN ZAKELIJK — de grens op het scherm ─────────────────────────────
  *
@@ -598,18 +599,25 @@ export default function Grens({
                       }),
                       `vraag-${s.key}`,
                     )}
-                  <div className="grens-rijen">
-                    {shown.map((c) => (
-                      <div className="grens-rij" key={c.id}>
-                        {paragraphs(crossingLines(c), `rij-${c.id}`)}
-                      </div>
-                    ))}
-                  </div>
-                  {rows.length > shown.length &&
-                    paragraphs(
-                      GRENS_COPY.meerRijen({ hidden: rows.length - shown.length, shown: shown.length, count: rows.length }),
-                      `meer-${s.key}`,
-                    )}
+                  {/* KOP + ANTWOORD/VRAAG hierboven zijn het antwoord; de losse
+                      rijen met hun bewijs (welk been gemeten is, en waarom) zijn
+                      de onderbouwing. Zelfde indeling als de btw-module in
+                      Belasting.tsx — zie ToonMeer.tsx voor waarom dit een
+                      <details> is en geen useState. */}
+                  <ToonMeer summary="Hoe dit gemeten is">
+                    <div className="grens-rijen">
+                      {shown.map((c) => (
+                        <div className="grens-rij" key={c.id}>
+                          {paragraphs(crossingLines(c), `rij-${c.id}`)}
+                        </div>
+                      ))}
+                    </div>
+                    {rows.length > shown.length &&
+                      paragraphs(
+                        GRENS_COPY.meerRijen({ hidden: rows.length - shown.length, shown: shown.length, count: rows.length }),
+                        `meer-${s.key}`,
+                      )}
+                  </ToonMeer>
                 </div>
               );
             })}
