@@ -1,0 +1,13 @@
+{
+  "quoteSummary": {
+    "result": [
+      {
+        "assetProfile": {
+          "sector": "Technology",
+          "industry": "Consumer Electronics",
+          "website": "https://www.example.com"
+        }
+      }
+    ]
+  }
+}

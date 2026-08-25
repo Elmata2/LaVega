@@ -138,6 +138,7 @@ test("sync returns collected trades and problem when later page fails", async ()
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
 
   expect(result.trades).toHaveLength(1);
+  expect(result.tradesComplete).toBe(false);
   expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
 });
 
@@ -197,6 +198,19 @@ test("malformed order-history payload becomes a problem without throwing", async
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
+test("maps sell fills with negative quantities to positive quantity and side sell", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      json(response, 200, { items: [{ fill: { id: 3, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 12, quantity: -1.5 }, order: { id: 3, ticker: "AAPL", side: "SELL", currency: "USD", instrument: { ticker: "AAPL", currency: "USD" } } }] });
+    } else standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
+});
+
 test("ignores non-trade fill rows and maps nested instruments", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) {
@@ -223,6 +237,16 @@ test("schema-mismatched order rows become problems instead of silent empty succe
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 historical order fill is missing or invalid"]);
+});
+
+test("a pending order without a fill is skipped, not reported as a problem", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) json(response, 200, { items: [{ order: { id: 7, ticker: "AAPL", side: "BUY", currency: "EUR", status: "NEW" } }, order(1, "AAPL")] });
+    else standardNonOrder(request, response);
+  });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ symbol: "AAPL" }]);
 });
 
 test("malformed holdings rows become problems without taking trades down", async () => {

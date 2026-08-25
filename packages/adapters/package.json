@@ -6,6 +6,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./src/prices/priceStore.contract.js": "./src/prices/priceStore.contract.ts",
     "./credentials/localKeySource": "./src/credentials/localKeySource.ts"
   },
   "scripts": {

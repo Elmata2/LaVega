@@ -255,6 +255,35 @@ test("price cache delete purges store and returns success", async () => {
   const response = await createApp({ store, onPriceDataChanged }).request("/api/prices/cache", { method: "DELETE" });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ deleted: true });
-  expect(await store.getRange("ASML", "2026-01-01", "2026-01-01")).toEqual([]);
+  expect(await store.getRange("local", "ASML", "2026-01-01", "2026-01-01")).toEqual([]);
   expect(onPriceDataChanged).toHaveBeenCalledOnce();
+});
+
+test("summary route composes metrics, cached sectors, and top positions; sector failure degrades to Unknown", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push(
+    { symbol: "AAPL", entity: "personal", quantity: 1, marketValue: 300, portfolioWeight: null, priceStatus: "priced", currency: "EUR", asOf: "2026-08-18", returns: { status: "unpriced", remainingCostBasis: 0, realizedCostBasisRemoved: 0, unrealizedGain: 0, realizedGain: 0, dividendsReceived: 0, totalReturn: 0, totalReturnPercentage: null, sinceFirstBuyPercentage: null, firstBuyDate: null } },
+    { symbol: "MYST", entity: "personal", quantity: 1, marketValue: 100, portfolioWeight: null, priceStatus: "priced", currency: "EUR", asOf: "2026-08-18", returns: { status: "unpriced", remainingCostBasis: 0, realizedCostBasisRemoved: 0, unrealizedGain: 0, realizedGain: 0, dividendsReceived: 0, totalReturn: 0, totalReturnPercentage: null, sinceFirstBuyPercentage: null, firstBuyDate: null } },
+  );
+  const investingApp = createApp({
+    dashboardReader: vi.fn(async () => ({ ...dashboard, problems: [] })),
+    sectorProfile: vi.fn(async (symbol: string) => symbol === "MYST" ? null : { sector: "Technology", industry: "Hardware" }),
+    sectorStore: (() => {
+      const map = new Map<string, { sector: string; industry: string }>();
+      return { get: async (symbol: string) => map.get(symbol) ?? null, set: async (symbol: string, profile: { sector: string; industry: string }) => void map.set(symbol, profile) };
+    })(),
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+  expect(response.status).toBe(200);
+  const payload = await response.json() as { metrics: unknown; sectors: Array<{ sector: string; weight: number }>; topPositions: Array<{ symbol: string; weight: number }> };
+  expect(payload.metrics).toMatchObject({ dailyVolatility: null, beta: null, maxDrawdown: null, observationDays: 0 });
+  expect(payload.sectors).toEqual([{ sector: "Technology", weight: 0.75 }, { sector: "Unknown", weight: 0.25 }]);
+  expect(payload.topPositions).toEqual([{ symbol: "AAPL", weight: 0.75 }, { symbol: "MYST", weight: 0.25 }]);
+});
+
+test("summary route reports failures as 503 problem payload", async () => {
+  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("down")) });
+  const response = await investingApp.request("/api/investing/summary");
+  expect(response.status).toBe(503);
 });

@@ -265,13 +265,22 @@ function basicAuth(token: string, secret: string): string {
 }
 
 function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId | null {
+  // Pending and cancelled orders legitimately have no fill yet; they are not
+  // executed trades and must not fail the whole history sync. That skip only
+  // applies to rows that carry the order envelope: a row without one is not a
+  // Trading 212 order at all, and swallowing it turns a changed provider schema
+  // into a silent empty sync.
+  const envelope = optionalObject(historyOrder.order, "historical order");
+  if (envelope && (!historyOrder.fill || typeof historyOrder.fill !== "object" || Array.isArray(historyOrder.fill))) return null;
   const fill = object(historyOrder.fill, "historical order fill");
   if (value(fill, "type") !== "TRADE") return null;
-  const order = object(historyOrder.order, "historical order");
+  const order = envelope ?? object(historyOrder.order, "historical order");
   const instrument = optionalObject(order.instrument, "historical order instrument") ?? {};
   const symbol = string(value(order, "ticker") ?? value(instrument, "ticker"), "order symbol");
   const fillPrice = number(fill.price, "order fill price");
-  const fillQuantity = number(fill.quantity, "order fill quantity");
+  // Trading 212 reports sell fills as negative quantities; the trade model
+  // carries direction in `side`, so magnitudes stay positive.
+  const fillQuantity = Math.abs(number(fill.quantity, "order fill quantity"));
   const brokerTradeId = value(fill, "id") ?? value(order, "id");
   const walletImpact = optionalObject(fill.walletImpact, "order fill wallet impact");
   const isin = optionalString(value(instrument, "isin"));
@@ -328,6 +337,7 @@ function result(
   cashFlows: CashFlow[],
   problems: string[],
   retryAfterMs: number | null,
+  tradesComplete = true,
 ): BrokerResult {
   return {
     positions,
@@ -337,6 +347,7 @@ function result(
     cashFlows,
     source: SOURCE,
     problems,
+    tradesComplete,
     ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
   };
 }
@@ -464,6 +475,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let nextUrl = historyUrl.toString();
       let historyPages = 0;
       let ordersRead = 0;
+      let historyComplete = true;
       try {
         while (nextUrl) {
           const current = await page(nextUrl, config, limiter);
@@ -481,6 +493,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
         }
       } catch (error) {
+        historyComplete = false;
         noteRateLimit(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
       }
@@ -558,7 +571,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
         }
       }
-      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs);
+      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete);
     },
   };
 }

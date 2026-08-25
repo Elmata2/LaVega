@@ -1,9 +1,11 @@
 import { Hono } from "hono";
-import { emptyInvestingDashboard, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
+import { emptyInvestingDashboard, LOCAL_TENANT_ID, buildSectorExposure, computePortfolioMetrics, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
-import { LocalKeySource, MarketDataRouter, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, searchYahooBenchmarks, syncPrices, type PriceProviderResult, type PriceStore, type YahooPriceRequest, type FxRequest, type FxProviderResult, type IdentifierRequest, type IdentifierProviderResult } from "@lavega/adapters";
+import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type YahooPriceRequest } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
+import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
+import { createInMemorySectorProfileStore, type SectorProfileStore } from "./fileSectorProfileStore.js";
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase: string };
@@ -18,7 +20,7 @@ export type BrokerSyncProgress = {
   message: string | null;
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -31,20 +33,25 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const benchmarkSelectionStore = dependencies.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
   const benchmarkSearch = dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
   const marketDataConsentStore = dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
-  const router = new MarketDataRouter<YahooPriceRequest, PriceProviderResult, FxRequest, FxProviderResult, IdentifierRequest, IdentifierProviderResult>({ price: [provider], fx: [fxProvider], identifier: [identifierProvider] });
+  const sectorProfile = dependencies.sectorProfile ?? fetchYahooSectorProfile;
+  const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
+  const priceProviders = [provider];
+  const fxProviders = [fxProvider];
+  const identifierProviders = [identifierProvider];
+  const mapIdentifier = (request: { isin: string }) => firstProviderResult(identifierProviders, request, undefined, hasProblems);
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
     sync: async (target) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string } = target;
       if (target.isin) {
-        const identifier = await router.mapIdentifier({ isin: target.isin });
+        const identifier = await mapIdentifier({ isin: target.isin });
         if (!identifier || identifier.value.problems.length || !identifier.value.match.ticker || !identifier.value.match.exchange) {
           return { bars: [], fetched: false, problems: identifier?.value.problems ?? ["Could not resolve ISIN"] };
         }
         request = { ...target, ticker: identifier.value.match.ticker, exchange: identifier.value.match.exchange };
       }
-      const result = await syncPrices({ store, router, request });
+      const result = await syncPrices({ store, tenantId: LOCAL_TENANT_ID, priceProviders, request });
       if (result.fetched) dependencies.onPriceDataChanged?.();
       return result;
     },
@@ -55,6 +62,30 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (await hasYahooConsent()) return priceOrchestrator.run("local");
   };
   investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
+  investingApp.get("/api/investing/summary", async (c) => {
+    try {
+      const data = await dashboardReader({});
+      const priced = data.positions.filter((position): position is typeof position & { marketValue: number } => position.marketValue !== null && position.marketValue > 0);
+      const totalValue = priced.reduce((sum, position) => sum + position.marketValue, 0);
+      const topPositions = [...priced].sort((left, right) => right.marketValue - left.marketValue).slice(0, 5).map((position) => ({ symbol: position.symbol, weight: totalValue > 0 ? position.marketValue / totalValue : 0 }));
+      const sectorBySymbol = new Map<string, string>();
+      for (const position of priced) {
+        let profile = await sectorStore.get(position.symbol);
+        if (!profile) {
+          profile = await sectorProfile(position.symbol);
+          if (profile) await sectorStore.set(position.symbol, profile);
+        }
+        sectorBySymbol.set(position.symbol.toUpperCase(), profile?.sector ?? "Unknown");
+      }
+      return c.json({
+        metrics: computePortfolioMetrics({ valuePoints: data.portfolio.All.map((point) => ({ date: point.date, value: point.value })), benchmarkPoints: data.benchmarks[0]?.points }),
+        sectors: buildSectorExposure(data.positions, sectorBySymbol),
+        topPositions,
+      });
+    } catch {
+      return c.json({ problems: ["Portefeuillesamenvatting kon niet worden samengesteld"] }, 503);
+    }
+  });
   investingApp.get("/api/investing/dashboard", async (c) => {
     try {
       return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));
@@ -144,8 +175,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); dependencies.onPriceDataChanged?.(); return c.json({ deleted: true }); });
   investingApp.get("/api/prices/sync/status", (c) => c.json(priceOrchestrator.status("local")));
-  investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await router.getFx({ from, to }); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
-  investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await router.mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
+  investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await firstProviderResult(fxProviders, { from, to }, undefined, hasProblems); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
+  investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.post("/api/prices/sync", async (c) => {
     if (!(await hasYahooConsent())) return c.json({ consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] }, 428);
     void priceOrchestrator.run("local");

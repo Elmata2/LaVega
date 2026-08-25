@@ -7,8 +7,19 @@ import { Button } from "./components/ui/button";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { NetWorthChart } from "./components/NetWorthChart";
+import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
+
+const SYNC_BACKGROUND_MESSAGE = "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
+
+/* Een eerste volledige synchronisatie duurt langer dan de time-out van de edge:
+   Cloudflare kapt de aanvraag na ongeveer 100 seconden af met een HTML-pagina
+   (524), terwijl de server gewoon doorwerkt. Een antwoord zonder JSON is dus
+   geen mislukking, en de parserfout hoort niet als foutmelding op het scherm. */
+async function readSyncResult(response: Response): Promise<{ problems?: string[] } | null> {
+  return await response.json().catch(() => null) as { problems?: string[] } | null;
+}
 
 function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
   const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
@@ -395,7 +406,13 @@ function BrokerVaultUnlock() {
       if (!unlockResponse.ok) throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
       setPassphrase("");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await syncResponse.json() as { problems?: string[] };
+      const syncResult = await readSyncResult(syncResponse);
+      if (!syncResult) {
+        setVaultStatus("unlocked");
+        setMessage(`Kluis ontgrendeld. ${SYNC_BACKGROUND_MESSAGE}`);
+        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        return;
+      }
       if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setVaultStatus("unlocked");
       setMessage((syncResult.problems ?? []).length === 0 ? "Kluis ontgrendeld. Synchronisatie voltooid." : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`);
@@ -443,7 +460,13 @@ function BrokerCredentialForm() {
       const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
       if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await syncResponse.json() as { problems?: string[] };
+      const syncResult = await readSyncResult(syncResponse);
+      if (!syncResult) {
+        setStatus("success"); setMessage(`Inloggegevens opgeslagen. ${SYNC_BACKGROUND_MESSAGE}`);
+        setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
+        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        return;
+      }
       const blocking = (syncResult.problems ?? []).filter((problem) => !otherBrokerUnconfigured(problem, broker));
       if (!syncResponse.ok || blocking.length > 0) throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setStatus("success"); setMessage("Inloggegevens opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
@@ -515,7 +538,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><PortfolioSummaryCard currency={state.data.presentationCurrency} /><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {

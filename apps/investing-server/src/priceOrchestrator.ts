@@ -58,7 +58,9 @@ export function discoverPriceSyncTargets(input: {
     if (seen.has(key)) continue;
     seen.add(key);
     const firstTrade = earliestTrade.get(key);
-    targets.push(instrument(position, "current", firstTrade?.date ?? position.asOf));
+    // Without trade history there is no real backfill anchor; position.asOf is
+    // only a snapshot date and would limit Yahoo to a ~1-day window.
+    targets.push(instrument(position, "current", firstTrade?.date ?? "2000-01-01"));
   }
   for (const [key, trade] of earliestTrade) {
     if (seen.has(key)) continue;

@@ -55,4 +55,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   serve({ fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" }, (info) => {
     console.log(`LaVega investing Docker server listening on 0.0.0.0:${info.port}`);
   });
+  if (process.env.LAVEGA_PORTFOLIO_AGENT === "1") {
+    const timer = setInterval(() => {
+      runtimeApp.runPortfolioAgentOnce()
+        .then((record) => console.log(`Portfolio agent run ${record.status}: ${record.summary ?? record.error ?? ""}`))
+        .catch((error) => console.error(`Portfolio agent run failed: ${error instanceof Error ? error.message : error}`));
+    }, 6 * 60 * 60 * 1000);
+    timer.unref();
+  }
 }

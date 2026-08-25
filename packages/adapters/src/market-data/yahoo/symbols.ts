@@ -19,7 +19,11 @@ export function getYahooSymbolsToTry(ticker: string, exchange: string): string[]
   const normalized = ticker.replace(/ /g, "-");
   const suffix = EXCHANGE_SUFFIX_MAP[exchange];
   if (suffix !== undefined) return [getYahooSymbol(normalized, exchange)];
-  return FALLBACKS.map((candidate) => `${normalized}${candidate}`);
+  // Broker tickers like "AMD_US_EQ" (Trading 212) are not Yahoo symbols; also
+  // try the stripped base so price sync works when ISIN lookup is rate-limited.
+  const stripped = normalized.replace(/_[A-Z]{2}_EQ$/, "");
+  const bases = stripped === normalized ? [normalized] : [normalized, stripped];
+  return bases.flatMap((base) => FALLBACKS.map((candidate) => `${base}${candidate}`));
 }
 
 function tickerHasYahooSuffix(ticker: string): boolean {

@@ -20,6 +20,12 @@ test("discovers current, closed, and benchmark symbols in request order with cor
   ]);
 });
 
+test("position without trades backfills full history, not the snapshot date", () => {
+  const targets = discoverPriceSyncTargets({ positions: [position("AMD_US_EQ")], trades: [] });
+  expect(targets).toHaveLength(1);
+  expect(targets[0]!.backfillFrom).not.toBe("2026-08-20");
+});
+
 test("concurrent tenant triggers join one orchestration", async () => {
   let release!: () => void;
   const pending = new Promise<void>((resolve) => { release = resolve; });

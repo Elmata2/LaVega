@@ -577,3 +577,28 @@ test("the health line asks the investing server, not whoever owns the origin roo
   root.unmount();
   vi.unstubAllEnvs();
 });
+
+test("a broker sync that outlives the edge timeout reports background progress, not a parser error", async () => {
+  /* Cloudflare cuts an origin request off at ~100s with an HTML 524 page. A
+     Trading 212 first sync pages far past that, so the browser gets HTML where
+     the form expected JSON and the raw parser error surfaced as the failure. */
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
+    if (String(input) === "/api/brokers/sync?force=true") return new Response("<!DOCTYPE html><html><title>524: A timeout occurred</title></html>", { status: 524, headers: { "content-type": "text/html" } });
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); });
+  const setInput = (field: HTMLInputElement, value: string) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set; setter?.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); };
+  const brokerSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Broker"]')!;
+  await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set; setter?.call(brokerSelect, "trading212"); brokerSelect.dispatchEvent(new Event("change", { bubbles: true })); });
+  setInput(container.querySelector<HTMLInputElement>('[name="token"]')!, "t212-key");
+  setInput(container.querySelector<HTMLInputElement>('[name="secret"]')!, "t212-secret");
+  setInput(container.querySelector<HTMLInputElement>('[name="passphrase"]')!, "vault-passphrase");
+  await act(async () => { container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Synchronisatie loopt door op de achtergrond");
+  expect(container.textContent).not.toMatch(/JSON|Unexpected token|did not match/i);
+  root.unmount();
+});

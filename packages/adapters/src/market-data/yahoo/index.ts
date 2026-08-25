@@ -5,3 +5,4 @@ export * from "./history.js";
 export * from "./mappers.js";
 export * from "./priceProvider.js";
 export * from "./search.js";
+export * from "./sectorProfile.js";

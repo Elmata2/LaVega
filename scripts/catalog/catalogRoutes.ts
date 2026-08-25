@@ -1,4 +1,4 @@
-import { isCovered, type CatalogRoute, type CatalogValue } from "./catalog.js";
+import { isCovered, type CatalogRoute, type CatalogValue } from "@lavega/core";
 
 export type RouteAttempt = { route: CatalogRoute; run: () => Promise<CatalogValue | null> };
 export type LadderResult = { value: CatalogValue | null; tried: CatalogRoute[]; reason: string | null };
