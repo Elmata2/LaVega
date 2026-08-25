@@ -369,6 +369,23 @@ export const GRENS_COPY = {
       "Deze module meet wat er tussen je ondernemingen en je privérekeningen bewoog, in centen en op datum. Ze rekent geen belasting uit en trekt geen conclusie over wat een overboeking betekent — wat LaVega hier niet berekent, staat in “Niet berekend” hieronder.",
     ];
   },
+
+  /** De vaste tekst van het antwoordformulier (fase "review"): kolomkoppen,
+   *  de selectie-opties en de twee knoppen. Geen zinnen maar losse etiketten —
+   *  en toch hier, en niet als losse stringliteral in de JSX. `renderToStaticMarkup`
+   *  rendert nooit fase "review" (`phase` is component-state, niet een prop, en
+   *  er is geen React Testing Library in dit pakket om een klik te simuleren),
+   *  dus dit is de plek waar een latere, hulpvaardige zin het scherm ongezien
+   *  zou kunnen bereiken — precies wat de audit van 25 augustus 2026 aanwees.
+   *  Door hier te staan loopt `GRENS_COPY_SAMPLES` hem wél af: die tabel is
+   *  typegedwongen op elke sleutel van `GRENS_COPY` en heeft geen render nodig. */
+  reviewChrome(): string[] {
+    return [
+      "Stroom", "Gemeten", "Wat was dit?",
+      "nog niet beantwoord", "Salaris", "Dividend", "Weet ik niet",
+      "Bewaar antwoorden", "Annuleer",
+    ];
+  },
 } as const;
 
 /* ── DE MODULE ───────────────────────────────────────────────────────────── */
@@ -636,16 +653,19 @@ export default function Grens({
         </div>
       )}
 
-      {phase === "review" && (
+      {phase === "review" && (() => {
+        const [kolomStroom, kolomGemeten, kolomWatWasDit, nogNietBeantwoord, salarisLabel, dividendLabel, onbekendLabel, bewaarLabel, annuleerLabel] =
+          GRENS_COPY.reviewChrome();
+        return (
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           {paragraphs(GRENS_COPY.antwoordUitleg({ streams: unanswered.length }), "uitleg")}
           <div className="table-wrap table-cards">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Stroom</th>
-                  <th>Gemeten</th>
-                  <th>Wat was dit?</th>
+                  <th>{kolomStroom}</th>
+                  <th>{kolomGemeten}</th>
+                  <th>{kolomWatWasDit}</th>
                 </tr>
               </thead>
               <tbody>
@@ -653,11 +673,11 @@ export default function Grens({
                   const label = `${sideLabel(s.fromEntity, s.fromScope)} → ${sideLabel(s.toEntity, s.toScope)}`;
                   return (
                     <tr key={s.key}>
-                      <td data-label="Stroom">{label}</td>
-                      <td data-label="Gemeten">
+                      <td data-label={kolomStroom}>{label}</td>
+                      <td data-label={kolomGemeten}>
                         {euro(s.totalCents)} · {s.count}× · {s.firstDate} t/m {s.lastDate}
                       </td>
-                      <td data-label="Wat was dit?">
+                      <td data-label={kolomWatWasDit}>
                         <select
                           value={drafts[s.key] ?? ""}
                           disabled={busy}
@@ -666,10 +686,10 @@ export default function Grens({
                             setDrafts((prev) => ({ ...prev, [s.key]: e.target.value as CrossScopeKind | "" }))
                           }
                         >
-                          <option value="">nog niet beantwoord</option>
-                          <option value="salaris">Salaris</option>
-                          <option value="dividend">Dividend</option>
-                          <option value="onbekend">Weet ik niet</option>
+                          <option value="">{nogNietBeantwoord}</option>
+                          <option value="salaris">{salarisLabel}</option>
+                          <option value="dividend">{dividendLabel}</option>
+                          <option value="onbekend">{onbekendLabel}</option>
                         </select>
                       </td>
                     </tr>
@@ -679,13 +699,14 @@ export default function Grens({
             </table>
           </div>
           <button type="button" className="btn btn-primary" disabled={busy} onClick={saveAnswers}>
-            Bewaar antwoorden
+            {bewaarLabel}
           </button>{" "}
           <button type="button" className="btn" disabled={busy} onClick={() => { setDrafts({}); setPhase("idle"); }}>
-            Annuleer
+            {annuleerLabel}
           </button>
         </div>
-      )}
+        );
+      })()}
       {note && <p className="cell-sub" role="alert">{note}</p>}
 
       {/* ── Het bijproduct ────────────────────────────────────────────────── */}

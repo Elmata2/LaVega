@@ -275,8 +275,21 @@ test("(a) the bookkeeping sheet reaches the BTW figure through the view's own re
  *     Nieuwe copy hoort daarom in een geëxporteerd object, niet los in de JSX.
  */
 const FORBIDDEN = [
-  "advies", "adviseer", "wij raden aan", "we raden aan", "je moet", "u moet",
-  "optimaal", "bespaar", "besparing", "fiscaal voordeel",
+  "advies", "adviseer", "adviseren", "adviseert",
+  "wij raden aan", "we raden aan",
+  "je moet", "u moet", "moet je", "moet u",
+  "optimaal", "bespaar", "besparing", "besparen", "bespaart",
+  "fiscaal voordeel", "belastingvoordeel", "belastingvoordelen",
+  // GEVONDEN OP 25 AUGUSTUS 2026, bij een adversariële audit van Richting B:
+  // de eerste versie van deze lijst ving alleen de stam ("bespaar", "adviseer")
+  // en niet de vervoeging. "besparen" en "adviseren" bevatten die stam NIET
+  // als substring — Nederlandse spelling verkort de klinker in de open lettergreep
+  // ("spaar" -> "sparen"), dus "Je zou € 4.100 besparen als je…" — de zin die
+  // sectie 7 zelf als verboden voorbeeld noemt — kwam er zonder deze regels
+  // ongehinderd doorheen. "moet je" (omgekeerde woordvolgorde, "dan moet je…")
+  // had hetzelfde gat. Geen stam-substring erbij (zoals "spar"): dit is een
+  // spaarapp, en "spaarrekening" zou daarmee zichzelf verbieden.
+  //
   // Sectie 4, en dit was tot nu toe het enige verbod in het hele ontwerp zonder
   // test: "rekening-courant" is een boekhoudkundige conclusie over een
   // rechtsverhouding, geen meting, en mag het scherm niet halen. Beide
@@ -356,6 +369,10 @@ const GRENS_COPY_SAMPLES: Record<keyof typeof GRENS_COPY, () => string[]> = {
   antwoordUitleg: () => [...GRENS_COPY.antwoordUitleg({ streams: 2 }), ...GRENS_COPY.antwoordUitleg({ streams: 1 })],
   antwoordNotitie: () => [...GRENS_COPY.antwoordNotitie({ saved: 2 }), ...GRENS_COPY.antwoordNotitie({ saved: 1 }), ...GRENS_COPY.antwoordNotitie({ saved: 0 })],
   voet: () => GRENS_COPY.voet(),
+  // Fase "review" die renderToStaticMarkup nooit bereikt (zie het commentaar
+  // bij GRENS_COPY.reviewChrome in Grens.tsx) — deze regel is de enige plek
+  // die hem alsnog aan de verbodenwoordenscan onderwerpt.
+  reviewChrome: () => GRENS_COPY.reviewChrome(),
 };
 
 /** Alle acht `VatNote`-takken, met een positie die de tellingen in de zinnen
