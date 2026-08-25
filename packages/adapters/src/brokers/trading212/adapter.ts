@@ -266,11 +266,15 @@ function basicAuth(token: string, secret: string): string {
 
 function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId | null {
   // Pending and cancelled orders legitimately have no fill yet; they are not
-  // executed trades and must not fail the whole history sync.
-  if (!historyOrder.fill || typeof historyOrder.fill !== "object" || Array.isArray(historyOrder.fill)) return null;
+  // executed trades and must not fail the whole history sync. That skip only
+  // applies to rows that carry the order envelope: a row without one is not a
+  // Trading 212 order at all, and swallowing it turns a changed provider schema
+  // into a silent empty sync.
+  const envelope = optionalObject(historyOrder.order, "historical order");
+  if (envelope && (!historyOrder.fill || typeof historyOrder.fill !== "object" || Array.isArray(historyOrder.fill))) return null;
   const fill = object(historyOrder.fill, "historical order fill");
   if (value(fill, "type") !== "TRADE") return null;
-  const order = object(historyOrder.order, "historical order");
+  const order = envelope ?? object(historyOrder.order, "historical order");
   const instrument = optionalObject(order.instrument, "historical order instrument") ?? {};
   const symbol = string(value(order, "ticker") ?? value(instrument, "ticker"), "order symbol");
   const fillPrice = number(fill.price, "order fill price");

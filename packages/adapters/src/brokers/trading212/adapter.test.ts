@@ -239,6 +239,16 @@ test("schema-mismatched order rows become problems instead of silent empty succe
   expect(result.problems).toEqual(["Trading 212 historical order fill is missing or invalid"]);
 });
 
+test("a pending order without a fill is skipped, not reported as a problem", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) json(response, 200, { items: [{ order: { id: 7, ticker: "AAPL", side: "BUY", currency: "EUR", status: "NEW" } }, order(1, "AAPL")] });
+    else standardNonOrder(request, response);
+  });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  expect(result.problems).toEqual([]);
+  expect(result.trades).toMatchObject([{ symbol: "AAPL" }]);
+});
+
 test("malformed holdings rows become problems without taking trades down", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")] });

@@ -11,6 +11,16 @@ import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
+const SYNC_BACKGROUND_MESSAGE = "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
+
+/* Een eerste volledige synchronisatie duurt langer dan de time-out van de edge:
+   Cloudflare kapt de aanvraag na ongeveer 100 seconden af met een HTML-pagina
+   (524), terwijl de server gewoon doorwerkt. Een antwoord zonder JSON is dus
+   geen mislukking, en de parserfout hoort niet als foutmelding op het scherm. */
+async function readSyncResult(response: Response): Promise<{ problems?: string[] } | null> {
+  return await response.json().catch(() => null) as { problems?: string[] } | null;
+}
+
 function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
   const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
   return other.test(problem) && /credentials are not configured/i.test(problem);
@@ -396,7 +406,13 @@ function BrokerVaultUnlock() {
       if (!unlockResponse.ok) throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
       setPassphrase("");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await syncResponse.json() as { problems?: string[] };
+      const syncResult = await readSyncResult(syncResponse);
+      if (!syncResult) {
+        setVaultStatus("unlocked");
+        setMessage(`Kluis ontgrendeld. ${SYNC_BACKGROUND_MESSAGE}`);
+        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        return;
+      }
       if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setVaultStatus("unlocked");
       setMessage((syncResult.problems ?? []).length === 0 ? "Kluis ontgrendeld. Synchronisatie voltooid." : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`);
@@ -444,7 +460,13 @@ function BrokerCredentialForm() {
       const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
       if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await syncResponse.json() as { problems?: string[] };
+      const syncResult = await readSyncResult(syncResponse);
+      if (!syncResult) {
+        setStatus("success"); setMessage(`Inloggegevens opgeslagen. ${SYNC_BACKGROUND_MESSAGE}`);
+        setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
+        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        return;
+      }
       const blocking = (syncResult.problems ?? []).filter((problem) => !otherBrokerUnconfigured(problem, broker));
       if (!syncResponse.ok || blocking.length > 0) throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setStatus("success"); setMessage("Inloggegevens opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
