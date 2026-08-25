@@ -102,13 +102,19 @@ test("NL gets exactly one tax module — its VAT — because that is all LaVega 
   const html = render([tx("t1", "2026-08-01", 12_100)]);
   const titles = [...html.matchAll(/class="module-title">([^<]*)</g)].map((m) => m[1]);
   // "Privé en zakelijk" is GEEN belasting en telt daarom niet mee in de eyebrow
-  // hieronder — het is een meting die naast de belasting staat.
-  expect(titles).toEqual(["BTW", "Privé en zakelijk", "Niet berekend"]);
+  // hieronder — het is een meting die naast de belasting staat. "Niet
+  // berekend" is geen eigen module meer (zie hieronder): de kop droeg zijn
+  // eigen ⓘ ernaast en de module-titel is dus weg, niet zijn inhoud.
+  expect(titles).toEqual(["BTW", "Privé en zakelijk"]);
 
   expect(html).toContain("Belasting · Nederland");
   expect(html).toContain("1 belasting");
   expect(html).toContain("Tarieven in Nederland: 21% / 9% / 0%");
-  // And it says out loud which Dutch tax it deliberately does NOT model.
+  // Het ⓘ staat naast de kop, dicht — en de lijst zelf staat er dus, want
+  // <details> houdt zijn kinderen in de DOM. Beide apart getoetst: het ene
+  // bewijst dat het ⓘ er is, het andere dat de inhoud niet is verdwenen.
+  expect(html).toContain('class="toonmeer toonmeer-info"');
+  expect(html).toContain("Wat LaVega hier niet berekent");
   expect(html).toContain("voorlopige aanslag vennootschapsbelasting");
   expect(html).not.toContain("Vorauszahlung");
 });
@@ -119,7 +125,7 @@ test("switching the profile to DE adds the prepayment module, with its dated ins
   const html = render([tx("t1", "2026-02-01", 100_000)]);
 
   const titles = [...html.matchAll(/class="module-title">([^<]*)</g)].map((m) => m[1]);
-  expect(titles).toEqual(["USt", "Vorauszahlung", "Privé en zakelijk", "Niet berekend"]);
+  expect(titles).toEqual(["USt", "Vorauszahlung", "Privé en zakelijk"]);
   expect(html).toContain("Belasting · Duitsland");
   expect(html).toContain("2 belastingen");
   expect(html).toContain("Tarieven in Duitsland: 19% / 7% / 0%");

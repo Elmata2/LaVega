@@ -24,6 +24,7 @@ import { formatEuro } from "../format";
 import { getHomeCountry } from "../settings";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import ToonMeer from "../components/ToonMeer";
 import Grens, { type GrensAnswerRow } from "./Grens";
 import "../styles/views.css";
 
@@ -361,7 +362,22 @@ export default function Belasting({
   return (
     <>
       <div className="view-head">
-        <h2>Belasting · {pack.label}</h2>
+        {/* HET ⓘ VERVANGT DE VOLLE-BREEDTE MODULE "Niet berekend" ONDERAAN.
+            Die lijst is anders niet te beoordelen (zie de kop van dit bestand),
+            maar hoeft niet standaard open te staan om dat te blijven doen —
+            zelfde patroon als StatistiekBlock.tsx: de kop blijft zichtbaar
+            zoals hij was, het ⓘ komt ernaast, de lijst zelf vouwt op. */}
+        <ToonMeer
+          variant="info"
+          heading={<h2>Belasting · {pack.label}</h2>}
+          summary="Wat LaVega hier niet berekent"
+        >
+          <ul className="tax-caveats">
+            {pack.caveats.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </ToonMeer>
         <span className="eyebrow">
           {profitTax ? "2 belastingen" : "1 belasting"} · regels per {pack.rulesAsOf}
         </span>
@@ -395,68 +411,78 @@ export default function Belasting({
                   </span>
                 </div>
 
-                {/* WHICH period, and which way the money goes. */}
+                {/* HET ANTWOORD, EN NIET MEER DAN DAT — periode, richting,
+                    deadline, en of dit een stand is of een afgesloten aangifte.
+                    Dat laatste blijft hier zichtbaar en gaat niet mee de
+                    ToonMeer in: een schatting die als afgesloten cijfer leest is
+                    dezelfde "half advies"-fout die TravelBlock.tsx al eens
+                    beschrijft bij de kaartprijs. Alles wat dit cijfer
+                    ONDERBOUWT — waar het vandaan komt, de dekking, de
+                    kanttekeningen — staat erna, opgevouwen. */}
                 <p className="cell-sub">
-                  {period.periodLabel} · {DIRECTION_LABEL[direction]} · uiterlijk {period.deadline}
+                  {period.periodLabel} · {DIRECTION_LABEL[direction]} · uiterlijk {period.deadline} ·{" "}
+                  {stage === "loopt" ? `stand tot ${asOf}` : "afgesloten"}
                 </p>
 
-                {/* Is the window over? This is the difference between a stand and
-                    an aangifte, and it is also what makes the flow `expected`
-                    instead of `confirmed`. */}
-                <p className="cell-sub">
-                  {stage === "loopt"
-                    ? `${period.periodLabel} loopt nog t/m ${period.periodEnd} — dit is de stand tot ${asOf}, niet de aangifte.`
-                    : `${period.periodLabel} is afgesloten (t/m ${period.periodEnd}).`}
-                </p>
-
-                {/* WHAT it was built from. A figure without its source is not
-                    rendered here, because the type cannot produce one. */}
-                <p className="cell-sub">
-                  Bron: {BASIS_LABEL[basis]} · regels per {p.rulesAsOf}.
-                  {p.chargedCents !== null && p.paidCents !== null
-                    ? ` Btw over omzet ${formatEuro(p.chargedCents / 100)}, voorbelasting ${formatEuro(p.paidCents / 100)}.`
-                    : ""}
-                </p>
-
-                {coverage.total > 0 && (
+                <ToonMeer summary="Waar dit cijfer vandaan komt">
+                  {/* Is the window over? This is the difference between a stand and
+                      an aangifte, and it is also what makes the flow `expected`
+                      instead of `confirmed`. */}
                   <p className="cell-sub">
-                    Btw-bedrag bekend op {coverage.withVat} van de {coverage.total} facturen in deze periode.
+                    {stage === "loopt"
+                      ? `${period.periodLabel} loopt nog t/m ${period.periodEnd} — dit is de stand tot ${asOf}, niet de aangifte.`
+                      : `${period.periodLabel} is afgesloten (t/m ${period.periodEnd}).`}
                   </p>
-                )}
 
-{/* WAAROM DIT ER STAAT: hij zette het stelsel goed, voerde een factuur
-                    mét btw in die correct werd gelezen, en zag 0 staan — "is dat
-                    goed of niet weet ik niet". De 0 klopte: zijn factuur viel in
-                    een ander tijdvak. Maar een cijfer dat waar is en niet te
-                    beoordelen, is een cijfer waar niemand iets aan heeft. Deze
-                    regel maakt het verschil zichtbaar tussen "je hebt geen btw"
-                    en "je factuur staat ergens anders". */}
-                {coverage.outside > 0 && (
-                  <p className="cell-sub" data-testid={`btw-buiten-${entity}`}>
-                    {coverage.outside === 1
-                      ? "Er staat 1 factuur van deze onderneming buiten dit tijdvak"
-                      : `Er staan ${coverage.outside} facturen van deze onderneming buiten dit tijdvak`}
-                    {coverage.nearestOutside ? `, de dichtstbijzijnde van ${coverage.nearestOutside}` : ""}
-                    . {coverage.total === 0
-                      ? "In dit tijdvak staat er geen enkele, dus hier valt niets uit je facturen af te leiden."
-                      : "Die telt hier dus niet mee."}
-                  </p>
-                )}
-                {note && <p className="cell-sub">{noteText(note, p)}</p>}
-
-                {direction === "terugvragen" && (
+                  {/* WHAT it was built from. A figure without its source is not
+                      rendered here, because the type cannot produce one. */}
                   <p className="cell-sub">
-                    Dit bedrag staat niet als inkomende betaling in je forecast: LaVega weet niet wanneer de
-                    Belastingdienst uitbetaalt.
+                    Bron: {BASIS_LABEL[basis]} · regels per {p.rulesAsOf}.
+                    {p.chargedCents !== null && p.paidCents !== null
+                      ? ` Btw over omzet ${formatEuro(p.chargedCents / 100)}, voorbelasting ${formatEuro(p.paidCents / 100)}.`
+                      : ""}
                   </p>
-                )}
 
-                {known && netCents > 0 && (
-                  <p className="cell-sub">
-                    Met “Bereken &amp; bewaar” staat dit bedrag op {period.deadline} in je forecast en gaat het van je
-                    beschikbare saldo af.
-                  </p>
-                )}
+                  {coverage.total > 0 && (
+                    <p className="cell-sub">
+                      Btw-bedrag bekend op {coverage.withVat} van de {coverage.total} facturen in deze periode.
+                    </p>
+                  )}
+
+                  {/* WAAROM DIT ER STAAT: hij zette het stelsel goed, voerde een factuur
+                      mét btw in die correct werd gelezen, en zag 0 staan — "is dat
+                      goed of niet weet ik niet". De 0 klopte: zijn factuur viel in
+                      een ander tijdvak. Maar een cijfer dat waar is en niet te
+                      beoordelen, is een cijfer waar niemand iets aan heeft. Deze
+                      regel maakt het verschil zichtbaar tussen "je hebt geen btw"
+                      en "je factuur staat ergens anders". */}
+                  {coverage.outside > 0 && (
+                    <p className="cell-sub" data-testid={`btw-buiten-${entity}`}>
+                      {coverage.outside === 1
+                        ? "Er staat 1 factuur van deze onderneming buiten dit tijdvak"
+                        : `Er staan ${coverage.outside} facturen van deze onderneming buiten dit tijdvak`}
+                      {coverage.nearestOutside ? `, de dichtstbijzijnde van ${coverage.nearestOutside}` : ""}
+                      . {coverage.total === 0
+                        ? "In dit tijdvak staat er geen enkele, dus hier valt niets uit je facturen af te leiden."
+                        : "Die telt hier dus niet mee."}
+                    </p>
+                  )}
+                  {note && <p className="cell-sub">{noteText(note, p)}</p>}
+
+                  {direction === "terugvragen" && (
+                    <p className="cell-sub">
+                      Dit bedrag staat niet als inkomende betaling in je forecast: LaVega weet niet wanneer de
+                      Belastingdienst uitbetaalt.
+                    </p>
+                  )}
+
+                  {known && netCents > 0 && (
+                    <p className="cell-sub">
+                      Met “Bereken &amp; bewaar” staat dit bedrag op {period.deadline} in je forecast en gaat het van je
+                      beschikbare saldo af.
+                    </p>
+                  )}
+                </ToonMeer>
 
                 <div className="tax-fields">
                   <label>
@@ -663,17 +689,6 @@ export default function Belasting({
           />
         )}
 
-        {/* ── Wat dit land WEL heeft maar LaVega niet berekent. Hoort erbij:
-             de lijst hierboven is anders niet te beoordelen. Staat LAATST en
-             over de volle breedte: het scherm draagt nu twee soorten cijfer, en
-             deze lijst is het laatste woord over allebei. ─────────────────── */}
-        <Module title="Niet berekend" span={2}>
-          <ul className="tax-caveats">
-            {pack.caveats.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        </Module>
       </ModuleGrid>
 
       <div className="stack-form-actions">
