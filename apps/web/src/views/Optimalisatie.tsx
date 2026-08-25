@@ -1416,33 +1416,43 @@ export default function Optimalisatie({ txs, accounts, rules, own, asOf, busy, f
                 Verplaatsen levert je <strong>{euro(interest.totalExtraPerYearCents)}</strong> per jaar op
                 {interest.net === null ? "" : ", vóór wat die rekening zelf kost"}.
               </p>
-              <div className="reason-list">
-                {interest.suggestions.map((s) => (
-                  <p key={`sug-${s.account.key}`} className="reason">
-                    Je houdt <strong>{euro(s.balanceCents)}</strong> aan bij {accountLabel(s.account)} tegen{" "}
-                    {pct(s.ratePct)}; {interest.best!.bank} betaalt {keptLabel(interest.best!)}, ook als een actie
-                    afloopt — dat verschil van {pct(Math.round((keptBest! - s.ratePct) * 100) / 100)} is{" "}
-                    <span className="reason-figure text-warn">{euro(s.extraPerYearCents)}</span> per jaar.
-                  </p>
-                ))}
-                {/* WAT DIE REKENING ZELF KOST. Op het TOTAAL en niet per suggestie:
-                    het advies is één rekening openen en daar alles heen brengen,
-                    dus die pakketprijs betaal je één keer. Per rij aftrekken zou hem
-                    bij drie rekeningen drie keer in rekening brengen. Core rekent
-                    het uit (`analyzeInterest`); hier wordt het alleen geprint, in
-                    dezelfde component en met dezelfde woorden als bij Cashback en in
-                    het reisblok. Is er niets te verrekenen, dan komt hier ook geen
-                    leeg blok — `interest.net` is dan null. */}
-                {interest.net !== null && (
-                  <Productkosten
-                    net={interest.net}
-                    id="rente"
-                    noun="rekening"
-                    gainWord="meer rente"
-                    costWord="rekeningkosten"
-                  />
-                )}
-              </div>
+              {/* HET "VÓÓR WAT DIE REKENING ZELF KOST" STAAT AL IN DE KOP HIERBOVEN,
+                  en blijft dus zichtbaar ook al vouwt de rest op — de waarschuwing
+                  dat dit een brutobedrag is, is geen "notitie" maar deel van het
+                  antwoord zelf. Wat hieronder opvouwt is de ONDERBOUWING per
+                  rekening plus de exacte nettoberekening: dezelfde tabel verderop
+                  toont Rekening/Saldo/Rente %/Bron/Mogelijk per jaar, dus dit is
+                  uitleg naast een tabel en geen tweede plek waar hetzelfde cijfer
+                  voor het eerst staat. */}
+              <ToonMeer summary="Per rekening, en wat de nieuwe rekening zelf kost">
+                <div className="reason-list">
+                  {interest.suggestions.map((s) => (
+                    <p key={`sug-${s.account.key}`} className="reason">
+                      Je houdt <strong>{euro(s.balanceCents)}</strong> aan bij {accountLabel(s.account)} tegen{" "}
+                      {pct(s.ratePct)}; {interest.best!.bank} betaalt {keptLabel(interest.best!)}, ook als een actie
+                      afloopt — dat verschil van {pct(Math.round((keptBest! - s.ratePct) * 100) / 100)} is{" "}
+                      <span className="reason-figure text-warn">{euro(s.extraPerYearCents)}</span> per jaar.
+                    </p>
+                  ))}
+                  {/* WAT DIE REKENING ZELF KOST. Op het TOTAAL en niet per suggestie:
+                      het advies is één rekening openen en daar alles heen brengen,
+                      dus die pakketprijs betaal je één keer. Per rij aftrekken zou hem
+                      bij drie rekeningen drie keer in rekening brengen. Core rekent
+                      het uit (`analyzeInterest`); hier wordt het alleen geprint, in
+                      dezelfde component en met dezelfde woorden als bij Cashback en in
+                      het reisblok. Is er niets te verrekenen, dan komt hier ook geen
+                      leeg blok — `interest.net` is dan null. */}
+                  {interest.net !== null && (
+                    <Productkosten
+                      net={interest.net}
+                      id="rente"
+                      noun="rekening"
+                      gainWord="meer rente"
+                      costWord="rekeningkosten"
+                    />
+                  )}
+                </div>
+              </ToonMeer>
             </>
           ) : (
             <div className="empty-guide">
