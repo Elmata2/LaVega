@@ -1,5 +1,5 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
-import type { BrokerAccessAdapter, BrokerResult } from "./BrokerAccessAdapter.js";
+import { tradesComplete, type BrokerAccessAdapter, type BrokerResult } from "./BrokerAccessAdapter.js";
 
 export type ScheduledBroker = Extract<CredentialBroker, "ibkr" | "trading212">;
 export type BrokerSyncState = {
@@ -105,8 +105,18 @@ export async function syncScheduledBrokers(input: {
       // Only a rate limit gets a cooldown. Every other problem (missing
       // credentials above all) must stay retryable, or saving credentials would
       // not be able to trigger the sync that follows it.
-      if (result.retryAfter) await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter });
-      outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
+      if (result.retryAfter) {
+        await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter });
+        outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
+        continue;
+      }
+      // A run that delivered a complete data set is done, even if single rows
+      // were unreadable. Leaving `lastSyncedAt` unset over a row problem made
+      // the next app open replay the entire Trading 212 order history — six
+      // requests per minute, restarting the moment it finished.
+      const delivered = tradesComplete(result) && (result.positions.length > 0 || result.trades.length > 0);
+      if (delivered) await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null });
+      outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt: delivered ? nowIso : lastSyncedAt, result });
       continue;
     }
     await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null });

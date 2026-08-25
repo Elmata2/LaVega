@@ -1,4 +1,4 @@
-import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
+import { LOCAL_TENANT_ID, type CredentialStore, type Position } from "@lavega/core";
 import { expect, test, vi } from "vitest";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
 import { createMemoryBrokerSyncStateStore, syncScheduledBrokers } from "./scheduledSync.js";
@@ -66,4 +66,30 @@ test("a successful sync clears a stored hold-off", async () => {
   await run(sync, state, new Date("2026-08-19T12:06:00.000Z"));
 
   expect(await state.get("trading212")).toEqual({ lastSyncedAt: "2026-08-19T12:06:00.000Z", retryAfter: null });
+});
+
+/* A first Trading 212 sync reads the whole order history, page by page, at six
+ * requests per minute. Treating every row-level problem as a failed run left
+ * `lastSyncedAt` unset, so the next app open replayed that entire history from
+ * page one — the sync visibly finished and then started over, forever. */
+test("row problems do not condemn the next run to replaying the whole history", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const position: Position = { tenantId: LOCAL_TENANT_ID, entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" };
+  const sync = vi.fn(async () => empty({ positions: [position], problems: ["Trading 212 transaction 87456cce has ambiguous TRANSFER direction"] }));
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  const second = await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
+
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(second.outcomes[0]?.status).toBe("skipped");
+});
+
+test("a truncated history keeps retrying, because nothing complete ever landed", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({ problems: ["Trading 212 order history page failed"], tradesComplete: false }));
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
+
+  expect(sync).toHaveBeenCalledTimes(2);
 });
