@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
-import { App } from "./app";
+import { App, HealthStatus } from "./app";
 import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -544,4 +544,36 @@ test("broker credential form succeeds when the other broker is not configured", 
   expect(container.textContent).toContain("Synchronisatie voltooid");
   expect(container.textContent).not.toContain("credentials are not configured");
   root.unmount();
+});
+
+test("the health line asks the investing server, not whoever owns the origin root", async () => {
+  /* In the all-in-one deploy this app is served under /investing/, and the
+   * origin's own /health belongs to the personal server: it answers {ok:true}
+   * with no `service` field, so a hardcoded "/health" renders as ": beschikbaar"
+   * with an empty name and says nothing about whether the investing runtime is
+   * actually up. The request has to carry the base the app was built with. */
+  vi.stubEnv("BASE_URL", "/investing/");
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return Promise.resolve(new Response(JSON.stringify({ ok: true, service: "investing-server" })));
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<HealthStatus />);
+  });
+  // The health body arrives two microtasks later (fetch, then .json()), so let
+  // the state land inside act rather than after the assertion.
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(calls).toEqual(["/investing/health"]);
+  expect(container.textContent).toContain("investing-server: beschikbaar");
+  root.unmount();
+  vi.unstubAllEnvs();
 });

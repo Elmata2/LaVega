@@ -11,7 +11,7 @@ vi.mock("./config.js", async () => {
   return { ...actual, loadConfig: loadConfigMock };
 });
 
-const { app } = await import("./index.js");
+const { app, isStaticAssetPath } = await import("./index.js");
 
 afterEach(() => {
   loadConfigMock.mockReset();
@@ -88,4 +88,52 @@ test("the JSON preflight is answered, or the real POST never runs", async () => 
   });
   expect(pre.status).toBe(204);
   expect(pre.headers.get("access-control-allow-methods")).toContain("POST");
+});
+
+/* --- The static fallback used to answer everything with 200 + index.html. ---
+ *
+ * That is how the /investing blank page survived every check we had: the page's
+ * <script> asked for /assets/index-DQzV9ttd.js, the personal SPA's catch-all
+ * had no such file, and it replied with its own index.html at 200 text/html.
+ * A module request answered with markup does not run and does not complain, so
+ * /health was green, /investing/health was green, /investing/ was green, and the
+ * one request that mattered was green too. Cloudflare then cached the HTML under
+ * the .js URL for four hours. */
+
+test("a missing asset is a 404, not the SPA shell with a 200", async () => {
+  const res = await app.request("/assets/index-DQzV9ttd.js");
+  expect(res.status).toBe(404);
+  expect(res.headers.get("content-type") ?? "").not.toContain("text/html");
+});
+
+test("a missing stylesheet or source map is a 404 too", async () => {
+  for (const path of ["/assets/index-CLKdSLqH.css", "/assets/app.js.map", "/vendor/chart.mjs"]) {
+    const res = await app.request(path);
+    expect(res.status, path).toBe(404);
+  }
+});
+
+test("an SPA view path is not treated as a missing file", async () => {
+  // Whether this ends as index.html or as Hono's own 404 depends on whether the
+  // checkout has a built apps/web/dist, so what is pinned here is the routing
+  // decision rather than the file outcome: the asset guard must not answer.
+  const res = await app.request("/app/rekeningen");
+  expect(await res.text()).not.toBe("Not Found");
+});
+
+test("isStaticAssetPath asks for a file extension, not merely for a dot", () => {
+  // Everything Vite emits is under /assets/, whatever it is called.
+  expect(isStaticAssetPath("/assets/index-DQzV9ttd.js")).toBe(true);
+  expect(isStaticAssetPath("/assets/logo-a1b2c3")).toBe(true);
+  expect(isStaticAssetPath("/favicon.ico")).toBe(true);
+  expect(isStaticAssetPath("/service-worker.js")).toBe(true);
+  expect(isStaticAssetPath("/fonts/Inter.woff2")).toBe(true);
+
+  // Views must keep reaching index.html. The dotted ticker is the reason this is
+  // an extension allowlist and not "does the path contain a dot": the investing
+  // SPA routes /positions/:symbol, and BRK.B is a real symbol.
+  expect(isStaticAssetPath("/app/rekeningen")).toBe(false);
+  expect(isStaticAssetPath("/investing/positions/BRK.B")).toBe(false);
+  expect(isStaticAssetPath("/privacy")).toBe(false);
+  expect(isStaticAssetPath("/")).toBe(false);
 });

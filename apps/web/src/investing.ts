@@ -11,7 +11,8 @@
  * error page. The URL is configuration. Production Docker bakes
  * `VITE_INVESTING_URL=/investing` on the all-in-one deploy; override with a full
  * origin when investing runs on its own host. `investingReachable` remains for
- * optional liveness checks. */
+ * optional liveness checks — read its doc comment before trusting it, because
+ * what it can and cannot see is narrower than the name suggests. */
 
 export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
 
@@ -34,10 +35,24 @@ export function resolveInvestingUrl(env: InvestingEnv): string | null {
 
 export const INVESTING_URL: string | null = resolveInvestingUrl(import.meta.env as InvestingEnv);
 
-/** Is the investing app reachable at `url`? Answers false rather than throwing.
+/** Does something answer at `url`? Answers false rather than throwing.
+ *
+ *  Read the name as "the server is up", not "the page works". This checks one
+ *  health endpoint and nothing else, and the two are genuinely different
+ *  states: the investing SPA once served a fully healthy shell whose <script>
+ *  pointed at the wrong path, so `/investing/health` answered
+ *  `{ok:true,"service":"investing-server"}` — this function returned true — while
+ *  every visitor got a blank page. Nothing reachable from here can see that.
+ *  Whether the emitted HTML points at assets that exist is settled at build
+ *  time instead, by apps/investing-web/src/base-guard.ts, which the root
+ *  Dockerfile runs as a gate; do not re-implement it as a second fetch here.
+ *
+ *  Also worth knowing before wiring this to anything: it currently has no
+ *  caller. NavBar and Landing render the link unconditionally from
+ *  INVESTING_URL, so a false here hides nothing today.
  *
  *  Same origin can be verified properly, and has to be: the SPA's catch-all
- *  route answers 200 with index.html for any unknown path, so only the
+ *  route answers 200 with index.html for unknown VIEW paths, so only the
  *  investing server's own `{ok:true}` health body counts.
  *
  *  A cross-origin URL cannot be read — the investing server sends no CORS

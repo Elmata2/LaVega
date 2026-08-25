@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:base": "vitest run src/base-guard.test.ts"
   },
   "dependencies": {
     "@lavega/core": "workspace:*",

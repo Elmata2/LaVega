@@ -18,6 +18,28 @@ export const PORT = Number(process.env.PORT) || 8787;
 // package dir (pnpm --filter runs scripts in the package dir). Overridable via env.
 const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
+/* Extensions that mean "a file", so a miss must 404 instead of falling back to
+ * index.html. An allowlist, deliberately — the tempting rule ("the path has a
+ * dot in it") breaks real deep links: the investing SPA routes /positions/:symbol
+ * and a ticker like BRK.B would be read as a file request and refused. */
+const STATIC_ASSET_EXTENSIONS = new Set([
+  ".js", ".mjs", ".cjs", ".css", ".map", ".json", ".wasm",
+  ".woff", ".woff2", ".ttf", ".otf", ".eot",
+  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
+  ".webmanifest", ".xml", ".txt",
+]);
+
+/** Is `pathname` a request for a file rather than for an SPA view? Everything
+ *  Vite emits lives under /assets/; anything else has to carry a known
+ *  extension to count. */
+export function isStaticAssetPath(pathname: string): boolean {
+  if (pathname.startsWith("/assets/")) return true;
+  const name = pathname.slice(pathname.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return STATIC_ASSET_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
 export const app = new Hono();
 
 /* The committed catalogue, read once as this module loads — before any request
@@ -129,6 +151,13 @@ if (shouldMountInvesting()) {
  * no server routes). In local dev the web runs on Vite (:5173) and WEB_DIST may
  * not exist yet, in which case these simply 404 — the API still works. */
 app.use("/*", serveStatic({ root: WEB_DIST }));
+/* …but the fallback is for VIEWS, not for files. A request for a file that is
+ * not in the build used to get index.html with `200 text/html`, and that is how
+ * the /investing blank page hid for as long as it did: the browser asked for
+ * /assets/index-DQzV9ttd.js, got HTML, never executed a module, and every probe
+ * we had still saw 200s. Cloudflare then cached the HTML under the .js URL for
+ * four hours. A file that is not there is a 404. */
+app.get("/*", (c, next) => (isStaticAssetPath(c.req.path) ? c.text("Not Found", 404) : next()));
 app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
 
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
