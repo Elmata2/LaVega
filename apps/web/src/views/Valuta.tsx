@@ -802,19 +802,6 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             )}
           </p>
 
-          {/* WAAR DEZE KOERS VANDAAN KOMT, bij het bedrag en niet in de bronregel
-              onderaan. De bronregel vertelt waar de LIJST vandaan komt; dit
-              vertelt waar de koers vandaan komt waarmee het bedrag hierboven
-              gerekend is, en dat is sinds de tweede laag niet meer hetzelfde.
-              Zonder deze regel staan de dollar en de dirham als even harde
-              getallen naast elkaar, en dat is precies het verschil dat de
-              catalogus overal bewaakt. */}
-          {koersHerkomst && (
-            <p className="cell-sub" data-testid="koers-herkomst">
-              {koersHerkomst}
-            </p>
-          )}
-
           {/* DE VERPLICHTE BRONVERMELDING. Hij staat hier — vóór de plooi, altijd
               zichtbaar zodra de tweede laag in de lijst zit — en niet in de
               opgevouwen bronregel: een vermelding achter een dichte <details> is
@@ -984,6 +971,20 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               dezelfde review: een bron hoort niet op de voorgrond, maar hij hoort
               er wel te zijn. */}
           <ToonMeer className="valuta-bronnen" summary="Waar de koers en de tarieven vandaan komen">
+            {/* WAAR DEZE KOERS VANDAAN KOMT, bij het bedrag en niet in de bronregel
+                die hierna komt. Die bronregel vertelt waar de LIJST vandaan komt;
+                dit vertelt waar de koers vandaan komt waarmee het bedrag hierboven
+                gerekend is, en dat is sinds de tweede laag niet meer hetzelfde.
+                Zonder deze regel staan de dollar en de dirham als even harde
+                getallen naast elkaar, en dat is precies het verschil dat de
+                catalogus overal bewaakt. Verhuisd hierheen (25 augustus): de
+                verplichte bronvermelding moet vóór de plooi blijven, maar dit is
+                geen vermelding — het is uitleg, en uitleg mag opvouwen. */}
+            {koersHerkomst && (
+              <p className="cell-sub" data-testid="koers-herkomst">
+                {koersHerkomst}
+              </p>
+            )}
             {/* WAT DE KOERS IS, in beide standen, en let op wat er NIET staat.
                 Er stond "offline momentopname van 2026-08-04" en dat zei niet
                 waarvan het een momentopname was — terwijl het gewoon dezelfde

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ToonMeer from "./ToonMeer";
 import {
   WORLD_LATLON_BOUNDS,
   WORLD_MAP_FILL_RULE,
@@ -1017,12 +1018,14 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         </ul>
       </div>
 
-      <p className="lv-globe-source">
-        Grenzen en valuta's zijn meegebundeld (Natural Earth, CLDR), opgehaald op {WORLD_MAP_SOURCES.fetchedAt}. Er
-        wordt niets opgehaald terwijl je aan de bol draait. De grenzen lopen van {latitudeText(WORLD_LATLON_BOUNDS[1])}{" "}
-        tot {latitudeText(WORLD_LATLON_BOUNDS[3])}: Antarctica staat erop, boven de noordpunt van Groenland staat er
-        niets meer in de tabel. Dat laatste is een gat in onze data en geen uitspraak over wat daar ligt.
-      </p>
+      <ToonMeer className="lv-globe-source" summary="Waar de grenzen en valuta's vandaan komen">
+        <p>
+          Grenzen en valuta's zijn meegebundeld (Natural Earth, CLDR), opgehaald op {WORLD_MAP_SOURCES.fetchedAt}. Er
+          wordt niets opgehaald terwijl je aan de bol draait. De grenzen lopen van {latitudeText(WORLD_LATLON_BOUNDS[1])}{" "}
+          tot {latitudeText(WORLD_LATLON_BOUNDS[3])}: Antarctica staat erop, boven de noordpunt van Groenland staat er
+          niets meer in de tabel. Dat laatste is een gat in onze data en geen uitspraak over wat daar ligt.
+        </p>
+      </ToonMeer>
     </div>
   );
 }
