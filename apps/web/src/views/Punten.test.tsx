@@ -471,12 +471,6 @@ test("een ander programma blijft precies zoals het was", () => {
 
 const AMEX = "American Express Membership Rewards";
 
-/** De regel uit de programmalijst waar deze naam in staat. */
-const rosterRowFor = (name: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(".punt-roster-row")].find((li) =>
-    (li.textContent ?? "").includes(name),
-  )!;
-
 test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg", () => {
   const pickable = PICK_PROGRAMS.map((p) => p.name).filter((n) => /^ING/i.test(n));
   expect(pickable).toEqual([ING]);
@@ -486,59 +480,17 @@ test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg"
   expect(programCategory("ING")).toBe("Bank");
 });
 
-test("ING staat op het scherm zonder dat er één saldo is ingevoerd", () => {
-  mount(<Punten {...puntenProps([])} />);
-  // De klacht letterlijk: hij zag ING nergens. Nu wel, en met de reden erbij
-  // waarom er geen koers per bestede euro staat.
-  const row = rosterRowFor(ING);
-  expect(row).toBeTruthy();
-  expect(row.textContent).toContain("nog geen saldo");
-  expect(row.textContent).toContain("Geen koers per bestede euro");
-  // En hij kan hem kiezen zonder de naam over te typen.
-  expect([...row.querySelectorAll("button")].map((b) => b.textContent)).toContain("Saldo invullen");
-});
-
-test("Amex en alle andere programma's staan er ook, zonder verzonnen nul", () => {
-  mount(<Punten {...puntenProps([])} />);
-  const names = [...container!.querySelectorAll<HTMLElement>(".punt-roster-row")].length;
-  expect(names).toBe(PICK_PROGRAMS.length);
-  const amex = rosterRowFor(AMEX);
-  // "nog geen saldo" is een lege plek. "0 punten" zou een bewering zijn over een
-  // rekening die LaVega nooit heeft gezien.
-  expect(amex.textContent).toContain("nog geen saldo");
-  expect(amex.textContent).not.toContain("0 punten");
-  expect(amex.textContent).not.toContain("€");
-});
-
-test("de kop telt saldi en spreekt de lijst eronder niet tegen", () => {
-  mount(<Punten {...puntenProps([])} />);
-  const head = container!.querySelector(".view-head .eyebrow")!;
-  // Vóór de programmalijst bestond stond hier "0 programma's", en dat was toen
-  // waar: er stond niets anders op het scherm. Boven een lijst die er tien
-  // opsomt is het pertinent onwaar, en van twee getallen die elkaar tegenspreken
-  // gelooft niemand er nog een. Deze kop telt wat hij telt.
-  expect(head.textContent).toContain("0 saldi");
-  expect(head.textContent).not.toContain("programma");
-  expect(container!.querySelectorAll(".punt-roster-row").length).toBe(PICK_PROGRAMS.length);
-});
-
-test("een saldo in de lijst draagt altijd zijn datum", () => {
-  mount(<Punten {...puntenProps([makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" })])} />);
-  const amex = rosterRowFor(AMEX);
-  expect(amex.textContent).toContain("245.000 punten");
-  expect(amex.textContent).toContain("van 12 mei 2026");
-  // Dit is de reden dat de datum niet optioneel is: de extensie gaat deze
-  // getallen gebruiken en moet kunnen zien hoe oud ze zijn.
-  expect(rosterFigure(programRoster([makeRewardsBalance({ program: AMEX, points: 1, updatedAt: "2026-05-12" })])[0]))
-    .toBe("1 punt — van 12 mei 2026");
-});
-
-test("de knop richt het formulier op dat programma, met zijn regels erbij", () => {
-  mount(<Punten {...puntenProps([])} />);
-  click([...rosterRowFor(ING).querySelectorAll<HTMLElement>("button")].find((b) => b.textContent === "Saldo invullen")!);
-  expect(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!.value).toBe(ING);
-  expect(container!.querySelector(".punt-facts")!.textContent).toContain("drempel, geen tarief");
-});
+/* DE ZEVEN TESTS DIE HIER STONDEN — "ING staat op het scherm zonder dat er één
+ * saldo is ingevoerd", "Amex en alle andere programma's staan er ook", "de kop
+ * telt saldi", "een saldo in de lijst draagt altijd zijn datum", "de knop
+ * richt het formulier op dat programma", "de lijst zet geen euroteken" en
+ * "busy zet ook de knoppen in de programmalijst uit" — waren de regressietest
+ * voor review 4, punt 29: "waarom zie ik ING niet". Het "Alle programma's"-blok
+ * dat ze testten is op zijn verzoek verwijderd (25 augustus), ook al blijft de
+ * onderliggende oorzaak bestaan: de kieslijst in "Saldo toevoegen" is een
+ * <input list> + <datalist>, onzichtbaar tot je begint te typen. Met het blok
+ * is ook deze wacht weg — komt die klacht terug, dan is er nu geen test die
+ * hem vóór hem vangt. */
 
 test("de lijst zet de programma's met een saldo bovenaan en verzint er geen bij", () => {
   const rows = programRoster([makeRewardsBalance({ program: "Spaarzegels van de bakker", points: 12, updatedAt: "2026-08-01" })]);
@@ -565,25 +517,6 @@ test("er staat geen uitleg meer over waarom punten geen euro-waarde hebben", () 
   mount(<Punten {...puntenProps([])} />);
   expect(container!.querySelector(".punt-waarom")).toBeNull();
   expect(container!.textContent).not.toContain("Geen euro-waarde bij punten");
-});
-
-test("de lijst zet geen euroteken bij punten, en wél bij cashback in euro's", () => {
-  mount(<Punten {...puntenProps([
-    makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-08-01" }),
-    makeRewardsBalance({ program: "bunq", points: 42, updatedAt: "2026-08-01" }),
-  ])} />);
-  expect(rosterRowFor(AMEX).textContent).not.toContain("€");
-  // bunq is de uitzondering en blijft dat: dit ís euro's, er zit geen omrekening
-  // tussen. Precies het onderscheid dat "geen euro-waarde" niet raakt.
-  expect(rosterRowFor("bunq").textContent).toContain("42,00");
-  expect(rosterRowFor("bunq").textContent).toContain("Keert uit in euro's");
-});
-
-test("busy zet ook de knoppen in de programmalijst uit", () => {
-  mount(<Punten {...puntenProps([])} busy />);
-  const buttons = [...container!.querySelectorAll<HTMLButtonElement>(".punt-roster-row button")];
-  expect(buttons.length).toBeGreaterThan(0);
-  expect(buttons.every((b) => b.disabled)).toBe(true);
 });
 
 test("de programmalijst haalt niets op: geen link, geen afbeelding, geen remote adres", () => {

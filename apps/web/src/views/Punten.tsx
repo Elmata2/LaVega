@@ -418,59 +418,6 @@ const INTERVALS: { days: number; label: string }[] = [
   { days: 365, label: "elk jaar" },
 ];
 
-/** De lijst met alle programma's. Eén regel per programma, en de knop richt het
- *  formulier onderaan op dat programma — hij hoeft de naam dus niet over te
- *  typen, en een typefout kan geen tweede rij voor hetzelfde programma maken.
- *
- *  Geen eigen CSS: dit blok leunt op klassen die er al zijn (`field-note`,
- *  `eyebrow`, `cell-sub`, `card-link`) plus wat plaatsing inline, want
- *  styles/views.css is deze run van een andere lane. Komt er ooit een eigen
- *  regel in dat bestand, dan kunnen deze inline-stijlen weg. */
-function ProgramRoster({
-  rows, busy, onPick,
-}: { rows: RosterRow[]; busy: boolean; onPick: (program: string) => void }) {
-  return (
-    <div className="punt-roster">
-      <div className="view-head">
-        <h3>Alle programma's</h3>
-        <span className="eyebrow">
-          {rows.filter((r) => r.balance !== null).length} van {rows.length} met een saldo
-        </span>
-      </div>
-      <ul className="punt-roster-list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {rows.map((r) => (
-          <li
-            key={r.name}
-            className="punt-roster-row"
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "baseline",
-              gap: "0.6rem",
-              padding: "0.45rem 0",
-              borderTop: "1px solid var(--line)",
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>{r.name}</span>
-            <span className="eyebrow">{r.category}</span>
-            <span className="cell-sub" style={{ marginLeft: "auto" }}>
-              {rosterFigure(r)}
-            </span>
-            <button type="button" className="card-link" disabled={busy} onClick={() => onPick(r.name)}>
-              {r.balance === null ? "Saldo invullen" : "Bijwerken"}
-            </button>
-            {r.rateNote ? (
-              <span className="cell-sub" style={{ flexBasis: "100%" }}>
-                {r.rateNote}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export default function Punten({
   balances, asOf, busy, onSave,
 }: { balances: RewardsBalance[]; asOf: string; busy: boolean; onSave: (next: RewardsBalance[]) => void }) {
@@ -552,21 +499,6 @@ export default function Punten({
 
   function changeInterval(id: string, days: number) {
     onSave(balances.map((b) => (b.id === id ? { ...b, intervalDays: days } : b)));
-  }
-
-  /** De knop uit de programmalijst richt het formulier hieronder op dat
-   *  programma. Hij typt de naam dus niet over, en een typefout kan geen tweede
-   *  rij voor hetzelfde programma maken — de rij-id is de genormaliseerde naam,
-   *  dus "Marriot Bonvoy" zou een eigen rij worden naast "Marriott Bonvoy".
-   *
-   *  Het getalveld gaat leeg: een getal dat er nog van een ander programma stond
-   *  hoort niet mee te verhuizen. De datum blijft staan zoals hij hem heeft gezet
-   *  — die heeft hij zelf ingevuld, en zijn invoer overschrijven omdat hij een
-   *  knop indrukt is precies het soort stille wijziging dat hier niet mag. */
-  function pick(name: string) {
-    setProgram(name);
-    setPoints("");
-    setAddError("");
   }
 
   return (
@@ -713,8 +645,6 @@ export default function Punten({
           </button>
         </p>
       ) : null}
-
-      <ProgramRoster rows={programRoster(balances)} busy={busy} onPick={pick} />
 
       <div className="view-head">
         <h3>Saldo toevoegen</h3>
