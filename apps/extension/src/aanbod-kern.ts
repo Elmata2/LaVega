@@ -332,10 +332,28 @@ export type RuweLezing = {
    *  overgenomen zoals hij er staat — samenvatten zou van een uitspraak van de
    *  aanbieder een uitspraak van ons maken. */
   geenAanbiedingen: string;
-  /** Hoeveel knopen er op de selectorlijst pasten. Nul betekent dat er geen
-   *  aanbiedingenblok op deze pagina staat; meer dan nul met geen enkele
-   *  bruikbare kaart betekent dat het blok er is maar er anders uitziet. */
+  /** Hoeveel knopen er op de selectorlijst pasten. Nul betekent dat er niets is
+   *  GEVONDEN dat op een aanbiedingenblok lijkt — niet dat er niets stáát, en
+   *  dat verschil is op 24 augustus 2026 een ronde komen te kosten. Meer dan nul
+   *  met geen enkele bruikbare kaart betekent dat het blok er is maar er anders
+   *  uitziet. */
   markers: number;
+  /** Hoeveel onderdelen deze pagina zelf opbouwt waar de lezer NIET in kan
+   *  kijken: eigen elementen (een streepje in de tagnaam) die leeg zijn en
+   *  waarvan geen schaduwwortel te openen viel.
+   *
+   *  OPTIONEEL, EN DAT IS EEN GRENS EN GEEN GEMAK. Alleen `collectIngWinkel`
+   *  telt dit, want alleen daar is gemeten dat het ertoe doet; `collectAanbod`
+   *  in amex.ts kijkt niet door schaduwwortels heen en zou hier dus altijd nul
+   *  melden — en een nul die "niet gekeken" betekent is precies de soort nul die
+   *  deze codebase nergens accepteert. Afwezig betekent hier: niet geteld.
+   *
+   *  WAT HET WEL EN NIET VASTSTELT: het scheidt een GESLOTEN component van een
+   *  pagina waar helemaal niets van dien aard staat. Het scheidt een gesloten
+   *  component NIET van een component die nog niet gebouwd was toen we keken —
+   *  die twee zien er van buiten identiek uit, en de zin die erbij hoort noemt ze
+   *  daarom allebei. */
+  afgeschermd?: number;
   kandidaten: RuwAanbod[];
 };
 
@@ -381,8 +399,8 @@ export type Aanbieding = {
   gelezenOp: string;
 };
 
-/** Wat de lezing heeft opgeleverd. Vijf uitkomsten, vijf oorzaken, vijf zinnen.
- *  Ze samenvoegen tot "er is niets gelezen" zou van vijf verschillende feiten
+/** Wat de lezing heeft opgeleverd. Zes uitkomsten, zes oorzaken, zes zinnen.
+ *  Ze samenvoegen tot "er is niets gelezen" zou van zes verschillende feiten
  *  één vage mededeling maken, en dan kan hij niet zien wat hij eraan kan doen. */
 export type LezingUitkomst =
   /** Er zijn aanbiedingen gelezen. */
@@ -394,8 +412,25 @@ export type LezingUitkomst =
    *  die mag genoemd worden. Hem op één hoop gooien met "we konden niets lezen"
    *  zou een antwoord van de aanbieder verbouwen tot een gat in onze meting. */
   | "uitgesproken-geen-aanbiedingen"
-  /** Geen enkele knoop paste op de selectorlijst: dit lijkt de pagina niet
-   *  (meer) te zijn. */
+  /** Geen enkele knoop paste op de selectorlijst, MAAR de pagina bouwt zichzelf
+   *  wel op uit onderdelen waar de lezer niet in kan kijken.
+   *
+   *  ERBIJ GEKOMEN OP 24 AUGUSTUS 2026, en met een reden die het waard is te
+   *  onthouden. De eigenaar stond op zijn eigen ingelogde winkelpagina en las:
+   *  "LaVega vindt op deze pagina geen artikelen … het adres dat LaVega leest is
+   *  https://mijn.ing.nl/punten*." Die zin wees hem op het ADRES — de oorzaak
+   *  die er die dag NIET was, en de vorige die wél een ronde had gekost. De
+   *  echte was bereik: de kaarten stonden in componenten waar
+   *  `document.querySelectorAll` niet doorheen komt.
+   *
+   *  Deze uitkomst bestaat om die twee gevallen uit elkaar te houden, want ze
+   *  vragen om een ander antwoord: bij "geen-aanbiedingenblok" kan hij zelf
+   *  kijken of hij op het goede adres staat, en hier kan hij dat niet — hier is
+   *  het onze grens en hoort dat er te staan. Wat deze uitkomst NIET beweert, is
+   *  dat die onderdelen de winkel bevatten; alleen dat ze er zijn en dicht. */
+  | "afgeschermd"
+  /** Geen enkele knoop paste op de selectorlijst en er stond ook niets dicht:
+   *  dit lijkt de pagina niet (meer) te zijn, of ze was nog aan het bouwen. */
   | "geen-aanbiedingenblok"
   /** Het blok staat er, maar er kwam geen bruikbare kaart uit: de pagina is
    *  veranderd, of hij was nog aan het laden. */
@@ -668,6 +703,16 @@ export function leesAanbod(
   if (aanbiedingen.length > 0) uitkomst = "gelezen";
   else if (ruw.inlogformulier) uitkomst = "niet-ingelogd";
   else if (ruw.geenAanbiedingen.trim() !== "") uitkomst = "uitgesproken-geen-aanbiedingen";
+  /* AFGESCHERMD GAAT VÓÓR "GEEN BLOK", en alleen als er ook echt niets gevonden
+   * is. Vonden we wél knopen (markers > 0), dan is "het blok staat er maar we
+   * lezen er niets uit" het scherpere antwoord — dan hebben we tenminste iets
+   * gezien. Vonden we niets én stond er iets dicht, dan is die afscherming het
+   * enige wat we kunnen aanwijzen, en dan hoort dát er te staan in plaats van
+   * een zin die naar het adres wijst.
+   *
+   * `?? 0` en niet `!`: een bron die niet telt (amex.ts) meldt hier niets, en
+   * "niet geteld" mag nooit als "nul gevonden" gaan gelden. */
+  else if (ruw.markers === 0 && (ruw.afgeschermd ?? 0) > 0) uitkomst = "afgeschermd";
   else if (ruw.markers === 0) uitkomst = "geen-aanbiedingenblok";
   else uitkomst = "blok-zonder-kaarten";
 

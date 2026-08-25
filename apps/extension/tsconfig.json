@@ -5,7 +5,7 @@
     "noEmit": true,
     /* De extensie heeft GEEN @types/chrome (dat zou een install vragen terwijl
      * andere lanes in dezelfde repo werken). De chrome.*-API's die we gebruiken
-     * staan daarom met de hand getypeerd in src/chrome.d.ts — precies de vier
+     * staan daarom met de hand getypeerd in src/chrome.d.ts — precies de vijf
      * die we aanroepen en niets meer. Dat is minder comfort en meer controle:
      * een aanroep die er niet in staat, valt op. */
     "types": []

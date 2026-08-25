@@ -218,10 +218,21 @@ export const _schoonSaldi = schoonSaldi;
  * Wie zijn ING-schakelaar omzet, hoort zijn Amex-lijst te houden — dat is
  * dezelfde gedachte als "aparte toestemming", een laag lager. */
 
+/* DE UITKOMSTEN DIE UIT DE OPSLAG MOGEN TERUGKOMEN. Alles wat hier niet in
+ * staat, valt uit `schoonLezing` en leest als "nog nooit gelezen".
+ *
+ * DEZE LIJST IS EEN OPSLAGSCHEMA, en op 24 augustus 2026 is er één waarde bij
+ * gekomen ("afgeschermd"). Vooruit is dat veilig: een oude opgeslagen waarde
+ * staat er nog steeds in. Achteruit niet: schrijft deze build "afgeschermd" weg
+ * en leest een OUDERE build hem terug, dan valt hij eruit en ziet die build
+ * "nog nooit gelezen" in plaats van de echte uitkomst. Dat is de goede kant om
+ * op te falen — een onbekende uitkomst als bekend behandelen zou erger zijn —
+ * maar het staat hier zodat de volgende toevoeging met open ogen gebeurt. */
 const UITKOMSTEN: readonly LezingUitkomst[] = [
   "gelezen",
   "niet-ingelogd",
   "uitgesproken-geen-aanbiedingen",
+  "afgeschermd",
   "geen-aanbiedingenblok",
   "blok-zonder-kaarten",
 ];

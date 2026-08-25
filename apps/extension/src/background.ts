@@ -484,8 +484,17 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
     /* Alleen doorvragen als de pagina nog aan het opbouwen KAN zijn. Bij een
      * inlogscherm is het antwoord definitief: nog vier keer een uitgelogde
      * pagina lezen levert vier keer hetzelfde op, en een strook die pas na tien
-     * seconden zegt dat je moet inloggen is tien seconden te laat. */
-    opnieuw: lezing.uitkomst === "geen-aanbiedingenblok" || lezing.uitkomst === "blok-zonder-kaarten",
+     * seconden zegt dat je moet inloggen is tien seconden te laat.
+     *
+     * "afgeschermd" hoort in dezelfde rij, en juist daar: die uitkomst telt
+     * eigen elementen die leeg zijn en geen te openen wortel hebben, en een
+     * component die nog niet GEBOUWD is ziet er precies zo uit als een die
+     * dicht is. Bij de eerste poging is dat verschil het grootst — dus nog een
+     * keer kijken, en pas de laatste lezing op het scherm zetten. */
+    opnieuw:
+      lezing.uitkomst === "geen-aanbiedingenblok" ||
+      lezing.uitkomst === "blok-zonder-kaarten" ||
+      lezing.uitkomst === "afgeschermd",
     regel: strook.regel,
     noot: strook.noot,
   };

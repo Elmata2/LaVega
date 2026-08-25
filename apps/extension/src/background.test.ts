@@ -135,9 +135,9 @@ const AMEX_SENDER = {
 };
 
 const ING_SENDER = {
-  tab: { id: 8, url: "https://www.ing.nl/punten" },
-  url: "https://www.ing.nl/punten",
-  origin: "https://www.ing.nl",
+  tab: { id: 8, url: "https://mijn.ing.nl/punten/overview" },
+  url: "https://mijn.ing.nl/punten/overview",
+  origin: "https://mijn.ing.nl",
 };
 
 beforeEach(reset);

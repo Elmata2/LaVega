@@ -202,7 +202,36 @@ export function domeinVanKaart(ruw: RuwAanbod): string | null {
  *
  *  WAT ER MEEKOMT is per kaart: de kop (60), de kortingsvormen (120 samen), de
  *  datumaanduiding (40) en de hostnamen van de links (vijf). Niet de tekst van
- *  de kaart, niet de tekst van de pagina, en niets buiten de kaarten. */
+ *  de kaart, niet de tekst van de pagina, en niets buiten de kaarten.
+ *
+ *  ── EEN GEMETEN BLINDE VLEK DIE HIER MET OPZET BLIJFT STAAN ───────────────
+ *
+ *  Deze functie kijkt alleen in het LICHTE dom: `d.querySelectorAll`, `d.query
+ *  Selector("input[type='password']")` en de GEEN-scan lopen geen van drieën
+ *  door een schaduwwortel heen. Zet Amex zijn aanbiedingen in webcomponenten,
+ *  dan meldt deze lezer `markers === 0` op een pagina die vol staat — precies de
+ *  fout die de ING-kant op 24 augustus 2026 gemaakt heeft. `collectIngWinkel` in
+ *  ing.ts heeft daar sindsdien een wandeling over schaduwwortels voor, met de
+ *  varianttests eronder; die zijn hier zo over te nemen.
+ *
+ *  WAAROM DAT HIER TOCH NIET GEBEURD IS, en dat is een keuze en geen
+ *  vergeetachtigheid:
+ *
+ *   1. ER IS GEEN METING DIE ZEGT DAT HET HIER BIJT. Bij ING is er een echte
+ *      pagina die faalt. Bij Amex is er alleen de UITGELOGDE schil, en wat daar
+ *      gemeten is (`_globalHeader_n0dcp_11`, `_navSticky_n0dcp_468`) is een
+ *      vingerafdruk van CSS-modules — een bundler, geen schaduw-DOM.
+ *   2. DE TWEE FUNCTIES KUNNEN DE WANDELING NIET DELEN. Chrome verstuurt ze als
+ *      tekst; een gedeelde hulpfunctie bestaat op de pagina niet. Hem hier
+ *      overnemen betekent dus een tweede, ONGETESTE kopie in de bron waar geen
+ *      aanleiding voor is.
+ *   3. HET VERBREEDT WAT DE LEZER ZIET, op de rekeningpagina van een
+ *      creditcard. Bij ING is dat verantwoord met drie saldo-zeven eronder; hier
+ *      zou het bereik groeien zonder dat er één meting om vraagt.
+ *
+ *  Print de strook op zijn Amex-pagina ooit "LaVega heeft hier geen blok met
+ *  aanbiedingen gevonden" terwijl er wél aanbiedingen staan, dan is dit de
+ *  eerste plek om te kijken — en ing.test.ts levert het sjabloon. */
 export function collectAanbod(doc?: Document | null): RuweLezing {
   const d: Document = doc ?? document;
 

@@ -40,7 +40,7 @@
   "optional_host_permissions": [
     "https://www.ikea.com/nl/nl/p/*",
     "https://global.americanexpress.com/offers/eligible*",
-    "https://www.ing.nl/punten*"
+    "https://mijn.ing.nl/punten*"
   ],
 
   "content_security_policy": {

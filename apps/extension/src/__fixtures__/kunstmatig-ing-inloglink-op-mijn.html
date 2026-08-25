@@ -1,0 +1,30 @@
+<!-- KUNSTMATIG. De winkel ZOALS HIJ OP mijn.ing.nl STAAT, met een "Inloggen"-link
+     erin — en dat is de combinatie die de lezer op 24 augustus 2026 verkeerd las.
+
+     De inlogdetectie nam een link naar `mijn.ing.nl` als bewijs dat je NIET was
+     ingelogd. Maar de winkel staat op mijn.ing.nl, dus daar wijst elke interne
+     link naar mijn.ing.nl. Op precies de pagina die alleen ingelogd bestaat,
+     concludeerde hij dus "niet ingelogd".
+
+     De `<base href>` hieronder is het hele punt van dit bestand: zonder hem is
+     een los geparseerd document hostloos en valt er niets te meten. -->
+<!doctype html><html lang="nl"><head><title>ING Winkel</title>
+<base href="https://mijn.ing.nl/punten/overview"></head>
+<body>
+<div id="app">
+  <header class="site-header">
+    <a href="/particulier/overzicht">Mijn ING</a>
+    <a href="https://mijn.ing.nl/punten/overview">Inloggen bij een ander profiel</a>
+  </header>
+  <main>
+    <div class="product-info">
+      <div class="product-content">
+        <h2 class="card-title">JBL Flip 6</h2>
+        <div class="card-price-labels">
+          <div class="points-only-amount"><span><strong>1.250</strong></span> Punten</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body></html>
