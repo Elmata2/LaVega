@@ -106,6 +106,36 @@ export function ownAccounts(accounts: Account[]): OwnAccounts {
   return { all: [...all], byKey };
 }
 
+/** The identifier of ANOTHER of the owner's own accounts inside an ALREADY
+ *  normalized, space-stripped haystack — or null. Takes the prepared haystack
+ *  rather than the tx because `categorize` runs on every transaction at read
+ *  time and already has one; normalizing twice per row is a cost a vault of ten
+ *  thousand rows notices. */
+function ownAccountIn(hayCompact: string, accountKey: string, own: OwnAccounts): string | null {
+  const skip = own.byKey.get(accountKey);
+  for (const id of own.all) {
+    if (skip && skip.includes(id)) continue; // don't match the tx's own account
+    if (hayCompact.includes(id)) return id;
+  }
+  return null;
+}
+
+/** Which of the owner's OWN accounts this row names on its other side, or null.
+ *
+ *  THE SAME RULE `categorize` USES to reach "Eigen overboeking", exported so
+ *  there is exactly ONE copy of it. The privé/zakelijk boundary module
+ *  (`crossScope.ts`) needs the same question answered — and needs to know WHICH
+ *  account was named, not just that one was — and a second implementation of
+ *  "is this my own account" would drift from the category within a release. */
+export function ownAccountNamed(
+  tx: Pick<Tx, "accountKey" | "counterparty" | "description">,
+  own?: OwnAccounts,
+): string | null {
+  if (!own || own.all.length === 0) return null;
+  const hayCompact = matchNorm(tx.counterparty + " " + tx.description).replace(/\s+/g, "");
+  return ownAccountIn(hayCompact, tx.accountKey, own);
+}
+
 /** Category for a tx, in precedence order: a non-empty tx.category (manual
  *  override) wins; else — when `own` is supplied — an "Eigen overboeking" if the
  *  counterparty/description names another of the user's own accounts; else the
@@ -136,12 +166,7 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   if (own && own.all.length) {
     // Compare against a space-stripped haystack so an IBAN printed with spaces
     // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
-    const hayCompact = hay.replace(/\s+/g, "");
-    const skip = own.byKey.get(tx.accountKey);
-    for (const id of own.all) {
-      if (skip && skip.includes(id)) continue; // don't match the tx's own account
-      if (hayCompact.includes(id)) return "Eigen overboeking";
-    }
+    if (ownAccountIn(hay.replace(/\s+/g, ""), tx.accountKey, own) !== null) return "Eigen overboeking";
   }
   // HIS OWN NAME on the other side of the row is the same fact as his own IBAN
   // on it: his own money moving. It sits here, above the rules, for that reason

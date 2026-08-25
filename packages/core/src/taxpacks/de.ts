@@ -50,5 +50,11 @@ export const DE_TAX_PACK = {
     "Het tarief is indicatief (rechtsvorm en Hebesatz verschillen per gemeente) — vul het bedrag van de Vorauszahlungsbescheid in zodra je die hebt.",
     "Dauerfristverlängerung (een maand uitstel voor de USt-Voranmeldung) is niet meegerekend.",
     "Indicatieve momentopname; controleer bij het Finanzamt.",
+    /* Landneutraal, en daarom ook hier: het gaat over wat LaVega LEEST, niet
+     * over Duits recht. De drie Nederlandse rechtsfiguren die in de NL-pack bij
+     * de grensmodule staan (excessief lenen, pensioen in eigen beheer,
+     * terbeschikkingstelling) staan hier bewust NIET — die zou deze pack niet
+     * kunnen waarmaken. */
+    "LaVega leest je bankrekeningen en je facturen. Wat er in je aangiftes of in je boekhouding staat, ziet het niet — ook een boekhoudbestand dat je hier importeert blijft één bestand in dit tabblad en is geen administratie.",
   ],
 } as const satisfies TaxPack;

@@ -466,6 +466,25 @@
   gap: var(--sp-3);
 }
 
+/* De grensmodule. Eén stroom is een blokje met zinnen, geen tabel: elk bedrag
+ * draagt zijn eigen herkomst in dezelfde zin, en dat past niet in een kolom.
+ * De losse overboekingen krijgen een lijn links, zodat te zien is dat ze BIJ de
+ * kop erboven horen en niet een tweede telling zijn. */
+.grens-stroom {
+  margin-top: var(--sp-3);
+}
+.grens-stroom:first-child {
+  margin-top: 0;
+}
+.grens-rijen {
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--line);
+}
+.grens-rij + .grens-rij {
+  margin-top: var(--sp-1);
+}
+
 /* ---------- Profielkop ----------
  *
  * The owner at the top of his own profile: a drawn monogram (never a fetched

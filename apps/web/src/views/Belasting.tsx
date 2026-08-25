@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import type {
-  Account, CountryCode, Invoice, ScheduledFlow, TaxFigures, TaxSheetRow, Tx,
-  VatBasis, VatNote, VatPosition, VatSettings,
+  Account, CountryCode, CrossScopeAnswer, EntityProfile, Invoice, OwnName, ScheduledFlow,
+  TaxFigures, TaxSheetRow, Tx, VatBasis, VatNote, VatPosition, VatSettings,
 } from "@lavega/core";
 import {
   COUNTRY_OPTIONS,
   DEFAULT_COUNTRY,
+  answerCrossScope,
   computeProfitTaxPrepayments,
   computeTaxReservations,
   nextVatPeriod,
@@ -23,6 +24,7 @@ import { formatEuro } from "../format";
 import { getHomeCountry } from "../settings";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
+import Grens, { type GrensAnswerRow } from "./Grens";
 import "../styles/views.css";
 
 /* Belasting — one module per tax that is ACTUALLY relevant (UI review,
@@ -55,6 +57,30 @@ type BelastingProps = {
    *  the only basis that sees an unpaid invoice's BTW debt. Optional so a caller
    *  that has none (a test, an older screen) behaves exactly as before. */
   invoices?: readonly Invoice[];
+  /* ── DE DRIE PROPS VAN DE GRENSMODULE ──────────────────────────────────────
+   *
+   * `txs`/`accounts` hierboven zijn en blijven de GESCOPEERDE lijsten: de
+   * btw-module rekent per onderneming-in-beeld, en die lijsten hier verruimen
+   * zou een cijfer veranderen dat al draait.
+   *
+   * De grensmodule heeft precies het omgekeerde nodig. Ze meet wat er tussen de
+   * zakelijke en de privékant bewoog, dus vanuit één helft is de tegenboeking
+   * per definitie niet in beeld — en het resultaat zou dan niet leeg zijn maar
+   * FOUT: elke kruising onbeantwoord, het totaal gehalveerd of verdubbeld,
+   * zonder dat er iets op het scherm zegt dat er een helft ontbreekt. Vandaar
+   * eigen, anders genoemde props: het type is aan beide kanten `Tx[]` en vangt
+   * de vergissing niet, de NAAM op de aanroepplek wel.
+   *
+   * Dit is dezelfde redenering die App al één niveau lager maakt: `ownAccounts`
+   * wordt daar uit de VOLLEDIGE rekeninglijst gebouwd "so a transfer between
+   * accounts of different BVs is still recognized as an internal transfer"
+   * (App.tsx). De grens is dat argument één niveau hoger. */
+  allAccounts?: Account[];
+  allTxs?: Tx[];
+  entityProfiles?: EntityProfile[];
+  /** Zijn eigen naam uit het profiel, al geparsed. Ontbreekt hij, dan matcht
+   *  core nergens op een naam — dat is de bedoeling, niet een gat. */
+  ownNames?: readonly OwnName[];
   busy: boolean;
   onSaveVatSettings: (s: VatSettings[]) => void;
   onSaveScheduledFlows: (f: ScheduledFlow[]) => void;
@@ -106,8 +132,14 @@ const DIRECTION_LABEL: Record<VatPosition["direction"], string> = {
 };
 
 /** Why a better basis was not used. One sentence, naming the real cause — never
- *  an instruction, and never a number LaVega cannot point at. */
-function noteText(note: VatNote, p: VatPosition): string {
+ *  an instruction, and never a number LaVega cannot point at.
+ *
+ *  EXPORTED om dezelfde reden als `readBookkeepingSheet` hierboven: de woordtest
+ *  moet alle acht `VatNote`-takken kunnen lezen, en twee ervan zijn met props
+ *  alleen niet te bereiken (`boekhouding-andere-periode` hangt aan een bestand
+ *  dat hij kiest). Een zin die achter een onbereikbare tak zit, wordt door
+ *  gerenderde HTML nooit gecontroleerd. */
+export function noteText(note: VatNote, p: VatPosition): string {
   const missing = p.coverage.total - p.coverage.withVat;
   switch (note) {
     case "gemengde-tarieven":
@@ -137,6 +169,10 @@ export default function Belasting({
   vatSettings,
   scheduledFlows,
   invoices = [],
+  allAccounts,
+  allTxs,
+  entityProfiles = [],
+  ownNames,
   busy,
   onSaveVatSettings,
   onSaveScheduledFlows,
@@ -227,6 +263,86 @@ export default function Belasting({
         : `Bewaard. ${freshFlows.length} reservering${freshFlows.length === 1 ? "" : "en"} staan nu in je forecast en zijn van je beschikbare saldo afgetrokken.`,
     );
   }
+
+  /* ── ZIJN ANTWOORD OVER EEN STROOM WEGSCHRIJVEN ────────────────────────────
+   *
+   * DE VAL DIE HIER OMZEILD WORDT, want hij is niet zichtbaar en kost een
+   * antwoord: `berekenEnBewaar` hierboven bouwt de instellingen opnieuw op voor
+   * de ondernemingen die NU IN BEELD zijn (`entities.map(resolve)`) en laat de
+   * rest onaangeroerd staan. Een grensantwoord gaat over een PAAR dat de twee
+   * helften doorkruist, dus de zakelijke onderneming waar het op bewaard wordt
+   * staat vaak niet in `entities` — sta je in Persoonlijk, dan is BV1 er niet
+   * bij. Zou het antwoord meeliften op die knop, dan werd het bij de eerstvolgende
+   * opslagronde stilzwijgend weggelaten en bleef de module dezelfde vraag stellen.
+   *
+   * Daarom een EIGEN opslagpad, direct op het moment dat hij antwoordt:
+   *
+   *  1. samenvoegen in de VOLLEDIGE `vatSettings`-lijst (replace-all, zoals elke
+   *     andere opslag in dit scherm), zodat rijen buiten beeld blijven staan;
+   *  2. bestaat er nog geen rij voor die onderneming, dan wordt er één gemaakt
+   *     via `resolveVatSettings` — de standaardwaarden van het land, niets
+   *     verzonnen;
+   *  3. `answerCrossScope` doet de samenvoeging zelf, met de ene regel die er
+   *     toe doet: een antwoord van hem wordt nooit door een agent overschreven;
+   *  4. EN het loopt ook door het lokale concept heen. Dat is stap 4 en niet een
+   *     detail: als hij vóór het antwoorden het tarief aanpaste, ligt er een
+   *     `drafts[entity]` uit die tijd. `resolve()` geeft dat concept voorrang op
+   *     wat er bewaard staat, dus zonder deze stap zou de eerstvolgende
+   *     "Bereken & bewaar" het antwoord met het oudere concept overschrijven.
+   *
+   * WAAROM OP DE ZAKELIJKE ONDERNEMING: bij elke kruising is precies één kant
+   * zakelijk (core koppelt alleen tegengestelde kanten), dus die keuze is
+   * eenduidig en overleeft het hernoemen of verdwijnen van de privékant. Grens
+   * bepaalt de onderneming en geeft hem mee; dit scherm bepaalt waar hij landt. */
+  function bewaarGrensAntwoorden(rows: GrensAnswerRow[]) {
+    if (rows.length === 0) return;
+    // Op TRIM vergeleken, niet op de letterlijke string. Core levert de naam
+    // getrimd terug (`account.entity.trim()`) terwijl `entityOptionsFor` in
+    // apps/web/src/scope.ts dat niet doet, dus een import met "BV1 " zou hier
+    // anders een tweede instellingenrij naast "BV1" zetten. Alleen trim, geen
+    // hoofdletterregel: die zou van dit scherm iets anders maken dan van
+    // `resolve()` ernaast, en één scherm hoort één regel te volgen.
+    const key = (e: string) => e.trim();
+    const byEntity = new Map<string, CrossScopeAnswer[]>();
+    for (const r of rows) {
+      const list = byEntity.get(key(r.entity));
+      if (list) list.push(r.answer);
+      else byEntity.set(key(r.entity), [r.answer]);
+    }
+
+    const next = vatSettings.map((s) => {
+      const incoming = byEntity.get(key(s.entity));
+      if (!incoming) return s;
+      byEntity.delete(key(s.entity));
+      return { ...s, crossScopeAnswers: answerCrossScope(s.crossScopeAnswers ?? [], incoming) };
+    });
+    for (const [entity, incoming] of byEntity) {
+      next.push({ ...resolveVatSettings({ entity, saved: undefined, country }), crossScopeAnswers: answerCrossScope([], incoming) });
+    }
+    onSaveVatSettings(next);
+
+    // Stap 4: hetzelfde antwoord in een eventueel openstaand concept.
+    setDrafts((prev) => {
+      let touched = false;
+      const out = { ...prev };
+      for (const r of rows) {
+        const target = Object.keys(out).find((e) => key(e) === key(r.entity));
+        const draft = target === undefined ? undefined : out[target];
+        if (!draft || target === undefined) continue;
+        out[target] = { ...draft, crossScopeAnswers: answerCrossScope(draft.crossScopeAnswers ?? [], [r.answer]) };
+        touched = true;
+      }
+      return touched ? out : prev;
+    });
+  }
+
+  /** Alle bewaarde antwoorden bij elkaar. `CrossScopeAnswer.target` is een hash
+   *  en dus vault-breed uniek, dus samenvoegen kan niet botsen — welke rij een
+   *  antwoord droeg, doet er bij het LEZEN niet toe. */
+  const crossScopeAnswers = useMemo(
+    () => vatSettings.flatMap((s) => s.crossScopeAnswers ?? []),
+    [vatSettings],
+  );
 
   if (entities.length === 0) {
     return (
@@ -524,9 +640,34 @@ export default function Belasting({
           </Module>
         )}
 
+        {/* ── Module 3: de grens tussen privé en zakelijk. GEEN BELASTING, en
+             daarom blijft de eyebrow hierboven "1 belasting"/"2 belastingen"
+             ongemoeid: dit is een meting, en hem meetellen als belasting zou de
+             eerste kleine onwaarheid van het scherm zijn.
+
+             Staat er alleen als de aanroeper de VOLLEDIGE lijsten meegeeft. Een
+             scherm dat hem met de gescopeerde lijsten zou tekenen, toont een
+             nul met een geloofwaardig verhaal erachter — zie de opmerking bij
+             `allAccounts` hierboven. Ontbreken ze, dan is er geen module in
+             plaats van een verkeerde. ──────────────────────────────────────── */}
+        {allAccounts && allTxs && (
+          <Grens
+            allAccounts={allAccounts}
+            allTxs={allTxs}
+            entityProfiles={entityProfiles}
+            asOf={asOf}
+            ownNames={ownNames}
+            answers={crossScopeAnswers}
+            busy={busy}
+            onSaveAnswers={bewaarGrensAntwoorden}
+          />
+        )}
+
         {/* ── Wat dit land WEL heeft maar LaVega niet berekent. Hoort erbij:
-             de lijst hierboven is anders niet te beoordelen. ──────────────── */}
-        <Module title="Niet berekend" span={profitTax ? 2 : 1}>
+             de lijst hierboven is anders niet te beoordelen. Staat LAATST en
+             over de volle breedte: het scherm draagt nu twee soorten cijfer, en
+             deze lijst is het laatste woord over allebei. ─────────────────── */}
+        <Module title="Niet berekend" span={2}>
           <ul className="tax-caveats">
             {pack.caveats.map((c) => (
               <li key={c}>{c}</li>

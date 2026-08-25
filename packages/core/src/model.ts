@@ -1,4 +1,7 @@
 import type { CountryCode, VatFrequency } from "./taxpacks/index.js";
+// Type-only, dus na compileren blijft er geen import over en ontstaat er geen
+// cyclus met crossScope.ts (dat Account/Tx hiervandaan haalt).
+import type { CrossScopeAnswer } from "./crossScope.js";
 
 export type Account = { key: string; iban: string; name: string; bank: string;
   entity: string; currency: string; balance: number | null; balanceDate?: string; type?: string;
@@ -150,6 +153,32 @@ export type VatSettings = {
    *  yet. Absent means unanswered: the invoice basis is then not used at all
    *  rather than guessed (see `vatPosition`). */
   vatBasis?: "factuurstelsel" | "kasstelsel";
+  /** WAT HIJ ZELF ZEI DAT EEN OVERBOEKING OVER DE GRENS WAS — zijn antwoorden op
+   *  de vragen die `crossScopeTransfers` stelt, bewaard op de rij van de
+   *  ZAKELIJKE onderneming van die stroom (bij elke kruising is precies één kant
+   *  zakelijk, dus die keuze is eenduidig).
+   *
+   *  DIT IS EEN COMPROMIS EN GEEN NET ONTWERP, en dat hoort hier te staan in
+   *  plaats van in een commit message. `VatSettings` is een btw-instellingentype
+   *  dat hier een niet-btw-feit krijgt. Waarom toch hier:
+   *
+   *   · een eigen vault-store zou `packages/adapters` raken, en dat is een
+   *     andere lane;
+   *   · `putVatSettings` is replace-all over een OPTIONEEL VaultData-veld en
+   *     `resolveVatSettings` spreidt `...base`, dus een oude vault ontsleutelt
+   *     ongewijzigd en een bewaard antwoord overleeft elke opslagronde;
+   *   · en — dit is de reden die het écht draagt — `agent/tabContext.ts` bouwt
+   *     zijn belasting-context met een EXPLICIETE veldenlijst (entity,
+   *     frequency, defaultRatePct, mixedRates, manualCents). Een nieuw veld op
+   *     dit type reist daardoor NIET mee naar een model. Dat is precies waarom
+   *     de feitenstore afviel: die wordt wél in system prompts gerenderd, en een
+   *     antwoord over een overboeking bestaat uit de namen van zijn eigen
+   *     ondernemingen.
+   *
+   *  Wie hier later een echte store voor maakt: dit veld is het migratiepunt.
+   *  `crossScopeAnswers` van alle rijen samenvoegen geeft de volledige lijst,
+   *  want `CrossScopeAnswer.target` is al vault-breed uniek (een hash). */
+  crossScopeAnswers?: CrossScopeAnswer[];
 };
 
 /** What `VatSettings` has grown into. Same type, honest name — use this one in

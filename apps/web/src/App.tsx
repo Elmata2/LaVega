@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, parseOwnName, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
@@ -9,7 +9,7 @@ import { pathForView, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
+import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, ownerDisplayName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import { txsForAccounts, flowsForScope, entityOptionsFor, screenOnSwitch, SCOPE_LABELS, type ParkedScreens, type ScopeScreen } from "./scope.js";
 import { mergeScheduledFlows } from "./scheduled-flows.js";
@@ -505,6 +505,18 @@ export default function App() {
   // FULL accounts list (not the entity-scoped subset) so a transfer between
   // accounts of different BVs is still recognized as an internal transfer.
   const own = useMemo(() => ownAccounts(accounts), [accounts]);
+
+  /** Zijn eigen naam, geparsed, voor de plekken waar core op een naam mag
+   *  matchen. Alleen wat hij zelf in zijn profiel typte — core verzint nooit een
+   *  naam, en zonder naam matcht het er ook nergens op (zie `isOwnName`).
+   *  `parseOwnName` geeft null terug voor alles wat onbruikbaar is (leeg, één
+   *  letter), en dan blijft de lijst leeg in plaats van dat er een halve naam in
+   *  komt. Blijft in dit apparaat: `ownerName` staat in localStorage, gaat nooit
+   *  de vault of een modelaanroep in. */
+  const ownNamesForMatching = useMemo(() => {
+    const parsed = parseOwnName(ownerDisplayName(ownerName));
+    return parsed ? [parsed] : [];
+  }, [ownerName]);
 
   // Accounts that look like the SAME real account imported twice. Computed on
   // the full list (a duplicate pair can straddle two entities if one side was
@@ -1094,6 +1106,18 @@ export default function App() {
               vatSettings={vatSettings}
               scheduledFlows={scopedScheduledFlows}
               invoices={invoices}
+              /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
+                 blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
+                 kan dat per definitie niet, want die meet wat er TUSSEN de twee
+                 helften bewoog en zou vanuit één helft de tegenboeking nooit
+                 zien. Dit is de ene plek in de app waar de
+                 persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
+                 reden staat uitgeschreven bij `crossScopeTransfers` in core en
+                 bij `allAccounts` in Belasting.tsx. */
+              allAccounts={accounts}
+              allTxs={txs}
+              entityProfiles={entityProfiles}
+              ownNames={ownNamesForMatching}
               busy={busy}
               onSaveVatSettings={saveVatSettings}
               onSaveScheduledFlows={saveScheduledFlows}
