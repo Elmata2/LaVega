@@ -1,7 +1,8 @@
 # LaVega — backlog
 
-Bijgewerkt **21 augustus 2026**, na de drie app-reviews van 20 augustus
-(`docs/reviews/2026-08-20-app-review.md`, `-2.md`, `-3.md`).
+Bijgewerkt **25 augustus 2026**. Basis: de drie app-reviews van 20 augustus
+(`docs/reviews/2026-08-20-app-review.md`, `-2.md`, `-3.md`), plus §0b hieronder voor wat er op
+24–25 augustus bij is gekomen en gesloten.
 
 **Gegroepeerd op wat een punt blokkeert**, niet op wanneer het is opgeschreven. Bij elk open punt
 staat waarom het open staat. Staat die reden er niet bij, dan hoort het punt hier niet.
@@ -58,6 +59,27 @@ al eens "gefixt" zijn geweest en toch terugkwamen:
   rijen, alleen tegen de tests. Tot hij het ziet, is dit niet af.
 - **De donut van € 2 miljoen.** De hypothese uit review 3 klopte en is gerepareerd, maar het getal
   dat er nu staat is nooit door hem gecontroleerd.
+
+---
+
+## 0b. Afgesloten op 24–25 augustus
+
+Zes commits op `master` (`1048eff`, `8e7b54a`, `7143b82`, `99f2cf5`, `2cf7232`, plus de
+cofounder-commits `88c67c6`/`c9f1fa9` na goedkeuring van drie `NEEDS_APPROVAL`-deploys). Wat hierin
+staat vervangt de cijfers in §2.2 en de openstaande vraag in §2.1 — die twee secties liepen 25 augustus
+achter de werkelijkheid aan en zijn hieronder bijgewerkt.
+
+| Wat | Uitkomst |
+|---|---|
+| §2.1, voorstel 1 (kaartkosten-FX-gaten + ING-puntendata, 20 aug) en voorstel 2 (`staging-account-fees.json`) | **Samengevoegd.** `catalog.json`: 185 → 192 producten, `accountFee` 89 → 107, `fxFeePct` 73 → 83 |
+| Zeven kaarten zonder `fxFeePct` die wél reizen (gevonden via een productieregel: `79 accepted, 113 refused`) | **Vier erin** (ING Creditcard More/Extra/Max, Bleap — uit documenten die de catalogus al citeerde), **drie blijven leeg met een gemeten reden** (Wise publiceert geen kaart-FX-percentage; Wirex' eigen artikel heeft nul FX-treffers en drie andere paden geven 404; bunq crypto is geen kaart). `83 accepted, 109 refused` is het nieuwe productiecijfer |
+| §2.3, `ing-betaalpas`-datum | **Bevestigd correct.** Het ING-kostenoverzicht zelf zegt "geldig vanaf 15 juni 2026" — precies de `checkedAt` die er al stond. Staat nog op `route: "agent"` in plaats van `provider-pdf`, wat een onderwaardering is en geen fout in het cijfer |
+| Extensie: `bepaalClaim` gaf altijd een caveat bij een niet-lege voorwaardentekst, dus basis "netto" was onbereikbaar | **Gerepareerd.** Herkomstnotitie en beperking worden nu onderscheiden; bij twijfel blijft het een beperking. Gemeten: 0 netto-rijen op de echte bundel, in EUR en USD — de tak leeft maar is op de data van vandaag onbereikbaar |
+| Extensie: ING Winkel las nul artikelen | **Twee fouten, allebei gemeten door de eigenaar.** Het adres stond op `www.ing.nl/punten`, hij zat op `mijn.ing.nl/punten/overview` — de voorwaarden van ING noemden de ingang, niet de pagina. En de kaarten staan in open shadow roots; `collectIngWinkel` piercet ze nu, met plafonds tegen een pathologische pagina. Sluitende roots en iframes geven bewust een eerlijke "kan hier niet in kijken"-zin in plaats van een gok |
+| `docs/n8n/2026-08-24-workflow-diagnose.md`: de wachtrij-leegmaker zat op het mailpad | **Gecorrigeerde workflow klaar** (`docs/n8n/lavega-facturen-workflow.json`) plus een permanente structuurwacht (49 tests). **Nog niet geïmporteerd in n8n — wacht op de cofounder die de Cloudflare-kant aanpast.** Zie §4.3 |
+| `/investing/` laadde een blanco pagina | **Root cause was Turbo, niet Vite:** `envMode: "strict"` filterde `INVESTING_WEB_BASE` uit de tweede, overschrijvende build. Hernoemd naar `VITE_INVESTING_BASE` (Turbo laat `VITE_*` automatisch door), dubbele build eruit, een build-poort die het image laat falen als de base terugvalt. **Live bevestigd na deploy:** `/investing/assets/…` geeft 200 text/javascript, het oude pad geeft nu 404 in plaats van stil 200 HTML |
+| Belastingspec van 20 augustus, Richting A | **Was al gebouwd** — `vatPosition` (tax.ts) draagt stage/basis/coverage/rulesAsOf, het lopende kwartaal geeft `status: "expected"`, een teruggave wordt zichtbaar. Niets aan te sluiten |
+| Belastingspec, Richting B | **Gebouwd** (`packages/core/src/crossScope.ts`, module "Privé en zakelijk" op Belasting). Meet oversteken BV↔Privé zonder oordeel — alleen een vraag per stroom. Signaal 1 (gebruikelijkloon) bewust niet gebouwd, geen loonadministratie; signaal 2 (box-2) bewust niet gebouwd, "closest thing to advice"; geen boekhouder-export, hij zei nee. **Nog niet gepusht** — lokaal gecommit, wacht op: rekeningen samenvoegen vóór hij de cijfers leest (een dubbel geïmporteerde rekening verdubbelt elke oversteek erop), en de verbogen vormen in de woordwacht (`besparen`, `adviseren`, `moet je` komen er nu doorheen) |
 
 ---
 
@@ -124,52 +146,60 @@ een LSP/TPP-status. Dat staat in §4.2, want daar wacht het op iemand anders.
 
 ## 2. Blokkeert het cijfer op het scherm
 
-### 2.1 Twee voorstellen liggen klaar en zijn niet samengevoegd
+### 2.1 Afgesloten op 24 augustus — zie §0b
 
-Beide zijn expliciet als *voorstel* geschreven en raken `catalog.json` niet aan. Zolang ze niet zijn
-samengevoegd, mist de app cijfers die in huis zijn.
+De twee voorstellen van 20/21 augustus (kaartkosten-FX-gaten + ING-puntendata, en
+`staging-account-fees.json`) zijn samengevoegd, plus twee nieuwe rondes op 24 augustus (de acht
+grootbanken, en de zeven FX-gaten). Details en de precieze uitkomst staan in §0b.
 
-| Voorstel | Wat erin zit | Wat het samenvoegen tegenhoudt |
-|---|---|---|
-| `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md` | zes FX-cijfers om vast te pinnen (Revolut Premium/Metal 0, Amex Corporate 2,5, Gnosis Pay 0, paysafecard 3, Tria 0) — dat brengt kaart-FX van 73/82 naar 79/82. Plus drie schone negatieven met reden | Alleen dat iemand het doet. De gemeten stand in `catalog.json` is nog steeds 73 |
-| `docs/catalog/staging-points.json` | 15 producten, ING Punten en RevPoints als programma, en twee inwisselwaarden | Zes regels leunen op **`enumerated-absence`** (een complete eigen productopsomming waarin punten ontbreken), niet op een uitgesproken "wij hebben geen punten". Die bewijssoort is één beslissing van hem — zie §6 |
-| `docs/catalog/staging-account-fees.json` | 105 tarieven met bron en citaat, waarvan 26 een **uitgesproken** nul (elke studentenrekening) | Er is nog geen veld in de catalogus waar een maand- of jaarlast in past. `value` + `unit` horen bij elkaar en er mag niet worden omgerekend |
+**Nog wél open uit deze paragraaf:** de zes `enumerated-absence`-regels in `staging-points.json`
+wachten nog op de algemene beslissing uit §6 (V2) — dat is een andere vraag dan de zeven die op
+24 augustus wél zijn afgehandeld, op zijn eigen gezag en niet op de bewijssoort.
 
-### 2.2 Wat de catalogus vandaag dekt, gemeten
+### 2.2 Wat de catalogus vandaag dekt, gemeten (25 augustus)
 
-**185 producten** in `catalog.json` (gegenereerd 2026-08-21). Per veld:
-**73** `fxFeePct`, **89** `accountFee`, **51** `pointsPerEuro`,
+**192 producten** in `catalog.json` (gegenereerd 2026-08-24). Per veld:
+**83** `fxFeePct`, **107** `accountFee`, **58** `pointsPerEuro`,
 **32** `interestPct`, **8** `cashbackPct`.
 
 Twee dingen die daarin verstopt zitten en die elke agent raken:
 
 - **Van de puntencijfers zijn er 14 groter dan nul, en die 14 zijn állemaal American Express.**
-  Buiten Amex heeft geen enkel product een aantoonbare koers per bestede euro.
-- **Cashback staat op 8.** Elk cashback-antwoord rust dus op een smalle basis — en van die 8
-  draagt er geen enkele óók een prijs, wat de nettotak van de extensie blokkeert tot de
-  kaartkosten-sweep is samengevoegd (§2.1).
+  Buiten Amex heeft geen enkel product een aantoonbare koers per bestede euro. Ongewijzigd na
+  24 augustus — die rondes raakten alleen `accountFee` en `fxFeePct`.
+- **Cashback staat op 8, en daarvan draagt Bleap en Wirex nu ook een prijs (was 0, sinds 24
+  augustus 2).** Dat is precies wat de nettotak van de extensie nodig had — en toch komt hij er niet
+  doorheen: allebei hebben een voorwaarde die de nettoclaim blokkeert (bij Bleap kunnen er
+  netwerkkosten bijkomen, bij Wirex is de uitkering geen euro's maar Cryptoback). Een kaart met
+  cashback IN EURO'S én een prijs bestaat nog niet in de catalogus.
 
+### 2.3 Twee datums dragen mogelijk de dag dat wij keken
 
-### 2.3 Vier datums dragen mogelijk de dag dat wij keken
+Huisregel: elk cijfer draagt de datum die *het document* noemt, niet de dag dat wij keken.
 
-Huisregel: elk cijfer draagt de datum die *het document* noemt, niet de dag dat wij keken. Twee
-regels zijn al gevonden door de lane die er niet in mocht schrijven; twee komen erbij uit een
-telling van 21-08 (het jaartal in de `sourceUrl` vergeleken met het jaartal in `checkedAt`, drie
-treffers op 122 producten):
+**`ing-betaalpas` is op 24 augustus opgelost — het was geen fout.** De vondst kwam terzijde, tijdens
+het uitlezen van hetzelfde ING-kostenoverzicht voor de FX-gaten-ronde (§0b): het document zelf zegt
+"Deze brochure is geldig vanaf 15 juni 2026", en dat is precies de `checkedAt` die er al stond. De
+bestandsnaam met `2023` erin wees dus niet naar een oude controle. Wat nog wel klopt: de rij staat op
+`route: "agent"` terwijl het cijfer nu uit een gedateerd providerdocument bevestigd is — een
+onderwaardering, geen foute waarde, en goedkoop recht te zetten in dezelfde pass als een volgende
+Amex-ronde.
+
+Twee blijven kandidaat, niet vondst, uit een telling van 21-08 (het jaartal in de `sourceUrl`
+vergeleken met het jaartal in `checkedAt`):
 
 | Regel | Veld | Staat er nu | Waar de twijfel op rust |
 |---|---|---|---|
 | `american-express-corporate-gold-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, PDF-`CreationDate` 7 december 2022 — **bevestigd** |
 | `zeal-card-gnosis-pay-rails` | `fxFeePct` | `2026-04-27` | Zendesk-API `updated_at: 2026-08-12`, `created_at: 2025-07-21` — **bevestigd** |
-| `ing-betaalpas` | `fxFeePct` | `2026-06-15` | bron heet `ING_Kostenoverzicht-betaalproducten-particulieren_**2023**.pdf` — alleen de bestandsnaam gezien, het document zelf is niet geopend |
 | `klm-american-express-corporate-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, bestand `NL_KLM_Corporate_Cardmember_TCs_**Dec2022**.pdf` — idem |
 
-De laatste twee zijn **kandidaten, geen vondsten**: een jaartal in een URL is geen bewijs van de
-datum die het document zelf noemt. Ze horen opengemaakt te worden in dezelfde pass als de merge van
-§2.1, anders staan de nieuwe regels naast een paar die het anders doen.
-
-Dit raakt de gebruiker direct: `ing-betaalpas` is de rij die hij het vaakst ziet, en de datum ernaast
-suggereert dat de koersopslag van twee maanden geleden is gecontroleerd.
+Een jaartal in een URL is geen bewijs van de datum die het document zelf noemt — ze horen opengemaakt
+te worden. De eerste en de derde zijn allebei Amex-rijen, en Amex is intussen het oudste cluster in
+de catalogus: elf
+FX-cijfers staan op `2022-03-01` en zijn `route: "agent"` (§0b), terwijl Amex de enige uitgever is
+waar alle veertien puntencijfers groter dan nul van komen (§2.2). Eén Amex-sweep zou dit hele blok in
+één keer meenemen.
 
 ---
 
@@ -237,27 +267,30 @@ onbevestigde aanname.
 
 ---
 
-### Het doorstuuradres bestaat nog niet (22 augustus)
+### Het doorstuuradres bestaat sinds 23 augustus, de n8n-workflow zelf niet meer (25 augustus)
 
-Hij probeerde weg 1 te testen en stuurde een factuur naar het doorstuuradres. Zijn
-bevinding: **dat adres bestaat niet.** Er kwam dus niets bij Cloudflare aan, niets bij n8n,
-en er valt langs die weg voorlopig niets te testen.
+Het doorstuuradres was het eerste blokkade en is opgelost: `ale@invoices.lavega.dev` bestaat en de
+eigenaar draait het zelf (§6, "Beantwoord op 23 augustus"). Dat maakte de mailketen end-to-end
+testbaar — en die test vond een ERNSTIGER probleem terug dan de oude CORS-preflight.
 
-**Twee blokkades die niet door elkaar mogen lopen**, want ze zitten op verschillende
-plekken in de keten en de een lost de ander niet op:
+**De diagnose van 24 augustus** (`docs/n8n/2026-08-24-workflow-diagnose.md`): de webhook die de
+wachtrij ophaalt staat op GET, LaVega's eigen `n8n.ts` doet ook GET — dat matcht — maar de node die
+de wachtrij LEEGT zit op het MAILPAD, niet achter de ophaalkant. Zodra een factuur wordt
+doorgestuurd, leegt hij de hele wachtrij voordat de app hem heeft opgehaald. n8n antwoordt daarbij
+met 200, dus het dataverlies leest als succes.
 
-1. **De mailkant.** Het doorstuuradres moet bestaan en op de Cloudflare-worker uitkomen.
-   Zolang dat er niet is, is weg 1 niet te testen — ook niet gedeeltelijk. Wacht op zijn
-   cofounder (zie sectie 4).
-2. **De ophaalkant.** Los daarvan gaf de app "geen antwoord van n8n", en dat is een ANDER
-   probleem: de app haalt de wachtrij op met een eigen header, dus de browser doet eerst
-   een CORS-preflight, en een geweigerde preflight laat in n8n géén uitvoering achter.
-   Zet Allowed Origins in de Webhook-node, of controleer de URL met curl buiten de browser
-   om. Die controle kan hij nu al doen, zonder dat het mailadres bestaat.
+**Stand op 25 augustus:** de gecorrigeerde workflow staat klaar
+(`docs/n8n/lavega-facturen-workflow.json`) met een permanente structuurwacht van 49 tests
+(`apps/web/src/n8n-workflow.test.ts`, commit `7143b82`). **Nog niet geïmporteerd in een echte n8n** —
+niets hiervan is tegen een draaiende instantie getest. Blokkeert op de cofounder, die de
+Cloudflare-webhookkant aanpast; zodra dat staat kan de gecorrigeerde workflow geïmporteerd en de
+negen controlestappen uit de diagnose doorlopen worden.
 
-**Wat intussen wél werkt en wat hij dus kan blijven gebruiken:** de PDF in Facturen slepen
-(werkt, bevestigd) en de nepwachtrij met `--rows` en zijn eigen cijfers. Die twee dekken
-samen alles behalve de afzendercontrole.
+De oude CORS-preflight op de ophaalkant (Allowed Origins op de Webhook-node) is een apart probleem
+en is niet vanzelf meegelost.
+
+**Wat intussen wél werkt:** de PDF in Facturen slepen (werkt, bevestigd) en de nepwachtrij met
+`--rows` en zijn eigen cijfers.
 
 **Nog open aan de facturenkant:** xlsx wordt niet gelezen. Hij had een factuur met btw in
 xlsx en moest hem overslaan.
@@ -375,7 +408,18 @@ schakel. Het scherm toont geen euro-waarde meer.
 
 **Het doorstuuradres bestaat: `ale@invoices.lavega.dev`**, en hij draait het zelf. Daarmee vervalt de
 blokkade uit §4.3 zodra het loopt — de mailketen is dan end-to-end te testen. Let op wat er dan nog
-overblijft: de CORS-preflight op de ophaalkant is een ANDER probleem en gaat hier niet mee weg.
+overblijft: de CORS-preflight op de ophaalkant is een ANDER probleem en gaat hier niet mee weg. (En
+die eindtest vond op 24 augustus meteen een ernstiger probleem — zie de bijgewerkte §4.3.)
+
+### Beantwoord op 24–25 augustus
+
+**V4 — geen boekhouder-export; Richting A afmaken als het makkelijk is; Richting B afmaken.**
+Richting A bleek al gebouwd (niets aan te sluiten). Richting B is gebouwd in de vorm die overblijft
+zonder loonadministratie — de gebruikelijkloonmeter (signaal 1) is expliciet niet gebouwd op zijn
+eigen woorden *"het is niet voor DGA's met loon, het is gewoon inkomen al belast met btw"*, en de
+box-2-kalender (signaal 2) is ook niet gebouwd, want de spec noemt hem zelf al *"the closest thing to
+advice in the entire proposal"*. Details en de twee openstaande gebreken (dubbele rekeningen
+verdubbelen een oversteek; de woordwacht mist verbogen vormen) staan in §0b. **Nog niet gepusht.**
 
 ### Nog open
 
@@ -383,7 +427,6 @@ overblijft: de CORS-preflight op de ophaalkant is een ANDER probleem en gaat hie
 | # | De vraag | Waarom niemand anders hem kan beantwoorden |
 |---|---|---|
 | **V2** | **Is `enumerated-absence` sterk genoeg bewijs?** Zes regels in `staging-points.json` leunen erop: een complete eigen productopsomming waarin punten ontbreken, terwijl de aanbieder nergens zegt "wij hebben geen punten" | Consistent met hoe ICS, ABN en Rabobank al op 0.0 staan. Accepteert hij het niet, dan blijven die zes leeg — één regel werk, maar het is zijn lat |
-| **V4** | **De belastingoptimalisatie** (R2-15). Er ligt een voorstel: `docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md` | Zijn woorden waren *"I'm thinking I do something here"* — een open brief, nog geen opdracht |
 | **V5** | **Kleuren en fontgroottes** | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop |
 | **V6** | **Wat de chatwidget wordt** | Uit de chrome gehaald, zijn `[later]` |
 | **V7** | **Meldingen in het profiel** | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie |
