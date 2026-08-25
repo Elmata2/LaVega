@@ -900,6 +900,21 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
         : `In de ${u.totaal} aanbiedingen die LaVega op ${dateNL(u.op)} van ${bron.paginaNaam} las, ` +
             `staat er geen voor deze winkel. De koppeling gaat op het webadres van de winkel en niet op de ` +
             `naam — een aanbieding zonder webadres blijft hier dus weg, en staat wel in het LaVega-venster.`;
+    case "mogelijke-merknaam-match": {
+      /* GEEN AANBIEDING, ALLEEN EEN TITEL. Deze zin mag niet zeggen "hier ligt
+       * een aanbieding voor je" — dat zou, net als een naamkoppeling bij
+       * `hoortBijWinkel`, een aankoop bij ING voorspiegelen als aanbieding van
+       * deze winkel. Ze staat er daarom als een vraag die hij zelf beantwoordt,
+       * niet als een bewering die LaVega niet kan dragen. Geen punten, geen
+       * bedrag: dat cijfer zou relevantie voor DEZE winkel suggereren, en dat is
+       * precies het deel dat onbevestigd is. */
+      const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
+      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      return (
+        `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij deze winkel ` +
+        `passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
+      );
+    }
     case "gevonden":
       return "";
   }

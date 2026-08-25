@@ -45,7 +45,7 @@ import {
   leesIngAanbod,
 } from "./ing.js";
 import { AMEX_BRON } from "./amex.js";
-import { aanbodVoorWinkel, leesPuntenprijs, type Aanbieding } from "./aanbod-kern.js";
+import { aanbodVoorWinkel, leesPuntenprijs, MOGELIJKE_MATCH_MAX, type Aanbieding } from "./aanbod-kern.js";
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
@@ -422,11 +422,13 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
 /* ──────────────── de koppeling: een aankoop bij ING is geen korting ────────── */
 
 describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () => {
-  it("koppelt een artikel dat alleen naar ING linkt aan NIETS", () => {
-    /* DE NORMALE UITKOMST, en de goede. Een productkaart in de winkel van ING
-     * wijst naar ING, dus er is geen winkeldomein en er verschijnt aan een kassa
-     * niets. Dat "repareren" met een merknaamvergelijking zou een aankoop bij
-     * ING op de kassa van een andere winkel zetten. */
+  it("koppelt een artikel dat alleen naar ING linkt nooit met de zekere bewering", () => {
+    /* DE NORMALE UITKOMST BLIJFT DEZE: geen domein, dus geen "gevonden" en geen
+     * "je hebt hier een aanbieding". Dat "repareren" met een merknaamvergelijking
+     * zou een aankoop bij ING neerzetten als een aanbieding van deze winkel, en
+     * dat blijft fout. Wat WEL mag, is de veel zwakkere, apart benoemde tak
+     * hieronder: een titel die de merknaam raakt, zonder claim over verzilvering.
+     * Zie `mogelijkeMerknaamMatch`. */
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
     const jbl = aanbiedingen.find((a) => a.winkel.startsWith("JBL Flip"))!;
     expect(jbl.domein).toBe(null);
@@ -438,14 +440,20 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
       { aan: true, lezing: null, aanbiedingen: [jbl] },
       "www.jbl.nl",
       NU,
+      ING_BRON,
     );
-    expect(uit.soort).toBe("geen-voor-deze-winkel");
+    expect(uit.soort).toBe("mogelijke-merknaam-match");
     expect(aanbodBlok(uit, NU, ING_BRON).regels).toHaveLength(0);
+    const regel = aanbodToestandRegel(uit, ING_BRON);
+    /* De bewering die hier niet mag staan. */
+    expect(regel).not.toMatch(/je (kunt|hebt) hier/i);
+    expect(regel).not.toContain("aanbieding voor je");
+    expect(regel).toContain("mijn.ing.nl");
   });
 
   it("legt uit dat dat te verwachten is en geen tekortkoming", () => {
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.hema.nl", NU);
+    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.hema.nl", NU, ING_BRON);
     const regel = aanbodToestandRegel(uit, ING_BRON);
     expect(regel).toContain("koop je bij ING");
     expect(regel).toContain("LaVega-venster");
@@ -459,7 +467,7 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
     const tune = aanbiedingen.find((a) => a.winkel.startsWith("JBL Tune"))!;
     expect(tune.domein).toBe("jbl.nl");
 
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.jbl.nl", NU);
+    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.jbl.nl", NU, ING_BRON);
     expect(uit.soort).toBe("gevonden");
 
     const blok = aanbodBlok(uit, NU, ING_BRON);
@@ -471,14 +479,36 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
     expect(blok.regels[0]!.regel).not.toMatch(/korting bij deze winkel/i);
   });
 
-  it("koppelt nooit op de merknaam in de artikelnaam", () => {
-    /* "JBL Flip 6" bevat JBL, maar draagt geen webadres. Op een namaakwinkel met
-     * "jbl" in de hostnaam mag daar niets van verschijnen. */
+  it("koppelt nooit VOLUIT op de merknaam, en de gehedgde match raakt de namaakwinkel niet", () => {
+    /* "JBL Flip 6" bevat JBL, maar draagt geen webadres. Bij het echte jbl.nl
+     * mag de gehedgde, zwakkere tak wél vuren (dat is het hele punt van
+     * `mogelijkeMerknaamMatch`). Bij een namaakwinkel als "jbl-outlet-nep.nl"
+     * mag dat niet — het label is daar "jbl-outlet-nep", geen los woord "jbl"
+     * in de titel, dus geen match. En "nike" komt nergens in de titel voor. */
     const zonderAdres = [artikel({ winkel: "JBL Flip 6 bluetoothspeaker", domein: null })];
-    for (const host of ["www.jbl.nl", "jbl-outlet-nep.nl", "www.nike.com"]) {
-      const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: zonderAdres }, host, NU);
+    const echt = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: zonderAdres }, "www.jbl.nl", NU, ING_BRON);
+    expect(echt.soort).toBe("mogelijke-merknaam-match");
+
+    for (const host of ["jbl-outlet-nep.nl", "www.nike.com"]) {
+      const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: zonderAdres }, host, NU, ING_BRON);
       expect(uit.soort).toBe("geen-voor-deze-winkel");
     }
+  });
+
+  it("kapt de gehedgde matches af maar telt ze ongekapt door", () => {
+    /* Vier titels die allemaal "jbl" als los woord dragen. De zin en de
+     * uitkomst mogen het bestaan van de vierde niet verzwijgen. */
+    const veel = [1, 2, 3, 4].map((n) =>
+      artikel({ winkel: `JBL Product ${n} kortingsvoucher`, domein: null, prijsTekst: `${n}00 punten` }),
+    );
+    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: veel }, "www.jbl.nl", NU, ING_BRON);
+    expect(uit.soort).toBe("mogelijke-merknaam-match");
+    if (uit.soort !== "mogelijke-merknaam-match") return;
+    expect(uit.matches).toHaveLength(MOGELIJKE_MATCH_MAX);
+    expect(uit.totaal).toBe(4);
+
+    const regel = aanbodToestandRegel(uit, ING_BRON);
+    expect(regel).toContain("1 andere titel(s)");
   });
 
   it("toont in het werkbalkvenster wél alles, want daar is het geen bewering", () => {
@@ -508,7 +538,7 @@ describe("de ING-schakelaar staat los van die van Amex", () => {
     /* Uit is uit — ook geen uitnodiging om hem aan te zetten. Dat is reclame op
      * het slechtste moment: hij staat af te rekenen. */
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
-    const uit = aanbodVoorWinkel({ aan: false, lezing: null, aanbiedingen }, "www.jbl.nl", NU);
+    const uit = aanbodVoorWinkel({ aan: false, lezing: null, aanbiedingen }, "www.jbl.nl", NU, ING_BRON);
     expect(uit).toEqual({ soort: "uit" });
     expect(aanbodBlok(uit, NU, ING_BRON)).toEqual({ kop: "", regels: [], toestand: "" });
     expect(aanbodLijst({ aan: false, lezing: null, aanbiedingen }, NU, ING_BRON).kop).toBe("");
@@ -523,7 +553,7 @@ describe("de ING-schakelaar staat los van die van Amex", () => {
     /* De opdracht eist letterlijk dezelfde periode. Er is dus geen veld per bron
      * waarmee een bron zijn eigen ruimere grens kan meebrengen. */
     const oud = [artikel({ winkel: "JBL Tune 770NC", domein: "jbl.nl", gelezenOp: "2026-06-01" })];
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: oud }, "www.jbl.nl", NU);
+    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: oud }, "www.jbl.nl", NU, ING_BRON);
     expect(uit.soort).toBe("te-oud");
     expect(aanbodToestandRegel(uit, ING_BRON)).toContain("60 dagen");
   });

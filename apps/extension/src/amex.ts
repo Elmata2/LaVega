@@ -71,9 +71,11 @@ import {
 export {
   AANBOD_OUD_NA_DAGEN,
   AANBOD_TE_OUD_NA_DAGEN,
+  MOGELIJKE_MATCH_MAX,
   dagenTussen,
   registreerbaarDomein,
   hoortBijWinkel,
+  mogelijkeMerknaamMatch,
   leesEinddatum,
   leesPuntenprijs,
   aanbodVoorWinkel,

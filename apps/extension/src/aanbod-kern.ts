@@ -144,6 +144,11 @@ export const AANBOD_OUD_NA_DAGEN = 14;
  *  is opgeslagen. */
 export const AANBOD_TE_OUD_NA_DAGEN = 60;
 
+/** Hoeveel titels een gehedgde merknaam-match aan een kassa mag laten zien.
+ *  Meer dan dit wordt niet stilgehouden — `totaal` in de uitkomst telt ongekapt
+ *  door, en de zin in lines.ts zegt dat er meer zijn. */
+export const MOGELIJKE_MATCH_MAX = 3;
+
 /** Dagen tussen twee ISO-datums; NaN als er iets onleesbaar is.
  *
  *  Geen `new Date(string)`: die accepteert van alles en maakt er stilletjes een
@@ -283,6 +288,40 @@ export function hoortBijWinkel(aanbieding: Aanbieding, winkelHost: string): bool
   const winkel = registreerbaarDomein(winkelHost);
   if (winkel === null) return false;
   return aanbieding.domein === winkel;
+}
+
+/** Een zwakkere, gehedgde koppeling op de titel van een PUNTENREGEL — nooit op
+ *  een korting-aanbieding, en nooit met de bewering die `hoortBijWinkel` mag
+ *  doen.
+ *
+ *  ── WAAROM DIT NIET DE HIERBOVEN AFGEWEZEN FOUT IS ─────────────────────────
+ *
+ *  Hierboven staat waarom er nooit op naam gekoppeld wordt: bij een KORTING
+ *  (Amex) zou "Nike" op `nike-outlet-fake.nl` een namaakwinkel voorzien van een
+ *  bewering die klopt lijkt. Die fout is hier nog steeds fout — deze functie
+ *  mag daarom uitsluitend worden aangeroepen voor een PUNTEN-bron; dat bewaakt
+ *  `aanbodVoorWinkel`, niet deze functie zelf.
+ *
+ *  Bij een puntenbron is de zin die hierbij hoort nooit "hier ligt een
+ *  aanbieding voor je" (dat zou, precies zoals hierboven, een aankoop bij ING
+ *  voorspiegelen als een aanbieding van de winkel zelf). Het is een zwakkere
+ *  bewering: "in je ING Punten staat een titel die hierbij kan passen — kijk
+ *  zelf of dat klopt en of het hier te verzilveren is". Die zin beweert zelf
+ *  geen aanbieding, dus de tweede fout uit `hoortBijWinkel` kan hij niet maken.
+ *  Vandaar een eigen `AanbodUitkomst`-tak (`mogelijke-merknaam-match`) die
+ *  nooit samenvalt met `gevonden`.
+ *
+ *  Het label (het eerste deel van het domein, dus "jbl" uit "jbl.nl") moet
+ *  minstens 3 tekens zijn en als los woord in de titel voorkomen — niet als
+ *  losse substring, anders raakt "ing" op elk woord dat die drie letters
+ *  toevallig bevat. */
+export function mogelijkeMerknaamMatch(aanbieding: Aanbieding, winkelHost: string): boolean {
+  const domein = registreerbaarDomein(winkelHost);
+  if (domein === null) return false;
+  const label = domein.split(".")[0]!;
+  if (label.length < 3) return false;
+  const patroon = new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  return patroon.test(aanbieding.winkel);
 }
 
 /* ──────────────────── wat er uit de pagina terugkomt ──────────────────────── */
@@ -751,6 +790,13 @@ export type AanbodUitkomst =
   | { soort: "te-oud"; op: string; dagen: number }
   | { soort: "winkel-zonder-domein"; host: string }
   | { soort: "geen-voor-deze-winkel"; op: string; dagen: number; totaal: number }
+  /** Geen enkele regel koppelt op domein, maar bij een PUNTEN-bron staat er wel
+   *  een titel die de merknaam van deze winkel raakt (zie
+   *  `mogelijkeMerknaamMatch`). Zwakker dan "gevonden": dit beweert geen
+   *  aanbieding, alleen een mogelijke match op tekst. `matches` is afgekapt op
+   *  `MOGELIJKE_MATCH_MAX`; `totaal` telt ongekapt, zodat een afgekapte lijst
+   *  dat ook zegt in plaats van te verzwijgen. */
+  | { soort: "mogelijke-merknaam-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
   | {
       soort: "gevonden";
       op: string;
@@ -788,6 +834,7 @@ export function aanbodVoorWinkel(
   toestand: AanbodToestand,
   winkelHost: string,
   asOf: string,
+  bron: Bron,
 ): AanbodUitkomst {
   if (!toestand.aan) return { soort: "uit" };
 
@@ -816,6 +863,21 @@ export function aanbodVoorWinkel(
 
   const passend = toestand.aanbiedingen.filter((a) => hoortBijWinkel(a, winkelHost));
   if (passend.length === 0) {
+    /* Alleen bij een PUNTEN-bron, en dat is de bewaking waar de rejection-
+     * comment bij `hoortBijWinkel` om vraagt: bij een KORTING-bron zou dit de
+     * Nike/nike-outlet-fake.nl-fout terugbrengen. */
+    if (bron.prijsSoort === "punten") {
+      const matches = toestand.aanbiedingen.filter((a) => mogelijkeMerknaamMatch(a, winkelHost));
+      if (matches.length > 0) {
+        return {
+          soort: "mogelijke-merknaam-match",
+          op,
+          dagen,
+          matches: matches.slice(0, MOGELIJKE_MATCH_MAX),
+          totaal: matches.length,
+        };
+      }
+    }
     return { soort: "geen-voor-deze-winkel", op, dagen, totaal: toestand.aanbiedingen.length };
   }
 
