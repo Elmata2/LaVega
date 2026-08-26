@@ -49,7 +49,7 @@ import { aanbodVoorWinkel, leesPuntenprijs, MOGELIJKE_MATCH_MAX, type Aanbieding
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
-import { padIsSpecifiek } from "./sites.js";
+import { padIsSpecifiek } from "./bronnen.js";
 import { BRONNEN } from "./bronnen.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");

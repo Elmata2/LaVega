@@ -179,7 +179,7 @@ if (manifest) {
   );
 }
 
-/* ── 4. loopt de sitelijst gelijk met sites.ts? ────────────────────────────── */
+/* ── 4. staat <all_urls> plus de accountpagina's van bronnen.ts in het manifest? ── */
 
 /* De kassa-lezer vraagt sinds 26 augustus 2026 één brede toestemming
  * (<all_urls>) i.p.v. een per-site lijst — zie
