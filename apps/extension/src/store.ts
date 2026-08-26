@@ -78,7 +78,6 @@ import type {
 } from "./aanbod-kern.js";
 
 const KEY_KAARTEN = "heldIds";
-const KEY_SITES = "enabledSiteIds";
 const KEY_KASSA_OVERAL = "kassaOveralAan";
 const KEY_PUNTEN = "pointsBalances";
 
@@ -105,15 +104,6 @@ export async function getHeldIds(): Promise<string[]> {
 
 export async function setHeldIds(ids: readonly string[]): Promise<void> {
   await chrome.storage.local.set({ [KEY_KAARTEN]: schoonLijst(ids) });
-}
-
-export async function getEnabledSiteIds(): Promise<string[]> {
-  const items = await chrome.storage.local.get([KEY_SITES]);
-  return schoonLijst(items[KEY_SITES]);
-}
-
-export async function setEnabledSiteIds(ids: readonly string[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY_SITES]: schoonLijst(ids) });
 }
 
 /** Dezelfde zeef, voor puntensaldi. Strenger dan die voor de kaart-id's, omdat
