@@ -12,11 +12,6 @@
     "INVESTING_MARKET_DATA_CONSENT_FILE": "/tmp/lavega-market-data-consent.json",
     "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json"
   },
-  "functions": {
-    "api/[...route].js": {
-      "excludeFiles": "**/.lavega/**"
-    }
-  },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },
     { "source": "/privacy", "destination": "/api/privacy" },
