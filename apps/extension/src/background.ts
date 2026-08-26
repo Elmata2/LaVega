@@ -122,9 +122,18 @@ async function syncRegistraties(): Promise<void> {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
 
-  const bijZetten: { id: string; match: string; js: string }[] = [];
+  const bijZetten: { id: string; match: string; js: string; excludeMatches?: string[] }[] = [];
   if (gewensteIds.has(KASSA_REG_ID) && !bestaandeIds.has(KASSA_REG_ID)) {
-    bijZetten.push({ id: KASSA_REG_ID, match: KASSA_MATCH, js: "content.js" });
+    bijZetten.push({
+      id: KASSA_REG_ID,
+      match: KASSA_MATCH,
+      js: "content.js",
+      /* Anders draaien content.js én aanbod-content.js allebei op dezelfde
+       * ING/Amex-pagina's, met twee overlappende panelen als gevolg. Komt uit
+       * BRONNEN.TS en niet uit een tweede lijstje hier: een derde bron hoort
+       * hier automatisch uitgesloten te worden. */
+      excludeMatches: BRONNEN.map((b) => b.match),
+    });
   }
   for (const bron of bronnenAan) {
     const id = `${REG_PREFIX}${bron.id}`;
@@ -139,6 +148,7 @@ async function syncRegistraties(): Promise<void> {
       bijZetten.map((s) => ({
         id: s.id,
         matches: [s.match],
+        excludeMatches: s.excludeMatches,
         js: [s.js],
         /* document_idle: de pagina is klaar met laden. Eerder heeft geen zin —
          * de prijsopmaak staat er dan misschien nog niet — en het paneel dat
