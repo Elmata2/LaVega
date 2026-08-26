@@ -175,7 +175,7 @@ if (manifest) {
   );
   eis(
     (manifest.host_permissions ?? []).length === 0,
-    "host_permissions moet leeg zijn — sites lopen via optional_host_permissions, zodat de gebruiker per winkel ja zegt.",
+    "host_permissions moet leeg zijn — alle leestoestemming loopt via optional_host_permissions (de brede kassa-toestemming plus de aparte ING/Amex-toestemmingen), zodat de gebruiker er zelf ja tegen zegt.",
   );
 }
 
@@ -203,9 +203,12 @@ eis(
     `        verwacht: ${JSON.stringify(uitCode)}`,
 );
 /* Alleen de accountpagina's moeten een PAD aanwijzen, geen heel domein — dat
- * blijft gelden (de winkelwagen en de accountpagina's van ING/Amex zelf horen
- * er nog steeds buiten). <all_urls> is geen https-patroon en heeft geen pad om
- * op te controleren, dus die staat hier terecht buiten de lus. */
+ * blijft gelden (het rekeningoverzicht van ING/Amex zelf hoort er nog steeds
+ * buiten). Dat geldt NIET voor de winkelwagen van een willekeurige webshop: die
+ * valt onder de brede <all_urls>-toestemming en er is niets dat hem uitsluit —
+ * dat is een geaccepteerd gevolg van breed gaan, geen garantie. <all_urls> is
+ * geen https-patroon en heeft geen pad om op te controleren, dus die staat hier
+ * terecht buiten de lus. */
 for (const patroon of bronnen.BRON_MATCHES) {
   eis(
     bronnen.padIsSpecifiek(patroon),

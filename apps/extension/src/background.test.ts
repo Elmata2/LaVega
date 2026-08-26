@@ -31,7 +31,7 @@ type Injectie = { target: { tabId: number }; func: (...a: never[]) => unknown; a
 
 const opslag = new Map<string, unknown>();
 const toegestaan = new Set<string>();
-let scripts: { id: string; matches?: string[]; js?: string[] }[] = [];
+let scripts: { id: string; matches?: string[]; js?: string[]; excludeMatches?: string[] }[] = [];
 const luister = {
   bericht: [] as ((m: unknown, s: unknown, r: (x?: unknown) => void) => unknown)[],
   verwijderd: [] as (() => void)[],
@@ -209,6 +209,9 @@ describe("de brede kassa-toestemming heeft twee onafhankelijke schakelaars", () 
     const kassa = scripts.find((s) => s.id === "paneel-kassa-overal");
     expect(kassa?.matches).toEqual([KASSA_MATCH]);
     expect(kassa?.js).toEqual(["content.js"]);
+    /* Regressietest voor het paneel-botsingprobleem: zonder deze uitsluiting
+     * draaien content.js én aanbod-content.js allebei op de ING/Amex-pagina's. */
+    expect(kassa?.excludeMatches).toEqual([AMEX_MATCH, ING_MATCH]);
   });
 
   it("haalt de registratie weg en zet het vinkje uit zodra de toestemming wordt ingetrokken", async () => {

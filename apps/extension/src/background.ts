@@ -1,7 +1,10 @@
 /* De service worker. Doet drie dingen en verder niets:
  *
- *   1. hij houdt bij op welke winkels het paneel geregistreerd staat, en zorgt
- *      dat die registratie nooit verder reikt dan de toestemming;
+ *   1. hij houdt de registraties in lijn met de werkelijkheid: één brede
+ *      kassa-registratie (<all_urls>, achter het vinkje "kassa-overal") plus
+ *      een registratie per aanbiedingenbron (ING/Amex, elk achter zijn eigen
+ *      vinkje en zijn eigen host-toestemming) — en zorgt dat geen van die
+ *      registraties verder reikt dan de toestemming die erbij hoort;
  *   2. hij beantwoordt de vraag van het content script met AFGEMAAKTE ZINNEN;
  *   3. hij ruimt op zodra de gebruiker een toestemming intrekt.
  *
@@ -91,11 +94,14 @@ async function kassaMagDraaien(): Promise<boolean> {
 /** Brengt de registraties in lijn met de werkelijkheid. Wordt aangeroepen bij
  *  installeren, bij opstarten, en na elke wijziging in opslag of toestemmingen.
  *
+ *  Er is geen lijst van winkels meer om langs te lopen: er is één brede
+ *  kassa-registratie (aan of uit) plus één registratie per aanbiedingenbron
+ *  (ING/Amex, elk apart aan of uit).
+ *
  *  IDEMPOTENT MET OPZET: hij kijkt eerst wat er al staat en doet alleen het
  *  verschil. Blind opnieuw registreren gooit een fout ("Duplicate script ID") en
- *  die fout laat de worker halverwege stoppen — waarna de helft van de sites
- *  geregistreerd is en de andere helft niet, en het van de volgorde afhangt
- *  welke. */
+ *  die fout laat de worker halverwege stoppen — waarna de ene registratie er
+ *  staat en de andere niet, en het van de volgorde afhangt welke. */
 async function syncRegistraties(): Promise<void> {
   const bestaand = await chrome.scripting.getRegisteredContentScripts();
   const bestaandeIds = new Set(bestaand.map((s) => s.id));
@@ -130,8 +136,13 @@ async function syncRegistraties(): Promise<void> {
       js: "content.js",
       /* Anders draaien content.js én aanbod-content.js allebei op dezelfde
        * ING/Amex-pagina's, met twee overlappende panelen als gevolg. Komt uit
-       * BRONNEN.TS en niet uit een tweede lijstje hier: een derde bron hoort
-       * hier automatisch uitgesloten te worden. */
+       * BRONNEN.TS en niet uit een tweede lijstje hier: een derde bron die
+       * hier bij komt, wordt bij de VOLGENDE nieuwe kassa-registratie
+       * automatisch uitgesloten. Alleen dit blok — als de kassa-registratie
+       * al bestaat (`bestaandeIds.has(KASSA_REG_ID)`), wordt hij hierboven
+       * niet opnieuw opgebouwd, dus een bestaande registratie neemt de
+       * uitsluiting van een pas toegevoegde bron niet automatisch over totdat
+       * hij een keer wordt afgemeld en opnieuw geregistreerd. */
       excludeMatches: BRONNEN.map((b) => b.match),
     });
   }
@@ -247,11 +258,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 /** De host van de afzender, geverifieerd — of null als er iets niet klopt.
  *
- *  Dezelfde drie eisen als voorheen (`siteVanAfzender`), nu zonder een vaste
- *  sitelijst om ze tegen af te zetten: het schema is https, geen poort,
- *  `sender.origin` (indien aanwezig) hoort bij dezelfde URL, en het tabblad
- *  (indien bekend) hoort bij dezelfde ORIGIN — niet meer bij hetzelfde
- *  "site.id", want dat bestaat niet meer sinds er geen sitelijst meer is. */
+ *  ER IS GEEN SITELIJST MEER. Deze functie wijst dus geen enkele WINKEL af of
+ *  toe; ze controleert alleen dat de afzender, zijn origin en zijn tabblad het
+ *  onderling eens zijn over dezelfde https-origin (zonder poort). Dat is een
+ *  interne consistentiecontrole, niet een scoping naar welke site het mag zijn
+ *  — die laag bestaat niet meer sinds de brede <all_urls>-toestemming de
+ *  per-winkel-sitelijst heeft vervangen.
+ *
+ *  Waarom dat mag rusten op `sender.url` en `sender.origin`: dat zijn velden
+ *  die CHROME zelf op het bericht zet, niet de pagina. Een pagina kan wel
+ *  proberen te doen alsof ze een andere host is, maar niet Chrome's eigen
+ *  metadata over het bericht veranderen — dezelfde reden waarom `bronVanAfzender`
+ *  hieronder op diezelfde velden rust. */
 function hostVanAfzender(sender: chrome.runtime.MessageSender): string | null {
   const url = sender.url;
   if (!url) return null;
@@ -382,7 +400,7 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
 
 /** Welke BRON hoort bij de afzender van dit bericht? Null als het er geen is.
  *
- *  Dezelfde drie eisen als bij een winkel (`siteVanAfzender`) en om dezelfde
+ *  Dezelfde drie eisen als bij `hostVanAfzender` hierboven en om dezelfde
  *  reden: `sender.url` en `sender.origin` worden door Chrome gezet en niet door
  *  de pagina, dus dat zijn de enige velden waarop dit mag rusten. Een origin
  *  heeft geen pad, dus alleen de origin controleren zou "alles op

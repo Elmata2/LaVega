@@ -10,7 +10,9 @@
  *
  * Er staan dus drie soorten dingen in:
  *   - welke kaarten hij heeft (zijn keuze, hoort bij hem);
- *   - op welke winkels het paneel aan mag (zijn keuze, hoort bij de winkel);
+ *   - of het paneel op winkelpagina's mag verschijnen (`kassaOveralAan`, één
+ *     boolean voor de brede <all_urls>-toestemming — geen lijst van winkels
+ *     meer, want die lijst bestaat niet meer);
  *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf).
  *
  * Alle drie zijn ze na het weghalen van de extensie weg, en alle drie zijn ze in

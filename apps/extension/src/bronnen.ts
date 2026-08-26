@@ -50,9 +50,9 @@ export const AANBOD_CONTENT_JS = "aanbod-content.js";
 
 /** Welke bron hoort bij deze volledige URL? Null als het er geen is.
  *
- *  Net als `siteForUrl` in sites.ts controleert dit host én PAD, en niet alleen
- *  de host: een origin heeft geen pad, dus alleen op de origin afgaan zou
- *  "alles op ing.nl" betekenen — inclusief zijn rekeningoverzicht. */
+ *  Dit controleert host én PAD, en niet alleen de host: een origin heeft geen
+ *  pad, dus alleen op de origin afgaan zou "alles op ing.nl" betekenen —
+ *  inclusief zijn rekeningoverzicht. */
 export function bronVoorUrl(url: string): Bron | null {
   for (const b of BRONNEN) {
     if (urlValtBinnen(b.match, url)) return b;
