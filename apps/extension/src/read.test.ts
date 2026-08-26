@@ -38,6 +38,15 @@ function read(name: string, host = "voorbeeld.nl") {
 }
 
 describe("echt opgehaalde winkelpagina's", () => {
+  /* TOT 26 AUGUSTUS 2026 sloot sites.ts coolblue.nl op grond van precies deze
+   * test uit: geldige, eenduidige JSON-LD, maar voor een ander artikel dan de
+   * pagina toonde (deze AirPods-URL gaf de prijs van een Samsonite kofferset;
+   * een Sonos-URL gaf een PlayStation 5). Sinds de brede <all_urls>-toestemming
+   * is er geen lijst meer om een domein uit te sluiten — dit is dus niet meer
+   * "waarom Coolblue niet meedoet" maar een GEDOCUMENTEERDE, GEACCEPTEERDE
+   * beperking van de generieke lezer: readCheckout kan dit soort fout niet
+   * onderscheiden van een kloppend antwoord. Zie
+   * docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md. */
   it("coolblue.nl: leest 420 EUR uit het JSON-LD Offer, als ARTIKELprijs", () => {
     const r = read("coolblue-product.html", "www.coolblue.nl");
     expect(r.ok).toBe(true);
