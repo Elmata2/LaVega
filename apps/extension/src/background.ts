@@ -37,20 +37,19 @@
  * worker die alleen leeft als er iets gevraagd wordt, is er ook niet als er
  * niets gevraagd wordt. */
 
-import { SITES, siteForUrl, ontleedMatch, type Site } from "./sites.js";
 import { collectEvidence, readCheckout, type Evidence } from "./read.js";
 import { rankCheckout } from "./rank.js";
 import { buildPanel, PANEEL_CAPS } from "./panel.js";
 import { pointsCoverage } from "./points.js";
 import {
   getHeldIds,
-  getEnabledSiteIds,
-  setEnabledSiteIds,
+  getKassaOveralAan,
   getPointsBalances,
   getBronAan,
   getBronAanbiedingen,
   getBronLezing,
   setBronLezing,
+  setKassaOveralAan,
   wisBron,
 } from "./store.js";
 import {
@@ -65,26 +64,28 @@ import { aanbodStrook } from "./lines.js";
 import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
 
-/** Het id waaronder een site zijn content script registreert. Eén vaste vorm,
- *  zodat opruimen ook lukt als de sitelijst inmiddels is veranderd: alles met
- *  dit voorvoegsel dat niet meer hoort te bestaan, gaat eraf. */
+/** Zelfde voorvoegsel als voorheen, nu gedeeld door de bronnen (per-bron id)
+ *  en de kassa (één vast id) — zodat opruimen blijft werken op alles wat met
+ *  dit voorvoegsel begint en niet meer gewenst is. */
 const REG_PREFIX = "paneel-";
-const regId = (site: Site) => `${REG_PREFIX}${site.id}`;
+const KASSA_REG_ID = `${REG_PREFIX}kassa-overal`;
+const KASSA_MATCH = "<all_urls>";
 
-/** Mag het paneel op deze site draaien? Twee voorwaarden, en ze moeten allebei
- *  waar zijn:
+/** Mag het kassa-paneel draaien? Twee voorwaarden, en ze moeten allebei waar
+ *  zijn:
  *
- *   - Chrome heeft ons de host-toestemming gegeven (die kan de gebruiker in
+ *   - Chrome heeft de <all_urls>-toestemming gegeven (die kan de gebruiker in
  *     chrome://extensions intrekken zonder ons iets te vragen);
  *   - het vinkje staat aan in onze eigen opslag.
  *
- *  Twee schakelaars voor één ding lijkt dubbelop, maar ze horen bij verschillende
- *  partijen. De eerste is van Chrome en die wint altijd. De tweede is van hem:
- *  het vinkje uitzetten zonder de toestemming in te trekken hoort te kunnen, en
- *  dan moet het paneel wegblijven ook al MAG het technisch nog. */
-async function magDraaien(site: Site, aangevinkt: readonly string[]): Promise<boolean> {
-  if (!aangevinkt.includes(site.id)) return false;
-  return chrome.permissions.contains({ origins: [site.match] });
+ *  Twee schakelaars voor één ding lijkt dubbelop, maar ze horen bij
+ *  verschillende partijen. De eerste is van Chrome en die wint altijd. De
+ *  tweede is van hem: het vinkje uitzetten zonder de toestemming in te trekken
+ *  hoort te kunnen, en dan moet het paneel wegblijven ook al MAG het technisch
+ *  nog. */
+async function kassaMagDraaien(): Promise<boolean> {
+  if (!(await getKassaOveralAan())) return false;
+  return chrome.permissions.contains({ origins: [KASSA_MATCH] });
 }
 
 /** Brengt de registraties in lijn met de werkelijkheid. Wordt aangeroepen bij
@@ -96,15 +97,11 @@ async function magDraaien(site: Site, aangevinkt: readonly string[]): Promise<bo
  *  geregistreerd is en de andere helft niet, en het van de volgorde afhangt
  *  welke. */
 async function syncRegistraties(): Promise<void> {
-  const aangevinkt = await getEnabledSiteIds();
   const bestaand = await chrome.scripting.getRegisteredContentScripts();
   const bestaandeIds = new Set(bestaand.map((s) => s.id));
 
-  const gewenst: Site[] = [];
-  for (const site of SITES) {
-    if (await magDraaien(site, aangevinkt)) gewenst.push(site);
-  }
-  const gewensteIds = new Set(gewenst.map(regId));
+  const gewensteIds = new Set<string>();
+  if (await kassaMagDraaien()) gewensteIds.add(KASSA_REG_ID);
 
   /* Zijn eigen accountpagina's hangen aan APARTE schakelaars en aparte
    * toestemmingen — één per bron. Ze lopen hier mee in dezelfde registratielus
@@ -125,9 +122,10 @@ async function syncRegistraties(): Promise<void> {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
 
-  const bijZetten: { id: string; match: string; js: string }[] = gewenst
-    .filter((s) => !bestaandeIds.has(regId(s)))
-    .map((s) => ({ id: regId(s), match: s.match, js: "content.js" }));
+  const bijZetten: { id: string; match: string; js: string }[] = [];
+  if (gewensteIds.has(KASSA_REG_ID) && !bestaandeIds.has(KASSA_REG_ID)) {
+    bijZetten.push({ id: KASSA_REG_ID, match: KASSA_MATCH, js: "content.js" });
+  }
   for (const bron of bronnenAan) {
     const id = `${REG_PREFIX}${bron.id}`;
     if (bestaandeIds.has(id)) continue;
@@ -192,14 +190,13 @@ function planSync(): Promise<void> {
  *  gebeurt, en zoekt hij naar een fout die er niet is. */
 chrome.permissions.onRemoved.addListener(() => {
   void (async () => {
-    const aangevinkt = await getEnabledSiteIds();
-    const blijft: string[] = [];
-    for (const id of aangevinkt) {
-      const site = SITES.find((s) => s.id === id);
-      if (!site) continue;
-      if (await chrome.permissions.contains({ origins: [site.match] })) blijft.push(id);
+    /* Trekt de gebruiker de <all_urls>-toestemming in via chrome://extensions,
+     * dan hoort het vinkje in het optiescherm dat ook te tonen — anders zoekt
+     * hij naar een fout die er niet is (zie het commentaar bij
+     * kassaMagDraaien). */
+    if ((await getKassaOveralAan()) && !(await chrome.permissions.contains({ origins: [KASSA_MATCH] }))) {
+      await setKassaOveralAan(false);
     }
-    if (blijft.length !== aangevinkt.length) await setEnabledSiteIds(blijft);
 
     /* EN DE BRONNEN, en die doen meer dan een vinkje omzetten: het opgeslagene
      * gaat weg.
@@ -234,76 +231,52 @@ chrome.runtime.onStartup.addListener(() => void planSync());
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const bronSleutel = BRONNEN.some((b) => b.sleutels.aan in changes);
-  if (!("enabledSiteIds" in changes) && !bronSleutel) return;
+  if (!("kassaOveralAan" in changes) && !bronSleutel) return;
   void planSync();
 });
 
-/** Welke site hoort bij de afzender van dit bericht?
+/** De host van de afzender, geverifieerd — of null als er iets niet klopt.
  *
- *  DIT IS EEN CONTROLE EN GEEN GEMAK. Een bericht kan van elke pagina komen
- *  waar ooit een content script van ons heeft gedraaid, en `sendMessage` is niet
- *  te vertrouwen op zijn woord. `sender.url` en `sender.origin` worden door
- *  Chrome gezet en niet door de pagina, dus dat zijn de enige velden waarop dit
- *  mag rusten.
- *
- *  ── WAAROM HET PAD HIER WORDT GECONTROLEERD EN NIET ALLEEN DE HOST ─────────
- *
- *  Onder het vinkje in de opties staat dat de extensie alleen productpagina's
- *  leest. Deze functie is de plek waar die zin waar wordt gemaakt. Eerder keek
- *  ze alleen naar `sender.origin`, en een origin HEEFT geen pad: `winkelwagen`
- *  en `p/billy-boekenkast` zijn er allebei `https://www.ikea.com`. Wat de zin
- *  beloofde, werd dus nergens in deze code gecontroleerd.
- *
- *  Vandaar drie eisen, en ze moeten alle drie kloppen:
- *
- *    - `sender.url` — de volledige URL van het frame dat ons aanspreekt — valt
- *      binnen host én pad van een ondersteunde site (`siteForUrl`);
- *    - is er ook een `sender.origin`, dan hoort die bij diezelfde URL. Twee
- *      velden die elkaar tegenspreken is geen afzender;
- *    - is de URL van het TABBLAD bekend, dan moet die het ook halen, en bij
- *      dezelfde site uitkomen. Dat laatste is geen dubbelop: we lezen zo meteen
- *      het tabblad, niet het frame dat de vraag stelde. Vraagt een frame binnen
- *      een productpagina iets terwijl het tabblad ergens anders staat, dan zou
- *      de lezing over een andere pagina gaan dan de controle.
- *
- *  Wat hiermee NIET is dichtgezet: het tabblad kan tussen dit bericht en de
- *  injectie hieronder navigeren. Daar is `documentIds` van executeScript voor,
- *  en dat staat niet in chrome.d.ts — dat bestand is met opzet de complete lijst
- *  van wat de extensie mag aanroepen, en er langs casten om een race van
- *  milliseconden te sluiten is de verkeerde ruil. De schade blijft ook beperkt:
- *  na de injectie wordt de host uit het bewijsmateriaal nog een keer tegen de
- *  site gelegd (zie `beantwoord`), dus wat er overblijft is een navigatie binnen
- *  dezelfde host, precies tussen twee opeenvolgende regels. */
-function siteVanAfzender(sender: chrome.runtime.MessageSender): Site | null {
+ *  Dezelfde drie eisen als voorheen (`siteVanAfzender`), nu zonder een vaste
+ *  sitelijst om ze tegen af te zetten: het schema is https, geen poort,
+ *  `sender.origin` (indien aanwezig) hoort bij dezelfde URL, en het tabblad
+ *  (indien bekend) hoort bij dezelfde ORIGIN — niet meer bij hetzelfde
+ *  "site.id", want dat bestaat niet meer sinds er geen sitelijst meer is. */
+function hostVanAfzender(sender: chrome.runtime.MessageSender): string | null {
   const url = sender.url;
   if (!url) return null;
 
-  const site = siteForUrl(url);
-  if (!site) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:") return null;
+  if (u.port !== "") return null;
 
-  if (sender.origin) {
-    let origin: string;
+  if (sender.origin && sender.origin !== u.origin) return null;
+
+  const tabUrl = sender.tab?.url;
+  if (tabUrl !== undefined) {
+    let tu: URL;
     try {
-      origin = new URL(url).origin;
+      tu = new URL(tabUrl);
     } catch {
       return null;
     }
-    if (sender.origin !== origin) return null;
+    if (tu.origin !== u.origin) return null;
   }
 
-  const tabUrl = sender.tab?.url;
-  if (tabUrl !== undefined && siteForUrl(tabUrl)?.id !== site.id) return null;
-
-  return site;
+  return u.hostname.toLowerCase();
 }
 
 async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelAntwoord> {
-  const site = siteVanAfzender(sender);
-  if (!site) return { soort: "zwijg", reden: "afzender hoort niet bij een ondersteunde winkel" };
+  const host = hostVanAfzender(sender);
+  if (!host) return { soort: "zwijg", reden: "afzender is geen geldige https-pagina" };
 
-  const aangevinkt = await getEnabledSiteIds();
-  if (!(await magDraaien(site, aangevinkt))) {
-    return { soort: "zwijg", reden: `${site.id} staat uit` };
+  if (!(await kassaMagDraaien())) {
+    return { soort: "zwijg", reden: "kassa-overal staat uit" };
   }
 
   const tabId = sender.tab?.id;
@@ -331,8 +304,7 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
    * niet overeen met de site die de vraag stelde, dan is het tabblad onderweg
    * ergens anders heen gegaan en gaat deze lezing over een pagina waar niemand
    * ja tegen heeft gezegd. */
-  const verwachteHost = ontleedMatch(site.match)?.host;
-  if (!verwachteHost || evidence.host.toLowerCase() !== verwachteHost) {
+  if (evidence.host.toLowerCase() !== host) {
     return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
   }
 
