@@ -16,6 +16,7 @@ state.json
 !**/.env.example
 .DS_Store
 .superpowers/
+.worktrees/
 .gstack/
 .lavega/
 
