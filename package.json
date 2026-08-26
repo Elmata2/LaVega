@@ -19,12 +19,13 @@
     "catalog:find-pdfs": "tsx scripts/find-tariff-pdfs.ts"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@lavega/core": "workspace:*",
+    "@vercel/oidc": "3.2.0",
     "jsdom": "^30.0.1",
     "tsx": "^4",
     "turbo": "2.10.8",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "@anthropic-ai/sdk": "^0.115.0"
+    "vitest": "^2.1.0"
   }
 }
