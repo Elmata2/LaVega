@@ -1,40 +1,36 @@
-# Deploy — Railway + `lavega.dev` (all-in-one)
+# Deploy — Vercel + Neon + `lavega.dev`
 
-One Hono service serves both the API (`/health`, `/api/rates`, later `/api/eb/*`)
-and the built web app (`apps/web/dist`). Your financial data stays in the
-browser's encrypted vault — the server is a thin proxy (public rates + the
-Enable Banking OAuth exchange), it never stores your accounts/transactions.
+Vercel serves the web application and Hono API. Neon project `lavega`
+(`royal-surf-52181032`) stores future authenticated application data in separate
+`personal` and `investing` schemas. Personal vault data must be encrypted before
+storage. Better Auth integration remains pending.
 
 ## What's already wired
-- `railway.json` — Nixpacks build (`pnpm install --frozen-lockfile && pnpm build`),
-  start (`pnpm start`), health check on `/health`.
-- Root `build` = build the web SPA; root `start` = run the Hono server (tsx),
-  which serves `apps/web/dist` + the API. `PORT` is read from the environment
-  (Railway sets it automatically).
+- `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
+- `db/migrations/0001_lavega.sql` — applied to Neon. Creates six tables and six
+  RLS policies. Database is empty.
+- `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
+- Runtime Neon adapters and Better Auth are not wired yet.
 
 ## Deploy steps
-1. Make sure the repo is pushed to GitHub (`Elmata2/LaVega`).
-2. Railway → **New Project → Deploy from GitHub repo** → pick `LaVega`.
-   Railway reads `railway.json` automatically — no manual build/start config needed.
-3. In Railway, open the deployed service and choose **Settings → Networking →
-   Custom Domain**. Add `lavega.dev`.
-4. Railway will show the DNS target for the domain. In Cloudflare →
-   **lavega.dev → DNS → Records**, create the record Railway requests:
+1. Vercel project `lavega` uses repository `Elmata2/LaVega`.
+2. Vercel reads `vercel.json` and runs the configured build command.
+3. Add `lavega.dev` under Vercel **Settings → Domains**.
+4. Configure DNS using the target Vercel provides:
    - Type: `CNAME`
    - Name: `@`
-   - Target: the Railway target shown in the Custom Domain screen
-   - Proxy status: **DNS only** (grey cloud) until Railway has issued its TLS
-     certificate; Cloudflare may be enabled afterwards if desired.
-5. Return to Railway and wait for the custom domain to become **Active**. Railway
-   manages the origin certificate. In Cloudflare, set **SSL/TLS encryption mode**
-   to **Full (strict)** before enabling the proxy.
+   - Target: the Vercel target shown in the Domains screen
+   - Proxy status: **DNS only** (grey cloud) until Vercel has issued its TLS
+   certificate; Cloudflare may be enabled afterwards if desired.
+5. Add Neon connection variables only after runtime adapters and authentication
+   are implemented. Never put connection strings in repository files.
 
-   Optional: add `www.lavega.dev` as a second Railway custom domain, then create
+   Optional: add `www.lavega.dev` as a second Vercel domain, then create
    the matching `CNAME` record in Cloudflare. Pick one canonical hostname and
    redirect the other at Cloudflare if you use both.
 
-   Railway's generated `*.up.railway.app` hostname can remain enabled for
-   troubleshooting, but do not use it in public integrations.
+   Vercel's generated hostname can remain enabled for troubleshooting, but do
+   not use it in public integrations.
 6. Verify:
    - `https://lavega.dev/` → landing
    - `https://lavega.dev/app` → personal vault (Overzicht)
@@ -72,24 +68,24 @@ personal server:
 - Health probe for the link: `/investing/health`
 
 The personal SPA link is baked as `VITE_INVESTING_URL=/investing`. To point at a
-separate investing host instead, set a Railway **build** variable
-`VITE_INVESTING_URL=https://investing.lavega.dev` and redeploy (or use
-`Dockerfile.investing` as a second Railway service — see `docs/investing/DOCKER.md`).
+separate investing host instead, set a Vercel build variable
+`VITE_INVESTING_URL=https://investing.lavega.dev` and redeploy.
 
-Optional: mount a Railway volume at `/data` so broker credentials and price cache
-survive redeploys (`INVESTING_PRICE_STORE_FILE`, `LAVEGA_VAULT_FILE` in
-`docs/investing/DOCKER.md`).
+Do not use filesystem persistence on Vercel. Neon persistence requires the
+authenticated runtime adapters described in the Neon ADR.
 
-## Environment variables (Railway → Variables)
-- `PORT` — set by Railway automatically; don't hardcode.
+## Environment variables (Vercel → Settings → Environment Variables)
+- `DATABASE_URL` — Neon connection string, server-only. Add after auth and
+  runtime adapters are wired.
+- `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
-  commit the `.pem` — add it as a Railway variable/secret or a mounted volume.
+  commit the `.pem` — add it as a Vercel secret or a mounted local file.
   `config.json`, `*.pem`, `.env*` are git-ignored.
 
 ## Enable Banking (flow is built — needs credentials)
 The `/api/eb/*` flow (aspsps → auth → callback → accounts) and the frontend
 "Koppel bank" button are implemented. To switch it on, register the EB app and
-set these Railway **Variables**:
+set these Vercel **Environment Variables**:
 
 - `EB_APPLICATION_ID` — your Enable Banking application id
 - `EB_PRIVATE_KEY` — the PEM private key, inline (paste the whole key; literal
