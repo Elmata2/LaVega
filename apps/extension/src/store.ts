@@ -79,6 +79,7 @@ import type {
 
 const KEY_KAARTEN = "heldIds";
 const KEY_SITES = "enabledSiteIds";
+const KEY_KASSA_OVERAL = "kassaOveralAan";
 const KEY_PUNTEN = "pointsBalances";
 
 /** Alleen strings, geen lege, geen dubbele. Geen lengtegrens per string omdat de
@@ -252,6 +253,18 @@ export async function getBronAan(bron: Bron): Promise<boolean> {
 
 export async function setBronAan(bron: Bron, aan: boolean): Promise<void> {
   await chrome.storage.local.set({ [bron.sleutels.aan]: aan === true });
+}
+
+/** Standaard UIT, net als bij een bron: alles wat geen letterlijke `true` is,
+ *  levert false op. Zie de uitleg bij `getBronAan` hierboven — dezelfde regel,
+ *  nu voor de brede kassa-toestemming in plaats van per bron. */
+export async function getKassaOveralAan(): Promise<boolean> {
+  const items = await chrome.storage.local.get([KEY_KASSA_OVERAL]);
+  return items[KEY_KASSA_OVERAL] === true;
+}
+
+export async function setKassaOveralAan(aan: boolean): Promise<void> {
+  await chrome.storage.local.set({ [KEY_KASSA_OVERAL]: aan === true });
 }
 
 /** De puntenprijs door de zeef.
