@@ -11,6 +11,7 @@ import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import { forwardInvesting, shouldMountInvesting } from "./investing-mount.js";
+import { getAuth } from "./auth.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -84,6 +85,12 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ ok: true }));
+
+app.all("/api/auth/*", async (c) => {
+  const auth = getAuth();
+  if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
+  return auth.handler(c.req.raw);
+});
 
 /**
  * Public NL savings-rate benchmark for the Optimisatie tab. Returns generic,
