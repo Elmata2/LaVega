@@ -1,0 +1,18 @@
+.git
+.vercel
+node_modules
+dist
+.turbo
+.claude
+**/.lavega
+.env
+.env.*
+!.env.example
+*.pem
+**/* 2.*
+**/* 3.*
+**/* 4.*
+**/* 5.*
+**/* 6.*
+**/* [0-9].*
+**/* [0-9][0-9].*
