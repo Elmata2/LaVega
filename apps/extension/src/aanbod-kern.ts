@@ -169,10 +169,13 @@ export function dagenTussen(vanISO: string, totISO: string): number {
 /* ─────────────────────────── waar we mogen kijken ─────────────────────────── */
 
 /** Een matchpatroon uit elkaar getrokken: het hostdeel en het VASTE stuk pad dat
- *  ervoor staat. Zelfde vorm als `ontleedMatch` in sites.ts, en met opzet een
- *  eigen kopie van die drie regels: sites.ts gaat over WINKELS en dit bestand
- *  over accountpagina's, en de een hoort de ander niet te hoeven importeren om
- *  een URL te kunnen weigeren. */
+ *  ervoor staat. Zelfde vorm als `ontleedMatch` in bronnen.ts — dat is inmiddels
+ *  een kopie van een kopie: `ontleedMatch` verscheen later en importeert
+ *  `urlValtBinnen` uit dit bestand al, dus de cirkelvrees die deze eigen kopie
+ *  ooit rechtvaardigde speelt hier niet meer. De duplicatie is nu puur
+ *  historisch; `bronnen.ts` zou `ontleedMatch` (of deze functie, verplaatst)
+ *  rechtstreeks kunnen hergebruiken, maar dat is een structuurwijziging en
+ *  hoort niet in deze documentatieronde. */
 function ontleed(match: string): { host: string; padPrefix: string } | null {
   const m = /^https:\/\/([a-z0-9.-]+)(\/[^*]*)\*$/.exec(match);
   if (!m) return null;
@@ -181,11 +184,11 @@ function ontleed(match: string): { host: string; padPrefix: string } | null {
 
 /** Valt deze volledige URL binnen het matchpatroon van deze bron?
  *
- *  Dezelfde drie eisen als `siteForUrl` in sites.ts, en om dezelfde reden: het
- *  matchpatroon zegt waar we toestemming voor vroegen en niet welke pagina ons
- *  aanspreekt. Https, geen poort, host letterlijk gelijk, en het pad begint met
- *  het vaste stuk. Geef hier een origin aan door en het antwoord is false — een
- *  origin heeft geen pad. */
+ *  Dezelfde drie eisen als bij `bronVoorUrl`/`ontleedMatch` in bronnen.ts, en om
+ *  dezelfde reden: het matchpatroon zegt waar we toestemming voor vroegen en
+ *  niet welke pagina ons aanspreekt. Https, geen poort, host letterlijk gelijk,
+ *  en het pad begint met het vaste stuk. Geef hier een origin aan door en het
+ *  antwoord is false — een origin heeft geen pad. */
 export function urlValtBinnen(match: string, url: string): boolean {
   const d = ontleed(match);
   if (!d) return false;

@@ -1,9 +1,10 @@
 /* Het venster onder het werkbalkicoon: bedrag intypen, antwoord teruglezen.
  *
  * DIT VENSTER LEEST GEEN ENKELE PAGINA en vraagt daar ook geen toestemming voor.
- * Dat is geen beperking maar het punt: hierdoor werkt het overal — ook op de
- * twintig winkels die niet in sites.ts staan, en ook op een winkel die haar
- * prijs nergens machineleesbaar neerzet. Het handmatige veld is niet het
+ * Dat is geen beperking maar het punt: hierdoor werkt het overal — er is geen
+ * curated lijst van winkels meer die het paneel wél of niet mag lezen, dus dit
+ * venster werkt sowieso op elke winkel, ook een winkel die haar prijs nergens
+ * machineleesbaar neerzet. Het handmatige veld is niet het
  * noodgeval, het is het normale geval; het paneel op de winkelpagina is de
  * uitzondering waar we het konden aantonen.
  *

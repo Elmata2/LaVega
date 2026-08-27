@@ -112,6 +112,7 @@ declare namespace chrome {
     type RegisteredContentScript = {
       id: string;
       matches?: string[];
+      excludeMatches?: string[];
       js?: string[];
       runAt?: "document_start" | "document_end" | "document_idle";
       persistAcrossSessions?: boolean;

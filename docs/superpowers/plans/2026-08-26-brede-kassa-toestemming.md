@@ -1178,15 +1178,39 @@ with:
     (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
 ```
 
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 4: Remove the now-dead `getEnabledSiteIds`/`setEnabledSiteIds` from `store.ts`**
+
+After this task, nothing imports these two functions any more: `background.ts` stopped in Task 5, and Step 2 above just removed `options.ts`'s import of them. Left in place, they'd be dead exports nobody calls — the same kind of unused, misleading code this codebase's own comments warn against elsewhere.
+
+Run: `cd apps/extension && grep -rn "getEnabledSiteIds\|setEnabledSiteIds" src/`
+Expected: no results outside `store.ts` itself.
+
+In `apps/extension/src/store.ts`, remove:
+
+```ts
+export async function getEnabledSiteIds(): Promise<string[]> {
+  const items = await chrome.storage.local.get([KEY_SITES]);
+  return _schoonLijst(items[KEY_SITES]);
+}
+
+export async function setEnabledSiteIds(ids: readonly string[]): Promise<void> {
+  await chrome.storage.local.set({ [KEY_SITES]: schoonLijst(ids) });
+}
+```
+
+(Read the file first to get the exact surrounding text — the two function bodies above are what Task 5's research found; confirm they match what's actually on disk before deleting, since store.ts wasn't touched by any task between then and now.)
+
+Also remove the now-unused `const KEY_SITES = "enabledSiteIds";` declaration, but only after confirming nothing else in `store.ts` still reads `KEY_SITES` (it shouldn't — it was only ever consumed by the two functions just removed).
+
+- [ ] **Step 5: Typecheck**
 
 Run: `cd apps/extension && pnpm exec tsc --noEmit`
-Expected: no errors from `options.ts`. If `el`/`leeg` are now reported unused, remove them from the import only if nothing else in the file still uses them (the punten/bronnen sections likely still do — check before removing).
+Expected: no errors from `options.ts` or `store.ts`. If `el`/`leeg` in `options.ts` are now reported unused, remove them from the import only if nothing else in the file still uses them (the punten/bronnen sections likely still do — check before removing).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/extension/public/options.html apps/extension/src/options.ts
+git add apps/extension/public/options.html apps/extension/src/options.ts apps/extension/src/store.ts
 git commit -m "feat(extensie): optiescherm krijgt één breed kassa-vinkje i.p.v. een sitelijst"
 ```
 

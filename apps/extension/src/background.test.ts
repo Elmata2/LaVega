@@ -25,13 +25,13 @@ import { AMEX_MATCH } from "./amex.js";
 import { ING_MATCH } from "./ing.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
-const IKEA_MATCH = "https://www.ikea.com/nl/nl/p/*";
+const KASSA_MATCH = "<all_urls>";
 
 type Injectie = { target: { tabId: number }; func: (...a: never[]) => unknown; args?: unknown[] };
 
 const opslag = new Map<string, unknown>();
 const toegestaan = new Set<string>();
-let scripts: { id: string; matches?: string[]; js?: string[] }[] = [];
+let scripts: { id: string; matches?: string[]; js?: string[]; excludeMatches?: string[] }[] = [];
 const luister = {
   bericht: [] as ((m: unknown, s: unknown, r: (x?: unknown) => void) => unknown)[],
   verwijderd: [] as (() => void)[],
@@ -170,8 +170,8 @@ describe("welk script waar geregistreerd staat", () => {
     expect(scripts.map((s) => s.js?.[0])).toEqual(["aanbod-content.js"]);
 
     reset();
-    opslag.set("enabledSiteIds", ["ikea-nl"]);
-    toegestaan.add(IKEA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    toegestaan.add(KASSA_MATCH);
     await sync();
     expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
   });
@@ -185,6 +185,47 @@ describe("welk script waar geregistreerd staat", () => {
     opslag.set("amexAan", false);
     await sync();
     expect(scripts).toEqual([]);
+  });
+});
+
+describe("de brede kassa-toestemming heeft twee onafhankelijke schakelaars", () => {
+  it("registreert niets als het vinkje aan staat maar de toestemming ontbreekt", async () => {
+    opslag.set("kassaOveralAan", true);
+    await sync();
+    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
+  });
+
+  it("registreert niets als de toestemming er is maar het vinkje uit staat", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", false);
+    await sync();
+    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
+  });
+
+  it("registreert <all_urls> zodra beide aan staan", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    await sync();
+    const kassa = scripts.find((s) => s.id === "paneel-kassa-overal");
+    expect(kassa?.matches).toEqual([KASSA_MATCH]);
+    expect(kassa?.js).toEqual(["content.js"]);
+    /* Regressietest voor het paneel-botsingprobleem: zonder deze uitsluiting
+     * draaien content.js én aanbod-content.js allebei op de ING/Amex-pagina's. */
+    expect(kassa?.excludeMatches).toEqual([AMEX_MATCH, ING_MATCH]);
+  });
+
+  it("haalt de registratie weg en zet het vinkje uit zodra de toestemming wordt ingetrokken", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    await sync();
+    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(true);
+
+    toegestaan.delete(KASSA_MATCH);
+    for (const cb of luister.verwijderd) cb();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
+    expect(opslag.get("kassaOveralAan")).toBe(false);
   });
 });
 
@@ -318,6 +359,56 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as { opnieuw: boolean; regel: string };
     expect(a.opnieuw).toBe(false);
     expect(a.regel).toContain("zegt zelf");
+  });
+});
+
+describe("wie er antwoord krijgt op een paneel-vraag", () => {
+  it("zwijgt zolang kassa-overal uitstaat, ook als de toestemming er is", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", false);
+    const a = (await stuur({ soort: "paneel-vragen" }, {
+      tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
+      url: "https://www.ikea.com/nl/nl/p/billy",
+      origin: "https://www.ikea.com",
+    })) as { soort: string; reden?: string };
+    expect(a.soort).toBe("zwijg");
+    expect(a.reden).toBe("kassa-overal staat uit");
+  });
+
+  it("zwijgt tegen een afzender die geen https is", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    const a = (await stuur({ soort: "paneel-vragen" }, {
+      tab: { id: 7, url: "http://www.ikea.com/nl/nl/p/billy" },
+      url: "http://www.ikea.com/nl/nl/p/billy",
+      origin: "http://www.ikea.com",
+    })) as { soort: string; reden?: string };
+    expect(a.soort).toBe("zwijg");
+    expect(a.reden).toBe("afzender is geen geldige https-pagina");
+  });
+
+  it("zwijgt als het tabblad ergens anders staat dan het frame dat vraagt", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    const a = (await stuur({ soort: "paneel-vragen" }, {
+      tab: { id: 7, url: "https://www.hema.nl/" },
+      url: "https://www.ikea.com/nl/nl/p/billy",
+      origin: "https://www.ikea.com",
+    })) as { soort: string; reden?: string };
+    expect(a.soort).toBe("zwijg");
+    expect(a.reden).toBe("afzender is geen geldige https-pagina");
+  });
+
+  it("zwijgt tegen een afwijkende poort", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("kassaOveralAan", true);
+    const a = (await stuur({ soort: "paneel-vragen" }, {
+      tab: { id: 7, url: "https://www.ikea.com:8443/nl/nl/p/billy" },
+      url: "https://www.ikea.com:8443/nl/nl/p/billy",
+      origin: "https://www.ikea.com:8443",
+    })) as { soort: string; reden?: string };
+    expect(a.soort).toBe("zwijg");
+    expect(a.reden).toBe("afzender is geen geldige https-pagina");
   });
 });
 

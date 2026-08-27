@@ -27,12 +27,11 @@
  * kapotte extensie. Nu staat er van tevoren "koersopslag bekend, cashback niet"
  * en klopt het gedrag met wat er beloofd is. */
 
-import { SITES, type Site } from "./sites.js";
 import {
   getHeldIds,
   setHeldIds,
-  getEnabledSiteIds,
-  setEnabledSiteIds,
+  getKassaOveralAan,
+  setKassaOveralAan,
   getPointsBalances,
   setPointsBalances,
   getBronAan,
@@ -383,83 +382,54 @@ puntenFormulier.addEventListener("submit", (e) => {
   void zetSaldo(naam, n);
 });
 
-/* ───────────────────────────── de winkels ────────────────────────────────── */
+/* ───────────────────────────── de kassa ──────────────────────────────────── */
 
-const sitesLijst = document.getElementById("siteslijst") as HTMLDivElement;
-const sitesMelding = document.getElementById("sites-melding") as HTMLParagraphElement;
+const KASSA_MATCH = "<all_urls>";
+const kassaVink = document.getElementById("kassa-overal") as HTMLInputElement;
+const kassaMelding = document.getElementById("kassa-melding") as HTMLParagraphElement;
 
 function meld(tekst: string, fout = false): void {
-  sitesMelding.textContent = tekst;
-  sitesMelding.className = fout ? "hint fout" : "hint";
+  kassaMelding.textContent = tekst;
+  kassaMelding.className = fout ? "hint fout" : "hint";
 }
 
-async function zetSite(site: Site, aan: boolean, vink: HTMLInputElement): Promise<void> {
-  const ids = new Set(await getEnabledSiteIds());
+async function zetKassaOveral(aan: boolean): Promise<void> {
+  await setKassaOveralAan(aan);
+  kassaVink.checked = aan;
   if (aan) {
-    ids.add(site.id);
-    await setEnabledSiteIds([...ids]);
-    meld(`${site.label} staat aan. Herlaad een openstaande winkelpagina om het paneel te zien.`);
+    meld("Aan. Herlaad een openstaande winkelpagina om het paneel te zien.");
   } else {
-    ids.delete(site.id);
-    await setEnabledSiteIds([...ids]);
     /* Pas ná het vinkje: zie de kop van dit bestand. */
-    await chrome.permissions.remove({ origins: [site.match] });
-    meld(`${site.label} staat uit. De leestoestemming is ingetrokken.`);
+    await chrome.permissions.remove({ origins: [KASSA_MATCH] });
+    meld("Uit. De leestoestemming is ingetrokken.");
   }
-  vink.checked = aan;
 }
 
-function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
-  leeg(sitesLijst);
-  for (const site of SITES) {
-    const rij = el("div", "vinkrij");
-    const vink = document.createElement("input");
-    vink.type = "checkbox";
-    vink.id = `site-${site.id}`;
-    /* Aan is aan ALS beide waar zijn. Staat het vinkje in de opslag maar heeft
-     * Chrome de toestemming niet (meer), dan is de waarheid "uit" — en die tonen
-     * we, want een vinkje dat aanstaat bij een site waar niets gebeurt, laat hem
-     * zoeken naar een fout die er niet is. */
-    vink.checked = aangevinkt.has(site.id) && toegestaan.has(site.id);
-
-    vink.addEventListener("change", () => {
-      const wil = vink.checked;
-      if (!wil) {
-        void zetSite(site, false, vink);
+kassaVink.addEventListener("change", () => {
+  const wil = kassaVink.checked;
+  if (!wil) {
+    void zetKassaOveral(false);
+    return;
+  }
+  /* EERSTE REGEL, zonder await ervoor: zie de kop van dit bestand. */
+  chrome.permissions
+    .request({ origins: [KASSA_MATCH] })
+    .then((gegeven) => {
+      if (!gegeven) {
+        kassaVink.checked = false;
+        meld(
+          "Zonder deze toestemming kan het paneel nergens verschijnen. Het handmatige veld in het werkbalkvenster werkt wel gewoon.",
+          true,
+        );
         return;
       }
-      /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
-       * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
-      chrome.permissions
-        .request({ origins: [site.match] })
-        .then((gegeven) => {
-          if (!gegeven) {
-            vink.checked = false;
-            meld(
-              `Zonder toestemming voor ${site.match} kan het paneel daar niet verschijnen. Het handmatige veld in het werkbalkvenster werkt wel gewoon.`,
-              true,
-            );
-            return;
-          }
-          return zetSite(site, true, vink);
-        })
-        .catch(() => {
-          vink.checked = false;
-          meld("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
-        });
+      return zetKassaOveral(true);
+    })
+    .catch(() => {
+      kassaVink.checked = false;
+      meld("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
     });
-
-    const tekst = document.createElement("label");
-    tekst.htmlFor = vink.id;
-    tekst.appendChild(el("div", "titel", site.label));
-    tekst.appendChild(el("div", "noot", `${site.match} — ${site.scope}`));
-    tekst.appendChild(el("div", "noot", site.evidence));
-
-    rij.appendChild(vink);
-    rij.appendChild(tekst);
-    sitesLijst.appendChild(rij);
-  }
-}
+});
 
 /* ─────────────────── de aanbiedingenbronnen, één blok per bron ────────────── */
 
@@ -688,12 +658,8 @@ async function start(): Promise<void> {
     await tekenBronLijst(bron);
   }
 
-  const aangevinkteSites = new Set<string>(await getEnabledSiteIds());
-  const toegestaan = new Set<string>();
-  for (const site of SITES) {
-    if (await chrome.permissions.contains({ origins: [site.match] })) toegestaan.add(site.id);
-  }
-  tekenSites(aangevinkteSites, toegestaan);
+  kassaVink.checked =
+    (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
 
   const herkomst = document.getElementById("herkomst");
   if (herkomst) {

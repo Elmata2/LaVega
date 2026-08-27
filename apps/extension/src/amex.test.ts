@@ -39,7 +39,7 @@ import {
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
-import { padIsSpecifiek, ontleedMatch } from "./sites.js";
+import { padIsSpecifiek, ontleedMatch } from "./bronnen.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const NU = "2026-08-22";
