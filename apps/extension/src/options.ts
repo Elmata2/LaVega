@@ -48,7 +48,7 @@ import { POINTS_RATES } from "./generated/points-rates.generated.js";
 import { pct, dateNL, euro, eurosToCents, getal } from "./money.js";
 import { leesVoorwaarden } from "./rank.js";
 import { normaliseerProgramma, zoekKoers, VEROUDERD_NA_DAGEN, type PointsBalance } from "./points.js";
-import { citaat } from "./lines.js";
+import { citaat, aanbodGrensRegel } from "./lines.js";
 import type { CheckoutCard } from "./types.js";
 
 function el(tag: string, klasse: string, tekst?: string): HTMLElement {
@@ -551,8 +551,6 @@ function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
   kop.textContent = bron.label;
   bronnenVlak.appendChild(kop);
 
-  bronnenVlak.appendChild(el("p", "hint", bron.uitleg));
-
   bronnenVlak.appendChild(el("p", "hint", "Wat er van die pagina meekomt:"));
   bronnenVlak.appendChild(lijstje(bron.watWel));
   bronnenVlak.appendChild(el("p", "hint", "En wat niet:"));
@@ -613,15 +611,16 @@ function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
         `op andere paden en vallen erbuiten.`,
     ),
   );
-  /* DIT MOET ERBIJ STAAN EN HET IS ONGEMAKKELIJK. De lezer is bij beide bronnen
-   * gebouwd op HTML die met de hand is gemaakt: de echte ingelogde pagina is
-   * nooit gezien. Dat hoort te staan waar hij ja zegt, niet in een README. */
-  tekst.appendChild(el("div", "noot", bron.voorbehoud));
 
   rij.appendChild(vink);
   rij.appendChild(tekst);
   schakelaar.appendChild(rij);
   bronnenVlak.appendChild(schakelaar);
+
+  /* De ene grensregel die blijft staan: dit is het moment waarop hij
+   * toestemming geeft, en de schakelaar mag niet onbeschreven staan. Zie
+   * `aanbodGrensRegel` in lines.ts. */
+  bronnenVlak.appendChild(el("p", "hint", aanbodGrensRegel(bron)));
 
   const melding = el("p", "hint") as HTMLParagraphElement;
   bronnenVlak.appendChild(melding);
@@ -660,15 +659,6 @@ async function start(): Promise<void> {
 
   kassaVink.checked =
     (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
-
-  const herkomst = document.getElementById("herkomst");
-  if (herkomst) {
-    herkomst.textContent =
-      `De kaartgegevens komen uit de LaVega-catalogus van ${dateNL(CATALOG_GENERATED_AT)} en zitten in de ` +
-      `bundel; ze worden niet bijgewerkt zonder een nieuwe versie van de extensie. Bij elk cijfer hoort ` +
-      `een bron en een controledatum — die staan in de regel onder de uitkomst, zodat je kunt zien hoe ` +
-      `oud een cijfer is voordat je erop afgaat.`;
-  }
 }
 
 void start();

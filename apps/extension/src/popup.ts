@@ -16,33 +16,22 @@
  * geven op dezelfde invoer. */
 
 import { parseAmountToCents, reasonTextHandmatig } from "./read.js";
-import { rankCheckout } from "./rank.js";
-import { panelRows, POPUP_CAPS, footer, puntenBlok, aanbodLijst } from "./panel.js";
-import { headline, aanbodGrensRegel } from "./lines.js";
-import { euro } from "./money.js";
+import { aanbodLijst } from "./panel.js";
+import { aanbodGrensRegel, puntenLeegRegel, puntenDatumRegel } from "./lines.js";
+import { euro, dateNL, getal } from "./money.js";
 import { BRONNEN } from "./bronnen.js";
-import {
-  getHeldIds,
-  getPointsBalances,
-  getBronAan,
-  getBronAanbiedingen,
-  getBronLezing,
-} from "./store.js";
-import { pointsCoverage } from "./points.js";
-import { CHECKOUT_CARDS } from "./generated/catalog.generated.js";
+import { getPointsBalances, getBronAan, getBronAanbiedingen, getBronLezing } from "./store.js";
+import { pointsCoverage, type PuntenRij } from "./points.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
 
-const GROEPKOP: Record<PaneelGroep, string> = {
-  mijn: "Jouw kaarten",
-  openen: "Zou je kunnen openen",
-  achteruit: "Kost na kaartkosten meer dan het oplevert",
-  "onbekende-kosten": "Kaartkosten onbekend",
-  "geen-euro-uitkomst": "Opbrengst niet in euro's",
-  onbekend: "Hier kunnen we niets over zeggen",
-};
-
+const WAARDEKOP = "Wat je punten waard zijn";
 const PUNTENKOP = "Punten die je hier hebt liggen";
 
+/** "Bijgewerkt op 21 augustus 2026." — de datum uit puntenBron in lines.ts,
+ *  hier los omdat dit venster alleen de datum toont en niet de rest van die
+ *  regel (koers, herkomst, verouderingswaarschuwing). Geen lege datum stil
+ *  maken: zie de kop van points.ts over waarom een saldo zonder datum niet
+ *  als vers mag ogen. */
 function el(tag: string, klasse: string, tekst?: string): HTMLElement {
   const e = document.createElement(tag);
   e.className = klasse;
@@ -64,11 +53,9 @@ async function bereken(): Promise<void> {
   const ruw = bedragVeld.value.trim();
   const munt = muntVeld.value;
 
-  /* Zonder bedrag wordt er WEL gerangschikt. De volgorde hangt van de
-   * percentages af en die staan los van het bedrag, dus er valt iets zinnigs te
-   * zeggen — alleen geen euro's, en dat zegt de kop uit lines.ts er zelf bij.
-   * Doen alsof er niets te melden is zolang het veld leeg is, zou informatie
-   * achterhouden die er gewoon is. */
+  /* Zonder bedrag wordt er WEL getoond. Wat de punten waard zijn en wat er
+   * ligt hangt niet van deze aankoop af — alleen de dekking van een aankoop
+   * (die hier niet meer getoond wordt) zou een bedrag nodig hebben. */
   let bedragCenten: number | null = null;
   if (ruw) {
     const p = parseAmountToCents(ruw);
@@ -94,10 +81,7 @@ async function bereken(): Promise<void> {
     bedragCenten = p.cents;
   }
 
-  const heldIds = await getHeldIds();
-  /* De enige klokaflezing in dit scherm, en hij wordt door twee pure functies
-   * gedeeld zodat de kaartkant en de puntenkant niet op een andere dag kunnen
-   * uitkomen. */
+  /* De enige klokaflezing in dit scherm. */
   const asOf = new Date().toISOString().slice(0, 10);
   const punten = pointsCoverage({
     balances: await getPointsBalances(),
@@ -110,22 +94,46 @@ async function bereken(): Promise<void> {
     amountCents: munt === "EUR" ? bedragCenten : null,
     asOf,
   });
-  const ranking = rankCheckout({
-    cards: CHECKOUT_CARDS,
-    heldIds,
-    currency: munt,
-    amountCents: bedragCenten,
-    asOf,
-  });
 
   const kaart = el("div", "kaart");
   if (bedragCenten !== null) kaart.appendChild(el("div", "bedrag", euro(bedragCenten)));
 
-  /* De aanbiedingen bovenaan, net als in het paneel, en om dezelfde reden: dit
-   * is het enige blok met een einddatum erin. Hier staat de HELE lijst en niet
-   * de selectie voor één winkel — dit venster weet niet op welke pagina hij
-   * staat en vraagt dat ook niet, dus er wordt niets aan een winkel gekoppeld.
-   * Zie `aanbodLijst` voor waarom dat geen inconsistentie is met het paneel. */
+  /* 1. DE KOP VAN DIT VENSTER: wat zijn punten in euro's waard zijn, los van
+   * deze aankoop. `saldoWaardeCents` staat al in points.ts uitgerekend — hier
+   * wordt alleen gefilterd en geformatteerd, nooit gerekend. Een programma
+   * zonder gepubliceerde koers (of met een uitgesproken nul of "geen vaste
+   * waarde") heeft geen `saldoWaardeCents` en verschijnt hier dus niet; dat
+   * saldo staat wel in het blok eronder. */
+  const metWaarde = punten.filter((p) => p.saldoWaardeCents !== null);
+  if (metWaarde.length > 0) {
+    kaart.appendChild(el("div", "groep", WAARDEKOP));
+    for (const p of metWaarde) {
+      const rij = el("div", "rij");
+      rij.appendChild(el("div", "titel", p.program));
+      rij.appendChild(el("div", "regel", euro(p.saldoWaardeCents!)));
+      kaart.appendChild(rij);
+    }
+  }
+
+  /* 2. DE SALDI ZELF, super simpel: naam, aantal, datum — verder niets. De
+   * langere uitlegzinnen (koersbron, inwisselroute, verouderingswaarschuwing)
+   * staan in het paneel op de winkelpagina, niet hier. */
+  kaart.appendChild(el("div", "groep", PUNTENKOP));
+  if (punten.length === 0) {
+    kaart.appendChild(el("div", "noot", puntenLeegRegel()));
+  } else {
+    for (const p of punten) {
+      const rij = el("div", "rij");
+      rij.appendChild(el("div", "titel", `${p.program} · ${getal(p.points, 0)}`));
+      rij.appendChild(el("div", "regel", puntenDatumRegel(p)));
+      kaart.appendChild(rij);
+    }
+  }
+
+  /* 3. De aanbiedingen. Hier staat de HELE lijst en niet de selectie voor één
+   * winkel — dit venster weet niet op welke pagina hij staat en vraagt dat ook
+   * niet, dus er wordt niets aan een winkel gekoppeld. Zie `aanbodLijst` voor
+   * waarom dat geen inconsistentie is met het paneel. */
   for (const bron of BRONNEN) {
     const aanbod = aanbodLijst(
       {
@@ -159,42 +167,6 @@ async function bereken(): Promise<void> {
     kaart.appendChild(el("div", "bron", aanbodGrensRegel(bron)));
   }
 
-  /* Punten daarna. Dit is wat hij al heeft liggen; de kaartrangschikking
-   * eronder gaat over wat hij zou kunnen doen. */
-  const blok = puntenBlok(punten, munt === "EUR" ? bedragCenten : null, munt);
-  if (blok.leeg) {
-    kaart.appendChild(el("div", "groep", PUNTENKOP));
-    kaart.appendChild(el("div", "noot", blok.leeg));
-  } else if (blok.regels.length > 0) {
-    kaart.appendChild(el("div", "groep", PUNTENKOP));
-    for (const r of blok.regels) {
-      const rij = el("div", "rij");
-      rij.appendChild(el("div", "titel", r.titel));
-      rij.appendChild(el("div", "regel", r.regel));
-      if (r.bron) rij.appendChild(el("div", "bron", r.bron));
-      kaart.appendChild(rij);
-    }
-    if (blok.voetnoot) kaart.appendChild(el("div", "bron", blok.voetnoot));
-  }
-
-  kaart.appendChild(el("div", "groep", "Jouw kaarten aan deze kassa"));
-  kaart.appendChild(el("div", "kop", headline(ranking)));
-
-  const regels = panelRows(ranking, POPUP_CAPS);
-  let vorige: PaneelGroep | null = null;
-  for (const r of regels) {
-    if (r.groep !== vorige) {
-      kaart.appendChild(el("div", "groep", GROEPKOP[r.groep]));
-      vorige = r.groep;
-    }
-    const rij = el("div", "rij");
-    rij.appendChild(el("div", "titel", r.titel));
-    rij.appendChild(el("div", "regel", r.regel));
-    if (r.bron) rij.appendChild(el("div", "bron", r.bron));
-    kaart.appendChild(rij);
-  }
-
-  kaart.appendChild(el("div", "noot groep", footer(CHECKOUT_CARDS)));
   uitkomst.appendChild(kaart);
 }
 
@@ -208,7 +180,6 @@ document.getElementById("naar-opties")?.addEventListener("click", (e) => {
   void chrome.runtime.openOptionsPage();
 });
 
-/* Meteen bij openen één keer rekenen. Zonder bedrag geeft dat de volgorde op
- * percentage plus de vraag om het bedrag — nuttiger dan een leeg vlak, en het
- * laat zien dat er kaarten aangevinkt staan (of juist niet). */
+/* Meteen bij openen één keer rekenen. Zonder bedrag geeft dat meteen de
+ * puntenwaarde en de aanbiedingen te zien — nuttiger dan een leeg vlak. */
 void bereken();

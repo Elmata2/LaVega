@@ -444,7 +444,25 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
       null,
     );
     expect(uit.soort).toBe("mogelijke-merknaam-match");
-    expect(aanbodBlok(uit, NU, ING_BRON).regels).toHaveLength(0);
+
+    /* SINDS 27 AUGUSTUS 2026 KRIJGT DEZE TAK WÉL RIJEN, en dat is een bewuste
+     * omkering van wat hier eerst stond (`regels` moest leeg zijn). De reden dat
+     * het toen leeg moest, was dat een rij een BEWERING is; de reden dat het nu
+     * mag, is dat de hedge niet meer aan de rij hangt maar in `toestand` staat
+     * en in het paneel onder de rijen in de vouw terechtkomt. De bewering is
+     * dus niet sterker geworden, hij staat alleen leesbaarder op het scherm.
+     *
+     * DAAROM CONTROLEERT DEZE TEST ALLEBEI: dat de rij er is, én dat het
+     * voorbehoud niet is weggevallen. */
+    const blok = aanbodBlok(uit, NU, ING_BRON);
+    expect(blok.regels).toHaveLength(1);
+    expect(blok.regels[0]!.titel).toBe(jbl.winkel);
+    expect(blok.antwoord).toBe("JBL-korting via je ING-punten");
+    expect(blok.link?.href).toBe("https://mijn.ing.nl/punten");
+
+    /* Het voorbehoud reist mee in het blok, niet alleen los uit lines.ts. */
+    expect(blok.toestand).toBe(aanbodToestandRegel(uit, ING_BRON));
+
     const regel = aanbodToestandRegel(uit, ING_BRON);
     /* De bewering die hier niet mag staan. */
     expect(regel).not.toMatch(/je (kunt|hebt) hier/i);
@@ -582,7 +600,13 @@ describe("de ING-schakelaar staat los van die van Amex", () => {
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
     const uit = aanbodVoorWinkel({ aan: false, lezing: null, aanbiedingen }, "www.jbl.nl", NU, ING_BRON, null);
     expect(uit).toEqual({ soort: "uit" });
-    expect(aanbodBlok(uit, NU, ING_BRON)).toEqual({ kop: "", regels: [], toestand: "" });
+    expect(aanbodBlok(uit, NU, ING_BRON)).toEqual({
+      kop: "",
+      antwoord: "",
+      link: null,
+      regels: [],
+      toestand: "",
+    });
     expect(aanbodLijst({ aan: false, lezing: null, aanbiedingen }, NU, ING_BRON).kop).toBe("");
   });
 

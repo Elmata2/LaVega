@@ -81,6 +81,12 @@
     /* HET ANTWOORD: de naam van de kaart die hier het meest oplevert, en verder
      * niets. De onderbouwing zit in een vouw eronder. */
     .antwoord { margin-top: 2px; font-size: 15px; font-weight: 600; }
+    /* Eén aanbieding, één regel. De hulp-cursor zegt dat er meer achter zit; de
+     * volledige tekst zit in het title-attribuut en nog eens in de restvouw. */
+    .aanbieding { margin-top: 6px; cursor: help; }
+    .aanbieding::before { content: "• "; color: #6f6a5f; }
+    .link { display: inline-block; margin-top: 8px; color: #1c1c1a; font-weight: 600; }
+    .link:focus-visible { outline: 2px solid #1c1c1a; outline-offset: 2px; border-radius: 3px; }
     /* De vouwen. GEEN TRANSITION — zie de kop van dit bestand; <details> opent
      * en sluit, het schuift niet. */
     .vouw { margin-top: 10px; border-top: 1px solid #eae6dd; padding-top: 8px; }
@@ -191,10 +197,38 @@
     const aanbodMetRegels = antwoord.aanbod.filter((a) => a.kop && a.regels.length > 0);
     const aanbodZonderRegels = antwoord.aanbod.filter((a) => a.kop && a.regels.length === 0);
 
+    /* EEN AANBIEDING IS ÉÉN REGEL, en de rest hangt eronder in de titel-tip.
+     *
+     * De volledige zin (puntenprijs, einddatum, het voorbehoud van ING zelf) en
+     * de leesdatum staan in het `title`-attribuut, dus ze zijn er nog — maar ze
+     * duwen het antwoord niet meer van het scherm.
+     *
+     * HOVER IS NIET HET ENIGE PAD ERNAARTOE. Wie geen muis heeft ziet dezelfde
+     * zinnen in de restvouw onderaan; `title` is de snelkoppeling en niet de
+     * enige weg. Dat onderscheid is de reden dat de zinnen ook nog ergens
+     * volledig uitgeschreven staan. */
     function toonAanbodRegels(doel: HTMLElement): void {
       for (const blok of aanbodMetRegels) {
-        doel.appendChild(el("div", "groep", blok.kop));
-        for (const r of blok.regels) doel.appendChild(rij(r));
+        if (blok.antwoord) doel.appendChild(el("div", "antwoord", blok.antwoord));
+        for (const r of blok.regels) {
+          const e = el("div", "aanbieding", r.titel);
+          const tip = [r.regel, r.bron].filter((t) => t).join("\n\n");
+          if (tip) e.title = tip;
+          doel.appendChild(e);
+        }
+        if (blok.link) {
+          /* Een echte link en geen knop: hij mag hem in een nieuw tabblad openen
+           * of kopiëren, en het adres komt uit het matchpatroon van de bron —
+           * nooit van de pagina waar dit paneel op staat. `noopener` omdat de
+           * geopende pagina anders via `window.opener` bij dit tabblad kan. */
+          const a = document.createElement("a");
+          a.className = "link";
+          a.textContent = `${blok.link.tekst} →`;
+          a.href = blok.link.href;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          doel.appendChild(a);
+        }
       }
     }
 
@@ -220,6 +254,14 @@
      * voetregel met de peildatums en de leesgrens. */
     function toonRest(punten: PaneelPunten, voet: string): void {
       const rest = vouw("Punten en wat LaVega hier niet weet");
+      /* HET VOORBEHOUD BIJ EEN GEVONDEN AANBIEDING, en het hoort er nog steeds
+       * te staan. Bij een merknaam- of productmatch zegt deze zin dat het een
+       * MOGELIJKE match is en dat LaVega niet weet of het hier te verzilveren
+       * is. Dat is precies het soort zin die niet mag verdwijnen omdat hij het
+       * antwoord in de weg zat — hij verhuist, hij vervalt niet. */
+      for (const blok of aanbodMetRegels) {
+        if (blok.toestand) rest.appendChild(el("div", "uitleg", blok.toestand));
+      }
       toonPunten(rest, punten);
       for (const blok of aanbodZonderRegels) {
         rest.appendChild(el("div", "groep", blok.kop));

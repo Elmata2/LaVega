@@ -3,7 +3,18 @@
 
 import { describe, it, expect } from "vitest";
 import { rankCheckout, type Ranking } from "./rank.js";
-import { rowLine, headline, unknownLine, sourceLine, korteUitgever } from "./lines.js";
+import {
+  rowLine,
+  headline,
+  unknownLine,
+  sourceLine,
+  korteUitgever,
+  aanbodAntwoord,
+  aanbodLink,
+} from "./lines.js";
+import type { Aanbieding } from "./aanbod-kern.js";
+import { ING_BRON } from "./ing.js";
+import { AMEX_BRON } from "./amex.js";
 import type { CheckoutCard, CardFee } from "./types.js";
 
 const ASOF = "2026-08-21";
@@ -352,5 +363,52 @@ describe("de kop belooft niets wat de lijst niet kan waarmaken", () => {
     const kop = headline(r);
     expect(kop).toContain("bij geen van deze kaarten kennen we een prijs");
     expect(kop).not.toContain("wat het openen kost");
+  });
+});
+
+/* ───────────── het antwoord en de doorklik boven de aanbiedingen ─────────── */
+
+describe("de korte kop boven de aanbiedingen", () => {
+  const bon = (winkel: string): Aanbieding => ({
+    winkel,
+    prijsTekst: "1.250 punten",
+    prijs: { punten: 1250, bij: null },
+    tot: null,
+    totRuw: "",
+    domein: null,
+    gelezenOp: "2026-08-25",
+  });
+
+  it("noemt het merk zodra alle titels het delen", () => {
+    const uit = aanbodAntwoord([bon("JBL Boombox 4 25% kortingsvoucher"), bon("JBL Grip (zwart)")], ING_BRON);
+    expect(uit).toBe("JBL-korting via je ING-punten");
+  });
+
+  it("laat het merk weg zodra de titels het NIET delen", () => {
+    /* Één merk noemen zou het andere verzwijgen, en de kop staat boven allebei. */
+    const uit = aanbodAntwoord([bon("JBL Boombox 4"), bon("Philips Hue starterset")], ING_BRON);
+    expect(uit).toBe("Korting via je ING-punten");
+  });
+
+  it("zegt bij een kortingbron iets anders dan bij een puntenbron", () => {
+    /* Een Amex-aanbieding is een korting OP JE KAART; een ING-regel is een
+     * aankoop MET JE PUNTEN. Dat verschil zit in de hele codebase en hoort ook
+     * in deze kop te staan. */
+    expect(aanbodAntwoord([bon("JBL Boombox 4")], AMEX_BRON)).toBe("JBL-aanbieding op je American Express-kaart");
+  });
+});
+
+describe("de doorklik onder de aanbiedingen", () => {
+  it("wijst naar het adres uit het matchpatroon van de bron, zonder de sterretje", () => {
+    /* HET ADRES KOMT NIET VAN DE PAGINA. Het is hetzelfde patroon waarvoor hij
+     * Chrome toestemming gaf, met het matchpatroon-sterretje eraf. */
+    expect(aanbodLink(ING_BRON).href).toBe("https://mijn.ing.nl/punten");
+    expect(aanbodLink(ING_BRON).href).not.toContain("*");
+    expect(aanbodLink(AMEX_BRON).href).toBe("https://global.americanexpress.com/offers/eligible");
+  });
+
+  it("zegt per bron wat je er doet", () => {
+    expect(aanbodLink(ING_BRON).tekst).toBe("Ophalen in de ING Winkel");
+    expect(aanbodLink(AMEX_BRON).tekst).toBe("Toevoegen bij American Express");
   });
 });
