@@ -344,6 +344,45 @@ const PRODUCT_MATCH_STOPWOORDEN = new Set([
   "het",
 ]);
 
+/** Kleuren tellen niet mee als onderscheidend woord, en dat is GEMETEN nodig.
+ *
+ *  Op 27 augustus 2026 op de echte pagina's naast elkaar gelegd: ING schrijft
+ *  "JBL Tune Flex 2 (zwart) voor € 55 kortingsvoucher" en bol.com noemt exact
+ *  hetzelfde artikel "JBL Tune Flex 2 - True Wireless NC Earbuds - Black".
+ *  Zelfde product, andere taal voor de kleur — en met de kleur als harde eis
+ *  matcht dat nooit. Een kleur is bovendien een VARIANT-eigenschap: de voucher
+ *  gaat over de Tune Flex 2, de kleur zegt welke uitvoering. Hem laten vallen
+ *  kost precisie op de variant (een voucher voor de zwarte kan nu ook op de
+ *  witte pagina raken) en dat is aanvaardbaar, want de zin die erbij hoort
+ *  belooft niets over verzilverbaarheid — hij zegt "dit kan passen, check zelf".
+ *  Dat kost minder dan de functie helemaal niet laten werken. */
+const PRODUCT_MATCH_KLEUREN = new Set([
+  "zwart",
+  "wit",
+  "black",
+  "white",
+  "blauw",
+  "blue",
+  "rood",
+  "red",
+  "groen",
+  "green",
+  "grijs",
+  "grey",
+  "gray",
+  "roze",
+  "pink",
+  "beige",
+  "paars",
+  "purple",
+  "geel",
+  "yellow",
+  "zilver",
+  "silver",
+  "goud",
+  "gold",
+]);
+
 /** Een zwakkere, gehedgde koppeling op de PAGINA-INHOUD, niet op de winkelnaam.
  *
  *  ── WAAROM DIT ER NAAST STAAT EN GEEN VERVANGING IS VAN `mogelijkeMerknaamMatch` ──
@@ -361,21 +400,36 @@ const PRODUCT_MATCH_STOPWOORDEN = new Set([
  *  ("30% korting bij JBL") geldt alleen aan de kassa VAN die winkel, hoe
  *  precies de paginainhoud ook overeenkomt.
  *
- *  DE WOORDEN MOETEN ALLEMAAL RAKEN, niet het merk alleen. "boombox" alleen
- *  matchen op een JBL-merknaam zou dezelfde eerste fout zijn als bij
- *  `hoortBijWinkel` afgewezen: te ruim. Elk woord van minstens 4 tekens uit de
- *  titel — met uitzondering van de voucher-standaardtaal hierboven — moet als
- *  los woord in de productnaam voorkomen. Blijft er na het wegstrepen niets
- *  over (zoals bij "ING kortingsvoucher"), dan matcht er niets: geen
- *  onderscheidend woord is geen bewijs, geen gok. */
+ *  TWEE EISEN, EN ALLEBEI NODIG: het MERK én minstens één onderscheidend woord.
+ *
+ *    - het merk is het eerste woord van de titel ("JBL"), en dat mag korter dan
+ *      vier tekens zijn — precies omdat de bekendste merken dat zijn. Zonder
+ *      deze eis blijft er bij "JBL Grip (zwart) …" na het wegstrepen van de
+ *      standaardtaal en de kleur alleen "grip" over, en dan zou elke pagina met
+ *      het woord "grip" erin raak zijn. Mét de merkeis moet er óók "jbl" staan;
+ *    - én minstens één woord van vier tekens of langer dat geen standaardtaal
+ *      en geen kleur is, dat ALLEMAAL moeten raken. Het merk alleen is
+ *      nadrukkelijk niet genoeg: "JBL 15% kortingsvoucher" houdt niets
+ *      onderscheidends over en matcht daarom nergens, net als "ING
+ *      kortingsvoucher". Een merkbrede voucher aan elke pagina van dat merk
+ *      hangen is een andere bewering dan deze, en die is hier niet gemaakt.
+ *
+ *  Zo blijft de fout die `hoortBijWinkel` afwees ook hier uitgesloten: er is
+ *  nooit een match op één los, algemeen woord. */
 export function mogelijkeProductMatch(aanbieding: Aanbieding, productNaam: string): boolean {
-  const woorden = aanbieding.winkel
-    .toLowerCase()
-    .split(/[^a-zà-ÿ0-9]+/i)
-    .filter((w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w));
-  if (woorden.length === 0) return false;
+  const alle = aanbieding.winkel.toLowerCase().split(/[^a-zà-ÿ0-9]+/i).filter((w) => w !== "");
+  const merk = alle[0];
+  if (merk === undefined || merk.length < 3) return false;
+
+  const onderscheidend = alle
+    .slice(1)
+    .filter((w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w) && !PRODUCT_MATCH_KLEUREN.has(w));
+  if (onderscheidend.length === 0) return false;
+
   const naam = productNaam.toLowerCase();
-  return woorden.every((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(naam));
+  const raakt = (w: string) =>
+    new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(naam);
+  return raakt(merk) && onderscheidend.every(raakt);
 }
 
 /* ──────────────────── wat er uit de pagina terugkomt ──────────────────────── */

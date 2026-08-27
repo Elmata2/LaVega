@@ -327,24 +327,50 @@ describe("een aanbieding wordt op domein gekoppeld, nooit op naam", () => {
     expect(mogelijkeMerknaamMatch(kort, "www.nu.nl")).toBe(false);
   });
 
-  it("mogelijkeProductMatch raakt een productnaam die de onderscheidende woorden van de titel draagt", () => {
-    /* Dit is de tak die WEL werkt op een marktplaats: bol.com se hostnaam
-     * matcht nooit met "JBL", maar de productnaam op de pagina kan dat wel. */
+  it("mogelijkeProductMatch raakt de ECHTE bol.com-titel van hetzelfde artikel", () => {
+    /* Dit is de tak die WEL werkt op een marktplaats: bol.com's hostnaam matcht
+     * nooit met "JBL", maar de productnaam op de pagina kan dat wel.
+     *
+     * DE PAGINATITEL HIERONDER IS ECHT, opgehaald op 27 augustus 2026 van
+     * bol.com/nl/nl/p/jbl-tune-flex-2-true-wireless-nc-earbuds-black/. Hij staat
+     * er letterlijk in omdat hij het gemeten verschil laat zien waar deze
+     * functie op stukliep: ING schrijft "(zwart)" en bol.com "Black". */
     const bon = aanbieding({ winkel: "JBL Tune Flex 2 (zwart) voor € 55 kortingsvoucher", domein: null });
-    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 TWS oordopjes zwart")).toBe(true);
-    /* Ontbreekt één onderscheidend woord (hier: de kleur), dan matcht hij niet
-     * — ALLE woorden moeten raken, niet het merk alleen. */
-    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 TWS oordopjes wit")).toBe(false);
-    /* Een heel ander JBL-artikel raakt niet, en dat is precies het punt: het
-     * merk alleen is niet genoeg, anders zou elk JBL-artikel op elke JBL-titel
-     * matchen. */
+    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 - True Wireless NC Earbuds - Black | bol")).toBe(true);
+
+    /* Een kleur is een VARIANT en geen eis: de witte pagina raakt óók. Dat is
+     * bewust ingeleverde precisie — zie de uitleg bij PRODUCT_MATCH_KLEUREN. */
+    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 TWS oordopjes wit")).toBe(true);
+
+    /* Een ander JBL-artikel raakt niet: het merk alleen is niet genoeg. */
     expect(mogelijkeProductMatch(bon, "JBL Charge 5 waterdichte bluetooth speaker")).toBe(false);
+    /* En de echte Sense Lite-pagina die de eigenaar ook probeerde: JBL, maar
+     * geen Tune Flex — dus terecht niets. */
+    expect(
+      mogelijkeProductMatch(bon, "JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol"),
+    ).toBe(false);
   });
 
-  it("mogelijkeProductMatch weigert als er na de voucher-standaardtaal niets onderscheidends overblijft", () => {
-    /* "ING kortingsvoucher": "ing" is te kort (net als bij de merknaam-match) en
-     * "kortingsvoucher" staat op de stoplijst. Niets over, dus geen match op
-     * wat voor productnaam dan ook — een lege eis mag nooit als voldaan gelden. */
+  it("mogelijkeProductMatch eist het MERK erbij, zodat één algemeen woord nooit genoeg is", () => {
+    /* Na het wegstrepen van standaardtaal en kleur houdt deze titel alleen
+     * "grip" over. Zonder de merkeis zou elke pagina met het woord "grip" erin
+     * raak zijn — precies de "te ruime" fout die `hoortBijWinkel` afwees. */
+    const grip = aanbieding({ winkel: "JBL Grip (zwart) voor € 59 kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(grip, "JBL Grip draagbare speaker")).toBe(true);
+    expect(mogelijkeProductMatch(grip, "Samsonite Grip Handbagage Trolley 55cm Zwart")).toBe(false);
+
+    const tour = aanbieding({ winkel: "JBL Tour Pro 3 (zwart) voor € 179 kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(tour, "Grand Tour Reisgids Europa 2026")).toBe(false);
+  });
+
+  it("mogelijkeProductMatch weigert als er naast het merk niets onderscheidends overblijft", () => {
+    /* "JBL 15% kortingsvoucher" is merkbreed: er blijft naast "jbl" geen enkel
+     * onderscheidend woord over. Zo'n voucher aan élke JBL-pagina hangen is een
+     * andere bewering dan deze functie doet, dus hij matcht nergens. Hetzelfde
+     * geldt voor "ING kortingsvoucher". */
+    const merkbreed = aanbieding({ winkel: "JBL 15% kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(merkbreed, "JBL Charge 5 waterdichte bluetooth speaker")).toBe(false);
+
     const bon = aanbieding({ winkel: "ING kortingsvoucher", domein: null });
     expect(mogelijkeProductMatch(bon, "ING kortingsvoucher")).toBe(false);
     expect(mogelijkeProductMatch(bon, "Willekeurig artikel")).toBe(false);
