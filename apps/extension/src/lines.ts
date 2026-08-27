@@ -915,6 +915,19 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
         `passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
       );
     }
+    case "mogelijke-product-match": {
+      /* ZELFDE GRENS ALS BIJ "mogelijke-merknaam-match" HIERBOVEN, alleen is de
+       * match nu op het artikel dat de pagina zelf noemt, niet op de winkel. Dat
+       * verandert de bewering niet: geen "hier ligt een aanbieding voor je",
+       * geen bedrag, geen punten — alleen dat de titel bij WAT JE HIER BEKIJKT
+       * kan passen. */
+      const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
+      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      return (
+        `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij wat je hier ` +
+        `bekijkt passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
+      );
+    }
     case "gevonden":
       return "";
   }

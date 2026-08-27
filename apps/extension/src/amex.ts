@@ -76,6 +76,7 @@ export {
   registreerbaarDomein,
   hoortBijWinkel,
   mogelijkeMerknaamMatch,
+  mogelijkeProductMatch,
   leesEinddatum,
   leesPuntenprijs,
   aanbodVoorWinkel,

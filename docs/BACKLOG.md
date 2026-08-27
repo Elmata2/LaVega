@@ -484,6 +484,38 @@ eigen FAQ is vanaf deze machine niet te bereiken (Akamai-botbeheer). De gekozen 
 zelf geen verzilvering — hij wijst er alleen naar. Als hij zelf ooit een voucher bestelt en ziet wat er
 precies gebeurt, kan die zin scherper (of losser).
 
+### V11 — dezelfde melding, nu ook op een marktplaats die het merk niet in de hostnaam draagt (GEBOUWD, 27 augustus)
+
+V10 werkte alleen op de merknaam-site zelf: `mogelijkeMerknaamMatch` koppelt op de HOSTNAAM
+("jbl" uit jbl.nl), en dat kan structureel nooit vuren op bol.com — de hostnaam is "bol", hoe
+duidelijk de pagina ook een JBL-artikel toont. Live getest, precies dit gevonden: het paneel
+verscheen wél op een JBL-productpagina (met de gehedgde melding) en op de bol.com-zoekresultaten
+(terecht: geen machineleesbaar bedrag), maar op een los bol.com JBL-product bleef de melding weg.
+
+**Dit vroeg om de redactiegrens in `read.ts` bewust te verleggen.** Die grens bestond met opzet:
+`Evidence` droeg alleen host en bedragen, nooit een productnaam, met een expliciete,
+test-bewaakte reden ("dan draagt de extensie gegevens over wat hij koopt terwijl ze alleen een
+bedrag nodig heeft"). Voor V11 is dat ÉÉN specifiek veld — de productnaam, en alleen die —
+bewust vrijgegeven, na een aparte afweging (niet stilzwijgend): een narrow-optie (alleen het
+`brand`-veld, minder informatief maar minder ingrijpend) is aangeboden en afgewezen ten gunste
+van de volledige naam, voor scherpere matching. Omschrijving, artikelnummer, afbeelding en
+verkoper blijven wél weg — `read.test.ts`'s redactiegrens-tests zijn bijgewerkt om precies dát te
+bewaken, niet om de grens helemaal weg te halen.
+
+**Gebouwd als een derde tak, na de eerste twee.** `mogelijkeProductMatch` in `aanbod-kern.ts`
+matcht op de PAGINA-INHOUD (`Evidence.productNaam`) in plaats van de winkelnaam: elk
+onderscheidend woord (≥4 tekens, met een stoplijst voor voucher-standaardtaal als "korting" en
+"voor") uit de voucher-titel moet als los woord in de productnaam voorkomen — niet het merk
+alleen, anders zou elk artikel van dat merk op elke titel van dat merk matchen. Alleen aangeroepen
+door `aanbodVoorWinkel` als de domeinkoppeling NIETS vond, ná de merknaam-match (die gaat voor:
+minstens zo specifiek, en al aanwezig): drie tredes van aflopend zekere koppeling, niet drie losse
+paden. Nieuwe uitkomst `mogelijke-product-match`, eigen zin in `lines.ts` — zelfde belofte-grens
+als V10: geen aanbieding, geen bedrag, alleen "dat kan bij wat je hier bekijkt passen, check zelf".
+Strikt PUNTEN-only, net als V10, en om dezelfde reden (een KORTING-aanbieding geldt alleen aan de
+kassa van de winkel zelf, hoe precies de paginainhoud ook aansluit). Getest in `amex.test.ts`
+(shared kernel, inclusief dat een korting-bron dit nooit krijgt) en `ing.test.ts` (echte titel op
+een marktplaats-host, en dat de merknaam-match voorrang houdt).
+
 ---
 
 ## 7. Besluiten die blijven gelden

@@ -150,19 +150,27 @@ export const VIA_REEKS_HOOG = "JSON-LD AggregateOffer highPrice";
 export const VIA_REEKS_PRIJS = "JSON-LD AggregateOffer price";
 export const VIA_GEEN_ARTIKELPRIJS = "JSON-LD prijsopgave, geen artikelprijs";
 
-/** WAT DE EXTENSIE VAN EEN PAGINA MEENEEMT, en dit is de hele lijst: de host en
- *  de bedragen die er machineleesbaar op staan.
+/** WAT DE EXTENSIE VAN EEN PAGINA MEENEEMT: de host, de bedragen die er
+ *  machineleesbaar op staan, en — sinds de merknaam-op-paginainhoud-match
+ *  (V11, 27 augustus 2026) — de productnaam, als die machineleesbaar op de
+ *  pagina staat.
  *
- *  Geen paginatitel, geen artikelnaam, geen omschrijving, geen winkelwagen,
- *  geen cookies, geen URL-pad. De eerste opzet nam de RUWE TEKST van elk
- *  JSON-LD-blok mee en ontcijferde die in de popup — makkelijker te testen, maar
- *  dan reist de naam en de hele omschrijving van het artikel mee, en dan draagt
- *  de extensie gegevens over wat hij koopt terwijl ze alleen een bedrag nodig
- *  heeft. Het ontcijferen is daarom naar de pagina verhuisd en wat eruit komt is
- *  gesnoeid tot getal, munt en herkomst. read.test.ts houdt die lijst kort. */
+ *  Nog steeds GEEN omschrijving, geen artikelnummer, geen afbeelding, geen
+ *  verkoper, geen winkelwagen, geen cookies, geen URL-pad. De redactiegrens is
+ *  bewust en met opzet verlegd voor precies dit ene veld — niet stilletjes
+ *  verruimd: V10's merknaam-match kon alleen op de HOSTNAAM van de winkel
+ *  matchen ("jbl" uit jbl.nl), en dus nooit op een marktplaats als bol.com die
+ *  een JBL-artikel verkoopt. Om dat wél te laten werken is er een tweede,
+ *  zwakkere match nodig op wat de pagina zelf zegt te verkopen — en dat kan
+ *  niet zonder de naam te lezen. `productNaam` is null zolang die nergens
+ *  machineleesbaar op de pagina staat; er wordt niet gegokt op de <title> van
+ *  de hele pagina of iets anders dat evengoed de winkel zelf kan zijn.
+ *  read.test.ts's redactiegrens-tests bewaken dat dit het enige nieuwe veld is
+ *  en dat de omschrijving en de rest nog steeds niet meereizen. */
 export type Evidence = {
   host: string;
   candidates: PriceCandidate[];
+  productNaam: string | null;
 };
 
 /* ─────────────────────── het aftasten van de pagina ───────────────────────── */
@@ -192,6 +200,13 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
   const isOrder = (t: string) => /(^|\/|:)(Order|Invoice)$/i.test(t);
   const isOffer = (t: string) => /(^|\/|:)Offer$/i.test(t);
   const isReeks = (t: string) => /(^|\/|:)AggregateOffer$/i.test(t);
+  const isProduct = (t: string) => /(^|\/|:)Product$/i.test(t);
+
+  /* EERSTE GEVONDEN NAAM WINT, en er wordt niet verder gezocht. Twee
+   * Product-blokken op één pagina (hoofdartikel plus "vaak samen gekocht")
+   * zouden anders de tweede naam over de eerste heen kunnen zetten, afhankelijk
+   * van de willekeurige volgorde waarin de stack ze aftast. */
+  let productNaam: string | null = null;
 
   const types = (o: Record<string, unknown>): string[] => {
     const t = o["@type"];
@@ -401,6 +416,10 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
           });
         }
       }
+      if (ts.some(isProduct) && productNaam === null) {
+        const naam = scalar(o["name"]);
+        if (typeof naam === "string") productNaam = naam;
+      }
       for (const v of Object.values(o)) {
         if (v && typeof v === "object") stack.push({ node: v, parent: o });
       }
@@ -452,7 +471,26 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
     }
   }
 
-  return { host: h, candidates };
+  /* ZELFDE VOORRANG ALS BOVEN: alleen zoeken als de JSON-LD-doorloop nog niets
+   * opleverde. `og:title`/`product:title` behoren net zo goed bij het artikel
+   * als een JSON-LD Product.name; `itemprop="name"` alleen binnen een scope die
+   * zelf al als artikel is aangemerkt door de prijs-microdata hierboven, anders
+   * zou een willekeurige `itemprop="name"` op de pagina (een auteur, een
+   * organisatie) voor een artikelnaam kunnen doorgaan. */
+  if (productNaam === null) {
+    const titelEl = d.querySelector(
+      'meta[property="og:title"], meta[property="product:title"], meta[name="product:title"]',
+    );
+    const titel = (titelEl?.getAttribute("content") ?? "").trim();
+    if (titel) productNaam = titel;
+  }
+  if (productNaam === null) {
+    const naamEl = d.querySelector('[itemscope][itemtype*="Product"] [itemprop="name"]');
+    const naam = (naamEl?.getAttribute("content") ?? naamEl?.textContent ?? "").trim();
+    if (naam) productNaam = naam;
+  }
+
+  return { host: h, candidates, productNaam };
 }
 
 /* ────────────────────────── het bedrag ontcijferen ───────────────────────── */

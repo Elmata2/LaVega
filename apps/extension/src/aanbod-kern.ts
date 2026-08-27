@@ -327,6 +327,57 @@ export function mogelijkeMerknaamMatch(aanbieding: Aanbieding, winkelHost: strin
   return patroon.test(aanbieding.winkel);
 }
 
+/** Woorden uit een voucher-titel die op ELKE titel voorkomen en dus niets
+ *  onderscheiden — "korting" op zichzelf zegt niets over WELK product. Zonder
+ *  deze lijst zou "ING kortingsvoucher" met "kortingsvoucher" als enige
+ *  overgebleven woord op praktisch elke productpagina rondom "korting" kunnen
+ *  matchen; met de lijst blijft er dan niets over en matcht hij nergens. */
+const PRODUCT_MATCH_STOPWOORDEN = new Set([
+  "voor",
+  "korting",
+  "kortingsbon",
+  "kortingsvoucher",
+  "voucher",
+  "punten",
+  "van",
+  "een",
+  "het",
+]);
+
+/** Een zwakkere, gehedgde koppeling op de PAGINA-INHOUD, niet op de winkelnaam.
+ *
+ *  ── WAAROM DIT ER NAAST STAAT EN GEEN VERVANGING IS VAN `mogelijkeMerknaamMatch` ──
+ *
+ *  Die functie koppelt op de HOSTNAAM van de winkel ("jbl" uit jbl.nl) en werkt
+ *  daarom alleen op de merknaam-site zelf. Een marktplaats die het artikel van
+ *  een ander merk verkoopt (bol.com met een JBL-koptelefoon) heeft een
+ *  hostnaam die nooit matcht, hoe duidelijk het artikel ook een JBL is. Deze
+ *  functie kijkt daarom naar wat de PAGINA ZELF zegt te verkopen
+ *  (`Evidence.productNaam` uit read.ts) in plaats van naar waar hij staat.
+ *
+ *  ZELFDE GEHEDGDE ZIN, ZELFDE GRENS AAN PUNTEN-BRONNEN: de aanroeper
+ *  (`aanbodVoorWinkel`) zet deze functie alleen in voor een PUNTEN-bron, om
+ *  precies de reden die bij `hoortBijWinkel` staat — een KORTING-aanbieding
+ *  ("30% korting bij JBL") geldt alleen aan de kassa VAN die winkel, hoe
+ *  precies de paginainhoud ook overeenkomt.
+ *
+ *  DE WOORDEN MOETEN ALLEMAAL RAKEN, niet het merk alleen. "boombox" alleen
+ *  matchen op een JBL-merknaam zou dezelfde eerste fout zijn als bij
+ *  `hoortBijWinkel` afgewezen: te ruim. Elk woord van minstens 4 tekens uit de
+ *  titel — met uitzondering van de voucher-standaardtaal hierboven — moet als
+ *  los woord in de productnaam voorkomen. Blijft er na het wegstrepen niets
+ *  over (zoals bij "ING kortingsvoucher"), dan matcht er niets: geen
+ *  onderscheidend woord is geen bewijs, geen gok. */
+export function mogelijkeProductMatch(aanbieding: Aanbieding, productNaam: string): boolean {
+  const woorden = aanbieding.winkel
+    .toLowerCase()
+    .split(/[^a-zà-ÿ0-9]+/i)
+    .filter((w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w));
+  if (woorden.length === 0) return false;
+  const naam = productNaam.toLowerCase();
+  return woorden.every((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(naam));
+}
+
 /* ──────────────────── wat er uit de pagina terugkomt ──────────────────────── */
 
 /** Wat het aftasten per kaart teruggeeft. Alleen stukjes die op een patroon
@@ -800,6 +851,12 @@ export type AanbodUitkomst =
    *  `MOGELIJKE_MATCH_MAX`; `totaal` telt ongekapt, zodat een afgekapte lijst
    *  dat ook zegt in plaats van te verzwijgen. */
   | { soort: "mogelijke-merknaam-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
+  /** Zelfde soort zwakke koppeling als hierboven, maar op de PAGINA-INHOUD in
+   *  plaats van de winkelnaam (zie `mogelijkeProductMatch`) — dit is de tak die
+   *  ook op een marktplaats vuurt die het artikel van een ander merk verkoopt.
+   *  Wordt pas geprobeerd als de merknaam-match niets vond: een match op de
+   *  winkelnaam zelf is minstens zo specifiek en gaat voor. */
+  | { soort: "mogelijke-product-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
   | {
       soort: "gevonden";
       op: string;
@@ -838,6 +895,7 @@ export function aanbodVoorWinkel(
   winkelHost: string,
   asOf: string,
   bron: Bron,
+  productNaam: string | null,
 ): AanbodUitkomst {
   if (!toestand.aan) return { soort: "uit" };
 
@@ -870,15 +928,31 @@ export function aanbodVoorWinkel(
      * comment bij `hoortBijWinkel` om vraagt: bij een KORTING-bron zou dit de
      * Nike/nike-outlet-fake.nl-fout terugbrengen. */
     if (bron.prijsSoort === "punten") {
-      const matches = toestand.aanbiedingen.filter((a) => mogelijkeMerknaamMatch(a, winkelHost));
-      if (matches.length > 0) {
+      const merknaamMatches = toestand.aanbiedingen.filter((a) => mogelijkeMerknaamMatch(a, winkelHost));
+      if (merknaamMatches.length > 0) {
         return {
           soort: "mogelijke-merknaam-match",
           op,
           dagen,
-          matches: matches.slice(0, MOGELIJKE_MATCH_MAX),
-          totaal: matches.length,
+          matches: merknaamMatches.slice(0, MOGELIJKE_MATCH_MAX),
+          totaal: merknaamMatches.length,
         };
+      }
+      /* Pas als de winkelnaam niets opleverde: een match op de winkelnaam zelf
+       * is minstens zo specifiek als een match op de paginainhoud, en gaat
+       * daarom voor. Zie `mogelijkeProductMatch` voor waarom dit er apart naast
+       * staat en niet in de plaats van komt. */
+      if (productNaam !== null) {
+        const productMatches = toestand.aanbiedingen.filter((a) => mogelijkeProductMatch(a, productNaam));
+        if (productMatches.length > 0) {
+          return {
+            soort: "mogelijke-product-match",
+            op,
+            dagen,
+            matches: productMatches.slice(0, MOGELIJKE_MATCH_MAX),
+            totaal: productMatches.length,
+          };
+        }
       }
     }
     return { soort: "geen-voor-deze-winkel", op, dagen, totaal: toestand.aanbiedingen.length };
