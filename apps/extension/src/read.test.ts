@@ -647,6 +647,26 @@ describe("productNaam: waar hij vandaan komt, en waarvandaan niet", () => {
     const ev = bewijs("hema-geen-prijsmarkup.html");
     expect(ev.productNaam).toBeNull();
   });
+
+  it("og:title gaat voor een ProductGroup met varianten — anders komt de VERKEERDE variant erdoor", () => {
+    /* Het echte, gemeten geval: bol.com zet een pagina neer als ÉÉN
+     * ProductGroup (naam zonder kleur) met vijf losse Product-varianten
+     * erin. De eerst genoemde variant in deze fixture is "Wit" — een andere
+     * kleur dan de "Zwart" die de bezochte pagina en og:title allebei noemen.
+     * Zonder de og:title-voorrang zou "eerste Product wint" hier stilzwijgend
+     * de witte variant hebben opgeleverd. */
+    const ev = bewijs("bol-productgroup.html", "www.bol.com");
+    expect(ev.productNaam).toBe("JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol");
+    expect(ev.productNaam).not.toContain("Wit");
+  });
+
+  it("valt terug op de ProductGroup-naam als er geen og:title is, niet op een willekeurige variant", () => {
+    const html = readFileSync(join(FIXTURES, "bol-productgroup.html"), "utf8");
+    const zonderOgTitle = html.replace(/<meta property="og:title"[^>]*>\n?/, "");
+    const doc = new DOMParser().parseFromString(zonderOgTitle, "text/html");
+    const ev = collectEvidence(doc, "www.bol.com");
+    expect(ev.productNaam).toBe("JBL Sense Lite - Volledig draadloze open-ear oordopjes");
+  });
 });
 
 describe("de munt mag uit een kale prijsopgave komen, niet uit een tarief", () => {

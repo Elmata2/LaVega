@@ -200,13 +200,30 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
   const isOrder = (t: string) => /(^|\/|:)(Order|Invoice)$/i.test(t);
   const isOffer = (t: string) => /(^|\/|:)Offer$/i.test(t);
   const isReeks = (t: string) => /(^|\/|:)AggregateOffer$/i.test(t);
-  const isProduct = (t: string) => /(^|\/|:)Product$/i.test(t);
+  /* OOK ProductGroup, EN DAT IS GEMETEN NODIG. Een marktplaats met kleur- of
+   * maatvarianten (bol.com) zet de pagina neer als ÉÉN ProductGroup met een
+   * `hasVariant`-lijst van losse Product-objecten erin — één per variant. Zonder
+   * ProductGroup hier zou "eerste Product wint" een WILLEKEURIGE variant uit die
+   * lijst kunnen pakken (gemeten: de eerste in de lijst was "Wit", terwijl de
+   * bezochte pagina "Zwart" was) — geen ambigu resultaat maar een stille,
+   * verkeerde naam. De ProductGroup zelf is de buitenste knoop en wordt daardoor
+   * als eerste bezocht, vóór zijn varianten ooit op de stack komen; "eerste
+   * gevonden naam wint" hieronder geeft hem daarom altijd voorrang. */
+  const isProduct = (t: string) => /(^|\/|:)(Product|ProductGroup)$/i.test(t);
 
-  /* EERSTE GEVONDEN NAAM WINT, en er wordt niet verder gezocht. Twee
-   * Product-blokken op één pagina (hoofdartikel plus "vaak samen gekocht")
-   * zouden anders de tweede naam over de eerste heen kunnen zetten, afhankelijk
-   * van de willekeurige volgorde waarin de stack ze aftast. */
+  /* EERSTE GEVONDEN NAAM WINT, en er wordt niet verder gezocht — met ÉÉN
+   * uitzondering die voorrang krijgt: og:title/product:title, hieronder vóór de
+   * JSON-LD-doorloop. Gemeten op dezelfde bol.com-pagina als hierboven: og:title
+   * droeg de volledige, kloppende titel inclusief kleur ("... - Zwart"), terwijl
+   * de ProductGroup-naam die kleur niet draagt (die staat alleen op de losse
+   * variant, en dat is precies het probleem hierboven). Waar geen og:title
+   * bestaat (IKEA, Coolblue) blijft de JSON-LD-naam gewoon de bron. */
   let productNaam: string | null = null;
+  const titelEl = d.querySelector(
+    'meta[property="og:title"], meta[property="product:title"], meta[name="product:title"]',
+  );
+  const titel = (titelEl?.getAttribute("content") ?? "").trim();
+  if (titel) productNaam = titel;
 
   const types = (o: Record<string, unknown>): string[] => {
     const t = o["@type"];
@@ -471,19 +488,11 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
     }
   }
 
-  /* ZELFDE VOORRANG ALS BOVEN: alleen zoeken als de JSON-LD-doorloop nog niets
-   * opleverde. `og:title`/`product:title` behoren net zo goed bij het artikel
-   * als een JSON-LD Product.name; `itemprop="name"` alleen binnen een scope die
-   * zelf al als artikel is aangemerkt door de prijs-microdata hierboven, anders
-   * zou een willekeurige `itemprop="name"` op de pagina (een auteur, een
-   * organisatie) voor een artikelnaam kunnen doorgaan. */
-  if (productNaam === null) {
-    const titelEl = d.querySelector(
-      'meta[property="og:title"], meta[property="product:title"], meta[name="product:title"]',
-    );
-    const titel = (titelEl?.getAttribute("content") ?? "").trim();
-    if (titel) productNaam = titel;
-  }
+  /* LAATSTE TERUGVAL, alleen als er nog steeds niets is: og:title stond al
+   * vóór de JSON-LD-doorloop (zie boven). `itemprop="name"` alleen binnen een
+   * itemscope die zelf al Product in zijn itemtype draagt, anders zou een
+   * willekeurige `itemprop="name"` op de pagina (een auteur, een organisatie)
+   * voor een artikelnaam kunnen doorgaan. */
   if (productNaam === null) {
     const naamEl = d.querySelector('[itemscope][itemtype*="Product"] [itemprop="name"]');
     const naam = (naamEl?.getAttribute("content") ?? naamEl?.textContent ?? "").trim();
