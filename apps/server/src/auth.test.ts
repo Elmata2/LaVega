@@ -8,6 +8,7 @@ afterEach(() => {
   delete process.env.BETTER_AUTH_URL;
   delete process.env.BETTER_AUTH_TRUSTED_ORIGINS;
   delete process.env.VERCEL_URL;
+  delete process.env.VERCEL_BRANCH_URL;
 });
 
 test("auth refuses requests when server secrets are absent", async () => {
@@ -52,5 +53,22 @@ test("configured trusted origins are kept alongside the deployment's own", () =>
   } finally {
     delete process.env.BETTER_AUTH_TRUSTED_ORIGINS;
     delete process.env.VERCEL_URL;
+  }
+});
+
+test("a preview trusts both the URL you click and the one Vercel built", () => {
+  // VERCEL_URL is the immutable per-commit deployment; VERCEL_BRANCH_URL is the
+  // stable branch alias, and that is the link a person actually opens.
+  process.env.VERCEL_URL = "lavega-abc123-elmata2s-projects.vercel.app";
+  process.env.VERCEL_BRANCH_URL = "lavega-git-preview-elmata2s-projects.vercel.app";
+  try {
+    expect(authBaseUrl()).toBe("https://lavega-git-preview-elmata2s-projects.vercel.app");
+    expect(authTrustedOrigins()).toEqual([
+      "https://lavega-git-preview-elmata2s-projects.vercel.app",
+      "https://lavega-abc123-elmata2s-projects.vercel.app",
+    ]);
+  } finally {
+    delete process.env.VERCEL_URL;
+    delete process.env.VERCEL_BRANCH_URL;
   }
 });
