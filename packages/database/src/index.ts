@@ -275,3 +275,65 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
     },
   };
 }
+
+export type OpaqueVaultRow = { blob: Buffer; updatedAt: string };
+
+/* The version token a conditional write is compared against.
+ *
+ * It has to come back out of Postgres at the precision it went in at.
+ * `timestamptz` keeps microseconds and `Date.toISOString()` only keeps
+ * milliseconds, so reading the column through a JS Date and sending it back
+ * lands three digits short of the stored value — and then `updated_at = $2`
+ * never matches and every conditional write reads as a conflict. Formatting in
+ * SQL keeps it exact, and the client only ever echoes it back. */
+const VAULT_VERSION = `to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at`;
+export type OpaqueVaultWrite = { status: "stored"; updatedAt: string } | { status: "conflict" };
+
+/**
+ * The personal vault as bytes the server cannot read.
+ *
+ * `createVaultRepository` above encrypts with the server's key, which is right
+ * for data the server has to act on. Personal finances are not that: the
+ * browser encrypts them with a key derived from the user's own passphrase, and
+ * this only holds the result. There is deliberately no `encryptBlob` here — if
+ * a later change needs one, that is a decision to re-open, not a line to add.
+ *
+ * Writes are conditional on the copy the client last saw. Two devices holding
+ * different vaults is a real situation, and last-write-wins would silently
+ * destroy one of them, so a stale write is refused instead.
+ */
+export function createOpaqueVaultRepository(db: Database, userId: string | undefined | null) {
+  const tenantId = requireUserId(userId);
+  return {
+    async get(): Promise<OpaqueVaultRow | null> {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(`SELECT vault_blob, ${VAULT_VERSION} FROM personal.vaults`);
+        const row = result.rows[0];
+        return row ? { blob: Buffer.from(row.vault_blob as Buffer), updatedAt: row.updated_at as string } : null;
+      });
+    },
+    /** `expectedUpdatedAt` is the copy the client is replacing; `null` means it believes there is none. */
+    async put(blob: Buffer, expectedUpdatedAt: string | null): Promise<OpaqueVaultWrite> {
+      if (blob.length === 0) throw new Error("Vault blob is empty");
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP WHERE personal.vaults.updated_at = $2::timestamptz RETURNING ${VAULT_VERSION}`,
+          [blob, expectedUpdatedAt],
+        );
+        const row = result.rows[0];
+        return row ? { status: "stored", updatedAt: row.updated_at as string } : { status: "conflict" };
+      });
+    },
+    /** Replace whatever the server holds. Only for a user who has been shown the conflict and chose. */
+    async overwrite(blob: Buffer): Promise<{ updatedAt: string }> {
+      if (blob.length === 0) throw new Error("Vault blob is empty");
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP RETURNING ${VAULT_VERSION}`,
+          [blob],
+        );
+        return { updatedAt: result.rows[0]?.updated_at as string };
+      });
+    },
+  };
+}

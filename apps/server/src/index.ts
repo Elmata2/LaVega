@@ -9,6 +9,7 @@ import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
+import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import { forwardInvesting, investingTenantId, shouldMountInvesting } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
@@ -132,6 +133,12 @@ registerEbRoutes(app);
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */
 registerAgentRoutes(app);
+
+/* Encrypted backup of the personal vault. Only with a database configured —
+ * there is nowhere to put it otherwise, and a route that always fails is worse
+ * than one that is not there. */
+const vaultDependencies = vaultRouteDependencies();
+if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
 
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */

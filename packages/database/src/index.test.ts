@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { createAgentRunRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
+import { createAgentRunRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
 import type { QueryResultRow } from "@neondatabase/serverless";
 
 afterEach(() => { delete process.env.LAVEGA_ENCRYPTION_KEY; });
@@ -128,4 +128,41 @@ test("agent runs are read back in the runtime's own vocabulary", async () => {
     summary: null,
     error: "boom",
   });
+});
+
+test("the personal vault stores bytes the server never decrypts", async () => {
+  const { db, calls } = fakeDatabase([{ vault_blob: Buffer.from("opaque-ciphertext"), updated_at: "2026-08-31T00:00:00.000000Z" }]);
+  const repository = createOpaqueVaultRepository(db, "user-123");
+
+  const stored = await repository.get();
+
+  expect(stored?.blob.toString("utf8")).toBe("opaque-ciphertext");
+  // Full microsecond precision: this token is compared against the column verbatim.
+  expect(stored?.updatedAt).toBe("2026-08-31T00:00:00.000000Z");
+  // No key is read and no plaintext is produced: the row is bytes in, bytes out.
+  expect(calls.some((call) => call.sql.includes("decrypt"))).toBe(false);
+});
+
+test("a vault write that is not based on the current server copy is refused", async () => {
+  const { db } = fakeDatabase([]);
+
+  const outcome = await createOpaqueVaultRepository(db, "user-123").put(Buffer.from("new"), "2026-01-01T00:00:00.000Z");
+
+  expect(outcome).toEqual({ status: "conflict" });
+});
+
+test("a vault write based on the current server copy is accepted", async () => {
+  const { db, calls } = fakeDatabase([{ updated_at: "2026-08-31T12:00:00.000000Z" }]);
+
+  const outcome = await createOpaqueVaultRepository(db, "user-123").put(Buffer.from("new"), "2026-08-31T00:00:00.000000Z");
+
+  expect(outcome).toEqual({ status: "stored", updatedAt: "2026-08-31T12:00:00.000000Z" });
+  expect(calls.at(-2)?.values).toEqual([Buffer.from("new"), "2026-08-31T00:00:00.000000Z"]);
+});
+
+test("an empty vault blob is refused before it reaches the table's own check", async () => {
+  const { db, calls } = fakeDatabase();
+
+  await expect(createOpaqueVaultRepository(db, "user-123").put(Buffer.alloc(0), null)).rejects.toThrow(/empty/i);
+  expect(calls).toEqual([]);
 });
