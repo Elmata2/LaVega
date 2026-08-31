@@ -39,6 +39,8 @@ kon de brokerkluis claimen — en niet de H2-terugval.
 | **M1** | **Opgelost** — de callback eist nu een `state` die deze server zelf heeft uitgegeven, en verbruikt hem (replay geweigerd). `eb-routes.ts` heeft eindelijk een testbestand | `eb-routes.ts` |
 | **M6** | **Gedeeltelijk opgelost** — de Worker weigert nu een GEMETEN mislukking zonder geldige DKIM, vóór het parsen, met een bounce die de reden noemt. Niet op `unknown`/`none`/`temperror`, en niet als DKIM klopt (doorsturen) | `email-worker/src/authResults.ts` |
 | M2, M4, M5, M7, L1–L7 | **Nog open** | — |
+| **V1** | **Opgelost** — nieuw, niet uit de review: `/api/vault/backup` kwam ná 28 augustus binnen en had dezelfde vorm als C1 | `apiGuard.vault.test.ts` |
+
 
 **Afwijking van het advies, bewust.** H3 vroeg om een minimum bij `setup` *én* `restore`.
 Alleen `setup` heeft het gekregen. `restore` en `unlock` controleren een wachtwoord dat
@@ -80,6 +82,29 @@ registratie wijst naar de URL, niet naar een kopie, dus hij is bij het uitrollen
 bij. Wel het nalezen waard voordat er een externe gebruiker op zit.
 
 ---
+
+**Derde ronde, 31 augustus — verplaatst naar de nieuwe master.** Deze tak stond
+op een master van vóór de Better Auth/Neon/Vercel-migratie en is daarna vijftien
+commits achterop geraakt. Na de rebase:
+
+- **C1 was intussen ook langs de andere kant gedicht.** Master geeft
+  `/api/investing/*` en `/api/brokers/*` een tenant uit de sessie
+  (`investingTenantId`). Dat is niet dubbelop: `apiGuard` beantwoordt de eerdere
+  vraag (*is er überhaupt een sessie?*), `investingTenantId` de latere (*van wie
+  is dit?*). De bewaking staat vóór de tenantlaag, en `investing-guard.test.ts`
+  gaat nu uit van een geldige sessie omdat het over het tweede gaat, niet het
+  eerste.
+- **V1 — de versleutelde kluis-back-up.** `/api/vault/backup` bestond nog niet
+  toen de review draaide. Zijn eigen controle is `investingTenantId`, en die valt
+  zonder ingestelde authenticatie terug op de lokale tenant. Met een
+  `DATABASE_URL` maar zonder `BETTER_AUTH_SECRET` registreren de routes zich,
+  noemt de terugval een tenant, en leest of overschrijft een vreemde andermans
+  verzegelde financiën. `apiGuard` weigert dat. De test geeft de route expres de
+  meest toegeeflijke dependencies die hij ooit kan hebben — er is *altijd* een
+  tenant — zodat alleen de bewaking het nog kan tegenhouden.
+- **`/api/agent/*`, `/api/eb/*` en `/api/vault/*` stonden op dat moment open in
+  productie.** Alleen de investing-routes waren gedicht. H1 was dus nog levend
+  toen deze tak werd verplaatst.
 
 ## Kort samengevat
 

@@ -78,6 +78,7 @@ test("a preview trusts both the URL you click and the one Vercel built", () => {
     delete process.env.VERCEL_URL;
     delete process.env.VERCEL_BRANCH_URL;
   }
+});
 
 test("sign-up is closed by default, so the new API guard cannot be walked around", () => {
   delete process.env.LAVEGA_ALLOW_SIGNUP;
