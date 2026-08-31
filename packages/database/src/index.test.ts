@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { createAgentRunRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
+import { createAgentRunRepository, createBrokerRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
 import type { QueryResultRow } from "@neondatabase/serverless";
 
 afterEach(() => { delete process.env.LAVEGA_ENCRYPTION_KEY; });
@@ -165,4 +165,30 @@ test("an empty vault blob is refused before it reaches the table's own check", a
 
   await expect(createOpaqueVaultRepository(db, "user-123").put(Buffer.alloc(0), null)).rejects.toThrow(/empty/i);
   expect(calls).toEqual([]);
+});
+
+test("a snapshot sealed under an older key reads as absent instead of crashing the runtime", async () => {
+  process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
+  const staleSnapshot = encryptBlob({ trading212: { positions: [] } });
+  process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
+  const credentials = encryptBlob({ broker: "trading212", token: "t" });
+  const { db } = fakeDatabase([{ credentials_blob: credentials, snapshot_blob: staleSnapshot }]);
+
+  const row = await createBrokerRepository(db, "user-123").get("trading212");
+
+  // The snapshot is a cache of broker data; a sync rebuilds it. Losing it must
+  // not take the credentials — and the whole account — down with it.
+  expect(row).toEqual({ credentials: { broker: "trading212", token: "t" }, snapshot: null });
+});
+
+test("credentials sealed under an older key fail loudly, naming the key", async () => {
+  process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
+  const stale = encryptBlob({ broker: "trading212", token: "t" });
+  process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
+  const { db } = fakeDatabase([{ credentials_blob: stale, snapshot_blob: null }]);
+
+  /* Deliberately not "no credentials": that would send the user off to re-enter
+   * their broker tokens, and the write would overwrite ciphertext that a fixed
+   * key could still have opened. */
+  await expect(createBrokerRepository(db, "user-123").get("trading212")).rejects.toThrow(/LAVEGA_ENCRYPTION_KEY/);
 });

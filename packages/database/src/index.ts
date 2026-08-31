@@ -47,6 +47,22 @@ export function encryptBlob(value: unknown): Buffer {
   return Buffer.concat([Buffer.from([1, iv.length]), iv, cipher.getAuthTag(), ciphertext]);
 }
 
+/**
+ * Decrypt, or say it could not be done.
+ *
+ * A blob sealed under a key that is no longer configured is not corrupt and not
+ * absent — it is unreadable, and those three want different answers. Callers
+ * that hold a cache can carry on without it; callers that hold the only copy of
+ * something must not pretend it was never there.
+ */
+export function tryDecryptBlob<T>(blob: Buffer | Uint8Array): { readable: true; value: T } | { readable: false } {
+  try {
+    return { readable: true, value: decryptBlob<T>(blob) };
+  } catch {
+    return { readable: false };
+  }
+}
+
 export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
   const bytes = Buffer.from(blob);
   if (bytes[0] !== 1 || bytes[1] !== 12 || bytes.length < 30) throw new Error("Invalid encrypted blob");
@@ -90,7 +106,16 @@ export function createBrokerRepository(db: Database, userId: string | undefined 
       return withTenant(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>("SELECT credentials_blob, snapshot_blob FROM investing.broker_vaults WHERE broker = $1", [broker]);
         const row = result.rows[0];
-        return row ? { credentials: decryptBlob<T>(row.credentials_blob as Buffer), snapshot: row.snapshot_blob ? decryptBlob(row.snapshot_blob as Buffer) : null } : null;
+        if (!row) return null;
+        const credentials = tryDecryptBlob<T>(row.credentials_blob as Buffer);
+        /* Credentials are the only copy there is. Reporting them as missing
+         * would send the user to re-enter their broker tokens, and that write
+         * would replace ciphertext a restored key could still have opened. */
+        if (!credentials.readable) throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+        // The snapshot is a cache of broker data. A sync rebuilds it, so an
+        // unreadable one is dropped rather than taking the account down.
+        const snapshot = row.snapshot_blob ? tryDecryptBlob(row.snapshot_blob as Buffer) : null;
+        return { credentials: credentials.value, snapshot: snapshot?.readable ? snapshot.value : null };
       });
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
