@@ -97,6 +97,30 @@ Do not add filesystem persistence on Vercel. Anything a user must get back on
 their next visit belongs in Neon, behind a repository in `@lavega/database` that
 runs inside `withTenant` so row-level security applies.
 
+## Environments
+
+| | Production | Preview | Local |
+| --- | --- | --- | --- |
+| Neon branch | `main` | `preview` | none |
+| Stores | Neon | Neon | files on disk |
+| Authentication | on | on | off |
+
+Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
+production's: a leaked preview key must not open production data. It shares one
+`preview` branch rather than getting one per deployment, so test accounts
+accumulate there — reset it with `neonctl branches reset preview --parent`.
+
+Preview deliberately has no `BETTER_AUTH_URL` or `BETTER_AUTH_TRUSTED_ORIGINS`.
+Every preview gets a new hostname, so no fixed value could name it; the server
+reads `VERCEL_URL` instead (`apps/server/src/auth.ts`).
+
+The Development scope is deliberately empty. Without `DATABASE_URL` the app uses
+its file stores and authentication is off, which is what `pnpm dev` should do —
+pointing every developer's machine at the shared preview branch would let one
+person's local experiment land in someone else's preview. To exercise auth
+locally, create your own Neon branch and put its connection string, a
+`BETTER_AUTH_SECRET` and a `LAVEGA_ENCRYPTION_KEY` in `apps/server/.env`.
+
 ## Environment variables (Vercel → Settings → Environment Variables)
 - `DATABASE_URL` — Neon connection string, server-only. Use the
   `lavega_runtime` role, never the owner.
