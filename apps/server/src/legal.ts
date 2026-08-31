@@ -3,10 +3,15 @@
  * a contact email + privacy + terms URL) and generally good practice. Content
  * reflects how LaVega actually works: local-first, data in the browser's
  * encrypted vault, read-only bank access via Enable Banking, server is a thin
- * proxy that never stores financial data. Keep this truthful. */
+ * proxy that never stores financial data. Keep this truthful.
+ *
+ * legal.test.ts enforces that: it fails when a processor appears in the code
+ * and not on this page. The 2026-08-03 version drifted for four weeks because
+ * nothing checked — the AI features, the invoice mail pipeline and the waitlist
+ * all shipped while the page still said the server only did two things. */
 
 const CONTACT_EMAIL = "alexander@generation-c.nl";
-const UPDATED = "2026-08-03";
+const UPDATED = "2026-08-31";
 
 function page(title: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -25,6 +30,10 @@ function page(title: string, bodyHtml: string): string {
   li { margin: 4px 0; }
   hr { border: none; border-top: 1px solid #e6e2d9; margin: 32px 0; }
   code { background: #efece4; padding: 1px 5px; border-radius: 5px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.94rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e6e2d9; vertical-align: top; }
+  th { color: #6b6961; font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  @media (max-width: 560px) { th, td { padding: 6px 6px; font-size: 0.88rem; } }
 </style></head><body>
 ${bodyHtml}
 <hr>
@@ -40,26 +49,46 @@ export const privacyHtml = page(
 
 <h2>Welke gegevens en waar ze staan</h2>
 <ul>
-  <li>Je financiële gegevens (rekeningen, saldi, transacties) worden <strong>uitsluitend in je eigen browser</strong> bewaard, versleuteld met een wachtwoord (AES-GCM, sleutel alleen in je apparaat). Ze worden <strong>nooit</strong> naar servers van LaVega gestuurd of daar opgeslagen.</li>
+  <li>Je financiële gegevens (rekeningen, saldi, transacties) worden <strong>in je eigen browser</strong> bewaard, versleuteld met je wachtwoord (AES-GCM-256, sleutel alleen op je apparaat). Er is geen kopie van je administratie op onze servers: wij bewaren geen rekeningen, saldi of transacties in rust.</li>
   <li>Je wachtwoord verlaat je apparaat niet en is bij ons niet bekend of herstelbaar.</li>
+  <li><strong>Wel passeert er data.</strong> De functies hieronder sturen bepaalde gegevens via onze server naar een verwerker en tonen je het antwoord. Dat is verwerking in doorvoer, geen opslag — maar het is niet hetzelfde als "het verlaat je apparaat nooit", en dat willen we niet mooier opschrijven dan het is.</li>
 </ul>
 
 <h2>Banktoegang (Enable Banking)</h2>
 <ul>
   <li>Koppelen van een bank verloopt via <strong>Enable Banking</strong>, een gelicentieerde dienstverlener voor rekeninginformatie (AIS/PSD2). Je autoriseert de toegang rechtstreeks bij je eigen bank.</li>
   <li>De toegang is <strong>alleen-lezen</strong>: rekeninginformatie en transacties. LaVega kan <strong>geen betalingen</strong> initiëren.</li>
-  <li>Opgehaalde rekening- en transactiegegevens gaan direct naar je lokale, versleutelde opslag; ze worden niet blijvend op onze server bewaard.</li>
+  <li>Opgehaalde rekening- en transactiegegevens gaan direct door naar je lokale, versleutelde opslag; ze worden niet blijvend op onze server bewaard.</li>
 </ul>
+
+<h2>AI-functies — standaard uit</h2>
+<p>LaVega heeft vier functies die een AI-model van <strong>Anthropic</strong> gebruiken. Ze zijn <strong>opt-in</strong>: je zet ze zelf aan, en wat er verstuurd wordt krijg je eerst te zien ter bevestiging. Staan ze uit, dan gaat er niets heen.</p>
+<ul>
+  <li><strong>Factuur uitlezen</strong> — het factuurdocument dat je aanbiedt (PDF), om er bedrag, datum en leverancier uit te halen.</li>
+  <li><strong>Transacties categoriseren</strong> — alleen de omschrijving van een transactie, met een filter dat IBANs, bedragen en datums er vooraf uit haalt. Niet je saldo, niet je rekeningnummer.</li>
+  <li><strong>Chat</strong> — de context van het tabblad waar je op staat: rekeningtypes en saldi, abonnementen, facturen en btw-instellingen. Rekeningnummers gaan niet mee.</li>
+  <li><strong>Reisfeiten opzoeken</strong> — de naam van een aanbieder of kaart, geen persoonsgegevens.</li>
+</ul>
+<p>Anthropic verwerkt deze gegevens <strong>buiten de EU</strong> (Verenigde Staten) om er een antwoord op te geven. De sleutel is van ons, niet van jou; je hoeft dus geen eigen account. Wij bewaren deze verzoeken niet.</p>
+
+<h2>Facturen per e-mail — alleen als je het aanzet</h2>
+<p>Zet je het doorstuuradres voor facturen aan, dan loopt inkomende post langs <strong>Cloudflare</strong> (die het adres bedient) naar <strong>n8n</strong> (dat de mail en de bijlagen klaarzet voor je Facturen-scherm). Een factuur wordt pas geboekt nadat jij hem bevestigt. Gebruik je een eigen n8n-server, dan gaat het naar de jouwe.</p>
 
 <h2>De rol van de server</h2>
-<p>De LaVega-server is een dunne tussenlaag die alleen: (a) de Enable Banking-autorisatie uitvoert (kortstondige sessietokens, geen opslag van jouw gegevens in rust), en (b) publieke, niet-persoonlijke spaarrentes ophaalt (bron: geld.nl) voor de vergelijkingsfunctie.</p>
+<p>De LaVega-server bewaart je administratie niet, maar is meer dan een doorgeefluik. Hij: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Anthropic-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt sinds 31 augustus 2026 elke API achter een ingelogde sessie.</p>
 
 <h2>Derden</h2>
-<ul>
-  <li><strong>Enable Banking</strong> — banktoegang (AIS). Zie hun eigen privacyverklaring.</li>
-  <li><strong>Railway</strong> — hosting van de app en de tussenlaag.</li>
-  <li>Geen verkoop van gegevens, geen advertenties, geen tracking of analytics.</li>
-</ul>
+<table>
+  <tr><th align="left">Wie</th><th align="left">Wat er heen gaat</th><th align="left">Wanneer</th></tr>
+  <tr><td><strong>Enable Banking</strong></td><td>Banktoegang (AIS), rekening- en transactiegegevens</td><td>Als je een bank koppelt</td></tr>
+  <tr><td><strong>Anthropic</strong> (VS)</td><td>Factuurdocumenten, transactieomschrijvingen, chatcontext</td><td>Alleen met AI-functies aan</td></tr>
+  <tr><td><strong>Cloudflare</strong></td><td>Inkomende factuurmail</td><td>Alleen met het factuuradres aan</td></tr>
+  <tr><td><strong>n8n</strong></td><td>Diezelfde mail plus bijlagen</td><td>Alleen met het factuuradres aan</td></tr>
+  <tr><td><strong>Google</strong> (Apps Script)</td><td>Je e-mailadres</td><td>Alleen als je je op de wachtlijst zet</td></tr>
+  <tr><td><strong>Frankfurter</strong> (ECB)</td><td>Valutaparen — publiek, niet persoonlijk</td><td>Bij de valutafunctie</td></tr>
+  <tr><td><strong>Railway</strong></td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
+</table>
+<p>Geen verkoop van gegevens, geen advertenties, geen tracking of analytics.</p>
 
 <h2>Jouw controle</h2>
 <p>Omdat je gegevens op je eigen apparaat staan, heb jij de controle: exporteren en verwijderen kan in de app, en het wissen van de browseropslag verwijdert alles definitief.</p>

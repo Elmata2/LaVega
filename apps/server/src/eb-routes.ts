@@ -116,7 +116,20 @@ export function registerEbRoutes(app: Hono): void {
     const state = c.req.query("state");
     if (!code)
       return c.redirect(`/?eb_error=${encodeURIComponent("Geen autorisatiecode ontvangen.")}`);
-    if (state) pending.delete(state); // one-shot
+
+    /* The `state` has to be one THIS server issued, or the whole point of
+     * having one is lost. It used to be created in /auth, deleted here, and
+     * never read — so the callback accepted any code from anyone. An attacker
+     * could start his own authorisation, take his `code`, and send the owner to
+     * /api/eb/callback?code=<his>; the server would exchange it and the app
+     * would pull HIS bank data into the owner's vault.
+     *
+     * Consumed on use, so a replayed callback is refused too. */
+    sweep(pending, PENDING_TTL_MS);
+    if (!state || !pending.has(state)) {
+      return c.redirect(`/?eb_error=${encodeURIComponent("Onbekende of verlopen autorisatie — koppel de bank opnieuw.")}`);
+    }
+    pending.delete(state); // one-shot
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/sessions", { code })) as {
         session_id?: string;
