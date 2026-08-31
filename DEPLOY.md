@@ -16,12 +16,23 @@ storage. Better Auth integration remains pending.
   `DATABASE_URL` and `BETTER_AUTH_SECRET` set, `/api/investing`, `/api/brokers`,
   `/api/prices`, `/api/market-data` and `/api/config/status` answer `401`
   without a session. The `/investing/*` SPA shell stays public.
-- Broker credentials and broker snapshots go to `investing.broker_vaults`,
-  encrypted with `LAVEGA_ENCRYPTION_KEY`. Without `DATABASE_URL` the
-  passphrase-locked file vault is still the store, for local and self-hosted runs.
-- Still on the filesystem, so still lost between Vercel invocations: prices,
-  benchmarks, market-data consent, broker sync state, sector profiles and the
-  latest agent run. The `/tmp` paths in `vercel.json` cover exactly these.
+- With `DATABASE_URL` set, every user-scoped store is in Neon and survives the
+  invocation:
+
+  | Store | Table |
+  | --- | --- |
+  | Broker credentials and snapshots | `investing.broker_vaults` (encrypted) |
+  | Daily price bars | `investing.price_bars` |
+  | Benchmarks and market-data consent | `investing.preferences` |
+  | Broker sync state | `investing.sync_state` |
+  | Latest portfolio agent run | `investing.agent_runs` |
+
+  Without `DATABASE_URL` each of these falls back to its file store, which is
+  what local and self-hosted runs want.
+- Sector profiles are the one exception, still `/tmp/lavega-sectors.json`. They
+  are a cache of public Yahoo data keyed by symbol, not user data, so a cold
+  start costs a re-fetch and nothing else. `INVESTING_SECTOR_STORE_FILE` in
+  `vercel.json` is therefore the only `/tmp` path left.
 
 ## Deploy steps
 1. Vercel project `lavega` uses repository `Elmata2/LaVega`.
@@ -82,8 +93,9 @@ The personal SPA link is baked as `VITE_INVESTING_URL=/investing`. To point at a
 separate investing host instead, set a Vercel build variable
 `VITE_INVESTING_URL=https://investing.lavega.dev` and redeploy.
 
-Do not use filesystem persistence on Vercel. Neon persistence requires the
-authenticated runtime adapters described in the Neon ADR.
+Do not add filesystem persistence on Vercel. Anything a user must get back on
+their next visit belongs in Neon, behind a repository in `@lavega/database` that
+runs inside `withTenant` so row-level security applies.
 
 ## Environment variables (Vercel → Settings → Environment Variables)
 - `DATABASE_URL` — Neon connection string, server-only. Use the

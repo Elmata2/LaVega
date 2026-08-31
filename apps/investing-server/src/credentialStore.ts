@@ -15,6 +15,14 @@ export type RuntimeCredentialStore = CredentialStore & {
 
 let pool: Database | null = null;
 
+/** The Neon pool for this runtime, or `null` when there is no database configured. */
+export function runtimeDatabase(): Database | null {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) return null;
+  pool ??= createDatabase(connectionString);
+  return pool;
+}
+
 /**
  * Where one tenant's broker credentials live.
  *
@@ -24,10 +32,9 @@ let pool: Database | null = null;
  * the tenant is whichever single one that runtime serves.
  */
 export function createRuntimeCredentialStore(tenantId: string): RuntimeCredentialStore {
-  const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) return createFileCredentialStore();
-  pool ??= createDatabase(connectionString);
-  return createNeonCredentialStore(createBrokerRepository(pool, tenantId), tenantId);
+  const database = runtimeDatabase();
+  if (!database) return createFileCredentialStore();
+  return createNeonCredentialStore(createBrokerRepository(database, tenantId), tenantId);
 }
 
 /** True when credentials are stored per user rather than in one local vault. */

@@ -113,6 +113,7 @@ function isInvestingServerEntry(file: string): boolean {
  */
 const INVESTING_SERVER_NODE_ADAPTERS = new Set([
   "./credentialStore.js",
+  "./neonStores.js",
   "./fileCredentialStore.js",
   "./fileBrokerSyncStateStore.js",
   "./fileAgentRunStore.js",

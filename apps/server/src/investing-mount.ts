@@ -9,6 +9,8 @@ import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import { createFileBenchmarkSelectionStore, runtimeBenchmarkSelectionFile } from "@lavega/investing-server/src/fileBenchmarkSelectionStore.js";
 import { createFileMarketDataConsentStore, runtimeMarketDataConsentFile } from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
 import { createFilePriceStore, runtimePriceStoreFile } from "@lavega/investing-server/src/filePriceStore.js";
+import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { createNeonBenchmarkSelectionStore, createNeonMarketDataConsentStore, createNeonPriceStore } from "@lavega/investing-server/src/neonStores.js";
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
@@ -53,11 +55,15 @@ let investingFetch: ((request: Request) => Promise<Response>) | null = null;
 
 async function getInvestingFetch(): Promise<(request: Request) => Promise<Response>> {
   if (investingFetch) return investingFetch;
+  /* With a database these stores are per user and survive the invocation.
+   * Without one they are files, which is what local and self-hosted runs want
+   * and what Vercel's /tmp cannot actually keep. */
+  const database = runtimeDatabase();
   const runtimeApp = await createRuntimeApp({
     resolveTenantId: currentInvestingTenant,
-    priceStore: createFilePriceStore(runtimePriceStoreFile()),
-    benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
-    marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    priceStore: database ? createNeonPriceStore(database, currentInvestingTenant) : createFilePriceStore(runtimePriceStoreFile()),
+    benchmarkSelectionStore: database ? createNeonBenchmarkSelectionStore(database) : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
+    marketDataConsentStore: database ? createNeonMarketDataConsentStore(database) : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
   });
   investingFetch = createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist());
   return investingFetch;

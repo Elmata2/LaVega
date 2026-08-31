@@ -4,12 +4,6 @@
   "outputDirectory": "dist",
   "installCommand": "pnpm install --frozen-lockfile",
   "env": {
-    "LAVEGA_VAULT_FILE": "/tmp/lavega-vault.json",
-    "LAVEGA_AGENT_RUN_FILE": "/tmp/lavega-agent-run.json",
-    "LAVEGA_BROKER_SYNC_STATE_FILE": "/tmp/lavega-broker-sync.json",
-    "INVESTING_PRICE_STORE_FILE": "/tmp/lavega-prices.json",
-    "INVESTING_BENCHMARK_STORE_FILE": "/tmp/lavega-benchmarks.json",
-    "INVESTING_MARKET_DATA_CONSENT_FILE": "/tmp/lavega-market-data-consent.json",
     "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json"
   },
   "rewrites": [

@@ -15,7 +15,8 @@ import {
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
-import { createRuntimeCredentialStore, credentialsArePerTenant, type RuntimeCredentialStore as RuntimeCredentialStoreType } from "./credentialStore.js";
+import { createRuntimeCredentialStore, credentialsArePerTenant, runtimeDatabase, type RuntimeCredentialStore as RuntimeCredentialStoreType } from "./credentialStore.js";
+import { createNeonAgentRunStore, createNeonBrokerSyncStateStore } from "./neonStores.js";
 import { createFileBrokerSyncStateStore, runtimeBrokerSyncStateFile } from "./fileBrokerSyncStateStore.js";
 import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
@@ -163,10 +164,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const marketDataConsentStore = options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
   const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
-  const agentRunStore = options.agentRunStore ?? createFileAgentRunStore();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => { priceDataVersion += 1; };
   const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
+  const database = runtimeDatabase();
+  const agentRunStore = options.agentRunStore ?? (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
   const tenantSyncStateFile = (tenantId: string) => {
     const base = runtimeBrokerSyncStateFile();
     return tenantId === LOCAL_TENANT_ID ? base : base.replace(/\.json$/, `.${encodeURIComponent(tenantId)}.json`);
@@ -202,10 +204,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         syncProgress = { ...syncProgress, status: "running", remaining: event.remaining, updatedAt, message: event.status === 429 ? "Trading 212 rate limit response received" : syncProgress.message };
       }
     };
-    /* Sync state is per tenant too, even though it holds no personal data: one
-     * shared file would let one user's run clear another's rate-limit cooldown.
-     * It is still a file — investing.sync_state is the next step. */
-    const syncStateStore = createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
+    /* Sync state is per tenant even though it holds no personal data: one
+     * shared store would let one user's run clear another's rate-limit cooldown. */
+    const syncStateStore = database
+      ? createNeonBrokerSyncStateStore(database, tenantId)
+      : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
     const scheduledBrokerSync = createRuntimeBrokerSync(async (result) => {
       brokerData.apply(result);
       if (result.outcomes.some((outcome) => outcome.result !== null)) await credentials.putBrokerData(brokerData.snapshot());
