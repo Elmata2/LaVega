@@ -20,7 +20,7 @@ export type BrokerSyncProgress = {
   message: string | null;
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string> };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string> };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -127,9 +127,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     return c.json(decision);
   });
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
-  investingApp.get("/api/brokers/sync/status", (c) => {
+  investingApp.get("/api/brokers/sync/status", async (c) => {
     if (!dependencies.brokerSyncStatus) return c.json({ problems: ["Broker synchronization status is not available"] }, 503);
-    return c.json(dependencies.brokerSyncStatus());
+    return c.json(await dependencies.brokerSyncStatus());
   });
   investingApp.post("/api/brokers/sync", async (c) => {
     try {

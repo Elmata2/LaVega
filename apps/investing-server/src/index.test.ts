@@ -225,3 +225,35 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("each tenant gets its own runtime, so no cache is shared between users", async () => {
+  const priceStore = createInMemoryPriceStore();
+  const getRange = vi.spyOn(priceStore, "getRange");
+  const benchmarkSymbols = vi.fn(async (tenantId: string) => [`BENCH-${tenantId}`]);
+  let tenantId = "user-a";
+  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols, resolveTenantId: () => tenantId });
+
+  await runtimeApp.request("/api/investing/dashboard");
+  tenantId = "user-b";
+  await runtimeApp.request("/api/investing/dashboard");
+
+  expect(benchmarkSymbols.mock.calls.map(([tenant]) => tenant)).toEqual(["user-a", "user-b"]);
+  // Price bars are read under the requesting tenant, never a shared one.
+  expect(getRange.mock.calls.map(([tenant, symbol]) => `${tenant}:${symbol}`)).toEqual([
+    "user-a:BENCH-user-a",
+    "user-b:BENCH-user-b",
+  ]);
+});
+
+test("a tenant's broker sync status is its own, not the last caller's", async () => {
+  let tenantId = "user-a";
+  const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore(), resolveTenantId: () => tenantId });
+
+  await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
+  const started = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+  tenantId = "user-b";
+  const untouched = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+
+  expect(started.status).not.toBe("idle");
+  expect(untouched.status).toBe("idle");
+});

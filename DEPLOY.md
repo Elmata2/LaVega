@@ -8,9 +8,20 @@ storage. Better Auth integration remains pending.
 ## What's already wired
 - `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
 - `db/migrations/0001_lavega.sql` — applied to Neon. Creates six tables and six
-  RLS policies. Database is empty.
+  RLS policies.
+- `db/migrations/0002_auth.sql` — Better Auth tables and the `lavega_runtime`
+  grants.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
-- Runtime Neon adapters and Better Auth are not wired yet.
+- Better Auth is mounted at `/api/auth/*` and guards the investing API: with
+  `DATABASE_URL` and `BETTER_AUTH_SECRET` set, `/api/investing`, `/api/brokers`,
+  `/api/prices`, `/api/market-data` and `/api/config/status` answer `401`
+  without a session. The `/investing/*` SPA shell stays public.
+- Broker credentials and broker snapshots go to `investing.broker_vaults`,
+  encrypted with `LAVEGA_ENCRYPTION_KEY`. Without `DATABASE_URL` the
+  passphrase-locked file vault is still the store, for local and self-hosted runs.
+- Still on the filesystem, so still lost between Vercel invocations: prices,
+  benchmarks, market-data consent, broker sync state, sector profiles and the
+  latest agent run. The `/tmp` paths in `vercel.json` cover exactly these.
 
 ## Deploy steps
 1. Vercel project `lavega` uses repository `Elmata2/LaVega`.
@@ -75,8 +86,13 @@ Do not use filesystem persistence on Vercel. Neon persistence requires the
 authenticated runtime adapters described in the Neon ADR.
 
 ## Environment variables (Vercel → Settings → Environment Variables)
-- `DATABASE_URL` — Neon connection string, server-only. Add after auth and
-  runtime adapters are wired.
+- `DATABASE_URL` — Neon connection string, server-only. Use the
+  `lavega_runtime` role, never the owner.
+- `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS` — session
+  signing and the origins allowed to use it.
+- `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
+  they reach Neon; Neon never sees the key. Losing it loses every stored
+  credential.
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.
