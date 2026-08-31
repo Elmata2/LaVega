@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24",
+  "generatedAt": "2026-08-31",
   "entries": [
     {
       "id": "ing-betaalpas",
@@ -442,7 +442,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -499,7 +499,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -991,7 +991,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -1751,7 +1751,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -1775,7 +1775,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -1799,7 +1799,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
@@ -1823,7 +1823,7 @@
           "conditionsKnown": true
         },
         "pointsPerEuro": {
-          "value": 0.0,
+          "value": 0,
           "route": "agent",
           "sourceUrl": "user:eigenaar-2026-08-24",
           "checkedAt": "2026-08-24",
