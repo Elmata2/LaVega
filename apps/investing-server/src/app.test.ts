@@ -287,3 +287,30 @@ test("summary route reports failures as 503 problem payload", async () => {
   const response = await investingApp.request("/api/investing/summary");
   expect(response.status).toBe(503);
 });
+
+test("tenant-scoped routes read and write under the resolved tenant, not the local default", async () => {
+  const benchmarkSelectionStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, symbols: ["^GSPC"] })), set: vi.fn(async () => undefined) };
+  const marketDataConsentStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, accepted: true, decidedAt: null, disclosureVersion: "yahoo-finance-v1" })), set: vi.fn(async () => undefined) };
+  const investingApp = createApp({ resolveTenantId: () => "user-123", benchmarkSelectionStore, marketDataConsentStore });
+
+  const benchmarks = await investingApp.request("/api/investing/benchmarks");
+  expect(benchmarks.status).toBe(200);
+  expect(benchmarkSelectionStore.get).toHaveBeenCalledWith("user-123");
+
+  const stored = await investingApp.request("/api/investing/benchmarks", { method: "PUT", body: JSON.stringify({ symbols: ["^AEX"] }), headers: { "content-type": "application/json" } });
+  expect(stored.status).toBe(200);
+  expect(benchmarkSelectionStore.set).toHaveBeenCalledWith({ tenantId: "user-123", symbols: ["^AEX"] });
+
+  const consent = await investingApp.request("/api/market-data/consent", { method: "PUT", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+  expect(consent.status).toBe(200);
+  expect(marketDataConsentStore.set).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "user-123", accepted: true }));
+});
+
+test("tenant defaults to the local tenant when no resolver is injected", async () => {
+  const benchmarkSelectionStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, symbols: [] })), set: vi.fn(async () => undefined) };
+  const investingApp = createApp({ benchmarkSelectionStore });
+
+  await investingApp.request("/api/investing/benchmarks");
+
+  expect(benchmarkSelectionStore.get).toHaveBeenCalledWith("local");
+});

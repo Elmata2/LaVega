@@ -10,7 +10,7 @@ import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
-import { forwardInvesting, shouldMountInvesting } from "./investing-mount.js";
+import { forwardInvesting, investingTenantId, shouldMountInvesting } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
@@ -142,14 +142,24 @@ app.get("/terms", (c) => c.html(termsHtml));
  * with API routes at `/api/investing/*`, `/api/brokers/*`, etc. Enabled when the
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
-  const toInvesting = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Every investing API call is served under one tenant, and the session names
+   * it. A request that cannot name a tenant is refused rather than falling back
+   * to the local one — that fallback would hand one user another user's data. */
+  const toInvesting = async (c: { req: { raw: Request } }) => {
+    const tenantId = await investingTenantId(c.req.raw);
+    if (!tenantId) return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
+    return forwardInvesting(c.req.raw, tenantId);
+  };
+  const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
   app.all("/api/investing/*", toInvesting);
   app.all("/api/brokers/*", toInvesting);
   app.all("/api/prices/*", toInvesting);
   app.all("/api/market-data/*", toInvesting);
   app.all("/api/config/status", toInvesting);
+  /* The SPA shell itself is public: it has to load before anyone can sign in.
+   * Its data comes from the /api routes above, which are not. */
   app.get("/investing", (c) => c.redirect("/investing/"));
-  app.all("/investing/*", toInvesting);
+  app.all("/investing/*", toInvestingStatic);
 }
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,

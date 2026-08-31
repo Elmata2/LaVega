@@ -71,7 +71,7 @@ export function createRuntimeBrokerSync(
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore; agentRunStore?: AgentRunStore; runAgent?: typeof runPortfolioAgent };
+export type RuntimeAppOptions = { priceStore: PriceStore; resolveTenantId?: () => string | Promise<string>; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore; agentRunStore?: AgentRunStore; runAgent?: typeof runPortfolioAgent };
 
 export type RuntimeApp = ReturnType<typeof createApp> & { runPortfolioAgentOnce: () => Promise<AgentRunRecord> };
 
@@ -280,8 +280,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce });
   };
   const sectorDependencies = { sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()) };
-  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged }));
+  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged }));
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) }));
+  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) }));
 }

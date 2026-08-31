@@ -1,7 +1,10 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LOCAL_TENANT_ID } from "@lavega/core";
 import { createRuntimeApp } from "@lavega/investing-server/src/index.js";
+import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
 import { createFileBenchmarkSelectionStore, runtimeBenchmarkSelectionFile } from "@lavega/investing-server/src/fileBenchmarkSelectionStore.js";
 import { createFileMarketDataConsentStore, runtimeMarketDataConsentFile } from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
@@ -21,11 +24,37 @@ export function shouldMountInvesting(): boolean {
   return existsSync(investingDist());
 }
 
+/* The investing runtime is one long-lived app, so tenant identity cannot live
+ * on it — it has to travel with the request. An async-local scope carries it
+ * without a header, which means there is no inbound value anything could spoof. */
+const tenantScope = new AsyncLocalStorage<string>();
+
+/** The tenant of the request being handled, or the local tenant outside one. */
+export function currentInvestingTenant(): string {
+  return tenantScope.getStore() ?? LOCAL_TENANT_ID;
+}
+
+export function withInvestingTenant<T>(tenantId: string, fn: () => T): T {
+  return tenantScope.run(tenantId, fn);
+}
+
+/**
+ * The tenant an investing request belongs to, or `null` when it may not be
+ * served. Without authentication configured (local dev, self-hosted) there is
+ * one local tenant; with it, only a verified session names a tenant.
+ */
+export async function investingTenantId(request: Request): Promise<string | null> {
+  if (!getAuth()) return LOCAL_TENANT_ID;
+  const session = await verifiedSession(request);
+  return session?.user?.id ?? null;
+}
+
 let investingFetch: ((request: Request) => Promise<Response>) | null = null;
 
 async function getInvestingFetch(): Promise<(request: Request) => Promise<Response>> {
   if (investingFetch) return investingFetch;
   const runtimeApp = await createRuntimeApp({
+    resolveTenantId: currentInvestingTenant,
     priceStore: createFilePriceStore(runtimePriceStoreFile()),
     benchmarkSelectionStore: createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
     marketDataConsentStore: createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
@@ -42,7 +71,7 @@ export function rewriteInvestingRequest(request: Request): Request {
   return new Request(url, request);
 }
 
-export async function forwardInvesting(request: Request): Promise<Response> {
+export async function forwardInvesting(request: Request, tenantId = LOCAL_TENANT_ID): Promise<Response> {
   const fetch = await getInvestingFetch();
-  return fetch(rewriteInvestingRequest(request));
+  return withInvestingTenant(tenantId, () => fetch(rewriteInvestingRequest(request)));
 }
