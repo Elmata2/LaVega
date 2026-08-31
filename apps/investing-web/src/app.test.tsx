@@ -35,22 +35,36 @@ const dashboard: InvestingDashboardData = {
 
 const emptyDashboard = emptyInvestingDashboard();
 
+/* Every existing test here predates sign-up and runs against a backend
+ * with no DATABASE_URL / BETTER_AUTH_SECRET, exactly like local dev — so
+ * RequireAuth's get-session check must see the same 503 apps/server sends
+ * in that mode, or these tests would redirect to /sign-in instead of
+ * rendering the dashboard. */
+function withAuthUnconfigured(input: RequestInfo | URL, fallback: () => Response): Response {
+  if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
+  return fallback();
+}
+
 function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
-  if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
-  if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
-  if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
-  return new Response(JSON.stringify({}));
+  return withAuthUnconfigured(input, () => {
+    if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+    if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+    if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
+    if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
+    return new Response(JSON.stringify({}));
+  });
 }
 
 function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
-  if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
-  if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
-  if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
-  if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
-  return new Response(JSON.stringify({}));
+  return withAuthUnconfigured(input, () => {
+    if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+    if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+    if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
+    if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
+    return new Response(JSON.stringify({}));
+  });
 }
 
 test("overview shell fetches and displays investing server health", async () => {
@@ -88,7 +102,7 @@ test("positions route renders its empty state", async () => {
 });
 
 test("positions route renders loading state while read model is pending", async () => {
-  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => String(input).startsWith("/api/investing/dashboard") ? new Promise<Response>(() => {}) : Promise.resolve(new Response(JSON.stringify({ ok: true, service: "investing-server" })) )));
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => String(input).startsWith("/api/investing/dashboard") ? new Promise<Response>(() => {}) : Promise.resolve(withAuthUnconfigured(input, () => new Response(JSON.stringify({ ok: true, service: "investing-server" }))))));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
 
   await act(async () => { root.render(<MemoryRouter initialEntries={["/positions"]}><App /></MemoryRouter>); });
@@ -98,7 +112,7 @@ test("positions route renders loading state while read model is pending", async 
 });
 
 test("positions route renders read-model error state", async () => {
-  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response("", { status: 503 })) : Promise.resolve(new Response(JSON.stringify({ ok: true, service: "investing-server" })) )));
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => String(input).startsWith("/api/investing/dashboard") ? Promise.resolve(new Response("", { status: 503 })) : Promise.resolve(withAuthUnconfigured(input, () => new Response(JSON.stringify({ ok: true, service: "investing-server" }))))));
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
 
   await act(async () => { root.render(<MemoryRouter initialEntries={["/positions"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
@@ -336,6 +350,7 @@ test("requests and persists Yahoo consent before broker-triggered price sync", a
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input); requests.push({ url, method: init?.method });
+    if (url === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
     if (url === "/api/market-data/consent" && init?.method === "PUT") return new Response(JSON.stringify({ accepted: true }));
     if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: false }));
@@ -377,6 +392,7 @@ test("overview reports independent price-sync progress", async () => {
 test("shows broker sync problems and asks before deleting cached prices", async () => {
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     requests.push({ url: String(input), method: init?.method });
     if (String(input) === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
     if (String(input) === "/api/brokers/sync") return new Response(JSON.stringify({ problems: ["ibkr: niet beschikbaar"] }));
@@ -418,6 +434,7 @@ test("broker koppelen opens setup guide with IBKR instructions", async () => {
 test("broker setup starts forced sync and shows returned problems", async () => {
   const requests: Array<{ url: string; method?: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     requests.push({ url: String(input), method: init?.method });
     if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [], problems: ["IBKR: credentials are not configured"] }));
     return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
@@ -436,6 +453,7 @@ test("broker setup starts forced sync and shows returned problems", async () => 
 test("broker credential form stores IBKR credentials and starts sync", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     requests.push({ url: String(input), init });
     if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
     if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
@@ -466,6 +484,7 @@ test("broker credential form stores IBKR credentials and starts sync", async () 
 test("locked broker vault can be unlocked without entering broker credentials again", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     requests.push({ url: String(input), init });
     if (String(input) === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "locked" }));
     if (String(input) === "/api/brokers/credentials/unlock") return new Response(null, { status: 204 });
@@ -494,6 +513,7 @@ test("locked broker vault can be unlocked without entering broker credentials ag
 
 test("broker sync progress shows exact pages, orders, and provider wait", async () => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     if (String(input) === "/api/brokers/sync/status") return new Response(JSON.stringify({ status: "waiting", pages: 6, ordersRead: 300, positionsRead: 0, waitUntil: "2026-08-19T14:00:00.000Z", remaining: 0, updatedAt: "2026-08-19T13:59:00.000Z", message: null }));
     if (String(input) === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "unlocked" }));
     return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
@@ -513,6 +533,7 @@ test("broker sync progress shows exact pages, orders, and provider wait", async 
 test("broker credential form succeeds when the other broker is not configured", async () => {
   const requests: Array<{ url: string }> = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     requests.push({ url: String(input) });
     if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
     if (String(input) === "/api/brokers/sync?force=true") {
@@ -583,6 +604,7 @@ test("a broker sync that outlives the edge timeout reports background progress, 
      Trading 212 first sync pages far past that, so the browser gets HTML where
      the form expected JSON and the raw parser error surfaced as the failure. */
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
     if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
     if (String(input) === "/api/brokers/sync?force=true") return new Response("<!DOCTYPE html><html><title>524: A timeout occurred</title></html>", { status: 524, headers: { "content-type": "text/html" } });
     return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
@@ -600,5 +622,33 @@ test("a broker sync that outlives the edge timeout reports background progress, 
 
   expect(container.textContent).toContain("Synchronisatie loopt door op de achtergrond");
   expect(container.textContent).not.toMatch(/JSON|Unexpected token|did not match/i);
+  root.unmount();
+});
+
+test("a server-key vault asks for no passphrase and does not claim the key is the user's", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/auth/get-session") return new Response(JSON.stringify({ problems: ["Authentication is not configured"] }), { status: 503 });
+    requests.push({ url: String(input), init });
+    if (String(input) === "/api/brokers/credentials/status") return new Response(JSON.stringify({ status: "empty", passphrase: "unused" }));
+    if (String(input) === "/api/brokers/credentials") return new Response(null, { status: 204 });
+    if (String(input) === "/api/brokers/sync?force=true") return new Response(JSON.stringify({ outcomes: [{ status: "synced" }], problems: [] }));
+    return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/brokers/connect"]}><App /></MemoryRouter>); });
+
+  expect(container.querySelector('[name="passphrase"]')).toBeNull();
+  expect(container.textContent).not.toContain("lokale kluis");
+  expect(container.textContent).not.toContain("LaVega kan het niet herstellen");
+
+  const setInput = (field: HTMLInputElement, value: string) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set; setter?.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); };
+  setInput(container.querySelector<HTMLInputElement>('[name="token"]')!, "flex-token");
+  setInput(container.querySelector<HTMLInputElement>('[name="queryId"]')!, "123456");
+  await act(async () => { container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click(); await Promise.resolve(); });
+
+  const credentialRequest = requests.find((request) => request.url === "/api/brokers/credentials");
+  expect(credentialRequest?.init?.body).toBe(JSON.stringify({ broker: "ibkr", token: "flex-token", queryId: "123456" }));
   root.unmount();
 });

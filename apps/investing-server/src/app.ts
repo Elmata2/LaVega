@@ -8,7 +8,9 @@ import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
 import { createInMemorySectorProfileStore, type SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 export type InvestingDashboardReader = (input: { symbol?: string }) => Promise<InvestingDashboardData>;
-export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase: string };
+export type BrokerCredentialInput = { broker: "ibkr" | "trading212"; token: string; queryId?: string; secret?: string; passphrase?: string };
+/** Whether the vault behind this runtime is unlocked by a passphrase the user types. */
+export type PassphraseMode = "required" | "unused";
 export type BrokerSyncProgress = {
   status: "idle" | "running" | "waiting" | "completed" | "problem";
   pages: number;
@@ -20,7 +22,7 @@ export type BrokerSyncProgress = {
   message: string | null;
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string> };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string>; passphraseMode: () => PassphraseMode };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -38,6 +40,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   /* Who the request belongs to. Standalone and local runs have a single tenant;
    * mounted behind the personal server this resolves to the signed-in user. */
   const resolveTenantId = dependencies.resolveTenantId ?? (() => LOCAL_TENANT_ID);
+  /* The file vault derives its key from a passphrase, so it needs one. A vault
+   * the server holds the key to has nothing to ask for. */
+  const passphraseMode = dependencies.passphraseMode ?? (() => "required" as const);
   const priceProviders = [provider];
   const fxProviders = [fxProvider];
   const identifierProviders = [identifierProvider];
@@ -148,11 +153,12 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const body: Partial<BrokerCredentialInput> = await c.req.json<Partial<BrokerCredentialInput>>().catch(() => ({} as Partial<BrokerCredentialInput>));
     const broker = body.broker;
     if (broker !== "ibkr" && broker !== "trading212") return c.json({ problems: ["broker must be ibkr or trading212"] }, 400);
-    if (!body.token?.trim() || !body.passphrase?.trim()) return c.json({ problems: ["token and passphrase are required"] }, 400);
+    if (!body.token?.trim()) return c.json({ problems: ["token is required"] }, 400);
+    if (passphraseMode() === "required" && !body.passphrase?.trim()) return c.json({ problems: ["passphrase is required"] }, 400);
     if (broker === "ibkr" && !body.queryId?.trim()) return c.json({ problems: ["queryId is required for ibkr"] }, 400);
     if (broker === "trading212" && !body.secret?.trim()) return c.json({ problems: ["secret is required for trading212"] }, 400);
     try {
-      await configureBroker({ broker, token: body.token.trim(), queryId: body.queryId?.trim(), secret: body.secret?.trim(), passphrase: body.passphrase.trim() });
+      await configureBroker({ broker, token: body.token.trim(), queryId: body.queryId?.trim(), secret: body.secret?.trim(), passphrase: body.passphrase?.trim() });
       return new Response(null, { status: 204 });
     } catch {
       return c.json({ problems: ["Broker credentials could not be stored"] }, 500);
@@ -161,7 +167,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/brokers/credentials/status", async (c) => {
     if (!dependencies.credentialStatus) return c.json({ problems: ["Broker credential vault is not available"] }, 503);
     try {
-      return c.json({ status: await dependencies.credentialStatus() });
+      return c.json({ status: await dependencies.credentialStatus(), passphrase: passphraseMode() });
     } catch {
       return c.json({ problems: ["Broker credential vault status could not be read"] }, 500);
     }

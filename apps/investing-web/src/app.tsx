@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { buildIndexedSeries, type InvestingDashboardData, type InvestingPositionDetail } from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
 import { AllocationDonut } from "./components/AllocationDonut";
+import { AuthForm } from "./components/AuthForm";
+import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
 import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
+import { signOut } from "./lib/auth-client";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
@@ -382,6 +385,24 @@ function BrokerSyncProgressCard() {
   </section>;
 }
 
+/**
+ * Whether this runtime's vault is opened by a passphrase the user types.
+ * A vault the server holds the key to has nothing to ask for, so the field and
+ * every promise around it have to disappear rather than sit there unused.
+ */
+function useVaultPassphraseMode(): "checking" | "required" | "unused" {
+  const [mode, setMode] = useState<"checking" | "required" | "unused">("checking");
+  useEffect(() => {
+    let current = true;
+    void fetch("/api/brokers/credentials/status")
+      .then(async (response) => response.ok ? await response.json() as { passphrase?: string } : {})
+      .then((result) => { if (current) setMode(result.passphrase === "unused" ? "unused" : "required"); })
+      .catch(() => { if (current) setMode("required"); });
+    return () => { current = false; };
+  }, []);
+  return mode;
+}
+
 function BrokerVaultUnlock() {
   const [vaultStatus, setVaultStatus] = useState<"checking" | "hidden" | "locked" | "unlocked">("checking");
   const [passphrase, setPassphrase] = useState("");
@@ -444,6 +465,7 @@ function BrokerCredentialForm() {
   const [queryId, setQueryId] = useState("");
   const [secret, setSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");
+  const passphraseMode = useVaultPassphraseMode();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -454,7 +476,7 @@ function BrokerCredentialForm() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("loading"); setMessage(null);
-    const payload = { broker, token, ...(broker === "ibkr" ? { queryId } : { secret }), passphrase };
+    const payload = { broker, token, ...(broker === "ibkr" ? { queryId } : { secret }), ...(passphraseMode === "unused" ? {} : { passphrase }) };
     try {
       const saveResponse = await fetch("/api/brokers/credentials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
@@ -477,11 +499,11 @@ function BrokerCredentialForm() {
   }
 
   return <form onSubmit={submit} className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Inloggegevens opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">LaVega versleutelt deze gegevens in lokale kluis. Daarna start synchronisatie automatisch.</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Inloggegevens opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{passphraseMode === "unused" ? "LaVega versleutelt deze gegevens met de serversleutel voordat ze worden opgeslagen. Daarna start synchronisatie automatisch." : "LaVega versleutelt deze gegevens in lokale kluis. Daarna start synchronisatie automatisch."}</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <label className="text-sm font-semibold">{broker === "ibkr" ? "Flex-token" : "API key"}<input required name="token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
       {broker === "ibkr" ? <label className="text-sm font-semibold">Query ID<input required name="queryId" inputMode="numeric" value={queryId} onChange={(event) => setQueryId(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label> : <label className="text-sm font-semibold">API secret<input required name="secret" type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>}
-      <label className="text-sm font-semibold sm:col-span-2">Kluiswachtwoord<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe kluis? Dit wachtwoord wordt kluissleutel. Bewaar het veilig; LaVega kan het niet herstellen.</span></label>
+      {passphraseMode !== "unused" && <label className="text-sm font-semibold sm:col-span-2">Kluiswachtwoord<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe kluis? Dit wachtwoord wordt kluissleutel. Bewaar het veilig; LaVega kan het niet herstellen.</span></label>}
     </div>
     <div className="mt-6 flex flex-wrap items-center gap-4"><Button type="submit" disabled={status === "loading"}>{status === "loading" ? "Opslaan en synchroniseren…" : "Opslaan en synchroniseren"}</Button>{status === "success" && <span role="status" className="text-sm text-positive">{message}</span>}{status === "error" && <span role="alert" className="text-sm text-negative">{message}</span>}</div>
   </form>;
@@ -529,11 +551,20 @@ export function HealthStatus() {
   return <span>{health.service}: {health.ok ? "beschikbaar" : "niet beschikbaar"}</span>;
 }
 
+function SignOutLink() {
+  const navigate = useNavigate();
+  async function handleSignOut() {
+    await signOut();
+    navigate("/sign-in", { replace: true });
+  }
+  return <button type="button" onClick={handleSignOut} className="pressable rounded-sm font-semibold text-primary underline-offset-2 hover:underline">Uitloggen</button>;
+}
+
 function Layout() {
   const location = useLocation();
   const detail = location.pathname.startsWith("/positions/");
   const connect = location.pathname === "/brokers/connect";
-  return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12">{!connect && <div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Link to="/brokers/connect" className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary">Broker koppelen</Link>}</div>}<Outlet /></main><footer className="border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span></footer></div></div>;
+  return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12">{!connect && <div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Link to="/brokers/connect" className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary">Broker koppelen</Link>}</div>}<Outlet /></main><footer className="flex items-center justify-between border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span><SignOutLink /></footer></div></div>;
 }
 
 function Overview() {
@@ -594,4 +625,4 @@ function PositionDetail() {
   return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><CompletePositionDetail position={state.data.position} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
 }
 
-export function App() { return <Routes><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Routes>; }
+export function App() { return <Routes><Route path="/sign-in" element={<AuthForm />} /><Route element={<RequireAuth />}><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Route></Routes>; }

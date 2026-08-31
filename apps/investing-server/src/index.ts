@@ -36,8 +36,8 @@ type RuntimeCredentialStore = RuntimeCredentialStoreType;
 export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentialStore, onUnlocked?: () => void | Promise<void>, tenantId: string = LOCAL_TENANT_ID) {
   return async (input: BrokerCredentialInput): Promise<void> => {
     const status = await credentials.status();
-    if (status === "empty") await credentials.setup(input.passphrase);
-    else if (!(await credentials.unlock(input.passphrase))) throw new Error("Vault passphrase is incorrect");
+    if (status === "empty") await credentials.setup(input.passphrase ?? "");
+    else if (!(await credentials.unlock(input.passphrase ?? ""))) throw new Error("Vault passphrase is incorrect");
     await onUnlocked?.();
     if (input.broker === "ibkr") {
       await credentials.putCredentials({ broker: "ibkr", tenantId, token: input.token, queryId: input.queryId! });
@@ -313,6 +313,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     credentialStatus: async () => (await currentRuntime()).credentialStatus(),
     unlockCredentials: async (passphrase: string) => (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
+    passphraseMode: () => credentialsArePerTenant() ? "unused" as const : "required" as const,
     priceSyncTargets: async (tenantId: string) => (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
   const brokerSync = async (force: boolean) => (await currentRuntime()).brokerSync(force);

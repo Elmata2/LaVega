@@ -201,7 +201,7 @@ test("broker vault routes report status and unlock without returning passphrase"
   const investingApp = createApp({ credentialStatus, unlockCredentials });
 
   const statusResponse = await investingApp.request("/api/brokers/credentials/status");
-  expect(await statusResponse.json()).toEqual({ status: "locked" });
+  expect(await statusResponse.json()).toEqual({ status: "locked", passphrase: "required" });
 
   const unlockResponse = await investingApp.request("/api/brokers/credentials/unlock", {
     method: "POST",
@@ -313,4 +313,39 @@ test("tenant defaults to the local tenant when no resolver is injected", async (
   await investingApp.request("/api/investing/benchmarks");
 
   expect(benchmarkSelectionStore.get).toHaveBeenCalledWith("local");
+});
+
+test("the status route says whether a passphrase is used at all", async () => {
+  const investingApp = createApp({ credentialStatus: vi.fn(async () => "empty" as const), passphraseMode: () => "unused" });
+
+  const response = await investingApp.request("/api/brokers/credentials/status");
+
+  expect(await response.json()).toEqual({ status: "empty", passphrase: "unused" });
+});
+
+test("credentials are accepted without a passphrase when the server holds the key", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker, passphraseMode: () => "unused" });
+
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", token: "api-key", secret: "api-secret" }),
+  });
+
+  expect(response.status).toBe(204);
+  expect(configureBroker).toHaveBeenCalledWith({ broker: "trading212", token: "api-key", queryId: undefined, secret: "api-secret", passphrase: undefined });
+});
+
+test("a passphrase-locked vault still refuses credentials without one", async () => {
+  const investingApp = createApp({ configureBroker: vi.fn(async () => undefined) });
+
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", token: "api-key", secret: "api-secret" }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["passphrase is required"] });
 });
