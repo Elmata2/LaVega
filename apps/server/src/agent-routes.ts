@@ -11,7 +11,8 @@ import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { getBankNlTable } from "./bankNl.js";
-import { createRateLimiter } from "./agent/rateLimit.js";
+import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
+import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
 
 /* Agent proxy routes. The server holds the Anthropic key (it never reaches the
@@ -27,10 +28,16 @@ type Deps = {
   cardComparison?: () => Promise<BankNlTable>;
 };
 
-// 20 requests/min per route key (each route passes its own key — "extract" /
-// "chat" / "categorize" — so each gets an independent bucket). Single-user
-// personal app, so these limits are a safety valve, not a shared budget.
+// 20 requests/min per CALLER per route. The key comes from `rateLimitKey`,
+// which prefers the verified session's user id and falls back to the caller's
+// address; see the note there for why it is not the route name alone.
 const limit = createRateLimiter(20, 60_000);
+
+
+/* This request's rate-limit bucket for `route`. */
+function bucket(c: { req: { header(name: string): string | undefined } }, route: string): string {
+  return rateLimitKey(route, sessionUserId(c as never), c.req.header("x-forwarded-for"));
+}
 
 export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const extract = deps.extract ?? extractInvoiceFields;
@@ -51,7 +58,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
-    if (!limit("extract")) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
+    if (!limit(bucket(c, "extract"))) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
     try {
@@ -78,7 +85,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
-    if (!limit("chat")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "chat"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let tab = "";
     let messages;
     let context;
@@ -115,7 +122,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
-    if (!limit("categorize")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "categorize"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
     try {
@@ -143,7 +150,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
-    if (!limit("travel")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "travel"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());
