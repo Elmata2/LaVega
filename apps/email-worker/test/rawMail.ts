@@ -180,3 +180,16 @@ export const RAW_SPOOFED = [
   "rekening NL00 XXXX 0000 0000 00 om kosten te voorkomen.",
   "",
 ].join("\r\n");
+
+/** F — dezelfde factuur, maar DOORGESTUURD vanuit Gmail. SPF zakt (de
+ *  verzendende server is nu Gmail en niet meer die van de leverancier) terwijl
+ *  DKIM blijft staan (die ondertekent het bericht, en dat is niet gewijzigd).
+ *  Dit is het hoofdgebruik van het doorstuuradres en moet er dus doorheen
+ *  komen — het is precies het patroon dat `forwardedNotSpoofed` in n8n.ts
+ *  beschrijft. */
+export const RAW_FORWARDED_INVOICE = RAW_PDF_INVOICE.replace(
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
+    " spf=pass smtp.mailfrom=vandijk-installatie.nl; dmarc=pass header.from=vandijk-installatie.nl",
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
+    " spf=fail smtp.mailfrom=gmail.com; dmarc=pass header.from=vandijk-installatie.nl",
+);

@@ -37,7 +37,8 @@ kon de brokerkluis claimen — en niet de H2-terugval.
 | **M8** | **Opgelost** — registratie staat dicht tenzij `LAVEGA_ALLOW_SIGNUP=1` | `auth.ts` |
 | **H4** | **Opgelost** — beleid herschreven naar wat de code doet: alle zeven verwerkers benoemd met wat er heen gaat en wanneer, AI expliciet opt-in, doorgifte buiten de EU benoemd, en de "nooit"-zin vervangen door wat er werkelijk passeert | `legal.ts` |
 | **M1** | **Opgelost** — de callback eist nu een `state` die deze server zelf heeft uitgegeven, en verbruikt hem (replay geweigerd). `eb-routes.ts` heeft eindelijk een testbestand | `eb-routes.ts` |
-| M2, M4, M5, M6, M7, L1–L7 | **Nog open** | — |
+| **M6** | **Gedeeltelijk opgelost** — de Worker weigert nu een GEMETEN mislukking zonder geldige DKIM, vóór het parsen, met een bounce die de reden noemt. Niet op `unknown`/`none`/`temperror`, en niet als DKIM klopt (doorsturen) | `email-worker/src/authResults.ts` |
+| M2, M4, M5, M7, L1–L7 | **Nog open** | — |
 
 **Afwijking van het advies, bewust.** H3 vroeg om een minimum bij `setup` *én* `restore`.
 Alleen `setup` heeft het gekregen. `restore` en `unlock` controleren een wachtwoord dat
@@ -61,6 +62,18 @@ een test die de callback een `state` gaf die de server nooit had uitgegeven, zag
 van de aanvaller gewoon ingewisseld worden. Nu niet meer. H4 heeft er een test bij
 gekregen die faalt zodra een verwerker wél in de code staat en niet op de pagina — de
 drift van vier weken kon ontstaan omdat niets dat controleerde.
+
+**M6 is bewust maar half.** De poort stopt het NASPELEN van een bestaande leverancier.
+Hij stopt niet iemand die vanaf zijn eigen, keurig ingerichte domein een nepfactuur
+stuurt — die haalt SPF, DKIM en DMARC gewoon. Tegen het volgooien van de wachtrij als
+zodanig helpt alleen dat het adres geheim blijft, plus een limiet per wachtrij; die
+bestaat niet en hoort in KV of een Durable Object.
+
+Hierbij is één bestaande ontwerpkeuze overruled: `authResults.ts` zei "een mail die zakt
+wordt GEMARKEERD en niet weggegooid", en er stond een test op. Die regel bestond omdat een
+echte factuur niet ongemerkt mag verdwijnen — en verdwijnen doet hij niet, want de Worker
+weigert met `setReject`, dus met een bounce die de oorzaak noemt, precies zoals elke andere
+afwijzing daar. Voor alles wat níét gemeten kon worden geldt de oude regel onverkort.
 
 De privacypagina is een geregistreerd artefact bij de Enable Banking-aanvraag. Die
 registratie wijst naar de URL, niet naar een kopie, dus hij is bij het uitrollen meteen

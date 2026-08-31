@@ -20,7 +20,7 @@
  * afzender ziet die tekst in zijn bounce en moet er iets mee kunnen.
  */
 
-import { parseAuthResults, localPartOf, type SenderChecks } from "./authResults.js";
+import { localPartOf, parseAuthResults, senderHardFail, type SenderChecks } from "./authResults.js";
 import { parseMail, type ParsedMail } from "./parseMail.js";
 import { buildReplyMime } from "./replyMime.js";
 import type { Env, ForwardableEmailMessage } from "./types.js";
@@ -237,6 +237,16 @@ export async function handleInboundEmail(
         mb(MAX_MESSAGE_BYTES) +
         " aan (drie PDF's van 4 MB). Stuur de facturen los door.",
     };
+  }
+
+  /* De afzendercontrole, VÓÓR het parsen. Een nagespeelde afzender kost zo geen
+   * geheugen, geen webhook-aanroep, geen wachtrij-item en vooral geen
+   * Claude-extractie op de sleutel van de eigenaar. De uitslagen komen uit de
+   * header die de ontvangende MTA zet, dus daar is de mail zelf niet voor
+   * nodig. Alleen een GEMETEN mislukking gaat terug — zie senderHardFail. */
+  const spoofed = senderHardFail(parseAuthResults(message.headers.get("Authentication-Results")));
+  if (spoofed) {
+    return { kind: "reject", reason: "LaVega heeft deze mail niet aangenomen: " + spoofed };
   }
 
   let mail: ParsedMail;

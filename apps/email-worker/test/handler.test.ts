@@ -11,7 +11,7 @@ import {
 } from "../src/handler.js";
 import { parseMail } from "../src/parseMail.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
-import { RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
+import { RAW_FORWARDED_INVOICE, RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
 
 const ENV = {
   N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",
@@ -51,20 +51,27 @@ test("een geslaagde mail wordt NIET geweigerd en er wordt niet geantwoord", asyn
   expect(message.replied).toEqual([]);
 });
 
-test("een afzender die SPF/DKIM niet haalt gaat er WEL door, gemarkeerd", async () => {
-  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
+test("een domein zonder DKIM- of DMARC-beleid gaat er WEL door, gemarkeerd", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const http = fakeFetch({ body: { ...QUEUED, addedNotices: 1 } });
 
   const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
 
   expect(verdict.kind).toBe("queued");
   expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
-    spf: "softfail",
-    dkim: "fail",
-    dmarc: "fail",
+    spf: "pass",
+    dkim: "none",
+    dmarc: "none",
   });
   // Wegfilteren zou betekenen dat een ECHTE factuur van een domein met een
-  // slecht ingericht SPF-record verdwijnt zonder dat iemand het merkt.
+  // slecht ingericht record verdwijnt. Dat blijft de regel voor alles wat NIET
+  // gemeten kon worden — "none", "unknown", "temperror" en een gezakte SPF met
+  // geldige DKIM gaan er allemaal doorheen, gemarkeerd.
+  //
+  // WAT HIER VERANDERD IS (M6, 31-08-2026): één geval is uitgezonderd. Een
+  // GEMETEN mislukking zonder geldige DKIM — de nep-ING in RAW_SPOOFED — wordt
+  // sinds deze wijziging wél geweigerd, met een bounce die de reden noemt. Dat
+  // verdwijnt dus ook niet; zie de M6-tests onderaan dit bestand.
   expect(message.rejected).toEqual([]);
 });
 
@@ -324,4 +331,37 @@ test("buildPayload gebruikt de From:-header en valt terug op de envelop-afzender
   expect(buildPayload(zonderHeader, parseMail("Subject: x\r\n\r\ntekst")).from).toBe(
     "envelop@voorbeeld.nl",
   );
+});
+
+/* ── M6: een nagespeelde afzender komt de wachtrij niet in ─────────────────── */
+
+test("een nagespeelde afzender wordt geweigerd en bereikt n8n NIET", async () => {
+  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("reject");
+  // Het punt van de poort: geen webhook, dus geen wachtrij-item en geen
+  // Claude-extractie op de sleutel van de eigenaar.
+  expect(http.calls).toHaveLength(0);
+});
+
+test("de weigering noemt de gemeten uitslagen, zodat de bounce bruikbaar is", async () => {
+  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
+  const http = fakeFetch({ body: QUEUED });
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+  expect(verdict.kind === "reject" && verdict.reason).toContain("DMARC fail");
+});
+
+test("een doorgestuurde factuur (SPF zakt, DKIM klopt) gaat er nog steeds door", async () => {
+  // RAW_PDF_INVOICE_FORWARDED heeft dkim=pass met een gezakte SPF — het
+  // hoofdgebruik van het doorstuuradres. Deze poort mag dat niet raken.
+  const message = fakeMessage({ raw: RAW_FORWARDED_INVOICE });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("queued");
+  expect(http.calls).toHaveLength(1);
 });
