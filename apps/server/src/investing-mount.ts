@@ -20,9 +20,18 @@ export function investingDist(): string {
   return process.env.INVESTING_WEB_DIST?.trim() || defaultInvestingDist;
 }
 
-/** Mount investing API + `/investing` UI when the investing-web build exists. */
+/**
+ * Whether this server answers the investing API and serves its UI.
+ *
+ * The default asks whether the built SPA sits next to this server, which is the
+ * right question for the Docker image that ships both. It is the wrong question
+ * on Vercel: there the CDN serves those files and the function never has them
+ * on disk, so the check said no and `/api/investing/*` 404'd while `/investing/`
+ * loaded — a dashboard with no backend. INVESTING_MOUNT answers it outright.
+ */
 export function shouldMountInvesting(): boolean {
   if (process.env.INVESTING_MOUNT === "0") return false;
+  if (process.env.INVESTING_MOUNT === "1") return true;
   return existsSync(investingDist());
 }
 

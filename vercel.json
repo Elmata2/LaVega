@@ -1,17 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node scripts/vercel-build.mjs",
-  "outputDirectory": "dist",
   "installCommand": "pnpm install --frozen-lockfile",
   "env": {
-    "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json"
-  },
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/[...route]" },
-    { "source": "/health", "destination": "/api/health" },
-    { "source": "/privacy", "destination": "/api/privacy" },
-    { "source": "/terms", "destination": "/api/terms" },
-    { "source": "/app/:path*", "destination": "/index.html" },
-    { "source": "/investing/:path*", "destination": "/investing/index.html" }
-  ]
+    "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json",
+    "INVESTING_MOUNT": "1"
+  }
 }

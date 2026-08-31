@@ -44,6 +44,19 @@ test("shouldMountInvesting is false when dist is missing", () => {
   process.env.INVESTING_MOUNT = prev;
 });
 
+test("the investing API can be mounted where its built UI is served by something else", () => {
+  const prev = process.env.INVESTING_MOUNT;
+  process.env.INVESTING_MOUNT = "1";
+  process.env.INVESTING_WEB_DIST = "/nowhere-at-all";
+  try {
+    // On Vercel the CDN holds the SPA and the function never sees it on disk.
+    expect(shouldMountInvesting()).toBe(true);
+  } finally {
+    process.env.INVESTING_MOUNT = prev;
+    delete process.env.INVESTING_WEB_DIST;
+  }
+});
+
 test("investingDist defaults next to investing-web dist", () => {
   const serverDir = dirname(fileURLToPath(import.meta.url));
   expect(investingDist()).toBe(resolve(serverDir, "../../investing-web/dist"));
