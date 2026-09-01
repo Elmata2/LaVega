@@ -11,6 +11,7 @@ import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
+import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
@@ -207,6 +208,11 @@ registerAgentRoutes(app);
  * than one that is not there. */
 const vaultDependencies = vaultRouteDependencies();
 if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
+
+/* Erasure of everything this deployment stores about the caller. Same condition
+ * as the vault routes: without a database there is nothing to erase. */
+const accountDependencies = accountRouteDependencies();
+if (accountDependencies) registerAccountRoutes(app, accountDependencies);
 
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */

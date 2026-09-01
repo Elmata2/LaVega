@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import {
+  eraseUserData,
   createAgentRunRepository,
   createBrokerRepository,
   createOpaqueVaultRepository,
@@ -353,4 +354,65 @@ test("credentials sealed under an older key fail loudly, naming the key", async 
   await expect(createBrokerRepository(db, "user-123").get("trading212")).rejects.toThrow(
     /LAVEGA_ENCRYPTION_KEY/,
   );
+});
+
+/* Erasure (GDPR art. 17). A fake that reports rowCount, which the shared
+ * `fakeDatabase` above has no reason to. */
+function erasureDatabase(rowCount = 1, failOn?: string) {
+  const calls: string[] = [];
+  const client = {
+    query: async (sql: string) => {
+      calls.push(sql);
+      if (failOn && sql.includes(failOn)) throw new Error("boom");
+      return { rows: [], rowCount };
+    },
+    release: () => undefined,
+  } as never;
+  return { db: { connect: async () => client } as never, calls };
+}
+
+test("erasure clears every table that holds personal data, in one transaction", async () => {
+  const { db, calls } = erasureDatabase(3);
+
+  const report = await eraseUserData(db, "user-123");
+
+  expect(calls[0]).toBe("BEGIN");
+  expect(calls[1]).toBe("SELECT set_config('app.user_id', $1, true)");
+  expect(calls.at(-1)).toBe("COMMIT");
+  expect(calls.filter((sql) => sql.startsWith("DELETE FROM"))).toEqual([
+    "DELETE FROM investing.agent_runs",
+    "DELETE FROM investing.sync_state",
+    "DELETE FROM investing.preferences",
+    "DELETE FROM investing.price_bars",
+    "DELETE FROM investing.broker_vaults",
+    "DELETE FROM personal.vaults",
+  ]);
+  // The personal vault — the one thing the server cannot read — is still erasable.
+  expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
+  expect(report).toHaveLength(6);
+});
+
+test("erasure reports zero rows rather than pretending it did not run", async () => {
+  const { db } = erasureDatabase(0);
+  const report = await eraseUserData(db, "user-123");
+  expect(report.every((entry) => entry.rows === 0)).toBe(true);
+  expect(report).toHaveLength(6);
+});
+
+test("a half-erased account rolls back — the caller is never told they are gone when they are not", async () => {
+  // Fail on the LAST table, so five deletes have already 'succeeded'.
+  const { db, calls } = erasureDatabase(1, "personal.vaults");
+
+  await expect(eraseUserData(db, "user-123")).rejects.toThrow("boom");
+
+  expect(calls).toContain("ROLLBACK");
+  expect(calls).not.toContain("COMMIT");
+});
+
+test("erasure refuses without an authenticated identity", async () => {
+  const { db, calls } = erasureDatabase();
+  await expect(eraseUserData(db, undefined)).rejects.toThrow("Authenticated user identity is required");
+  await expect(eraseUserData(db, " ")).rejects.toThrow("Authenticated user identity is required");
+  // Nothing was even connected to, let alone deleted.
+  expect(calls).toEqual([]);
 });

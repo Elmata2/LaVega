@@ -94,34 +94,6 @@ export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
   ) as T;
 }
 
-export type VaultRepository = {
-  get<T>(): Promise<T | null>;
-  put(value: unknown): Promise<void>;
-};
-
-export function createVaultRepository(
-  db: Database,
-  userId: string | undefined | null,
-): VaultRepository {
-  return {
-    async get<T>() {
-      return withTenant(db, userId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT vault_blob FROM personal.vaults");
-        return result.rows[0] ? decryptBlob<T>(result.rows[0].vault_blob as Buffer) : null;
-      });
-    },
-    async put(value) {
-      const blob = encryptBlob(value);
-      await withTenant(db, userId, async (client) => {
-        await client.query(
-          "INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP",
-          [blob],
-        );
-      });
-    },
-  };
-}
-
 export type EncryptedBrokerRepository = {
   get<T>(broker: string): Promise<{ credentials: T; snapshot: unknown | null } | null>;
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
@@ -531,11 +503,17 @@ export type OpaqueVaultWrite = { status: "stored"; updatedAt: string } | { statu
 /**
  * The personal vault as bytes the server cannot read.
  *
- * `createVaultRepository` above encrypts with the server's key, which is right
- * for data the server has to act on. Personal finances are not that: the
- * browser encrypts them with a key derived from the user's own passphrase, and
- * this only holds the result. There is deliberately no `encryptBlob` here — if
- * a later change needs one, that is a decision to re-open, not a line to add.
+ * `encryptBlob` uses the SERVER's key, which is right for data the server has to
+ * act on — broker credentials it must present to a broker. Personal finances are
+ * not that: the browser encrypts them with a key derived from the user's own
+ * passphrase, and this only holds the result. There is deliberately no
+ * `encryptBlob` here — if a later change needs one, that is a decision to
+ * re-open, not a line to add.
+ *
+ * A `createVaultRepository` that sealed this table with the server's key used to
+ * sit above. It was wired to nothing, but an exported function that decrypts
+ * personal vaults server-side is one import away from making the promise below
+ * false, so it was deleted rather than left for someone to find and use.
  *
  * Writes are conditional on the copy the client last saw. Two devices holding
  * different vaults is a real situation, and last-write-wins would silently
@@ -581,4 +559,54 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
       });
     },
   };
+}
+
+/* The six tables that hold anything belonging to a person. Deliberately a
+ * literal list rather than a query over the catalogue: a table added later
+ * should have to be considered here by a human, not silently swept up or —
+ * worse — silently missed. Order is child-before-parent; nothing here has a
+ * foreign key to another, but that stops being true the moment one is added. */
+const USER_DATA_TABLES = [
+  "investing.agent_runs",
+  "investing.sync_state",
+  "investing.preferences",
+  "investing.price_bars",
+  "investing.broker_vaults",
+  "personal.vaults",
+] as const;
+
+export type ErasureReport = { table: string; rows: number }[];
+
+/**
+ * Erase everything this deployment stores about one person (GDPR art. 17).
+ *
+ * Until this existed there was exactly one `DELETE` in this file and it emptied
+ * the price cache. Encryption was doing the privacy work, and encryption is a
+ * mitigation, not a lawful basis: a user asking to be forgotten could not be,
+ * because nothing could remove their rows.
+ *
+ * It runs in ONE transaction inside `withTenant`, so `app.user_id` is set and
+ * the RLS policies in `0001_lavega.sql` scope every statement to that user —
+ * the deletion cannot reach anyone else's rows even if a predicate here were
+ * wrong. Either all six tables are cleared or none are; a half-erased account
+ * is worse than a failed request, because the caller is told they are gone.
+ *
+ * It returns what it deleted per table. An erasure you cannot evidence is one
+ * you cannot answer a regulator about, and "0 rows" is a legitimate result that
+ * needs to be distinguishable from "never ran".
+ *
+ * NOTE: this clears application data. The Better Auth identity itself (the user
+ * and session rows from `0002_auth.sql`) is separate and must be deleted
+ * through Better Auth, or the person is forgotten but can still sign in.
+ */
+export async function eraseUserData(db: Database, userId: string | undefined | null): Promise<ErasureReport> {
+  const identity = requireUserId(userId);
+  return withTenant(db, identity, async (client) => {
+    const report: ErasureReport = [];
+    for (const table of USER_DATA_TABLES) {
+      const result = await client.query(`DELETE FROM ${table}`);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
+    return report;
+  });
 }
