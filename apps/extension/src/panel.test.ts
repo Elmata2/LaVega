@@ -3,7 +3,7 @@
  * verzinnen. */
 
 import { describe, it, expect } from "vitest";
-import { buildPanel, panelRows, PANEEL_CAPS, POPUP_CAPS, amountNote, footer, puntenBlok } from "./panel.js";
+import { buildPanel, panelRows, PANEEL_CAPS, ONGEKAPT, amountNote, footer, puntenBlok } from "./panel.js";
 import { rankCheckout, type Ranking } from "./rank.js";
 import { pointsCoverage } from "./points.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -109,7 +109,7 @@ describe("de volgorde en de afkapping van de rijen", () => {
   const r = rank([mijn1, mijn2, beter, achteruit, geenPrijs, onbekend], ["m1", "m2", "m3"], 30000);
 
   it("zet eerst wat hij heeft, dan wat hij kan openen, en onbekend onderaan", () => {
-    const groepen = panelRows(r, POPUP_CAPS).map((x) => x.groep);
+    const groepen = panelRows(r, ONGEKAPT).map((x) => x.groep);
     const eerste = (g: PaneelGroep) => groepen.indexOf(g);
     expect(eerste("mijn")).toBeLessThan(eerste("openen"));
     expect(eerste("openen")).toBeLessThan(eerste("achteruit"));
@@ -119,7 +119,7 @@ describe("de volgorde en de afkapping van de rijen", () => {
   it("laat de achteruit-rij STAAN, want die bestaat om zichtbaar te zijn", () => {
     /* Een kaart die op papier meer teruggeeft en na kosten minder oplevert,
      * weglaten omdat het geen aanbeveling is, verbergt juist de vergelijking. */
-    const achter = panelRows(r, POPUP_CAPS).find((x) => x.groep === "achteruit");
+    const achter = panelRows(r, ONGEKAPT).find((x) => x.groep === "achteruit");
     expect(achter?.titel).toBe("Beter Maar Duur");
     expect(achter?.regel).toContain("geen aanbeveling");
   });
@@ -134,7 +134,7 @@ describe("de volgorde en de afkapping van de rijen", () => {
   });
 
   it("bij onbekende kaartkosten valt het woord netto ook in het paneel niet", () => {
-    const rij = panelRows(r, POPUP_CAPS).find((x) => x.groep === "onbekende-kosten");
+    const rij = panelRows(r, ONGEKAPT).find((x) => x.groep === "onbekende-kosten");
     expect(rij?.titel).toBe("Beter Zonder Prijskaartje");
     expect(rij?.regel.toLowerCase()).not.toContain("netto");
     expect(rij?.regel).toContain("brutobedrag");
@@ -237,7 +237,7 @@ describe("twee soorten onbekend krijgen twee groepskoppen", () => {
     });
     const geenPrijs = card({ id: "g", product: "Geen Prijskaartje", fxFeePct: sourced(0), cashbackPct: sourced(3) });
     const r = rank([inToken, geenPrijs], [], 30000);
-    const groepen = panelRows(r, POPUP_CAPS);
+    const groepen = panelRows(r, ONGEKAPT);
     expect(groepen.find((x) => x.titel === "Tokenkaart")?.groep).toBe("geen-euro-uitkomst");
     expect(groepen.find((x) => x.titel === "Geen Prijskaartje")?.groep).toBe("onbekende-kosten");
   });

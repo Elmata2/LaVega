@@ -149,15 +149,17 @@ meestal zijn; zie [Wat de build controleert](#wat-de-build-controleert).
 
 ## Eerst instellen
 
-Klik op het icoon → **Kaarten en winkels instellen** (of rechtsklik op het icoon
-→ **Opties**).
+Klik op het icoon → **Kaarten, punten en winkels instellen** (of rechtsklik op
+het icoon → **Opties**).
 
 - **Welke kaarten heb je?** Vink aan wat je in je portemonnee hebt. Dit is de
   hele koppeling met LaVega in deze versie: één lijstje in je browser. Geen
   account, geen verbinding met je kluis, geen server.
-- **Op welke winkels mag het paneel verschijnen?** Standaard staat alles uit en
-  heeft de extensie geen enkele leestoestemming. Vink je een winkel aan, dan
-  vraagt Chrome apart om toestemming voor dat ene adres.
+- **Mag het paneel op winkelpagina's verschijnen?** Standaard staat dit uit en
+  heeft de extensie geen enkele leestoestemming. Zet je het vinkje aan, dan
+  vraagt Chrome in één keer om toestemming voor alle websites — niet per
+  winkel — en die toestemming kun je in `chrome://extensions` altijd weer
+  intrekken; het vinkje in de opties gaat dan vanzelf uit.
 
 Waarom het uitmaakt wat je aanvinkt: een kaart die je AL hebt, kost je die
 maand- of jaarprijs toch. Die kosten worden daarom niet van de opbrengst
@@ -194,9 +196,10 @@ munt waarin de winkel afrekent, en krijgt de ranglijst. Dit venster leest geen
 enkele pagina en vraagt daar ook geen toestemming voor. Dat is het normale
 gebruik.
 
-**Het paneel op de winkelpagina is de uitzondering.** Op een winkel die je hebt
-aangevinkt leest de extensie het bedrag van de pagina en zet het antwoord in een
-klein paneel rechtsonder. Je sluit het met het kruisje, of met Escape **zodra de
+**Het paneel op de winkelpagina is de uitzondering.** Staat het vinkje "Paneel
+op winkelpagina's" aan, dan leest de extensie het bedrag van de pagina en zet
+het antwoord in een klein paneel rechtsonder. Je sluit het met het kruisje, of
+met Escape **zodra de
 aandacht in het paneel zit** — klik er dus eerst in, of gebruik het kruisje. Er
 hangt met opzet geen globale Escape-vanger in de pagina: die zou de zoekbalk of
 de maatkiezer van de winkel in de weg zitten, en een extensie hoort geen toetsen
@@ -214,79 +217,95 @@ er elders te halen valt. Dat is een eerlijk antwoord op de vraag, maar het is
 zelden een bruikbaar antwoord — en dat verandert pas als de catalogus voor
 gangbare Nederlandse kaarten cijfers krijgt.
 
-## Op welke sites hij werkt, waarom het er maar één is, en wie het pad afdwingt
+## Op welke sites hij werkt, en wat dat vinkje wel en niet dekt
 
-| Winkel | Patroon | Status |
-| --- | --- | --- |
-| IKEA Nederland | `https://www.ikea.com/nl/nl/p/*` | werkt op productpagina's met één prijs; **zwijgt over het bedrag op pagina's met een actieprijs** |
+Tot 26 augustus 2026 stond hier een tabel met precies één rij: IKEA Nederland,
+`https://www.ikea.com/nl/nl/p/*`, de enige winkel die eerst gemeten en
+goedgekeurd was voor het paneel er mocht draaien. Die curatie is vervangen
+door **één brede, optionele toestemming**: `<all_urls>` in
+`optional_host_permissions`, aan- of uitgezet met het vinkje "Paneel op
+winkelpagina's" in de opties (`kassaOveralAan` in `chrome.storage.local`, zie
+`src/store.ts`). Staat het vinkje aan **en** heeft Chrome de toestemming
+gegeven, dan probeert het paneel te lezen op elke `https:`-pagina — niet meer
+op een lijst die per winkel is goedgekeurd. Staat één van de twee uit, dan
+nergens.
 
-Die tweede helft is nieuw en het is een echte beperking. Van de drie
-IKEA-productpagina's die op 21 augustus 2026 zijn gemeten, gaven er twee het
-bedrag van het artikel dat er ook echt stond (BILLY € 49,99, KALLAX € 69,99). De
-derde (SLÄKT) zet zijn Family-actieprijs neer als een `AggregateOffer` van
-€ 96,99 tot € 114,99, en welke van de twee jij afrekent staat er niet bij. Daar
-leest de extensie dus **niets** en wijst ze naar het handmatige veld. Dat is het
-juiste antwoord — de vorige versie gaf daar de Family-prijs aan iemand die
-misschien geen lid is — maar het betekent dat het paneel over het BEDRAG zwijgt
-op precies de pagina's waar korting staat.
+Wat daarbij niet is veranderd: de lezer zelf. `src/read.ts`
+(`collectEvidence`/`readCheckout`) was al volledig generiek — hij leest
+JSON-LD, `itemprop`-microdata en Open Graph price-tags, ongeacht welke host
+erbij staat, met elf benoemde weigerredenen (rangeprijzen, valutategenspraak,
+meerdere prijzen op één pagina, etc.). Dat bestand is voor deze wijziging geen
+regel veranderd; het was al gebouwd om overal te kunnen draaien en kreeg door
+de curatie eerder alleen nooit de kans. Wat LaVega van een pagina meeneemt is
+dus nog steeds precies wat het altijd was: **de machineleesbare
+productgegevens die een winkel zelf op de pagina zet** — dezelfde gegevens die
+zoekmachines gebruiken voor hun productkaarten. Nooit de rest van de pagina,
+nooit de zichtbare tekst, nooit een titel of omschrijving.
 
-Wat er op zo'n pagina wél staat: je puntensaldi. Die hangen niet van het bedrag
-af, dus daar is de leestoestemming niet voor nodig en verschijnt het blok gewoon.
+### Wat dat vinkje niet dekt, en waarom dat een bewuste keuze is
 
-Dat is de hele lijst. De drempel is niet "de winkel is groot" maar: **kunnen we
-aantonen dat het bedrag dat we lezen ook echt het bedrag op díé pagina is.**
-
-Op 21 augustus 2026 zijn eenentwintig Nederlandse winkelpagina's opgehaald. Eén
-gaf een machineleesbaar bedrag mét munt dat ook bij het juiste artikel hoorde.
-
-De belangrijkste uitkomst is een winkel die er **niet** in staat. Coolblue geeft
-keurige JSON-LD (schema.org) met een prijs en een munt — maar die JSON-LD gaat
-over een ánder product dan de pagina toont:
+Machineleesbare opmaak kan geldig zijn en toch over het VERKEERDE artikel
+gaan. Op 21 augustus 2026 gaf Coolblue keurige JSON-LD (schema.org) met een
+prijs en een munt — maar die JSON-LD ging over een ánder product dan de pagina
+toonde:
 
 ```
 /product/949341/apple-airpods-pro-3.html   → Samsonite kofferset, € 420
 /product/865867/sonos-era-100-zwart.html   → PlayStation 5, € 490
 ```
 
-De lezer heeft daar geen verweer tegen: het is geldige opmaak met een geldige
-munt, dus er komt met vlag en wimpel € 490 uit op een Sonos van € 279. Daarna
-rekent de ranglijst daar een percentage over uit en rolt er een aanbeveling uit
-die nergens op slaat, zonder dat er ergens twijfel in beeld komt. **Een winkel
-waar je het verkeerde bedrag leest, is erger dan een winkel waar je zwijgt.**
+Tegen geldige opmaak met de verkeerde inhoud heeft de lezer geen verweer: er
+komt met vlag en wimpel € 490 uit op een Sonos van € 279, de ranglijst rekent
+daar een percentage over uit, en er rolt een aanbeveling uit die nergens op
+slaat, zonder dat er ergens twijfel in beeld komt. **Een winkel waar je het
+verkeerde bedrag leest, is erger dan een winkel waar je zwijgt.**
 
-Bol.com staat er om een andere reden niet in: die geeft opmaak zonder prijs, dus
-de leestoestemming zou niets opleveren wat het handmatige veld niet al doet.
+Onder het oude, per-site gemeten model was precies dit de reden om Coolblue
+buiten de lijst te houden. Onder `<all_urls>` bestaat die lijst niet meer, en
+dus ook niet de mogelijkheid om één winkel op deze grond uit te sluiten. Dat
+is geen oversight: het is een bewuste risico-acceptatie voor persoonlijk
+gebruik, expliciet zo besloten op 26 augustus 2026 (zie
+`docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md`) —
+alles gaat mee, en wat in de praktijk fout blijkt wordt gaandeweg gesignaleerd
+in plaats van vooraf dichtgetimmerd. `read.test.ts` legt dit nu vast als een
+GEDOCUMENTEERDE, GEACCEPTEERDE beperking (de Coolblue-fixture geeft
+`{ ok: true }` terug met het bekend-verkeerde bedrag) en niet meer als "deze
+winkel staat er niet in". Bol.com is om een andere reden geen bijzonder geval:
+die geeft opmaak zonder prijs, dus daar komt sowieso niets uit — met of zonder
+lijst.
 
-De volledige meting en de afweging staan in `src/sites.ts`. Wie een winkel wil
-toevoegen, meet hem eerst en zet de meting erbij.
+Dezelfde kwetsbaarheid geldt voor een `AggregateOffer`-actieprijs — een
+IKEA-productpagina met een Family-actieprijs naast de gewone prijs geeft de
+lezer bijvoorbeeld een prijsbereik zonder te vermelden welke van de twee bij
+jou geldt, en de lezer pakt dan de laagste in plaats van te zwijgen. Zie de tak
+"prijsbereik" en de meting daarachter in `src/read.ts`.
 
-### Alleen productpagina's — en dat dwingt de extensie zelf af
+**Wat er op elke pagina wél blijft staan, ongeacht dit vinkje**: je
+puntensaldi. Die hangen niet van het bedrag op de pagina af, dus daar is de
+leestoestemming niet voor nodig.
 
-Het patroon is `https://www.ikea.com/nl/nl/p/*`. De winkelwagen, het
-bestelproces en je account vallen erbuiten.
+### De build-controle op een heel domein geldt nu alleen nog voor ING/Amex
 
-Dat is met opzet geen belofte die op Chrome rust. Chrome's toestemmingsdialoog
-praat over een DOMEIN, en of een verleende host-toestemming het pad ook
-afdwingt, is hier nooit gemeten — dus wordt er niet op gebouwd. Wat er wél
-gebeurt, staat in deze map:
+Vroeger weigerde de build een matchpatroon dat alleen een domein aanwees
+(`https://www.ikea.com/*` liet `pnpm build` omvallen) — dat gold voor de ene
+winkel die er stond, en het dwong af dat de goedkeuring niet verder reikte dan
+het gemeten pad. Die controle bestaat nog, maar geldt nu alleen voor de
+accountpatronen van ING en Amex in `src/bronnen.ts` (`padIsSpecifiek`,
+gecontroleerd door `scripts/copy-static.mjs`) — niet voor de kassa-registratie.
+`<all_urls>` is geen `https:`-patroon met een pad om op te controleren, dus die
+controle is voor de brede toestemming niet van toepassing: er is geen pad meer
+dat afgedwongen kan worden, en de enige begrenzing die voor het kassa-paneel
+overblijft is het vinkje zelf plus wat `read.ts` weigert te lezen.
 
-- `siteForUrl` in `src/sites.ts` weigert elke URL waarvan schema, host of pad
-  niet klopt (ook `https://www.ikea.com/` en `https://www.ikea.com/nl/nl/pizza/`).
-  De service worker leest geen pagina zonder dat die functie ja zegt.
-- `src/background.ts` legt daarbij `sender.url`, `sender.origin` en de URL van
-  het tabblad naast elkaar. Spreken die elkaar tegen, dan zwijgt het paneel.
-- de build weigert een matchpatroon dat alleen een domein aanwijst
-  (`https://www.ikea.com/*` laat `pnpm build` omvallen).
-- `registerContentScripts` krijgt hetzelfde patroon mét pad, dus Chrome draait
-  het content script alleen daar.
-
-Wat er overblijft, en dat hoort hier te staan: navigeert het tabblad in de
-milliseconden tussen de vraag van het content script en de lezing naar een
-andere pagina op dezelfde host, dan gaat de lezing over die andere pagina. Na de
-lezing wordt de host nog één keer gecontroleerd, dus dat blijft binnen dezelfde
-winkel. Helemaal dicht is het met `documentIds` bij `executeScript`; dat staat
-niet in `src/chrome.d.ts` en dat bestand is met opzet de complete lijst van wat
-deze extensie mag aanroepen.
+Wat er voor de kassa-lezing wel overblijft, en dat hoort hier te staan:
+navigeert het tabblad in de milliseconden tussen de vraag van het content
+script en de lezing naar een andere pagina op dezelfde host, dan gaat de
+lezing over die andere pagina. Na de lezing wordt de host nog één keer
+gecontroleerd tegen `hostVanAfzender` in `src/background.ts` (schema, poort,
+en of `sender.origin`/het tabblad hetzelfde https-origin dragen), dus dat
+blijft binnen hetzelfde origin. Helemaal dicht is het met `documentIds` bij
+`executeScript`; dat staat niet in `src/chrome.d.ts` en dat bestand is met
+opzet de complete lijst van wat deze extensie mag aanroepen.
 
 ## Wat hij niet doet
 
@@ -316,16 +335,23 @@ deze extensie mag aanroepen.
   geldt voor de extensiepagina's en de worker; het content script draait in de
   pagina van de winkel en valt daarbuiten. Daar is hek 1 de dekking — `content.js`
   wordt net zo hard gescand als de rest.
-- **Geen `<all_urls>`.** `host_permissions` is leeg. Alle sites lopen via
-  `optional_host_permissions`, zodat Chrome het per winkel aan jou vraagt en je
-  het in `chrome://extensions` weer kunt intrekken. Trek je het in, dan gaat het
-  vinkje in de opties vanzelf uit. Geeft Chrome de toestemming ruimer dan het
-  patroon — voor het hele domein — dan blijft de extensie zich aan het pad
-  houden; zie [Alleen productpagina's](#alleen-productpaginas--en-dat-dwingt-de-extensie-zelf-af).
+- **Geen leestoestemming zonder dat jij hem geeft.** `host_permissions` in het
+  manifest is leeg — de extensie krijgt bij installatie nul toegang tot enige
+  pagina. Alles loopt via `optional_host_permissions`
+  (`<all_urls>` voor het kassa-paneel, plus de aparte ING/Amex-patronen), en
+  elk van die drie vraagt apart om toestemming: het aanzetten van het ene
+  vinkje zet niet ook de andere twee aan. Sinds 26 augustus 2026 is de
+  kassa-toestemming zelf breed — `<all_urls>`, niet meer per winkel gemeten —
+  maar ze blijft **optioneel en herroepbaar**: jij zet het vinkje om, Chrome
+  vraagt het, en trek je de toestemming in `chrome://extensions` weer in, dan
+  gaat het vinkje in de opties vanzelf uit. Zie [Op welke sites hij
+  werkt](#op-welke-sites-hij-werkt-en-wat-dat-vinkje-wel-en-niet-dekt) voor
+  wat die brede toestemming wel en niet dekt.
 - **Geen bedragen of ordergegevens bewaren.** In de opslag staan drie dingen:
-  welke kaarten je hebt, welke winkels aan staan, en de puntensaldi die je zelf
-  hebt ingetypt. Niets dat aan een BEZOEK vastzit — geen bedragen van een pagina,
-  geen artikelen, geen hosts, geen tijdstippen.
+  welke kaarten je hebt, of het paneel op winkelpagina's mag verschijnen (één
+  aan/uit-vinkje, `kassaOveralAan` — geen lijst van winkels meer), en de
+  puntensaldi die je zelf hebt ingetypt. Niets dat aan een BEZOEK vastzit —
+  geen bedragen van een pagina, geen artikelen, geen hosts, geen tijdstippen.
 
   Dat derde lijstje verdient een aparte zin, want het lijkt een uitzondering op
   de eerste. Wat er niet in mag is alles wat ONTSTAAT doordat je ergens kijkt;
@@ -353,7 +379,7 @@ deze extensie mag aanroepen.
 ```
 public/manifest.json     Manifest V3
 public/popup.html        het werkbalkvenster        → src/popup.ts
-public/options.html      kaarten, punten, winkels   → src/options.ts
+public/options.html      kaarten, punten, kassa-vinkje, bronnen → src/options.ts
 src/content.ts           het paneel op de pagina    (klassiek script, geen imports)
 src/background.ts        service worker: registratie, lezen, antwoorden
 src/read.ts              bedrag van een pagina lezen, of weigeren met een reden
@@ -362,9 +388,9 @@ src/rank.ts              welke kaart hier het meeste oplevert
 src/horizon.ts           de horizonregel: eenmalig versus terugkerend
 src/lines.ts             de Nederlandse zinnen
 src/panel.ts             van rangschikking naar schermtekst
-src/sites.ts             welke winkels, en de meting waarop dat rust
+src/bronnen.ts           de lijst van aanbiedingenbronnen (ING/Amex) en hun matchpatronen
 src/money.ts             centen en nl-NL-notatie
-src/store.ts             de drie lijstjes in chrome.storage
+src/store.ts             kaarten, kassa-vinkje, puntensaldi en per-bron gegevens in chrome.storage
 src/generated/           de gebundelde kaartgegevens (77 producten) en
                          de puntenkoersen (4 programma's)
 ```
@@ -410,8 +436,10 @@ Chrome zou afwijzen of die stilletjes niets doet:
 2. is `content.js` per ongeluk een ES-module geworden?
 3. staat er iets in de bundel dat het netwerk op gaat? (alles in `dist/`, niet
    alleen `.js`)
-4. loopt `optional_host_permissions` nog gelijk met `src/sites.ts`, en wijst elk
-   patroon een pad aan in plaats van een heel domein?
+4. staat `<all_urls>` plus de accountpagina's van `src/bronnen.ts` in het
+   manifest, en wijst elk accountpatroon (ING/Amex) een pad aan in plaats van
+   een heel domein? (Vóór 26 augustus 2026 stond hier een lijst met
+   individueel gemeten winkels in plaats van `<all_urls>`.)
 5. heeft de CSP een `default-src`, staan `img-src`, `font-src`, `media-src` en
    `connect-src` op `'none'`, en staat `style-src` op `'self'` zonder
    `'unsafe-inline'`?
@@ -453,17 +481,21 @@ de bundel.
 
 ## Wat er nog niet is
 
-- Eén winkel. Meer winkels betekent meer metingen, niet meer regels in het
-  manifest.
+- Geen denylist. Sinds 26 augustus 2026 dekt één brede, optionele toestemming
+  elke `https:`-winkel, zonder dat er per winkel gemeten en goedgekeurd wordt —
+  zie [Op welke sites hij werkt](#op-welke-sites-hij-werkt-en-wat-dat-vinkje-wel-en-niet-dekt)
+  voor wat dat wel en niet dekt, en waarom dat een bewuste keuze is en geen
+  oversight.
 - Geen brug naar de LaVega-kluis. Het kaartenlijstje én de puntensaldi zijn met
   de hand. Waarom dat een keuze is en niet een tekort, staat in "Waarom de saldi
   in de extensie worden ingetypt" hierboven — met de kost die eraan vastzit.
 - Eén programma met een koers. Komt er een tweede, dan groeit
   `points-rates.generated.ts` met één regel en verandert er verder niets; dat is
   met opzet zo gebouwd.
-- Het paneel verschijnt op elke aangevinkte productpagina en wordt per pagina
-  weggeklikt; er is geen "niet meer tonen op deze winkel" die iets onthoudt,
-  omdat daarvoor bijgehouden zou moeten worden waar je bent geweest.
+- Het paneel verschijnt op elke pagina waar het vinkje en de toestemming het
+  toelaten, en wordt per pagina weggeklikt; er is geen "niet meer tonen op deze
+  winkel" die iets onthoudt, omdat daarvoor bijgehouden zou moeten worden waar
+  je bent geweest.
 - Geen netto-antwoord. Zie de meting in de eerste sectie: geen enkele kaart in
   de bundel heeft zowel een cashbackcijfer als een prijs, dus de netto-tak van
   de code draait vandaag niet.
@@ -489,5 +521,7 @@ de bundel.
   Wat wél onmeetbaar blijft: het toestemmingsvenster zelf is een venster van het
   besturingssysteem en blijft in een headless sessie hangen. Na een echte klik op
   het vinkje stond `permissions.getAll()` nog op `{"origins":[]}`. De code hangt
-  daar niet van af — `siteForUrl` controleert schema, host, poort en pad zelf, en
-  de build weigert een patroon zonder pad.
+  daar niet van af — `hostVanAfzender` in `src/background.ts` controleert
+  schema, poort en origin zelf, en de build weigert voor de ING/Amex-patronen
+  nog steeds een patroon zonder pad (zie [Wat de build
+  controleert](#wat-de-build-controleert)).

@@ -10,7 +10,9 @@
  *
  * Er staan dus drie soorten dingen in:
  *   - welke kaarten hij heeft (zijn keuze, hoort bij hem);
- *   - op welke winkels het paneel aan mag (zijn keuze, hoort bij de winkel);
+ *   - of het paneel op winkelpagina's mag verschijnen (`kassaOveralAan`, één
+ *     boolean voor de brede <all_urls>-toestemming — geen lijst van winkels
+ *     meer, want die lijst bestaat niet meer);
  *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf).
  *
  * Alle drie zijn ze na het weghalen van de extensie weg, en alle drie zijn ze in
@@ -78,7 +80,7 @@ import type {
 } from "./aanbod-kern.js";
 
 const KEY_KAARTEN = "heldIds";
-const KEY_SITES = "enabledSiteIds";
+const KEY_KASSA_OVERAL = "kassaOveralAan";
 const KEY_PUNTEN = "pointsBalances";
 
 /** Alleen strings, geen lege, geen dubbele. Geen lengtegrens per string omdat de
@@ -104,15 +106,6 @@ export async function getHeldIds(): Promise<string[]> {
 
 export async function setHeldIds(ids: readonly string[]): Promise<void> {
   await chrome.storage.local.set({ [KEY_KAARTEN]: schoonLijst(ids) });
-}
-
-export async function getEnabledSiteIds(): Promise<string[]> {
-  const items = await chrome.storage.local.get([KEY_SITES]);
-  return schoonLijst(items[KEY_SITES]);
-}
-
-export async function setEnabledSiteIds(ids: readonly string[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY_SITES]: schoonLijst(ids) });
 }
 
 /** Dezelfde zeef, voor puntensaldi. Strenger dan die voor de kaart-id's, omdat
@@ -252,6 +245,18 @@ export async function getBronAan(bron: Bron): Promise<boolean> {
 
 export async function setBronAan(bron: Bron, aan: boolean): Promise<void> {
   await chrome.storage.local.set({ [bron.sleutels.aan]: aan === true });
+}
+
+/** Standaard UIT, net als bij een bron: alles wat geen letterlijke `true` is,
+ *  levert false op. Zie de uitleg bij `getBronAan` hierboven — dezelfde regel,
+ *  nu voor de brede kassa-toestemming in plaats van per bron. */
+export async function getKassaOveralAan(): Promise<boolean> {
+  const items = await chrome.storage.local.get([KEY_KASSA_OVERAL]);
+  return items[KEY_KASSA_OVERAL] === true;
+}
+
+export async function setKassaOveralAan(aan: boolean): Promise<void> {
+  await chrome.storage.local.set({ [KEY_KASSA_OVERAL]: aan === true });
 }
 
 /** De puntenprijs door de zeef.

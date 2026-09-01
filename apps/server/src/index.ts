@@ -9,8 +9,10 @@ import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
+import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
-import { forwardInvesting, shouldMountInvesting } from "./investing-mount.js";
+import { forwardInvesting, investingTenantId, shouldMountInvesting } from "./investing-mount.js";
+import { getAuth } from "./auth.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -85,6 +87,12 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/health", (c) => c.json({ ok: true }));
 
+app.all("/api/auth/*", async (c) => {
+  const auth = getAuth();
+  if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
+  return auth.handler(c.req.raw);
+});
+
 /**
  * Public NL savings-rate benchmark for the Optimisatie tab. Returns generic,
  * non-personal data only — the client sends nothing about the user. CORS is
@@ -126,6 +134,12 @@ registerEbRoutes(app);
  * static catch-all below so the API routes win. */
 registerAgentRoutes(app);
 
+/* Encrypted backup of the personal vault. Only with a database configured —
+ * there is nowhere to put it otherwise, and a route that always fails is worse
+ * than one that is not there. */
+const vaultDependencies = vaultRouteDependencies();
+if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
+
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */
 app.get("/privacy", (c) => c.html(privacyHtml));
@@ -135,14 +149,28 @@ app.get("/terms", (c) => c.html(termsHtml));
  * with API routes at `/api/investing/*`, `/api/brokers/*`, etc. Enabled when the
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
-  const toInvesting = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Every investing API call is served under one tenant, and the session names
+   * it. A request that cannot name a tenant is refused rather than falling back
+   * to the local one — that fallback would hand one user another user's data. */
+  const toInvesting = async (c: { req: { raw: Request } }) => {
+    const tenantId = await investingTenantId(c.req.raw);
+    if (!tenantId) return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
+    return forwardInvesting(c.req.raw, tenantId);
+  };
+  const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Ahead of the wildcard, and without a session: the health line names the
+   * runtime, not a tenant, and the footer that shows it renders before anyone
+   * has signed in. */
+  app.get("/api/investing/health", toInvestingStatic);
   app.all("/api/investing/*", toInvesting);
   app.all("/api/brokers/*", toInvesting);
   app.all("/api/prices/*", toInvesting);
   app.all("/api/market-data/*", toInvesting);
   app.all("/api/config/status", toInvesting);
+  /* The SPA shell itself is public: it has to load before anyone can sign in.
+   * Its data comes from the /api routes above, which are not. */
   app.get("/investing", (c) => c.redirect("/investing/"));
-  app.all("/investing/*", toInvesting);
+  app.all("/investing/*", toInvestingStatic);
 }
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,

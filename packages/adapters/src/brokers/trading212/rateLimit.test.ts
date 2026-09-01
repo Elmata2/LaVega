@@ -198,3 +198,56 @@ test("large order history continues across every required provider window", asyn
     clock.restore();
   }
 });
+
+test("a host deadline stops before the rate-limit wait and leaves a resume cursor", async () => {
+  const clock = withVirtualClock();
+  const provider = fakeTrading212(400);
+  vi.stubGlobal("fetch", provider.fetch);
+  try {
+    const result = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+      deadlineMs: START_MS + 10_000,
+    }).sync({ entity: "BV" });
+
+    expect(result.tradesComplete).toBe(false);
+    expect(result.trades).toHaveLength(300);
+    expect(result.positions).toHaveLength(1);
+    expect(result.resume?.ordersNextPagePath).toContain("cursor=300");
+    expect(result.problems).toEqual(expect.arrayContaining([
+      "Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+    ]));
+    expect(result.retryAfter).toBeDefined();
+    expect(clock.now()).toBe(START_MS);
+    expect(provider.requests.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toHaveLength(6);
+  } finally {
+    clock.restore();
+  }
+});
+
+test("a resumed sync continues from the stored cursor and finishes the history", async () => {
+  const clock = withVirtualClock();
+  const provider = fakeTrading212(400);
+  vi.stubGlobal("fetch", provider.fetch);
+  try {
+    const first = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+      deadlineMs: START_MS + 10_000,
+    }).sync({ entity: "BV" });
+    const second = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+    }).sync({ entity: "BV", resume: first.resume });
+
+    expect(second.trades).toHaveLength(100);
+    expect(second.tradesComplete).toBe(true);
+    expect(second.resume).toBeUndefined();
+    expect(second.problems).toEqual([]);
+  } finally {
+    clock.restore();
+  }
+});

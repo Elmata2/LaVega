@@ -112,6 +112,8 @@ function isInvestingServerEntry(file: string): boolean {
  * what keeps that shared helper's own `node:fs` out of the walk.
  */
 const INVESTING_SERVER_NODE_ADAPTERS = new Set([
+  "./credentialStore.js",
+  "./neonStores.js",
   "./fileCredentialStore.js",
   "./fileBrokerSyncStateStore.js",
   "./fileAgentRunStore.js",

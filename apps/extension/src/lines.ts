@@ -238,6 +238,20 @@ function inwisselZin(scope: string): string {
   );
 }
 
+/** ALLEEN de datum van ZIJN eigen opgave, voor het werkbalkvenster.
+ *
+ *  `puntenBron` hieronder bundelt drie dingen in één zin: de koers, waar die
+ *  vandaan komt, en wanneer hij zelf het saldo invoerde. In de popup staat sinds
+ *  27 augustus 2026 alleen nog het saldo zelf, en dan is die hele zin te veel —
+ *  maar de datum weglaten mag niet: een saldo zonder datum is een getal waarvan
+ *  je niet weet of het van vandaag of van vorig jaar is.
+ *
+ *  Een lege datum wordt hier "geen datum bekend" en niet stilzwijgend van
+ *  vandaag. Dat onderscheid is de hele reden dat deze functie bestaat. */
+export function puntenDatumRegel(rij: PuntenRij): string {
+  return rij.updatedAt === "" ? "Geen datum bekend." : `Bijgewerkt op ${dateNL(rij.updatedAt)}.`;
+}
+
 /** Waar de koers vandaan komt, van wanneer, en wanneer HIJ het saldo invoerde.
  *  Die twee datums zijn allebei nodig en ze zijn niet uitwisselbaar: de eerste
  *  zegt hoe oud ons cijfer is, de tweede hoe oud zijn eigen opgave is. */
@@ -807,6 +821,44 @@ export function aanbodRegel(a: Aanbieding, asOf: string, bron: Bron): string {
   return delen.join(" ");
 }
 
+/** HET ANTWOORD BOVEN DE AANBIEDINGEN: één korte regel, en verder niets.
+ *
+ *  Wat eronder staat is de onderbouwing; dit is wat hij in één blik moet zien.
+ *  Daarom staat er geen datum in, geen puntenaantal en geen voorbehoud — die
+ *  staan alle drie in de regel per aanbieding en in de vouw eronder.
+ *
+ *  HET MERK STAAT ER ALLEEN ALS ZE HET ALLEMAAL DELEN. Het eerste woord van een
+ *  titel is bij de ING Winkel in de praktijk de merknaam ("JBL Boombox 4 25%
+ *  kortingsvoucher"). Verschillen ze, dan zou één merk noemen de andere
+ *  verzwijgen, en dan blijft het bij het algemene woord. Dit is bewust dezelfde
+ *  aanname als in `mogelijkeProductMatch` en hij is even zwak: het is een kop,
+ *  geen bewering over wat je krijgt. */
+export function aanbodAntwoord(aanbiedingen: readonly Aanbieding[], bron: Bron): string {
+  const merken = new Set(
+    aanbiedingen.map((a) => a.winkel.trim().split(/\s+/)[0] ?? "").filter((m) => m.length >= 3),
+  );
+  const merk = merken.size === 1 ? [...merken][0] : null;
+  if (bron.prijsSoort === "punten") {
+    return merk ? `${merk}-korting via je ${bron.merk}-punten` : `Korting via je ${bron.merk}-punten`;
+  }
+  return merk ? `${merk}-aanbieding op je ${bron.merk}-kaart` : `Aanbieding op je ${bron.merk}-kaart`;
+}
+
+/** De doorklik: waar hij dit ophaalt.
+ *
+ *  HET ADRES KOMT UIT HET MATCHPATROON VAN DE BRON en nergens anders vandaan.
+ *  Dat patroon is hetzelfde patroon waarvoor hij Chrome toestemming heeft
+ *  gegeven, dus de link kan per definitie niet ergens heen wijzen waar hij geen
+ *  ja tegen zei — en er komt geen adres in dat van een winkelpagina afkomstig
+ *  is. De `*` aan het eind is een matchpatroon-teken en hoort niet in een URL. */
+export function aanbodLink(bron: Bron): PaneelAanbodLink {
+  const href = bron.match.replace(/\*$/, "");
+  return {
+    tekst: bron.prijsSoort === "punten" ? `Ophalen in ${bron.paginaNaam}` : `Toevoegen bij ${bron.merk}`,
+    href,
+  };
+}
+
 /** Waar deze regel vandaan komt en van wanneer. */
 export function aanbodBron(a: Aanbieding, asOf: string, bron: Bron): string {
   const dagen = dagenTussen(a.gelezenOp, asOf);
@@ -900,6 +952,34 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
         : `In de ${u.totaal} aanbiedingen die LaVega op ${dateNL(u.op)} van ${bron.paginaNaam} las, ` +
             `staat er geen voor deze winkel. De koppeling gaat op het webadres van de winkel en niet op de ` +
             `naam — een aanbieding zonder webadres blijft hier dus weg, en staat wel in het LaVega-venster.`;
+    case "mogelijke-merknaam-match": {
+      /* GEEN AANBIEDING, ALLEEN EEN TITEL. Deze zin mag niet zeggen "hier ligt
+       * een aanbieding voor je" — dat zou, net als een naamkoppeling bij
+       * `hoortBijWinkel`, een aankoop bij ING voorspiegelen als aanbieding van
+       * deze winkel. Ze staat er daarom als een vraag die hij zelf beantwoordt,
+       * niet als een bewering die LaVega niet kan dragen. Geen punten, geen
+       * bedrag: dat cijfer zou relevantie voor DEZE winkel suggereren, en dat is
+       * precies het deel dat onbevestigd is. */
+      const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
+      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      return (
+        `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij deze winkel ` +
+        `passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
+      );
+    }
+    case "mogelijke-product-match": {
+      /* ZELFDE GRENS ALS BIJ "mogelijke-merknaam-match" HIERBOVEN, alleen is de
+       * match nu op het artikel dat de pagina zelf noemt, niet op de winkel. Dat
+       * verandert de bewering niet: geen "hier ligt een aanbieding voor je",
+       * geen bedrag, geen punten — alleen dat de titel bij WAT JE HIER BEKIJKT
+       * kan passen. */
+      const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
+      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      return (
+        `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij wat je hier ` +
+        `bekijkt passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
+      );
+    }
     case "gevonden":
       return "";
   }

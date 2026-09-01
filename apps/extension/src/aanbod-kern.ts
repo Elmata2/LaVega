@@ -144,6 +144,11 @@ export const AANBOD_OUD_NA_DAGEN = 14;
  *  is opgeslagen. */
 export const AANBOD_TE_OUD_NA_DAGEN = 60;
 
+/** Hoeveel titels een gehedgde merknaam-match aan een kassa mag laten zien.
+ *  Meer dan dit wordt niet stilgehouden — `totaal` in de uitkomst telt ongekapt
+ *  door, en de zin in lines.ts zegt dat er meer zijn. */
+export const MOGELIJKE_MATCH_MAX = 3;
+
 /** Dagen tussen twee ISO-datums; NaN als er iets onleesbaar is.
  *
  *  Geen `new Date(string)`: die accepteert van alles en maakt er stilletjes een
@@ -164,10 +169,13 @@ export function dagenTussen(vanISO: string, totISO: string): number {
 /* ─────────────────────────── waar we mogen kijken ─────────────────────────── */
 
 /** Een matchpatroon uit elkaar getrokken: het hostdeel en het VASTE stuk pad dat
- *  ervoor staat. Zelfde vorm als `ontleedMatch` in sites.ts, en met opzet een
- *  eigen kopie van die drie regels: sites.ts gaat over WINKELS en dit bestand
- *  over accountpagina's, en de een hoort de ander niet te hoeven importeren om
- *  een URL te kunnen weigeren. */
+ *  ervoor staat. Zelfde vorm als `ontleedMatch` in bronnen.ts — dat is inmiddels
+ *  een kopie van een kopie: `ontleedMatch` verscheen later en importeert
+ *  `urlValtBinnen` uit dit bestand al, dus de cirkelvrees die deze eigen kopie
+ *  ooit rechtvaardigde speelt hier niet meer. De duplicatie is nu puur
+ *  historisch; `bronnen.ts` zou `ontleedMatch` (of deze functie, verplaatst)
+ *  rechtstreeks kunnen hergebruiken, maar dat is een structuurwijziging en
+ *  hoort niet in deze documentatieronde. */
 function ontleed(match: string): { host: string; padPrefix: string } | null {
   const m = /^https:\/\/([a-z0-9.-]+)(\/[^*]*)\*$/.exec(match);
   if (!m) return null;
@@ -176,11 +184,11 @@ function ontleed(match: string): { host: string; padPrefix: string } | null {
 
 /** Valt deze volledige URL binnen het matchpatroon van deze bron?
  *
- *  Dezelfde drie eisen als `siteForUrl` in sites.ts, en om dezelfde reden: het
- *  matchpatroon zegt waar we toestemming voor vroegen en niet welke pagina ons
- *  aanspreekt. Https, geen poort, host letterlijk gelijk, en het pad begint met
- *  het vaste stuk. Geef hier een origin aan door en het antwoord is false — een
- *  origin heeft geen pad. */
+ *  Dezelfde drie eisen als bij `bronVoorUrl`/`ontleedMatch` in bronnen.ts, en om
+ *  dezelfde reden: het matchpatroon zegt waar we toestemming voor vroegen en
+ *  niet welke pagina ons aanspreekt. Https, geen poort, host letterlijk gelijk,
+ *  en het pad begint met het vaste stuk. Geef hier een origin aan door en het
+ *  antwoord is false — een origin heeft geen pad. */
 export function urlValtBinnen(match: string, url: string): boolean {
   const d = ontleed(match);
   if (!d) return false;
@@ -283,6 +291,145 @@ export function hoortBijWinkel(aanbieding: Aanbieding, winkelHost: string): bool
   const winkel = registreerbaarDomein(winkelHost);
   if (winkel === null) return false;
   return aanbieding.domein === winkel;
+}
+
+/** Een zwakkere, gehedgde koppeling op de titel van een PUNTENREGEL — nooit op
+ *  een korting-aanbieding, en nooit met de bewering die `hoortBijWinkel` mag
+ *  doen.
+ *
+ *  ── WAAROM DIT NIET DE HIERBOVEN AFGEWEZEN FOUT IS ─────────────────────────
+ *
+ *  Hierboven staat waarom er nooit op naam gekoppeld wordt: bij een KORTING
+ *  (Amex) zou "Nike" op `nike-outlet-fake.nl` een namaakwinkel voorzien van een
+ *  bewering die klopt lijkt. Die fout is hier nog steeds fout — deze functie
+ *  mag daarom uitsluitend worden aangeroepen voor een PUNTEN-bron; dat bewaakt
+ *  `aanbodVoorWinkel`, niet deze functie zelf.
+ *
+ *  Bij een puntenbron is de zin die hierbij hoort nooit "hier ligt een
+ *  aanbieding voor je" (dat zou, precies zoals hierboven, een aankoop bij ING
+ *  voorspiegelen als een aanbieding van de winkel zelf). Het is een zwakkere
+ *  bewering: "in je ING Punten staat een titel die hierbij kan passen — kijk
+ *  zelf of dat klopt en of het hier te verzilveren is". Die zin beweert zelf
+ *  geen aanbieding, dus de tweede fout uit `hoortBijWinkel` kan hij niet maken.
+ *  Vandaar een eigen `AanbodUitkomst`-tak (`mogelijke-merknaam-match`) die
+ *  nooit samenvalt met `gevonden`.
+ *
+ *  Het label (het eerste deel van het domein, dus "jbl" uit "jbl.nl") moet
+ *  minstens 3 tekens zijn en als los woord in de titel voorkomen — niet als
+ *  losse substring, anders raakt "ing" op elk woord dat die drie letters
+ *  toevallig bevat. */
+export function mogelijkeMerknaamMatch(aanbieding: Aanbieding, winkelHost: string): boolean {
+  const domein = registreerbaarDomein(winkelHost);
+  if (domein === null) return false;
+  const label = domein.split(".")[0]!;
+  if (label.length < 3) return false;
+  const patroon = new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  return patroon.test(aanbieding.winkel);
+}
+
+/** Woorden uit een voucher-titel die op ELKE titel voorkomen en dus niets
+ *  onderscheiden — "korting" op zichzelf zegt niets over WELK product. Zonder
+ *  deze lijst zou "ING kortingsvoucher" met "kortingsvoucher" als enige
+ *  overgebleven woord op praktisch elke productpagina rondom "korting" kunnen
+ *  matchen; met de lijst blijft er dan niets over en matcht hij nergens. */
+const PRODUCT_MATCH_STOPWOORDEN = new Set([
+  "voor",
+  "korting",
+  "kortingsbon",
+  "kortingsvoucher",
+  "voucher",
+  "punten",
+  "van",
+  "een",
+  "het",
+]);
+
+/** Kleuren tellen niet mee als onderscheidend woord, en dat is GEMETEN nodig.
+ *
+ *  Op 27 augustus 2026 op de echte pagina's naast elkaar gelegd: ING schrijft
+ *  "JBL Tune Flex 2 (zwart) voor € 55 kortingsvoucher" en bol.com noemt exact
+ *  hetzelfde artikel "JBL Tune Flex 2 - True Wireless NC Earbuds - Black".
+ *  Zelfde product, andere taal voor de kleur — en met de kleur als harde eis
+ *  matcht dat nooit. Een kleur is bovendien een VARIANT-eigenschap: de voucher
+ *  gaat over de Tune Flex 2, de kleur zegt welke uitvoering. Hem laten vallen
+ *  kost precisie op de variant (een voucher voor de zwarte kan nu ook op de
+ *  witte pagina raken) en dat is aanvaardbaar, want de zin die erbij hoort
+ *  belooft niets over verzilverbaarheid — hij zegt "dit kan passen, check zelf".
+ *  Dat kost minder dan de functie helemaal niet laten werken. */
+const PRODUCT_MATCH_KLEUREN = new Set([
+  "zwart",
+  "wit",
+  "black",
+  "white",
+  "blauw",
+  "blue",
+  "rood",
+  "red",
+  "groen",
+  "green",
+  "grijs",
+  "grey",
+  "gray",
+  "roze",
+  "pink",
+  "beige",
+  "paars",
+  "purple",
+  "geel",
+  "yellow",
+  "zilver",
+  "silver",
+  "goud",
+  "gold",
+]);
+
+/** Een zwakkere, gehedgde koppeling op de PAGINA-INHOUD, niet op de winkelnaam.
+ *
+ *  ── WAAROM DIT ER NAAST STAAT EN GEEN VERVANGING IS VAN `mogelijkeMerknaamMatch` ──
+ *
+ *  Die functie koppelt op de HOSTNAAM van de winkel ("jbl" uit jbl.nl) en werkt
+ *  daarom alleen op de merknaam-site zelf. Een marktplaats die het artikel van
+ *  een ander merk verkoopt (bol.com met een JBL-koptelefoon) heeft een
+ *  hostnaam die nooit matcht, hoe duidelijk het artikel ook een JBL is. Deze
+ *  functie kijkt daarom naar wat de PAGINA ZELF zegt te verkopen
+ *  (`Evidence.productNaam` uit read.ts) in plaats van naar waar hij staat.
+ *
+ *  ZELFDE GEHEDGDE ZIN, ZELFDE GRENS AAN PUNTEN-BRONNEN: de aanroeper
+ *  (`aanbodVoorWinkel`) zet deze functie alleen in voor een PUNTEN-bron, om
+ *  precies de reden die bij `hoortBijWinkel` staat — een KORTING-aanbieding
+ *  ("30% korting bij JBL") geldt alleen aan de kassa VAN die winkel, hoe
+ *  precies de paginainhoud ook overeenkomt.
+ *
+ *  TWEE EISEN, EN ALLEBEI NODIG: het MERK én minstens één onderscheidend woord.
+ *
+ *    - het merk is het eerste woord van de titel ("JBL"), en dat mag korter dan
+ *      vier tekens zijn — precies omdat de bekendste merken dat zijn. Zonder
+ *      deze eis blijft er bij "JBL Grip (zwart) …" na het wegstrepen van de
+ *      standaardtaal en de kleur alleen "grip" over, en dan zou elke pagina met
+ *      het woord "grip" erin raak zijn. Mét de merkeis moet er óók "jbl" staan;
+ *    - én minstens één woord van vier tekens of langer dat geen standaardtaal
+ *      en geen kleur is, dat ALLEMAAL moeten raken. Het merk alleen is
+ *      nadrukkelijk niet genoeg: "JBL 15% kortingsvoucher" houdt niets
+ *      onderscheidends over en matcht daarom nergens, net als "ING
+ *      kortingsvoucher". Een merkbrede voucher aan elke pagina van dat merk
+ *      hangen is een andere bewering dan deze, en die is hier niet gemaakt.
+ *
+ *  Zo blijft de fout die `hoortBijWinkel` afwees ook hier uitgesloten: er is
+ *  nooit een match op één los, algemeen woord. */
+export function mogelijkeProductMatch(aanbieding: Aanbieding, productNaam: string): boolean {
+  const alle = aanbieding.winkel.toLowerCase().split(/[^a-zà-ÿ0-9]+/i).filter((w) => w !== "");
+  const merk = alle[0];
+  if (merk === undefined || merk.length < 3) return false;
+
+  const onderscheidend = alle
+    .slice(1)
+    .filter((w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w) && !PRODUCT_MATCH_KLEUREN.has(w));
+  if (onderscheidend.length === 0) return false;
+
+  const naam = productNaam.toLowerCase();
+  const raakt = (w: string) =>
+    new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(naam);
+  return raakt(merk) && onderscheidend.every(raakt);
 }
 
 /* ──────────────────── wat er uit de pagina terugkomt ──────────────────────── */
@@ -751,6 +898,19 @@ export type AanbodUitkomst =
   | { soort: "te-oud"; op: string; dagen: number }
   | { soort: "winkel-zonder-domein"; host: string }
   | { soort: "geen-voor-deze-winkel"; op: string; dagen: number; totaal: number }
+  /** Geen enkele regel koppelt op domein, maar bij een PUNTEN-bron staat er wel
+   *  een titel die de merknaam van deze winkel raakt (zie
+   *  `mogelijkeMerknaamMatch`). Zwakker dan "gevonden": dit beweert geen
+   *  aanbieding, alleen een mogelijke match op tekst. `matches` is afgekapt op
+   *  `MOGELIJKE_MATCH_MAX`; `totaal` telt ongekapt, zodat een afgekapte lijst
+   *  dat ook zegt in plaats van te verzwijgen. */
+  | { soort: "mogelijke-merknaam-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
+  /** Zelfde soort zwakke koppeling als hierboven, maar op de PAGINA-INHOUD in
+   *  plaats van de winkelnaam (zie `mogelijkeProductMatch`) — dit is de tak die
+   *  ook op een marktplaats vuurt die het artikel van een ander merk verkoopt.
+   *  Wordt pas geprobeerd als de merknaam-match niets vond: een match op de
+   *  winkelnaam zelf is minstens zo specifiek en gaat voor. */
+  | { soort: "mogelijke-product-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
   | {
       soort: "gevonden";
       op: string;
@@ -788,6 +948,8 @@ export function aanbodVoorWinkel(
   toestand: AanbodToestand,
   winkelHost: string,
   asOf: string,
+  bron: Bron,
+  productNaam: string | null,
 ): AanbodUitkomst {
   if (!toestand.aan) return { soort: "uit" };
 
@@ -816,6 +978,37 @@ export function aanbodVoorWinkel(
 
   const passend = toestand.aanbiedingen.filter((a) => hoortBijWinkel(a, winkelHost));
   if (passend.length === 0) {
+    /* Alleen bij een PUNTEN-bron, en dat is de bewaking waar de rejection-
+     * comment bij `hoortBijWinkel` om vraagt: bij een KORTING-bron zou dit de
+     * Nike/nike-outlet-fake.nl-fout terugbrengen. */
+    if (bron.prijsSoort === "punten") {
+      const merknaamMatches = toestand.aanbiedingen.filter((a) => mogelijkeMerknaamMatch(a, winkelHost));
+      if (merknaamMatches.length > 0) {
+        return {
+          soort: "mogelijke-merknaam-match",
+          op,
+          dagen,
+          matches: merknaamMatches.slice(0, MOGELIJKE_MATCH_MAX),
+          totaal: merknaamMatches.length,
+        };
+      }
+      /* Pas als de winkelnaam niets opleverde: een match op de winkelnaam zelf
+       * is minstens zo specifiek als een match op de paginainhoud, en gaat
+       * daarom voor. Zie `mogelijkeProductMatch` voor waarom dit er apart naast
+       * staat en niet in de plaats van komt. */
+      if (productNaam !== null) {
+        const productMatches = toestand.aanbiedingen.filter((a) => mogelijkeProductMatch(a, productNaam));
+        if (productMatches.length > 0) {
+          return {
+            soort: "mogelijke-product-match",
+            op,
+            dagen,
+            matches: productMatches.slice(0, MOGELIJKE_MATCH_MAX),
+            totaal: productMatches.length,
+          };
+        }
+      }
+    }
     return { soort: "geen-voor-deze-winkel", op, dagen, totaal: toestand.aanbiedingen.length };
   }
 

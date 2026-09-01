@@ -42,16 +42,23 @@
     <button type="submit">Toevoegen</button>
   </form>
 
-  <h2>Op welke winkels mag het paneel verschijnen?</h2>
+  <h2>Mag het paneel op winkelpagina's verschijnen?</h2>
   <p class="hint">
-    Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een
-    winkel aan, dan vraagt Chrome je apart om toestemming voor dat ene adres; die kun je in
-    <code>chrome://extensions</code> altijd weer intrekken. De lijst is kort omdat er alleen
-    winkels in staan waarvan we hebben gemeten dat het bedrag dat we lezen ook echt bij de
-    pagina hoort.
+    Standaard staat dit uit. Zet je het aan, dan vraagt Chrome toestemming om alle websites te
+    lezen — niet per winkel, en dat kun je in <code>chrome://extensions</code> altijd weer
+    intrekken. LaVega leest daarbij alleen de machineleesbare productgegevens die een winkel zelf
+    op de pagina zet (dezelfde gegevens die zoekmachines gebruiken) — nooit de rest van de pagina.
+    Het vergelijkt dat niet met wat er verder op de pagina staat: een winkel die dat verkeerd zet
+    (gemeten dat dit gebeurt), kan LaVega niet opvangen. Zwijgen bij twijfel blijft gelden; een
+    geldig maar verkeerd bedrag is de uitzondering die dit vinkje accepteert.
   </p>
-  <div id="siteslijst"></div>
-  <p class="hint" id="sites-melding"></p>
+  <div class="vinkrij">
+    <input type="checkbox" id="kassa-overal" />
+    <label for="kassa-overal">
+      <div class="titel">Paneel op winkelpagina's</div>
+    </label>
+  </div>
+  <p class="hint" id="kassa-melding"></p>
 
   <h2>Mag LaVega je eigen aanbiedingen lezen?</h2>
   <p class="hint">
@@ -66,22 +73,6 @@
     bron verdwijnt. Hetzelfde gebeurt als je de toestemming in <code>chrome://extensions</code> intrekt.
   </p>
   <div id="bronnen"></div>
-
-  <h2>Wat deze extensie niet doet</h2>
-  <ul class="grens">
-    <li>Geen netwerkverkeer. Niet naar lavega.dev, niet naar een statistiekendienst, nergens
-      heen. De kaartgegevens zitten in de bundel en worden nooit bijgewerkt zonder een nieuwe
-      versie van de extensie.</li>
-    <li>Geen bedragen bewaren. Wat er op een pagina staat wordt gelezen, gebruikt om de zin op
-      het scherm te maken, en daarna is het weg. Er is geen geschiedenis.</li>
-    <li>Geen andere pagina's dan de aangevinkte winkels. Geen <code>&lt;all_urls&gt;</code>,
-      geen achtergrondtoegang tot je tabbladen, geen cookies.</li>
-    <li>Geen advies dat je hier niet kunt navolgen. Weten we de kosten van een kaart niet, dan
-      staat er een brutobedrag met die onbekendheid erbij — en niet het woord "netto".</li>
-  </ul>
-
-  <h2>Waar de cijfers vandaan komen</h2>
-  <p class="hint" id="herkomst"></p>
 
   <script type="module" src="options.js"></script>
 </body>

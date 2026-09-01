@@ -34,12 +34,14 @@ test("dashboard route returns injected core-shaped read model and selected symbo
 });
 
 test("dashboard route reports read-model failures without inventing values", async () => {
-  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")) });
+  const problemReporter = vi.fn();
+  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")), problemReporter });
 
   const response = await investingApp.request("/api/investing/dashboard");
 
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
+  expect(problemReporter).toHaveBeenCalledWith({ source: "dashboard-read", problems: ["read failed"] });
 });
 
 test("benchmark API persists ordered replace-whole selection and rejects invalid caps", async () => {
@@ -201,7 +203,7 @@ test("broker vault routes report status and unlock without returning passphrase"
   const investingApp = createApp({ credentialStatus, unlockCredentials });
 
   const statusResponse = await investingApp.request("/api/brokers/credentials/status");
-  expect(await statusResponse.json()).toEqual({ status: "locked" });
+  expect(await statusResponse.json()).toEqual({ status: "locked", passphrase: "required" });
 
   const unlockResponse = await investingApp.request("/api/brokers/credentials/unlock", {
     method: "POST",
@@ -286,4 +288,75 @@ test("summary route reports failures as 503 problem payload", async () => {
   const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("down")) });
   const response = await investingApp.request("/api/investing/summary");
   expect(response.status).toBe(503);
+});
+
+test("tenant-scoped routes read and write under the resolved tenant, not the local default", async () => {
+  const benchmarkSelectionStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, symbols: ["^GSPC"] })), set: vi.fn(async () => undefined) };
+  const marketDataConsentStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, accepted: true, decidedAt: null, disclosureVersion: "yahoo-finance-v1" })), set: vi.fn(async () => undefined) };
+  const investingApp = createApp({ resolveTenantId: () => "user-123", benchmarkSelectionStore, marketDataConsentStore });
+
+  const benchmarks = await investingApp.request("/api/investing/benchmarks");
+  expect(benchmarks.status).toBe(200);
+  expect(benchmarkSelectionStore.get).toHaveBeenCalledWith("user-123");
+
+  const stored = await investingApp.request("/api/investing/benchmarks", { method: "PUT", body: JSON.stringify({ symbols: ["^AEX"] }), headers: { "content-type": "application/json" } });
+  expect(stored.status).toBe(200);
+  expect(benchmarkSelectionStore.set).toHaveBeenCalledWith({ tenantId: "user-123", symbols: ["^AEX"] });
+
+  const consent = await investingApp.request("/api/market-data/consent", { method: "PUT", body: JSON.stringify({ accepted: true }), headers: { "content-type": "application/json" } });
+  expect(consent.status).toBe(200);
+  expect(marketDataConsentStore.set).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "user-123", accepted: true }));
+});
+
+test("tenant defaults to the local tenant when no resolver is injected", async () => {
+  const benchmarkSelectionStore = { get: vi.fn(async (tenantId: string) => ({ tenantId, symbols: [] })), set: vi.fn(async () => undefined) };
+  const investingApp = createApp({ benchmarkSelectionStore });
+
+  await investingApp.request("/api/investing/benchmarks");
+
+  expect(benchmarkSelectionStore.get).toHaveBeenCalledWith("local");
+});
+
+test("the status route says whether a passphrase is used at all", async () => {
+  const investingApp = createApp({ credentialStatus: vi.fn(async () => "empty" as const), passphraseMode: () => "unused" });
+
+  const response = await investingApp.request("/api/brokers/credentials/status");
+
+  expect(await response.json()).toEqual({ status: "empty", passphrase: "unused" });
+});
+
+test("credentials are accepted without a passphrase when the server holds the key", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker, passphraseMode: () => "unused" });
+
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", token: "api-key", secret: "api-secret" }),
+  });
+
+  expect(response.status).toBe(204);
+  expect(configureBroker).toHaveBeenCalledWith({ broker: "trading212", token: "api-key", queryId: undefined, secret: "api-secret", passphrase: undefined });
+});
+
+test("a passphrase-locked vault still refuses credentials without one", async () => {
+  const investingApp = createApp({ configureBroker: vi.fn(async () => undefined) });
+
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "trading212", token: "api-key", secret: "api-secret" }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["passphrase is required"] });
+});
+
+test("health answers under /api/ too, because that is the only path a mount forwards", async () => {
+  const runtime = createApp();
+
+  const response = await runtime.request("/api/investing/health");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
 });

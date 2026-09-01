@@ -10,7 +10,7 @@ export async function syncPrices(input: { store: PriceStore; tenantId: string; p
   const today = input.request.today ?? new Date().toISOString().slice(0, 10);
   const lastDate = await input.store.lastDate(input.tenantId, input.request.symbol);
   const from = lastDate ? nextDate(lastDate) : input.request.backfillFrom;
-  const cached = () => input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom ?? "0000-01-01", today);
+  const cached = () => input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom, today);
   if (from && from > today) return { bars: await cached(), problems: [], fetched: false };
   const result = await firstProviderResult(input.priceProviders, { ...input.request, from, to: today }, undefined, hasProblems);
   if (!result) return { bars: await cached(), problems: ["No price provider returned data"], fetched: true };

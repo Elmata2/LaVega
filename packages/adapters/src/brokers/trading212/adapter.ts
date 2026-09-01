@@ -8,13 +8,19 @@ import {
   type TradeSide,
   type TradeWithoutId,
 } from "@lavega/core";
-import type { BrokerAccessAdapter, BrokerResult } from "../BrokerAccessAdapter.js";
+import { historyPending, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "../BrokerAccessAdapter.js";
 
 export type Trading212Config = {
   token: string;
   secret: string;
   baseUrl: string;
   diagnostics?: (event: Trading212DiagnosticEvent) => void;
+  /**
+   * Stop before this Unix ms so the host can persist. On Vercel the function
+   * otherwise dies mid-history and the next invocation restarts page one.
+   */
+  deadlineMs?: number;
+  resume?: BrokerSyncResume;
 };
 
 export type Trading212DiagnosticEvent =
@@ -41,15 +47,32 @@ const MAX_RATE_LIMIT_RETRIES = 3;
 /** One order-history window is 60s; leave room for a reset timestamp plus clock skew. */
 const MAX_RATE_LIMIT_WAIT_MS = 120_000;
 const RATE_LIMIT_MARGIN_MS = 1_000;
+/** Leave time to persist the snapshot and answer the HTTP request. */
+const HOST_DEADLINE_MARGIN_MS = 5_000;
+const HOST_DEADLINE_MESSAGE = "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
+const RATE_LIMIT_MESSAGE = "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
 
-/** Signals that the provider window, not the request, ended the sync. Carries the cooldown. */
-class Trading212RateLimitError extends Error {
+/** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
+class Trading212SyncPausedError extends Error {
   readonly retryAfterMs: number;
 
-  constructor(retryAfterMs: number) {
-    super("Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown");
+  constructor(message: string, retryAfterMs: number) {
+    super(message);
     this.retryAfterMs = retryAfterMs;
   }
+}
+
+class Trading212RateLimitError extends Trading212SyncPausedError {
+  constructor(retryAfterMs: number) {
+    super(RATE_LIMIT_MESSAGE, retryAfterMs);
+  }
+}
+
+function throwIfHostDeadline(deadlineMs: number | undefined, waitMs = 0): void {
+  if (deadlineMs === undefined) return;
+  const remaining = deadlineMs - Date.now();
+  if (remaining - HOST_DEADLINE_MARGIN_MS > waitMs) return;
+  throw new Trading212SyncPausedError(HOST_DEADLINE_MESSAGE, Math.max(0, waitMs));
 }
 
 function headerNumber(response: Response, name: string): number | null {
@@ -92,7 +115,7 @@ type RateLimiter = ReturnType<typeof createRateLimiter>;
  * response, so a sync waits out a spent window instead of spending a request to
  * discover it is spent.
  */
-function createRateLimiter(diagnostics: (event: Trading212DiagnosticEvent) => void) {
+function createRateLimiter(diagnostics: (event: Trading212DiagnosticEvent) => void, deadlineMs?: number) {
   const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
 
   const sleep = async (milliseconds: number): Promise<void> => {
@@ -106,6 +129,7 @@ function createRateLimiter(diagnostics: (event: Trading212DiagnosticEvent) => vo
       if (!budget || budget.remaining > 0) return;
       budgets.delete(path);
       const waitMs = Math.max(0, budget.resetAtMs - Date.now() + RATE_LIMIT_MARGIN_MS);
+      throwIfHostDeadline(deadlineMs, waitMs);
       diagnostics({ type: "wait", endpoint: path, reason: "budget-exhausted", waitMs });
       await sleep(waitMs);
     },
@@ -338,6 +362,8 @@ function result(
   problems: string[],
   retryAfterMs: number | null,
   tradesComplete = true,
+  resume?: BrokerSyncResume,
+  completeness?: { positionsComplete?: boolean; cashBalancesComplete?: boolean },
 ): BrokerResult {
   return {
     positions,
@@ -348,7 +374,10 @@ function result(
     source: SOURCE,
     problems,
     tradesComplete,
+    ...(completeness?.positionsComplete === false ? { positionsComplete: false } : {}),
+    ...(completeness?.cashBalancesComplete === false ? { cashBalancesComplete: false } : {}),
     ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
+    ...(historyPending(resume) ? { resume } : {}),
   };
 }
 
@@ -422,6 +451,7 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
     if (response.status !== 429) return response;
     if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
     const waitMs = rateLimitWaitMs(response, retry);
+    throwIfHostDeadline(config.deadlineMs, waitMs);
     config.diagnostics?.({ type: "wait", endpoint: path, reason: "http-429", waitMs });
     await limiter.sleep(waitMs);
   }
@@ -458,52 +488,46 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
   return {
-    async sync({ entity }) {
+    async sync({ entity, resume: inputResume }) {
+      const resume = inputResume ?? config.resume ?? {};
       const positionsResult: Position[] = [];
       const trades: TradeWithoutId[] = [];
       const dividends: Dividend[] = [];
       const cashBalances: CashBalance[] = [];
       const cashFlows: CashFlow[] = [];
       const problems: string[] = [];
-      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined));
+      const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), config.deadlineMs);
       let retryAfterMs: number | null = null;
-      const noteRateLimit = (error: unknown) => {
-        if (error instanceof Trading212RateLimitError) retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
+      const notePaused = (error: unknown) => {
+        if (error instanceof Trading212SyncPausedError) retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
       };
-      const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
-      historyUrl.searchParams.set("limit", String(ORDER_HISTORY_PAGE_SIZE));
-      let nextUrl = historyUrl.toString();
-      let historyPages = 0;
-      let ordersRead = 0;
-      let historyComplete = true;
+      const firstHistoryUrl = () => {
+        const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
+        historyUrl.searchParams.set("limit", String(ORDER_HISTORY_PAGE_SIZE));
+        return historyUrl.toString();
+      };
+      const firstCashUrl = (path: string) => {
+        const url = new URL(path, config.baseUrl);
+        url.searchParams.set("limit", String(CASH_HISTORY_PAGE_SIZE));
+        return url.toString();
+      };
+      let ordersComplete = resume.ordersComplete === true;
+      let transactionsComplete = resume.transactionsComplete === true;
+      let dividendsComplete = resume.dividendsComplete === true;
+      let ordersResume = !ordersComplete ? (resume.ordersNextPagePath ?? firstHistoryUrl()) : undefined;
+      let transactionsResume = !transactionsComplete ? (resume.transactionsNextPagePath ?? undefined) : undefined;
+      let dividendsResume = !dividendsComplete ? (resume.dividendsNextPagePath ?? undefined) : undefined;
+      let holdingsComplete = false;
+      let summaryComplete = false;
+
       try {
-        while (nextUrl) {
-          const current = await page(nextUrl, config, limiter);
-          historyPages += 1;
-          ordersRead += current.items.length;
-          config.diagnostics?.({ type: "history-page", page: historyPages, pageItems: current.items.length, ordersRead, hasNext: Boolean(current.nextPagePath) });
-          for (const order of current.items) {
-            try {
-              const trade = mapOrder(order, entity);
-              if (trade) trades.push(trade);
-            } catch (error) {
-              problems.push(error instanceof Error ? error.message : "Trading 212 order is invalid");
-            }
-          }
-          nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
-        }
-      } catch (error) {
-        historyComplete = false;
-        noteRateLimit(error);
-        problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
-      }
-      try {
-        // This equity endpoint is the shared read scope for Trading 212 Invest
-        // and Stocks ISA accounts. Multi-currency accounts are outside the
-        // connector contract; no order-capable endpoint is called here. It has
-        // its own 1-per-second budget, so it still runs after a history cutoff.
+        throwIfHostDeadline(config.deadlineMs, 0);
+        // Holdings and cash are one request each. Read them before order
+        // history so a host time limit still leaves the dashboard something
+        // current to show.
         const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
         const holdings = await positions(holdingsUrl, config, limiter);
+        holdingsComplete = true;
         config.diagnostics?.({ type: "positions", count: holdings.length });
         for (const holding of holdings) {
           try {
@@ -513,65 +537,129 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           }
         }
       } catch (error) {
-        noteRateLimit(error);
+        notePaused(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 holdings sync failed");
       }
 
       let accountCurrency = "";
       try {
+        throwIfHostDeadline(config.deadlineMs, 0);
         const summary = await accountSummary(new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(), config, limiter);
+        summaryComplete = true;
         accountCurrency = string(summary.currency, "account summary currency");
         const mapped = mapCashBalance(summary, entity, new Date().toISOString().slice(0, 10));
         if (mapped.balance) cashBalances.push(mapped.balance);
         problems.push(...mapped.problems);
       } catch (error) {
-        noteRateLimit(error);
+        notePaused(error);
         problems.push(error instanceof Error ? error.message : "Trading 212 account-summary sync failed");
+      }
+
+      let historyComplete = ordersComplete;
+      if (!ordersComplete) {
+        let nextUrl = ordersResume ?? firstHistoryUrl();
+        let historyPages = 0;
+        let ordersRead = 0;
+        try {
+          while (nextUrl) {
+            throwIfHostDeadline(config.deadlineMs, 0);
+            const current = await page(nextUrl, config, limiter);
+            historyPages += 1;
+            ordersRead += current.items.length;
+            config.diagnostics?.({ type: "history-page", page: historyPages, pageItems: current.items.length, ordersRead, hasNext: Boolean(current.nextPagePath) });
+            for (const order of current.items) {
+              try {
+                const trade = mapOrder(order, entity);
+                if (trade) trades.push(trade);
+              } catch (error) {
+                problems.push(error instanceof Error ? error.message : "Trading 212 order is invalid");
+              }
+            }
+            nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
+          }
+          ordersComplete = true;
+          historyComplete = true;
+          ordersResume = undefined;
+        } catch (error) {
+          historyComplete = false;
+          ordersComplete = false;
+          ordersResume = nextUrl || firstHistoryUrl();
+          notePaused(error);
+          problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
+        }
       }
 
       const readCashHistory = async (history: "transactions" | "dividends") => {
         const path = history === "transactions" ? TRANSACTIONS_PATH : DIVIDENDS_PATH;
         const seenPaths = new Set<string>();
         const seenReferences = new Set<string>();
-        const firstUrl = new URL(path, config.baseUrl);
-        firstUrl.searchParams.set("limit", String(CASH_HISTORY_PAGE_SIZE));
-        let nextUrl = firstUrl.toString();
+        const stored = history === "transactions" ? transactionsResume : dividendsResume;
+        let nextUrl = stored ?? firstCashUrl(path);
         let pageNumber = 0;
-        while (nextUrl) {
-          if (seenPaths.has(nextUrl)) throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
-          seenPaths.add(nextUrl);
-          const current = await historyPage(nextUrl, history === "transactions" ? "transaction" : "dividend", config, limiter);
-          pageNumber += 1;
-          config.diagnostics?.({ type: "cash-history-page", history, page: pageNumber, pageItems: current.items.length, hasNext: Boolean(current.nextPagePath) });
-          for (const row of current.items) {
-            try {
-              const reference = string(row.reference, `${history === "transactions" ? "transaction" : "dividend"} reference`);
-              if (seenReferences.has(reference)) continue;
-              seenReferences.add(reference);
-              if (history === "transactions") {
-                const mapped = mapTransaction(row, entity, accountCurrency);
-                if (mapped.flow) cashFlows.push(mapped.flow);
-                if (mapped.problem) problems.push(mapped.problem);
-              } else {
-                dividends.push(mapDividend(row, entity, accountCurrency));
+        try {
+          while (nextUrl) {
+            throwIfHostDeadline(config.deadlineMs, 0);
+            if (seenPaths.has(nextUrl)) throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
+            seenPaths.add(nextUrl);
+            const current = await historyPage(nextUrl, history === "transactions" ? "transaction" : "dividend", config, limiter);
+            pageNumber += 1;
+            config.diagnostics?.({ type: "cash-history-page", history, page: pageNumber, pageItems: current.items.length, hasNext: Boolean(current.nextPagePath) });
+            for (const row of current.items) {
+              try {
+                const reference = string(row.reference, `${history === "transactions" ? "transaction" : "dividend"} reference`);
+                if (seenReferences.has(reference)) continue;
+                seenReferences.add(reference);
+                if (history === "transactions") {
+                  const mapped = mapTransaction(row, entity, accountCurrency);
+                  if (mapped.flow) cashFlows.push(mapped.flow);
+                  if (mapped.problem) problems.push(mapped.problem);
+                } else {
+                  dividends.push(mapDividend(row, entity, accountCurrency));
+                }
+              } catch (error) {
+                problems.push(error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`);
               }
-            } catch (error) {
-              problems.push(error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`);
             }
+            nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
           }
-          nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
+        } catch (error) {
+          if (history === "transactions") transactionsResume = nextUrl || firstCashUrl(path);
+          else dividendsResume = nextUrl || firstCashUrl(path);
+          throw error;
         }
       };
 
-      for (const history of ["transactions", "dividends"] as const) {
-        try {
-          await readCashHistory(history);
-        } catch (error) {
-          noteRateLimit(error);
-          problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
+      // Cash history waits until order history is done so a resumed run does
+      // not spend the 6/min budget on a second stream while trades are incomplete.
+      if (ordersComplete) {
+        for (const history of ["transactions", "dividends"] as const) {
+          const alreadyDone = history === "transactions" ? transactionsComplete : dividendsComplete;
+          if (alreadyDone) continue;
+          try {
+            await readCashHistory(history);
+            if (history === "transactions") {
+              transactionsComplete = true;
+              transactionsResume = undefined;
+            } else {
+              dividendsComplete = true;
+              dividendsResume = undefined;
+            }
+          } catch (error) {
+            notePaused(error);
+            problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
+          }
         }
       }
-      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete);
+
+      const nextResume: BrokerSyncResume = {
+        ...(ordersComplete ? { ordersComplete: true } : ordersResume ? { ordersNextPagePath: ordersResume } : {}),
+        ...(transactionsComplete ? { transactionsComplete: true } : transactionsResume ? { transactionsNextPagePath: transactionsResume } : {}),
+        ...(dividendsComplete ? { dividendsComplete: true } : dividendsResume ? { dividendsNextPagePath: dividendsResume } : {}),
+      };
+      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete, nextResume, {
+        positionsComplete: holdingsComplete,
+        cashBalancesComplete: summaryComplete,
+      });
     },
   };
 }

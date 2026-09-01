@@ -171,8 +171,22 @@ declare type AanbodAntwoord =
  *  schakelaar niet heeft aangezet. Een uitnodiging om een leestoestemming aan te
  *  zetten, neergezet op het moment dat hij aan het afrekenen is, is reclame op
  *  het slechtste moment; die vraag hoort in het optiescherm. */
+/** De doorklik onder een aanbiedingenblok: waar hij dit ophaalt.
+ *
+ *  ÉÉN VASTE HERKOMST: `href` komt uit het matchpatroon van de bron zelf en niet
+ *  uit iets wat een pagina aanlevert. Zo kan er nooit een adres in staan dat een
+ *  winkel heeft gezet, en wijst de link altijd naar dezelfde plek waar hij ook
+ *  toestemming voor gaf. */
+declare type PaneelAanbodLink = { tekst: string; href: string };
+
 declare type PaneelAanbod = {
   kop: string;
+  /** Het antwoord in één korte, vette regel: "JBL-korting via je ING-punten".
+   *  "" als er geen regels zijn — dan is er geen antwoord om te geven en zegt
+   *  `toestand` waarom. */
+  antwoord: string;
+  /** Waar hij het ophaalt, of null als er niets te halen valt. */
+  link: PaneelAanbodLink | null;
   regels: PaneelPuntRegel[];
   /** De ene zin als er geen regels zijn: de echte oorzaak, niet een leeg blok.
    *  "" als er wél regels zijn. */

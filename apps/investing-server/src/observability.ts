@@ -1,5 +1,5 @@
 export type ProblemContext = {
-  source: "broker-sync";
+  source: "broker-sync" | "dashboard-read";
   broker?: string;
   problems: string[];
 };
@@ -27,7 +27,7 @@ export function createProblemReporter(input: {
   return (context) => {
     if (context.problems.length === 0) return;
     const safeContext = {
-      event: "investing.broker_sync.problems",
+      event: context.source === "broker-sync" ? "investing.broker_sync.problems" : "investing.dashboard_read.problems",
       source: context.source,
       ...(context.broker ? { broker: context.broker } : {}),
       problems: context.problems.map(redactProblem),

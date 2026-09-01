@@ -83,7 +83,7 @@ export function discoverPriceSyncTargets(input: {
 
 export function createPriceOrchestrator(input: {
   discover: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
-  sync: (target: PriceSyncTarget) => Promise<PriceSyncResult>;
+  sync: (target: PriceSyncTarget, tenantId: string) => Promise<PriceSyncResult>;
   paceMs?: number;
   now?: () => Date;
   wait?: (milliseconds: number) => Promise<void>;
@@ -118,7 +118,7 @@ export function createPriceOrchestrator(input: {
         const target = targets[index]!;
         update(tenantId, { status: "running", total: targets.length, completed: index, remainingSymbols: targets.slice(index).map((value) => value.symbol), currentSymbol: target.symbol, waitUntil: null, message: `Synchronizing ${target.symbol}`, problems: [...problems] });
         try {
-          const result = await input.sync(target);
+          const result = await input.sync(target, tenantId);
           problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
         } catch (error) {
           problems.push(`${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`);

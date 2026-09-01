@@ -29,6 +29,8 @@ import {
   collectAanbod,
   domeinVanKaart,
   hoortBijWinkel,
+  mogelijkeMerknaamMatch,
+  mogelijkeProductMatch,
   leesAanbod,
   leesEinddatum,
   registreerbaarDomein,
@@ -38,7 +40,7 @@ import {
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
-import { padIsSpecifiek, ontleedMatch } from "./sites.js";
+import { padIsSpecifiek, ontleedMatch } from "./bronnen.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const NU = "2026-08-22";
@@ -297,6 +299,83 @@ describe("een aanbieding wordt op domein gekoppeld, nooit op naam", () => {
     expect(hoortBijWinkel(nike, "www.nike.com.kwaad.net")).toBe(false);
   });
 
+  it("mogelijkeMerknaamMatch raakt een titel met de merknaam, en de namaakwinkel niet", () => {
+    /* De zwakkere, gehedgde tak (alleen bedoeld voor een PUNTEN-bron; zie
+     * aanbodVoorWinkel). Het label van de winkel moet als los woord in de
+     * titel voorkomen. */
+    const bon = aanbieding({ winkel: "JBL Tune Flex 2 (zwart) voor € 55 kortingsvoucher", domein: null });
+    expect(mogelijkeMerknaamMatch(bon, "www.jbl.nl")).toBe(true);
+    expect(mogelijkeMerknaamMatch(bon, "jbl.nl")).toBe(true);
+
+    /* Precies de fout die `hoortBijWinkel` niet mag maken, blijft hier ook
+     * fout: het label van een namaakwinkel is "jbl-outlet-nep", en dat komt als
+     * los woord niet in de titel voor — alleen "jbl" zelf doet dat, en dat is
+     * niet hetzelfde label. */
+    expect(mogelijkeMerknaamMatch(bon, "jbl-outlet-nep.nl")).toBe(false);
+    expect(mogelijkeMerknaamMatch(bon, "www.nike.com")).toBe(false);
+  });
+
+  it("mogelijkeMerknaamMatch weigert een te kort label en een winkel zonder afleidbaar domein", () => {
+    const bon = aanbieding({ winkel: "ING kortingsvoucher", domein: null });
+    /* "ing" is precies 3 tekens en zou op elk woord dat toevallig "ing" bevat
+     * kunnen raken als dit geen woordgrens-vergelijking was. Hier gaat het om
+     * een kort label op een host dat zelf niet "ing" heet. */
+    expect(mogelijkeMerknaamMatch(bon, "co.uk")).toBe(false);
+    expect(mogelijkeMerknaamMatch(bon, "winkel.onbekendetld")).toBe(false);
+
+    const kort = aanbieding({ winkel: "Nu-voucher", domein: null });
+    expect(mogelijkeMerknaamMatch(kort, "www.nu.nl")).toBe(false);
+  });
+
+  it("mogelijkeProductMatch raakt de ECHTE bol.com-titel van hetzelfde artikel", () => {
+    /* Dit is de tak die WEL werkt op een marktplaats: bol.com's hostnaam matcht
+     * nooit met "JBL", maar de productnaam op de pagina kan dat wel.
+     *
+     * DE PAGINATITEL HIERONDER IS ECHT, opgehaald op 27 augustus 2026 van
+     * bol.com/nl/nl/p/jbl-tune-flex-2-true-wireless-nc-earbuds-black/. Hij staat
+     * er letterlijk in omdat hij het gemeten verschil laat zien waar deze
+     * functie op stukliep: ING schrijft "(zwart)" en bol.com "Black". */
+    const bon = aanbieding({ winkel: "JBL Tune Flex 2 (zwart) voor € 55 kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 - True Wireless NC Earbuds - Black | bol")).toBe(true);
+
+    /* Een kleur is een VARIANT en geen eis: de witte pagina raakt óók. Dat is
+     * bewust ingeleverde precisie — zie de uitleg bij PRODUCT_MATCH_KLEUREN. */
+    expect(mogelijkeProductMatch(bon, "JBL Tune Flex 2 TWS oordopjes wit")).toBe(true);
+
+    /* Een ander JBL-artikel raakt niet: het merk alleen is niet genoeg. */
+    expect(mogelijkeProductMatch(bon, "JBL Charge 5 waterdichte bluetooth speaker")).toBe(false);
+    /* En de echte Sense Lite-pagina die de eigenaar ook probeerde: JBL, maar
+     * geen Tune Flex — dus terecht niets. */
+    expect(
+      mogelijkeProductMatch(bon, "JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol"),
+    ).toBe(false);
+  });
+
+  it("mogelijkeProductMatch eist het MERK erbij, zodat één algemeen woord nooit genoeg is", () => {
+    /* Na het wegstrepen van standaardtaal en kleur houdt deze titel alleen
+     * "grip" over. Zonder de merkeis zou elke pagina met het woord "grip" erin
+     * raak zijn — precies de "te ruime" fout die `hoortBijWinkel` afwees. */
+    const grip = aanbieding({ winkel: "JBL Grip (zwart) voor € 59 kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(grip, "JBL Grip draagbare speaker")).toBe(true);
+    expect(mogelijkeProductMatch(grip, "Samsonite Grip Handbagage Trolley 55cm Zwart")).toBe(false);
+
+    const tour = aanbieding({ winkel: "JBL Tour Pro 3 (zwart) voor € 179 kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(tour, "Grand Tour Reisgids Europa 2026")).toBe(false);
+  });
+
+  it("mogelijkeProductMatch weigert als er naast het merk niets onderscheidends overblijft", () => {
+    /* "JBL 15% kortingsvoucher" is merkbreed: er blijft naast "jbl" geen enkel
+     * onderscheidend woord over. Zo'n voucher aan élke JBL-pagina hangen is een
+     * andere bewering dan deze functie doet, dus hij matcht nergens. Hetzelfde
+     * geldt voor "ING kortingsvoucher". */
+    const merkbreed = aanbieding({ winkel: "JBL 15% kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(merkbreed, "JBL Charge 5 waterdichte bluetooth speaker")).toBe(false);
+
+    const bon = aanbieding({ winkel: "ING kortingsvoucher", domein: null });
+    expect(mogelijkeProductMatch(bon, "ING kortingsvoucher")).toBe(false);
+    expect(mogelijkeProductMatch(bon, "Willekeurig artikel")).toBe(false);
+  });
+
   it("koppelt een aanbieding zonder domein aan niets, ook niet aan de winkel met dezelfde naam", () => {
     /* Nike staat in de fixture zonder link naar de winkel. Dan is er geen
      * domein, en bij twijfel verschijnt er niets — de aanbieding staat wel in
@@ -331,10 +410,30 @@ function toestand(p: Partial<AanbodToestand> = {}): AanbodToestand {
 }
 
 describe("het blok bij een winkel", () => {
+  it("laat de gehedgde merknaam-match nooit vuren bij een KORTING-bron, ook niet zonder domein", () => {
+    /* De bewaking zit in `aanbodVoorWinkel`, niet in `mogelijkeMerknaamMatch`
+     * zelf. Een Amex-aanbieding zonder domein die toevallig de merknaam van de
+     * winkel in zijn titel draagt, mag NOOIT de zwakkere tak krijgen — dat zou
+     * bij een korting-bron precies de fout terugbrengen die `hoortBijWinkel`
+     * bestaat om te voorkomen. */
+    const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL", domein: null })] });
+    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU, AMEX_BRON, null);
+    expect(u.soort).toBe("geen-voor-deze-winkel");
+  });
+
+  it("laat de gehedgde product-match nooit vuren bij een KORTING-bron, ook niet met een passende productnaam", () => {
+    /* Zelfde bewaking, nu voor de tweede zwakke tak: een KORTING-aanbieding
+     * geldt alleen aan de kassa van de winkel zelf, hoe precies de paginainhoud
+     * ook aansluit. */
+    const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL Charge 5 speaker", domein: null })] });
+    const u = aanbodVoorWinkel(t, "www.bol.com", NU, AMEX_BRON, "JBL Charge 5 speaker");
+    expect(u.soort).toBe("geen-voor-deze-winkel");
+  });
+
   it("zwijgt volledig zolang hij de schakelaar niet heeft aangezet", () => {
     /* De enige toestand waarin er niets staat. Bij elke kassa herinneren aan een
      * leestoestemming die hij niet wilde, is geen melding maar een aansporing. */
-    const u = aanbodVoorWinkel(toestand({ aan: false }), "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(toestand({ aan: false }), "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("uit");
     const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.kop).toBe("");
@@ -344,7 +443,7 @@ describe("het blok bij een winkel", () => {
 
   it("noemt het als er niets voor DEZE winkel is, met de dag en het aantal", () => {
     const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl" })] });
-    const u = aanbodVoorWinkel(t, "www.ikea.com", NU);
+    const u = aanbodVoorWinkel(t, "www.ikea.com", NU, AMEX_BRON, null);
     expect(u.soort).toBe("geen-voor-deze-winkel");
     const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.regels).toHaveLength(0);
@@ -358,7 +457,7 @@ describe("het blok bij een winkel", () => {
     const t = toestand({
       aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", prijsTekst: "30% korting", tot: "2026-12-31" })],
     });
-    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("gevonden");
     const blok = aanbodBlok(u, NU, AMEX_BRON);
     expect(blok.regels).toHaveLength(1);
@@ -376,7 +475,7 @@ describe("het blok bij een winkel", () => {
     const t = toestand({
       aanbiedingen: [aanbieding({ winkel: "HEMA", domein: "hema.nl", tot: "2026-07-01" })],
     });
-    const u = aanbodVoorWinkel(t, "www.hema.nl", NU);
+    const u = aanbodVoorWinkel(t, "www.hema.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("gevonden");
     if (u.soort !== "gevonden") return;
     expect(u.geldig).toHaveLength(0);
@@ -403,7 +502,7 @@ describe("het blok bij een winkel", () => {
       domein: "jbl.nl",
       gelezenOp: "2026-06-01",
     });
-    const u = aanbodVoorWinkel(toestand({ aanbiedingen: [oud] }), "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(toestand({ aanbiedingen: [oud] }), "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("te-oud");
     const blok = aanbodBlok(u, NU, AMEX_BRON);
     /* GEEN regels: de laatst bekende lijst blijven tonen alsof hij vers is, is
@@ -415,7 +514,7 @@ describe("het blok bij een winkel", () => {
 
   it("markeert een lijst tussen de twee grenzen als oud, maar toont hem nog wel", () => {
     const halfoud = aanbieding({ winkel: "JBL", domein: "jbl.nl", gelezenOp: "2026-08-01" });
-    const u = aanbodVoorWinkel(toestand({ aanbiedingen: [halfoud] }), "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(toestand({ aanbiedingen: [halfoud] }), "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("gevonden");
     if (u.soort !== "gevonden") return;
     expect(u.dagen).toBe(21);
@@ -433,14 +532,14 @@ describe("het blok bij een winkel", () => {
       lezing: { uitkomst: "blok-zonder-kaarten", aantal: 0, op: NU, citaat: "" },
       aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", gelezenOp: "2026-08-19" })],
     };
-    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("gevonden");
     if (u.soort !== "gevonden") return;
     expect(u.op).toBe("2026-08-19");
   });
 
   it("noemt bij een lege opslag de oorzaak uit de laatste poging", () => {
-    const nooit = aanbodVoorWinkel(toestand({ lezing: null }), "www.jbl.nl", NU);
+    const nooit = aanbodVoorWinkel(toestand({ lezing: null }), "www.jbl.nl", NU, AMEX_BRON, null);
     expect(nooit.soort).toBe("nooit-gelezen");
     expect(aanbodToestandRegel(nooit, AMEX_BRON)).toContain("nog niet gelezen");
 
@@ -448,6 +547,8 @@ describe("het blok bij een winkel", () => {
       toestand({ lezing: { uitkomst: "niet-ingelogd", aantal: 0, op: NU, citaat: "" } }),
       "www.jbl.nl",
       NU,
+      AMEX_BRON,
+      null,
     );
     expect(mislukt.soort).toBe("lezing-mislukt");
     expect(aanbodToestandRegel(mislukt, AMEX_BRON)).toContain("niet ingelogd");
@@ -455,7 +556,7 @@ describe("het blok bij een winkel", () => {
 
   it("behandelt een lijst zonder leesbare leeftijd als te oud, niet als vers", () => {
     const t = toestand({ aanbiedingen: [aanbieding({ winkel: "JBL", domein: "jbl.nl", gelezenOp: "geen-datum" })] });
-    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU);
+    const u = aanbodVoorWinkel(t, "www.jbl.nl", NU, AMEX_BRON, null);
     expect(u.soort).toBe("te-oud");
     expect(aanbodToestandRegel(u, AMEX_BRON)).toContain("geen leesbare datum");
   });

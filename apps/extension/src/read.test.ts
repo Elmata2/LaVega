@@ -38,6 +38,15 @@ function read(name: string, host = "voorbeeld.nl") {
 }
 
 describe("echt opgehaalde winkelpagina's", () => {
+  /* TOT 26 AUGUSTUS 2026 sloot sites.ts coolblue.nl op grond van precies deze
+   * test uit: geldige, eenduidige JSON-LD, maar voor een ander artikel dan de
+   * pagina toonde (deze AirPods-URL gaf de prijs van een Samsonite kofferset;
+   * een Sonos-URL gaf een PlayStation 5). Sinds de brede <all_urls>-toestemming
+   * is er geen lijst meer om een domein uit te sluiten — dit is dus niet meer
+   * "waarom Coolblue niet meedoet" maar een GEDOCUMENTEERDE, GEACCEPTEERDE
+   * beperking van de generieke lezer: readCheckout kan dit soort fout niet
+   * onderscheiden van een kloppend antwoord. Zie
+   * docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md. */
   it("coolblue.nl: leest 420 EUR uit het JSON-LD Offer, als ARTIKELprijs", () => {
     const r = read("coolblue-product.html", "www.coolblue.nl");
     expect(r.ok).toBe(true);
@@ -252,34 +261,40 @@ describe("parseAmountToCents", () => {
 });
 
 describe("wat de extensie van een pagina meeneemt", () => {
-  /* DEZE TWEE TESTS ZIJN DE REDACTIEGRENS. Komt er een veld bij dat er niet in
-   * staat, dan vallen ze om — en dat is de bedoeling: dat is het moment waarop
-   * iemand moet uitleggen waarom de extensie méér van de pagina nodig heeft dan
-   * een bedrag. */
+  /* DEZE TWEE TESTS WAREN DE HELE REDACTIEGRENS, TOT 27 AUGUSTUS 2026. Komt er
+   * een veld bij dat er niet in staat, dan vallen ze om — en dat is nog steeds
+   * de bedoeling voor alles BEHALVE de productnaam: die is toen bewust en
+   * expliciet toegevoegd (V11, de merknaam-op-paginainhoud-match — nodig omdat
+   * V10's merknaam-match alleen op de HOSTNAAM van de winkel kon matchen, en
+   * dus nooit op een marktplaats die het artikel van een andere merk verkoopt).
+   * Omschrijving, artikelnummer en afbeelding blijven wél buiten de deur. */
 
-  it("alleen de host en de bedragen — geen titel, geen artikelnaam, geen omschrijving", () => {
+  it("de host, de bedragen en de productnaam — geen omschrijving, geen artikelnummer, geen afbeelding", () => {
     const html = readFileSync(join(FIXTURES, "coolblue-product.html"), "utf8");
     const doc = new DOMParser().parseFromString(html, "text/html");
     const ev = collectEvidence(doc, "www.coolblue.nl");
 
-    expect(Object.keys(ev).sort()).toEqual(["candidates", "host"]);
+    expect(Object.keys(ev).sort()).toEqual(["candidates", "host", "productNaam"]);
     expect(ev.host).toBe("www.coolblue.nl");
+    expect(ev.productNaam).toBe("Samsonite S'cure Spinner 69+75+75cm Black kofferset");
     for (const c of ev.candidates) {
       expect(Object.keys(c).sort()).toEqual(["basis", "currency", "raw", "via"]);
     }
   });
 
-  it("de naam en de omschrijving van het artikel reizen niet mee", () => {
-    /* De Coolblue-fixture bevat de naam "Samsonite S'cure Spinner" en een
-     * omschrijving van vijf regels in dezelfde JSON-LD als de prijs. Die stonden
-     * in de eerste opzet in het bewijsmateriaal, omdat het ontcijferen toen in
-     * de popup gebeurde en het hele blok als tekst meereisde. */
+  it("de omschrijving en de afbeelding van het artikel reizen niet mee — de naam wel, en dat is de enige uitzondering", () => {
+    /* De Coolblue-fixture bevat naast de naam een omschrijving van vijf regels
+     * en een afbeeldings-URL in dezelfde JSON-LD als de prijs. Die stonden in de
+     * eerste opzet ook in het bewijsmateriaal, omdat het ontcijferen toen in de
+     * popup gebeurde en het hele blok als tekst meereisde — en die twee blijven
+     * hier wél weg. Alleen de naam is met opzet losgemaakt van die grens. */
     const html = readFileSync(join(FIXTURES, "coolblue-product.html"), "utf8");
     const doc = new DOMParser().parseFromString(html, "text/html");
     const ev = collectEvidence(doc, "www.coolblue.nl");
 
-    const serialised = JSON.stringify(ev);
-    expect(serialised).not.toContain("Samsonite");
+    expect(ev.productNaam).not.toBeNull();
+    const zonderNaam = { ...ev, productNaam: null };
+    const serialised = JSON.stringify(zonderNaam);
     expect(serialised).not.toContain("kofferset");
     expect(serialised).not.toContain("image.coolblue.nl");
   });
@@ -358,6 +373,7 @@ describe("een prijsbereik is geen prijs", () => {
     const zonderReeks = {
       host: ev.host,
       candidates: ev.candidates.filter((c) => c.via === "JSON-LD Offer"),
+      productNaam: ev.productNaam,
     };
     expect(readCheckout(zonderReeks).ok).toBe(true); // dit is wat er zou gebeuren
     expect(readCheckout(ev).ok).toBe(false); // en dit is wat er gebeurt
@@ -588,16 +604,68 @@ describe("de via-etiketten", () => {
 });
 
 describe("de redactiegrens houdt ook bij de nieuwe fixture", () => {
-  it("de IKEA-pagina laat naam, artikelnummer en verkoper achter", () => {
+  it("de IKEA-pagina laat het artikelnummer en de verkoper-URL achter, en draagt de naam alleen in productNaam", () => {
     const ev = bewijs("ikea-slakt-actieprijs.html", "www.ikea.com");
-    const serialised = JSON.stringify(ev);
+    expect(ev.productNaam).toBe("SLÄKT Bedframe met lattenbodem - wit 90x200 cm");
+
+    const zonderNaam = { ...ev, productNaam: null };
+    const serialised = JSON.stringify(zonderNaam);
     expect(serialised).not.toContain("SLÄKT");
     expect(serialised).not.toContain("792.277.55");
     expect(serialised).not.toContain("ikea.com/nl/nl/p/");
-    expect(Object.keys(ev).sort()).toEqual(["candidates", "host"]);
+    expect(Object.keys(ev).sort()).toEqual(["candidates", "host", "productNaam"]);
     for (const c of ev.candidates) {
       expect(Object.keys(c).sort()).toEqual(["basis", "currency", "raw", "via"]);
     }
+  });
+});
+
+describe("productNaam: waar hij vandaan komt, en waarvandaan niet", () => {
+  it("leest de naam uit een JSON-LD Product, niet uit een ander @type op dezelfde pagina", () => {
+    /* De fixture draagt ook een BreadcrumbList met een eigen "name"-veld
+     * ("Audio") — dat mag niet als productnaam doorkomen. */
+    const ev = bewijs("kunstmatig-productnaam-og-title.html");
+    expect(ev.productNaam).toBe("JBL Tune Flex 2 TWS oordopjes zwart");
+  });
+
+  it("valt terug op og:title als er geen JSON-LD Product is", () => {
+    /* Dezelfde fixture als hierboven test toevallig beide: er staat geen
+     * JSON-LD Product op, dus dit IS de og:title-tak. Een aparte assertie hier
+     * zodat een toekomstige wijziging aan de JSON-LD-tak deze niet per ongeluk
+     * stil laat vallen. */
+    const ev = bewijs("kunstmatig-productnaam-og-title.html");
+    expect(ev.productNaam).not.toBeNull();
+  });
+
+  it("valt terug op itemprop=\"name\" binnen een Product-itemscope, en negeert de naam van de organisatie erbuiten", () => {
+    const ev = bewijs("kunstmatig-productnaam-itemprop.html");
+    expect(ev.productNaam).toBe("Boombox 4 25W bluetooth speaker");
+    expect(ev.productNaam).not.toContain("Voorbeeldwinkel");
+  });
+
+  it("is null als geen van de drie bronnen iets opleverde", () => {
+    const ev = bewijs("hema-geen-prijsmarkup.html");
+    expect(ev.productNaam).toBeNull();
+  });
+
+  it("og:title gaat voor een ProductGroup met varianten — anders komt de VERKEERDE variant erdoor", () => {
+    /* Het echte, gemeten geval: bol.com zet een pagina neer als ÉÉN
+     * ProductGroup (naam zonder kleur) met vijf losse Product-varianten
+     * erin. De eerst genoemde variant in deze fixture is "Wit" — een andere
+     * kleur dan de "Zwart" die de bezochte pagina en og:title allebei noemen.
+     * Zonder de og:title-voorrang zou "eerste Product wint" hier stilzwijgend
+     * de witte variant hebben opgeleverd. */
+    const ev = bewijs("bol-productgroup.html", "www.bol.com");
+    expect(ev.productNaam).toBe("JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol");
+    expect(ev.productNaam).not.toContain("Wit");
+  });
+
+  it("valt terug op de ProductGroup-naam als er geen og:title is, niet op een willekeurige variant", () => {
+    const html = readFileSync(join(FIXTURES, "bol-productgroup.html"), "utf8");
+    const zonderOgTitle = html.replace(/<meta property="og:title"[^>]*>\n?/, "");
+    const doc = new DOMParser().parseFromString(zonderOgTitle, "text/html");
+    const ev = collectEvidence(doc, "www.bol.com");
+    expect(ev.productNaam).toBe("JBL Sense Lite - Volledig draadloze open-ear oordopjes");
   });
 });
 

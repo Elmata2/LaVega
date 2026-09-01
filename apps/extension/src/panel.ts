@@ -39,6 +39,8 @@ import { reasonText } from "./read.js";
 import {
   aanbodRegel,
   aanbodBron,
+  aanbodAntwoord,
+  aanbodLink,
   aanbodToestandRegel,
   aanbodKopWinkel,
   aanbodKopLijst,
@@ -64,8 +66,15 @@ export type Caps = {
 /** Het paneel over de winkel heen: kort. */
 export const PANEEL_CAPS: Caps = { mijn: 3, openen: 1, achteruit: 1, onbekendeKosten: 1 };
 
-/** De popup: alles, want die heeft hij zelf opengeklikt. */
-export const POPUP_CAPS: Caps = {
+/** Ongekapt: alle rijen, in volgorde, zonder afkapping.
+ *
+ *  HEETTE POPUP_CAPS EN DE POPUP GEBRUIKT HEM NIET MEER. Sinds 27 augustus 2026
+ *  toont het werkbalkvenster geen kaartranglijst meer (alleen punten en
+ *  aanbiedingen), dus de enige overgebleven gebruiker is panel.test.ts — waar
+ *  hij precies doet wat hier staat: bewijzen dat de VOLGORDE klopt zonder dat
+ *  een cap de staart afknipt. De naam is daarom veranderd naar wat hij is en
+ *  niet naar waar hij ooit heen ging. */
+export const ONGEKAPT: Caps = {
   mijn: Infinity,
   openen: Infinity,
   achteruit: Infinity,
@@ -183,21 +192,52 @@ export function puntenBlok(rijen: readonly PuntenRij[], amountCents: number | nu
  *  "voor deze winkel staat er geen aanbieding in wat we op 12 augustus lazen" is
  *  een antwoord, en een leeg blok is dat niet. */
 export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string, bron: Bron): PaneelAanbod {
-  if (uitkomst.soort === "uit") return { kop: "", regels: [], toestand: "" };
+  if (uitkomst.soort === "uit") return { kop: "", antwoord: "", link: null, regels: [], toestand: "" };
 
-  if (uitkomst.soort === "gevonden") {
-    /* De geldige eerst, de verlopen eronder. Ze door elkaar zetten zou een
-     * verlopen aanbieding de plek geven van een bruikbare. */
-    const regels = [...uitkomst.geldig, ...uitkomst.verlopen].map((a) => ({
+  const rijenVan = (aanbiedingen: readonly Aanbieding[]) =>
+    aanbiedingen.map((a) => ({
       titel: a.winkel,
       regel: aanbodRegel(a, asOf, bron),
       bron: aanbodBron(a, asOf, bron),
     }));
-    return { kop: aanbodKopWinkel(bron), regels, toestand: "" };
+
+  if (uitkomst.soort === "gevonden") {
+    /* De geldige eerst, de verlopen eronder. Ze door elkaar zetten zou een
+     * verlopen aanbieding de plek geven van een bruikbare. */
+    const alle = [...uitkomst.geldig, ...uitkomst.verlopen];
+    return {
+      kop: aanbodKopWinkel(bron),
+      antwoord: aanbodAntwoord(alle, bron),
+      link: aanbodLink(bron),
+      regels: rijenVan(alle),
+      toestand: "",
+    };
+  }
+
+  /* DE TWEE ZWAKKE KOPPELINGEN KRIJGEN NU ÓÓK RIJEN, en dat is de reparatie van
+   * een echt gat. Ze vielen hieronder in de toestand-tak, waardoor drie
+   * gevonden vouchers als één lange zin op het scherm kwamen met de titels
+   * ertussen gepropt — precies de brij die dit paneel niet hoort te zijn.
+   *
+   * DE HEDGE GAAT NIET VERLOREN. `toestand` blijft gevuld met de zin die zegt
+   * dat dit een MOGELIJKE match is en dat LaVega niet weet of het hier te
+   * verzilveren is; content.ts zet die onder de rijen in de vouw. Zo staat het
+   * antwoord vooraan en het voorbehoud er nog steeds bij — wat het niet meer
+   * doet, is het antwoord onleesbaar maken. */
+  if (uitkomst.soort === "mogelijke-merknaam-match" || uitkomst.soort === "mogelijke-product-match") {
+    return {
+      kop: aanbodKopWinkel(bron),
+      antwoord: aanbodAntwoord(uitkomst.matches, bron),
+      link: aanbodLink(bron),
+      regels: rijenVan(uitkomst.matches),
+      toestand: aanbodToestandRegel(uitkomst, bron),
+    };
   }
 
   return {
     kop: aanbodKopWinkel(bron),
+    antwoord: "",
+    link: null,
     regels: [],
     toestand: aanbodToestandRegel(uitkomst, bron),
   };
@@ -225,7 +265,7 @@ export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string, bron: Bron): 
  *  einddatum draagt komt onderaan die groep; dat is geen "onbeperkt geldig",
  *  alleen "we weten het niet", en dat staat ook in de regel zelf. */
 export function aanbodLijst(toestand: AanbodToestand, asOf: string, bron: Bron): PaneelAanbod {
-  if (!toestand.aan) return { kop: "", regels: [], toestand: "" };
+  if (!toestand.aan) return { kop: "", antwoord: "", link: null, regels: [], toestand: "" };
 
   if (toestand.aanbiedingen.length === 0) {
     const uitkomst: AanbodUitkomst = !toestand.lezing
@@ -233,7 +273,13 @@ export function aanbodLijst(toestand: AanbodToestand, asOf: string, bron: Bron):
       : toestand.lezing.uitkomst === "gelezen"
         ? { soort: "geen-voor-deze-winkel", op: toestand.lezing.op, dagen: 0, totaal: 0 }
         : { soort: "lezing-mislukt", lezing: toestand.lezing };
-    return { kop: aanbodKopLijst(bron), regels: [], toestand: aanbodToestandRegel(uitkomst, bron) };
+    return {
+      kop: aanbodKopLijst(bron),
+      antwoord: "",
+      link: null,
+      regels: [],
+      toestand: aanbodToestandRegel(uitkomst, bron),
+    };
   }
 
   const verlopen = (a: Aanbieding): boolean => a.tot !== null && a.tot < asOf;
@@ -246,6 +292,8 @@ export function aanbodLijst(toestand: AanbodToestand, asOf: string, bron: Bron):
 
   return {
     kop: aanbodKopLijst(bron),
+    antwoord: aanbodAntwoord(gesorteerd, bron),
+    link: aanbodLink(bron),
     regels: gesorteerd.map((a) => ({
       titel: a.winkel,
       regel: aanbodRegel(a, asOf, bron),

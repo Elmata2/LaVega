@@ -160,6 +160,8 @@ Expose price progress separately from broker progress at `GET /api/prices/sync/s
 
 Render cached partial data while backfill continues. A failed symbol retries on the next orchestrator run because it has no completed cache range. Benchmark lines appear and extend as their own histories arrive. They never block the portfolio line.
 
+`GET /api/investing/dashboard` returns a valid empty dashboard with a problem message when the read model cannot be assembled. It must not return 503 for broker, snapshot, price-cache, FX, or benchmark-read failures, because the dashboard shell also contains reconnect and resync controls. The server logs the redacted failure under `investing.dashboard_read.problems`; the browser keeps the dashboard open and shows the problem banner.
+
 Maintain an in-memory `dataVersion`. Increment it after broker data is applied and after a price-store upsert completes. Cache the last `InvestingDashboardData` with its version. Recompute only when the version changes.
 
 ## Overview layout
@@ -367,7 +369,7 @@ Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega
 
 ## Loading, empty, and error states
 
-Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources.
+Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.

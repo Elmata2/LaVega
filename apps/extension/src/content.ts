@@ -78,6 +78,30 @@
     .bron { color: #6f6a5f; font-size: 11.5px; }
     .voet { margin-top: 12px; padding-top: 8px; border-top: 1px solid #eae6dd;
             color: #6f6a5f; font-size: 11px; }
+    /* HET ANTWOORD: de naam van de kaart die hier het meest oplevert, en verder
+     * niets. De onderbouwing zit in een vouw eronder. */
+    .antwoord { margin-top: 2px; font-size: 15px; font-weight: 600; }
+    /* Eén aanbieding, één regel. De hulp-cursor zegt dat er meer achter zit; de
+     * volledige tekst zit in het title-attribuut en nog eens in de restvouw. */
+    .aanbieding { margin-top: 6px; cursor: help; }
+    .aanbieding::before { content: "• "; color: #6f6a5f; }
+    .link { display: inline-block; margin-top: 8px; color: #1c1c1a; font-weight: 600; }
+    .link:focus-visible { outline: 2px solid #1c1c1a; outline-offset: 2px; border-radius: 3px; }
+    /* De vouwen. GEEN TRANSITION — zie de kop van dit bestand; <details> opent
+     * en sluit, het schuift niet. */
+    .vouw { margin-top: 10px; border-top: 1px solid #eae6dd; padding-top: 8px; }
+    .vouw > summary {
+      cursor: pointer; color: #6f6a5f; font-size: 11.5px;
+      list-style: none; user-select: none;
+    }
+    .vouw > summary::-webkit-details-marker { display: none; }
+    .vouw > summary::after { content: " ▾"; font-size: 10px; }
+    .vouw[open] > summary::after { content: " ▴"; }
+    .vouw > summary:focus-visible { outline: 2px solid #1c1c1a; outline-offset: 2px; border-radius: 3px; }
+    /* Binnen een vouw begint het eerste kopje niet aan een tweede streep: de
+     * vouw zelf is al de scheiding. */
+    .vouw > .groep:first-of-type { border-top: 0; margin-top: 6px; padding-top: 0; }
+    .vouw > .voet { border-top: 0; margin-top: 6px; padding-top: 0; }
   `;
 
   const GROEPKOP: Record<PaneelGroep, string> = {
@@ -134,79 +158,176 @@
     balk.appendChild(sluit);
     paneel.appendChild(balk);
 
-    /* Het aanbiedingenblok staat BOVEN de punten, en dat is een uitspraak over
-     * wat er hier het meest toe doet. Een Amex-aanbieding hangt aan DEZE winkel
-     * en aan een einddatum; een puntensaldo hangt aan geen van beide en is er
-     * volgende week nog. Wat aan deze kassa iets verandert, staat boven wat
-     * overal hetzelfde is.
+    /* ── DE INDELING, EN DE REGEL DIE HEM BEPAALT ──────────────────────────
      *
-     * Een lege `kop` betekent zwijgen: dan heeft hij de schakelaar niet
-     * aangezet, en dan hoort er bij het afrekenen geen uitnodiging te staan. */
-    function toonAanbod(aanbod: PaneelAanbod): void {
-      if (!aanbod.kop) return;
-      paneel.appendChild(el("div", "groep", aanbod.kop));
-      if (aanbod.regels.length === 0) {
-        paneel.appendChild(el("div", "uitleg", aanbod.toestand));
-        return;
-      }
-      for (const r of aanbod.regels) {
-        const rij = el("div", "rij");
-        rij.appendChild(el("div", "titel", r.titel));
-        rij.appendChild(el("div", "regel", r.regel));
-        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
-        paneel.appendChild(rij);
+     * Wat je BESLISSING verandert staat open; wat het UITLEGT of GERUSTSTELT
+     * vouwt weg. Voorheen stond alles even hard op het scherm: drie kaartregels
+     * van elk drie- tot vierhonderd tekens, met de punten, de aanbiedingen en de
+     * voetregel eronder — en dan is er geen antwoord meer, alleen tekst.
+     *
+     * Er wordt hier NIETS weggegooid. Elke zin die er stond staat er nog, één
+     * klik verderop. Dat is het verschil tussen korter maken en minder zeggen.
+     *
+     * De volgorde BINNEN de vouwen blijft wat hij was: aanbiedingen boven
+     * punten boven kaarten, om de redenen die hieronder bij elk blok staan. */
+    function vouw(samenvatting: string): HTMLDetailsElement {
+      const d = el("details", "vouw") as HTMLDetailsElement;
+      const s = document.createElement("summary");
+      s.textContent = samenvatting;
+      d.appendChild(s);
+      return d;
+    }
+
+    function rij(r: PaneelPuntRegel | PaneelRegel): HTMLElement {
+      const e = el("div", "rij");
+      e.appendChild(el("div", "titel", r.titel));
+      e.appendChild(el("div", "regel", r.regel));
+      if (r.bron) e.appendChild(el("div", "bron", r.bron));
+      return e;
+    }
+
+    /* Een aanbieding die ECHT bij deze winkel of dit artikel hoort, verandert
+     * wat je hier doet — die hoort dus bij het antwoord en niet in een vouw. De
+     * toestandszin ("geen van je vouchers hoort bij deze winkel") legt alleen
+     * uit waarom er niets staat, en dat is precies geruststelling: die vouwt.
+     *
+     * Een lege `kop` betekent nog steeds zwijgen: dan heeft hij de schakelaar
+     * niet aangezet, en dan hoort er bij het afrekenen geen uitnodiging te
+     * staan. */
+    const aanbodMetRegels = antwoord.aanbod.filter((a) => a.kop && a.regels.length > 0);
+    const aanbodZonderRegels = antwoord.aanbod.filter((a) => a.kop && a.regels.length === 0);
+
+    /* EEN AANBIEDING IS ÉÉN REGEL, en de rest hangt eronder in de titel-tip.
+     *
+     * De volledige zin (puntenprijs, einddatum, het voorbehoud van ING zelf) en
+     * de leesdatum staan in het `title`-attribuut, dus ze zijn er nog — maar ze
+     * duwen het antwoord niet meer van het scherm.
+     *
+     * HOVER IS NIET HET ENIGE PAD ERNAARTOE. Wie geen muis heeft ziet dezelfde
+     * zinnen in de restvouw onderaan; `title` is de snelkoppeling en niet de
+     * enige weg. Dat onderscheid is de reden dat de zinnen ook nog ergens
+     * volledig uitgeschreven staan. */
+    function toonAanbodRegels(doel: HTMLElement): void {
+      for (const blok of aanbodMetRegels) {
+        if (blok.antwoord) doel.appendChild(el("div", "antwoord", blok.antwoord));
+        for (const r of blok.regels) {
+          const e = el("div", "aanbieding", r.titel);
+          const tip = [r.regel, r.bron].filter((t) => t).join("\n\n");
+          if (tip) e.title = tip;
+          doel.appendChild(e);
+        }
+        if (blok.link) {
+          /* Een echte link en geen knop: hij mag hem in een nieuw tabblad openen
+           * of kopiëren, en het adres komt uit het matchpatroon van de bron —
+           * nooit van de pagina waar dit paneel op staat. `noopener` omdat de
+           * geopende pagina anders via `window.opener` bij dit tabblad kan. */
+          const a = document.createElement("a");
+          a.className = "link";
+          a.textContent = `${blok.link.tekst} →`;
+          a.href = blok.link.href;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          doel.appendChild(a);
+        }
       }
     }
 
-    /* Het puntenblok staat BOVEN de kaarten, in allebei de toestanden. Dat is
-     * geen opmaakvoorkeur: dit is wat hij al heeft liggen, en het is het enige
-     * deel dat ook nog iets zegt als het bedrag op deze pagina niet te lezen
-     * was. */
-    function toonPunten(punten: PaneelPunten): void {
+    /* Het puntenblok stond BOVEN de kaarten omdat het het enige deel is dat ook
+     * nog iets zegt als het bedrag niet te lezen was. Dat blijft zo binnen de
+     * vouw: het staat er vóór de kaarten in. Wat het niet meer doet is het
+     * antwoord wegdrukken — een saldo dat er volgende week ook nog is, is geen
+     * antwoord op de vraag "welke kaart nu". */
+    function toonPunten(doel: HTMLElement, punten: PaneelPunten): void {
       if (punten.leeg) {
-        paneel.appendChild(el("div", "groep", PUNTENKOP));
-        paneel.appendChild(el("div", "uitleg", punten.leeg));
+        doel.appendChild(el("div", "groep", PUNTENKOP));
+        doel.appendChild(el("div", "uitleg", punten.leeg));
         return;
       }
       if (punten.regels.length === 0) return;
-      paneel.appendChild(el("div", "groep", PUNTENKOP));
-      for (const r of punten.regels) {
-        const rij = el("div", "rij");
-        rij.appendChild(el("div", "titel", r.titel));
-        rij.appendChild(el("div", "regel", r.regel));
-        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
-        paneel.appendChild(rij);
+      doel.appendChild(el("div", "groep", PUNTENKOP));
+      for (const r of punten.regels) doel.appendChild(rij(r));
+      if (punten.voetnoot) doel.appendChild(el("div", "bron", punten.voetnoot));
+    }
+
+    /* De restvouw: alles wat geen antwoord is en ook geen onderbouwing van het
+     * antwoord — de punten, de uitleg waarom er geen aanbieding staat, en de
+     * voetregel met de peildatums en de leesgrens. */
+    function toonRest(punten: PaneelPunten, voet: string): void {
+      const rest = vouw("Punten en wat LaVega hier niet weet");
+      /* HET VOORBEHOUD BIJ EEN GEVONDEN AANBIEDING, en het hoort er nog steeds
+       * te staan. Bij een merknaam- of productmatch zegt deze zin dat het een
+       * MOGELIJKE match is en dat LaVega niet weet of het hier te verzilveren
+       * is. Dat is precies het soort zin die niet mag verdwijnen omdat hij het
+       * antwoord in de weg zat — hij verhuist, hij vervalt niet. */
+      for (const blok of aanbodMetRegels) {
+        if (blok.toestand) rest.appendChild(el("div", "uitleg", blok.toestand));
       }
-      if (punten.voetnoot) paneel.appendChild(el("div", "bron", punten.voetnoot));
+      toonPunten(rest, punten);
+      for (const blok of aanbodZonderRegels) {
+        rest.appendChild(el("div", "groep", blok.kop));
+        rest.appendChild(el("div", "uitleg", blok.toestand));
+      }
+      rest.appendChild(el("div", "voet", voet));
+      paneel.appendChild(rest);
     }
 
     if (antwoord.soort === "geen-bedrag") {
+      /* HIER IS DE UITLEG HET ANTWOORD. "Het bedrag is hier niet te lezen, vul
+       * het zelf in" is precies wat hij moet weten en doen; er is niets om
+       * onder te bouwen. Hij blijft dus open staan. */
       paneel.appendChild(el("div", "kop", antwoord.kop));
       paneel.appendChild(el("div", "uitleg", antwoord.uitleg));
-      for (const blok of antwoord.aanbod) toonAanbod(blok);
-      toonPunten(antwoord.punten);
-      paneel.appendChild(el("div", "voet", antwoord.voet));
+      toonAanbodRegels(paneel);
+      toonRest(antwoord.punten, antwoord.voet);
     } else {
       if (antwoord.bedrag) paneel.appendChild(el("div", "bedrag", antwoord.bedrag));
       if (antwoord.bedragNoot) paneel.appendChild(el("div", "noot", antwoord.bedragNoot));
-      for (const blok of antwoord.aanbod) toonAanbod(blok);
-      toonPunten(antwoord.punten);
-      paneel.appendChild(el("div", "kop", antwoord.kop));
 
-      let vorigeGroep: PaneelGroep | null = null;
-      for (const r of antwoord.regels) {
-        if (r.groep !== vorigeGroep) {
-          paneel.appendChild(el("div", "groep", GROEPKOP[r.groep]));
-          vorigeGroep = r.groep;
-        }
-        const rij = el("div", "rij");
-        rij.appendChild(el("div", "titel", r.titel));
-        rij.appendChild(el("div", "regel", r.regel));
-        if (r.bron) rij.appendChild(el("div", "bron", r.bron));
-        paneel.appendChild(rij);
+      /* HET ANTWOORD: de bovenste regel, en alleen zijn naam. `panelRows` heeft
+       * ze al gerangschikt, dus de bovenste IS de aanbeveling.
+       *
+       * MET ZIJN GROEPKOP ERBOVEN, en dat is geen opmaak maar eerlijkheid. De
+       * bovenste regel is niet altijd een kaart die hij HEEFT: het kan er een
+       * zijn die hij zou kunnen openen, of zelfs een die na kaartkosten geld
+       * kost. Alleen de naam groot neerzetten zou van "zou je kunnen openen"
+       * een aanbeveling maken die er niet stond. De kop zegt welke van de zes
+       * het is, en die tekst komt onveranderd uit GROEPKOP. */
+      const [beste, ...overige] = antwoord.regels;
+      if (beste) {
+        paneel.appendChild(el("div", "groep", GROEPKOP[beste.groep]));
+        paneel.appendChild(el("div", "antwoord", beste.titel));
       }
 
-      paneel.appendChild(el("div", "voet", antwoord.voet));
+      toonAanbodRegels(paneel);
+
+      /* De onderbouwing van precies díé kaart: de volledige zin met alle
+       * voorwaarden erin, plus de bron met zijn controledatum. Ongewijzigd —
+       * hij staat alleen niet meer standaard open. */
+      if (beste) {
+        const waarom = vouw("Waarom deze kaart");
+        waarom.appendChild(el("div", "regel", beste.regel));
+        if (beste.bron) waarom.appendChild(el("div", "bron", beste.bron));
+        paneel.appendChild(waarom);
+      }
+
+      /* De rest van de kaarten, met hun groepkoppen zoals ze waren. Niets wordt
+       * hier afgekapt: `panelRows` heeft de caps al toegepast en laat de
+       * onbekenden er met opzet ongekapt in — dat mag deze vouw niet alsnog
+       * stilzwijgend wegpoetsen. */
+      if (overige.length > 0) {
+        const meer = vouw(`Je andere kaarten (${overige.length})`);
+        let vorigeGroep: PaneelGroep | null = beste ? beste.groep : null;
+        for (const r of overige) {
+          if (r.groep !== vorigeGroep) {
+            meer.appendChild(el("div", "groep", GROEPKOP[r.groep]));
+            vorigeGroep = r.groep;
+          }
+          meer.appendChild(rij(r));
+        }
+        paneel.appendChild(meer);
+      }
+
+      toonRest(antwoord.punten, antwoord.voet);
     }
 
     /* Escape sluit het paneel, maar alleen zolang de aandacht erin zit. Een

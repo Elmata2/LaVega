@@ -12,8 +12,10 @@
  *   2. is content.js per ongeluk een ES-module geworden? (dan doet het content
  *      script niets, met de fout alleen in de console van de WINKELPAGINA)
  *   3. staat er in de bundel iets dat het netwerk op gaat?
- *   4. loopt de sitelijst in het manifest nog gelijk met src/sites.ts, en wijst
- *      elk patroon een PAD aan en niet een heel domein?
+ *   4. staat <all_urls> plus de accountpagina's van bronnen.ts in het manifest,
+ *      en wijst elk accountpatroon een PAD aan en niet een heel domein? (Vóór
+ *      26 augustus 2026 stond hier een lijst met individueel gemeten winkels
+ *      i.p.v. <all_urls> — zie de spec voor waarom dat is losgelaten.)
  *
  * Controle 3 heeft in de eerste versie groen gemeld terwijl er iets doorheen
  * kwam. Hij keek alleen naar `.js`, en public/ levert ook .html, .css en JSON
@@ -25,11 +27,10 @@
  * build opzettelijk afgaan op precies die drie gevallen, en laat hem zwijgen op
  * de bestanden die er nu echt in zitten.
  *
- * De vierde is de sluipendste. optional_host_permissions staat in JSON en kan
- * sites.ts niet importeren, dus de twee lijsten zijn met de hand gelijkgehouden.
- * Voeg je een winkel toe aan sites.ts en vergeet je het manifest, dan komt de
- * fout pas naar boven op het moment dat een gebruiker het vinkje aanzet en
- * Chrome het verzoek weigert — met een melding die niets over de oorzaak zegt.
+ * De vierde bewaakt dat het manifest en bronnen.ts niet uit elkaar lopen.
+ * Vergeet je een accountpagina in het manifest bij te werken, dan komt de fout
+ * pas naar boven op het moment dat een gebruiker een vinkje aanzet en Chrome
+ * het verzoek weigert — met een melding die niets over de oorzaak zegt.
  *
  * Draaien gebeurt via `pnpm build`; los kan met `node scripts/copy-static.mjs`,
  * maar dan moet tsc er al overheen zijn geweest. */
@@ -173,57 +174,51 @@ if (manifest) {
       `        is een uitzondering die niemand een tweede keer afweegt.`,
   );
   eis(
-    !JSON.stringify(manifest).includes("<all_urls>"),
-    "manifest bevat <all_urls>. Dat mag nooit: elke host moet apart te verantwoorden zijn.",
-  );
-  eis(
     (manifest.host_permissions ?? []).length === 0,
-    "host_permissions moet leeg zijn — sites lopen via optional_host_permissions, zodat de gebruiker per winkel ja zegt.",
+    "host_permissions moet leeg zijn — alle leestoestemming loopt via optional_host_permissions (de brede kassa-toestemming plus de aparte ING/Amex-toestemmingen), zodat de gebruiker er zelf ja tegen zegt.",
   );
 }
 
-/* ── 4. loopt de sitelijst gelijk met sites.ts? ────────────────────────────── */
+/* ── 4. staat <all_urls> plus de accountpagina's van bronnen.ts in het manifest? ── */
 
-const sites = await import(pathToFileURL(join(DIST, "sites.js")).href);
-/* De accountpagina's horen in dezelfde vergelijking. Ze staan niet in
- * SITE_MATCHES omdat het geen WINKELS zijn — het zijn zijn eigen accounts, elk
- * met een eigen schakelaar en een eigen vraag — maar ze vragen wel een
- * hostrecht, en dat recht moet net zo hard gelijklopen met het manifest.
- * Vergeet je er een, dan merkt hij het pas doordat Chrome zijn
- * toestemmingsverzoek weigert met een melding die niets over de oorzaak zegt.
+/* De kassa-lezer vraagt sinds 26 augustus 2026 één brede toestemming
+ * (<all_urls>) i.p.v. een per-site lijst — zie
+ * docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md. Die
+ * ene entry ligt hier vast, niet in een geïmporteerd bestand: er is geen
+ * sites.ts meer om hem uit te lezen.
  *
- * DIT KOMT UIT BRONNEN.TS EN NIET UIT EEN TWEEDE LIJSTJE HIER. Zodra er een
- * derde bron bij komt, loopt hij automatisch mee; een lijst die hier met de hand
- * wordt bijgehouden is precies de plek waar de vorige er een zou vergeten. */
+ * De accountpagina's (ING/Amex) horen wel nog in dezelfde vergelijking: ze
+ * vragen ook een hostrecht en dat moet gelijklopen met het manifest. DIT KOMT
+ * UIT BRONNEN.TS EN NIET UIT EEN TWEEDE LIJSTJE HIER — zodra er een derde bron
+ * bij komt, loopt hij automatisch mee. */
+const KASSA_MATCH = "<all_urls>";
 const bronnen = await import(pathToFileURL(join(DIST, "bronnen.js")).href);
 const voorSitelijst = fouten.length;
-const uitCode = [...sites.SITE_MATCHES, ...bronnen.BRON_MATCHES].sort();
+const uitCode = [KASSA_MATCH, ...bronnen.BRON_MATCHES].sort();
 const uitManifest = [...(manifest?.optional_host_permissions ?? [])].sort();
 eis(
   JSON.stringify(uitCode) === JSON.stringify(uitManifest),
-  `optional_host_permissions loopt niet gelijk met src/sites.ts.\n` +
+  `optional_host_permissions loopt niet gelijk met de verwachte lijst.\n` +
     `        manifest: ${JSON.stringify(uitManifest)}\n` +
-    `        sites.ts: ${JSON.stringify(uitCode)}`,
+    `        verwacht: ${JSON.stringify(uitCode)}`,
 );
-/* En elk patroon moet een PAD aanwijzen, geen heel domein. `https://www.ikea.com/*`
- * is syntactisch een prima matchpatroon en glijdt er zonder deze controle in;
- * daarna staat er onder het vinkje "alleen productpagina's" terwijl de extensie
- * de hele winkel mag lezen. siteForUrl in sites.ts weigert zo'n pagina wél, dus
- * het resultaat zou een extensie zijn die om meer toestemming vraagt dan ze
- * gebruikt — en dat is de vorm van vragen waar niemand ja op hoort te zeggen. */
-for (const patroon of uitCode) {
+/* Alleen de accountpagina's moeten een PAD aanwijzen, geen heel domein — dat
+ * blijft gelden (het rekeningoverzicht van ING/Amex zelf hoort er nog steeds
+ * buiten). Dat geldt NIET voor de winkelwagen van een willekeurige webshop: die
+ * valt onder de brede <all_urls>-toestemming en er is niets dat hem uitsluit —
+ * dat is een geaccepteerd gevolg van breed gaan, geen garantie. <all_urls> is
+ * geen https-patroon en heeft geen pad om op te controleren, dus die staat hier
+ * terecht buiten de lus. */
+for (const patroon of bronnen.BRON_MATCHES) {
   eis(
-    sites.padIsSpecifiek(patroon),
-    `${patroon} wijst een heel domein aan, geen pad. Een winkel komt erin met het pad erbij\n` +
-      `        (zoals https://www.ikea.com/nl/nl/p/*), zodat de winkelwagen en de accountpagina's\n` +
-      `        erbuiten vallen.`,
+    bronnen.padIsSpecifiek(patroon),
+    `${patroon} wijst een heel domein aan, geen pad.`,
   );
 }
 
 if (fouten.length === voorSitelijst) {
   gedaan.push(
-    `hostrechten gelijk aan het manifest, en elk patroon wijst een pad aan ` +
-      `(${uitCode.length}: ${uitCode.join(", ") || "geen"})`,
+    `hostrechten gelijk aan het manifest (${uitCode.length}: ${uitCode.join(", ")})`,
   );
 }
 
@@ -279,8 +274,7 @@ for (const naam of ["content.js", "aanbod-content.js"]) {
  * of optional_host_permissions staat. Dat is een matchpatroon en geen adres — er
  * wordt niets opgehaald, het beschrijft waar de extensie mag kijken. Dat die
  * lijst zichzelf niet mag goedkeuren, bewaakt controle 4 hierboven: hij moet
- * gelijk zijn aan SITE_MATCHES uit sites.ts, en elk patroon moet een pad
- * aanwijzen. */
+ * gelijk zijn aan <all_urls> plus BRON_MATCHES uit bronnen.ts. */
 
 /* Regels die met // of * beginnen zijn commentaar; tsc laat dat staan en anders
  * struikelt deze controle over haar eigen uitleg. Stringliterals met een URL

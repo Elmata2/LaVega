@@ -12,7 +12,7 @@ export function createInMemoryPriceStore(): PriceStore {
   return {
     async getRange(tenantId, symbol, from, to) {
       return rowsFor(tenantId, symbol)
-        .filter((row) => row.date >= from && row.date <= to)
+        .filter((row) => (from === undefined || row.date >= from) && (to === undefined || row.date <= to))
         .sort((a, b) => a.date.localeCompare(b.date));
     },
     async lastDate(tenantId, symbol) {

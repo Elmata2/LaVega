@@ -84,6 +84,28 @@ test("runtime broker sync coalesces concurrent runs", async () => {
   expect(first.problems).toEqual(second.problems);
 });
 
+test("runtime broker sync passes the signed-in tenant to credential-aware adapters", async () => {
+  const baseUrl = await serve((request, response) => {
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
+    return json(response, []);
+  });
+  vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+  const credentials = {
+    getCredentials: vi.fn(async (tenantId: string, broker: string) => {
+      if (tenantId !== "user-123") throw new Error("Credential vault belongs to another tenant");
+      return broker === "trading212" ? { broker: "trading212", tenantId, token: "token", secret: "secret" } : null;
+    }),
+  } as unknown as ReturnType<typeof createFileCredentialStore>;
+  const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore(), undefined, "user-123");
+
+  const result = await sync(true);
+
+  expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
+  expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");
+});
+
 test("cached broker skip retains last successful positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({
@@ -190,10 +212,46 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["full-1", "full-2"]) }], problems: [] });
 
   cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["history failed"], tradesComplete: false } }], problems: ["trading212: history failed"] });
-  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1", "full-2"]);
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1", "full-2", "partial-1"]);
 
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["fresh-1"]) }], problems: [] });
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["fresh-1"]);
+});
+
+test("a failed holdings read keeps last-good positions instead of replacing them with empty", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const good = { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 3, averagePrice: 10, marketPrice: 10, marketValue: 30, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "full-1" }], cashBalances: [{ tenantId: "local", entity: "BV", broker: "trading212", currency: "EUR", amount: 250, asOf: "2026-08-19" }], source: "trading-212", problems: [] };
+  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: good }], problems: [] });
+
+  cache.apply({
+    outcomes: [{
+      broker: "trading212",
+      status: "problem",
+      lastSyncedAt: null,
+      result: {
+        positions: [],
+        trades: good.trades,
+        cashBalances: [],
+        source: "trading-212",
+        problems: ["Trading 212 holdings request failed with HTTP 503"],
+        tradesComplete: true,
+        positionsComplete: false,
+        cashBalancesComplete: false,
+      },
+    }],
+    problems: ["trading212: Trading 212 holdings request failed with HTTP 503"],
+  });
+
+  expect(cache.read().positions).toMatchObject([{ symbol: "AAPL", quantity: 3 }]);
+  expect(cache.read().cashBalances).toMatchObject([{ amount: 250 }]);
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1"]);
+});
+
+test("a first truncated history still keeps the trades it did read", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
+  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["host time limit"], tradesComplete: false } }], problems: ["trading212: host time limit"] });
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["partial-1"]);
 });
 
 test("runtime unlocks persisted broker credentials after restart", async () => {
@@ -224,4 +282,53 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("each tenant gets its own runtime, so no cache is shared between users", async () => {
+  const priceStore = createInMemoryPriceStore();
+  const getRange = vi.spyOn(priceStore, "getRange");
+  const benchmarkSymbols = vi.fn(async (tenantId: string) => [`BENCH-${tenantId}`]);
+  let tenantId = "user-a";
+  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols, resolveTenantId: () => tenantId });
+
+  await runtimeApp.request("/api/investing/dashboard");
+  tenantId = "user-b";
+  await runtimeApp.request("/api/investing/dashboard");
+
+  expect(benchmarkSymbols.mock.calls.map(([tenant]) => tenant)).toEqual(["user-a", "user-b"]);
+  // Price bars are read under the requesting tenant, never a shared one.
+  expect(getRange.mock.calls.map(([tenant, symbol]) => `${tenant}:${symbol}`)).toEqual([
+    "user-a:BENCH-user-a",
+    "user-b:BENCH-user-b",
+  ]);
+});
+
+test("a tenant's broker sync status is its own, not the last caller's", async () => {
+  let tenantId = "user-a";
+  const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore(), resolveTenantId: () => tenantId });
+
+  await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
+  const started = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+  tenantId = "user-b";
+  const untouched = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+
+  expect(started.status).not.toBe("idle");
+  expect(untouched.status).toBe("idle");
+});
+
+test("price history is read with dates Postgres accepts", async () => {
+  const priceStore = createInMemoryPriceStore();
+  const getRange = vi.spyOn(priceStore, "getRange").mockImplementation(async (_tenantId, _symbol, from, to) => {
+    // Postgres has no year zero, so `0000-01-01` fails the query outright
+    // instead of standing for "from the beginning" the way a string compare does.
+    for (const date of [from, to]) if (date?.startsWith("0000-")) throw new Error(`date/time field value out of range: "${date}"`);
+    return [];
+  });
+  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols: () => ["^GSPC"], resolveTenantId: () => "user-a" });
+
+  const response = await runtimeApp.request("/api/investing/dashboard");
+  const body = await response.json() as { problems: string[] };
+
+  expect(getRange).toHaveBeenCalled();
+  expect(body.problems).toEqual([]);
 });

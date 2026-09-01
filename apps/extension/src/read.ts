@@ -150,19 +150,27 @@ export const VIA_REEKS_HOOG = "JSON-LD AggregateOffer highPrice";
 export const VIA_REEKS_PRIJS = "JSON-LD AggregateOffer price";
 export const VIA_GEEN_ARTIKELPRIJS = "JSON-LD prijsopgave, geen artikelprijs";
 
-/** WAT DE EXTENSIE VAN EEN PAGINA MEENEEMT, en dit is de hele lijst: de host en
- *  de bedragen die er machineleesbaar op staan.
+/** WAT DE EXTENSIE VAN EEN PAGINA MEENEEMT: de host, de bedragen die er
+ *  machineleesbaar op staan, en — sinds de merknaam-op-paginainhoud-match
+ *  (V11, 27 augustus 2026) — de productnaam, als die machineleesbaar op de
+ *  pagina staat.
  *
- *  Geen paginatitel, geen artikelnaam, geen omschrijving, geen winkelwagen,
- *  geen cookies, geen URL-pad. De eerste opzet nam de RUWE TEKST van elk
- *  JSON-LD-blok mee en ontcijferde die in de popup — makkelijker te testen, maar
- *  dan reist de naam en de hele omschrijving van het artikel mee, en dan draagt
- *  de extensie gegevens over wat hij koopt terwijl ze alleen een bedrag nodig
- *  heeft. Het ontcijferen is daarom naar de pagina verhuisd en wat eruit komt is
- *  gesnoeid tot getal, munt en herkomst. read.test.ts houdt die lijst kort. */
+ *  Nog steeds GEEN omschrijving, geen artikelnummer, geen afbeelding, geen
+ *  verkoper, geen winkelwagen, geen cookies, geen URL-pad. De redactiegrens is
+ *  bewust en met opzet verlegd voor precies dit ene veld — niet stilletjes
+ *  verruimd: V10's merknaam-match kon alleen op de HOSTNAAM van de winkel
+ *  matchen ("jbl" uit jbl.nl), en dus nooit op een marktplaats als bol.com die
+ *  een JBL-artikel verkoopt. Om dat wél te laten werken is er een tweede,
+ *  zwakkere match nodig op wat de pagina zelf zegt te verkopen — en dat kan
+ *  niet zonder de naam te lezen. `productNaam` is null zolang die nergens
+ *  machineleesbaar op de pagina staat; er wordt niet gegokt op de <title> van
+ *  de hele pagina of iets anders dat evengoed de winkel zelf kan zijn.
+ *  read.test.ts's redactiegrens-tests bewaken dat dit het enige nieuwe veld is
+ *  en dat de omschrijving en de rest nog steeds niet meereizen. */
 export type Evidence = {
   host: string;
   candidates: PriceCandidate[];
+  productNaam: string | null;
 };
 
 /* ─────────────────────── het aftasten van de pagina ───────────────────────── */
@@ -192,6 +200,30 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
   const isOrder = (t: string) => /(^|\/|:)(Order|Invoice)$/i.test(t);
   const isOffer = (t: string) => /(^|\/|:)Offer$/i.test(t);
   const isReeks = (t: string) => /(^|\/|:)AggregateOffer$/i.test(t);
+  /* OOK ProductGroup, EN DAT IS GEMETEN NODIG. Een marktplaats met kleur- of
+   * maatvarianten (bol.com) zet de pagina neer als ÉÉN ProductGroup met een
+   * `hasVariant`-lijst van losse Product-objecten erin — één per variant. Zonder
+   * ProductGroup hier zou "eerste Product wint" een WILLEKEURIGE variant uit die
+   * lijst kunnen pakken (gemeten: de eerste in de lijst was "Wit", terwijl de
+   * bezochte pagina "Zwart" was) — geen ambigu resultaat maar een stille,
+   * verkeerde naam. De ProductGroup zelf is de buitenste knoop en wordt daardoor
+   * als eerste bezocht, vóór zijn varianten ooit op de stack komen; "eerste
+   * gevonden naam wint" hieronder geeft hem daarom altijd voorrang. */
+  const isProduct = (t: string) => /(^|\/|:)(Product|ProductGroup)$/i.test(t);
+
+  /* EERSTE GEVONDEN NAAM WINT, en er wordt niet verder gezocht — met ÉÉN
+   * uitzondering die voorrang krijgt: og:title/product:title, hieronder vóór de
+   * JSON-LD-doorloop. Gemeten op dezelfde bol.com-pagina als hierboven: og:title
+   * droeg de volledige, kloppende titel inclusief kleur ("... - Zwart"), terwijl
+   * de ProductGroup-naam die kleur niet draagt (die staat alleen op de losse
+   * variant, en dat is precies het probleem hierboven). Waar geen og:title
+   * bestaat (IKEA, Coolblue) blijft de JSON-LD-naam gewoon de bron. */
+  let productNaam: string | null = null;
+  const titelEl = d.querySelector(
+    'meta[property="og:title"], meta[property="product:title"], meta[name="product:title"]',
+  );
+  const titel = (titelEl?.getAttribute("content") ?? "").trim();
+  if (titel) productNaam = titel;
 
   const types = (o: Record<string, unknown>): string[] => {
     const t = o["@type"];
@@ -401,6 +433,10 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
           });
         }
       }
+      if (ts.some(isProduct) && productNaam === null) {
+        const naam = scalar(o["name"]);
+        if (typeof naam === "string") productNaam = naam;
+      }
       for (const v of Object.values(o)) {
         if (v && typeof v === "object") stack.push({ node: v, parent: o });
       }
@@ -452,7 +488,18 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
     }
   }
 
-  return { host: h, candidates };
+  /* LAATSTE TERUGVAL, alleen als er nog steeds niets is: og:title stond al
+   * vóór de JSON-LD-doorloop (zie boven). `itemprop="name"` alleen binnen een
+   * itemscope die zelf al Product in zijn itemtype draagt, anders zou een
+   * willekeurige `itemprop="name"` op de pagina (een auteur, een organisatie)
+   * voor een artikelnaam kunnen doorgaan. */
+  if (productNaam === null) {
+    const naamEl = d.querySelector('[itemscope][itemtype*="Product"] [itemprop="name"]');
+    const naam = (naamEl?.getAttribute("content") ?? naamEl?.textContent ?? "").trim();
+    if (naam) productNaam = naam;
+  }
+
+  return { host: h, candidates, productNaam };
 }
 
 /* ────────────────────────── het bedrag ontcijferen ───────────────────────── */

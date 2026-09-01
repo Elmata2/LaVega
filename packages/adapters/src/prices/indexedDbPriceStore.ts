@@ -24,7 +24,9 @@ export function createIndexedDbPriceStore(dbName = DEFAULT_DB_NAME): PriceStore 
     async getRange(tenantId, symbol, from, to) {
       const db = await openPriceDb(dbName);
       const index = db.transaction(STORE_NAME).store.index("tenant-symbol-date");
-      const rows = await index.getAll(IDBKeyRange.bound([tenantId, symbol, from], [tenantId, symbol, to]));
+      /* Dates are ISO strings ordered lexicographically, so an absent bound is
+       * the empty string below and a character above every digit up top. */
+      const rows = await index.getAll(IDBKeyRange.bound([tenantId, symbol, from ?? ""], [tenantId, symbol, to ?? "\uffff"]));
       db.close();
       return rows;
     },
