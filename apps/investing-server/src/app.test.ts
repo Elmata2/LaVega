@@ -34,12 +34,14 @@ test("dashboard route returns injected core-shaped read model and selected symbo
 });
 
 test("dashboard route reports read-model failures without inventing values", async () => {
-  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")) });
+  const problemReporter = vi.fn();
+  const investingApp = createApp({ dashboardReader: vi.fn().mockRejectedValue(new Error("read failed")), problemReporter });
 
   const response = await investingApp.request("/api/investing/dashboard");
 
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
+  expect(problemReporter).toHaveBeenCalledWith({ source: "dashboard-read", problems: ["read failed"] });
 });
 
 test("benchmark API persists ordered replace-whole selection and rejects invalid caps", async () => {

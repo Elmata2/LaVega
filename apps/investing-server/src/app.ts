@@ -97,8 +97,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/investing/dashboard", async (c) => {
     try {
       return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));
-    } catch {
-      return c.json({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] }, 503);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Dashboardgegevens konden niet worden geladen";
+      problemReporter({ source: "dashboard-read", problems: [message] });
+      return c.json({ ...emptyInvestingDashboard(), problems: ["Dashboardgegevens konden niet worden geladen"] });
     }
   });
   investingApp.get("/api/investing/benchmarks", async (c) => c.json(await benchmarkSelectionStore.get(await resolveTenantId())));
