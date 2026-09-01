@@ -54,6 +54,8 @@ Per-broker failures go in `problems` so one broken connection doesn't block the 
 
 `Position` and `Trade` land in `packages/core/src/investing/`. Positions carry the broker symbol, quantity, average/market price, market value, currency, and statement date. Trades carry ISO date, symbol, buy/sell side, quantity, price, amount, currency, commission, and an optional broker trade ID. Monetary values use the instrument/trade currency; quantities use broker units. `Trade` carries an `id` computed by `assignTradeIds` using the same hash and occurrence-counter pattern as bank transactions. Adapters return `Omit<Trade, "id">[]`; core stamps IDs after combining adapter results.
 
+Broker symbols stay as the portfolio identity. Market-data requests may use a provider-specific ticker, but returned `PriceBar.symbol` must remain the broker symbol so dashboard joins do not depend on Yahoo naming. Trading 212 symbols such as `AMD_US_EQ`, `ASMLa_EQ`, `BY6_CORP_DE_EQ`, and `BRK_B_US_EQ` are bridged at the Yahoo market-data boundary. OpenFIGI ISIN resolution remains the preferred path when it succeeds; if it is rate-limited or cannot resolve an instrument, price sync falls back to the broker-symbol bridge instead of skipping that instrument.
+
 ## Credentials & secrets
 
 Local-first by default, inherited unchanged from the personal side ([#5](https://github.com/Elmata2/LaVega/issues/5)): the user brings their own broker credentials, nothing routes through LaVega-run infrastructure, and no secret ever enters the repo. No broker in v1 needs an exception to this.

@@ -52,16 +52,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     paceMs: dependencies.priceSyncPaceMs,
     sync: async (target, tenantId) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string } = target;
+      let identifierProblems: string[] = [];
       if (target.isin) {
         const identifier = await mapIdentifier({ isin: target.isin });
-        if (!identifier || identifier.value.problems.length || !identifier.value.match.ticker || !identifier.value.match.exchange) {
-          return { bars: [], fetched: false, problems: identifier?.value.problems ?? ["Could not resolve ISIN"] };
+        if (identifier && identifier.value.problems.length === 0 && identifier.value.match.ticker && identifier.value.match.exchange) {
+          request = { ...target, ticker: identifier.value.match.ticker, exchange: identifier.value.match.exchange };
+        } else {
+          identifierProblems = identifier?.value.problems ?? ["Could not resolve ISIN"];
         }
-        request = { ...target, ticker: identifier.value.match.ticker, exchange: identifier.value.match.exchange };
       }
       const result = await syncPrices({ store, tenantId, priceProviders, request });
       if (result.fetched) dependencies.onPriceDataChanged?.();
-      return result;
+      return result.problems.length === 0 ? result : { ...result, problems: [...identifierProblems, ...result.problems] };
     },
   });
   const investingApp = new Hono();
