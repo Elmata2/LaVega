@@ -80,3 +80,13 @@ test("an empty vault reports no broker data instead of failing", async () => {
 
   expect(await store.getBrokerData()).toEqual({});
 });
+
+test("an unreadable hosted broker row does not block reconnecting", async () => {
+  const repository = fakeRepository();
+  repository.get = vi.fn(async () => {
+    throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+  });
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  expect(await store.status()).toBe("empty");
+});

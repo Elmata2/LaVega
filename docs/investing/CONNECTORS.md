@@ -60,6 +60,8 @@ Local-first by default, inherited unchanged from the personal side ([#5](https:/
 
 Hosted credential storage is tenant-bound. The same signed-in user id must reach the credential write, the scheduled sync preflight, and the credential-aware adapter lookup; falling back to `local` inside one of those steps makes Neon reject the vault as belonging to another tenant. Each tenant may store its own IBKR and Trading 212 credentials independently.
 
+If a hosted credential row cannot be decrypted with the configured server key, the dashboard and reconnect form must still load. Sync can report the unreadable row as a broker problem, but status reads treat it as reconnectable state so a user can save fresh broker credentials.
+
 **Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
 
 | Broker | Persisted? | Why |

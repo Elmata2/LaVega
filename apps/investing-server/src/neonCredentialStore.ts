@@ -39,7 +39,13 @@ export function createNeonCredentialStore(repository: EncryptedBrokerRepository,
 
   return {
     async status() {
-      for (const broker of BROKERS) if (await repository.get(broker)) return "unlocked";
+      for (const broker of BROKERS) {
+        try {
+          if (await repository.get(broker)) return "unlocked";
+        } catch {
+          return "empty";
+        }
+      }
       return "empty";
     },
     async setup() {
