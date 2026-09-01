@@ -27,6 +27,9 @@ const pidFile = join(runDir, "local.pid");
 const portFile = join(runDir, "local.port");
 const logFile = join(runDir, "local.log");
 const cookieFile = join(runDir, "cookies.txt");
+/* Kept outside runDir so `cleanup` does not delete it, and outside the repo so
+ * it can never be committed. The user writes it; this CLI only reads it. */
+const credentialsFile = join(stateRoot, "auth.json");
 
 const PROD_BASE = "https://www.lavega.dev";
 const DEFAULT_LOCAL_PORT = 8799;
@@ -334,15 +337,39 @@ async function commandDoctor(flags) {
   return report.verdict === "ok" ? 0 : 1;
 }
 
+/**
+ * Where a password comes from, in order: a credentials file, the environment,
+ * then a flag. The file is the intended path — a password passed as an argument
+ * is visible in shell history and in any transcript of the run.
+ */
+function resolveCredentials(flags) {
+  const path = flags["credentials-file"] ? resolve(String(flags["credentials-file"])) : credentialsFile;
+  if (existsSync(path)) {
+    try {
+      const stored = JSON.parse(readFileSync(path, "utf8"));
+      if (stored.email && stored.password) return { email: String(stored.email), password: String(stored.password), from: path };
+    } catch {
+      fail(`${path} is not readable JSON`, 'expected: {"email":"...","password":"..."}');
+    }
+  }
+  const email = flags.email ?? process.env.LAVEGA_VERIFY_EMAIL;
+  const password = flags.password ?? process.env.LAVEGA_VERIFY_PASSWORD;
+  if (email && password) return { email: String(email), password: String(password), from: flags.password ? "--password flag" : "environment" };
+  return null;
+}
+
 async function commandLogin(flags) {
-  if (!flags.email || !flags.password) fail("login needs --email and --password", "credentials come from the user; this CLI never invents them");
-  const response = await request(flags, "POST", "/api/auth/sign-in/email", { email: String(flags.email), password: String(flags.password) });
+  const credentials = resolveCredentials(flags);
+  if (!credentials) {
+    fail("no credentials found", `write ${credentialsFile} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`);
+  }
+  const response = await request(flags, "POST", "/api/auth/sign-in/email", { email: credentials.email, password: credentials.password });
   if (!response.ok) {
     print({ signedIn: false, status: response.status, body: response.json ?? response.text });
     return 1;
   }
   const session = await request(flags, "GET", "/api/auth/get-session");
-  print({ signedIn: Boolean(session.json?.user), user: session.json?.user ?? null, cookieJar: cookieFile });
+  print({ signedIn: Boolean(session.json?.user), user: session.json?.user ?? null, cookieJar: cookieFile, credentialsFrom: credentials.from });
   return session.json?.user ? 0 : 1;
 }
 
@@ -575,7 +602,8 @@ Health
   assets [--path P]            shell + every asset it references
 
 Session (prod)
-  login --email E --password P
+  login                        reads ${credentialsFile}
+  login --credentials-file F   or LAVEGA_VERIFY_EMAIL / LAVEGA_VERIFY_PASSWORD
   whoami
   logout
 

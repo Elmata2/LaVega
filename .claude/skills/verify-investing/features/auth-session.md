@@ -18,15 +18,29 @@ Sign in, and the overview loads.
 
 ## Driving it with control-investing
 
+The user writes their credentials once, in their own terminal, to a file outside the repo:
+
+```bash
+umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
+  > /tmp/lavega-verify-investing/auth.json
+```
+
+Then:
+
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C login --target prod --email <email> --password <password>
+node $C login --target prod          # reads the file
 node $C whoami --target prod
 node $C logout
 ```
 
-The cookie jar is `/tmp/lavega-verify-investing/run/cookies.txt`; `cleanup` removes it.
-Credentials belong to the user — ask, do not invent an account.
+`LAVEGA_VERIFY_EMAIL` / `LAVEGA_VERIFY_PASSWORD` work too, and `--email`/`--password` still
+exist for a throwaway account. Prefer the file: a password passed as an argument ends up in
+shell history and in any transcript of the run.
+
+The cookie jar is `/tmp/lavega-verify-investing/run/cookies.txt`; `cleanup` removes it, and
+`auth.json` sits above it so teardown leaves it alone. Credentials belong to the user — ask,
+do not invent an account.
 
 ## Gotchas
 

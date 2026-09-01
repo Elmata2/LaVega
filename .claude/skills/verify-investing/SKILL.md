@@ -80,8 +80,11 @@ node $C probe --target prod --out /tmp/lavega-verify-investing/evidence/prod-pro
 # the SPA shell plus every asset it references
 node $C assets --target prod
 
-# production needs a session before any /api call works
-node $C login --target prod --email <email> --password <password>
+# production needs a session before any /api call works.
+# login reads /tmp/lavega-verify-investing/auth.json, which the user writes:
+#   umask 077 && printf '{"email":"%s","password":"%s"}' "<email>" "<password>" \
+#     > /tmp/lavega-verify-investing/auth.json
+node $C login --target prod
 node $C whoami --target prod
 
 # read the dashboard the way the frontend does
@@ -102,7 +105,9 @@ node $C api PUT /api/investing/benchmarks --target prod --body '{"symbols":["^GS
 node $C logs --lines 40
 ```
 
-Credentials are the user's. Ask for them; never invent an account or sign up one.
+Credentials are the user's. Ask for them, and take them through the credentials file rather
+than a `--password` argument, which would land in shell history and in the run's transcript.
+Never invent an account or sign one up.
 
 Write commands that reach a broker, Yahoo Finance or the price store take `--dry-run` and
 print what they would send. `prices purge` additionally refuses without `--yes`.
