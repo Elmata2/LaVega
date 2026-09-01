@@ -20,7 +20,10 @@ state.json
 .gstack/
 .lavega/
 
-.claude/
+# Local Claude state stays out of the repo; the verification skills in
+# .claude/skills are checked in, because every agent working here needs them.
+.claude/*
+!.claude/skills/
 .vercel
 
 # The pnpm store is pinned to the repo (.npmrc) so an install never has to
