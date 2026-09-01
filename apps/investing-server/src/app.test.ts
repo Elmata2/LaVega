@@ -360,3 +360,23 @@ test("health answers under /api/ too, because that is the only path a mount forw
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
 });
+
+test("summary stays 200 when sector lookup fails after a priced dashboard", async () => {
+  const dashboard = emptyInvestingDashboard();
+  dashboard.positions.push({
+    symbol: "AAPL", entity: "personal", description: "Apple", quantity: 2, marketValue: 200, portfolioWeight: 1,
+    priceStatus: "priced", currency: "USD", asOf: "2026-08-18",
+    returns: { status: "available", remainingCostBasis: 180, realizedCostBasisRemoved: 0, unrealizedGain: 20, realizedGain: 0, dividendsReceived: 0, totalReturn: 20, totalReturnPercentage: 20 / 180, sinceFirstBuyPercentage: 20 / 180, firstBuyDate: "2026-01-02" },
+  });
+  const investingApp = createApp({
+    dashboardReader: async () => dashboard,
+    sectorProfile: vi.fn().mockRejectedValue(new Error("yahoo down")),
+  });
+
+  const response = await investingApp.request("/api/investing/summary");
+  const body = await response.json() as { topPositions: { symbol: string }[]; sectors: unknown };
+
+  expect(response.status).toBe(200);
+  expect(body.topPositions).toEqual([{ symbol: "AAPL", weight: 1 }]);
+  expect(body.sectors).toBeDefined();
+});

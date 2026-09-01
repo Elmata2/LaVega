@@ -86,8 +86,12 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       for (const position of priced) {
         let profile = await sectorStore.get(position.symbol);
         if (!profile) {
-          profile = await sectorProfile(position.symbol);
-          if (profile) await sectorStore.set(position.symbol, profile);
+          try {
+            profile = await sectorProfile(position.symbol);
+            if (profile) await sectorStore.set(position.symbol, profile);
+          } catch {
+            profile = null;
+          }
         }
         sectorBySymbol.set(position.symbol.toUpperCase(), profile?.sector ?? "Unknown");
       }

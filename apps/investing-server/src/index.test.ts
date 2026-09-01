@@ -332,3 +332,47 @@ test("price history is read with dates Postgres accepts", async () => {
   expect(getRange).toHaveBeenCalled();
   expect(body.problems).toEqual([]);
 });
+
+test("IBKR missing plus a paused T212 result still keeps T212 positions", () => {
+  const cache = createRuntimeBrokerDataCache();
+  cache.apply({
+    outcomes: [
+      { broker: "ibkr", status: "problem", lastSyncedAt: null, result: null },
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: null,
+        result: {
+          positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }],
+          trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "p1" }],
+          source: "trading-212",
+          problems: ["Trading 212 sync paused before the host time limit; remaining history resumes on the next run"],
+          tradesComplete: false,
+          positionsComplete: true,
+          cashBalancesComplete: true,
+          resume: { ordersNextPagePath: "/next" },
+        },
+      },
+    ],
+    problems: ["ibkr: credentials are not configured", "trading212: Trading 212 sync paused before the host time limit; remaining history resumes on the next run"],
+  });
+
+  expect(cache.read().positions).toMatchObject([{ symbol: "AAPL" }]);
+  expect(cache.snapshot().trading212?.positions).toHaveLength(1);
+  expect(cache.snapshot().ibkr).toBeUndefined();
+});
+
+test("dashboard keeps positions when price history reads fail", async () => {
+  vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
+  vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
+  const priceStore = createInMemoryPriceStore();
+  vi.spyOn(priceStore, "getRange").mockRejectedValue(new Error("timeout exceeded when trying to connect"));
+  const runtimeApp = await createRuntimeApp({ priceStore });
+
+  const response = await runtimeApp.request("/api/investing/dashboard");
+  const body = await response.json() as { positions: unknown[]; problems: string[] };
+
+  expect(response.status).toBe(200);
+  expect(body.positions.length).toBeGreaterThan(0);
+  expect(body.problems).toContain("Prijsdata kon niet volledig worden geladen");
+});

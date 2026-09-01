@@ -87,10 +87,33 @@ const PORTFOLIO_AGENT_PROMPT = [
   "total value, largest position, and anything that looks off such as missing prices or empty broker data.",
 ].join(" ");
 
+
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((item) => [item.id, item]));
   for (const item of incoming) byId.set(item.id, item);
   return [...byId.values()];
+}
+
+/** Neon pool max is 5. Parallel getRange per symbol exhausts it and the dashboard
+ *  route then returns emptyInvestingDashboard even when broker rows are in cache. */
+const PRICE_BAR_READ_CONCURRENCY = 3;
+
+async function readPriceBars(priceStore: PriceStore, tenantId: string, symbols: readonly string[]) {
+  const bars: Awaited<ReturnType<PriceStore["getRange"]>> = [];
+  let failed = 0;
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(PRICE_BAR_READ_CONCURRENCY, symbols.length) }, async () => {
+    while (next < symbols.length) {
+      const symbol = symbols[next++];
+      if (!symbol) return;
+      try {
+        bars.push(...await priceStore.getRange(tenantId, symbol));
+      } catch {
+        failed += 1;
+      }
+    }
+  }));
+  return { bars, failed };
 }
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
@@ -236,7 +259,12 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
     const scheduledBrokerSync = createRuntimeBrokerSync(async (result) => {
       brokerData.apply(result);
-      if (result.outcomes.some((outcome) => outcome.result !== null)) await credentials.putBrokerData(brokerData.snapshot());
+      if (!result.outcomes.some((outcome) => outcome.result !== null)) return;
+      try {
+        await credentials.putBrokerData(brokerData.snapshot());
+      } catch (error) {
+        result.problems.push(`Broker snapshot could not be stored: ${error instanceof Error ? error.message : "unknown error"}`);
+      }
     }, credentials, syncStateStore, updateProgress, tenantId);
     const brokerSync = async (force: boolean) => {
       if (devFixtureEnabled) {
@@ -267,10 +295,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const cached = dashboardCache.get(cacheKey);
       if (cached?.version === version) return cached.data;
       const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
-      const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(tenantId, value)))).flat();
-      const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(tenantId, benchmark)))).flat();
-      const fxResult = await fxProvider.getLatestRate();
-      const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benchmarkBars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
+      const prices = await readPriceBars(priceStore, tenantId, symbols);
+      const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
+      const priceProblems = prices.failed + benches.failed > 0 ? ["Prijsdata kon niet volledig worden geladen"] : [];
+      const fxResult = await fxProvider.getLatestRate().catch(() => ({ rate: undefined, problems: ["FX-koers kon niet worden geladen"] }));
+      const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars: prices.bars, benchmarkBars: benches.bars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benches.bars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...priceProblems, ...fxResult.problems], dataVersion: version });
       dashboardCache.set(cacheKey, { version, data });
       return data;
     };
