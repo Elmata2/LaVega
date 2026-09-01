@@ -131,8 +131,12 @@ function saveCookies(response) {
 // ---------------------------------------------------------------- requests
 
 async function request(flags, method, path, body) {
-  const url = `${baseUrl(flags)}${path}`;
-  const headers = { accept: "application/json" };
+  const origin = baseUrl(flags);
+  const url = `${origin}${path}`;
+  /* better-auth rejects a state-changing request with no Origin header
+   * (MISSING_OR_NULL_ORIGIN) — that check is what stops a browser on another
+   * site from posting here. A non-browser client has to state its origin. */
+  const headers = { accept: "application/json", origin, referer: `${origin}/` };
   const cookies = loadCookies();
   if (cookies) headers.cookie = cookies;
   if (body !== undefined) headers["content-type"] = "application/json";
