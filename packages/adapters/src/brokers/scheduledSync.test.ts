@@ -111,6 +111,22 @@ test("an unfinished history stores the resume cursor and does not set lastSynced
   expect(await state.get("trading212")).toEqual({ lastSyncedAt: null, retryAfter: "2026-08-19T12:01:00.000Z", resume });
 });
 
+test("a holdings failure does not set lastSyncedAt, so the next open retries", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({
+    trades: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
+    problems: ["Trading 212 holdings request failed with HTTP 503"],
+    positionsComplete: false,
+  }));
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  const second = await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
+
+  expect(await state.get("trading212")).toMatchObject({ lastSyncedAt: null });
+  expect(sync).toHaveBeenCalledTimes(2);
+  expect(second.outcomes[0]?.status).toBe("problem");
+});
+
 test("the next run after the cooldown passes the stored resume into sync", async () => {
   const state = createMemoryBrokerSyncStateStore();
   const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };

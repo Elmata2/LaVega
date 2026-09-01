@@ -2,7 +2,7 @@
 
 Broker positions, trades, and dividends must survive local container rebuilds. This data is sensitive financial data. A plaintext file or Docker image layer is not acceptable.
 
-Local/self-hosted runtime stores one last-successful snapshot per broker inside the existing AES-GCM vault. Runtime restores snapshots only after vault unlock. Failed, partial, and skipped sync outcomes cannot replace a complete trade history with a shorter set; they may merge newly read pages and they persist a resume cursor when pagination did not finish.
+Local/self-hosted runtime stores one last-successful snapshot per broker inside the existing AES-GCM vault. Runtime restores snapshots only after vault unlock. Failed, partial, and skipped sync outcomes cannot replace a complete trade history with a shorter set; they may merge newly read pages and they persist a resume cursor when pagination did not finish. A holdings or cash-summary failure must not replace last-good positions or cash with empty arrays.
 
 ## Considered options
 

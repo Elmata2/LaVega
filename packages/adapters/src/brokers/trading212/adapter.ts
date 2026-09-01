@@ -363,6 +363,7 @@ function result(
   retryAfterMs: number | null,
   tradesComplete = true,
   resume?: BrokerSyncResume,
+  completeness?: { positionsComplete?: boolean; cashBalancesComplete?: boolean },
 ): BrokerResult {
   return {
     positions,
@@ -373,6 +374,8 @@ function result(
     source: SOURCE,
     problems,
     tradesComplete,
+    ...(completeness?.positionsComplete === false ? { positionsComplete: false } : {}),
+    ...(completeness?.cashBalancesComplete === false ? { cashBalancesComplete: false } : {}),
     ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
     ...(historyPending(resume) ? { resume } : {}),
   };
@@ -514,6 +517,8 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let ordersResume = !ordersComplete ? (resume.ordersNextPagePath ?? firstHistoryUrl()) : undefined;
       let transactionsResume = !transactionsComplete ? (resume.transactionsNextPagePath ?? undefined) : undefined;
       let dividendsResume = !dividendsComplete ? (resume.dividendsNextPagePath ?? undefined) : undefined;
+      let holdingsComplete = false;
+      let summaryComplete = false;
 
       try {
         throwIfHostDeadline(config.deadlineMs, 0);
@@ -522,6 +527,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         // current to show.
         const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
         const holdings = await positions(holdingsUrl, config, limiter);
+        holdingsComplete = true;
         config.diagnostics?.({ type: "positions", count: holdings.length });
         for (const holding of holdings) {
           try {
@@ -539,6 +545,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       try {
         throwIfHostDeadline(config.deadlineMs, 0);
         const summary = await accountSummary(new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(), config, limiter);
+        summaryComplete = true;
         accountCurrency = string(summary.currency, "account summary currency");
         const mapped = mapCashBalance(summary, entity, new Date().toISOString().slice(0, 10));
         if (mapped.balance) cashBalances.push(mapped.balance);
@@ -649,7 +656,10 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         ...(transactionsComplete ? { transactionsComplete: true } : transactionsResume ? { transactionsNextPagePath: transactionsResume } : {}),
         ...(dividendsComplete ? { dividendsComplete: true } : dividendsResume ? { dividendsNextPagePath: dividendsResume } : {}),
       };
-      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete, nextResume);
+      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete, nextResume, {
+        positionsComplete: holdingsComplete,
+        cashBalancesComplete: summaryComplete,
+      });
     },
   };
 }

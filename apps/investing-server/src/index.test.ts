@@ -218,6 +218,35 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["fresh-1"]);
 });
 
+test("a failed holdings read keeps last-good positions instead of replacing them with empty", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const good = { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 3, averagePrice: 10, marketPrice: 10, marketValue: 30, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "full-1" }], cashBalances: [{ tenantId: "local", entity: "BV", broker: "trading212", currency: "EUR", amount: 250, asOf: "2026-08-19" }], source: "trading-212", problems: [] };
+  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: good }], problems: [] });
+
+  cache.apply({
+    outcomes: [{
+      broker: "trading212",
+      status: "problem",
+      lastSyncedAt: null,
+      result: {
+        positions: [],
+        trades: good.trades,
+        cashBalances: [],
+        source: "trading-212",
+        problems: ["Trading 212 holdings request failed with HTTP 503"],
+        tradesComplete: true,
+        positionsComplete: false,
+        cashBalancesComplete: false,
+      },
+    }],
+    problems: ["trading212: Trading 212 holdings request failed with HTTP 503"],
+  });
+
+  expect(cache.read().positions).toMatchObject([{ symbol: "AAPL", quantity: 3 }]);
+  expect(cache.read().cashBalances).toMatchObject([{ amount: 250 }]);
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1"]);
+});
+
 test("a first truncated history still keeps the trades it did read", () => {
   const cache = createRuntimeBrokerDataCache();
   const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });

@@ -4,10 +4,12 @@ import { createPortfolioAgentTools, runPortfolioAgent } from "./portfolioAgent.j
 import { createProblemReporter } from "./observability.js";
 import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
+  cashBalancesComplete,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
   historyPending,
+  positionsComplete,
   syncScheduledBrokers,
   tradesComplete,
   type BrokerSyncStateStore,
@@ -126,7 +128,10 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         if (outcome.result === null) continue;
         const incoming = outcome.result;
         const complete = tradesComplete(incoming) && !historyPending(incoming.resume);
-        if (incoming.positions.length > 0 || complete || !positionsByBroker.has(outcome.broker)) {
+        // Holdings can fail independently of order history (different T212
+        // budgets). An empty positions array on that failure must not replace
+        // last-good rows, or the dashboard goes blank after a "completed" history.
+        if (incoming.positions.length > 0 || (complete && positionsComplete(incoming)) || !positionsByBroker.has(outcome.broker)) {
           positionsByBroker.set(outcome.broker, incoming.positions);
         }
         const mappedTrades = incoming.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` }));
@@ -138,7 +143,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         const incomingDividends = incoming.dividends ?? [];
         if (complete) dividendsByBroker.set(outcome.broker, incomingDividends);
         else if (incomingDividends.length > 0) dividendsByBroker.set(outcome.broker, mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends));
-        if ((incoming.cashBalances?.length ?? 0) > 0 || complete || !cashBalancesByBroker.has(outcome.broker)) {
+        if ((incoming.cashBalances?.length ?? 0) > 0 || (complete && cashBalancesComplete(incoming)) || !cashBalancesByBroker.has(outcome.broker)) {
           cashBalancesByBroker.set(outcome.broker, incoming.cashBalances ?? []);
         }
         const incomingFlows = incoming.cashFlows ?? [];

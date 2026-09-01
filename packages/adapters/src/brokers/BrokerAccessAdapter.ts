@@ -26,6 +26,16 @@ export type BrokerResult = {
    */
   tradesComplete?: boolean;
   /**
+   * False when the holdings endpoint failed. Callers must then keep last-good
+   * positions instead of replacing them with an empty array. Defaults to true.
+   */
+  positionsComplete?: boolean;
+  /**
+   * False when the account-summary endpoint failed. Callers must then keep
+   * last-good cash instead of replacing it with empty. Defaults to true.
+   */
+  cashBalancesComplete?: boolean;
+  /**
    * ISO timestamp before which the broker refused further requests. Set only
    * when the provider rate-limited the sync, so the scheduler can hold off
    * instead of re-running the same rejected requests on the next app open.
@@ -41,6 +51,14 @@ export interface BrokerAccessAdapter {
 
 export function tradesComplete(result: BrokerResult): boolean {
   return result.tradesComplete ?? true;
+}
+
+export function positionsComplete(result: BrokerResult): boolean {
+  return result.positionsComplete ?? true;
+}
+
+export function cashBalancesComplete(result: BrokerResult): boolean {
+  return result.cashBalancesComplete ?? true;
 }
 
 /** True when some history still has pages left to read. */

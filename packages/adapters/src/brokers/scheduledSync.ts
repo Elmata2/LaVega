@@ -1,5 +1,5 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
-import { historyPending, tradesComplete, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "./BrokerAccessAdapter.js";
+import { cashBalancesComplete, historyPending, positionsComplete, tradesComplete, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "./BrokerAccessAdapter.js";
 
 export type ScheduledBroker = Extract<CredentialBroker, "ibkr" | "trading212">;
 export type BrokerSyncState = {
@@ -119,7 +119,7 @@ export async function syncScheduledBrokers(input: {
       // requests per minute, restarting the moment it finished.
       // Unfinished pagination is not "delivered": the next run must continue
       // the cursor instead of waiting 24 hours.
-      const delivered = tradesComplete(result) && !resume && (result.positions.length > 0 || result.trades.length > 0 || (result.cashBalances?.length ?? 0) > 0);
+      const delivered = tradesComplete(result) && positionsComplete(result) && cashBalancesComplete(result) && !resume && (result.positions.length > 0 || result.trades.length > 0 || (result.cashBalances?.length ?? 0) > 0);
       if (delivered) await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
       else await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter ?? null, resume });
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt: delivered ? nowIso : lastSyncedAt, result });

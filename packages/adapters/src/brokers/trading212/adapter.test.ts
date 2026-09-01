@@ -174,6 +174,8 @@ test("holdings failure returns trades and holdings problem", async () => {
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
   expect(result.trades).toHaveLength(1);
   expect(result.positions).toEqual([]);
+  expect(result.positionsComplete).toBe(false);
+  expect(result.tradesComplete).toBe(true);
   expect(result.problems).toEqual(["Trading 212 holdings request failed with HTTP 503"]);
 });
 

@@ -35,7 +35,9 @@ node .claude/skills/verify-investing/control-investing.mjs up
 Starts the standalone server on port 8799 with its own data directory under
 `/tmp/lavega-verify-investing/run/data` and no `DATABASE_URL`, so a verification run never
 touches the tenant rows behind the deployed dashboard. It waits for `/health` to answer
-`{"service":"investing-server"}` and prints the pid, port and log path.
+`{"service":"investing-server"}` and prints the pid, port and log path. Child stdout/stderr
+go to a log file, not a pipe: `up` exits after `/health`, and a pipe would EPIPE-kill the
+child on the first Trading 212 diagnostic log.
 
 Needs `apps/investing-web/dist` to exist. If it does not:
 
