@@ -58,6 +58,8 @@ Per-broker failures go in `problems` so one broken connection doesn't block the 
 
 Local-first by default, inherited unchanged from the personal side ([#5](https://github.com/Elmata2/LaVega/issues/5)): the user brings their own broker credentials, nothing routes through LaVega-run infrastructure, and no secret ever enters the repo. No broker in v1 needs an exception to this.
 
+Hosted credential storage is tenant-bound. The same signed-in user id must reach the credential write, the scheduled sync preflight, and the credential-aware adapter lookup; falling back to `local` inside one of those steps makes Neon reject the vault as belonging to another tenant. Each tenant may store its own IBKR and Trading 212 credentials independently.
+
 **Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
 
 | Broker | Persisted? | Why |

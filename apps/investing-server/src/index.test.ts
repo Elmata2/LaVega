@@ -84,6 +84,28 @@ test("runtime broker sync coalesces concurrent runs", async () => {
   expect(first.problems).toEqual(second.problems);
 });
 
+test("runtime broker sync passes the signed-in tenant to credential-aware adapters", async () => {
+  const baseUrl = await serve((request, response) => {
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
+    return json(response, []);
+  });
+  vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+  const credentials = {
+    getCredentials: vi.fn(async (tenantId: string, broker: string) => {
+      if (tenantId !== "user-123") throw new Error("Credential vault belongs to another tenant");
+      return broker === "trading212" ? { broker: "trading212", tenantId, token: "token", secret: "secret" } : null;
+    }),
+  } as unknown as ReturnType<typeof createFileCredentialStore>;
+  const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore(), undefined, "user-123");
+
+  const result = await sync(true);
+
+  expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
+  expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");
+});
+
 test("cached broker skip retains last successful positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({

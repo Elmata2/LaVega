@@ -57,7 +57,7 @@ export function createRuntimeBrokerSync(
 ): (force: boolean) => Promise<ScheduledSyncResult> {
   let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
-  const adapters = createCredentialsAwareBrokerAdapters({ credentials, onTrading212Diagnostic });
+  const adapters = createCredentialsAwareBrokerAdapters({ credentials, tenantId, onTrading212Diagnostic });
   return async (force) => {
     if (inFlight) return inFlight;
     const run = syncScheduledBrokers({ adapters, credentials, state, tenantId, entity, force })
