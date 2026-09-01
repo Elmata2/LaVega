@@ -1,11 +1,13 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
-import { tradesComplete, type BrokerAccessAdapter, type BrokerResult } from "./BrokerAccessAdapter.js";
+import { cashBalancesComplete, historyPending, positionsComplete, tradesComplete, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "./BrokerAccessAdapter.js";
 
 export type ScheduledBroker = Extract<CredentialBroker, "ibkr" | "trading212">;
 export type BrokerSyncState = {
   lastSyncedAt: string | null;
   /** ISO timestamp the provider rate-limited us until. Survives `force`. */
   retryAfter?: string | null;
+  /** Unfinished Trading 212 (or similar) pagination. Survives `force`. */
+  resume?: BrokerSyncResume | null;
 };
 
 export interface BrokerSyncStateStore {
@@ -93,20 +95,21 @@ export async function syncScheduledBrokers(input: {
 
     let result: BrokerResult;
     try {
-      result = await entry.adapter.sync({ entity: input.entity });
+      result = await entry.adapter.sync({ entity: input.entity, resume: previous.resume ?? undefined });
     } catch (error) {
       const problem = `${entry.broker}: ${readableError(error, entry.broker)}`;
       problems.push(problem);
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result: null });
       continue;
     }
+    const resume = historyPending(result.resume) ? result.resume ?? null : null;
     if (result.problems.length > 0) {
       problems.push(...result.problems.map((problem) => `${entry.broker}: ${problem}`));
       // Only a rate limit gets a cooldown. Every other problem (missing
       // credentials above all) must stay retryable, or saving credentials would
       // not be able to trigger the sync that follows it.
       if (result.retryAfter) {
-        await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter });
+        await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter, resume });
         outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
         continue;
       }
@@ -114,12 +117,20 @@ export async function syncScheduledBrokers(input: {
       // were unreadable. Leaving `lastSyncedAt` unset over a row problem made
       // the next app open replay the entire Trading 212 order history — six
       // requests per minute, restarting the moment it finished.
-      const delivered = tradesComplete(result) && (result.positions.length > 0 || result.trades.length > 0);
-      if (delivered) await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null });
+      // Unfinished pagination is not "delivered": the next run must continue
+      // the cursor instead of waiting 24 hours.
+      const delivered = tradesComplete(result) && positionsComplete(result) && cashBalancesComplete(result) && !resume && (result.positions.length > 0 || result.trades.length > 0 || (result.cashBalances?.length ?? 0) > 0);
+      if (delivered) await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
+      else await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter ?? null, resume });
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt: delivered ? nowIso : lastSyncedAt, result });
       continue;
     }
-    await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null });
+    if (resume) {
+      await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter ?? null, resume });
+      outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
+      continue;
+    }
+    await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
     outcomes.push({ broker: entry.broker, status: "synced", lastSyncedAt: nowIso, result });
   }
 

@@ -51,6 +51,11 @@ await writeFile(`${functionDir}/.vc-config.json`, JSON.stringify({
   handler: "index.mjs",
   launcherType: "Nodejs",
   shouldAddHelpers: true,
+  /* Trading 212 order history is 6 req/min. A first sync is ~40 pages and
+   * cannot finish inside the 10s/15s default. 300s is the Pro ceiling that
+   * still lets the adapter stop on INVESTING_SYNC_BUDGET_MS and persist a
+   * resume cursor instead of dying mid-history. */
+  maxDuration: 300,
 }, null, 2));
 
 await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);

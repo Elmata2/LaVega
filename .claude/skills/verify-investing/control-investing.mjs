@@ -13,7 +13,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -204,10 +204,13 @@ async function commandUp(flags) {
   if (!existsSync(tsx)) fail("node_modules/.bin/tsx is missing", "run: pnpm install");
 
   writeFileSync(logFile, "");
+  const logFd = openSync(logFile, "a");
   const child = spawn(tsx, ["apps/investing-server/src/docker.ts"], {
     cwd: repoRoot,
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    /* File stdio, not a pipe: `up` exits after /health, and a pipe then
+     * EPIPE-kills the child on the first Trading 212 diagnostic log. */
+    stdio: ["ignore", logFd, logFd],
     env: {
       ...process.env,
       PORT: String(port),
@@ -222,10 +225,8 @@ async function commandUp(flags) {
       DATABASE_URL: "",
     },
   });
-  const append = (chunk) => { try { writeFileSync(logFile, chunk, { flag: "a" }); } catch { /* log is best effort */ } };
-  child.stdout.on("data", append);
-  child.stderr.on("data", append);
   child.unref();
+  closeSync(logFd);
 
   writeFileSync(pidFile, String(child.pid));
   writeFileSync(portFile, String(port));

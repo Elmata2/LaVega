@@ -242,7 +242,18 @@ export function createPreferencesRepository(db: Database, userId: string | undef
   };
 }
 
-export type SyncStateRow = { lastSyncedAt: string | null; retryAfter?: string | null };
+export type SyncStateRow = {
+  lastSyncedAt: string | null;
+  retryAfter?: string | null;
+  resume?: {
+    ordersNextPagePath?: string | null;
+    transactionsNextPagePath?: string | null;
+    dividendsNextPagePath?: string | null;
+    ordersComplete?: boolean;
+    transactionsComplete?: boolean;
+    dividendsComplete?: boolean;
+  } | null;
+};
 
 export type SyncStateRepository = {
   get(broker: string): Promise<SyncStateRow>;

@@ -65,7 +65,7 @@ test("a successful sync clears a stored hold-off", async () => {
 
   await run(sync, state, new Date("2026-08-19T12:06:00.000Z"));
 
-  expect(await state.get("trading212")).toEqual({ lastSyncedAt: "2026-08-19T12:06:00.000Z", retryAfter: null });
+  expect(await state.get("trading212")).toEqual({ lastSyncedAt: "2026-08-19T12:06:00.000Z", retryAfter: null, resume: null });
 });
 
 /* A first Trading 212 sync reads the whole order history, page by page, at six
@@ -92,4 +92,48 @@ test("a truncated history keeps retrying, because nothing complete ever landed",
   await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
 
   expect(sync).toHaveBeenCalledTimes(2);
+});
+
+test("an unfinished history stores the resume cursor and does not set lastSyncedAt", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
+  const sync = vi.fn(async () => empty({
+    trades: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
+    positions: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" }],
+    problems: ["Trading 212 sync paused before the host time limit; remaining history resumes on the next run"],
+    tradesComplete: false,
+    retryAfter: "2026-08-19T12:01:00.000Z",
+    resume,
+  }));
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+
+  expect(await state.get("trading212")).toEqual({ lastSyncedAt: null, retryAfter: "2026-08-19T12:01:00.000Z", resume });
+});
+
+test("a holdings failure does not set lastSyncedAt, so the next open retries", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () => empty({
+    trades: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
+    problems: ["Trading 212 holdings request failed with HTTP 503"],
+    positionsComplete: false,
+  }));
+
+  await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
+  const second = await run(sync, state, new Date("2026-08-19T12:05:00.000Z"), false);
+
+  expect(await state.get("trading212")).toMatchObject({ lastSyncedAt: null });
+  expect(sync).toHaveBeenCalledTimes(2);
+  expect(second.outcomes[0]?.status).toBe("problem");
+});
+
+test("the next run after the cooldown passes the stored resume into sync", async () => {
+  const state = createMemoryBrokerSyncStateStore();
+  const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
+  await state.put("trading212", { lastSyncedAt: null, retryAfter: "2026-08-19T12:01:00.000Z", resume });
+  const sync = vi.fn(async () => empty({}));
+
+  await run(sync, state, new Date("2026-08-19T12:01:01.000Z"));
+
+  expect(sync).toHaveBeenCalledWith({ entity: "BV", resume });
 });
