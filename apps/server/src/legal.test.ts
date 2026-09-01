@@ -8,7 +8,10 @@ import { privacyHtml, termsHtml } from "./legal.js";
  * the code but not in the policy. */
 
 test("every third party the code sends data to is named in the policy", () => {
-  for (const processor of ["Enable Banking", "Anthropic", "Cloudflare", "n8n", "Google", "Railway", "Frankfurter"]) {
+  // Railway was here until 2026-09-01, when hosting moved to Vercel and the
+  // database to Neon. A processor leaving the stack has to leave the policy too,
+  // or it names a company that no longer holds anything.
+  for (const processor of ["Enable Banking", "Anthropic", "Cloudflare", "n8n", "Google", "Vercel", "Neon", "Frankfurter"]) {
     expect(privacyHtml, `policy does not name ${processor}`).toContain(processor);
   }
 });
@@ -38,4 +41,27 @@ test("both pages are complete HTML documents", () => {
     expect(html.startsWith("<!doctype html>")).toBe(true);
     expect(html.trimEnd().endsWith("</html>")).toBe(true);
   }
+});
+
+test("the policy does not claim the server stores nothing, now that Neon does", () => {
+  // It said "De LaVega-server bewaart je administratie niet" while a vault
+  // backup, broker credentials and preferences sat in Neon. That is the same
+  // failure as the one above: the architecture moved and the policy did not.
+  expect(privacyHtml).not.toContain("bewaart je administratie niet");
+  expect(privacyHtml).toContain("Wat er wél op de server staat");
+});
+
+test("the policy separates the vault we cannot read from the broker data we can", () => {
+  // One blanket "your data is yours" would be false for the broker vault, which
+  // is sealed with OUR key because the server has to use it to sync.
+  expect(privacyHtml).toMatch(/die wij niet kunnen lezen/);
+  expect(privacyHtml).toMatch(/die wij wél kunnen lezen/);
+});
+
+test("the policy tells the user how to erase what is on the server", () => {
+  // Wiping browser storage no longer removes everything, so the policy has to
+  // say what survives it and what removes that.
+  expect(privacyHtml).not.toContain("het wissen van de browseropslag verwijdert alles definitief");
+  expect(privacyHtml).toContain("verwijderen van je gegevens op de server");
+  expect(privacyHtml).toContain("Autoriteit Persoonsgegevens");
 });

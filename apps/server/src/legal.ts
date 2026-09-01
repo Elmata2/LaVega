@@ -75,7 +75,16 @@ export const privacyHtml = page(
 <p>Zet je het doorstuuradres voor facturen aan, dan loopt inkomende post langs <strong>Cloudflare</strong> (die het adres bedient) naar <strong>n8n</strong> (dat de mail en de bijlagen klaarzet voor je Facturen-scherm). Een factuur wordt pas geboekt nadat jij hem bevestigt. Gebruik je een eigen n8n-server, dan gaat het naar de jouwe.</p>
 
 <h2>De rol van de server</h2>
-<p>De LaVega-server bewaart je administratie niet, maar is meer dan een doorgeefluik. Hij: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Anthropic-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt sinds 31 augustus 2026 elke API achter een ingelogde sessie.</p>
+<p>De server: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Anthropic-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt elke API achter een ingelogde sessie.</p>
+
+<h2>Wat er wél op de server staat</h2>
+<p>Hier stond eerder dat de server je administratie niet bewaart. Sinds we een database (Neon) gebruiken klopt dat niet meer, en we schrijven het liever precies op dan mooi.</p>
+<ul>
+  <li><strong>Een back-up van je kluis — die wij niet kunnen lezen.</strong> Zet je de back-up aan, dan versleutelt je browser de kluis met een sleutel uit jouw wachtwoord en stuurt alleen het resultaat. De sleutel verlaat je apparaat niet. Wij bewaren bytes waar wij niets van kunnen maken; raak je je wachtwoord kwijt, dan kunnen wij de back-up ook niet openen.</li>
+  <li><strong>Beleggingsgegevens — die wij wél kunnen lezen.</strong> Koppel je een broker, dan bewaart de server je brokerkoppeling en de opgehaalde standen versleuteld, maar met <em>onze</em> sleutel: hij moet die koppeling immers zelf kunnen gebruiken om te synchroniseren. Dat is een echt verschil met de regel hierboven en het hoort niet weggeschreven te worden.</li>
+  <li><strong>Je account</strong> (e-mailadres en inloggegevens), je voorkeuren, wanneer er voor het laatst gesynchroniseerd is, en een cache van publieke koersen.</li>
+</ul>
+<p>Elke rij is afgeschermd op gebruiker: een ingelogde sessie bepaalt van wie een verzoek is, en de database weigert rijen van iemand anders.</p>
 
 <h2>Derden</h2>
 <table>
@@ -86,12 +95,15 @@ export const privacyHtml = page(
   <tr><td><strong>n8n</strong></td><td>Diezelfde mail plus bijlagen</td><td>Alleen met het factuuradres aan</td></tr>
   <tr><td><strong>Google</strong> (Apps Script)</td><td>Je e-mailadres</td><td>Alleen als je je op de wachtlijst zet</td></tr>
   <tr><td><strong>Frankfurter</strong> (ECB)</td><td>Valutaparen — publiek, niet persoonlijk</td><td>Bij de valutafunctie</td></tr>
-  <tr><td><strong>Railway</strong></td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
+  <tr><td><strong>Vercel</strong> (VS)</td><td>Hosting van de app en de server</td><td>Altijd</td></tr>
+  <tr><td><strong>Neon</strong> (VS)</td><td>De database: versleutelde kluis-back-up, beleggingsgegevens, account en voorkeuren</td><td>Altijd</td></tr>
 </table>
 <p>Geen verkoop van gegevens, geen advertenties, geen tracking of analytics.</p>
 
 <h2>Jouw controle</h2>
-<p>Omdat je gegevens op je eigen apparaat staan, heb jij de controle: exporteren en verwijderen kan in de app, en het wissen van de browseropslag verwijdert alles definitief.</p>
+<p>Je gegevens staan op je eigen apparaat: exporteren en verwijderen kan in de app. Het wissen van je browseropslag verwijdert je lokale kluis.</p>
+<p><strong>Dat wist niet meer alles.</strong> Staat er een back-up of een brokerkoppeling op de server, dan blijft die na het legen van je browser gewoon staan. Om die ook weg te halen is er een aparte handeling: <strong>het verwijderen van je gegevens op de server</strong>. Die verwijdert in één keer je kluis-back-up, je brokerkoppelingen en opgehaalde standen, je voorkeuren, je synchronisatiestand en je agent-geschiedenis. Het is niet terug te draaien, en wij bewaren daarna geen kopie. Je account zelf (je inlog) verwijderen we op verzoek — <a href="mailto:alexander@generation-c.nl">stuur een bericht</a> en we doen het.</p>
+<p>Verder heb je de rechten uit de AVG: inzage, correctie, verwijdering, beperking, bezwaar en overdraagbaarheid, en het recht een klacht in te dienen bij de Autoriteit Persoonsgegevens.</p>
 
 <h2>Contact</h2>
 <p>Vragen? Mail <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>`,
