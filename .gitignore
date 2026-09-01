@@ -26,3 +26,4 @@ state.json
 # The pnpm store is pinned to the repo (.npmrc) so an install never has to
 # purge node_modules when the global store moves.
 .pnpm-store/
+.env.local

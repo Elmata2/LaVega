@@ -13,8 +13,17 @@ import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { signOut } from "./lib/auth-client";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
+const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
 
 const SYNC_BACKGROUND_MESSAGE = "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
+
+function brokerSyncActive(status?: BrokerProgress["status"]): boolean {
+  return status === "running" || status === "waiting";
+}
+
+function notifyBrokerSyncStarted() {
+  window.dispatchEvent(new Event(BROKER_SYNC_STARTED_EVENT));
+}
 
 /* Een eerste volledige synchronisatie duurt langer dan de time-out van de edge:
    Cloudflare kapt de aanvraag na ongeveer 100 seconden af met een HTML-pagina
@@ -189,6 +198,11 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
   const refreshedPriceRun = useRef<string | null>(null);
   useEffect(() => {
     let current = true;
+    let timer: number | null = null;
+    const clearTimer = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+    };
     const load = async () => {
       const [brokerResult, priceResult, vaultResult] = await Promise.allSettled([
         fetch("/api/brokers/sync/status").then(async (response) => response.ok ? await response.json() as BrokerProgress : null),
@@ -196,19 +210,33 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
         fetch("/api/brokers/credentials/status").then(async (response) => response.ok ? await response.json() as { status?: string } : null),
       ]);
       if (!current) return;
-      if (brokerResult.status === "fulfilled" && brokerResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)) setBroker(brokerResult.value);
+      let active = false;
+      if (brokerResult.status === "fulfilled" && brokerResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)) {
+        setBroker(brokerResult.value);
+        active = active || brokerSyncActive(brokerResult.value.status);
+      }
       if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(priceResult.value.status)) {
         setPrice(priceResult.value);
+        active = active || brokerSyncActive(priceResult.value.status);
         if ((priceResult.value.status === "completed" || priceResult.value.status === "problem") && priceResult.value.updatedAt && refreshedPriceRun.current !== priceResult.value.updatedAt) {
           refreshedPriceRun.current = priceResult.value.updatedAt;
           window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
         }
       }
       if (vaultResult.status === "fulfilled" && ["empty", "locked", "unlocked"].includes(vaultResult.value?.status ?? "")) setVault(vaultResult.value!.status as "empty" | "locked" | "unlocked");
+      if (active) timer = window.setTimeout(load, 1_000);
+    };
+    const wake = () => {
+      clearTimer();
+      void load();
     };
     void load();
-    const timer = window.setInterval(() => { void load(); }, 1_000);
-    return () => { current = false; window.clearInterval(timer); };
+    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
+    return () => {
+      current = false;
+      clearTimer();
+      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
+    };
   }, []);
   const brokerValue = broker?.status === "running" ? "Bezig" : broker?.status === "waiting" ? "Wachten" : broker?.status === "completed" ? "Actueel" : broker?.status === "problem" ? "Probleem" : broker?.status === "idle" ? "Gereed" : "Onbekend";
   const priceValue = price?.status === "running" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
@@ -230,6 +258,7 @@ function AppOpenSync() {
   const [consentBusy, setConsentBusy] = useState(false);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
+      notifyBrokerSyncStarted();
       const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
       const brokerResult = await brokerResponse.json() as { problems?: string[] };
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
@@ -323,6 +352,7 @@ function BrokerSyncAction() {
     setStatus("loading");
     setProblems([]);
     try {
+      notifyBrokerSyncStarted();
       const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const result = await response.json() as { problems?: string[] };
       if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker synchronisatie mislukt.");
@@ -354,17 +384,32 @@ function BrokerSyncProgressCard() {
 
   useEffect(() => {
     let current = true;
+    let timer: number | null = null;
+    const clearTimer = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+    };
     const load = async () => {
       try {
         const response = await fetch("/api/brokers/sync/status");
         if (!response.ok) return;
         const next = await response.json() as Partial<BrokerProgress>;
-        if (current && ["idle", "running", "waiting", "completed", "problem"].includes(next.status ?? "")) setProgress(next as BrokerProgress);
+        if (!current || !["idle", "running", "waiting", "completed", "problem"].includes(next.status ?? "")) return;
+        setProgress(next as BrokerProgress);
+        if (brokerSyncActive(next.status)) timer = window.setTimeout(load, 1_000);
       } catch { /* Existing sync result surfaces network errors. */ }
     };
+    const wake = () => {
+      clearTimer();
+      void load();
+    };
     void load();
-    const timer = window.setInterval(() => { void load(); }, 1_000);
-    return () => { current = false; window.clearInterval(timer); };
+    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
+    return () => {
+      current = false;
+      clearTimer();
+      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
+    };
   }, []);
 
   if (!progress || progress.status === "idle" || progress.status === "problem") return null;
@@ -426,6 +471,7 @@ function BrokerVaultUnlock() {
       const unlockResult = await unlockResponse.json().catch(() => ({})) as { problems?: string[] };
       if (!unlockResponse.ok) throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
       setPassphrase("");
+      notifyBrokerSyncStarted();
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await readSyncResult(syncResponse);
       if (!syncResult) {
@@ -481,6 +527,7 @@ function BrokerCredentialForm() {
       const saveResponse = await fetch("/api/brokers/credentials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
       if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
+      notifyBrokerSyncStarted();
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await readSyncResult(syncResponse);
       if (!syncResult) {
