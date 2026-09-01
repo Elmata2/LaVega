@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CredentialStore } from "@lavega/core";
-import { createCredentialsAwareBrokerAdapters } from "./credentialsAware.js";
+import { createCredentialsAwareBrokerAdapters, trading212DeadlineMs } from "./credentialsAware.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -75,4 +75,16 @@ test("stored credentials reach the broker adapters together with env config", as
   } finally {
     log.mockRestore();
   }
+});
+
+test("Vercel without an explicit budget uses a short host deadline", () => {
+  expect(trading212DeadlineMs((name) => name === "VERCEL" ? "1" : undefined, 1_000)).toBe(46_000);
+});
+
+test("INVESTING_SYNC_BUDGET_MS overrides the Vercel default", () => {
+  expect(trading212DeadlineMs((name) => name === "INVESTING_SYNC_BUDGET_MS" ? "240000" : name === "VERCEL" ? "1" : undefined, 1_000)).toBe(241_000);
+});
+
+test("a local runtime without Vercel has no host deadline", () => {
+  expect(trading212DeadlineMs(() => undefined, 1_000)).toBeUndefined();
 });

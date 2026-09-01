@@ -7,6 +7,7 @@ import {
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
   createInMemoryBenchmarkSelectionStore,
+  historyPending,
   syncScheduledBrokers,
   tradesComplete,
   type BrokerSyncStateStore,
@@ -84,6 +85,12 @@ const PORTFOLIO_AGENT_PROMPT = [
   "total value, largest position, and anything that looks off such as missing prices or empty broker data.",
 ].join(" ");
 
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return [...byId.values()];
+}
+
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
   const tradesByBroker = new Map<string, Trade[]>();
@@ -117,13 +124,26 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         // Partial results with problems still carry fresh broker data; discarding
         // them left the vault stale while the UI showed only the problem.
         if (outcome.result === null) continue;
-        positionsByBroker.set(outcome.broker, outcome.result.positions);
-        // A truncated trade history (pagination failed mid-chain) must not wipe
-        // good stored trades; keep the previous set until a complete sync lands.
-        if (tradesComplete(outcome.result)) tradesByBroker.set(outcome.broker, outcome.result.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` })));
-        dividendsByBroker.set(outcome.broker, outcome.result.dividends ?? []);
-        cashBalancesByBroker.set(outcome.broker, outcome.result.cashBalances ?? []);
-        cashFlowsByBroker.set(outcome.broker, outcome.result.cashFlows ?? []);
+        const incoming = outcome.result;
+        const complete = tradesComplete(incoming) && !historyPending(incoming.resume);
+        if (incoming.positions.length > 0 || complete || !positionsByBroker.has(outcome.broker)) {
+          positionsByBroker.set(outcome.broker, incoming.positions);
+        }
+        const mappedTrades = incoming.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` }));
+        // A truncated trade history must not wipe good stored trades. A first
+        // truncated run (empty vault) must still keep the pages it did read,
+        // or a Vercel time-limit stop would persist nothing.
+        if (complete) tradesByBroker.set(outcome.broker, mappedTrades);
+        else if (mappedTrades.length > 0) tradesByBroker.set(outcome.broker, mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades));
+        const incomingDividends = incoming.dividends ?? [];
+        if (complete) dividendsByBroker.set(outcome.broker, incomingDividends);
+        else if (incomingDividends.length > 0) dividendsByBroker.set(outcome.broker, mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends));
+        if ((incoming.cashBalances?.length ?? 0) > 0 || complete || !cashBalancesByBroker.has(outcome.broker)) {
+          cashBalancesByBroker.set(outcome.broker, incoming.cashBalances ?? []);
+        }
+        const incomingFlows = incoming.cashFlows ?? [];
+        if (complete) cashFlowsByBroker.set(outcome.broker, incomingFlows);
+        else if (incomingFlows.length > 0) cashFlowsByBroker.set(outcome.broker, mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows));
       }
       problems = result.problems;
       if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;

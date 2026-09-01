@@ -4,6 +4,7 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "env": {
     "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json",
-    "INVESTING_MOUNT": "1"
+    "INVESTING_MOUNT": "1",
+    "INVESTING_SYNC_BUDGET_MS": "240000"
   }
 }

@@ -99,10 +99,10 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
   const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "Holding BV" });
 
   expect(paths).toEqual([
-    "/api/v0/equity/history/orders?limit=50",
-    "/next",
     "/api/v0/equity/positions",
     "/api/v0/equity/account/summary",
+    "/api/v0/equity/history/orders?limit=50",
+    "/next",
     "/api/v0/equity/history/transactions?limit=50",
     "/api/v0/equity/history/dividends?limit=50",
   ]);
@@ -140,6 +140,29 @@ test("sync returns collected trades and problem when later page fails", async ()
   expect(result.trades).toHaveLength(1);
   expect(result.tradesComplete).toBe(false);
   expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
+  expect(result.resume?.ordersNextPagePath).toContain("/next");
+});
+
+test("the next sync continues order history from the stored nextPagePath", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    paths.push(request.url ?? "");
+    if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
+    else if (request.url === "/next") json(response, 200, { items: [order(2, "MSFT", "SELL")] });
+    else standardNonOrder(request, response);
+  });
+  const adapter = createTrading212Adapter({ token: "token", secret: "secret", baseUrl });
+  const first = await adapter.sync({ entity: "BV" });
+  expect(first.trades).toHaveLength(2);
+
+  paths.length = 0;
+  const second = await adapter.sync({ entity: "BV", resume: { ordersNextPagePath: `${baseUrl}/next`, ordersComplete: false } });
+
+  expect(paths.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toEqual([]);
+  expect(paths).toContain("/next");
+  expect(second.trades).toMatchObject([{ symbol: "MSFT", side: "sell" }]);
+  expect(second.tradesComplete).toBe(true);
+  expect(second.resume).toBeUndefined();
 });
 
 test("holdings failure returns trades and holdings problem", async () => {

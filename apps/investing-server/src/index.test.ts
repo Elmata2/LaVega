@@ -212,10 +212,17 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["full-1", "full-2"]) }], problems: [] });
 
   cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["history failed"], tradesComplete: false } }], problems: ["trading212: history failed"] });
-  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1", "full-2"]);
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1", "full-2", "partial-1"]);
 
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["fresh-1"]) }], problems: [] });
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["fresh-1"]);
+});
+
+test("a first truncated history still keeps the trades it did read", () => {
+  const cache = createRuntimeBrokerDataCache();
+  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
+  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["host time limit"], tradesComplete: false } }], problems: ["trading212: host time limit"] });
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["partial-1"]);
 });
 
 test("runtime unlocks persisted broker credentials after restart", async () => {

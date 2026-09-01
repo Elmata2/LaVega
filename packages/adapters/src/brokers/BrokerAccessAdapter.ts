@@ -1,5 +1,15 @@
 import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
 
+/** Cursor so a later invocation can continue a history that did not finish. */
+export type BrokerSyncResume = {
+  ordersNextPagePath?: string | null;
+  transactionsNextPagePath?: string | null;
+  dividendsNextPagePath?: string | null;
+  ordersComplete?: boolean;
+  transactionsComplete?: boolean;
+  dividendsComplete?: boolean;
+};
+
 export type BrokerResult = {
   positions: Position[];
   trades: Omit<Trade, "id">[];
@@ -21,12 +31,21 @@ export type BrokerResult = {
    * instead of re-running the same rejected requests on the next app open.
    */
   retryAfter?: string;
+  /** Present when at least one history is unfinished and the next run should continue it. */
+  resume?: BrokerSyncResume;
 };
 
 export interface BrokerAccessAdapter {
-  sync(input: { entity: string }): Promise<BrokerResult>;
+  sync(input: { entity: string; resume?: BrokerSyncResume }): Promise<BrokerResult>;
 }
 
 export function tradesComplete(result: BrokerResult): boolean {
   return result.tradesComplete ?? true;
+}
+
+/** True when some history still has pages left to read. */
+export function historyPending(resume: BrokerSyncResume | null | undefined): boolean {
+  if (!resume) return false;
+  if (resume.ordersNextPagePath || resume.transactionsNextPagePath || resume.dividendsNextPagePath) return true;
+  return resume.ordersComplete !== true || resume.transactionsComplete !== true || resume.dividendsComplete !== true;
 }

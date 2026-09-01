@@ -40,3 +40,11 @@ test("a missing or corrupt file reads as no state rather than blocking a sync", 
   await writeFile(filePath, "{ not json", "utf8");
   expect(await createFileBrokerSyncStateStore(filePath).get("trading212")).toEqual({ lastSyncedAt: null, retryAfter: null });
 });
+
+test("a resume cursor survives a restart", async () => {
+  const filePath = await statePath();
+  const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
+  await createFileBrokerSyncStateStore(filePath).put("trading212", { lastSyncedAt: null, retryAfter: "2026-08-19T12:05:00.000Z", resume });
+
+  expect(await createFileBrokerSyncStateStore(filePath).get("trading212")).toEqual({ lastSyncedAt: null, retryAfter: "2026-08-19T12:05:00.000Z", resume });
+});
