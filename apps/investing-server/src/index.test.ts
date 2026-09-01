@@ -279,3 +279,20 @@ test("a tenant's broker sync status is its own, not the last caller's", async ()
   expect(started.status).not.toBe("idle");
   expect(untouched.status).toBe("idle");
 });
+
+test("price history is read with dates Postgres accepts", async () => {
+  const priceStore = createInMemoryPriceStore();
+  const getRange = vi.spyOn(priceStore, "getRange").mockImplementation(async (_tenantId, _symbol, from, to) => {
+    // Postgres has no year zero, so `0000-01-01` fails the query outright
+    // instead of standing for "from the beginning" the way a string compare does.
+    for (const date of [from, to]) if (date?.startsWith("0000-")) throw new Error(`date/time field value out of range: "${date}"`);
+    return [];
+  });
+  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols: () => ["^GSPC"], resolveTenantId: () => "user-a" });
+
+  const response = await runtimeApp.request("/api/investing/dashboard");
+  const body = await response.json() as { problems: string[] };
+
+  expect(getRange).toHaveBeenCalled();
+  expect(body.problems).toEqual([]);
+});

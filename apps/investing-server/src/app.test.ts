@@ -351,3 +351,12 @@ test("a passphrase-locked vault still refuses credentials without one", async ()
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ problems: ["passphrase is required"] });
 });
+
+test("health answers under /api/ too, because that is the only path a mount forwards", async () => {
+  const runtime = createApp();
+
+  const response = await runtime.request("/api/investing/health");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, service: "investing-server" });
+});

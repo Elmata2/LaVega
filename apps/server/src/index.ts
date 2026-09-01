@@ -158,6 +158,10 @@ if (shouldMountInvesting()) {
     return forwardInvesting(c.req.raw, tenantId);
   };
   const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Ahead of the wildcard, and without a session: the health line names the
+   * runtime, not a tenant, and the footer that shows it renders before anyone
+   * has signed in. */
+  app.get("/api/investing/health", toInvestingStatic);
   app.all("/api/investing/*", toInvesting);
   app.all("/api/brokers/*", toInvesting);
   app.all("/api/prices/*", toInvesting);

@@ -52,3 +52,14 @@ test("the investing SPA shell stays reachable without a session", async () => {
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("tenant:none");
 });
+
+test("the health line is answered without a session, and by the investing runtime", async () => {
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  const response = await app.request("/api/investing/health");
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("tenant:none");
+  expect(investingTenantIdMock).not.toHaveBeenCalled();
+});

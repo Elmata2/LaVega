@@ -48,7 +48,7 @@ function withAuthUnconfigured(input: RequestInfo | URL, fallback: () => Response
 function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   return withAuthUnconfigured(input, () => {
-    if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+    if (url === "/api/investing/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
     if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
     if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
@@ -59,7 +59,7 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
 function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   return withAuthUnconfigured(input, () => {
-    if (url === "/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+    if (url === "/api/investing/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
     if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
     if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
@@ -82,7 +82,7 @@ test("overview shell fetches and displays investing server health", async () => 
   expect(container.textContent).toContain("Portefeuillewaarde");
   expect(container.textContent).toContain("ASML");
   expect(fetch).toHaveBeenCalledWith("/api/investing/dashboard");
-  expect(fetch).toHaveBeenCalledWith("/health");
+  expect(fetch).toHaveBeenCalledWith("/api/investing/health");
   root.unmount();
 });
 
@@ -568,11 +568,10 @@ test("broker credential form succeeds when the other broker is not configured", 
 });
 
 test("the health line asks the investing server, not whoever owns the origin root", async () => {
-  /* In the all-in-one deploy this app is served under /investing/, and the
-   * origin's own /health belongs to the personal server: it answers {ok:true}
-   * with no `service` field, so a hardcoded "/health" renders as ": beschikbaar"
-   * with an empty name and says nothing about whether the investing runtime is
-   * actually up. The request has to carry the base the app was built with. */
+  /* In the all-in-one deploy this app is served under /investing/, and neither
+   * neighbouring path answers for the investing runtime: the origin's own
+   * /health belongs to the personal server, and /investing/health is an SPA
+   * view the CDN answers with this very page. Only /api/ reaches the runtime. */
   vi.stubEnv("BASE_URL", "/investing/");
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
@@ -593,7 +592,7 @@ test("the health line asks the investing server, not whoever owns the origin roo
     await Promise.resolve();
   });
 
-  expect(calls).toEqual(["/investing/health"]);
+  expect(calls).toEqual(["/api/investing/health"]);
   expect(container.textContent).toContain("investing-server: beschikbaar");
   root.unmount();
   vi.unstubAllEnvs();

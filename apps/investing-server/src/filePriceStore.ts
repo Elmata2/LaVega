@@ -49,7 +49,7 @@ export function createFilePriceStore(filePath: string): PriceStore {
 
   return {
     async getRange(tenantId, symbol, from, to) {
-      return (await symbolIndex()).get(`${tenantId}\u0000${symbol}`)?.filter((bar) => bar.date >= from && bar.date <= to) ?? [];
+      return (await symbolIndex()).get(`${tenantId}\u0000${symbol}`)?.filter((bar) => (from === undefined || bar.date >= from) && (to === undefined || bar.date <= to)) ?? [];
     },
     async lastDate(tenantId, symbol) {
       return (await symbolIndex()).get(`${tenantId}\u0000${symbol}`)?.at(-1)?.date ?? null;

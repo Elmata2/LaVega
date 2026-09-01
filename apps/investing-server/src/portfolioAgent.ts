@@ -23,7 +23,7 @@ const IDENTITY_FX = { base: "EUR", date: "0000-01-01", rates: { EUR: 1 } };
 
 export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
   const getPriceBar = async (symbol: string, date?: string) => {
-    const bars = await deps.priceStore.getRange(TENANT_ID, symbol, date ?? "0000-01-01", date ?? "9999-12-31");
+    const bars = await deps.priceStore.getRange(TENANT_ID, symbol, date, date);
     return bars.filter((bar) => date === undefined || bar.date <= date).at(-1) ?? null;
   };
 
@@ -52,7 +52,7 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
       execute: async () => {
         const { positions, trades, dividends, cashBalances, cashFlows } = deps.readBrokerData();
         const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
-        const bars = (await Promise.all(symbols.map((symbol) => deps.priceStore.getRange(TENANT_ID, symbol, "0000-01-01", "9999-12-31")))).flat();
+        const bars = (await Promise.all(symbols.map((symbol) => deps.priceStore.getRange(TENANT_ID, symbol)))).flat();
         const today = bars.map((bar) => bar.date).sort().at(-1);
         const series = computePortfolioValueSeries(positions, trades, bars, "EUR", deps.fxRate ?? IDENTITY_FX, { cashBalances, cashFlows, dividends, today });
         return series.at(-1) ?? null;

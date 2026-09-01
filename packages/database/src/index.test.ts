@@ -48,6 +48,32 @@ function fakeDatabase(rows: QueryResultRow[] = []) {
 const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
   calls.filter((call) => !["BEGIN", "COMMIT", "ROLLBACK"].includes(call.sql) && !call.sql.startsWith("SELECT set_config"));
 
+test("an unbounded price bar read asks for no date range at all", async () => {
+  /* The whole history used to be spelled '0000-01-01'..'9999-12-31'. Postgres has
+   * no year zero, so that read threw and every dashboard behind it came back
+   * empty. Omitting a bound has to mean "no bound", not a sentinel date. */
+  const { db, calls } = fakeDatabase();
+  const repository = createPriceBarRepository(db, "user-123");
+
+  await repository.getRange("AAPL");
+
+  const query = executed(calls)[0];
+  expect(query?.values).toEqual(["AAPL"]);
+  expect(query?.sql).not.toMatch(/BETWEEN|\$2/);
+});
+
+test("a half-open price bar read keeps only the bound it was given", async () => {
+  const { db, calls } = fakeDatabase();
+  const repository = createPriceBarRepository(db, "user-123");
+
+  await repository.getRange("AAPL", "2026-01-01");
+
+  const query = executed(calls)[0];
+  expect(query?.values).toEqual(["AAPL", "2026-01-01"]);
+  expect(query?.sql).toContain("date >= $2");
+  expect(query?.sql).not.toContain("date <= ");
+});
+
 test("price bars are read, written and purged inside the tenant transaction", async () => {
   const { db, calls } = fakeDatabase([{ symbol: "AAPL", date: "2026-01-02", close: "120.50", currency: "USD" }]);
   const repository = createPriceBarRepository(db, "user-123");

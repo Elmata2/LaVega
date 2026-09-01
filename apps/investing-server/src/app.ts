@@ -69,7 +69,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const runPriceSyncIfConsented = async (tenantId: string) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId);
   };
-  investingApp.get("/health", (c) => c.json({ ok: true, service: "investing-server" }));
+  /* Twice, on purpose. `/health` is what a container health check and the
+   * standalone server ask for; `/api/investing/health` is the same answer on a
+   * path the mount forwards, because everything outside /api/ belongs to the
+   * SPA there and never reaches this app. */
+  const health = (c: { json: (body: unknown) => Response }) => c.json({ ok: true, service: "investing-server" });
+  investingApp.get("/health", health);
+  investingApp.get("/api/investing/health", health);
   investingApp.get("/api/investing/summary", async (c) => {
     try {
       const data = await dashboardReader({});

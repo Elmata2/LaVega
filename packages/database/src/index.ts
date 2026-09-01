@@ -144,7 +144,8 @@ const isoDate = (value: unknown): string | null =>
   value == null ? null : value instanceof Date ? value.toISOString() : String(value);
 
 export type PriceBarRepository = {
-  getRange(symbol: string, from: string, to: string): Promise<PriceBarRow[]>;
+  /** Omitting a bound means no bound. There is no date that stands for "all time". */
+  getRange(symbol: string, from?: string, to?: string): Promise<PriceBarRow[]>;
   lastDate(symbol: string): Promise<string | null>;
   upsert(bars: readonly PriceBarRow[]): Promise<void>;
   purgeAll(): Promise<void>;
@@ -160,10 +161,17 @@ export function createPriceBarRepository(db: Database, userId: string | undefine
   const tenantId = requireUserId(userId);
   return {
     async getRange(symbol, from, to) {
+      /* Built from the bounds actually given. A caller wanting the whole history
+       * passes none: spelling it as a wide date range is how '0000-01-01' — a
+       * year Postgres does not have — got into this query. */
+      const values: unknown[] = [symbol];
+      const conditions = ["symbol = $1"];
+      if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
+      if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
       return withTenant(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE symbol = $1 AND date BETWEEN $2 AND $3 ORDER BY date",
-          [symbol, from, to],
+          `SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
+          values,
         );
         // NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
         return result.rows.map((row) => ({ tenantId, symbol: row.symbol as string, date: row.date as string, close: Number(row.close), currency: row.currency as string }));

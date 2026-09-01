@@ -38,7 +38,9 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
   return other.test(problem) && /credentials are not configured/i.test(problem);
 }
 
-type Health = { ok: boolean; service: string };
+/* `service` only comes back from the investing server itself. Mounted on
+ * lavega.dev the personal server answers /health, and it names no service. */
+type Health = { ok: boolean; service?: string };
 type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
 type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
 type DashboardState =
@@ -592,10 +594,15 @@ function BrokerConnect() {
 export function HealthStatus() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { fetch(`${import.meta.env.BASE_URL}health`).then(async (response) => { if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`); return await response.json() as Health; }).then(setHealth).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt")); }, []);
+  /* The investing runtime answers under /api/, and only /api/ is guaranteed to
+   * reach it. `${BASE_URL}health` reads /investing/health on lavega.dev, which
+   * the CDN serves as the SPA shell: the check parsed a page as JSON and
+   * reported the server down while every API route was answering. Deploys
+   * differ in what owns the origin root, so /health is not it either. */
+  useEffect(() => { fetch("/api/investing/health").then(async (response) => { if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`); return await response.json().catch(() => { throw new Error("Gezondheidscontrole gaf geen serverantwoord"); }) as Health; }).then(setHealth).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt")); }, []);
   if (error) return <span className="text-negative">Server niet beschikbaar: {error}</span>;
   if (!health) return <span>Verbinden met investeringsserver…</span>;
-  return <span>{health.service}: {health.ok ? "beschikbaar" : "niet beschikbaar"}</span>;
+  return <span>{health.service ?? "server"}: {health.ok ? "beschikbaar" : "niet beschikbaar"}</span>;
 }
 
 function SignOutLink() {

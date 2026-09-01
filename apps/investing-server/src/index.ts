@@ -242,8 +242,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const cached = dashboardCache.get(cacheKey);
       if (cached?.version === version) return cached.data;
       const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
-      const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(tenantId, value, "0000-01-01", "9999-12-31")))).flat();
-      const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(tenantId, benchmark, "0000-01-01", "9999-12-31")))).flat();
+      const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(tenantId, value)))).flat();
+      const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(tenantId, benchmark)))).flat();
       const fxResult = await fxProvider.getLatestRate();
       const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benchmarkBars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
       dashboardCache.set(cacheKey, { version, data });
