@@ -4,17 +4,31 @@
 
 export type FxRate = { base: string; date: string; rates: Record<string, number> };
 
+/* London quotes several instruments in pence under GBp (Yahoo) or GBX (brokers).
+ * No FX table lists them, so resolve them to their major unit before crossing. */
+const MINOR_UNITS: Record<string, { major: string; perMajor: number }> = {
+  GBp: { major: "GBP", perMajor: 100 },
+  GBX: { major: "GBP", perMajor: 100 },
+};
+
+function majorUnit(currency: string): { code: string; perMajor: number } {
+  const minor = MINOR_UNITS[currency];
+  return minor ? { code: minor.major, perMajor: minor.perMajor } : { code: currency, perMajor: 1 };
+}
+
 /** Cross rate from->to via the payload's base. `rates` are base->ccy multipliers
  *  (1 base = rates[ccy] ccy). Throws on an unknown currency. */
 export function crossRate(from: string, to: string, rate: FxRate): number {
   if (from === to) return 1;
+  const source = majorUnit(from);
+  const target = majorUnit(to);
   const perBase = (ccy: string): number => {
     if (ccy === rate.base) return 1;
     const v = rate.rates[ccy];
     if (typeof v !== "number" || !(v > 0)) throw new Error(`onbekende valuta: ${ccy}`);
     return v;
   };
-  return perBase(to) / perBase(from);
+  return (perBase(target.code) * target.perMajor) / (perBase(source.code) * source.perMajor);
 }
 
 /** Validate an external rate payload (e.g. Frankfurter's `{amount,base,date,rates}`)

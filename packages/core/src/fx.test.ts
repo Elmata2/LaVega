@@ -10,6 +10,14 @@ test("crossRate: base identity, to-base, and cross", () => {
   expect(crossRate("USD", "USD", RATE)).toBe(1);
 });
 
+test("crossRate reads London pence as a hundredth of a pound", () => {
+  expect(crossRate("GBp", "GBP", RATE)).toBeCloseTo(0.01, 9);
+  expect(crossRate("GBX", "GBP", RATE)).toBeCloseTo(0.01, 9);
+  expect(crossRate("GBP", "GBp", RATE)).toBeCloseTo(100, 6);
+  expect(crossRate("GBp", "EUR", RATE)).toBeCloseTo(1 / 85, 9);
+  expect(crossRate("GBp", "GBp", RATE)).toBe(1);
+});
+
 test("crossRate throws on an unknown currency", () => {
   expect(() => crossRate("EUR", "XXX", RATE)).toThrow();
 });
