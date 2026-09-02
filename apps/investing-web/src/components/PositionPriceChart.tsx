@@ -5,10 +5,11 @@ import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
+import { shortDate } from "../lib/dates.js";
 
 type PositionPriceChartProps = { symbol: string; currency: string; points: PositionPricePoint[]; onMarkerActivate?: (date: string) => void };
 const markerColors = { buy: "hsl(var(--pos))", sell: "hsl(var(--neg))", dividend: "hsl(var(--chart-amber))" } as const;
-const dateLabel = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+const dateLabel = shortDate;
 const priceLabel = (value: number, currency: string) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
 
 function chartPointsWithGaps(points: PositionPricePoint[]): Array<PositionPricePoint | { date: string; close: null }> {

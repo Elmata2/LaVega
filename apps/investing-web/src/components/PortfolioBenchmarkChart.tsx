@@ -13,6 +13,7 @@ import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
+import { shortDate } from "../lib/dates.js";
 const colors = ["chart-blue", "chart-purple", "chart-teal"];
 type Props = { data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>; benchmarks?: BenchmarkSeries[]; externalCashFlows?: Array<{ date: string; amount: number | null }>; currency?: string };
 type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; problems?: string[] };
@@ -20,7 +21,7 @@ export type VisibleWindow = ChartWindow;
 
 const money = (value: number, currency: string) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
 const percent = (value: number) => value.toLocaleString("nl-NL", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 2 });
-const dateLabel = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+const dateLabel = shortDate;
 const valueOrUnknown = (value: number | null, formatter: (value: number) => string) => value === null ? "Onbekend" : formatter(value);
 const pp = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pp`;
 const cappedXirr = (value: number | null) => value === null ? "Onbekend" : value > 9.99 ? "> +999%" : value < -0.99 ? "< -99%" : percent(value);

@@ -11,6 +11,7 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { signOut } from "./lib/auth-client";
+import { longDate } from "./lib/dates.js";
 
 const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
@@ -633,7 +634,7 @@ function Positions() {
   return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>;
 }
 
-const detailDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+const detailDate = longDate;
 
 function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
   const [quantityOpen, setQuantityOpen] = useState(false);

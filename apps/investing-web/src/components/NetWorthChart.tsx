@@ -5,6 +5,7 @@ import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
+import { shortDate } from "../lib/dates.js";
 
 type Props = {
   data: Partial<Record<PortfolioRange, PortfolioValuePoint[]>>;
@@ -15,7 +16,7 @@ type NetWorthChartPoint = PortfolioValuePoint & {
   stalePositions: number | null;
 };
 
-const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+const dateLabel = shortDate;
 const money = (value: number, currency: string) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
 const displayValue = (value: number | null, currency: string) => value === null ? "Waarde onbekend" : money(value, currency);
 
