@@ -65,10 +65,9 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
     source: "ibkr-flex",
     problems: [],
     dividends: [],
-    cashBalances: [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }],
-    cashFlows: [expect.objectContaining({ tenantId: "local", entity: "personal", broker: "ibkr", currency: "USD", amount: 100, kind: "deposit", brokerFlowId: "U1:deposit-1" })],
+    cashBalances: [{ entity: "personal", broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }],
+    cashFlows: [expect.objectContaining({ entity: "personal", broker: "ibkr", currency: "USD", amount: 100, kind: "deposit", brokerFlowId: "U1:deposit-1" })],
     positions: [{
-      tenantId: "local",
       entity: "personal",
       symbol: "AAPL",
       isin: "US0378331005",
@@ -81,7 +80,6 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
       asOf: "2026-08-18",
     }],
     trades: [{
-      tenantId: "local",
       entity: "personal",
       date: "2026-08-18",
       symbol: "AAPL",

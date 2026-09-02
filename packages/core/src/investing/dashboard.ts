@@ -161,7 +161,7 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
   const seenFlows = new Set<string>();
   for (const flow of input.cashFlows ?? []) {
     if (flow.kind !== "deposit" && flow.kind !== "withdrawal") continue;
-    const identity = `${flow.tenantId}\u0000${flow.entity}\u0000${flow.broker}\u0000${flow.currency}\u0000${flow.brokerFlowId ?? flow.id}`;
+    const identity = `${flow.entity}\u0000${flow.broker}\u0000${flow.currency}\u0000${flow.brokerFlowId ?? flow.id}`;
     if (seenFlows.has(identity)) continue;
     seenFlows.add(identity);
     let converted: number | null = null;

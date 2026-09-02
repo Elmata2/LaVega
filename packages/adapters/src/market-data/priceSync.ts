@@ -15,7 +15,7 @@ export async function syncPrices(input: { store: PriceStore; tenantId: string; p
   const result = await firstProviderResult(input.priceProviders, { ...input.request, from, to: today }, undefined, hasProblems);
   if (!result) return { bars: await cached(), problems: ["No price provider returned data"], fetched: true };
   if (result.value.problems.length || result.value.bars.length === 0) return { bars: await cached(), problems: result.value.problems.length ? result.value.problems : ["Price provider returned no bars"], fetched: true };
-  await input.store.upsert(result.value.bars);
+  await input.store.upsert(input.tenantId, result.value.bars);
   return { bars: await cached(), problems: [], fetched: true };
 }
 

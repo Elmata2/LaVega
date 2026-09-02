@@ -29,7 +29,7 @@ const dashboard: InvestingDashboardData = {
     returnStatus: "available", firstBuyDate: "2026-01-02",
     quantityHistory: [{ date: "2026-01-02", quantity: 1, delta: 1, reason: "buy", sourceOrder: 0 }],
     activity: [{ date: "2026-01-02", kind: "buy", quantity: 1, executionPrice: 100, amount: 100, commission: 0, currency: "EUR", sourceOrder: 0 }],
-    points: [{ tenantId: "local", symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }],
+    points: [{ symbol: "ASML", date: "2026-08-18", close: 120, currency: "EUR", markers: [] }],
   },
 };
 

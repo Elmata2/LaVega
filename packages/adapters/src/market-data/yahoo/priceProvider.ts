@@ -1,4 +1,4 @@
-import { LOCAL_TENANT_ID, type PriceBar } from "@lavega/core";
+import type { PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory } from "./history.js";
 import type { YahooHttpClient } from "./http.js";
@@ -10,7 +10,7 @@ export function createYahooPriceProvider(input: { client?: YahooHttpClient; toda
   return { sourceKey: "yahoo", priority: 10, async get(request) {
     try {
       const points = await loadYahooPriceHistory({ ticker: request.ticker, exchange: request.exchange, from: request.from, to: request.to ?? request.today ?? (input.today ?? currentDate)(), interval: "1d", client: input.client });
-      return { bars: points.flatMap((point) => point.close == null ? [] : [{ tenantId: LOCAL_TENANT_ID, symbol: request.symbol, date: point.date, close: point.close, currency: request.currency }]), problems: [] };
+      return { bars: points.flatMap((point) => point.close == null ? [] : [{ symbol: request.symbol, date: point.date, close: point.close, currency: request.currency }]), problems: [] };
     } catch (error) { return { bars: [], problems: [readableYahooProblem(error)] }; }
   } };
 }

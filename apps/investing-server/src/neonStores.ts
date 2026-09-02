@@ -18,14 +18,7 @@ export function createNeonPriceStore(db: Database, resolveTenantId: () => string
   return {
     getRange: (tenantId, symbol, from, to) => createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
     lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),
-    async upsert(bars) {
-      /* Bars carry their own tenant and a sync only ever produces one tenant's,
-       * but grouping keeps that an assumption the code states rather than one it
-       * relies on. */
-      const byTenant = new Map<string, typeof bars>();
-      for (const bar of bars) byTenant.set(bar.tenantId, [...(byTenant.get(bar.tenantId) ?? []), bar]);
-      for (const [tenantId, tenantBars] of byTenant) await createPriceBarRepository(db, tenantId).upsert(tenantBars);
-    },
+    upsert: (tenantId, bars) => createPriceBarRepository(db, tenantId).upsert(bars),
     async purgeAll() {
       // No tenant in the signature, so the caller's own is the only safe one.
       await createPriceBarRepository(db, await resolveTenantId()).purgeAll();

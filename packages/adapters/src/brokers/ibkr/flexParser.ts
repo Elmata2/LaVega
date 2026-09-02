@@ -1,6 +1,5 @@
 import {
   hash,
-  LOCAL_TENANT_ID,
   norm,
   type CashBalance,
   type CashFlow,
@@ -98,7 +97,6 @@ function parseCashBalances(xml: string, entity: string): { cashBalances: CashBal
     const key = `${row.currency}\u0000${row.asOf}`;
     const existing = totals.get(key);
     totals.set(key, {
-      tenantId: LOCAL_TENANT_ID,
       entity,
       broker: "ibkr",
       currency: row.currency,
@@ -148,7 +146,6 @@ function parseStatementFunds(xml: string, entity: string): { dividends: Dividend
         const dedupeKey = providerId ?? id;
         dividends.set(dedupeKey, {
           id,
-          tenantId: LOCAL_TENANT_ID,
           entity,
           broker: "ibkr",
           date: flowDate,
@@ -167,7 +164,6 @@ function parseStatementFunds(xml: string, entity: string): { dividends: Dividend
       const dedupeKey = providerId ?? id;
       cashFlows.set(dedupeKey, {
         id,
-        tenantId: LOCAL_TENANT_ID,
         entity,
         broker: "ibkr",
         date: flowDate,
@@ -211,7 +207,6 @@ function parsePosition(attrs: Attributes, entity: string): Position {
   const symbol = first(attrs, "symbol", "underlyingSymbol");
   if (!symbol) throw new Error("IBKR Flex OpenPosition symbol is missing");
   return {
-    tenantId: LOCAL_TENANT_ID,
     entity,
     symbol,
     ...(first(attrs, "isin") ? { isin: first(attrs, "isin") } : {}),
@@ -230,7 +225,6 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
   if (!symbol) throw new Error("IBKR Flex Trade symbol is missing");
   const brokerTradeId = first(attrs, "transactionID", "tradeID", "tradeId");
   return {
-    tenantId: LOCAL_TENANT_ID,
     entity,
     date: date(first(attrs, "tradeDate", "dateTime", "date"), "trade date"),
     symbol,

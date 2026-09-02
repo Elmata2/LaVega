@@ -148,8 +148,8 @@ export function calculatePositionReturn(
   }
 }
 
-function key(value: Pick<Position | Trade | Dividend, "tenantId" | "entity" | "symbol">): string {
-  return `${value.tenantId}\u0000${value.entity}\u0000${value.symbol.toUpperCase()}`;
+function key(value: Pick<Position | Trade | Dividend, "entity" | "symbol">): string {
+  return `${value.entity}\u0000${value.symbol.toUpperCase()}`;
 }
 
 export function buildCurrentPositions(input: {
@@ -174,7 +174,7 @@ export function buildCurrentPositions(input: {
   const barsBySymbol = new Map<string, PriceBar[]>();
   for (const bar of input.priceBars) {
     if (bar.date > input.today) continue;
-    const listKey = `${bar.tenantId}\u0000${bar.symbol.toUpperCase()}`;
+    const listKey = bar.symbol.toUpperCase();
     const list = barsBySymbol.get(listKey);
     if (list) list.push(bar);
     else barsBySymbol.set(listKey, [bar]);
@@ -184,7 +184,7 @@ export function buildCurrentPositions(input: {
   const current = [...groups.entries()].map(([groupKey, positions]) => {
     const sample = positions[0]!;
     const quantity = positions.reduce((sum, position) => sum + position.quantity, 0);
-    const bars = barsBySymbol.get(`${sample.tenantId}\u0000${sample.symbol.toUpperCase()}`) ?? [];
+    const bars = barsBySymbol.get(sample.symbol.toUpperCase()) ?? [];
     const latest = bars.at(-1);
     let marketValue: number | null = null;
     let priceStatus: PositionPriceStatus = "unpriced";

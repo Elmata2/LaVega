@@ -20,7 +20,7 @@ test("dashboard builder returns finished chart series and selected position mark
   const dashboard = buildInvestingDashboard({
     positions: POSITIONS,
     trades: TRADES,
-    dividends: [{ id: "dividend", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 1.5, currency: "USD" }],
+    dividends: [{ id: "dividend", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 1.5, currency: "USD" }],
     priceBars: PRICE_BARS,
     benchmarkBars: BENCHMARK_BARS,
     presentationCurrency: "EUR",
@@ -43,10 +43,10 @@ test("dashboard builder returns finished chart series and selected position mark
 
 test("allocation uses current price bars and omits values beyond the five-day cap", () => {
   const dashboard = buildInvestingDashboard({
-    positions: [{ tenantId: "local", entity: "personal", symbol: "STALE", quantity: 2, averagePrice: 8, marketPrice: 999, marketValue: 1998, currency: "EUR", asOf: "2026-01-13" }],
-    trades: [{ id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "STALE", side: "buy", quantity: 2, price: 8, amount: 16, currency: "EUR", commission: 0 }],
+    positions: [{ entity: "personal", symbol: "STALE", quantity: 2, averagePrice: 8, marketPrice: 999, marketValue: 1998, currency: "EUR", asOf: "2026-01-13" }],
+    trades: [{ id: "buy", entity: "personal", date: "2026-01-02", symbol: "STALE", side: "buy", quantity: 2, price: 8, amount: 16, currency: "EUR", commission: 0 }],
     dividends: [],
-    priceBars: [{ tenantId: "local", symbol: "STALE", date: "2026-01-02", close: 10, currency: "EUR" }],
+    priceBars: [{ symbol: "STALE", date: "2026-01-02", close: 10, currency: "EUR" }],
     benchmarkBars: [], presentationCurrency: "EUR", fxRates: [], today: "2026-01-13",
   });
   expect(dashboard.positions[0]).toMatchObject({ marketValue: null, priceStatus: "unpriced" });
@@ -57,14 +57,14 @@ test("dashboard resolves a closed historical symbol with return and stable activ
   const dashboard = buildInvestingDashboard({
     positions: [],
     trades: [
-      { id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "CLOSED", description: "Closed Co", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 1 },
-      { id: "sell-1", tenantId: "local", entity: "personal", date: "2026-01-05", symbol: "CLOSED", side: "sell", quantity: 1, price: 14, amount: 14, currency: "EUR", commission: 1 },
-      { id: "sell-2", tenantId: "local", entity: "personal", date: "2026-01-05", symbol: "CLOSED", side: "sell", quantity: 1, price: 15, amount: 15, currency: "EUR", commission: 1 },
+      { id: "buy", entity: "personal", date: "2026-01-02", symbol: "CLOSED", description: "Closed Co", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 1 },
+      { id: "sell-1", entity: "personal", date: "2026-01-05", symbol: "CLOSED", side: "sell", quantity: 1, price: 14, amount: 14, currency: "EUR", commission: 1 },
+      { id: "sell-2", entity: "personal", date: "2026-01-05", symbol: "CLOSED", side: "sell", quantity: 1, price: 15, amount: 15, currency: "EUR", commission: 1 },
     ],
-    dividends: [{ id: "div", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "CLOSED", amount: 2, currency: "EUR" }],
+    dividends: [{ id: "div", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "CLOSED", amount: 2, currency: "EUR" }],
     priceBars: [
-      { tenantId: "local", symbol: "CLOSED", date: "2026-01-02", close: 10, currency: "EUR" },
-      { tenantId: "local", symbol: "CLOSED", date: "2026-01-05", close: 15, currency: "EUR" },
+      { symbol: "CLOSED", date: "2026-01-02", close: 10, currency: "EUR" },
+      { symbol: "CLOSED", date: "2026-01-05", close: 15, currency: "EUR" },
     ],
     benchmarkBars: [], presentationCurrency: "EUR", fxRates: [], selectedSymbol: "closed", today: "2026-01-06",
   });
@@ -84,9 +84,9 @@ test("dashboard resolves a closed historical symbol with return and stable activ
 
 test("position detail does not estimate incomplete return history", () => {
   const dashboard = buildInvestingDashboard({
-    positions: [{ tenantId: "local", entity: "personal", symbol: "PARTIAL", quantity: 2, averagePrice: null, marketPrice: 10, marketValue: 20, currency: "EUR", asOf: "2026-01-05" }],
-    trades: [{ id: "partial", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "PARTIAL", side: "buy", quantity: 1, price: null, amount: null, currency: "EUR", commission: null }],
-    dividends: [], priceBars: [{ tenantId: "local", symbol: "PARTIAL", date: "2026-01-05", close: 10, currency: "EUR" }], benchmarkBars: [], presentationCurrency: "EUR", fxRates: [], selectedSymbol: "PARTIAL", today: "2026-01-05",
+    positions: [{ entity: "personal", symbol: "PARTIAL", quantity: 2, averagePrice: null, marketPrice: 10, marketValue: 20, currency: "EUR", asOf: "2026-01-05" }],
+    trades: [{ id: "partial", entity: "personal", date: "2026-01-02", symbol: "PARTIAL", side: "buy", quantity: 1, price: null, amount: null, currency: "EUR", commission: null }],
+    dividends: [], priceBars: [{ symbol: "PARTIAL", date: "2026-01-05", close: 10, currency: "EUR" }], benchmarkBars: [], presentationCurrency: "EUR", fxRates: [], selectedSymbol: "PARTIAL", today: "2026-01-05",
   });
   expect(dashboard.position).toMatchObject({ returnStatus: "missing-cost", returns: { totalReturn: null, realizedGain: null }, averageCost: null });
 });
@@ -96,11 +96,11 @@ test("dashboard exposes cash-aware value fields and netted external TWR inputs",
     positions: POSITIONS,
     trades: TRADES,
     dividends: [],
-    cashBalances: [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 300, asOf: "2026-02-02" }],
+    cashBalances: [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 300, asOf: "2026-02-02" }],
     cashFlows: [
-      { id: "deposit", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 250, kind: "deposit" },
-      { id: "withdrawal", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: -50, kind: "withdrawal" },
-      { id: "fee", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: -5, kind: "fee" },
+      { id: "deposit", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 250, kind: "deposit" },
+      { id: "withdrawal", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: -50, kind: "withdrawal" },
+      { id: "fee", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: -5, kind: "fee" },
     ],
     priceBars: PRICE_BARS,
     benchmarkBars: [],

@@ -80,17 +80,9 @@ test("price bars are read, written and purged inside the tenant transaction", as
 
   const bars = await repository.getRange("AAPL", "2026-01-01", "2026-01-31");
 
-  expect(bars).toEqual([{ tenantId: "user-123", symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
+  expect(bars).toEqual([{ symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
   expect(calls[1]).toEqual({ sql: "SELECT set_config('app.user_id', $1, true)", values: ["user-123"] });
   expect(executed(calls)[0]?.values).toEqual(["AAPL", "2026-01-01", "2026-01-31"]);
-});
-
-test("price bar writes refuse a bar belonging to another tenant", async () => {
-  const { db } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await expect(repository.upsert([{ tenantId: "user-456", symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]))
-    .rejects.toThrow(/tenant/i);
 });
 
 test("an empty price bar write touches the database not at all", async () => {

@@ -23,8 +23,8 @@ test("reconstructs holdings from signed trades instead of current positions", ()
 
 test("includes closed positions only while trade history says they were held", () => {
   const trades: Trade[] = [
-    { id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "CLOSED", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 },
-    { id: "sell", tenantId: "local", entity: "personal", date: "2026-01-06", symbol: "CLOSED", side: "sell", quantity: 2, price: 12, amount: 24, currency: "EUR", commission: 0 },
+    { id: "buy", entity: "personal", date: "2026-01-02", symbol: "CLOSED", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 },
+    { id: "sell", entity: "personal", date: "2026-01-06", symbol: "CLOSED", side: "sell", quantity: 2, price: 12, amount: 24, currency: "EUR", commission: 0 },
   ];
   const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({ tenantId: "local", symbol: "CLOSED", date, close: 10, currency: "EUR" }));
 
@@ -46,10 +46,10 @@ test("forward-fills five business days then marks held symbol unpriced", () => {
 });
 
 test("walks cash anchors with deduplicated flows and dividends", () => {
-  const cashBalances: CashBalance[] = [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
+  const cashBalances: CashBalance[] = [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
   const cashFlows: CashFlow[] = [
-    { id: "deposit-1", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
-    { id: "deposit-copy", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
+    { id: "deposit-1", brokerFlowId: "same", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
+    { id: "deposit-copy", brokerFlowId: "same", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
   ];
   const dividends = [{ id: "dividend", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 50, currency: "EUR" }];
   const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, dividends, today: "2026-01-06" });
@@ -61,10 +61,10 @@ test("walks cash anchors with deduplicated flows and dividends", () => {
 
 test("keeps unreachable and unconvertible cash legs unknown", () => {
   const cashBalances: CashBalance[] = [
-    { tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
-    { tenantId: "local", entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
+    { entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
   ];
-  const cashFlows: CashFlow[] = [{ id: "late", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 100, kind: "deposit" }];
+  const cashFlows: CashFlow[] = [{ id: "late", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 100, kind: "deposit" }];
   const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, today: "2026-01-02" });
 
   expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });

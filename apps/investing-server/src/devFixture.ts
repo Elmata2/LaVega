@@ -34,11 +34,11 @@ function currencyOf(symbol: string): string {
 }
 
 function trade(id: string, now: Date, daysAgoCount: number, symbol: string, side: Trade["side"], quantity: number, price: number): Trade {
-  return { id, tenantId: TENANT_ID, entity: ENTITY, date: isoDate(daysAgo(now, daysAgoCount)), symbol, side, quantity, price, amount: Math.round(quantity * price * 100) / 100, currency: currencyOf(symbol), commission: 1 };
+  return { id, entity: ENTITY, date: isoDate(daysAgo(now, daysAgoCount)), symbol, side, quantity, price, amount: Math.round(quantity * price * 100) / 100, currency: currencyOf(symbol), commission: 1 };
 }
 
 function dividend(id: string, now: Date, daysAgoCount: number, symbol: string, amount: number): Dividend {
-  return { id, tenantId: TENANT_ID, entity: ENTITY, broker: FIXTURE_BROKER, date: isoDate(daysAgo(now, daysAgoCount)), symbol, amount, currency: currencyOf(symbol) };
+  return { id, entity: ENTITY, broker: FIXTURE_BROKER, date: isoDate(daysAgo(now, daysAgoCount)), symbol, amount, currency: currencyOf(symbol) };
 }
 
 export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataSnapshot {
@@ -74,7 +74,7 @@ function series(symbol: string, currency: string, startClose: number, endClose: 
     const progress = 1 - day / HISTORY_DAYS;
     const drift = startClose + (endClose - startClose) * progress;
     const wobble = Math.sin(day * 0.35) * volatility;
-    bars.push({ tenantId: TENANT_ID, symbol, date: isoDate(daysAgo(now, day)), close: Math.round((drift + wobble) * 100) / 100, currency });
+    bars.push({ symbol, date: isoDate(daysAgo(now, day)), close: Math.round((drift + wobble) * 100) / 100, currency });
   }
   return bars;
 }

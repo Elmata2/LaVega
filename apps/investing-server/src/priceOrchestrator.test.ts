@@ -2,8 +2,8 @@ import { expect, test, vi } from "vitest";
 import type { Position, Trade } from "@lavega/core";
 import { createPriceOrchestrator, discoverPriceSyncTargets, type PriceSyncTarget } from "./priceOrchestrator.js";
 
-const position = (symbol: string, quantity = 1): Position => ({ tenantId: "local", entity: "personal", symbol, quantity, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-20" });
-const trade = (symbol: string, date: string): Trade => ({ id: `${symbol}:${date}`, tenantId: "local", entity: "personal", symbol, date, side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0 });
+const position = (symbol: string, quantity = 1): Position => ({ entity: "personal", symbol, quantity, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-20" });
+const trade = (symbol: string, date: string): Trade => ({ id: `${symbol}:${date}`, entity: "personal", symbol, date, side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0 });
 const result = (problems: string[] = []) => ({ bars: [], fetched: true, problems });
 
 test("discovers current, closed, and benchmark symbols in request order with correct starts", () => {

@@ -13,10 +13,12 @@ export type PortfolioValuePoint = {
   cashUnknown: string[];
 };
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
-export type FxRates = FxRate | FxRate[];
+/** Undefined means the FX provider failed. Conversions then throw and every
+ *  caller already reports that as missing-fx rather than a wrong number. */
+export type FxRates = FxRate | FxRate[] | undefined;
 
 function rateFor(rates: FxRates, date: string): FxRate {
-  const candidates = Array.isArray(rates) ? rates : [rates];
+  const candidates = rates === undefined ? [] : Array.isArray(rates) ? rates : [rates];
   if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
   // Runtime often holds only the latest rate; fall forward to the nearest known
   // rate instead of failing conversion for bars older than that rate's date.
@@ -58,8 +60,8 @@ function signedQuantity(trade: Trade): number {
   return trade.side === "buy" ? trade.quantity : trade.side === "sell" ? -trade.quantity : 0;
 }
 
-function cashKey(value: { tenantId: string; entity: string; broker: string; currency: string }): string {
-  return `${value.tenantId}\u0000${value.entity}\u0000${value.broker}\u0000${value.currency}`;
+function cashKey(value: { entity: string; broker: string; currency: string }): string {
+  return `${value.entity}\u0000${value.broker}\u0000${value.currency}`;
 }
 
 function displayCashKey(value: { broker: string; currency: string }): string {

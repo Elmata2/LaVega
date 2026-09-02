@@ -5,16 +5,16 @@ import { createPortfolioAgentTools, resolveAgentConfig } from "./portfolioAgent.
 
 afterEach(() => vi.unstubAllEnvs());
 
-const position: Position = { tenantId: "local", entity: "personal", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: null, marketValue: null, currency: "EUR", asOf: "2026-08-19" };
-const trade: Trade = { id: "t1", tenantId: "local", entity: "personal", date: "2026-08-10", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 };
+const position: Position = { entity: "personal", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: null, marketValue: null, currency: "EUR", asOf: "2026-08-19" };
+const trade: Trade = { id: "t1", entity: "personal", date: "2026-08-10", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 };
 const bars: PriceBar[] = [
-  { tenantId: "local", symbol: "AAPL", date: "2026-08-18", close: 14, currency: "EUR" },
-  { tenantId: "local", symbol: "AAPL", date: "2026-08-19", close: 15, currency: "EUR" },
+  { symbol: "AAPL", date: "2026-08-18", close: 14, currency: "EUR" },
+  { symbol: "AAPL", date: "2026-08-19", close: 15, currency: "EUR" },
 ];
 
 async function tools() {
   const priceStore = createInMemoryPriceStore();
-  await priceStore.upsert(bars);
+  await priceStore.upsert("local", bars);
   return createPortfolioAgentTools({ readBrokerData: () => ({ positions: [position], trades: [trade], dividends: [], cashBalances: [], cashFlows: [] }), priceStore });
 }
 

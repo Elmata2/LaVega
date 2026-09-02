@@ -109,7 +109,7 @@ test("runtime broker sync passes the signed-in tenant to credential-aware adapte
 test("cached broker skip retains last successful positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({
-    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
     problems: [],
   });
   cache.apply({
@@ -124,7 +124,7 @@ test("cached broker skip retains last successful positions", () => {
 test("runtime broker cache restores encrypted snapshot after restart", () => {
   const first = createRuntimeBrokerDataCache();
   first.apply({
-    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
     problems: [],
   });
 
@@ -146,8 +146,8 @@ test("runtime broker cache persists cash facts and increments data version", () 
         positions: [],
         trades: [],
         dividends: [],
-        cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
-        cashFlows: [{ id: "flow", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" }],
+        cashBalances: [{ entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
+        cashFlows: [{ id: "flow", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" }],
         source: "ibkr-flex",
         problems: [],
       },
@@ -208,7 +208,7 @@ test("a partial result with fresh broker data updates the snapshot, a null resul
 
 test("a truncated trade history keeps the stored trades instead of overwriting them", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
+  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["full-1", "full-2"]) }], problems: [] });
 
   cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["history failed"], tradesComplete: false } }], problems: ["trading212: history failed"] });
@@ -220,7 +220,7 @@ test("a truncated trade history keeps the stored trades instead of overwriting t
 
 test("a failed holdings read keeps last-good positions instead of replacing them with empty", () => {
   const cache = createRuntimeBrokerDataCache();
-  const good = { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 3, averagePrice: 10, marketPrice: 10, marketValue: 30, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "full-1" }], cashBalances: [{ tenantId: "local", entity: "BV", broker: "trading212", currency: "EUR", amount: 250, asOf: "2026-08-19" }], source: "trading-212", problems: [] };
+  const good = { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 3, averagePrice: 10, marketPrice: 10, marketValue: 30, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [{ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "full-1" }], cashBalances: [{ tenantId: "local", entity: "BV", broker: "trading212", currency: "EUR", amount: 250, asOf: "2026-08-19" }], source: "trading-212", problems: [] };
   cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: good }], problems: [] });
 
   cache.apply({
@@ -249,7 +249,7 @@ test("a failed holdings read keeps last-good positions instead of replacing them
 
 test("a first truncated history still keeps the trades it did read", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
+  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
   cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["host time limit"], tradesComplete: false } }], problems: ["trading212: host time limit"] });
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["partial-1"]);
 });
@@ -343,8 +343,8 @@ test("IBKR missing plus a paused T212 result still keeps T212 positions", () => 
         status: "problem",
         lastSyncedAt: null,
         result: {
-          positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }],
-          trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "p1" }],
+          positions: [{ symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }],
+          trades: [{ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "p1" }],
           source: "trading-212",
           problems: ["Trading 212 sync paused before the host time limit; remaining history resumes on the next run"],
           tradesComplete: false,

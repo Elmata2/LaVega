@@ -20,7 +20,7 @@ test("price reads and writes run under the tenant that owns the bars", async () 
   const store = createNeonPriceStore(db, () => "user-purge");
 
   await store.getRange("user-a", "AAPL", "2026-01-01", "2026-01-31");
-  await store.upsert([{ tenantId: "user-b", symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]);
+  await store.upsert("user-b", [{ symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]);
   await store.purgeAll();
 
   expect(identities(calls)).toEqual(["user-a", "user-b", "user-purge"]);

@@ -234,7 +234,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const brokerData = createRuntimeBrokerDataCache(await credentials.status() === "unlocked" ? await credentials.getBrokerData() : {});
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
-      await priceStore.upsert(createDevFixturePriceBars());
+      await priceStore.upsert(tenantId, createDevFixturePriceBars());
       onPriceDataChanged();
     }
     const restoreBrokerData = async () => brokerData.restore(await credentials.getBrokerData());

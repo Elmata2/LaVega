@@ -10,7 +10,7 @@ const rates = [
 ];
 
 const trade = (overrides: Partial<Trade>): Trade => ({
-  id: crypto.randomUUID(), tenantId: "local", entity: "Holding BV", date: "2026-01-02", symbol: "ACME",
+  id: crypto.randomUUID(), entity: "Holding BV", date: "2026-01-02", symbol: "ACME",
   side: "buy", quantity: 10, price: 10, amount: 100, currency: "USD", commission: 2, ...overrides,
 });
 
@@ -20,7 +20,7 @@ test("position return uses trade-date FX, average cost, sell fees, and dividends
     trade({ id: "buy-2", date: "2026-01-03", quantity: 2, price: 12, amount: 24, commission: 1 }),
     trade({ id: "sell", date: "2026-01-04", side: "sell", quantity: 6, price: 15, amount: 90, commission: 3 }),
   ];
-  const dividends: Dividend[] = [{ id: "dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "USD" }];
+  const dividends: Dividend[] = [{ id: "dividend", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "USD" }];
 
   expect(calculatePositionReturn(6, 120, trades, dividends, "EUR", rates, { valuationDate: "2027-01-02" })).toEqual({
     status: "available",
@@ -46,25 +46,25 @@ test("position return stays unavailable for incomplete history and a zero denomi
 
 test("unpriced open position retains known realized and dividend components", () => {
   const trades = [trade({ id: "buy", quantity: 2, amount: 20, currency: "EUR", commission: 0 }), trade({ id: "sell", side: "sell", quantity: 1, amount: 15, currency: "EUR", commission: 1 })];
-  const dividends: Dividend[] = [{ id: "dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-03", symbol: "ACME", amount: 2, currency: "EUR" }];
+  const dividends: Dividend[] = [{ id: "dividend", entity: "Holding BV", broker: "ibkr", date: "2026-01-03", symbol: "ACME", amount: 2, currency: "EUR" }];
   expect(calculatePositionReturn(1, null, trades, dividends, "EUR", rates)).toMatchObject({ status: "unpriced", remainingCostBasis: 10, realizedGain: 4, dividendsReceived: 2, unrealizedGain: null, totalReturn: null });
 });
 
 test("current positions omit closed holdings and expose price quality, EUR weight, and missing FX", () => {
   const positions: Position[] = [
-    { tenantId: "local", entity: "Holding BV", symbol: "ACME", quantity: 6, averagePrice: 10, marketPrice: 40, marketValue: 240, currency: "USD", asOf: "2026-01-09" },
-    { tenantId: "local", entity: "Holding BV", symbol: "EURCO", quantity: 2, averagePrice: 10, marketPrice: 25, marketValue: 50, currency: "EUR", asOf: "2026-01-09" },
-    { tenantId: "local", entity: "Holding BV", symbol: "CLOSED", quantity: 0, averagePrice: 10, marketPrice: 10, marketValue: 0, currency: "EUR", asOf: "2026-01-09" },
+    { entity: "Holding BV", symbol: "ACME", quantity: 6, averagePrice: 10, marketPrice: 40, marketValue: 240, currency: "USD", asOf: "2026-01-09" },
+    { entity: "Holding BV", symbol: "EURCO", quantity: 2, averagePrice: 10, marketPrice: 25, marketValue: 50, currency: "EUR", asOf: "2026-01-09" },
+    { entity: "Holding BV", symbol: "CLOSED", quantity: 0, averagePrice: 10, marketPrice: 10, marketValue: 0, currency: "EUR", asOf: "2026-01-09" },
   ];
   const trades = [
     trade({ id: "acme", quantity: 6, amount: 60, commission: 0 }),
     trade({ id: "eurco", symbol: "EURCO", quantity: 2, amount: 20, price: 10, currency: "EUR", commission: 0 }),
   ];
   const bars: PriceBar[] = [
-    { tenantId: "local", symbol: "ACME", date: "2026-01-05", close: 40, currency: "USD" },
-    { tenantId: "local", symbol: "EURCO", date: "2026-01-09", close: 25, currency: "EUR" },
+    { symbol: "ACME", date: "2026-01-05", close: 40, currency: "USD" },
+    { symbol: "EURCO", date: "2026-01-09", close: 25, currency: "EUR" },
   ];
-  const dividends: Dividend[] = [{ id: "acme-dividend", tenantId: "local", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "EUR" }];
+  const dividends: Dividend[] = [{ id: "acme-dividend", entity: "Holding BV", broker: "ibkr", date: "2026-01-04", symbol: "ACME", amount: 10, currency: "EUR" }];
   const result = buildCurrentPositions({ positions, trades, dividends, priceBars: bars, presentationCurrency: "EUR", fxRates: rates, today: "2026-01-09" });
 
   expect(result.map(({ symbol }) => symbol)).toEqual(["ACME", "EURCO"]);
@@ -78,7 +78,7 @@ test("current positions omit closed holdings and expose price quality, EUR weigh
 });
 
 test("price becomes unknown after five business days", () => {
-  const position: Position = { tenantId: "local", entity: "Holding BV", symbol: "ACME", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-01-13" };
-  const result = buildCurrentPositions({ positions: [position], trades: [trade({ quantity: 1, amount: 10, currency: "EUR", commission: 0 })], dividends: [], priceBars: [{ tenantId: "local", symbol: "ACME", date: "2026-01-02", close: 10, currency: "EUR" }], presentationCurrency: "EUR", fxRates: rates, today: "2026-01-13" });
+  const position: Position = { entity: "Holding BV", symbol: "ACME", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-01-13" };
+  const result = buildCurrentPositions({ positions: [position], trades: [trade({ quantity: 1, amount: 10, currency: "EUR", commission: 0 })], dividends: [], priceBars: [{ symbol: "ACME", date: "2026-01-02", close: 10, currency: "EUR" }], presentationCurrency: "EUR", fxRates: rates, today: "2026-01-13" });
   expect(result[0]).toMatchObject({ marketValue: null, portfolioWeight: null, priceStatus: "unpriced", returns: { status: "unpriced" } });
 });

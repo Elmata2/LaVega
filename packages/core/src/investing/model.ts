@@ -1,7 +1,6 @@
 /** A broker-reported holding at statement time. Monetary values use the
  * instrument currency and quantities use broker units. */
 export type Position = {
-  tenantId: string;
   entity: string;
   symbol: string;
   isin?: string;
@@ -16,7 +15,6 @@ export type Position = {
 
 /** Daily closing price used by investing-side portfolio calculations. */
 export type PriceBar = {
-  tenantId: string;
   symbol: string;
   date: string;
   close: number;
@@ -25,7 +23,6 @@ export type PriceBar = {
 
 /** Broker-reported cash anchor. Amount uses the recorded currency. */
 export type CashBalance = {
-  tenantId: string;
   entity: string;
   broker: string;
   currency: string;
@@ -38,7 +35,6 @@ export type CashFlowKind = "deposit" | "withdrawal" | "interest" | "fee" | "othe
 /** Signed broker cash movement. Positive means cash in; negative means cash out. */
 export type CashFlow = {
   id: string;
-  tenantId: string;
   entity: string;
   broker: string;
   date: string;
@@ -54,7 +50,6 @@ export type TradeSide = "buy" | "sell" | "other";
 /** A broker-reported execution. `amount` and `commission` use currency. */
 export type Trade = {
   id: string;
-  tenantId: string;
   entity: string;
   date: string;
   symbol: string;

@@ -1,4 +1,4 @@
-import { LOCAL_TENANT_ID, type CredentialStore, type Position } from "@lavega/core";
+import { type CredentialStore, type Position } from "@lavega/core";
 import { expect, test, vi } from "vitest";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
 import { createMemoryBrokerSyncStateStore, syncScheduledBrokers } from "./scheduledSync.js";
@@ -19,7 +19,7 @@ function adapters(sync: () => Promise<BrokerResult>) {
 const empty = (overrides: Partial<BrokerResult>): BrokerResult => ({ positions: [], trades: [], source: "trading-212", problems: [], ...overrides });
 
 function run(sync: () => Promise<BrokerResult>, state: ReturnType<typeof createMemoryBrokerSyncStateStore>, now: Date, force = true) {
-  return syncScheduledBrokers({ adapters: adapters(sync), credentials, state, tenantId: LOCAL_TENANT_ID, entity: "BV", force, now });
+  return syncScheduledBrokers({ adapters: adapters(sync), credentials, state, tenantId: "local", entity: "BV", force, now });
 }
 
 test("a rate-limited sync holds off the next run, even a forced one", async () => {
@@ -74,7 +74,7 @@ test("a successful sync clears a stored hold-off", async () => {
  * page one — the sync visibly finished and then started over, forever. */
 test("row problems do not condemn the next run to replaying the whole history", async () => {
   const state = createMemoryBrokerSyncStateStore();
-  const position: Position = { tenantId: LOCAL_TENANT_ID, entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" };
+  const position: Position = { entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" };
   const sync = vi.fn(async () => empty({ positions: [position], problems: ["Trading 212 transaction 87456cce has ambiguous TRANSFER direction"] }));
 
   await run(sync, state, new Date("2026-08-19T12:00:00.000Z"));
@@ -98,8 +98,8 @@ test("an unfinished history stores the resume cursor and does not set lastSynced
   const state = createMemoryBrokerSyncStateStore();
   const resume = { ordersNextPagePath: "/api/v0/equity/history/orders?limit=50&cursor=300" };
   const sync = vi.fn(async () => empty({
-    trades: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
-    positions: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" }],
+    trades: [{ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
+    positions: [{ entity: "BV", symbol: "AAPL", quantity: 3, averagePrice: 100, marketPrice: 120, marketValue: 360, currency: "EUR", asOf: "2026-08-19" }],
     problems: ["Trading 212 sync paused before the host time limit; remaining history resumes on the next run"],
     tradesComplete: false,
     retryAfter: "2026-08-19T12:01:00.000Z",
@@ -114,7 +114,7 @@ test("an unfinished history stores the resume cursor and does not set lastSynced
 test("a holdings failure does not set lastSyncedAt, so the next open retries", async () => {
   const state = createMemoryBrokerSyncStateStore();
   const sync = vi.fn(async () => empty({
-    trades: [{ tenantId: LOCAL_TENANT_ID, entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
+    trades: [{ entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "1" }],
     problems: ["Trading 212 holdings request failed with HTTP 503"],
     positionsComplete: false,
   }));

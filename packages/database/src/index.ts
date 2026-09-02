@@ -132,13 +132,8 @@ export type { PoolClient, QueryResult };
 
 /* Investing tables. Every repository is bound to one user and runs inside
  * withTenant, so `app.user_id` is set and the RLS policy in 0001_lavega.sql
- * decides what the statement can see. The explicit tenant checks below are
- * belt-and-braces: they turn a caller passing the wrong user into an error
- * here rather than a silent write under the bound one. */
-
-const sameTenant = (bound: string, candidate: string) => {
-  if (candidate !== bound) throw new Error("Row belongs to another tenant");
-};
+ * decides what the statement can see. Rows never name a tenant of their own, so
+ * there is no wrong-user value for a caller to pass. */
 
 const isoDate = (value: unknown): string | null =>
   value == null ? null : value instanceof Date ? value.toISOString() : String(value);
@@ -151,7 +146,8 @@ export type PriceBarRepository = {
   purgeAll(): Promise<void>;
 };
 
-export type PriceBarRow = { tenantId: string; symbol: string; date: string; close: number; currency: string };
+/** The repository is built for one tenant, so a row never names its own. */
+export type PriceBarRow = { symbol: string; date: string; close: number; currency: string };
 
 /**
  * Daily bars for one user. `provider` records where a bar came from; the bar
@@ -174,7 +170,7 @@ export function createPriceBarRepository(db: Database, userId: string | undefine
           values,
         );
         // NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-        return result.rows.map((row) => ({ tenantId, symbol: row.symbol as string, date: row.date as string, close: Number(row.close), currency: row.currency as string }));
+        return result.rows.map((row) => ({ symbol: row.symbol as string, date: row.date as string, close: Number(row.close), currency: row.currency as string }));
       });
     },
     async lastDate(symbol) {
@@ -188,7 +184,6 @@ export function createPriceBarRepository(db: Database, userId: string | undefine
     },
     async upsert(bars) {
       if (bars.length === 0) return;
-      for (const bar of bars) sameTenant(tenantId, bar.tenantId);
       await withTenant(db, tenantId, async (client) => {
         await client.query(
           "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, updated_at = CURRENT_TIMESTAMP",

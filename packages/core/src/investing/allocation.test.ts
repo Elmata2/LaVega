@@ -3,10 +3,10 @@ import { bucketAllocationByEntity, bucketAllocationByInstrument, bucketPricedAll
 import type { Position } from "./model.js";
 
 const positions: Position[] = [
-  { tenantId: "local", entity: "Privé", symbol: "AAPL", description: "Apple", quantity: 2, averagePrice: 100, marketPrice: 110, marketValue: 220, currency: "USD", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Privé", symbol: "MSFT", quantity: 1, averagePrice: 200, marketPrice: 200, marketValue: 200, currency: "EUR", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Holding BV", symbol: "AAPL", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "USD", asOf: "2026-01-05" },
-  { tenantId: "local", entity: "Holding BV", symbol: "MISSING", quantity: 3, averagePrice: null, marketPrice: null, marketValue: null, currency: "USD", asOf: "2026-01-05" },
+  { entity: "Privé", symbol: "AAPL", description: "Apple", quantity: 2, averagePrice: 100, marketPrice: 110, marketValue: 220, currency: "USD", asOf: "2026-01-05" },
+  { entity: "Privé", symbol: "MSFT", quantity: 1, averagePrice: 200, marketPrice: 200, marketValue: 200, currency: "EUR", asOf: "2026-01-05" },
+  { entity: "Holding BV", symbol: "AAPL", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "USD", asOf: "2026-01-05" },
+  { entity: "Holding BV", symbol: "MISSING", quantity: 3, averagePrice: null, marketPrice: null, marketValue: null, currency: "USD", asOf: "2026-01-05" },
 ];
 const fx = { base: "EUR", date: "2026-01-05", rates: { USD: 2 } };
 

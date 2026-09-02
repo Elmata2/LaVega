@@ -1,5 +1,4 @@
 import {
-  LOCAL_TENANT_ID,
   type CashBalance,
   type CashFlow,
   type CashFlowKind,
@@ -214,7 +213,7 @@ function mapCashBalance(raw: Trading212Order, entity: string, asOf: string): { b
   // the owner still holds, so they count toward the balance instead of
   // discarding the record. pieCash on /account/cash is the same pie money.
   return {
-    balance: { tenantId: LOCAL_TENANT_ID, entity, broker: "trading212", currency, amount: available + (nullableNumber(cash.inPies) ?? 0) + (nullableNumber(cash.reservedForOrders) ?? 0), asOf },
+    balance: { entity, broker: "trading212", currency, amount: available + (nullableNumber(cash.inPies) ?? 0) + (nullableNumber(cash.reservedForOrders) ?? 0), asOf },
     problems: [],
   };
 }
@@ -247,7 +246,6 @@ function mapTransaction(raw: Trading212Order, entity: string, accountCurrency: s
   const currency = string(raw.currency ?? accountCurrency, "transaction currency");
   const flow: CashFlow = {
     id: stableId(entity, "cash", reference),
-    tenantId: LOCAL_TENANT_ID,
     entity,
     broker: "trading212",
     date: date(raw.dateTime, "transaction date"),
@@ -271,7 +269,6 @@ function mapDividend(raw: Trading212Order, entity: string, accountCurrency: stri
   const sourceType = optionalString(raw.type);
   return {
     id: stableId(entity, "dividend", reference),
-    tenantId: LOCAL_TENANT_ID,
     entity,
     broker: "trading212",
     date: date(raw.paidOn, "dividend date"),
@@ -316,7 +313,6 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
       }, 0)
     : null;
   return {
-    tenantId: LOCAL_TENANT_ID,
     entity,
     date: date(fill.filledAt, "order fill date"),
     symbol,
@@ -339,7 +335,6 @@ function mapPosition(raw: Trading212Order, entity: string): Position {
   const isin = optionalString(instrument.isin);
   const description = optionalString(instrument.name);
   return {
-    tenantId: LOCAL_TENANT_ID,
     entity,
     symbol,
     ...(isin ? { isin } : {}),

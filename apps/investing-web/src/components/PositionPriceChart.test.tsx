@@ -9,7 +9,7 @@ import { PositionPriceChart } from "./PositionPriceChart";
 test("exposes position price history and marker details accessibly", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
-  await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={[{ tenantId: "local", symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD", markers: [{ kind: "buy", eventDate: "2026-01-05", label: "Koop 2" }] }]} />); });
+  await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={[{ symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD", markers: [{ kind: "buy", eventDate: "2026-01-05", label: "Koop 2" }] }]} />); });
   expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("AAPL");
   expect(container.textContent).toContain("Koop");
   expect(container.textContent).toContain("Koop 2");
@@ -19,8 +19,8 @@ test("exposes position price history and marker details accessibly", async () =>
 test("groups marker fields and supports marker keyboard activation", async () => {
   const activate = vi.fn();
   const points = [
-    { tenantId: "local", symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD", markers: [] },
-    { tenantId: "local", symbol: "AAPL", date: "2026-01-06", close: 102, currency: "USD", markers: [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD", markers: [] },
+    { symbol: "AAPL", date: "2026-01-06", close: 102, currency: "USD", markers: [
       { kind: "buy" as const, eventDate: "2026-01-06", label: "Koop 2", quantity: 2, executionPrice: 101, amount: 202, commission: 1, currency: "USD" },
       { kind: "dividend" as const, eventDate: "2026-01-06", label: "Dividend 3 USD", amount: 3, dividendAmount: 3, currency: "USD" },
     ] },
@@ -38,7 +38,7 @@ test("groups marker fields and supports marker keyboard activation", async () =>
 });
 
 test("moves exact-value crosshair with keyboard and clears zoom with Escape", async () => {
-  const points = ["2026-01-05", "2026-02-10", "2026-03-20"].map((date, index) => ({ tenantId: "local", symbol: "AAPL", date, close: 100 + index, currency: "USD", markers: [] }));
+  const points = ["2026-01-05", "2026-02-10", "2026-03-20"].map((date, index) => ({ symbol: "AAPL", date, close: 100 + index, currency: "USD", markers: [] }));
   const container = document.createElement("div"); const root = createRoot(container);
   await act(async () => { root.render(<PositionPriceChart symbol="AAPL" currency="USD" points={points} />); });
   const chart = container.querySelector<HTMLElement>('[role="img"]')!;

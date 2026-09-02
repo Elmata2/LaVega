@@ -54,3 +54,19 @@ test("backfills once and top-ups from PriceStore lastDate without wiping cache",
   expect(urls[0]).toContain("range=5y");
   expect(urls[1]).toContain("period1=1767312000");
 });
+
+test("writes bars under the tenant the sync was asked for, not one a provider names", async () => {
+  const client = { fetchJsonWithCrumb: vi.fn(async () => ({
+    chart: { result: [{ timestamp: [1767225600], indicators: { quote: [{ close: [100] }] } }] },
+  })) } as never;
+  const store = createInMemoryPriceStore();
+  await syncPrices({
+    store,
+    tenantId: "user-b",
+    priceProviders: lane(createYahooPriceProvider({ client })),
+    request: { ...request, today: "2026-01-02" },
+  });
+
+  await expect(store.getRange("user-b", "ASML")).resolves.toHaveLength(1);
+  await expect(store.getRange("local", "ASML")).resolves.toEqual([]);
+});

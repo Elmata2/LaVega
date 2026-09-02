@@ -32,13 +32,13 @@ test("persists price bars across store instances and purges them", async () => {
   const filePath = join(directory, "nested", "prices.json");
   const first = createFilePriceStore(filePath);
   await Promise.all([
-    first.upsert([{ tenantId: "local", symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]),
-    first.upsert([{ tenantId: "local", symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]),
+    first.upsert("local", [{ symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]),
+    first.upsert("local", [{ symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]),
   ]);
 
   const second = createFilePriceStore(filePath);
-  await expect(second.getRange("local", "AAPL", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]);
-  await expect(second.getRange("local", "MSFT", "2026-01-01", "2026-01-03")).resolves.toEqual([{ tenantId: "local", symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]);
+  await expect(second.getRange("local", "AAPL", "2026-01-01", "2026-01-03")).resolves.toEqual([{ symbol: "AAPL", date: "2026-01-02", close: 101, currency: "USD" }]);
+  await expect(second.getRange("local", "MSFT", "2026-01-01", "2026-01-03")).resolves.toEqual([{ symbol: "MSFT", date: "2026-01-02", close: 201, currency: "USD" }]);
   await expect(second.lastDate("local", "AAPL")).resolves.toBe("2026-01-02");
   await second.purgeAll();
   await expect(second.getRange("local", "AAPL")).resolves.toEqual([]);
