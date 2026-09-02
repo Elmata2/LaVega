@@ -169,7 +169,7 @@ test("broker sync starts server-side price orchestration despite broker problems
 });
 
 test("broker sync status route exposes safe progress counters", async () => {
-  const progress = { status: "waiting" as const, pages: 6, ordersRead: 300, positionsRead: 0, waitUntil: "2026-08-19T14:00:00.000Z", remaining: 0, updatedAt: "2026-08-19T13:59:00.000Z", message: null };
+  const progress = { status: "waiting" as const, pages: 6, ordersRead: 300, positionsRead: 0, waitUntil: "2026-08-19T14:00:00.000Z", remaining: 0, updatedAt: "2026-08-19T13:59:00.000Z", message: null, history: null };
   const investingApp = createApp({ brokerSyncStatus: () => progress });
   const response = await investingApp.request("/api/brokers/sync/status");
   expect(response.status).toBe(200);

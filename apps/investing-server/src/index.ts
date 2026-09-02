@@ -1,4 +1,4 @@
-import { app, createApp, type BrokerCredentialInput, type BrokerSyncProgress, type InvestingDashboardReader } from "./app.js";
+import { app, createApp, type BrokerCredentialInput, type BrokerHistoryProgress, type BrokerSyncProgress, type InvestingDashboardReader } from "./app.js";
 import { createFileAgentRunStore, type AgentRunRecord, type AgentRunStore } from "./fileAgentRunStore.js";
 import { createPortfolioAgentTools, runPortfolioAgent } from "./portfolioAgent.js";
 import { createProblemReporter } from "./observability.js";
@@ -10,6 +10,7 @@ import {
   createInMemoryBenchmarkSelectionStore,
   historyPending,
   positionsComplete,
+  SCHEDULED_BROKERS,
   syncScheduledBrokers,
   tradesComplete,
   type BrokerSyncStateStore,
@@ -227,7 +228,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
    * store is per user, so the caches over it have to be too: a shared broker
    * data cache would serve the first signed-in user's positions to the second. */
   const buildTenantRuntime = async (tenantId: string) => {
-    let syncProgress: BrokerSyncProgress = { status: "idle", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: null, message: null };
+    let syncProgress: BrokerSyncProgress = { status: "idle", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: null, message: null, history: null };
     const credentials = createRuntimeCredentialStore(tenantId);
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && await credentials.status() === "locked") await credentials.unlock(startupPassphrase);
@@ -257,6 +258,23 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     const syncStateStore = database
       ? createNeonBrokerSyncStateStore(database, tenantId)
       : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
+    const readHistoryProgress = async (): Promise<BrokerHistoryProgress> => {
+      const entries = await Promise.all(SCHEDULED_BROKERS.map(async (broker) => {
+        const state = await syncStateStore.get(broker);
+        const resume = state.resume ?? {};
+        return [broker, {
+          lastSyncedAt: state.lastSyncedAt,
+          retryAfter: state.retryAfter ?? null,
+          /* No resume cursor at all means nothing is half-read: either the last
+           * run finished every page or none has run yet, and lastSyncedAt tells
+           * those apart. */
+          ordersComplete: resume.ordersComplete ?? resume.ordersNextPagePath == null,
+          transactionsComplete: resume.transactionsComplete ?? resume.transactionsNextPagePath == null,
+          dividendsComplete: resume.dividendsComplete ?? resume.dividendsNextPagePath == null,
+        }] as const;
+      }));
+      return Object.fromEntries(entries) as BrokerHistoryProgress;
+    };
     const scheduledBrokerSync = createRuntimeBrokerSync(async (result) => {
       brokerData.apply(result);
       if (!result.outcomes.some((outcome) => outcome.result !== null)) return;
@@ -268,11 +286,11 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     }, credentials, syncStateStore, updateProgress, tenantId);
     const brokerSync = async (force: boolean) => {
       if (devFixtureEnabled) {
-        syncProgress = { status: "completed", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Dev fixture data active — real broker sync skipped" };
+        syncProgress = { status: "completed", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Dev fixture data active — real broker sync skipped" , history: syncProgress.history };
         return { outcomes: [], problems: [] };
       }
       if (syncProgress.status !== "running" && syncProgress.status !== "waiting") {
-        syncProgress = { status: "running", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Broker synchronization started" };
+        syncProgress = { status: "running", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Broker synchronization started" , history: syncProgress.history };
       }
       try {
         const result = await scheduledBrokerSync(force);
@@ -330,7 +348,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     };
     return {
       brokerSync,
-      brokerSyncStatus: () => ({ ...syncProgress }),
+      brokerSyncStatus: async () => ({ ...syncProgress, history: await readHistoryProgress() }),
       configureBroker: createRuntimeBrokerCredentialSetup(credentials, restoreBrokerData, tenantId),
       credentialStatus: () => credentials.status(),
       unlockCredentials: async (passphrase: string) => {

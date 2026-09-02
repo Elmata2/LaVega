@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { emptyInvestingDashboard, LOCAL_TENANT_ID, buildSectorExposure, computePortfolioMetrics, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
-import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type YahooPriceRequest } from "@lavega/adapters";
+import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type ScheduledBroker, type YahooPriceRequest } from "@lavega/adapters";
 import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
@@ -20,7 +20,20 @@ export type BrokerSyncProgress = {
   remaining: number | null;
   updatedAt: string | null;
   message: string | null;
+  /** Read back from the durable sync state, so it survives the serverless
+   *  invocation that the counters above do not. Without it a mounted deployment
+   *  can only ever report "idle" and never says whether history finished. */
+  history: BrokerHistoryProgress | null;
 };
+
+/** Per broker, whether each paginated history ran to its last page. */
+export type BrokerHistoryProgress = Record<ScheduledBroker, {
+  lastSyncedAt: string | null;
+  retryAfter: string | null;
+  ordersComplete: boolean;
+  transactionsComplete: boolean;
+  dividendsComplete: boolean;
+}>;
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string>; passphraseMode: () => PassphraseMode };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {

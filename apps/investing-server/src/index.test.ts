@@ -284,6 +284,42 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
   }
 });
 
+test("sync status reports history completeness from durable state, not the invocation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-history-"));
+  try {
+    const credentialsFile = join(directory, "credentials.json");
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+
+    const baseUrl = await serve((request, response) => {
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
+      return json(response, []);
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const syncing = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
+
+    const restarted = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const progress = await (await restarted.request("/api/brokers/sync/status")).json() as {
+      status: string;
+      history: { trading212: { ordersComplete: boolean; lastSyncedAt: string | null } } | null;
+    };
+
+    expect(progress.status).toBe("idle");
+    expect(progress.history?.trading212.ordersComplete).toBe(true);
+    expect(progress.history?.trading212.lastSyncedAt).not.toBeNull();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("each tenant gets its own runtime, so no cache is shared between users", async () => {
   const priceStore = createInMemoryPriceStore();
   const getRange = vi.spyOn(priceStore, "getRange");

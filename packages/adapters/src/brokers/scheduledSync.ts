@@ -1,7 +1,10 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
 import { cashBalancesComplete, historyPending, positionsComplete, tradesComplete, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "./BrokerAccessAdapter.js";
 
-export type ScheduledBroker = Extract<CredentialBroker, "ibkr" | "trading212">;
+/** The brokers a scheduled sync knows how to drive. The type is derived from
+ *  this list so a broker can only be added in one place. */
+export const SCHEDULED_BROKERS = ["ibkr", "trading212"] as const satisfies readonly CredentialBroker[];
+export type ScheduledBroker = (typeof SCHEDULED_BROKERS)[number];
 export type BrokerSyncState = {
   lastSyncedAt: string | null;
   /** ISO timestamp the provider rate-limited us until. Survives `force`. */
