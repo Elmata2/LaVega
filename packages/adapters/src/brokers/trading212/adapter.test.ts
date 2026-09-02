@@ -1,10 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { createTrading212Adapter } from "./adapter.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
 
@@ -46,7 +47,7 @@ function order(id: number, ticker: string, direction = "BUY") {
 function holding(ticker: string) {
   return {
     averagePricePaid: 150.25,
-    createdAt: "2026-08-18T12:00:00Z",
+    createdAt: "2024-03-11T12:00:00Z",
     currentPrice: 175.5,
     instrument: {
       ticker,
@@ -85,6 +86,7 @@ function standardNonOrder(request: IncomingMessage, response: ServerResponse, po
 }
 
 test("sync follows nextPagePath, sends Basic auth, and maps every order", async () => {
+  vi.useFakeTimers({ now: new Date("2026-08-21T09:00:00Z"), shouldAdvanceTime: true });
   const paths: string[] = [];
   const baseUrl = await serve((request, response) => {
     paths.push(request.url ?? "");
@@ -108,7 +110,8 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
   ]);
   expect(result.source).toBe("trading-212");
   expect(result.problems).toEqual([]);
-  expect(result.positions).toMatchObject([{ entity: "Holding BV", symbol: "AAPL", isin: "US0378331005", quantity: 3, averagePrice: 150.25, marketPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18" }]);
+  // `asOf` is the date the broker was read, not the date the holding was opened.
+  expect(result.positions).toMatchObject([{ entity: "Holding BV", symbol: "AAPL", isin: "US0378331005", quantity: 3, averagePrice: 150.25, marketPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-21" }]);
   expect(result.trades).toMatchObject([
     { entity: "Holding BV", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, brokerTradeId: "10" },
     { entity: "Holding BV", symbol: "MSFT", side: "sell" },

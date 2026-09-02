@@ -328,7 +328,11 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   };
 }
 
-function mapPosition(raw: Trading212Order, entity: string): Position {
+function snapshotDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function mapPosition(raw: Trading212Order, entity: string, asOf: string): Position {
   const instrument = object(raw.instrument, "position instrument");
   const walletImpact = optionalObject(raw.walletImpact, "position wallet impact");
   const symbol = string(instrument.ticker, "position symbol");
@@ -344,7 +348,7 @@ function mapPosition(raw: Trading212Order, entity: string): Position {
     marketPrice: nullableNumber(raw.currentPrice),
     marketValue: walletImpact ? nullableNumber(walletImpact.currentValue) : null,
     currency: string(instrument.currency ?? walletImpact?.currency, "position currency"),
-    asOf: date(raw.createdAt ?? new Date().toISOString(), "position date"),
+    asOf,
   };
 }
 
@@ -524,9 +528,15 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         const holdings = await positions(holdingsUrl, config, limiter);
         holdingsComplete = true;
         config.diagnostics?.({ type: "positions", count: holdings.length });
+        // `asOf` is when the broker reported the holding, not when it was
+        // opened. Trading 212's per-position `createdAt` is the opening date,
+        // and reading it as a statement date anchored every holding in its own
+        // past: the FX rate used to value it, and the quantity the chart walks
+        // trades out from, both came from the day it was bought.
+        const asOf = snapshotDate();
         for (const holding of holdings) {
           try {
-            positionsResult.push(mapPosition(holding, entity));
+            positionsResult.push(mapPosition(holding, entity, asOf));
           } catch (error) {
             problems.push(error instanceof Error ? error.message : "Trading 212 holding is invalid");
           }
@@ -542,7 +552,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         const summary = await accountSummary(new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(), config, limiter);
         summaryComplete = true;
         accountCurrency = string(summary.currency, "account summary currency");
-        const mapped = mapCashBalance(summary, entity, new Date().toISOString().slice(0, 10));
+        const mapped = mapCashBalance(summary, entity, snapshotDate());
         if (mapped.balance) cashBalances.push(mapped.balance);
         problems.push(...mapped.problems);
       } catch (error) {
