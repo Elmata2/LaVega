@@ -79,21 +79,66 @@ function uniqueByIdentity<T extends { id: string }>(items: readonly T[], brokerI
 }
 
 type CashEvent = { date: string; amount: number };
+type Anchor = { asOf: string; amount: number };
 
-function cashAmountOnDate(date: string, anchors: readonly CashBalance[], events: readonly CashEvent[]): number | null {
+function sumBetween(events: readonly CashEvent[], after: string, through: string): number {
+  return events.filter((event) => event.date > after && event.date <= through).reduce((sum, event) => sum + event.amount, 0);
+}
+
+/** Walk events out from the nearest broker anchor: forwards from the last anchor
+ *  on or before the date, otherwise backwards from the first anchor after it.
+ *  Null when no anchor reaches the date at all. */
+function anchoredAmountOnDate(date: string, anchors: readonly Anchor[], events: readonly CashEvent[]): number | null {
   const sortedAnchors = [...anchors].sort((a, b) => a.asOf.localeCompare(b.asOf));
   const before = sortedAnchors.filter((anchor) => anchor.asOf <= date).at(-1);
-  if (before) {
-    return before.amount + events
-      .filter((event) => event.date > before.asOf && event.date <= date)
-      .reduce((sum, event) => sum + event.amount, 0);
-  }
+  if (before) return before.amount + sumBetween(events, before.asOf, date);
   const after = sortedAnchors.find((anchor) => anchor.asOf > date);
+  if (!after) return null;
+  return after.amount - sumBetween(events, date, after.asOf);
+}
+
+function cashAmountOnDate(date: string, anchors: readonly CashBalance[], events: readonly CashEvent[]): number | null {
+  // Before the first recorded flow an untracked earlier movement could sit
+  // between us and the anchor, so report unknown rather than a wrong balance.
   const firstEvent = [...events].sort((a, b) => a.date.localeCompare(b.date))[0];
-  if (!after || !firstEvent || date < firstEvent.date) return null;
-  return after.amount - events
-    .filter((event) => event.date > date && event.date <= after.asOf)
-    .reduce((sum, event) => sum + event.amount, 0);
+  const covered = anchors.some((anchor) => anchor.asOf <= date) || (firstEvent !== undefined && date >= firstEvent.date);
+  return covered ? anchoredAmountOnDate(date, anchors, events) : null;
+}
+
+/** One symbol held by one entity: broker quantity snapshots plus signed trades. */
+type Holding = { anchors: Map<string, number>; events: CashEvent[] };
+
+function holdingsBySymbol(positions: readonly Position[], trades: readonly Trade[]): Map<string, Holding[]> {
+  const byKey = new Map<string, Holding>();
+  const bySymbol = new Map<string, Holding[]>();
+  const holding = (symbol: string, entity: string): Holding => {
+    const key = `${symbol}\u0000${entity}`;
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const created: Holding = { anchors: new Map(), events: [] };
+    byKey.set(key, created);
+    const group = bySymbol.get(symbol) ?? [];
+    group.push(created);
+    bySymbol.set(symbol, group);
+    return created;
+  };
+  for (const position of positions) {
+    const anchors = holding(position.symbol, position.entity).anchors;
+    anchors.set(position.asOf, (anchors.get(position.asOf) ?? 0) + position.quantity);
+  }
+  for (const trade of trades) holding(trade.symbol, trade.entity).events.push({ date: trade.date, amount: signedQuantity(trade) });
+  return bySymbol;
+}
+
+/** Quantity held on a date, anchored on the broker's reported position. Order
+ *  history is routinely short, and pie trades never appear in it at all, so
+ *  accumulating trades forward from the start silently undercounts a holding. */
+function quantityOnDate(date: string, holdings: readonly Holding[]): number {
+  return holdings.reduce((sum, holding) => {
+    const anchors = [...holding.anchors].map(([asOf, amount]) => ({ asOf, amount }));
+    const anchored = anchoredAmountOnDate(date, anchors, holding.events);
+    return sum + (anchored ?? sumBetween(holding.events, "", date));
+  }, 0);
 }
 
 /** Build cash-aware daily portfolio values from trade history and broker anchors. */
@@ -116,7 +161,7 @@ export function computePortfolioValueSeries(
   const dates = businessCalendar(firstTrade, today, priceBars);
   const weekdays = businessDates(firstTrade, today);
   const symbols = [...new Set([...trades.map((trade) => trade.symbol), ...positions.map((position) => position.symbol)])].sort();
-  const tradesBySymbol = new Map(symbols.map((symbol) => [symbol, trades.filter((trade) => trade.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))]));
+  const holdings = holdingsBySymbol(positions, trades);
   const barsBySymbol = new Map(symbols.map((symbol) => [symbol, priceBars.filter((bar) => bar.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))]));
   const cashFlows = uniqueByIdentity(options.cashFlows ?? [], (flow) => `${cashKey(flow)}\u0000${flow.brokerFlowId ?? flow.id}`);
   const dividends = uniqueByIdentity(options.dividends ?? [], (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`);
@@ -131,9 +176,7 @@ export function computePortfolioValueSeries(
     const forwardFilled = new Set<string>();
 
     for (const symbol of symbols) {
-      const quantity = (tradesBySymbol.get(symbol) ?? [])
-        .filter((trade) => trade.date <= date)
-        .reduce((sum, trade) => sum + signedQuantity(trade), 0);
+      const quantity = quantityOnDate(date, holdings.get(symbol) ?? []);
       if (Math.abs(quantity) < 1e-12) continue;
       held += 1;
       const bars = barsBySymbol.get(symbol) ?? [];

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { CashBalance, CashFlow, PriceBar, Trade } from "./model.js";
+import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import { computePortfolioValueSeries, filterPortfolioValueRange, type PortfolioValuePoint } from "./portfolio.js";
 import { FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
 
@@ -13,12 +13,37 @@ const point = (date: string, value: number, unpriced: string[] = []): PortfolioV
   cashUnknown: [],
 });
 
-test("reconstructs holdings from signed trades instead of current positions", () => {
+test("values holdings by walking trades out from the broker position", () => {
   const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
 
   expect(result.find(({ date }) => date === "2026-01-02")).toEqual(point("2026-01-02", 2200));
   expect(result.find(({ date }) => date === "2026-01-05")).toEqual(point("2026-01-05", 1952.3809523809523));
   expect(result.at(-1)).toEqual(point("2026-02-02", 2090.909090909091));
+});
+
+test("values the broker position when the trade history is short", () => {
+  const trades = TRADES.filter((trade) => trade.id !== "a");
+
+  const result = computePortfolioValueSeries(POSITIONS, trades, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
+
+  expect(result.at(-1)?.positionsValue).toBeCloseTo((10 * 120 + 5 * 220) / 1.1, 9);
+});
+
+test("values a pie holding that never reaches the trade history", () => {
+  const positions: Position[] = [
+    { entity: "personal", symbol: "OTHER", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "EUR", asOf: "2026-02-02" },
+    { entity: "personal", symbol: "PIE", quantity: 4, averagePrice: 50, marketPrice: 60, marketValue: 240, currency: "EUR", asOf: "2026-02-02" },
+  ];
+  const trades: Trade[] = [{ id: "other", entity: "personal", date: "2026-01-02", symbol: "OTHER", side: "buy", quantity: 1, price: 100, amount: 100, currency: "EUR", commission: 0 }];
+  const bars: PriceBar[] = ["OTHER", "PIE"].flatMap((symbol) => [
+    { symbol, date: "2026-01-02", close: symbol === "PIE" ? 50 : 100, currency: "EUR" },
+    { symbol, date: "2026-02-02", close: symbol === "PIE" ? 60 : 100, currency: "EUR" },
+  ]);
+
+  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, { today: "2026-02-02" });
+
+  expect(result[0]?.positionsValue).toBe(300);
+  expect(result.at(-1)?.positionsValue).toBe(340);
 });
 
 test("includes closed positions only while trade history says they were held", () => {
