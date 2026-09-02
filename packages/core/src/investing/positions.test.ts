@@ -75,6 +75,15 @@ test("current positions omit closed holdings and expose price quality, EUR weigh
 
   const missingFx = buildCurrentPositions({ positions: [positions[0]!], trades: [trades[0]!], dividends: [], priceBars: bars, presentationCurrency: "EUR", fxRates: { base: "EUR", date: "2026-01-01", rates: {} }, today: "2026-01-09" });
   expect(missingFx[0]).toMatchObject({ marketValue: null, portfolioWeight: null, priceStatus: "missing-fx", returns: { status: "missing-fx" } });
+
+  // fxRates undefined is what a failed FX provider actually passes (not an
+  // empty rate set), and must fail closed the same way rather than crash.
+  const noFxProvider = buildCurrentPositions({ positions: [positions[0]!], trades: [trades[0]!], dividends: [], priceBars: bars, presentationCurrency: "EUR", fxRates: undefined, today: "2026-01-09" });
+  expect(noFxProvider[0]).toMatchObject({ marketValue: null, portfolioWeight: null, priceStatus: "missing-fx", returns: { status: "missing-fx" } });
+
+  // A EUR holding needs no conversion, so it prices fine even with no FX rate.
+  const eurWithoutFx = buildCurrentPositions({ positions: [positions[1]!], trades: [trades[1]!], dividends: [], priceBars: bars, presentationCurrency: "EUR", fxRates: undefined, today: "2026-01-09" });
+  expect(eurWithoutFx[0]).toMatchObject({ marketValue: 50, priceStatus: "priced" });
 });
 
 test("price becomes unknown after five business days", () => {

@@ -45,6 +45,15 @@ test("forward-fills five business days then marks held symbol unpriced", () => {
   expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({ positionsValue: null, value: null, unpriced: ["AAPL"], forwardFilled: [] });
 });
 
+test("with no FX rate at all, foreign holdings go unpriced but EUR cash still values", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL");
+  const cashBalances: CashBalance[] = [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-02" }];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", undefined, { cashBalances, today: "2026-01-02" });
+
+  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({ positionsValue: null, cashValue: 150, value: 150, unpriced: ["AAPL"] });
+});
+
 test("walks cash anchors with deduplicated flows and dividends", () => {
   const cashBalances: CashBalance[] = [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
   const cashFlows: CashFlow[] = [

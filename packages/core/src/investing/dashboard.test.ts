@@ -41,6 +41,29 @@ test("dashboard builder returns finished chart series and selected position mark
   expect(dashboard.position?.currentValue).toBeCloseTo(1200 / 1.1);
 });
 
+test("undefined fxRates (a failed FX provider) marks foreign positions missing-fx instead of crashing or pricing wrong", () => {
+  const dashboard = buildInvestingDashboard({
+    positions: POSITIONS,
+    trades: TRADES,
+    dividends: [],
+    priceBars: PRICE_BARS,
+    benchmarkBars: BENCHMARK_BARS,
+    presentationCurrency: "EUR",
+    fxRates: undefined,
+    selectedSymbol: "aapl",
+    problems: ["FX-koers kon niet worden geladen"],
+    today: "2026-02-02",
+  });
+
+  expect(dashboard.positions.every((position) => position.priceStatus === "missing-fx")).toBe(true);
+  expect(dashboard.positions.every((position) => position.marketValue === null)).toBe(true);
+  expect(dashboard.portfolio.All.at(-1)).toMatchObject({ positionsValue: null, value: null });
+  expect(dashboard.position?.currentValue).toBeNull();
+  // The FX provider's own failure reason, passed in by the caller, must
+  // reach the read model unchanged so the UI can surface it.
+  expect(dashboard.problems).toEqual(["FX-koers kon niet worden geladen"]);
+});
+
 test("allocation uses current price bars and omits values beyond the five-day cap", () => {
   const dashboard = buildInvestingDashboard({
     positions: [{ entity: "personal", symbol: "STALE", quantity: 2, averagePrice: 8, marketPrice: 999, marketValue: 1998, currency: "EUR", asOf: "2026-01-13" }],
