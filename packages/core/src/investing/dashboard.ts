@@ -10,7 +10,7 @@ import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
-import { buildCurrentPositions, calculatePositionReturn, type CurrentPosition, type PositionReturn, type PositionReturnStatus } from "./positions.js";
+import { brokerCostLegs, buildCurrentPositions, calculatePositionReturn, type CurrentPosition, type PositionReturn, type PositionReturnStatus } from "./positions.js";
 
 export const PORTFOLIO_RANGES = ["1M", "6M", "1Y", "YTD", "All"] as const satisfies readonly PortfolioRange[];
 
@@ -245,7 +245,7 @@ function buildPositionDetail(input: {
   const valuationDate = status === "open"
     ? latest?.date
     : [...input.trades.map((trade) => trade.date), ...input.dividends.map((dividend) => dividend.date)].sort().at(-1);
-  const returns = calculatePositionReturn(quantity, status === "closed" ? 0 : currentValue, input.trades, input.dividends, input.presentationCurrency, input.fxRates, { valuationDate });
+  const returns = calculatePositionReturn(quantity, status === "closed" ? 0 : currentValue, input.trades, input.dividends, input.presentationCurrency, input.fxRates, { valuationDate, brokerCost: brokerCostLegs(input.positions) });
   const averageCost = returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9 ? null : returns.remainingCostBasis / quantity;
   const activity: PositionActivity[] = [
     ...input.trades.flatMap((trade, sourceOrder): PositionActivity[] => trade.side === "other" ? [] : [{

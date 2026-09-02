@@ -82,3 +82,56 @@ test("price becomes unknown after five business days", () => {
   const result = buildCurrentPositions({ positions: [position], trades: [trade({ quantity: 1, amount: 10, currency: "EUR", commission: 0 })], dividends: [], priceBars: [{ symbol: "ACME", date: "2026-01-02", close: 10, currency: "EUR" }], presentationCurrency: "EUR", fxRates: rates, today: "2026-01-13" });
   expect(result[0]).toMatchObject({ marketValue: null, portfolioWeight: null, priceStatus: "unpriced", returns: { status: "unpriced" } });
 });
+
+test("a holding whose order history misses fills falls back to the broker average", () => {
+  const partial = [trade({ id: "buy-1", quantity: 4, amount: 40 })];
+  const dividends: Dividend[] = [{ id: "dividend", entity: "Holding BV", broker: "trading212", date: "2026-01-03", symbol: "ACME", amount: 3, currency: "EUR" }];
+  const brokerCost = [{ amount: 120, currency: "USD", date: "2026-01-03" }];
+
+  expect(calculatePositionReturn(10, 200, partial, dividends, "EUR", rates, { brokerCost })).toEqual({
+    status: "broker-average",
+    remainingCostBasis: 120,
+    realizedCostBasisRemoved: null,
+    unrealizedGain: 80,
+    realizedGain: null,
+    dividendsReceived: 3,
+    totalReturn: 83,
+    totalReturnPercentage: 83 / 120,
+    sinceFirstBuyPercentage: null,
+    firstBuyDate: "2026-01-02",
+  });
+});
+
+test("without a broker average an unreconciled holding still reports missing-cost", () => {
+  const partial = [trade({ id: "buy-1", quantity: 4, amount: 40 })];
+
+  expect(calculatePositionReturn(10, 200, partial, [], "EUR", rates)).toMatchObject({
+    status: "missing-cost",
+    remainingCostBasis: null,
+    totalReturn: null,
+  });
+});
+
+test("a pie leg and a direct holding in one instrument sum into one cost basis", () => {
+  const position = (overrides: Partial<Position>): Position => ({
+    entity: "Holding BV", symbol: "ACME", quantity: 4, averagePrice: 20, marketPrice: null,
+    marketValue: null, currency: "EUR", asOf: "2026-01-03", ...overrides,
+  });
+  const bars: PriceBar[] = [{ symbol: "ACME", date: "2026-01-03", close: 30, currency: "EUR" }];
+
+  const [merged] = buildCurrentPositions({
+    positions: [position({}), position({ quantity: 6, averagePrice: 25 })],
+    trades: [],
+    dividends: [],
+    priceBars: bars,
+    presentationCurrency: "EUR",
+    fxRates: rates,
+    today: "2026-01-03",
+  });
+
+  expect(merged).toMatchObject({
+    quantity: 10,
+    marketValue: 300,
+    returns: { status: "broker-average", remainingCostBasis: 230, unrealizedGain: 70 },
+  });
+});

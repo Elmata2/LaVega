@@ -5,8 +5,16 @@ import { businessDaysAfter } from "./calendar.js";
 import { solveXirr } from "./benchmarks.js";
 
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
-export type PositionReturnStatus = "available" | "missing-cost" | "missing-fx" | "unpriced";
+export type PositionReturnStatus =
+  | "available"
+  | "broker-average"
+  | "missing-cost"
+  | "missing-fx"
+  | "unpriced";
 
+/** `broker-average` means the cost basis is the broker's own average price
+ *  rather than a reconciled trade history. Realized gain and the annualized
+ *  return need the full history, so they stay null there. */
 export type PositionReturn = {
   status: PositionReturnStatus;
   remainingCostBasis: number | null;
@@ -57,6 +65,9 @@ function tradeValue(trade: Trade): number | null {
   return null;
 }
 
+/** What a broker says one holding cost, before any trade history is consulted. */
+export type BrokerCostLeg = { amount: number; currency: string; date: string };
+
 export function calculatePositionReturn(
   quantity: number,
   marketValue: number | null,
@@ -64,12 +75,17 @@ export function calculatePositionReturn(
   dividends: readonly Dividend[],
   presentationCurrency: string,
   fxRates: FxRates,
-  options: { valuationDate?: string } = {},
+  options: { valuationDate?: string; brokerCost?: readonly BrokerCostLeg[] } = {},
 ): PositionReturn {
   const orderedTrades = [...trades].sort((left, right) => left.date.localeCompare(right.date));
   const firstBuyDate = orderedTrades.find((trade) => trade.side === "buy")?.date ?? null;
+  /* Trades that do not reconcile are not the end of the story. Brokers that
+   * fill through pies or autoinvest report the holding and its average price
+   * but leave those fills out of order history, so the average is the only
+   * cost this position will ever have. */
+  const fallback = () => brokerAverageReturn(marketValue, dividends, presentationCurrency, fxRates, firstBuyDate, options.brokerCost);
   if (orderedTrades.length === 0 || orderedTrades.some((trade) => trade.side === "other" || trade.commission === null)) {
-    return emptyReturn("missing-cost", firstBuyDate);
+    return fallback();
   }
 
   let heldQuantity = 0;
@@ -80,7 +96,7 @@ export function calculatePositionReturn(
   try {
     for (const trade of orderedTrades) {
       const gross = tradeValue(trade);
-      if (gross === null || trade.quantity <= 0) return emptyReturn("missing-cost", firstBuyDate);
+      if (gross === null || trade.quantity <= 0) return fallback();
       const grossEur = convertCurrency(gross, trade.currency, presentationCurrency, trade.date, fxRates);
       const feeEur = convertCurrency(Math.abs(trade.commission!), trade.currency, presentationCurrency, trade.date, fxRates);
       if (trade.side === "buy") {
@@ -89,7 +105,7 @@ export function calculatePositionReturn(
         datedFlows.push({ date: trade.date, amount: -(grossEur + feeEur) });
         continue;
       }
-      if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return emptyReturn("missing-cost", firstBuyDate);
+      if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return fallback();
       const removed = remainingCostBasis / heldQuantity * trade.quantity;
       heldQuantity -= trade.quantity;
       remainingCostBasis -= removed;
@@ -98,7 +114,7 @@ export function calculatePositionReturn(
       datedFlows.push({ date: trade.date, amount: grossEur - feeEur });
     }
 
-    if (Math.abs(heldQuantity - quantity) > EPSILON) return emptyReturn("missing-cost", firstBuyDate);
+    if (Math.abs(heldQuantity - quantity) > EPSILON) return fallback();
     let dividendsReceived = 0;
     for (const dividend of dividends) {
       const converted = convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
@@ -141,6 +157,48 @@ export function calculatePositionReturn(
       totalReturn,
       totalReturnPercentage: Math.abs(denominator) <= EPSILON ? null : totalReturn / denominator,
       sinceFirstBuyPercentage,
+      firstBuyDate,
+    };
+  } catch {
+    return emptyReturn("missing-fx", firstBuyDate);
+  }
+}
+
+/** One leg per holding that reports an average price, so several accounts or a
+ *  pie and a direct holding in the same instrument add up instead of one
+ *  overwriting the other. */
+export function brokerCostLegs(positions: readonly Position[]): BrokerCostLeg[] {
+  return positions.flatMap((position) => position.averagePrice === null || Math.abs(position.quantity) <= EPSILON
+    ? []
+    : [{ amount: position.averagePrice * position.quantity, currency: position.currency, date: position.asOf }]);
+}
+
+function brokerAverageReturn(
+  marketValue: number | null,
+  dividends: readonly Dividend[],
+  presentationCurrency: string,
+  fxRates: FxRates,
+  firstBuyDate: string | null,
+  brokerCost: readonly BrokerCostLeg[] | undefined,
+): PositionReturn {
+  if (!brokerCost || brokerCost.length === 0) return emptyReturn("missing-cost", firstBuyDate);
+  try {
+    let remainingCostBasis = 0;
+    for (const leg of brokerCost) remainingCostBasis += convertCurrency(leg.amount, leg.currency, presentationCurrency, leg.date, fxRates);
+    let dividendsReceived = 0;
+    for (const dividend of dividends) dividendsReceived += convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+    const unrealizedGain = marketValue === null ? null : marketValue - remainingCostBasis;
+    const totalReturn = unrealizedGain === null ? null : unrealizedGain + dividendsReceived;
+    return {
+      status: "broker-average",
+      remainingCostBasis,
+      realizedCostBasisRemoved: null,
+      unrealizedGain,
+      realizedGain: null,
+      dividendsReceived,
+      totalReturn,
+      totalReturnPercentage: totalReturn === null || Math.abs(remainingCostBasis) <= EPSILON ? null : totalReturn / remainingCostBasis,
+      sinceFirstBuyPercentage: null,
       firstBuyDate,
     };
   } catch {
@@ -203,7 +261,7 @@ export function buildCurrentPositions(input: {
       input.dividends.filter((dividend) => key(dividend) === groupKey),
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date },
+      { valuationDate: latest?.date, brokerCost: brokerCostLegs(positions) },
     );
     const returns = priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
       ? { ...calculatedReturns, status: "missing-fx" as const }
