@@ -314,7 +314,10 @@ async function commandDoctor(flags) {
     if (!ok) report.verdict = "problem";
   };
 
-  const health = await request(flags, "GET", "/health");
+  /* The mount owns everything outside /api/, so on prod `/health` answers for
+   * the personal server and never reaches the investing app. Only the forwarded
+   * path proves which app replied. */
+  const health = await request(flags, "GET", "/api/investing/health");
   note("health", health.ok && health.json?.service === "investing-server", { status: health.status, body: health.json ?? health.text, error: health.error });
 
   const session = await request(flags, "GET", "/api/auth/get-session");
@@ -327,6 +330,17 @@ async function commandDoctor(flags) {
     note("dashboard", false, { status: 401, reason: "no session — the mount refuses to guess a tenant", fix: "control-investing.mjs login --target prod --email <you> --password <pw>" });
   } else {
     note("dashboard", dashboard.ok, { status: dashboard.status, problems: problemsOf(dashboard.json), positions: dashboard.json?.positions?.length ?? null });
+  }
+
+  /* A dashboard that returns 200 with no problems still shows a user nothing if
+   * no holding carries a price or a cost basis. That reads as green everywhere
+   * else, so name it here. */
+  const positions = Array.isArray(dashboard.json?.positions) ? dashboard.json.positions : [];
+  if (positions.length > 0) {
+    const priced = positions.filter((position) => position.priceStatus === "priced" || position.priceStatus === "forward-filled").length;
+    const withCost = positions.filter((position) => position.returns?.status === "available").length;
+    note("positionsPriced", priced > 0, { priced, of: positions.length, unpricedSample: positions.filter((position) => position.priceStatus === "unpriced").slice(0, 5).map((position) => position.symbol) });
+    note("positionsCosted", withCost > 0, { withCostBasis: withCost, of: positions.length, reasons: [...new Set(positions.map((position) => position.returns?.status).filter((status) => status && status !== "available"))] });
   }
 
   const config = await request(flags, "GET", "/api/config/status");

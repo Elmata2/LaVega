@@ -25,6 +25,7 @@ in a single command:
 | `401` on every `/api/*` | No session. The mount refuses to guess a tenant rather than serve another user's data. |
 | `5xx` | The backend itself failed. |
 | `200` with a non-empty `problems` array | Served but degraded. The dashboard deliberately returns an empty-but-valid payload plus problems so reconnect and resync stay reachable. |
+| `200`, no problems, positions all `unpriced` or `missing-cost` | Served and empty of meaning. Holdings arrived, prices or trades did not join them, and nothing in the payload says so. `doctor` names this as `positionsPriced` and `positionsCosted`. |
 
 ## Launch
 
