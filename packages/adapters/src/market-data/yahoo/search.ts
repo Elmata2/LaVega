@@ -28,6 +28,21 @@ async function confirmedCurrency(client: YahooHttpClient, quote: SearchQuote): P
   return response.chart?.result?.[0]?.meta?.currency?.toUpperCase() ?? null;
 }
 
+const ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+/** Resolve a broker ISIN to the Yahoo symbol for that instrument. Yahoo matches
+ *  an ISIN exactly, which beats guessing an exchange suffix from a broker ticker. */
+export async function resolveYahooSymbolByIsin(isin: string, client: YahooHttpClient): Promise<string | null> {
+  const normalized = isin.trim().toUpperCase();
+  if (!ISIN.test(normalized)) return null;
+  try {
+    const response = await client.fetchJsonWithCrumb<SearchResponse>(`https://query1.finance.yahoo.com/v1/finance/search?q=${normalized}&quotesCount=4&newsCount=0`);
+    return (response.quotes ?? []).find((quote) => quote.symbol)?.symbol?.toUpperCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function searchYahooBenchmarks(
   query: string,
   input: { client?: YahooHttpClient; limit?: number } = {},
