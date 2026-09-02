@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { loadConfig, type EbConfig } from "./config.js";
+import { createEbFlowRepository } from "@lavega/database";
+import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { investingTenantId } from "./investing-mount.js";
 import { eb, type EbClientConfig } from "./eb-client.js";
 
 /* Enable Banking AIS flow. The server holds the app credential (JWT signing)
@@ -13,20 +16,29 @@ import { eb, type EbClientConfig } from "./eb-client.js";
  * session, redirect to the SPA with ?eb=<sessionId>) -> GET /accounts?session_id
  * (fetch balances+transactions per account, return raw). */
 
-type PendingAuth = { name: string; country: string; ts: number };
-type EbSession = { accounts: Array<Record<string, unknown>>; aspsp: string; ts: number };
+export type EbSession = { accounts: Array<Record<string, unknown>>; aspsp: string };
+export type PendingAuth = { userId: string; name: string; country: string };
 
-// In-memory (single-user personal app). Lost on restart — the user just
-// reconnects. Short TTLs so nothing lingers.
-const pending = new Map<string, PendingAuth>();
-const sessions = new Map<string, EbSession>();
-const PENDING_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_MS = 60 * 60 * 1000;
+/**
+ * Where the flow's two intermediate states live.
+ *
+ * They used to be module-scope `Map`s, which worked on Railway — one container,
+ * one process — and cannot work on Vercel. `/api/eb/auth` may write the state in
+ * one function instance while the bank's redirect to `/api/eb/callback` lands on
+ * another, where the Map is empty. Every real bank connection would fail, and the
+ * `state` check added for M1 would fail it reliably rather than silently.
+ */
+export type EbFlowStore = {
+  startAuth(state: string, pending: PendingAuth): Promise<void>;
+  consumeAuth(state: string, ttlMs: number): Promise<PendingAuth | null>;
+  sweepAuth(ttlMs: number): Promise<void>;
+  putSession(userId: string, sessionId: string, payload: EbSession): Promise<void>;
+  getSession(userId: string, sessionId: string, ttlMs: number): Promise<EbSession | null>;
+  deleteSession(userId: string, sessionId: string): Promise<void>;
+};
 
-function sweep<T extends { ts: number }>(store: Map<string, T>, ttl: number): void {
-  const now = Date.now();
-  for (const [k, v] of store) if (now - v.ts > ttl) store.delete(k);
-}
+export const PENDING_TTL_MS = 15 * 60 * 1000;
+export const SESSION_TTL_MS = 60 * 60 * 1000;
 
 function clientConfig(cfg: EbConfig): EbClientConfig {
   return {
@@ -48,7 +60,14 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function registerEbRoutes(app: Hono): void {
+export type EbRouteDependencies = {
+  store: EbFlowStore;
+  /** The signed-in user, or null. Never read from the request's own body. */
+  tenantId: (request: Request) => Promise<string | null>;
+};
+
+export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): void {
+  const { store, tenantId } = dependencies;
   // Bank list for the picker (defaults to NL). Public-ish metadata only.
   app.get("/api/eb/aspsps", async (c) => {
     const cfg = loadConfig();
@@ -80,7 +99,9 @@ export function registerEbRoutes(app: Hono): void {
     const cfg = loadConfig();
     if (!cfg.configured)
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
-    sweep(pending, PENDING_TTL_MS);
+    const userId = await tenantId(c.req.raw);
+    if (!userId) return c.json({ error: "Log in om een bank te koppelen." }, 401);
+    await store.sweepAuth(PENDING_TTL_MS);
     const body = (await c.req.json().catch(() => ({}))) as { name?: string; country?: string };
     const name = body.name;
     const country = (body.country || "NL").toUpperCase();
@@ -96,7 +117,7 @@ export function registerEbRoutes(app: Hono): void {
       })) as { url?: string };
       if (!data.url)
         return c.json({ error: "Geen autorisatie-URL ontvangen van Enable Banking." }, 502);
-      pending.set(state, { name, country, ts: Date.now() });
+      await store.startAuth(state, { userId, name, country });
       return c.json({ url: data.url });
     } catch (e) {
       return c.json({ error: errMsg(e) }, 502);
@@ -125,11 +146,14 @@ export function registerEbRoutes(app: Hono): void {
      * would pull HIS bank data into the owner's vault.
      *
      * Consumed on use, so a replayed callback is refused too. */
-    sweep(pending, PENDING_TTL_MS);
-    if (!state || !pending.has(state)) {
+    /* Consumed as it is read, so a replayed callback finds nothing rather than
+     * getting a second exchange. The row also names the user who started the
+     * flow — which is how this route knows whose bank this is without relying
+     * on a session cookie surviving a redirect from the bank's own domain. */
+    const authorised = state ? await store.consumeAuth(state, PENDING_TTL_MS) : null;
+    if (!authorised) {
       return c.redirect(`/?eb_error=${encodeURIComponent("Onbekende of verlopen autorisatie — koppel de bank opnieuw.")}`);
     }
-    pending.delete(state); // one-shot
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/sessions", { code })) as {
         session_id?: string;
@@ -138,11 +162,9 @@ export function registerEbRoutes(app: Hono): void {
       };
       if (!data.session_id)
         return c.redirect(`/?eb_error=${encodeURIComponent("Geen sessie ontvangen.")}`);
-      sweep(sessions, SESSION_TTL_MS);
-      sessions.set(data.session_id, {
+      await store.putSession(authorised.userId, data.session_id, {
         accounts: data.accounts ?? [],
         aspsp: data.aspsp?.name ?? "",
-        ts: Date.now(),
       });
       return c.redirect(`/?eb=${encodeURIComponent(data.session_id)}`);
     } catch (e) {
@@ -156,8 +178,13 @@ export function registerEbRoutes(app: Hono): void {
     const cfg = loadConfig();
     if (!cfg.configured)
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
+    const userId = await tenantId(c.req.raw);
+    if (!userId) return c.json({ error: "Log in om je rekeningen op te halen." }, 401);
     const sessionId = c.req.query("session_id") || "";
-    const session = sessions.get(sessionId);
+    /* Scoped to the caller. The id still travels in the URL (review finding M2),
+     * but it is no longer a bearer token: the row belongs to a user, and RLS
+     * means someone else's session id finds nothing here. */
+    const session = await store.getSession(userId, sessionId, SESSION_TTL_MS);
     if (!session)
       return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
     const dateFrom = isoDaysAgo(365);
@@ -186,10 +213,17 @@ export function registerEbRoutes(app: Hono): void {
         }
         items.push({ account, balances: balancesRes.balances ?? [], transactions });
       }
-      sessions.delete(sessionId); // one-shot: data delivered
+      await store.deleteSession(userId, sessionId); // one-shot: data delivered
       return c.json({ aspsp: session.aspsp, items });
     } catch (e) {
       return c.json({ error: errMsg(e) }, 502);
     }
   });
+}
+
+/** Wiring for the real server: Neon storage, session identity. */
+export function ebRouteDependencies(): EbRouteDependencies | null {
+  const database = runtimeDatabase();
+  if (!database) return null;
+  return { store: createEbFlowRepository(database) as EbFlowStore, tenantId: investingTenantId };
 }

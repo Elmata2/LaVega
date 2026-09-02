@@ -567,6 +567,8 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
  * worse — silently missed. Order is child-before-parent; nothing here has a
  * foreign key to another, but that stops being true the moment one is added. */
 const USER_DATA_TABLES = [
+  "personal.eb_sessions",
+  "personal.eb_pending_auth",
   "investing.agent_runs",
   "investing.sync_state",
   "investing.preferences",
@@ -609,4 +611,105 @@ export async function eraseUserData(db: Database, userId: string | undefined | n
     }
     return report;
   });
+}
+
+export type PendingEbAuth = { userId: string; name: string; country: string };
+
+/**
+ * The Enable Banking authorisation flow's two stores.
+ *
+ * `pending` is read WITHOUT a tenant, on purpose. The callback is a cross-site
+ * redirect from the bank and may arrive with no session cookie; the state is
+ * what authenticates it — server-issued, unguessable, single-use, minutes long
+ * — and the row is where the user's identity comes back from. It is the one
+ * place in this file that queries outside `withTenant`, and it holds nothing
+ * financial: a bank name, a country, and who started the flow.
+ *
+ * `sessions` holds the account list the bank returned, which IS personal data,
+ * so it is written under the user the state named and read back inside
+ * `withTenant` where RLS applies.
+ */
+export function createEbFlowRepository(db: Database) {
+  return {
+    /** Record a started authorisation. Called for an authenticated user. */
+    async startAuth(state: string, pending: PendingEbAuth): Promise<void> {
+      const identity = requireUserId(pending.userId);
+      await withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_pending_auth (state, user_id, aspsp_name, aspsp_country) VALUES ($1, $2, $3, $4)",
+          [state, identity, pending.name, pending.country],
+        );
+      });
+    },
+
+    /**
+     * Take the pending authorisation, or nothing.
+     *
+     * One shot: the DELETE ... RETURNING is the read, so two callbacks racing
+     * the same state cannot both win — a replay gets nothing rather than a
+     * second exchange. Expired rows are refused by the same statement, so a
+     * stale state is indistinguishable from an unknown one, which is what a
+     * caller should be told anyway.
+     */
+    async consumeAuth(state: string, ttlMs: number): Promise<PendingEbAuth | null> {
+      if (!state.trim()) return null;
+      const client = await db.connect();
+      try {
+        const result = await client.query<QueryResultRow>(
+          "DELETE FROM personal.eb_pending_auth WHERE state = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') RETURNING user_id, aspsp_name, aspsp_country",
+          [state, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        return row ? { userId: row.user_id as string, name: row.aspsp_name as string, country: row.aspsp_country as string } : null;
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Housekeeping: drop authorisations nobody came back for. */
+    async sweepAuth(ttlMs: number): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          "DELETE FROM personal.eb_pending_auth WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          [String(ttlMs)],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Stash the bank's account list for the user the state named. */
+    async putSession(userId: string, sessionId: string, payload: unknown): Promise<void> {
+      const identity = requireUserId(userId);
+      const blob = encryptBlob(payload);
+      await withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob) VALUES ($1, $2, $3) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob",
+          [sessionId, identity, blob],
+        );
+      });
+    },
+
+    /** Read it back for its owner. RLS means another user's id finds nothing. */
+    async getSession<T>(userId: string, sessionId: string, ttlMs: number): Promise<T | null> {
+      return withTenant(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT payload_blob FROM personal.eb_sessions WHERE session_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond')",
+          [sessionId, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        if (!row) return null;
+        const payload = tryDecryptBlob<T>(row.payload_blob as Buffer);
+        return payload.readable ? payload.value : null;
+      });
+    },
+
+    /** One-shot: the data has been delivered, so the copy here goes. */
+    async deleteSession(userId: string, sessionId: string): Promise<void> {
+      await withTenant(db, userId, async (client) => {
+        await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [sessionId]);
+      });
+    },
+  };
 }

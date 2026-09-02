@@ -28,6 +28,14 @@ const PUBLIC_API_PATHS = new Set([
 
 export function isPublicApiPath(path: string): boolean {
   if (path.startsWith("/api/auth/")) return true; // how you log in
+  /* The bank redirects the user's browser here from its own domain. Whether a
+   * session cookie survives that hop is decided by SameSite behaviour we do not
+   * control, and a bank connection that breaks on a browser default is worse
+   * than one that does not depend on it. This route is not unauthenticated: it
+   * requires a `state` this server issued for a signed-in user, unguessable,
+   * single-use and valid for minutes, and it takes the user's identity from
+   * that row rather than from anything the caller sends. */
+  if (path === "/api/eb/callback") return true;
   return PUBLIC_API_PATHS.has(path);
 }
 

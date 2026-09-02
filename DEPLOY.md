@@ -12,6 +12,16 @@ storage. Better Auth integration remains pending.
   RLS policies.
 - `db/migrations/0002_auth.sql` — Better Auth tables and the `lavega_runtime`
   grants.
+- `db/migrations/0003_eb_flow.sql` — the Enable Banking flow's two intermediate
+  stores. **Must be applied to Neon before EB is switched on**, or `/api/eb/auth`
+  fails on its first insert. They were module-scope `Map`s, which worked on
+  Railway (one long-lived container) and cannot work on Vercel: `/auth` may write
+  the state in one function instance and the bank's redirect to `/callback` land
+  on another. `personal.eb_pending_auth` deliberately has NO row-level security —
+  the callback arrives cross-site from the bank and may carry no session cookie,
+  so its unguessable single-use `state` is the credential and the row is where
+  the user's identity comes back from. `personal.eb_sessions` holds the account
+  list, so it is encrypted and RLS-scoped like everything else.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
 - Better Auth is mounted at `/api/auth/*`, and `apiGuard` (`apps/server/src/apiGuard.ts`)
   puts **every** `/api/*` route behind it — not just investing. Closed unless the
@@ -183,6 +193,13 @@ In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
 
 Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
+
+**Two things to check before the first live connection:**
+- Apply `0003_eb_flow.sql`. Without a `DATABASE_URL` the EB routes are not
+  registered at all, and without the tables the flow fails at `/auth`.
+- `lavega.dev` now 308-redirects to `www.lavega.dev`. Register the redirect URL
+  against whichever hostname is canonical and test that leg deliberately — an
+  OAuth callback is a bad place to discover an extra hop.
 
 ## Local production test
 

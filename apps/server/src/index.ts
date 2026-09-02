@@ -8,7 +8,7 @@ import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
 import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
-import { registerEbRoutes } from "./eb-routes.js";
+import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
@@ -196,8 +196,11 @@ app.get("/api/eb/status", (c) => {
   });
 });
 
-/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts. */
-registerEbRoutes(app);
+/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts.
+ * Its two intermediate states live in Neon, not in this process — a serverless
+ * function does not survive between /auth and the bank's redirect back. */
+const ebDependencies = ebRouteDependencies();
+if (ebDependencies) registerEbRoutes(app, ebDependencies);
 
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */
