@@ -36,7 +36,7 @@ export async function runPriceSyncUntilComplete(current: () => boolean = () => t
     if (response && response.status >= 400 && response.status < 500) return failed;
     const progress = response ? await response.json().catch(() => null) as PriceSyncProgress | null : null;
     if (!current()) return [];
-    if (progress) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    if (progress && typeof window !== "undefined") window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     if (!response?.ok && response?.status !== 202) {
       interruptions += 1;
       if (interruptions >= MAX_INTERRUPTIONS) return failed;

@@ -6,6 +6,20 @@ const position = (symbol: string, quantity = 1): Position => ({ entity: "persona
 const trade = (symbol: string, date: string): Trade => ({ id: `${symbol}:${date}`, entity: "personal", symbol, date, side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0 });
 const result = (problems: string[] = []) => ({ bars: [], fetched: true, problems });
 
+async function waitForAssertion(assertion: () => void) {
+  let lastError: unknown;
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  throw lastError;
+}
+
 test("discovers current, closed, and benchmark symbols in request order with correct starts", () => {
   const targets = discoverPriceSyncTargets({
     positions: [position("ASML"), position("ZERO", 0)],
@@ -66,7 +80,7 @@ test("reports waiting state and remaining symbols during 300 ms pacing", async (
   const orchestrator = createPriceOrchestrator({ discover: () => targets, sync: async () => result(), wait });
 
   const run = orchestrator.run("local");
-  await vi.waitFor(() => expect(wait).toHaveBeenCalledWith(300));
+  await waitForAssertion(() => expect(wait).toHaveBeenCalledWith(300));
   await expect(orchestrator.status("local")).resolves.toMatchObject({ status: "waiting", completed: 1, remainingSymbols: ["NEXT"] });
   release();
   await expect(run).resolves.toMatchObject({ status: "completed", completed: 2 });
@@ -137,6 +151,21 @@ test("a stale run is taken over so a dead instance cannot strand the work", asyn
 
   await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
   expect(sync).toHaveBeenCalledOnce();
+});
+
+test("a worker that loses its durable lease stops before another provider request", async () => {
+  const owner = { status: "running" as const, total: 1, completed: 0, remainingSymbols: ["TWO"], currentSymbol: "TWO", waitUntil: null, updatedAt: new Date().toISOString(), message: "New owner", problems: [], leaseId: "new-owner" };
+  const progressStore = {
+    get: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(owner),
+    put: vi.fn(async () => false),
+    claim: vi.fn(async () => null),
+  };
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({ discover: () => [symbolTarget("TWO")], sync, paceMs: 0, progressStore });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({ leaseId: "new-owner", currentSymbol: "TWO" });
+  expect(sync).not.toHaveBeenCalled();
+  expect(progressStore.put).toHaveBeenCalled();
 });
 
 test("the budget is the broker sync budget unless prices are given their own", () => {

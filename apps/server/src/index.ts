@@ -11,7 +11,7 @@ import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
-import { forwardInvesting, investingTenantId, shouldMountInvesting } from "./investing-mount.js";
+import { forwardInvesting, investingTenantId, runInvestingCron, shouldMountInvesting } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
@@ -149,6 +149,7 @@ app.get("/terms", (c) => c.html(termsHtml));
  * with API routes at `/api/investing/*`, `/api/brokers/*`, etc. Enabled when the
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
+  app.get("/api/cron/investing-sync", (c) => runInvestingCron(c.req.raw));
   /* Every investing API call is served under one tenant, and the session names
    * it. A request that cannot name a tenant is refused rather than falling back
    * to the local one — that fallback would hand one user another user's data. */

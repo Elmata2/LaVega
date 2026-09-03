@@ -1,15 +1,17 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { shouldMountInvestingMock, investingTenantIdMock, forwardInvestingMock } = vi.hoisted(() => ({
+const { shouldMountInvestingMock, investingTenantIdMock, forwardInvestingMock, runInvestingCronMock } = vi.hoisted(() => ({
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
   forwardInvestingMock: vi.fn(async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`)),
+  runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
 }));
 
 vi.mock("./investing-mount.js", () => ({
   shouldMountInvesting: shouldMountInvestingMock,
   investingTenantId: investingTenantIdMock,
   forwardInvesting: forwardInvestingMock,
+  runInvestingCron: runInvestingCronMock,
   investingDist: () => "/tmp/investing-dist",
 }));
 
@@ -61,5 +63,16 @@ test("the health line is answered without a session, and by the investing runtim
 
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("tenant:none");
+  expect(investingTenantIdMock).not.toHaveBeenCalled();
+});
+
+test("investing cron route uses cron handler instead of browser session auth", async () => {
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  const response = await app.request("/api/cron/investing-sync");
+
+  expect(response.status).toBe(200);
+  expect(runInvestingCronMock).toHaveBeenCalledOnce();
   expect(investingTenantIdMock).not.toHaveBeenCalled();
 });

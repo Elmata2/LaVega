@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { createAgentRunRepository, createBrokerRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
+import { createAgentRunRepository, createBrokerRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createPriceSyncStateRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
 import type { QueryResultRow } from "@neondatabase/serverless";
 
 afterEach(() => { delete process.env.LAVEGA_ENCRYPTION_KEY; });
@@ -122,6 +122,30 @@ test("broker sync state round-trips per broker", async () => {
 
   await repository.put("trading212", { lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null });
   expect(executed(calls).at(-1)?.values).toEqual(["trading212", JSON.stringify({ lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null }), "2026-01-03T00:00:00.000Z"]);
+});
+
+test("price sync claim returns the active row when another invocation owns a fresh lease", async () => {
+  const active = { status: "running", leaseId: "older", updatedAt: "2026-09-03T10:00:00.000Z" };
+  const { db, calls } = fakeDatabase([{ state: active, claimed: false }]);
+  const repository = createPriceSyncStateRepository(db, "user-123");
+
+  await expect(repository.claim({ status: "running", leaseId: "newer", updatedAt: "2026-09-03T10:00:10.000Z" }, "running", "2026-09-03T09:59:30.000Z")).resolves.toEqual(active);
+
+  const claim = executed(calls).at(-1)!;
+  expect(claim.sql).toContain("ON CONFLICT");
+  expect(claim.sql).toContain("state->>'updatedAt'");
+  expect(claim.values).toEqual(["prices", "running", JSON.stringify({ status: "running", leaseId: "newer", updatedAt: "2026-09-03T10:00:10.000Z" }), "2026-09-03T09:59:30.000Z"]);
+});
+
+test("price sync writes require the lease that claimed the row", async () => {
+  const { db, calls } = fakeDatabase();
+  const repository = createPriceSyncStateRepository(db, "user-123");
+
+  await expect(repository.put({ status: "paused", leaseId: "mine", problems: [] }, "paused", "mine")).resolves.toBe(false);
+
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("WHERE broker = $1 AND state->>'leaseId' = $4");
+  expect(write.values?.slice(0, 4)).toEqual(["prices", "partial", JSON.stringify({ status: "paused", leaseId: "mine", problems: [] }), "mine"]);
 });
 
 test("agent run status is mapped onto the values the table allows", async () => {

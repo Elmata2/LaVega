@@ -65,7 +65,8 @@ export function createNeonBrokerSyncStateStore(db: Database, tenantId: string): 
 export function createNeonPriceSyncProgressStore(db: Database): PriceSyncProgressStore {
   return {
     get: async (tenantId) => (await createPriceSyncStateRepository(db, tenantId).get()) as PriceSyncProgress | null,
-    put: (tenantId, progress) => createPriceSyncStateRepository(db, tenantId).put(progress, progress.status),
+    put: (tenantId, progress, leaseId) => createPriceSyncStateRepository(db, tenantId).put(progress, progress.status, leaseId),
+    claim: async (tenantId, progress, staleBefore) => (await createPriceSyncStateRepository(db, tenantId).claim(progress, progress.status, staleBefore)) as PriceSyncProgress | null,
   };
 }
 

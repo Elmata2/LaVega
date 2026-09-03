@@ -89,6 +89,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
+  const visiblePriceProgress = (progress: PriceSyncProgress): PriceSyncProgress => {
+    const visible = { ...progress };
+    delete visible.leaseId;
+    return visible;
+  };
   /* A run that stopped on the budget is not finished, and the caller is the
    * one who can continue it. 202 is that difference, stated in the status
    * line rather than only in the body. */
@@ -223,14 +228,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); dependencies.onPriceDataChanged?.(); return c.json({ deleted: true }); });
-  investingApp.get("/api/prices/sync/status", async (c) => c.json(await priceOrchestrator.status(await resolveTenantId())));
+  investingApp.get("/api/prices/sync/status", async (c) => c.json(visiblePriceProgress(await priceOrchestrator.status(await resolveTenantId()))));
   investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await firstProviderResult(fxProviders, { from, to }, undefined, hasProblems); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.post("/api/prices/sync", async (c) => {
     const tenantId = await resolveTenantId();
     if (!(await hasYahooConsent(tenantId))) return c.json({ consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] }, 428);
     const progress = await priceOrchestrator.run(tenantId, priceSyncDeadline());
-    return c.json(progress, priceSyncStatusCode(progress));
+    return c.json(visiblePriceProgress(progress), priceSyncStatusCode(progress));
   });
   return investingApp;
 }

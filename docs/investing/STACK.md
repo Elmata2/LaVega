@@ -63,7 +63,9 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 
 **Local tier:** a Docker image running `investing-server`, with the storage backend gated by environment variable ([#23](https://github.com/Elmata2/LaVega/issues/23)) — self-hostable, and matches how a scaled-for-others deployment would look too.
 
-**Local-tier sync trigger: app-open, no cron.** The self-hosted Docker image has no Workers-style scheduler behind it, so IBKR and Trading 212 sync when the app opens, gated by a per-adapter `lastSyncedAt` timestamp that skips re-fetching within 24h of the last successful sync. The same sync endpoint could later serve an optional host-level cron for self-hosters who want it running with the app closed — worth documenting if someone asks for it, not worth building speculatively now.
+**Local-tier sync trigger: app-open, no cron.** The self-hosted Docker image has no Workers-style scheduler behind it, so IBKR and Trading 212 sync when the app opens, gated by a per-adapter `lastSyncedAt` timestamp that skips re-fetching within 24h of the last successful sync. The same sync endpoint can be called by a host-level cron for self-hosters who want it running with the app closed.
+
+**Current Vercel bridge:** the repository ships a Build Output API deployment that registers `GET /api/cron/investing-sync` daily at `0 4 * * *` UTC. Vercel calls it only on production deployments and sends `Authorization: Bearer $CRON_SECRET`; the route refuses missing or wrong secrets. With Better Auth enabled, the cron route cannot infer a browser session, so `INVESTING_CRON_TENANT_IDS` must list tenant ids explicitly. Each pass runs broker sync and one bounded price slice per tenant; the persisted price row lets later cron or dashboard calls resume.
 
 **Hosted tier: Cloudflare Workers.**
 
@@ -76,7 +78,7 @@ Storage: no new seam. `RuntimeBrokerDataSnapshot` gains `cashBalances`/`cashFlow
 **Ruled out:**
 
 - **No-server / pure-browser.** Broker and market-data APIs don't set CORS for browser origins, and client-held API keys would break the server-side-secret pattern `apps/server/src/config.ts` already established. Not viable.
-- **Vercel.** Its AI-forward positioning was a draw, but Workers fits the actual sync-scheduling/long-poll profile better and isn't plan-gated on it. Vercel's AI agentic suite (Eve, AI Gateway) was separately researched and not carried forward — see [in-product agent seam](#in-product-agent-seam) below.
+- **Vercel as final hosted architecture.** Vercel is the current bridge for `lavega.dev`, but Workers still fits the long-poll/scheduler profile better if the investing server becomes a multi-tenant hosted product. Vercel's AI agentic suite (Eve, AI Gateway) was separately researched and not carried forward — see [in-product agent seam](#in-product-agent-seam) below.
 
 ([Hosting & runtime for investing-server](https://github.com/Elmata2/LaVega/issues/24))
 

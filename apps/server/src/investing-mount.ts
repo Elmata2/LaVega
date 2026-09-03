@@ -49,6 +49,17 @@ export function withInvestingTenant<T>(tenantId: string, fn: () => T): T {
   return tenantScope.run(tenantId, fn);
 }
 
+export function investingCronTenantIds(): string[] {
+  const configured = process.env.INVESTING_CRON_TENANT_IDS?.split(",").map((tenant) => tenant.trim()).filter(Boolean) ?? [];
+  if (configured.length > 0) return [...new Set(configured)];
+  return getAuth() ? [] : [LOCAL_TENANT_ID];
+}
+
+export function authorizedCronRequest(request: Request): boolean {
+  const secret = process.env.CRON_SECRET?.trim();
+  return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
+}
+
 /**
  * The tenant an investing request belongs to, or `null` when it may not be
  * served. Without authentication configured (local dev, self-hosted) there is
@@ -89,4 +100,18 @@ export function rewriteInvestingRequest(request: Request): Request {
 export async function forwardInvesting(request: Request, tenantId = LOCAL_TENANT_ID): Promise<Response> {
   const fetch = await getInvestingFetch();
   return withInvestingTenant(tenantId, () => fetch(rewriteInvestingRequest(request)));
+}
+
+export async function runInvestingCron(request: Request): Promise<Response> {
+  if (!authorizedCronRequest(request)) return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
+  const tenants = investingCronTenantIds();
+  if (tenants.length === 0) return Response.json({ problems: ["INVESTING_CRON_TENANT_IDS is required when authentication is configured"] }, { status: 503 });
+  const results = [];
+  for (const tenantId of tenants) {
+    const origin = new URL(request.url).origin;
+    const broker = await forwardInvesting(new Request(`${origin}/api/brokers/sync`, { method: "POST" }), tenantId);
+    const price = await forwardInvesting(new Request(`${origin}/api/prices/sync`, { method: "POST" }), tenantId);
+    results.push({ tenantId, brokerStatus: broker.status, priceStatus: price.status, price: await price.json().catch(() => null) });
+  }
+  return Response.json({ tenants: results });
 }

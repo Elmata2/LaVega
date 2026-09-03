@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
-import { currentInvestingTenant, forwardInvesting, investingDist, investingTenantId, rewriteInvestingRequest, shouldMountInvesting, withInvestingTenant } from "./investing-mount.js";
+import { authorizedCronRequest, currentInvestingTenant, forwardInvesting, investingCronTenantIds, investingDist, investingTenantId, rewriteInvestingRequest, shouldMountInvesting, withInvestingTenant } from "./investing-mount.js";
 
 const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } = vi.hoisted(() => ({
   createRuntimeAppMock: vi.fn(async () => ({ fetch: vi.fn(async () => new Response(JSON.stringify({ ok: true, service: "investing-server" }), { headers: { "content-type": "application/json" } })) })),
@@ -19,6 +19,8 @@ vi.mock("@lavega/investing-server/src/fileMarketDataConsentStore.js", () => ({ c
 
 afterEach(() => {
   vi.clearAllMocks();
+  delete process.env.CRON_SECRET;
+  delete process.env.INVESTING_CRON_TENANT_IDS;
 });
 
 test("rewriteInvestingRequest strips /investing for static and health paths", () => {
@@ -88,6 +90,46 @@ test("the investing tenant is scoped to one request and never leaks to the next"
 
   expect(inside).toBe("user-123");
   expect(currentInvestingTenant()).toBe("local");
+});
+
+test("cron requests require the configured secret", () => {
+  process.env.CRON_SECRET = "secret-123";
+
+  expect(authorizedCronRequest(new Request("https://lavega.dev/api/cron/investing-sync", { headers: { authorization: "Bearer secret-123" } }))).toBe(true);
+  expect(authorizedCronRequest(new Request("https://lavega.dev/api/cron/investing-sync"))).toBe(false);
+});
+
+test("cron tenants come from env when auth exists, with local fallback only when auth is off", () => {
+  process.env.INVESTING_CRON_TENANT_IDS = " user-a, user-b, user-a ";
+  expect(investingCronTenantIds()).toEqual(["user-a", "user-b"]);
+
+  delete process.env.INVESTING_CRON_TENANT_IDS;
+  getAuthMock.mockReturnValueOnce({});
+  expect(investingCronTenantIds()).toEqual([]);
+  getAuthMock.mockReturnValueOnce(null);
+  expect(investingCronTenantIds()).toEqual(["local"]);
+});
+
+test("investing cron runs broker sync then a fresh price slice for each configured tenant", async () => {
+  vi.resetModules();
+  const mount = await import("./investing-mount.js");
+  const seen: string[] = [];
+  createDockerFetchMock.mockImplementationOnce(() => async (request: Request) => {
+    seen.push(`${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`);
+    return Response.json({ ok: true });
+  });
+  process.env.CRON_SECRET = "cron-secret";
+  process.env.INVESTING_CRON_TENANT_IDS = "user-a,user-b";
+
+  const response = await mount.runInvestingCron(new Request("https://lavega.dev/api/cron/investing-sync", { headers: { authorization: "Bearer cron-secret" } }));
+
+  expect(response.status).toBe(200);
+  expect(seen).toEqual([
+    "user-a:/api/brokers/sync",
+    "user-a:/api/prices/sync",
+    "user-b:/api/brokers/sync",
+    "user-b:/api/prices/sync",
+  ]);
 });
 
 test("forwardInvesting runs the forwarded request inside the caller's tenant scope", async () => {

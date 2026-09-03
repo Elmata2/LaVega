@@ -281,7 +281,8 @@ export function createSyncStateRepository(db: Database, userId: string | undefin
 
 export type PriceSyncStateRepository = {
   get(): Promise<unknown | null>;
-  put(progress: unknown, status: string): Promise<void>;
+  put(progress: unknown, status: string, leaseId?: string): Promise<boolean>;
+  claim(progress: unknown, status: string, staleBefore: string): Promise<unknown | null>;
 };
 
 /* Price synchronization is a sync like any other, so it lives in the sync
@@ -302,12 +303,51 @@ export function createPriceSyncStateRepository(db: Database, userId: string | un
         return state && Object.keys(state).length > 0 ? state : null;
       });
     },
-    async put(progress, status) {
-      await withTenant(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.sync_state (user_id, broker, status, state) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb) ON CONFLICT (user_id, broker) DO UPDATE SET status = EXCLUDED.status, state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP",
-          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress)],
+    async put(progress, status, leaseId) {
+      return withTenant(db, tenantId, async (client) => {
+        if (!leaseId) {
+          await client.query(
+            "INSERT INTO investing.sync_state (user_id, broker, status, state) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb) ON CONFLICT (user_id, broker) DO UPDATE SET status = EXCLUDED.status, state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP",
+            [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress)],
+          );
+          return true;
+        }
+        const result = await client.query<QueryResultRow>(
+          "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->>'leaseId' = $4 RETURNING state",
+          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress), leaseId, (progress as { problems?: unknown }).problems instanceof Array ? (progress as { problems: unknown[] }).problems.join("; ") : null],
         );
+        return result.rows.length > 0;
+      });
+    },
+    async claim(progress, status, staleBefore) {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = EXCLUDED.status,
+                   state = EXCLUDED.state,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE NOT (
+               investing.sync_state.state->>'status' IN ('running', 'waiting')
+               AND investing.sync_state.state->>'updatedAt' IS NOT NULL
+               AND (investing.sync_state.state->>'updatedAt')::timestamptz >= $4::timestamptz
+             )
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "running", JSON.stringify(progress), staleBefore],
+        );
+        const row = result.rows[0];
+        return row?.claimed ? null : (row?.state ?? null);
       });
     },
   };

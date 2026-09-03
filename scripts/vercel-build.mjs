@@ -75,6 +75,9 @@ await cp("apps/investing-web/dist", `${staticDir}/investing`, { recursive: true 
  * a blank /investing page hid behind green probes once before. */
 await writeFile(`${output}/config.json`, JSON.stringify({
   version: 3,
+  crons: [
+    { path: "/api/cron/investing-sync", schedule: "0 4 * * *" },
+  ],
   routes: [
     { handle: "filesystem" },
     { src: "/api/(.*)", dest: "/api/[...route]" },
