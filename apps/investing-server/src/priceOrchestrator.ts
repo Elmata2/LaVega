@@ -4,7 +4,9 @@ import type { PriceSyncInput, PriceSyncResult } from "@lavega/adapters";
 export type PriceSyncTarget = PriceSyncInput & { kind: "current" | "closed" | "benchmark"; isin?: string };
 
 export type PriceSyncProgress = {
-  status: "idle" | "running" | "waiting" | "completed" | "problem";
+  /** `paused` means the host budget ran out with symbols left: the run is
+   *  resumable and the caller is expected to post again to continue it. */
+  status: "idle" | "running" | "waiting" | "paused" | "completed" | "problem";
   total: number;
   completed: number;
   remainingSymbols: string[];
@@ -14,6 +16,31 @@ export type PriceSyncProgress = {
   message: string | null;
   problems: string[];
 };
+
+/**
+ * Where a run's progress lives between invocations.
+ *
+ * A serverless deployment answers the status poll from whichever instance the
+ * request lands on, which is rarely the one doing the work. Progress kept in
+ * process memory there can only ever report "idle", and a run interrupted by
+ * the host's time limit leaves nothing behind to resume from.
+ */
+export type PriceSyncProgressStore = {
+  get(tenantId: string): Promise<PriceSyncProgress | null>;
+  put(tenantId: string, progress: PriceSyncProgress): Promise<void>;
+};
+
+export function createInMemoryPriceSyncProgressStore(): PriceSyncProgressStore {
+  const rows = new Map<string, PriceSyncProgress>();
+  return {
+    async get(tenantId) {
+      return rows.get(tenantId) ?? null;
+    },
+    async put(tenantId, progress) {
+      rows.set(tenantId, progress);
+    },
+  };
+}
 
 const idleProgress = (): PriceSyncProgress => ({
   status: "idle",
@@ -26,6 +53,18 @@ const idleProgress = (): PriceSyncProgress => ({
   message: null,
   problems: [],
 });
+
+/** When one invocation has to stop so the host does not kill it mid-symbol.
+ *  Local and Docker runs have no host limit and get none, exactly like the
+ *  broker sync budget they share a name with. */
+export function priceSyncDeadlineMs(environment: (name: string) => string | undefined, now = Date.now()): number | undefined {
+  for (const name of ["INVESTING_PRICE_SYNC_BUDGET_MS", "INVESTING_SYNC_BUDGET_MS"]) {
+    const budget = Number(environment(name));
+    if (Number.isFinite(budget) && budget > 0) return now + budget;
+  }
+  if (environment("VERCEL")) return now + 45_000;
+  return undefined;
+}
 
 function instrument(target: Position | Trade, kind: PriceSyncTarget["kind"], backfillFrom: string): PriceSyncTarget {
   return {
@@ -81,28 +120,67 @@ export function discoverPriceSyncTargets(input: {
   return targets;
 }
 
+/**
+ * Runs price synchronization as budgeted, resumable slices.
+ *
+ * One call does as many symbols as the host's remaining time allows, writes
+ * what is left to the progress store, and returns. The caller keeps calling
+ * until the status is terminal. That is what makes the work survive a
+ * serverless invocation: nothing continues after the response, so nothing is
+ * lost when the instance goes away.
+ */
 export function createPriceOrchestrator(input: {
   discover: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
   sync: (target: PriceSyncTarget, tenantId: string) => Promise<PriceSyncResult>;
+  progressStore?: PriceSyncProgressStore;
+  /** Absolute epoch milliseconds this invocation must stop by. */
+  deadline?: () => number | undefined;
   paceMs?: number;
+  /** Time held back for the symbol in hand, so a run stops between symbols
+   *  rather than being killed inside a provider request. */
+  pauseMarginMs?: number;
+  /** How long a `running` row from another instance is believed before this
+   *  one takes the work over. */
+  takeoverAfterMs?: number;
   now?: () => Date;
   wait?: (milliseconds: number) => Promise<void>;
 }) {
-  const progress = new Map<string, PriceSyncProgress>();
+  const store = input.progressStore ?? createInMemoryPriceSyncProgressStore();
+  const local = new Map<string, PriceSyncProgress>();
   const inFlight = new Map<string, Promise<PriceSyncProgress>>();
   const paceMs = input.paceMs ?? 300;
+  const pauseMarginMs = input.pauseMarginMs ?? 10_000;
+  const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
+  const persistEveryMs = 2_000;
   const now = input.now ?? (() => new Date());
   const wait = input.wait ?? ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-  const update = (tenantId: string, next: Omit<PriceSyncProgress, "updatedAt">): PriceSyncProgress => {
+  const terminal = (status: PriceSyncProgress["status"]) => status !== "running" && status !== "waiting";
+
+  let lastPersistedAt = 0;
+  const update = async (tenantId: string, next: Omit<PriceSyncProgress, "updatedAt">): Promise<PriceSyncProgress> => {
     const value = { ...next, updatedAt: now().toISOString() };
-    progress.set(tenantId, value);
+    local.set(tenantId, value);
+    /* Every symbol would mean a row write per Yahoo call. The poll only needs
+     * to see movement, and a resumable run only needs the row to be right when
+     * it stops, so intermediate states are written on a timer. */
+    const at = now().getTime();
+    if (terminal(value.status) || at - lastPersistedAt >= persistEveryMs) {
+      lastPersistedAt = at;
+      await store.put(tenantId, value).catch(() => undefined);
+    }
     return value;
   };
 
-  const start = (tenantId: string): Promise<PriceSyncProgress> => {
+  const start = (tenantId: string, deadline = input.deadline?.()): Promise<PriceSyncProgress> => {
     const active = inFlight.get(tenantId);
     if (active) return active;
-    const run = (async () => {
+    const execute = async (): Promise<PriceSyncProgress> => {
+      const stored = await store.get(tenantId).catch(() => null);
+      /* Another instance is already working this tenant. Starting a second run
+       * would double the provider traffic and let two writers fight over one
+       * progress row; a stale row means that instance died, so we take over. */
+      if (stored?.status === "running" && stored.updatedAt && now().getTime() - Date.parse(stored.updatedAt) < takeoverAfterMs) return stored;
+
       let targets: PriceSyncTarget[];
       try {
         targets = await input.discover(tenantId);
@@ -110,34 +188,64 @@ export function createPriceOrchestrator(input: {
         const problem = error instanceof Error ? error.message : "Price target discovery failed";
         return update(tenantId, { status: "problem", total: 0, completed: 0, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: "Price synchronization could not start", problems: [problem] });
       }
-      const base = { total: targets.length, completed: 0, remainingSymbols: targets.map((target) => target.symbol), currentSymbol: null, waitUntil: null, message: targets.length ? "Price synchronization started" : "No price symbols to synchronize", problems: [] as string[] };
-      if (targets.length === 0) return update(tenantId, { ...base, status: "completed" });
-      update(tenantId, { ...base, status: "running" });
-      const problems: string[] = [];
-      for (let index = 0; index < targets.length; index += 1) {
-        const target = targets[index]!;
-        update(tenantId, { status: "running", total: targets.length, completed: index, remainingSymbols: targets.slice(index).map((value) => value.symbol), currentSymbol: target.symbol, waitUntil: null, message: `Synchronizing ${target.symbol}`, problems: [...problems] });
+
+      /* A paused run names the symbols it never reached. Resuming from that
+       * list, rather than from the full set, is what keeps repeated slices
+       * cheap: a symbol already stored costs neither a request nor a read. */
+      const paused = stored?.status === "paused" ? stored : null;
+      const pending = new Set(paused?.remainingSymbols ?? []);
+      const resumed = paused ? targets.filter((target) => pending.has(target.symbol)) : [];
+      const queue = resumed.length > 0 ? resumed : targets;
+      const total = resumed.length > 0 ? Math.max(paused!.total, queue.length) : queue.length;
+      const done = total - queue.length;
+      const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
+
+      if (queue.length === 0) return update(tenantId, { status: "completed", total, completed: total, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: total ? "Price synchronization completed" : "No price symbols to synchronize", problems });
+      const remainingFrom = (index: number) => queue.slice(index).map((target) => target.symbol);
+      const pause = (index: number) => update(tenantId, { status: "paused", total, completed: done + index, remainingSymbols: remainingFrom(index), currentSymbol: null, waitUntil: null, message: "Price synchronization paused for the host time budget", problems: [...problems] });
+
+      await update(tenantId, { status: "running", total, completed: done, remainingSymbols: remainingFrom(0), currentSymbol: null, waitUntil: null, message: "Price synchronization started", problems: [...problems] });
+      for (let index = 0; index < queue.length; index += 1) {
+        if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline) return pause(index);
+        const target = queue[index]!;
+        await update(tenantId, { status: "running", total, completed: done + index, remainingSymbols: remainingFrom(index), currentSymbol: target.symbol, waitUntil: null, message: `Synchronizing ${target.symbol}`, problems: [...problems] });
         try {
           const result = await input.sync(target, tenantId);
           problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
         } catch (error) {
           problems.push(`${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`);
         }
-        if (index < targets.length - 1) {
+        if (index < queue.length - 1) {
+          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline) return pause(index + 1);
           const waitUntil = new Date(now().getTime() + paceMs).toISOString();
-          update(tenantId, { status: "waiting", total: targets.length, completed: index + 1, remainingSymbols: targets.slice(index + 1).map((value) => value.symbol), currentSymbol: null, waitUntil, message: "Waiting before next price request", problems: [...problems] });
+          await update(tenantId, { status: "waiting", total, completed: done + index + 1, remainingSymbols: remainingFrom(index + 1), currentSymbol: null, waitUntil, message: "Waiting before next price request", problems: [...problems] });
           await wait(paceMs);
         }
       }
-      return update(tenantId, { status: problems.length ? "problem" : "completed", total: targets.length, completed: targets.length, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: problems.length ? "Price synchronization completed with problems" : "Price synchronization completed", problems });
+      return update(tenantId, { status: problems.length ? "problem" : "completed", total, completed: total, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: problems.length ? "Price synchronization completed with problems" : "Price synchronization completed", problems });
+    };
+    /* Cleared here rather than from a `.finally` on a derived promise: that one
+     * runs a microtask later than the caller it hands the result to, so the
+     * next run would join the finished one instead of starting. */
+    const run = (async () => {
+      try {
+        return await execute();
+      } finally {
+        inFlight.delete(tenantId);
+      }
     })();
     inFlight.set(tenantId, run);
-    void run.finally(() => { if (inFlight.get(tenantId) === run) inFlight.delete(tenantId); });
     return run;
   };
 
   return {
     run: start,
-    status: (tenantId: string): PriceSyncProgress => structuredClone(progress.get(tenantId) ?? idleProgress()),
+    /* A run in this process holds the newest state; the store holds the state
+     * of a run in some other one. */
+    status: async (tenantId: string): Promise<PriceSyncProgress> => {
+      if (inFlight.has(tenantId)) return structuredClone(local.get(tenantId) ?? idleProgress());
+      const stored = await store.get(tenantId).catch(() => null);
+      return structuredClone(stored ?? local.get(tenantId) ?? idleProgress());
+    },
   };
 }

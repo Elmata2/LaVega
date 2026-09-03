@@ -12,14 +12,18 @@ import { NetWorthChart } from "./components/NetWorthChart";
 import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
 import { signOut } from "./lib/auth-client";
 import { longDate } from "./lib/dates.js";
+import { DASHBOARD_REFRESH_EVENT, runPriceSyncUntilComplete, type PriceSyncProgress } from "./lib/priceSync";
 
-const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
 
 const SYNC_BACKGROUND_MESSAGE = "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
 
 function brokerSyncActive(status?: BrokerProgress["status"]): boolean {
   return status === "running" || status === "waiting";
+}
+
+function priceSyncActive(status?: PriceProgress["status"]): boolean {
+  return status === "running" || status === "waiting" || status === "paused";
 }
 
 function notifyBrokerSyncStarted() {
@@ -43,7 +47,7 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
  * lavega.dev the personal server answers /health, and it names no service. */
 type Health = { ok: boolean; service?: string };
 type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
-type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
+type PriceProgress = PriceSyncProgress;
 type DashboardState =
   | { status: "loading" }
   | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
@@ -218,9 +222,9 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
         setBroker(brokerResult.value);
         active = active || brokerSyncActive(brokerResult.value.status);
       }
-      if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(priceResult.value.status)) {
+      if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "paused", "completed", "problem"].includes(priceResult.value.status)) {
         setPrice(priceResult.value);
-        active = active || brokerSyncActive(priceResult.value.status);
+        active = active || priceSyncActive(priceResult.value.status);
         if ((priceResult.value.status === "completed" || priceResult.value.status === "problem") && priceResult.value.updatedAt && refreshedPriceRun.current !== priceResult.value.updatedAt) {
           refreshedPriceRun.current = priceResult.value.updatedAt;
           window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
@@ -242,13 +246,13 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
     };
   }, []);
   const brokerValue = broker?.status === "running" ? "Bezig" : broker?.status === "waiting" ? "Wachten" : broker?.status === "completed" ? "Actueel" : broker?.status === "problem" ? "Probleem" : broker?.status === "idle" ? "Gereed" : "Onbekend";
-  const priceValue = price?.status === "running" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
-  const statusTone = (status?: BrokerProgress["status"]): StatusTone => status === "problem" ? "problem" : status === "waiting" ? "warning" : status === "running" ? "active" : status === "completed" ? "success" : "neutral";
+  const priceValue = price?.status === "running" || price?.status === "paused" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
+  const statusTone = (status?: BrokerProgress["status"] | PriceProgress["status"]): StatusTone => status === "problem" ? "problem" : status === "waiting" ? "warning" : status === "running" || status === "paused" ? "active" : status === "completed" ? "success" : "neutral";
   return <section aria-label="Operationele status" className="rounded-card border border-border bg-card p-4 shadow-soft" data-dashboard-section="status">
     <p className="mb-3 text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Status</p>
     <div className="space-y-2" aria-live="polite">
       <StatusChip label="Brokers" value={brokerValue} tone={statusTone(broker?.status)} detail={broker?.status === "waiting" ? broker.message ?? "API-capaciteit wordt afgewacht" : broker?.status === "problem" ? broker.message ?? "Gecachete gegevens blijven zichtbaar" : undefined} />
-      <StatusChip label="Prijsgeschiedenis" value={priceValue} tone={statusTone(price?.status)} detail={price?.status === "running" ? price.currentSymbol ? `${price.currentSymbol} wordt geladen` : `${price.remainingSymbols.length} symbolen resterend` : price?.status === "problem" ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar` : undefined} />
+      <StatusChip label="Prijsgeschiedenis" value={priceValue} tone={statusTone(price?.status)} detail={price?.status === "running" || price?.status === "paused" ? price.currentSymbol ? `${price.currentSymbol} wordt geladen` : `${price.remainingSymbols.length} symbolen resterend` : price?.status === "problem" ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar` : undefined} />
       <StatusChip label="Kluis" value={vault === "unlocked" ? "Open" : vault === "locked" ? "Vergrendeld" : vault === "empty" ? "Niet ingesteld" : "Onbekend"} tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"} />
       <StatusChip label="Cache" value={`Versie ${dataVersion}`} tone={dataVersion > 0 ? "success" : "neutral"}><div className="mt-2 flex justify-end"><ClearPriceCache /></div></StatusChip>
     </div>
@@ -263,9 +267,11 @@ function AppOpenSync() {
     try {
       notifyBrokerSyncStarted();
       const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
-      const brokerResult = await brokerResponse.json() as { problems?: string[] };
+      const brokerResult = await readSyncResult(brokerResponse);
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-      if (current()) setProblems([...(brokerResult.problems ?? [])]);
+      if (current()) setProblems([...(brokerResult?.problems ?? [])]);
+      const priceProblems = await runPriceSyncUntilComplete(current);
+      if (current() && priceProblems.length > 0) setProblems((existing) => [...existing, ...priceProblems]);
     } catch { if (current()) setProblems(["Brokersynchronisatie mislukt."]); }
   }, []);
   useEffect(() => {
@@ -481,12 +487,16 @@ function BrokerVaultUnlock() {
         setVaultStatus("unlocked");
         setMessage(`Kluis ontgrendeld. ${SYNC_BACKGROUND_MESSAGE}`);
         window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+        void runPriceSyncUntilComplete();
         return;
       }
       if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
       setVaultStatus("unlocked");
       setMessage((syncResult.problems ?? []).length === 0 ? "Kluis ontgrendeld. Synchronisatie voltooid." : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`);
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+      /* Een eerste sync levert de posities; de koersen erachter komen pas als
+         iemand erom blijft vragen. Deze pagina is die iemand. */
+      void runPriceSyncUntilComplete();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kluis ontgrendelen mislukt.");
     } finally {

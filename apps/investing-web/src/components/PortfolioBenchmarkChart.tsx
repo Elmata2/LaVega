@@ -7,6 +7,7 @@ import {
   type PortfolioRange,
   type PortfolioValuePoint,
 } from "@lavega/core";
+import { runPriceSyncUntilComplete } from "../lib/priceSync";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
@@ -81,6 +82,9 @@ export function PortfolioBenchmarkChart({ data, benchmarks = [], externalCashFlo
       setSelected(symbols);
       setVisible((current) => new Set(["portfolio", ...symbols.filter((symbol) => current.has(symbol) || !selected.includes(symbol))]));
       window.dispatchEvent(new Event("lavega:dashboard-refresh"));
+      /* Een net gekozen benchmark heeft nog geen koersen. De server haalt ze
+         alleen op terwijl er een aanvraag loopt, dus vraagt de pagina erom. */
+      await runPriceSyncUntilComplete();
     } catch (error) {
       setSelectionError(error instanceof Error ? error.message : "Selectie opslaan mislukt");
     } finally { setBusy(false); }

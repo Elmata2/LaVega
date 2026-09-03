@@ -63,7 +63,7 @@ test("benchmark search route returns results after persisted consent", async () 
   expect(benchmarkSearch).toHaveBeenCalledWith("AEX");
 });
 
-test("Yahoo search and price calls fail before consent, then stored consent starts sync", async () => {
+test("Yahoo search and price calls fail before consent, and consent alone fetches nothing", async () => {
   const marketDataConsentStore = {
     accepted: false,
     async get() { return { tenantId: "local", accepted: this.accepted, decidedAt: null, disclosureVersion: "yahoo-finance-v1" }; },
@@ -77,8 +77,13 @@ test("Yahoo search and price calls fail before consent, then stored consent star
   expect(provider.get).not.toHaveBeenCalled();
   const accepted = await investingApp.request("/api/market-data/consent", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
   expect(accepted.status).toBe(200);
-  await vi.waitFor(() => expect(provider.get).toHaveBeenCalledOnce());
   expect(await (await investingApp.request("/api/market-data/consent")).json()).toMatchObject({ accepted: true });
+  /* Recording a decision fetches nothing on its own. Work started after the
+   * response is not guaranteed to run on a serverless host, so the sync only
+   * happens inside a request that waits for it. */
+  expect(provider.get).not.toHaveBeenCalled();
+  expect((await investingApp.request("/api/prices/sync", { method: "POST" })).status).toBe(200);
+  expect(provider.get).toHaveBeenCalledOnce();
 });
 
 test("price sync uses Yahoo Finance after persisted consent", async () => {
@@ -91,15 +96,16 @@ test("price sync uses Yahoo Finance after persisted consent", async () => {
     marketDataConsentStore: acceptedConsentStore(),
   });
   const response = await investingApp.request("/api/prices/sync", { method: "POST" });
-  expect(response.status).toBe(202);
-  await vi.waitFor(() => expect(fetchJsonWithCrumb).toHaveBeenCalled());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ total: 1, completed: 1, remainingSymbols: [] });
+  expect(fetchJsonWithCrumb).toHaveBeenCalled();
 });
 
 test("router problems reach HTTP response unchanged", async () => {
   const provider = { sourceKey: "yahoo", priority: 10, get: vi.fn().mockResolvedValue({ bars: [], problems: ["Yahoo Finance rate-limited price request"] }) };
   const investingApp = createApp({ provider: provider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0, marketDataConsentStore: acceptedConsentStore() });
   await investingApp.request("/api/prices/sync", { method: "POST" });
-  await vi.waitFor(async () => expect(await (await investingApp.request("/api/prices/sync/status")).json()).toMatchObject({ problems: ["ASML: Yahoo Finance rate-limited price request"] }));
+  expect(await (await investingApp.request("/api/prices/sync/status")).json()).toMatchObject({ problems: ["ASML: Yahoo Finance rate-limited price request"] });
   expect(provider.get).toHaveBeenCalledOnce();
 });
 
@@ -140,7 +146,7 @@ test("price sync resolves ISIN before asking price provider", async () => {
   const identifierProvider = { sourceKey: "openfigi", priority: 10, get: vi.fn().mockResolvedValue({ match: { isin: "NL0010273215", ticker: "ASML", exchange: "AMS" }, problems: [] }) };
   const investingApp = createApp({ provider: provider as never, identifierProvider: identifierProvider as never, priceSyncTargets: () => [{ kind: "current", symbol: "ASML", ticker: "ASML", exchange: "UNKNOWN", isin: "NL0010273215", currency: "EUR", backfillFrom: "2026-01-01" }], priceSyncPaceMs: 0, marketDataConsentStore: acceptedConsentStore() });
   await investingApp.request("/api/prices/sync", { method: "POST" });
-  await vi.waitFor(() => expect(provider.get).toHaveBeenCalled());
+  expect(provider.get).toHaveBeenCalled();
   expect(identifierProvider.get).toHaveBeenCalledWith({ isin: "NL0010273215" });
   expect(provider.get).toHaveBeenCalledWith(expect.objectContaining({ symbol: "ASML", ticker: "ASML", exchange: "AMS" }));
 });
@@ -165,7 +171,7 @@ test("broker sync starts server-side price orchestration despite broker problems
   });
 
   await investingApp.request("/api/brokers/sync", { method: "POST" });
-  await vi.waitFor(() => expect(provider.get).toHaveBeenCalledOnce());
+  expect(provider.get).toHaveBeenCalledOnce();
 });
 
 test("broker sync status route exposes safe progress counters", async () => {

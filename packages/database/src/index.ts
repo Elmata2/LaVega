@@ -279,6 +279,40 @@ export function createSyncStateRepository(db: Database, userId: string | undefin
   };
 }
 
+export type PriceSyncStateRepository = {
+  get(): Promise<unknown | null>;
+  put(progress: unknown, status: string): Promise<void>;
+};
+
+/* Price synchronization is a sync like any other, so it lives in the sync
+ * state table under its own name rather than in a table of its own. `broker`
+ * is the key of what was synchronized, and 'prices' is what this one reads. */
+const PRICE_SYNC_KEY = "prices";
+const PRICE_SYNC_STATUS_COLUMN: Record<string, string> = { idle: "idle", running: "running", waiting: "running", paused: "partial", completed: "succeeded", problem: "failed" };
+
+/** The progress of a price run, readable by whichever instance is asked for it. */
+export function createPriceSyncStateRepository(db: Database, userId: string | undefined | null): PriceSyncStateRepository {
+  const tenantId = requireUserId(userId);
+  return {
+    async get() {
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>("SELECT state FROM investing.sync_state WHERE broker = $1", [PRICE_SYNC_KEY]);
+        const state = result.rows[0]?.state as Record<string, unknown> | undefined;
+        // A row written before this repository existed holds `{}`, which is not progress.
+        return state && Object.keys(state).length > 0 ? state : null;
+      });
+    },
+    async put(progress, status) {
+      await withTenant(db, tenantId, async (client) => {
+        await client.query(
+          "INSERT INTO investing.sync_state (user_id, broker, status, state) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb) ON CONFLICT (user_id, broker) DO UPDATE SET status = EXCLUDED.status, state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP",
+          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress)],
+        );
+      });
+    },
+  };
+}
+
 export type AgentRunRow = { id: string; startedAt: string; finishedAt: string | null; status: "running" | "done" | "error"; summary: string | null; error: string | null };
 
 const AGENT_STATUS_TO_COLUMN = { running: "running", done: "succeeded", error: "failed" } as const;

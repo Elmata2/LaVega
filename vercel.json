@@ -5,6 +5,7 @@
   "env": {
     "INVESTING_SECTOR_STORE_FILE": "/tmp/lavega-sectors.json",
     "INVESTING_MOUNT": "1",
-    "INVESTING_SYNC_BUDGET_MS": "240000"
+    "INVESTING_SYNC_BUDGET_MS": "240000",
+    "INVESTING_PRICE_SYNC_BUDGET_MS": "60000"
   }
 }

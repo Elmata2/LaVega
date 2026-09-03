@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { emptyInvestingDashboard, LOCAL_TENANT_ID, buildSectorExposure, computePortfolioMetrics, validateBenchmarkSymbols, type BenchmarkInstrument, type BenchmarkSelectionStore, type InvestingDashboardData } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import { LocalKeySource, createInMemoryBenchmarkSelectionStore, createInMemoryPriceStore, createYahooPriceProvider, createFrankfurterFxProvider, createOpenFigiIdentifierProvider, firstProviderResult, hasProblems, searchYahooBenchmarks, syncPrices, type PriceStore, type ScheduledBroker, type YahooPriceRequest } from "@lavega/adapters";
-import { createPriceOrchestrator, type PriceSyncTarget } from "./priceOrchestrator.js";
+import { createInMemoryPriceSyncProgressStore, createPriceOrchestrator, priceSyncDeadlineMs, type PriceSyncProgress, type PriceSyncProgressStore, type PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemoryMarketDataConsentStore, YAHOO_DISCLOSURE_VERSION, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { fetchYahooSectorProfile, type SectorProfile } from "@lavega/adapters";
 import { createInMemorySectorProfileStore, type SectorProfileStore } from "./inMemorySectorProfileStore.js";
@@ -35,7 +35,7 @@ export type BrokerHistoryProgress = Record<ScheduledBroker, {
   dividendsComplete: boolean;
 }>;
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string>; passphraseMode: () => PassphraseMode };
+type PriceDependencies = { store: PriceStore; provider: ReturnType<typeof createYahooPriceProvider>; fxProvider: ReturnType<typeof createFrankfurterFxProvider>; identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>; benchmarkSelectionStore: BenchmarkSelectionStore; benchmarkSearch: (query: string) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>; brokerSync: (force: boolean) => Promise<{ outcomes: unknown[]; problems: string[] }>; brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>; priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[]; priceSyncPaceMs: number; priceSyncProgressStore: PriceSyncProgressStore; priceSyncDeadline: () => number | undefined; configureBroker: (input: BrokerCredentialInput) => Promise<void>; credentialStatus: () => Promise<BrokerVaultStatus>; unlockCredentials: (passphrase: string) => Promise<boolean>; problemReporter: ProblemReporter; dashboardReader: InvestingDashboardReader; onPriceDataChanged: () => void; marketDataConsentStore: MarketDataConsentStore; sectorProfile: (symbol: string) => Promise<SectorProfile | null>; sectorStore: SectorProfileStore; resolveTenantId: () => string | Promise<string>; passphraseMode: () => PassphraseMode };
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const store = dependencies.store ?? createInMemoryPriceStore();
   const provider = dependencies.provider ?? createYahooPriceProvider();
@@ -60,9 +60,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const fxProviders = [fxProvider];
   const identifierProviders = [identifierProvider];
   const mapIdentifier = (request: { isin: string }) => firstProviderResult(identifierProviders, request, undefined, hasProblems);
+  /* One invocation's worth of time. Anchored where the request starts, so a
+   * route that already spent the host budget on a broker sync hands the price
+   * run a deadline that has passed and it pauses instead of overrunning. */
+  const priceSyncDeadline = dependencies.priceSyncDeadline ?? (() => priceSyncDeadlineMs((name) => process.env[name]?.trim() || undefined));
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
     paceMs: dependencies.priceSyncPaceMs,
+    progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
     sync: async (target, tenantId) => {
       let request: Omit<YahooPriceRequest, "from" | "to"> & { today?: string; backfillFrom?: string } = target;
       let identifierProblems: string[] = [];
@@ -81,9 +86,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   });
   const investingApp = new Hono();
   const hasYahooConsent = async (tenantId: string) => (await marketDataConsentStore.get(tenantId)).accepted;
-  const runPriceSyncIfConsented = async (tenantId: string) => {
-    if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId);
+  const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
+    if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
+  /* A run that stopped on the budget is not finished, and the caller is the
+   * one who can continue it. 202 is that difference, stated in the status
+   * line rather than only in the body. */
+  const priceSyncStatusCode = (progress: PriceSyncProgress) => progress.status === "completed" || progress.status === "problem" ? 200 : 202;
   /* Twice, on purpose. `/health` is what a container health check and the
    * standalone server ask for; `/api/investing/health` is the same answer on a
    * path the mount forwards, because everything outside /api/ belongs to the
@@ -137,7 +146,6 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       const tenantId = await resolveTenantId();
       const selection = { tenantId, symbols: validateBenchmarkSymbols(symbols as string[]) };
       await benchmarkSelectionStore.set(selection);
-      void runPriceSyncIfConsented(tenantId);
       return c.json(selection);
     } catch (error) {
       return c.json({ problems: [error instanceof Error ? error.message : "Benchmark selection is invalid"] }, 400);
@@ -155,7 +163,6 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const tenantId = await resolveTenantId();
     const decision = { tenantId, accepted: body.accepted, decidedAt: new Date().toISOString(), disclosureVersion: YAHOO_DISCLOSURE_VERSION };
     await marketDataConsentStore.set(decision);
-    if (decision.accepted) void priceOrchestrator.run(tenantId);
     return c.json(decision);
   });
   investingApp.get("/api/config/status", (c) => { const keys = new LocalKeySource(); return c.json({ keys: { llm: keys.getStatus("llm"), marketData: keys.getStatus("market-data") } }); });
@@ -164,10 +171,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     return c.json(await dependencies.brokerSyncStatus());
   });
   investingApp.post("/api/brokers/sync", async (c) => {
+    const deadline = priceSyncDeadline();
     try {
       const result = await brokerSync(c.req.query("force") === "true");
       problemReporter({ source: "broker-sync", problems: result.problems });
-      void runPriceSyncIfConsented(await resolveTenantId());
+      /* Awaited, not detached. Work started after the response is not
+       * guaranteed to run at all on a serverless host, which is how prices
+       * went months without a bar while every call looked successful. */
+      await runPriceSyncIfConsented(await resolveTenantId(), deadline);
       return c.json(result);
     } catch {
       const result = { outcomes: [], problems: ["Broker synchronization failed"] };
@@ -212,14 +223,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.delete("/api/prices/cache", async (c) => { await store.purgeAll(); dependencies.onPriceDataChanged?.(); return c.json({ deleted: true }); });
-  investingApp.get("/api/prices/sync/status", async (c) => c.json(priceOrchestrator.status(await resolveTenantId())));
+  investingApp.get("/api/prices/sync/status", async (c) => c.json(await priceOrchestrator.status(await resolveTenantId())));
   investingApp.get("/api/market-data/fx", async (c) => { const from = c.req.query("from")?.trim().toUpperCase(); const to = c.req.query("to")?.trim().toUpperCase(); if (!from || !to) return c.json({ rate: null, problems: ["from and to currencies are required"] }, 400); const result = await firstProviderResult(fxProviders, { from, to }, undefined, hasProblems); if (!result) return c.json({ rate: null, problems: ["No FX provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.get("/api/market-data/identifier", async (c) => { const isin = c.req.query("isin")?.trim().toUpperCase(); if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400); const result = await mapIdentifier({ isin }); if (!result) return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503); return c.json({ ...result.value, source: result.sourceKey }); });
   investingApp.post("/api/prices/sync", async (c) => {
     const tenantId = await resolveTenantId();
     if (!(await hasYahooConsent(tenantId))) return c.json({ consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] }, 428);
-    void priceOrchestrator.run(tenantId);
-    return c.json(priceOrchestrator.status(tenantId), 202);
+    const progress = await priceOrchestrator.run(tenantId, priceSyncDeadline());
+    return c.json(progress, priceSyncStatusCode(progress));
   });
   return investingApp;
 }

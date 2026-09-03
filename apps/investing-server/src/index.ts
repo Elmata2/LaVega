@@ -20,12 +20,12 @@ import {
 } from "@lavega/adapters";
 import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
 import { createRuntimeCredentialStore, credentialsArePerTenant, runtimeDatabase, type RuntimeCredentialStore as RuntimeCredentialStoreType } from "./credentialStore.js";
-import { createNeonAgentRunStore, createNeonBrokerSyncStateStore } from "./neonStores.js";
+import { createNeonAgentRunStore, createNeonBrokerSyncStateStore, createNeonPriceSyncProgressStore } from "./neonStores.js";
 import { createFileBrokerSyncStateStore, runtimeBrokerSyncStateFile } from "./fileBrokerSyncStateStore.js";
 import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
 import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
-import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
+import { createInMemoryPriceSyncProgressStore, discoverPriceSyncTargets } from "./priceOrchestrator.js";
 
 export { app };
 
@@ -218,6 +218,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
   const database = runtimeDatabase();
   const agentRunStore = options.agentRunStore ?? (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
+  /* Progress belongs next to the data on a hosted deployment, where the status
+   * poll and the run that answers it are different instances. A local process
+   * is both, so memory is the whole truth there. */
+  const priceSyncProgressStore = database ? createNeonPriceSyncProgressStore(database) : createInMemoryPriceSyncProgressStore();
   const tenantSyncStateFile = (tenantId: string) => {
     const base = runtimeBrokerSyncStateFile();
     return tenantId === LOCAL_TENANT_ID ? base : base.replace(/\.json$/, `.${encodeURIComponent(tenantId)}.json`);
@@ -406,8 +410,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     return Object.assign(honoApp, { runPortfolioAgentOnce });
   };
   const sectorDependencies = { sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()) };
-  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged }));
+  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, priceSyncProgressStore }));
   const sentry = await import("@sentry/node");
   sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) }));
+  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, priceSyncProgressStore, problemReporter: createProblemReporter({ dsn, sentry }) }));
 }

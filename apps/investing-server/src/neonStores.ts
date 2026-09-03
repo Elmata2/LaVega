@@ -1,8 +1,9 @@
-import { createAgentRunRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, type Database } from "@lavega/database";
+import { createAgentRunRepository, createPreferencesRepository, createPriceBarRepository, createPriceSyncStateRepository, createSyncStateRepository, type Database } from "@lavega/database";
 import { validateBenchmarkSymbols, type BenchmarkSelectionStore } from "@lavega/core";
 import { YAHOO_DISCLOSURE_VERSION, type MarketDataConsentDecision, type MarketDataConsentStore } from "./marketDataConsent.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type { BrokerSyncStateStore, PriceStore, ScheduledBroker } from "@lavega/adapters";
+import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
 
 /**
  * The Neon side of the runtime's stores.
@@ -58,6 +59,13 @@ export function createNeonBrokerSyncStateStore(db: Database, tenantId: string): 
   return {
     get: (broker: ScheduledBroker) => repository.get(broker),
     put: (broker: ScheduledBroker, state) => repository.put(broker, state),
+  };
+}
+
+export function createNeonPriceSyncProgressStore(db: Database): PriceSyncProgressStore {
+  return {
+    get: async (tenantId) => (await createPriceSyncStateRepository(db, tenantId).get()) as PriceSyncProgress | null,
+    put: (tenantId, progress) => createPriceSyncStateRepository(db, tenantId).put(progress, progress.status),
   };
 }
 

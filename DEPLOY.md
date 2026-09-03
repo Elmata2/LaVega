@@ -24,7 +24,8 @@ storage. Better Auth integration remains pending.
   | Broker credentials and snapshots | `investing.broker_vaults` (encrypted) |
   | Daily price bars | `investing.price_bars` |
   | Benchmarks and market-data consent | `investing.preferences` |
-  | Broker sync state | `investing.sync_state` |
+  | Broker sync state | `investing.sync_state` (per broker) |
+  | Price sync progress | `investing.sync_state` (key `prices`) |
   | Latest portfolio agent run | `investing.agent_runs` |
 
   Without `DATABASE_URL` each of these falls back to its file store, which is
