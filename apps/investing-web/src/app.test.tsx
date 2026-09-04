@@ -250,6 +250,81 @@ test("positions route renders its empty state", async () => {
   root.unmount();
 });
 
+test("overview shows priced positions total when history is still unavailable", async () => {
+  const fallbackDashboard: InvestingDashboardData = {
+    ...emptyInvestingDashboard(),
+    positions: [
+      {
+        symbol: "HLMAl_EQ",
+        entity: "personal",
+        description: "Halma",
+        quantity: 0.319,
+        marketValue: 10150,
+        portfolioWeight: 1,
+        priceStatus: "priced",
+        currency: "GBX",
+        asOf: "2026-08-18",
+        returns: {
+          status: "missing-cost",
+          remainingCostBasis: null,
+          realizedCostBasisRemoved: 0,
+          unrealizedGain: null,
+          realizedGain: 0,
+          dividendsReceived: 0,
+          totalReturn: null,
+          totalReturnPercentage: null,
+          sinceFirstBuyPercentage: null,
+          firstBuyDate: null,
+        },
+      },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(
+        withAuthUnconfigured(input, () => {
+          const url = String(input);
+          if (url === "/api/investing/health")
+            return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
+          if (url === "/api/market-data/consent")
+            return new Response(JSON.stringify({ accepted: true }));
+          if (url === "/api/agents/portfolio")
+            return new Response(JSON.stringify({ agents: portfolioAgents }));
+          if (url === "/api/agents/portfolio/run" && init?.method === "POST")
+            return new Response(JSON.stringify({ result: agentInsight }));
+          if (url === "/api/brokers/sync" && init?.method === "POST")
+            return new Response(
+              JSON.stringify({ problems: ["ibkr: credentials are not configured"] }),
+            );
+          if (url.startsWith("/api/investing/dashboard"))
+            return new Response(JSON.stringify(fallbackDashboard));
+          return new Response(JSON.stringify({}));
+        }),
+      ),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("10.150,00");
+  expect(container.textContent).toContain("Alleen geprijsde posities");
+  expect(container.textContent).toContain("0,319 stuks");
+  expect(container.textContent).not.toContain("credentials are not configured");
+  root.unmount();
+});
+
 test("positions route renders loading state while read model is pending", async () => {
   vi.stubGlobal(
     "fetch",
@@ -1214,7 +1289,8 @@ test("broker setup starts forced sync and shows returned problems", async () => 
     await Promise.resolve();
   });
   expect(requests).toContainEqual({ url: "/api/brokers/sync?force=true", method: "POST" });
-  expect(container.textContent).toContain("IBKR: credentials are not configured");
+  expect(container.textContent).not.toContain("credentials are not configured");
+  expect(container.textContent).toContain("Synchronisatie voltooid");
   root.unmount();
 });
 

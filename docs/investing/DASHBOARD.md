@@ -156,6 +156,8 @@ Fetch in this order:
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
 
+If cached bars for a symbol contain a currency that no longer matches the symbol's normalized currency, restart that symbol from the earliest mismatched date and overwrite the stale rows. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge.
+
 Expose price progress separately from broker progress at `GET /api/prices/sync/status`. Use the same status vocabulary as `BrokerSyncProgress`. Show remaining symbols and running or waiting state in the dashboard right rail.
 
 Render cached partial data while backfill continues. A failed symbol retries on the next orchestrator run because it has no completed cache range. Benchmark lines appear and extend as their own histories arrive. They never block the portfolio line.
@@ -178,6 +180,7 @@ On wide screens:
 - Put the stacked net-worth chart at full width below the positions table.
 
 The KPI block shows current portfolio value, daily change, and total return. Status controls must not compete visually with these values.
+When portfolio history is still empty but current positions do have market values, show the priced-positions total in that value slot and state that it excludes cash and history.
 
 On narrow screens, use this order: portfolio chart, KPIs, allocation donut, status chips, positions table, net-worth chart. Keep tables and charts full width. Do not hide required information behind a desktop-only hover state.
 

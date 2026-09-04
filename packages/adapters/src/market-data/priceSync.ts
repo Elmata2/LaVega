@@ -20,8 +20,15 @@ export async function syncPrices(input: {
   request: PriceSyncInput;
 }): Promise<PriceSyncResult> {
   const today = input.request.today ?? new Date().toISOString().slice(0, 10);
-  const lastDate = await input.store.lastDate(input.tenantId, input.request.symbol);
-  const from = lastDate ? nextDate(lastDate) : input.request.backfillFrom;
+  const cachedBars = await input.store.getRange(
+    input.tenantId,
+    input.request.symbol,
+    input.request.backfillFrom,
+    today,
+  );
+  const lastDate = cachedBars.at(-1)?.date ?? null;
+  const staleFrom = firstCurrencyMismatchDate(cachedBars, input.request.currency);
+  const from = staleFrom ?? (lastDate ? nextDate(lastDate) : input.request.backfillFrom);
   const cached = () =>
     input.store.getRange(input.tenantId, input.request.symbol, input.request.backfillFrom, today);
   if (from && from > today) return { bars: await cached(), problems: [], fetched: false };
@@ -49,4 +56,11 @@ function nextDate(date: string): string {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + 1);
   return value.toISOString().slice(0, 10);
+}
+
+function firstCurrencyMismatchDate(
+  bars: Awaited<ReturnType<PriceStore["getRange"]>>,
+  expectedCurrency: string,
+): string | null {
+  return bars.find((bar) => bar.currency !== expectedCurrency)?.date ?? null;
 }

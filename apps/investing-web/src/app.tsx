@@ -62,6 +62,10 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
   return other.test(problem) && /credentials are not configured/i.test(problem);
 }
 
+function filterVisibleSyncProblems(problems: readonly string[]): string[] {
+  return problems.filter((problem) => !/credentials are not configured/i.test(problem));
+}
+
 /* `service` only comes back from the investing server itself. Mounted on
  * lavega.dev the personal server answers /health, and it names no service. */
 type Health = { ok: boolean; service?: string };
@@ -224,12 +228,13 @@ function DashboardError({ message }: { message: string }) {
 }
 
 function DashboardProblems({ problems }: { problems: string[] }) {
-  if (problems.length === 0) return null;
+  const visibleProblems = filterVisibleSyncProblems(problems);
+  if (visibleProblems.length === 0) return null;
   return (
     <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
       <p className="font-semibold">Leesproblemen</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
-        {problems.map((problem, index) => (
+        {visibleProblems.map((problem, index) => (
           <li key={`${problem}-${index}`}>{problem}</li>
         ))}
       </ul>
@@ -363,7 +368,7 @@ function PositionList({
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {position.symbol} · {position.entity} ·{" "}
-                  {position.quantity.toLocaleString("nl-NL")} {position.currency}
+                  {position.quantity.toLocaleString("nl-NL")} stuks
                 </span>
               </div>
               <div role="cell" className="text-right text-sm tabular-nums">
@@ -442,6 +447,14 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
   const points = data.portfolio.All;
   const latest = points.at(-1);
   const previous = points.at(-2);
+  const pricedPositionsValue = data.positions.reduce(
+    (sum, position) => sum + (position.marketValue ?? 0),
+    0,
+  );
+  const portfolioValue =
+    latest?.value ?? (pricedPositionsValue > 0 ? pricedPositionsValue : null);
+  const usingPositionsFallback =
+    (latest?.value === null || latest?.value === undefined) && pricedPositionsValue > 0;
   const dailyChange =
     latest?.value !== null &&
     latest?.value !== undefined &&
@@ -483,10 +496,15 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         <div>
           <dt className="text-xs text-muted-foreground">Portefeuillewaarde</dt>
           <dd
-            className={`mt-1 font-display text-3xl font-semibold tabular-nums ${latest?.value === null || latest?.value === undefined ? "text-muted-foreground" : ""}`}
+            className={`mt-1 font-display text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
           >
-            {money(latest?.value ?? null)}
+            {money(portfolioValue)}
           </dd>
+          {usingPositionsFallback && (
+            <dd className="text-xs text-muted-foreground">
+              Alleen geprijsde posities; cash en historie ontbreken nog.
+            </dd>
+          )}
         </div>
         <div className="border-t border-border pt-4">
           <dt className="text-xs text-muted-foreground">Dagmutatie</dt>
@@ -877,7 +895,7 @@ function AppOpenSync() {
       const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
       const brokerResult = await readSyncResult(brokerResponse);
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-      if (current()) setProblems([...(brokerResult?.problems ?? [])]);
+      if (current()) setProblems(filterVisibleSyncProblems(brokerResult?.problems ?? []));
       const priceProblems = await runPriceSyncUntilComplete(current);
       if (current() && priceProblems.length > 0)
         setProblems((existing) => [...existing, ...priceProblems]);
@@ -1095,7 +1113,7 @@ function BrokerSyncAction() {
       const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const result = (await response.json()) as { problems?: string[] };
       if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker synchronisatie mislukt.");
-      const nextProblems = result.problems ?? [];
+      const nextProblems = filterVisibleSyncProblems(result.problems ?? []);
       setProblems(nextProblems);
       setStatus(nextProblems.length > 0 ? "error" : "success");
       if (nextProblems.length === 0) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));

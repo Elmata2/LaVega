@@ -134,3 +134,37 @@ test("labels a London pence quote GBX so it cannot be read as pounds", async () 
   const result = await provider.get({ ...request, symbol: "HLMAl_EQ", currency: "GBX" });
   expect(result?.bars.map((bar) => bar.currency)).toEqual(["GBX"]);
 });
+
+test("refetches from earliest cached currency mismatch so stale rows self-heal", async () => {
+  const store = createInMemoryPriceStore();
+  await store.upsert("local", [
+    { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBP" },
+    { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBP" },
+  ]);
+  const priceProviders = [
+    {
+      sourceKey: "yahoo",
+      priority: 10,
+      get: vi.fn(async () => ({
+        bars: [
+          { symbol: "HLMAl_EQ", date: "2026-01-01", close: 3500, currency: "GBX" },
+          { symbol: "HLMAl_EQ", date: "2026-01-02", close: 3592, currency: "GBX" },
+          { symbol: "HLMAl_EQ", date: "2026-01-03", close: 3604, currency: "GBX" },
+        ],
+        problems: [],
+      })),
+    },
+  ];
+
+  const result = await syncPrices({
+    store,
+    tenantId: "local",
+    priceProviders,
+    request: { ...request, symbol: "HLMAl_EQ", currency: "GBX", today: "2026-01-03" },
+  });
+
+  expect(priceProviders[0]!.get).toHaveBeenCalledWith(
+    expect.objectContaining({ from: "2026-01-01", to: "2026-01-03" }),
+  );
+  expect(result.bars.map((bar) => bar.currency)).toEqual(["GBX", "GBX", "GBX"]);
+});

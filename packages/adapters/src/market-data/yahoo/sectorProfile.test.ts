@@ -37,3 +37,18 @@ test("degrades to null on request failure or empty profile", async () => {
     } as never),
   ).toBeNull();
 });
+
+test("tries Yahoo listing candidates for Trading 212-style symbols before giving up", async () => {
+  const fetchJsonWithCrumb = vi
+    .fn()
+    .mockResolvedValueOnce({ quoteSummary: { result: [{}] } })
+    .mockResolvedValueOnce(fixture);
+
+  const result = await fetchYahooSectorProfile("HLMAl_EQ", { fetchJsonWithCrumb } as never);
+
+  expect(result).toEqual({ sector: "Technology", industry: "Consumer Electronics" });
+  expect(fetchJsonWithCrumb).toHaveBeenNthCalledWith(
+    1,
+    "https://query2.finance.yahoo.com/v10/finance/quoteSummary/HLMA.L?modules=assetProfile",
+  );
+});
