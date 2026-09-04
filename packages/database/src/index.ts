@@ -353,7 +353,7 @@ export function createPriceSyncStateRepository(db: Database, userId: string | un
   };
 }
 
-export type AgentRunRow = { id: string; startedAt: string; finishedAt: string | null; status: "running" | "done" | "error"; summary: string | null; error: string | null };
+export type AgentRunRow = { id: string; agentId?: string; startedAt: string; finishedAt: string | null; status: "running" | "done" | "error"; summary: string | null; error: string | null; result?: unknown };
 
 const AGENT_STATUS_TO_COLUMN = { running: "running", done: "succeeded", error: "failed" } as const;
 const AGENT_STATUS_FROM_COLUMN: Record<string, AgentRunRow["status"]> = { running: "running", queued: "running", succeeded: "done", failed: "error", cancelled: "error" };
@@ -367,14 +367,16 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
         const result = await client.query<QueryResultRow>("SELECT run_id, status, run_result, started_at, finished_at FROM investing.agent_runs");
         const row = result.rows[0];
         if (!row) return null;
-        const runResult = (row.run_result ?? {}) as { summary?: string | null; error?: string | null };
+        const runResult = (row.run_result ?? {}) as { agentId?: string | null; summary?: string | null; error?: string | null; result?: unknown };
         return {
           id: row.run_id as string,
+          agentId: runResult.agentId ?? undefined,
           startedAt: isoDate(row.started_at) ?? new Date(0).toISOString(),
           finishedAt: isoDate(row.finished_at),
           status: AGENT_STATUS_FROM_COLUMN[row.status as string] ?? "error",
           summary: runResult.summary ?? null,
           error: runResult.error ?? null,
+          result: runResult.result,
         };
       });
     },
@@ -382,7 +384,7 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
       await withTenant(db, tenantId, async (client) => {
         await client.query(
           "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP",
-          [record.id, AGENT_STATUS_TO_COLUMN[record.status], JSON.stringify({ summary: record.summary, error: record.error }), record.startedAt, record.finishedAt],
+          [record.id, AGENT_STATUS_TO_COLUMN[record.status], JSON.stringify({ agentId: record.agentId, summary: record.summary, error: record.error, result: record.result }), record.startedAt, record.finishedAt],
         );
       });
     },

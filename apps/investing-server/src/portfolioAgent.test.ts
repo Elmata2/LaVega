@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createInMemoryPriceStore } from "@lavega/adapters";
-import type { Position, PriceBar, Trade } from "@lavega/core";
-import { createPortfolioAgentTools, resolveAgentConfig } from "./portfolioAgent.js";
+import type { InvestingDashboardData, Position, PriceBar, Trade } from "@lavega/core";
+import { createPortfolioAgentTools, getPortfolioAgent, listPortfolioAgents, renderPortfolioSnapshot, resolveAgentConfig } from "./portfolioAgent.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -40,4 +40,47 @@ test("runPortfolioAgent refuses to start without an API key", async () => {
   vi.stubEnv("LAVEGA_AGENT_API_KEY", "");
   expect(() => resolveAgentConfig()).toThrow("LAVEGA_AGENT_API_KEY is not set");
   await expect(runPortfolioAgent({ prompt: "hello" })).rejects.toThrow("LAVEGA_AGENT_API_KEY");
+});
+
+test("portfolio agent registry exposes distinct investor personas", () => {
+  expect(listPortfolioAgents().map((agent) => agent.id)).toEqual([
+    "warren_buffett",
+    "charlie_munger",
+    "bill_ackman",
+    "ben_graham",
+    "peter_lynch",
+    "stanley_druckenmiller",
+  ]);
+  expect(getPortfolioAgent("bill_ackman").systemPrompt).toContain("activist investor lens");
+  expect(getPortfolioAgent("unknown").id).toBe("warren_buffett");
+});
+
+test("portfolio snapshot renders user position facts for LLM input", () => {
+  const dashboard: InvestingDashboardData = {
+    dataVersion: 3,
+    presentationCurrency: "EUR",
+    portfolio: { "1M": [], "6M": [], "1Y": [], YTD: [], All: [{ date: "2026-08-19", positionsValue: 30, cashValue: 0, value: 30, unpriced: [], forwardFilled: [], cashUnknown: [] }] },
+    benchmarks: [],
+    externalCashFlows: [],
+    allocation: { instrument: { buckets: [{ key: "AAPL", label: "AAPL", value: 30, unpriced: false }], unpriced: [] }, entity: { buckets: [], unpriced: [] } },
+    positions: [{
+      symbol: "AAPL",
+      entity: "personal",
+      quantity: 2,
+      currency: "EUR",
+      asOf: "2026-08-19",
+      marketValue: 30,
+      portfolioWeight: 1,
+      priceStatus: "priced",
+      returns: { status: "broker-average", remainingCostBasis: 20, realizedCostBasisRemoved: null, unrealizedGain: 10, realizedGain: null, dividendsReceived: 0, totalReturn: 10, totalReturnPercentage: 0.5, sinceFirstBuyPercentage: null, firstBuyDate: "2026-08-10" },
+    }],
+    position: null,
+    problems: [],
+  };
+
+  expect(JSON.parse(renderPortfolioSnapshot(dashboard))).toMatchObject({
+    dataVersion: 3,
+    totalPricedValue: 30,
+    topPositions: [{ symbol: "AAPL", weight: 1, totalReturnPercentage: 0.5 }],
+  });
 });

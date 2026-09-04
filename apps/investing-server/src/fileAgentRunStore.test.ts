@@ -18,9 +18,10 @@ async function runPath(): Promise<string> {
 
 test("the latest run survives a restart", async () => {
   const filePath = await runPath();
-  await createFileAgentRunStore(filePath).put({ id: "1", startedAt: "2026-08-19T12:00:00.000Z", finishedAt: "2026-08-19T12:01:00.000Z", status: "done", summary: "All good", error: null });
+  const result = { agentId: "bill_ackman", signal: "neutral", summary: "All good" };
+  await createFileAgentRunStore(filePath).put({ id: "1", agentId: "bill_ackman", startedAt: "2026-08-19T12:00:00.000Z", finishedAt: "2026-08-19T12:01:00.000Z", status: "done", summary: "All good", error: null, result });
 
-  expect(await createFileAgentRunStore(filePath).get()).toEqual({ id: "1", startedAt: "2026-08-19T12:00:00.000Z", finishedAt: "2026-08-19T12:01:00.000Z", status: "done", summary: "All good", error: null });
+  expect(await createFileAgentRunStore(filePath).get()).toEqual({ id: "1", agentId: "bill_ackman", startedAt: "2026-08-19T12:00:00.000Z", finishedAt: "2026-08-19T12:01:00.000Z", status: "done", summary: "All good", error: null, result });
 });
 
 test("only the latest run is kept", async () => {

@@ -74,6 +74,9 @@ tx      = { id, accountKey, date /* ISO YYYY-MM-DD */, amount /* negative = outf
 ## Broker access (investing)
 Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. Read it before touching `packages/adapters/src/brokers/`.
 
+## Portfolio agents (investing)
+Specified in **`docs/investing/PORTFOLIO-AGENTS.md`** — investor-persona backend based on `virattt/ai-hedge-fund`: persona registry, portfolio snapshot, OpenAI-compatible model routing, and normalized JSON insights. Read it before touching `apps/investing-server/src/portfolioAgent.ts` or `/api/agents/portfolio`.
+
 ## Investing stack
 Specified in **`docs/investing/STACK.md`** — the investing side's own stack, diverging deliberately from the personal side's in several places: `apps/investing-web` runs shadcn/ui (Tailwind + Radix) rather than hand-written CSS; the hosted tier runs on Cloudflare Workers rather than local Docker; local/self-hosted price data defaults to Yahoo Finance, an unofficial API used against its Terms of Service (see [ADR 0001](adr/0001-yahoo-finance-default-price-source.md)). Read it before touching `packages/core/investing/`, `apps/investing-web`, or `apps/investing-server`.
 

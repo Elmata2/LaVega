@@ -4,11 +4,13 @@ export type AgentRunStatus = "running" | "done" | "error";
 
 export type AgentRunRecord = {
   id: string;
+  agentId?: string;
   startedAt: string;
   finishedAt: string | null;
   status: AgentRunStatus;
   summary: string | null;
   error: string | null;
+  result?: unknown;
 };
 
 export function runtimeAgentRunFile(): string {
@@ -20,6 +22,7 @@ function isRecord(value: unknown): value is AgentRunRecord {
   const record = value as Partial<AgentRunRecord>;
   const optionalString = (item: unknown) => item === undefined || item === null || typeof item === "string";
   return typeof record.id === "string"
+    && optionalString(record.agentId)
     && typeof record.startedAt === "string"
     && optionalString(record.finishedAt)
     && (record.status === "running" || record.status === "done" || record.status === "error")

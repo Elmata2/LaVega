@@ -34,6 +34,22 @@ const dashboard: InvestingDashboardData = {
 };
 
 const emptyDashboard = emptyInvestingDashboard();
+const portfolioAgents = [
+  { id: "warren_buffett", displayName: "Warren Buffett", description: "Quality business owner", investingStyle: "Durable moats, fair price." },
+  { id: "charlie_munger", displayName: "Charlie Munger", description: "Quality filter", investingStyle: "Invert first." },
+  { id: "bill_ackman", displayName: "Bill Ackman", description: "Activist lens", investingStyle: "Concentrated brands and catalysts." },
+];
+const agentInsight = {
+  agentId: "bill_ackman",
+  displayName: "Bill Ackman",
+  signal: "bullish",
+  confidence: 78,
+  summary: "ASML is concentrated but priced with clear conviction.",
+  reasoning: "Position size and return profile show conviction; catalyst data is absent.",
+  insights: ["ASML dominates portfolio risk.", "Missing catalyst data limits confidence."],
+  model: "test-model",
+  snapshotHash: "hash",
+};
 
 /* Every existing test here predates sign-up and runs against a backend
  * with no DATABASE_URL / BETTER_AUTH_SECRET, exactly like local dev — so
@@ -50,6 +66,8 @@ function responseFor(input: RequestInfo | URL, init?: RequestInit) {
   return withAuthUnconfigured(input, () => {
     if (url === "/api/investing/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
     if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+    if (url === "/api/agents/portfolio") return new Response(JSON.stringify({ agents: portfolioAgents }));
+    if (url === "/api/agents/portfolio/run" && init?.method === "POST") return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(dashboard));
     return new Response(JSON.stringify({}));
@@ -61,6 +79,8 @@ function emptyResponseFor(input: RequestInfo | URL, init?: RequestInit) {
   return withAuthUnconfigured(input, () => {
     if (url === "/api/investing/health") return new Response(JSON.stringify({ ok: true, service: "investing-server" }));
     if (url === "/api/market-data/consent") return new Response(JSON.stringify({ accepted: true }));
+    if (url === "/api/agents/portfolio") return new Response(JSON.stringify({ agents: portfolioAgents }));
+    if (url === "/api/agents/portfolio/run" && init?.method === "POST") return new Response(JSON.stringify({ result: agentInsight }));
     if (url === "/api/brokers/sync" && init?.method === "POST") return new Response(JSON.stringify({ problems: [] }));
     if (url.startsWith("/api/investing/dashboard")) return new Response(JSON.stringify(emptyDashboard));
     return new Response(JSON.stringify({}));
@@ -196,13 +216,41 @@ test("overview preserves responsive reading order and independent chart ranges",
   await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
 
   const order = Array.from(container.querySelectorAll<HTMLElement>("[data-dashboard-section]")).map((element) => element.dataset.dashboardSection);
-  expect(order).toEqual(["performance", "kpis", "allocation", "status", "positions", "net-worth"]);
+  expect(order).toEqual(["performance", "kpis", "allocation", "agent", "status", "positions", "net-worth"]);
   const performanceRange = container.querySelector<HTMLElement>('[role="group"][aria-label="Periode kiezen"]')!;
   const netWorthRange = container.querySelector<HTMLElement>('[role="group"][aria-label="Periode nettovermogen kiezen"]')!;
   expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("1 maand");
   await act(async () => { Array.from(netWorthRange.querySelectorAll("button")).find((button) => button.textContent === "Alles")?.click(); });
   expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Alles");
   expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("1 maand");
+  root.unmount();
+});
+
+test("overview runs selected portfolio investor agent and renders its insight", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return Promise.resolve(responseFor(input, init));
+  }));
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+
+  await act(async () => { root.render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>); await Promise.resolve(); await Promise.resolve(); });
+
+  expect(container.textContent).toContain("Investeerderslens");
+  expect(container.textContent).toContain("Warren Buffett");
+  expect(container.textContent).toContain("Bill Ackman");
+  const ackman = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find((button) => button.textContent === "Bill Ackman");
+  expect(ackman?.getAttribute("aria-checked")).toBe("false");
+  await act(async () => { ackman?.click(); });
+  expect(ackman?.getAttribute("aria-checked")).toBe("true");
+
+  await act(async () => { Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "Analyseer portefeuille")?.click(); await Promise.resolve(); });
+
+  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/run");
+  expect(runRequest?.init?.method).toBe("POST");
+  expect(runRequest?.init?.body).toBe(JSON.stringify({ agentId: "bill_ackman" }));
+  expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
+  expect(container.textContent).toContain("Missing catalyst data limits confidence.");
   root.unmount();
 });
 

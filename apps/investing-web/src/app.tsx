@@ -48,6 +48,8 @@ function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212")
 type Health = { ok: boolean; service?: string };
 type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
 type PriceProgress = PriceSyncProgress;
+type PortfolioAgentDefinition = { id: string; displayName: string; description: string; investingStyle: string };
+type PortfolioAgentInsight = { agentId: string; displayName: string; signal: "bullish" | "bearish" | "neutral"; confidence: number; summary: string; reasoning: string; insights: string[]; model: string; snapshotHash: string };
 type DashboardState =
   | { status: "loading" }
   | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
@@ -74,6 +76,47 @@ async function fetchDashboard(symbol?: string): Promise<InvestingDashboardData> 
   const payload: unknown = await response.json();
   if (!isDashboardData(payload)) throw new Error("Dashboardgegevens hebben ongeldig formaat.");
   return payload;
+}
+
+function isPortfolioAgentDefinition(value: unknown): value is PortfolioAgentDefinition {
+  if (!value || typeof value !== "object") return false;
+  const agent = value as Partial<PortfolioAgentDefinition>;
+  return typeof agent.id === "string" && typeof agent.displayName === "string" && typeof agent.description === "string" && typeof agent.investingStyle === "string";
+}
+
+function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight {
+  if (!value || typeof value !== "object") return false;
+  const insight = value as Partial<PortfolioAgentInsight>;
+  return typeof insight.agentId === "string"
+    && typeof insight.displayName === "string"
+    && (insight.signal === "bullish" || insight.signal === "bearish" || insight.signal === "neutral")
+    && typeof insight.confidence === "number"
+    && typeof insight.summary === "string"
+    && typeof insight.reasoning === "string"
+    && Array.isArray(insight.insights)
+    && typeof insight.model === "string"
+    && typeof insight.snapshotHash === "string";
+}
+
+async function fetchPortfolioAgents(): Promise<PortfolioAgentDefinition[]> {
+  const response = await fetch("/api/agents/portfolio");
+  if (!response.ok) throw new Error("Agents laden mislukt.");
+  const payload = await response.json() as { agents?: unknown };
+  const agents = Array.isArray(payload.agents) ? payload.agents.filter(isPortfolioAgentDefinition) : [];
+  if (agents.length === 0) throw new Error("Geen portfolio-agents beschikbaar.");
+  return agents;
+}
+
+async function runPortfolioAgent(agentId: string): Promise<PortfolioAgentInsight> {
+  const response = await fetch("/api/agents/portfolio/run", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ agentId }),
+  });
+  const payload = await response.json().catch(() => ({})) as { result?: unknown; problems?: string[] };
+  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent-run mislukt.");
+  if (!isPortfolioAgentInsight(payload.result)) throw new Error("Agent gaf ongeldig antwoord.");
+  return payload.result;
 }
 
 function useDashboard(symbol?: string): DashboardState {
@@ -187,6 +230,70 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
     </dl>
     {latest && latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
     {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"><p className="font-semibold">Waarde deels onbekend</p>{latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}{latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}</div>}
+  </section>;
+}
+
+function PortfolioAgentCard() {
+  const [agents, setAgents] = useState<PortfolioAgentDefinition[]>([]);
+  const [selected, setSelected] = useState<string>("");
+  const [insight, setInsight] = useState<PortfolioAgentInsight | null>(null);
+  const [status, setStatus] = useState<"loading" | "idle" | "running" | "error">("loading");
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void fetchPortfolioAgents()
+      .then((items) => {
+        if (!current) return;
+        setAgents(items);
+        setSelected(items[0]?.id ?? "");
+        setStatus("idle");
+      })
+      .catch((error) => {
+        if (!current) return;
+        setStatus("error");
+        setMessage(error instanceof Error ? error.message : "Agents laden mislukt.");
+      });
+    return () => { current = false; };
+  }, []);
+
+  async function run() {
+    if (!selected) return;
+    setStatus("running");
+    setMessage(null);
+    try {
+      setInsight(await runPortfolioAgent(selected));
+      setStatus("idle");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Agent-run mislukt.");
+    }
+  }
+
+  const active = agents.find((agent) => agent.id === selected);
+  const tone = insight?.signal === "bullish" ? "text-positive" : insight?.signal === "bearish" ? "text-negative" : "text-muted-foreground";
+  return <section aria-labelledby="portfolio-agent-title" className="rounded-card border border-border bg-card p-5 shadow-soft" data-dashboard-section="agent">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent</p>
+        <h3 id="portfolio-agent-title" className="mt-1 font-display text-2xl font-semibold">Investeerderslens</h3>
+      </div>
+      {insight && <span className={`rounded-pill bg-secondary px-3 py-1.5 text-xs font-semibold ${tone}`}>{insight.signal} · {Math.round(insight.confidence)}%</span>}
+    </div>
+    {status === "loading" ? <p role="status" className="mt-4 text-sm text-muted-foreground">Agents laden…</p> : <>
+      <div role="radiogroup" aria-label="Agent kiezen" className="mt-4 grid grid-cols-2 gap-2">
+        {agents.map((agent) => <button key={agent.id} type="button" role="radio" aria-checked={selected === agent.id} onClick={() => setSelected(agent.id)} className={`pressable rounded-[14px] border px-3 py-2 text-left text-xs font-semibold transition-colors ${selected === agent.id ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}>{agent.displayName}</button>)}
+      </div>
+      {active && <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>}
+      <Button type="button" className="mt-4 w-full" onClick={run} disabled={status === "running" || agents.length === 0}>{status === "running" ? "Agent leest…" : "Analyseer portefeuille"}</Button>
+      {message && <p role="alert" className="mt-3 text-sm text-negative">{message}</p>}
+      {insight && <article className="mt-4 rounded-[14px] border border-border bg-secondary/30 p-4">
+        <p className="text-sm font-semibold">{insight.displayName}</p>
+        <p className="mt-2 text-sm leading-6">{insight.summary}</p>
+        {insight.insights.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">{insight.insights.map((item, index) => <li key={`${insight.snapshotHash}-${index}`}>{item}</li>)}</ul>}
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{insight.reasoning}</p>
+      </article>}
+    </>}
   </section>;
 }
 
@@ -634,7 +741,7 @@ function Layout() {
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><PortfolioSummaryCard currency={state.data.presentationCurrency} /><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
+  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><PortfolioSummaryCard currency={state.data.presentationCurrency} /><PortfolioAgentCard /><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
 }
 
 function Positions() {
