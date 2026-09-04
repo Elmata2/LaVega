@@ -1,7 +1,7 @@
 import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
-import { businessDateRange } from "./calendar.js";
+import { businessDateRange, isPriceFresh } from "./calendar.js";
 
 export type PortfolioValuePoint = {
   date: string;
@@ -47,21 +47,6 @@ function businessCalendar(from: string, to: string, priceBars: readonly PriceBar
   );
   for (const date of businessDateRange(from, to)) dates.add(date);
   return [...dates].sort();
-}
-
-function businessDates(from: string, to: string): string[] {
-  return businessDateRange(from, to);
-}
-
-function upperBound(sortedDates: readonly string[], date: string): number {
-  let low = 0;
-  let high = sortedDates.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    if (sortedDates[middle] <= date) low = middle + 1;
-    else high = middle;
-  }
-  return low;
 }
 
 function signedQuantity(trade: Trade): number {
@@ -189,7 +174,6 @@ export function computePortfolioValueSeries(
   if (!firstTrade) return [];
   const today = options.today ?? isoDate(new Date());
   const dates = businessCalendar(firstTrade, today, priceBars);
-  const weekdays = businessDates(firstTrade, today);
   const symbols = [
     ...new Set([
       ...trades.map((trade) => trade.symbol),
@@ -236,8 +220,7 @@ export function computePortfolioValueSeries(
         unpriced.add(symbol);
         continue;
       }
-      const missedBusinessDays = upperBound(weekdays, date) - upperBound(weekdays, latest.date);
-      if (!exact && missedBusinessDays > 5) {
+      if (!exact && !isPriceFresh(latest.date, date)) {
         unpriced.add(symbol);
         continue;
       }

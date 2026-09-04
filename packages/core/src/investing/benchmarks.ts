@@ -1,5 +1,5 @@
 import type { PortfolioValuePoint } from "./portfolio.js";
-import { businessDaysAfter } from "./calendar.js";
+import { isPriceFresh } from "./calendar.js";
 
 export const MAX_BENCHMARKS = 3;
 
@@ -226,7 +226,7 @@ export function alignBenchmarkValues(
     }
     return {
       date,
-      value: !latest || businessDaysAfter(latest.date, date) > 5 ? null : latest.value,
+      value: !latest || !isPriceFresh(latest.date, date) ? null : latest.value,
     };
   });
 }

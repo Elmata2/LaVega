@@ -1,7 +1,7 @@
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
-import { businessDaysAfter } from "./calendar.js";
+import { isPriceFresh } from "./calendar.js";
 import { solveXirr } from "./benchmarks.js";
 
 export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
@@ -310,7 +310,7 @@ export function buildCurrentPositions(input: {
     const latest = bars.at(-1);
     let marketValue: number | null = null;
     let priceStatus: PositionPriceStatus = "unpriced";
-    if (latest && businessDaysAfter(latest.date, input.today) <= 5) {
+    if (latest && isPriceFresh(latest.date, input.today)) {
       try {
         marketValue = convertCurrency(
           quantity * latest.close,
