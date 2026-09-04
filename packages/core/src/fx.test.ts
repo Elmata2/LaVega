@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { crossRate, parseFxRatePayload, FX_RATE_FALLBACK } from "./fx.js";
+import { crossRate, normalizeCurrencyCode, parseFxRatePayload, FX_RATE_FALLBACK } from "./fx.js";
 
 const RATE = { base: "EUR", date: "2026-08-04", rates: { USD: 1.15, GBP: 0.85 } };
 
@@ -16,6 +16,18 @@ test("crossRate reads London pence as a hundredth of a pound", () => {
   expect(crossRate("GBP", "GBp", RATE)).toBeCloseTo(100, 6);
   expect(crossRate("GBp", "EUR", RATE)).toBeCloseTo(1 / 85, 9);
   expect(crossRate("GBp", "GBp", RATE)).toBe(1);
+});
+
+test("normalizeCurrencyCode keeps pence apart from pounds", () => {
+  expect(normalizeCurrencyCode("GBp")).toBe("GBX");
+  expect(normalizeCurrencyCode("gbx")).toBe("GBX");
+  expect(normalizeCurrencyCode("GBX")).toBe("GBX");
+  expect(normalizeCurrencyCode("GBP")).toBe("GBP");
+  expect(normalizeCurrencyCode(" usd ")).toBe("USD");
+});
+
+test("normalized pence still cross at a hundredth of a pound", () => {
+  expect(crossRate(normalizeCurrencyCode("GBp"), "GBP", RATE)).toBeCloseTo(0.01, 9);
 });
 
 test("crossRate throws on an unknown currency", () => {

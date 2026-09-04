@@ -11,6 +11,19 @@ const MINOR_UNITS: Record<string, { major: string; perMajor: number }> = {
   GBX: { major: "GBP", perMajor: 100 },
 };
 
+/** Canonical spelling of a currency code from a broker or price provider.
+ *  `GBp` differs from `GBP` by case alone and by a factor of 100, so anything
+ *  that stores or compares a code has to canonicalise here rather than
+ *  uppercase, which silently reprices pence as pounds. */
+export function normalizeCurrencyCode(currency: string): string {
+  const trimmed = currency.trim();
+  /* This one comparison stays case-sensitive on purpose: `GBp` is pence and
+   * `GBP` is pounds, and nothing but case tells them apart. `GBX` needs no
+   * branch because uppercasing already leaves it alone. */
+  if (trimmed === "GBp") return "GBX";
+  return trimmed.toUpperCase();
+}
+
 function majorUnit(currency: string): { code: string; perMajor: number } {
   const minor = MINOR_UNITS[currency];
   return minor ? { code: minor.major, perMajor: minor.perMajor } : { code: currency, perMajor: 1 };

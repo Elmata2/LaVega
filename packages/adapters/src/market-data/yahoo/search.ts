@@ -1,4 +1,4 @@
-import type { BenchmarkInstrument } from "@lavega/core";
+import { normalizeCurrencyCode, type BenchmarkInstrument } from "@lavega/core";
 import { YahooHttpClient } from "./http.js";
 import type { YahooChartResponse } from "./types.js";
 
@@ -24,11 +24,12 @@ async function confirmedCurrency(
   client: YahooHttpClient,
   quote: SearchQuote,
 ): Promise<string | null> {
-  if (quote.currency) return quote.currency.toUpperCase();
+  if (quote.currency) return normalizeCurrencyCode(quote.currency);
   if (!quote.symbol) return null;
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(quote.symbol)}?range=1d&interval=1d`;
   const response = await client.fetchJsonWithCrumb<YahooChartResponse>(url);
-  return response.chart?.result?.[0]?.meta?.currency?.toUpperCase() ?? null;
+  const meta = response.chart?.result?.[0]?.meta?.currency;
+  return meta ? normalizeCurrencyCode(meta) : null;
 }
 
 const ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;

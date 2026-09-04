@@ -120,6 +120,18 @@ test("price bars are read, written and purged inside the tenant transaction", as
   expect(executed(calls)[0]?.values).toEqual(["AAPL", "2026-01-01", "2026-01-31"]);
 });
 
+test("a price bar currency is stored exactly as the provider spelled it", async () => {
+  /* `GBp` is pence and `GBP` is pounds. Uppercasing on write turned one into the
+   * other and repriced London holdings by a factor of 100. */
+  const { db, calls } = fakeDatabase();
+
+  await createPriceBarRepository(db, "user-123").upsert([
+    { symbol: "HLMA.L", date: "2026-09-02", close: 3568, currency: "GBp" },
+  ]);
+
+  expect(executed(calls)[0]?.values?.[3]).toEqual(["GBp"]);
+});
+
 test("an empty price bar write touches the database not at all", async () => {
   const { db, calls } = fakeDatabase();
 

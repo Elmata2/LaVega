@@ -1,4 +1,4 @@
-import type { PriceBar } from "@lavega/core";
+import { normalizeCurrencyCode, type PriceBar } from "@lavega/core";
 import type { Provider } from "../providerRouter.js";
 import { loadYahooPriceHistory } from "./history.js";
 import type { YahooHttpClient } from "./http.js";
@@ -34,7 +34,7 @@ export function createYahooPriceProvider(
         });
         // Label a bar with the currency the quote is actually in. The broker's
         // instrument currency can name a different listing of the same stock.
-        const currency = history.currency ?? request.currency;
+        const currency = normalizeCurrencyCode(history.currency ?? request.currency);
         return {
           bars: history.points.flatMap((point) =>
             point.close == null

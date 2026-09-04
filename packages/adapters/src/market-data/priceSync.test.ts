@@ -117,3 +117,20 @@ test("writes bars under the tenant the sync was asked for, not one a provider na
   await expect(store.getRange("user-b", "ASML")).resolves.toHaveLength(1);
   await expect(store.getRange("local", "ASML")).resolves.toEqual([]);
 });
+
+test("labels a London pence quote GBX so it cannot be read as pounds", async () => {
+  const fetchJsonWithCrumb = vi.fn(async () => ({
+    chart: {
+      result: [
+        {
+          meta: { currency: "GBp" },
+          timestamp: [Math.floor(Date.parse("2026-01-02T00:00:00Z") / 1000)],
+          indicators: { quote: [{ close: [3592] }] },
+        },
+      ],
+    },
+  }));
+  const provider = createYahooPriceProvider({ client: { fetchJsonWithCrumb } as never });
+  const result = await provider.get({ ...request, symbol: "HLMAl_EQ", currency: "GBX" });
+  expect(result?.bars.map((bar) => bar.currency)).toEqual(["GBX"]);
+});

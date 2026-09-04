@@ -242,7 +242,10 @@ export function createPriceBarRepository(
             bars.map((bar) => bar.symbol),
             bars.map((bar) => bar.date),
             bars.map((bar) => bar.close),
-            bars.map((bar) => bar.currency.toUpperCase()),
+            /* Stored verbatim. `GBp` and `GBP` differ by case and by a factor
+             * of 100, so uppercasing here repriced pence as pounds; providers
+             * canonicalise on the way in instead. */
+            bars.map((bar) => bar.currency),
             bars.map(() => provider),
           ],
         );
