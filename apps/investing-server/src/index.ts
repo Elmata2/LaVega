@@ -79,6 +79,7 @@ import {
   createInMemoryPriceSyncProgressStore,
   discoverPriceSyncTargets,
 } from "./priceOrchestrator.js";
+import { readPriceBars } from "./priceReader.js";
 
 export { app };
 
@@ -202,30 +203,6 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
   const byId = new Map(existing.map((item) => [item.id, item]));
   for (const item of incoming) byId.set(item.id, item);
   return [...byId.values()];
-}
-
-/** Neon pool max is 5. Parallel getRange per symbol exhausts it and the dashboard
- *  route then returns emptyInvestingDashboard even when broker rows are in cache. */
-const PRICE_BAR_READ_CONCURRENCY = 3;
-
-async function readPriceBars(priceStore: PriceStore, tenantId: string, symbols: readonly string[]) {
-  const bars: Awaited<ReturnType<PriceStore["getRange"]>> = [];
-  let failed = 0;
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(PRICE_BAR_READ_CONCURRENCY, symbols.length) }, async () => {
-      while (next < symbols.length) {
-        const symbol = symbols[next++];
-        if (!symbol) return;
-        try {
-          bars.push(...(await priceStore.getRange(tenantId, symbol)));
-        } catch {
-          failed += 1;
-        }
-      }
-    }),
-  );
-  return { bars, failed };
 }
 
 export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {

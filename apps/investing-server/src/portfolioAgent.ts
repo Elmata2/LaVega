@@ -11,6 +11,7 @@ import {
   type Trade,
 } from "@lavega/core";
 import type { PriceStore } from "@lavega/adapters";
+import { readPriceBars } from "./priceReader.js";
 
 const TENANT_ID = "local";
 
@@ -79,14 +80,7 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
             ...trades.map((trade) => trade.symbol),
           ]),
         ];
-        const bars: Awaited<ReturnType<PortfolioAgentDeps["priceStore"]["getRange"]>> = [];
-        for (let index = 0; index < symbols.length; index += 3) {
-          const slice = symbols.slice(index, index + 3);
-          const ranges = await Promise.all(
-            slice.map((symbol) => deps.priceStore.getRange(TENANT_ID, symbol)),
-          );
-          for (const range of ranges) bars.push(...range);
-        }
+        const { bars } = await readPriceBars(deps.priceStore, TENANT_ID, symbols);
         const today = bars
           .map((bar) => bar.date)
           .sort()
