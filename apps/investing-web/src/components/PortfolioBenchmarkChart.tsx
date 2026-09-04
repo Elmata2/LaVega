@@ -358,7 +358,7 @@ export function PortfolioBenchmarkChart({
         {points.length === 0 ? (
           <EmptyState
             title="Geen portefeuillegegevens"
-            description="Portefeuillewaarde verschijnt zodra prijsdata beschikbaar is."
+            description="De waardegrafiek wordt opgebouwd uit je transactiegeschiedenis. Zolang je broker daar geen transacties voor aanlevert, blijft deze leeg."
           />
         ) : (
           <>
