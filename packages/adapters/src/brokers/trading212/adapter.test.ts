@@ -594,3 +594,86 @@ test("repeated cash-history nextPagePath stops with an explicit partial-history 
   });
   expect(result.problems).toContain("Trading 212 transactions pagination repeated nextPagePath");
 });
+
+test("repeated order-history nextPagePath stops with an explicit partial-history problem", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request))
+      return json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/loop" });
+    if (request.url === "/loop")
+      return json(response, 200, { items: [order(2, "MSFT")], nextPagePath: "/loop" });
+    return standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+  expect(result.tradesComplete).toBe(false);
+  expect(result.problems).toContain("Trading 212 orders pagination repeated nextPagePath");
+});
+
+test("skipped non-trade fills are counted per page in diagnostics", async () => {
+  const events: Array<{ type: string; skipped?: number; skippedTypes?: string[] }> = [];
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      return json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 1,
+              type: "STOCK_SPLIT",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 0,
+              quantity: 1,
+            },
+            order: {
+              id: 1,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          order(2, "AAPL"),
+        ],
+      });
+    }
+    return standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({
+    token: "token",
+    secret: "secret",
+    baseUrl,
+    diagnostics: (event) => {
+      if (event.type === "history-page")
+        events.push({ type: event.type, skipped: event.skipped, skippedTypes: event.skippedTypes });
+    },
+  }).sync({ entity: "BV" });
+
+  expect(result.trades).toHaveLength(1);
+  expect(events).toEqual([
+    { type: "history-page", skipped: 1, skippedTypes: ["STOCK_SPLIT"] },
+  ]);
+});
+
+test("average price falls back to walletImpact totalCost when averagePricePaid is missing", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) {
+      return json(response, 200, [
+        {
+          quantity: 3,
+          currentPrice: 175.5,
+          instrument: { ticker: "AAPL", currency: "USD" },
+          walletImpact: { currency: "USD", currentValue: 526.5, totalCost: 450.75 },
+        },
+      ]);
+    }
+    return standardNonOrder(request, response, []);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    entity: "BV",
+  });
+  expect(result.positions).toMatchObject([{ symbol: "AAPL", averagePrice: 150.25 }]);
+});

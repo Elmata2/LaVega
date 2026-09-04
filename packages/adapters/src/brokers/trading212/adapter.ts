@@ -38,7 +38,15 @@ export type Trading212DiagnosticEvent =
       resetAt: string | null;
     }
   | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
-  | { type: "history-page"; page: number; pageItems: number; ordersRead: number; hasNext: boolean }
+  | {
+      type: "history-page";
+      page: number;
+      pageItems: number;
+      ordersRead: number;
+      hasNext: boolean;
+      skipped?: number;
+      skippedTypes?: string[];
+    }
   | {
       type: "cash-history-page";
       history: "transactions" | "dividends";
@@ -416,13 +424,21 @@ function mapPosition(raw: Trading212Order, entity: string, asOf: string): Positi
   const symbol = string(instrument.ticker, "position symbol");
   const isin = optionalString(instrument.isin);
   const description = optionalString(instrument.name);
+  const quantity = number(raw.quantity, "position quantity");
+  // averagePricePaid can be null while walletImpact.totalCost is present.
+  // totalCost / quantity is the same average, so use it instead of leaving
+  // the holding without a cost basis.
+  const totalCost = walletImpact ? nullableNumber(walletImpact.totalCost) : null;
+  const averageFromTotal =
+    totalCost !== null && Math.abs(quantity) > 1e-9 ? totalCost / quantity : null;
+  const averagePrice = nullableNumber(raw.averagePricePaid) ?? averageFromTotal;
   return {
     entity,
     symbol,
     ...(isin ? { isin } : {}),
     ...(description ? { description } : {}),
-    quantity: number(raw.quantity, "position quantity"),
-    averagePrice: nullableNumber(raw.averagePricePaid),
+    quantity,
+    averagePrice,
     marketPrice: nullableNumber(raw.currentPrice),
     marketValue: walletImpact ? nullableNumber(walletImpact.currentValue) : null,
     currency: string(instrument.currency ?? walletImpact?.currency, "position currency"),
@@ -719,31 +735,47 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let historyComplete = ordersComplete;
       if (!ordersComplete) {
         let nextUrl = ordersResume ?? firstHistoryUrl();
+        const seenOrderPaths = new Set<string>();
         let historyPages = 0;
         let ordersRead = 0;
         try {
           while (nextUrl) {
             throwIfHostDeadline(config.deadlineMs, 0);
+            if (seenOrderPaths.has(nextUrl))
+              throw new Error("Trading 212 orders pagination repeated nextPagePath");
+            seenOrderPaths.add(nextUrl);
             const current = await page(nextUrl, config, limiter);
             historyPages += 1;
             ordersRead += current.items.length;
-            config.diagnostics?.({
-              type: "history-page",
-              page: historyPages,
-              pageItems: current.items.length,
-              ordersRead,
-              hasNext: Boolean(current.nextPagePath),
-            });
+            let skipped = 0;
+            const skippedTypes = new Set<string>();
             for (const order of current.items) {
               try {
                 const trade = mapOrder(order, entity);
                 if (trade) trades.push(trade);
+                else {
+                  skipped += 1;
+                  const fill =
+                    order.fill && typeof order.fill === "object" && !Array.isArray(order.fill)
+                      ? (order.fill as Trading212Order)
+                      : null;
+                  skippedTypes.add(String(fill ? (fill.type ?? "missing-fill") : "missing-fill"));
+                }
               } catch (error) {
                 problems.push(
                   error instanceof Error ? error.message : "Trading 212 order is invalid",
                 );
               }
             }
+            config.diagnostics?.({
+              type: "history-page",
+              page: historyPages,
+              pageItems: current.items.length,
+              ordersRead,
+              hasNext: Boolean(current.nextPagePath),
+              skipped,
+              skippedTypes: [...skippedTypes],
+            });
             nextUrl = current.nextPagePath
               ? new URL(current.nextPagePath, config.baseUrl).toString()
               : "";

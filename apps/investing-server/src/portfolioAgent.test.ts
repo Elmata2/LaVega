@@ -101,6 +101,42 @@ test("portfolio agent registry exposes distinct investor personas", () => {
   expect(getPortfolioAgent("unknown").id).toBe("warren_buffett");
 });
 
+test("compute_portfolio_value bounds price-store concurrency", async () => {
+  let inflight = 0;
+  let peak = 0;
+  const priceStore = createInMemoryPriceStore();
+  const symbols = Array.from({ length: 10 }, (_, index) => `SYM${index}`);
+  await priceStore.upsert(
+    "local",
+    symbols.map((symbol) => ({ symbol, date: "2026-08-19", close: 1, currency: "EUR" })),
+  );
+  const instrumented = {
+    ...priceStore,
+    getRange: (async (...args: Parameters<typeof priceStore.getRange>) => {
+      inflight += 1;
+      peak = Math.max(peak, inflight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        return await priceStore.getRange(...args);
+      } finally {
+        inflight -= 1;
+      }
+    }) as typeof priceStore.getRange,
+  };
+  const agentTools = createPortfolioAgentTools({
+    readBrokerData: () => ({
+      positions: symbols.map((symbol) => ({ ...position, symbol })),
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+    }),
+    priceStore: instrumented,
+  });
+  await agentTools.compute_portfolio_value.execute!({}, executeOptions());
+  expect(peak).toBeLessThanOrEqual(3);
+});
+
 test("portfolio snapshot renders user position facts for LLM input", () => {
   const dashboard: InvestingDashboardData = {
     dataVersion: 3,
