@@ -21,34 +21,34 @@ Alle drie de reviews van 20 augustus zijn verwerkt, in de 50 commits die die dag
 hieronder staat is gebouwd en getest in de repo; wat hij daarvan zelf op het scherm heeft
 teruggezien, staat eronder.
 
-| Uit | Wat | Commit |
-|---|---|---|
-| R1-1 | ING stond op `aangenomen 0%` in Optimalisatie — de catalogusrij werd niet gevonden. Tegelijk de actierente: standaardrente rangschikt, promo staat er annotatief bij | `b16640f` |
-| R1-2 | De AI leest de onbekende rijen nu echt uit, en "onbekend" zegt waarom hij onbekend is | `6a88373` |
-| R1-3, R2-4 | Abonnementen groeperen per merchant, en weigeren wat hij niet betaalt | `7493837`, `8e40d5d` |
-| R1-4 | Een met de hand ingetypt puntensaldo kan niet meer worden overschreven of stilletjes verdwijnen | `2077c86` |
-| R1-5, R1-10 | Valuta: één rij per bank, en de hele catalogus gerangschikt in plaats van alleen zijn eigen rekeningen | `8dd061d` |
-| R1-6, R1-7, R1-8, R3-2, R3-3 | Travel Agent: geldopname erbij, cashback erbij, en de aanbeveling is de beste kaart in plaats van de kaart die hij toevallig heeft — met het verschil in euro's | `d0aa742`, `d764baf`, `8600380`, `5b655bf` |
-| R1-11 | Het IBAN-veld op de kaarten toont echte laatste vier cijfers of niets (`ibanTail` geeft `null`) | in `KaartenBlock` |
-| R1-12, R2-10, R2-11 | "Positie per onderneming" en "Aandacht" zijn schakelbare widgets, uit tenzij aangezet | `a833577`, `f4ee5fb` |
-| R1-13 (deels), R2-12, R3-5, R3-6, R3-7, R3-8 | Statistieken: donut plus groeigrafiek, exact getal af te lezen per balk/boog/punt met hover, tap én toets, doorklikken naar de categorie | `53c4ebc`, `2a0b21a`, `9e5616a` |
-| R1-17 (deels), R3-12 | Banklogo's worden tijdens de sweep opgehaald en gebundeld — in de browser wordt niets opgehaald. Kaartvlak in de huisstijlkleur van dat logo | `7f1c353`, `3eafe6f` |
-| R1-20, R2-16 | Facturen: een geverifieerde factuur boekt en koppelt zichzelf, met een plafond van € 10.000. Het doorstuuradres is invoerbaar, want Cloudflare bepaalt hem | `470dd3a`, `8b0f7a3`, `e3b39f5` |
-| R2-2 | "Al op de beste plek" bij 0% was een conclusie die het cijfer niet droeg — er wordt nu vergeleken met Scalable Capital en het euro-bedrag staat erbij | `9e5616a` |
-| R2-3 | De Investing-link opende een localhost die weigerde. Hij verschijnt nu pas als de investing-app antwoordt (zie §4.1 — de app zelf draait nog niet) | `ce8fb09` |
-| R2-5 | Betaalagenda ziet ook binnenkomende terugkerende stromen (DUO), en zijn eigen rekeningen | `8e40d5d` |
-| R2-6 | Categorieën lezen wie de tegenpartij is: een persoon, een incasso, of hijzelf | `c5d42ac`, `170e327` |
-| R2-9 | Cashback-blok in de vorm van het huurblok, gerekend over echte maanduitgaven | `56e2a8c`, `e0abd93` |
-| R2-13 | Weg wat niets opleverde: de gele voorwaardenregel, de forecast-uitleg, woonlasten, lege blokken | `56e2a8c` |
-| R3-1 | De donut zei € 2 miljoen — overboekingen naar eigen spaar- en beleggingsrekeningen werden als uitgave geteld; creditcard-afbetaling telt niet meer mee | `19e7573`, `5b655bf` |
-| R3-4 | Het heet Travel Agent | `5b655bf` |
-| R3-9 | Profiel opgeschoond: de n8n-opzethulp weg, het paar dat Facturen nodig heeft blijft | `dc06b59` |
-| R3-10 | Nul ondernemingen is geen openstaande vraag — dan is het één zzp'er en gaat de factuur gewoon in het overzicht | `a6e7d7b` |
-| R3-11 | Regels alfabetisch, op een kopie gesorteerd zodat de winnende regel niet stilletjes verandert | in `Regels.tsx` |
-| R1-19, R3-13 | Implementatieplan voor de extensie | `docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md` |
-| R3-14, R3-15 | De laatste kaarten zonder FX-cijfer en de ING-puntendata — gevonden, nog niet samengevoegd (§2.1) | `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md` |
-| B7 (oude backlog) | `category-trend.ts` met zijn zeven misleidend groene tests is weg; de dode `rules`-tak is weg en er staat nu bij waarom `koppelingen` en `backup` géén dode takken zijn; `saveScheduledFlows` merget, dus Belasting kan een gescopete lijst krijgen | diverse |
-| B6 (oude backlog) | Trendlijnen: de groeigrafiek en het weekdagpatroon staan er, en die vond hij goed | `53c4ebc` |
+| Uit                                          | Wat                                                                                                                                                                                                                                                 | Commit                                                                        |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| R1-1                                         | ING stond op `aangenomen 0%` in Optimalisatie — de catalogusrij werd niet gevonden. Tegelijk de actierente: standaardrente rangschikt, promo staat er annotatief bij                                                                                | `b16640f`                                                                     |
+| R1-2                                         | De AI leest de onbekende rijen nu echt uit, en "onbekend" zegt waarom hij onbekend is                                                                                                                                                               | `6a88373`                                                                     |
+| R1-3, R2-4                                   | Abonnementen groeperen per merchant, en weigeren wat hij niet betaalt                                                                                                                                                                               | `7493837`, `8e40d5d`                                                          |
+| R1-4                                         | Een met de hand ingetypt puntensaldo kan niet meer worden overschreven of stilletjes verdwijnen                                                                                                                                                     | `2077c86`                                                                     |
+| R1-5, R1-10                                  | Valuta: één rij per bank, en de hele catalogus gerangschikt in plaats van alleen zijn eigen rekeningen                                                                                                                                              | `8dd061d`                                                                     |
+| R1-6, R1-7, R1-8, R3-2, R3-3                 | Travel Agent: geldopname erbij, cashback erbij, en de aanbeveling is de beste kaart in plaats van de kaart die hij toevallig heeft — met het verschil in euro's                                                                                     | `d0aa742`, `d764baf`, `8600380`, `5b655bf`                                    |
+| R1-11                                        | Het IBAN-veld op de kaarten toont echte laatste vier cijfers of niets (`ibanTail` geeft `null`)                                                                                                                                                     | in `KaartenBlock`                                                             |
+| R1-12, R2-10, R2-11                          | "Positie per onderneming" en "Aandacht" zijn schakelbare widgets, uit tenzij aangezet                                                                                                                                                               | `a833577`, `f4ee5fb`                                                          |
+| R1-13 (deels), R2-12, R3-5, R3-6, R3-7, R3-8 | Statistieken: donut plus groeigrafiek, exact getal af te lezen per balk/boog/punt met hover, tap én toets, doorklikken naar de categorie                                                                                                            | `53c4ebc`, `2a0b21a`, `9e5616a`                                               |
+| R1-17 (deels), R3-12                         | Banklogo's worden tijdens de sweep opgehaald en gebundeld — in de browser wordt niets opgehaald. Kaartvlak in de huisstijlkleur van dat logo                                                                                                        | `7f1c353`, `3eafe6f`                                                          |
+| R1-20, R2-16                                 | Facturen: een geverifieerde factuur boekt en koppelt zichzelf, met een plafond van € 10.000. Het doorstuuradres is invoerbaar, want Cloudflare bepaalt hem                                                                                          | `470dd3a`, `8b0f7a3`, `e3b39f5`                                               |
+| R2-2                                         | "Al op de beste plek" bij 0% was een conclusie die het cijfer niet droeg — er wordt nu vergeleken met Scalable Capital en het euro-bedrag staat erbij                                                                                               | `9e5616a`                                                                     |
+| R2-3                                         | De Investing-link opende een localhost die weigerde. Hij verschijnt nu pas als de investing-app antwoordt (zie §4.1 — de app zelf draait nog niet)                                                                                                  | `ce8fb09`                                                                     |
+| R2-5                                         | Betaalagenda ziet ook binnenkomende terugkerende stromen (DUO), en zijn eigen rekeningen                                                                                                                                                            | `8e40d5d`                                                                     |
+| R2-6                                         | Categorieën lezen wie de tegenpartij is: een persoon, een incasso, of hijzelf                                                                                                                                                                       | `c5d42ac`, `170e327`                                                          |
+| R2-9                                         | Cashback-blok in de vorm van het huurblok, gerekend over echte maanduitgaven                                                                                                                                                                        | `56e2a8c`, `e0abd93`                                                          |
+| R2-13                                        | Weg wat niets opleverde: de gele voorwaardenregel, de forecast-uitleg, woonlasten, lege blokken                                                                                                                                                     | `56e2a8c`                                                                     |
+| R3-1                                         | De donut zei € 2 miljoen — overboekingen naar eigen spaar- en beleggingsrekeningen werden als uitgave geteld; creditcard-afbetaling telt niet meer mee                                                                                              | `19e7573`, `5b655bf`                                                          |
+| R3-4                                         | Het heet Travel Agent                                                                                                                                                                                                                               | `5b655bf`                                                                     |
+| R3-9                                         | Profiel opgeschoond: de n8n-opzethulp weg, het paar dat Facturen nodig heeft blijft                                                                                                                                                                 | `dc06b59`                                                                     |
+| R3-10                                        | Nul ondernemingen is geen openstaande vraag — dan is het één zzp'er en gaat de factuur gewoon in het overzicht                                                                                                                                      | `a6e7d7b`                                                                     |
+| R3-11                                        | Regels alfabetisch, op een kopie gesorteerd zodat de winnende regel niet stilletjes verandert                                                                                                                                                       | in `Regels.tsx`                                                               |
+| R1-19, R3-13                                 | Implementatieplan voor de extensie                                                                                                                                                                                                                  | `docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md` |
+| R3-14, R3-15                                 | De laatste kaarten zonder FX-cijfer en de ING-puntendata — gevonden, nog niet samengevoegd (§2.1)                                                                                                                                                   | `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md`    |
+| B7 (oude backlog)                            | `category-trend.ts` met zijn zeven misleidend groene tests is weg; de dode `rules`-tak is weg en er staat nu bij waarom `koppelingen` en `backup` géén dode takken zijn; `saveScheduledFlows` merget, dus Belasting kan een gescopete lijst krijgen | diverse                                                                       |
+| B6 (oude backlog)                            | Trendlijnen: de groeigrafiek en het weekdagpatroon staan er, en die vond hij goed                                                                                                                                                                   | `53c4ebc`                                                                     |
 
 **Gebouwd, maar door hem nog niet teruggezien.** Alles in de tabel hierboven is na review 3 gebouwd
 of vlak ervoor. Hij heeft review 3 gedicteerd om 23:14; wat daarna landde (`5b655bf` en verder) is
@@ -69,17 +69,17 @@ cofounder-commits `88c67c6`/`c9f1fa9` na goedkeuring van drie `NEEDS_APPROVAL`-d
 staat vervangt de cijfers in §2.2 en de openstaande vraag in §2.1 — die twee secties liepen 25 augustus
 achter de werkelijkheid aan en zijn hieronder bijgewerkt.
 
-| Wat | Uitkomst |
-|---|---|
-| §2.1, voorstel 1 (kaartkosten-FX-gaten + ING-puntendata, 20 aug) en voorstel 2 (`staging-account-fees.json`) | **Samengevoegd.** `catalog.json`: 185 → 192 producten, `accountFee` 89 → 107, `fxFeePct` 73 → 83 |
-| Zeven kaarten zonder `fxFeePct` die wél reizen (gevonden via een productieregel: `79 accepted, 113 refused`) | **Vier erin** (ING Creditcard More/Extra/Max, Bleap — uit documenten die de catalogus al citeerde), **drie blijven leeg met een gemeten reden** (Wise publiceert geen kaart-FX-percentage; Wirex' eigen artikel heeft nul FX-treffers en drie andere paden geven 404; bunq crypto is geen kaart). `83 accepted, 109 refused` is het nieuwe productiecijfer |
-| §2.3, `ing-betaalpas`-datum | **Bevestigd correct.** Het ING-kostenoverzicht zelf zegt "geldig vanaf 15 juni 2026" — precies de `checkedAt` die er al stond. Staat nog op `route: "agent"` in plaats van `provider-pdf`, wat een onderwaardering is en geen fout in het cijfer |
-| Extensie: `bepaalClaim` gaf altijd een caveat bij een niet-lege voorwaardentekst, dus basis "netto" was onbereikbaar | **Gerepareerd.** Herkomstnotitie en beperking worden nu onderscheiden; bij twijfel blijft het een beperking. Gemeten: 0 netto-rijen op de echte bundel, in EUR en USD — de tak leeft maar is op de data van vandaag onbereikbaar |
-| Extensie: ING Winkel las nul artikelen | **Twee fouten, allebei gemeten door de eigenaar.** Het adres stond op `www.ing.nl/punten`, hij zat op `mijn.ing.nl/punten/overview` — de voorwaarden van ING noemden de ingang, niet de pagina. En de kaarten staan in open shadow roots; `collectIngWinkel` piercet ze nu, met plafonds tegen een pathologische pagina. Sluitende roots en iframes geven bewust een eerlijke "kan hier niet in kijken"-zin in plaats van een gok |
-| `docs/n8n/2026-08-24-workflow-diagnose.md`: de wachtrij-leegmaker zat op het mailpad | **Gecorrigeerde workflow klaar** (`docs/n8n/lavega-facturen-workflow.json`) plus een permanente structuurwacht (49 tests). **Nog niet geïmporteerd in n8n — wacht op de cofounder die de Cloudflare-kant aanpast.** Zie §4.3 |
-| `/investing/` laadde een blanco pagina | **Root cause was Turbo, niet Vite:** `envMode: "strict"` filterde `INVESTING_WEB_BASE` uit de tweede, overschrijvende build. Hernoemd naar `VITE_INVESTING_BASE` (Turbo laat `VITE_*` automatisch door), dubbele build eruit, een build-poort die het image laat falen als de base terugvalt. **Live bevestigd na deploy:** `/investing/assets/…` geeft 200 text/javascript, het oude pad geeft nu 404 in plaats van stil 200 HTML |
-| Belastingspec van 20 augustus, Richting A | **Was al gebouwd** — `vatPosition` (tax.ts) draagt stage/basis/coverage/rulesAsOf, het lopende kwartaal geeft `status: "expected"`, een teruggave wordt zichtbaar. Niets aan te sluiten |
-| Belastingspec, Richting B | **Gebouwd** (`packages/core/src/crossScope.ts`, module "Privé en zakelijk" op Belasting). Meet oversteken BV↔Privé zonder oordeel — alleen een vraag per stroom. Signaal 1 (gebruikelijkloon) bewust niet gebouwd, geen loonadministratie; signaal 2 (box-2) bewust niet gebouwd, "closest thing to advice"; geen boekhouder-export, hij zei nee. **Nog niet gepusht** — lokaal gecommit, wacht op: rekeningen samenvoegen vóór hij de cijfers leest (een dubbel geïmporteerde rekening verdubbelt elke oversteek erop), en de verbogen vormen in de woordwacht (`besparen`, `adviseren`, `moet je` komen er nu doorheen) |
+| Wat                                                                                                                  | Uitkomst                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §2.1, voorstel 1 (kaartkosten-FX-gaten + ING-puntendata, 20 aug) en voorstel 2 (`staging-account-fees.json`)         | **Samengevoegd.** `catalog.json`: 185 → 192 producten, `accountFee` 89 → 107, `fxFeePct` 73 → 83                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Zeven kaarten zonder `fxFeePct` die wél reizen (gevonden via een productieregel: `79 accepted, 113 refused`)         | **Vier erin** (ING Creditcard More/Extra/Max, Bleap — uit documenten die de catalogus al citeerde), **drie blijven leeg met een gemeten reden** (Wise publiceert geen kaart-FX-percentage; Wirex' eigen artikel heeft nul FX-treffers en drie andere paden geven 404; bunq crypto is geen kaart). `83 accepted, 109 refused` is het nieuwe productiecijfer                                                                                                                                                                                                                                                                |
+| §2.3, `ing-betaalpas`-datum                                                                                          | **Bevestigd correct.** Het ING-kostenoverzicht zelf zegt "geldig vanaf 15 juni 2026" — precies de `checkedAt` die er al stond. Staat nog op `route: "agent"` in plaats van `provider-pdf`, wat een onderwaardering is en geen fout in het cijfer                                                                                                                                                                                                                                                                                                                                                                          |
+| Extensie: `bepaalClaim` gaf altijd een caveat bij een niet-lege voorwaardentekst, dus basis "netto" was onbereikbaar | **Gerepareerd.** Herkomstnotitie en beperking worden nu onderscheiden; bij twijfel blijft het een beperking. Gemeten: 0 netto-rijen op de echte bundel, in EUR en USD — de tak leeft maar is op de data van vandaag onbereikbaar                                                                                                                                                                                                                                                                                                                                                                                          |
+| Extensie: ING Winkel las nul artikelen                                                                               | **Twee fouten, allebei gemeten door de eigenaar.** Het adres stond op `www.ing.nl/punten`, hij zat op `mijn.ing.nl/punten/overview` — de voorwaarden van ING noemden de ingang, niet de pagina. En de kaarten staan in open shadow roots; `collectIngWinkel` piercet ze nu, met plafonds tegen een pathologische pagina. Sluitende roots en iframes geven bewust een eerlijke "kan hier niet in kijken"-zin in plaats van een gok                                                                                                                                                                                         |
+| `docs/n8n/2026-08-24-workflow-diagnose.md`: de wachtrij-leegmaker zat op het mailpad                                 | **Gecorrigeerde workflow klaar** (`docs/n8n/lavega-facturen-workflow.json`) plus een permanente structuurwacht (49 tests). **Nog niet geïmporteerd in n8n — wacht op de cofounder die de Cloudflare-kant aanpast.** Zie §4.3                                                                                                                                                                                                                                                                                                                                                                                              |
+| `/investing/` laadde een blanco pagina                                                                               | **Root cause was Turbo, niet Vite:** `envMode: "strict"` filterde `INVESTING_WEB_BASE` uit de tweede, overschrijvende build. Hernoemd naar `VITE_INVESTING_BASE` (Turbo laat `VITE_*` automatisch door), dubbele build eruit, een build-poort die het image laat falen als de base terugvalt. **Live bevestigd na deploy:** `/investing/assets/…` geeft 200 text/javascript, het oude pad geeft nu 404 in plaats van stil 200 HTML                                                                                                                                                                                        |
+| Belastingspec van 20 augustus, Richting A                                                                            | **Was al gebouwd** — `vatPosition` (tax.ts) draagt stage/basis/coverage/rulesAsOf, het lopende kwartaal geeft `status: "expected"`, een teruggave wordt zichtbaar. Niets aan te sluiten                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Belastingspec, Richting B                                                                                            | **Gebouwd** (`packages/core/src/crossScope.ts`, module "Privé en zakelijk" op Belasting). Meet oversteken BV↔Privé zonder oordeel — alleen een vraag per stroom. Signaal 1 (gebruikelijkloon) bewust niet gebouwd, geen loonadministratie; signaal 2 (box-2) bewust niet gebouwd, "closest thing to advice"; geen boekhouder-export, hij zei nee. **Nog niet gepusht** — lokaal gecommit, wacht op: rekeningen samenvoegen vóór hij de cijfers leest (een dubbel geïmporteerde rekening verdubbelt elke oversteek erop), en de verbogen vormen in de woordwacht (`besparen`, `adviseren`, `moet je` komen er nu doorheen) |
 
 ---
 
@@ -91,19 +91,19 @@ achter de werkelijkheid aan en zijn hieronder bijgewerkt.
 
 `apps/server/src/eb-routes.ts` registreert vier routes en niet meer:
 
-| Route | Wat hij doet |
-|---|---|
-| `GET /api/eb/aspsps` | de bankenlijst voor de kiezer |
-| `POST /api/eb/auth` | start de autorisatie, geeft de bank-URL terug |
-| `GET /api/eb/callback` | wisselt de code in voor een sessie en stuurt door naar `/?eb=<sessionId>` |
+| Route                  | Wat hij doet                                                                |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `GET /api/eb/aspsps`   | de bankenlijst voor de kiezer                                               |
+| `POST /api/eb/auth`    | start de autorisatie, geeft de bank-URL terug                               |
+| `GET /api/eb/callback` | wisselt de code in voor een sessie en stuurt door naar `/?eb=<sessionId>`   |
 | `GET /api/eb/accounts` | haalt saldi en transacties op, geeft de rauwe bank-JSON door aan de browser |
 
 Er is **geen refresh-route** en er is **geen interval** — niet in de server, niet in `App.tsx`. Data
 komt alleen binnen op de terugweg van een autorisatie. Drie dingen maken dat harder dan het klinkt:
 
 1. **`/accounts` is eenmalig.** Direct na het uitleveren staat er `sessions.delete(sessionId)`.
-   Dezelfde sessie een tweede keer bevragen geeft *"Sessie onbekend of verlopen — koppel de bank
-   opnieuw."*
+   Dezelfde sessie een tweede keer bevragen geeft _"Sessie onbekend of verlopen — koppel de bank
+   opnieuw."_
 2. **De sessies staan in het geheugen**, met een TTL van 60 minuten, en zijn weg na elke deploy of
    herstart van de Railway-service.
 3. **De toestemming die hij gaf loopt 89 dagen** (`access: { valid_until: validUntil(89) }`). Het
@@ -175,7 +175,7 @@ Twee dingen die daarin verstopt zitten en die elke agent raken:
 
 ### 2.3 Twee datums dragen mogelijk de dag dat wij keken
 
-Huisregel: elk cijfer draagt de datum die *het document* noemt, niet de dag dat wij keken.
+Huisregel: elk cijfer draagt de datum die _het document_ noemt, niet de dag dat wij keken.
 
 **`ing-betaalpas` is op 24 augustus opgelost — het was geen fout.** De vondst kwam terzijde, tijdens
 het uitlezen van hetzelfde ING-kostenoverzicht voor de FX-gaten-ronde (§0b): het document zelf zegt
@@ -188,11 +188,11 @@ Amex-ronde.
 Twee blijven kandidaat, niet vondst, uit een telling van 21-08 (het jaartal in de `sourceUrl`
 vergeleken met het jaartal in `checkedAt`):
 
-| Regel | Veld | Staat er nu | Waar de twijfel op rust |
-|---|---|---|---|
-| `american-express-corporate-gold-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, PDF-`CreationDate` 7 december 2022 — **bevestigd** |
-| `zeal-card-gnosis-pay-rails` | `fxFeePct` | `2026-04-27` | Zendesk-API `updated_at: 2026-08-12`, `created_at: 2025-07-21` — **bevestigd** |
-| `klm-american-express-corporate-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, bestand `NL_KLM_Corporate_Cardmember_TCs_**Dec2022**.pdf` — idem |
+| Regel                                  | Veld       | Staat er nu  | Waar de twijfel op rust                                                                    |
+| -------------------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------------------ |
+| `american-express-corporate-gold-card` | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, PDF-`CreationDate` 7 december 2022 — **bevestigd**               |
+| `zeal-card-gnosis-pay-rails`           | `fxFeePct` | `2026-04-27` | Zendesk-API `updated_at: 2026-08-12`, `created_at: 2025-07-21` — **bevestigd**             |
+| `klm-american-express-corporate-card`  | `fxFeePct` | `2026-08-19` | URL-pad `…/2022-12-15/…`, bestand `NL_KLM_Corporate_Cardmember_TCs_**Dec2022**.pdf` — idem |
 
 Een jaartal in een URL is geen bewijs van de datum die het document zelf noemt — ze horen opengemaakt
 te worden. De eerste en de derde zijn allebei Amex-rijen, en Amex is intussen het oudste cluster in
@@ -205,7 +205,7 @@ waar alle veertien puntencijfers groter dan nul van komen (§2.2). Eén Amex-swe
 
 Bij BV1 telde een inkoopfactuur wél mee in de btw-module, een verkoopfactuur (de Penshee-factuur,
 btw verlegd wegens export naar UK) niet — het scherm gaf zelf de reden: `omzetfacturen-onbekend`,
-*"In deze periode staan alleen inkoopfacturen"*.
+_"In deze periode staan alleen inkoopfacturen"_.
 
 **Al uitgesloten als oorzaak, met de code erbij:** de vertaling van n8n's `"income"|"expense"` naar
 `Invoice.direction` (`"in"|"out"`) staat correct in `apps/web/src/n8n.ts:277`
@@ -222,21 +222,21 @@ zodra dat weer schoon te testen is: checken of die factuur al als bevestigde rij
 
 ## 3. Blokkeert de oplevering van de MVP
 
-Zijn eigen doel uit review 3: *"as much as possible an MVP of the final product."* Dit is wat daar
+Zijn eigen doel uit review 3: _"as much as possible an MVP of the final product."_ Dit is wat daar
 nog tussen zit, met per punt de reden dat het er nog is.
 
-| # | Wat | Waarom het open staat |
-|---|---|---|
-| **M1** | **Echte kaartafbeeldingen** (R1-17). De logo's zijn gebundeld en het kaartvlak heeft de huisstijlkleur; de kaart zelf is nog geen kaart | Merkenrecht. Een banklogo mag doorgaans gebruikt worden om dát product te identificeren, mits met disclaimer (`apps/web/src/assets/TRADEMARKS.md`); een kaartafbeelding is een ontwerp. Ophalen tijdens de sweep is de goedgekeurde route, de vraag is of het mág — niet of het kan |
-| **M2** | **De interactieve wereldkaart in Valuta** (R1-16) | Onderweg in deze ronde: `WorldMap.tsx`, `world-map.generated.ts` en `scripts/bundle-world-map.ts` staan in de werkboom en zijn nog niet gecommit. Gebundelde geodata mag, tiles ophalen niet — dat zou verraden naar welke landen hij kijkt |
-| **M3** | **Gemiddelde inkomsten en gemiddelde uitgaven** per periode (R1-13, laatste deel) | Niet gebouwd. Het weekdaggemiddelde bestaat, dit niet |
-| **M4** | **Periodeschakelaar op Abonnementen** (R1-14) | Niet gebouwd. In `Optimalisatie.tsx` staat overal "per maand" als vaste eenheid |
-| **M5** | **Een beter kostenoverzicht**, *"like an earlier version we worked with"*, waar categorieën als transport vanzelf goed stonden (R1-15) | Onduidelijk welke eerdere versie hij bedoelt. Dat moet hij aanwijzen; ernaar raden levert een tweede overzicht op in plaats van een beter |
-| **M6** | **De forecast zelf** (oude B2) | Het cashflowblok vindt hij goed, de voorspelling erachter is niet af. Nooit herzien sinds ronde 1 |
-| **M7** | **De Punten-UI mooier** (oude B5) | Cosmetisch, en de inhoud van die tab verandert nog (§1.2, §5.1) |
-| **M8** | **Rekeningen groeperen per bank**, met het logo en de kaarten achter een klik (oude B4) | Zijn eigen woorden: *"maybe just test this out, I'm not sure yet."* Het logo bestaat nu wel, dus het is goedkoper geworden om te proberen |
-| **M9** | **De vindbaarheid van "Ververs voorwaarden"** in het reisblok (oude B3) | Niet opnieuw gemeld in ronde 2 of 3. Niet gemeten of het nog speelt — dus ook niet afgevinkt |
-| **M10** | **Niets van deze ronde staat op lavega.dev** | Wacht op zijn go |
+| #       | Wat                                                                                                                                     | Waarom het open staat                                                                                                                                                                                                                                                               |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M1**  | **Echte kaartafbeeldingen** (R1-17). De logo's zijn gebundeld en het kaartvlak heeft de huisstijlkleur; de kaart zelf is nog geen kaart | Merkenrecht. Een banklogo mag doorgaans gebruikt worden om dát product te identificeren, mits met disclaimer (`apps/web/src/assets/TRADEMARKS.md`); een kaartafbeelding is een ontwerp. Ophalen tijdens de sweep is de goedgekeurde route, de vraag is of het mág — niet of het kan |
+| **M2**  | **De interactieve wereldkaart in Valuta** (R1-16)                                                                                       | Onderweg in deze ronde: `WorldMap.tsx`, `world-map.generated.ts` en `scripts/bundle-world-map.ts` staan in de werkboom en zijn nog niet gecommit. Gebundelde geodata mag, tiles ophalen niet — dat zou verraden naar welke landen hij kijkt                                         |
+| **M3**  | **Gemiddelde inkomsten en gemiddelde uitgaven** per periode (R1-13, laatste deel)                                                       | Niet gebouwd. Het weekdaggemiddelde bestaat, dit niet                                                                                                                                                                                                                               |
+| **M4**  | **Periodeschakelaar op Abonnementen** (R1-14)                                                                                           | Niet gebouwd. In `Optimalisatie.tsx` staat overal "per maand" als vaste eenheid                                                                                                                                                                                                     |
+| **M5**  | **Een beter kostenoverzicht**, _"like an earlier version we worked with"_, waar categorieën als transport vanzelf goed stonden (R1-15)  | Onduidelijk welke eerdere versie hij bedoelt. Dat moet hij aanwijzen; ernaar raden levert een tweede overzicht op in plaats van een beter                                                                                                                                           |
+| **M6**  | **De forecast zelf** (oude B2)                                                                                                          | Het cashflowblok vindt hij goed, de voorspelling erachter is niet af. Nooit herzien sinds ronde 1                                                                                                                                                                                   |
+| **M7**  | **De Punten-UI mooier** (oude B5)                                                                                                       | Cosmetisch, en de inhoud van die tab verandert nog (§1.2, §5.1)                                                                                                                                                                                                                     |
+| **M8**  | **Rekeningen groeperen per bank**, met het logo en de kaarten achter een klik (oude B4)                                                 | Zijn eigen woorden: _"maybe just test this out, I'm not sure yet."_ Het logo bestaat nu wel, dus het is goedkoper geworden om te proberen                                                                                                                                           |
+| **M9**  | **De vindbaarheid van "Ververs voorwaarden"** in het reisblok (oude B3)                                                                 | Niet opnieuw gemeld in ronde 2 of 3. Niet gemeten of het nog speelt — dus ook niet afgevinkt                                                                                                                                                                                        |
+| **M10** | **Niets van deze ronde staat op lavega.dev**                                                                                            | Wacht op zijn go                                                                                                                                                                                                                                                                    |
 
 ---
 
@@ -251,8 +251,8 @@ Twee losse dingen, en het tweede is groter dan het eerste.
 `/data` als volume voor de prijs-cache en de versleutelde brokerkluis. `railway.json` bouwt vandaag
 alleen de gewone `Dockerfile`. Wat er moet gebeuren: een tweede service die op
 `Dockerfile.investing` bouwt, en daarna `VITE_INVESTING_URL` op de web-build zetten. Tot dat er
-staat, verbergt `investing.ts` de link — bewust, want *"a link that refuses to connect is worse than
-no link"* — en ziet hij de app dus niet in de navigatie.
+staat, verbergt `investing.ts` de link — bewust, want _"a link that refuses to connect is worse than
+no link"_ — en ziet hij de app dus niet in de navigatie.
 
 **b) Eén account over beide apps.** Dit is niet af te vinken met een omgevingsvariabele. LaVega
 bewaart alles in een versleutelde kluis in de browser; de investing-app heeft een eigen kluis op de
@@ -264,7 +264,7 @@ iemand code voor schrijft.
 
 ### 4.2 Enable Banking en FinAPI — de aanvraag
 
-R1-18: mailen of we een paar maanden als LSP/TPP mogen optreden en wat dat kost — *"hopefully free"*.
+R1-18: mailen of we een paar maanden als LSP/TPP mogen optreden en wat dat kost — _"hopefully free"_.
 De prijs die het oplevert: realtime toegang tot de meeste rekeningen **inclusief Amex**, wat geen
 enkele CSV-import geeft.
 
@@ -332,16 +332,16 @@ plain curl en bevat de hele spaartabel. Dat deel is dus niet meer onbereikbaar.
 Wat wél dicht is, en waarschijnlijk dicht blijft:
 
 - **Wat een punt aan korting oplevert in de ING Winkel.** `www.ing.nl/punten/*` verbreekt de
-  HTTP/2-stream (ook op `--http1.1`), `r.jina.ai` meldt *"This page contains shadow DOM that are
-  currently hidden"* en levert alleen de titel, en de Wayback CDX heeft van dat pad uitsluitend
+  HTTP/2-stream (ook op `--http1.1`), `r.jina.ai` meldt _"This page contains shadow DOM that are
+  currently hidden"_ en levert alleen de titel, en de Wayback CDX heeft van dat pad uitsluitend
   JS-bundles. De Winkel zit achter Mijn ING.
-- **Een koers per bestede euro bestaat niet.** ING beloont drempels: *"Meer dan € 100 uitgeven met je
-  ING Creditcard Extra of Max → 250 punten per maand"*, bij € 100 én bij € 4.000. Wie daar 2,5 punt
+- **Een koers per bestede euro bestaat niet.** ING beloont drempels: _"Meer dan € 100 uitgeven met je
+  ING Creditcard Extra of Max → 250 punten per maand"_, bij € 100 én bij € 4.000. Wie daar 2,5 punt
   per euro van maakt, verzint een getal dat een factor 40 mis kan zitten. Dit veld blijft leeg — niet
   omdat we het niet konden vinden, maar omdat het niet bestaat.
 
-Wat ING wél uitspreekt is een **bekende nul**, en die is als zodanig genoteerd: *"ING Punten hebben
-geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld"*
+Wat ING wél uitspreekt is een **bekende nul**, en die is als zodanig genoteerd: _"ING Punten hebben
+geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld"_
 (`Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf`).
 
 ### 5.2 De inwisselwaarde van RevPoints
@@ -351,9 +351,8 @@ de RevPoints-voorwaarden wel binnen — dezelfde publieke pagina, niets omzeild.
 daarmee gevonden**: € 10 / € 10 / € 4 / € 2 per punt voor Standard / Plus / Premium / Metal, oftewel
 0,1 / 0,1 / 0,25 / 0,5 punt per euro.
 
-De inwisselwaarde blijft onbereikbaar omdat Revolut zegt dat hij niet bestaat: *"RevPoints hebben
-geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."* Daarom `null` en geen
-0. Het enige euro-per-punt dat Revolut noemt — maximaal € 0,02 bij het terugvorderen van een negatief
+De inwisselwaarde blijft onbereikbaar omdat Revolut zegt dat hij niet bestaat: _"RevPoints hebben
+geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode."_ Daarom `null` en geen 0. Het enige euro-per-punt dat Revolut noemt — maximaal € 0,02 bij het terugvorderen van een negatief
 saldo — is een plafond op een vordering en staat apart, zodat niemand het per ongeluk als koers
 leest.
 
@@ -407,8 +406,8 @@ er ligt, en `host_permissions` blijft leeg zodat Chrome het pad afdwingt. Wat no
 de echte pagina — dat kan alleen hij.
 
 **V2 — de zeven `enumerated-absence`-regels staan op nul, maar op een ANDERE grond dan gevraagd.**
-Zijn woorden: *"ik weet dat er voor die banken geen puntenschema's zijn en verwacht niet dat die
-binnenkort zullen komen."* Dat is geen instemming met de bewijssoort maar iets sterkers: een
+Zijn woorden: _"ik weet dat er voor die banken geen puntenschema's zijn en verwacht niet dat die
+binnenkort zullen komen."_ Dat is geen instemming met de bewijssoort maar iets sterkers: een
 uitspraak van de eigenaar, en in deze app verslaat een gebruikersfeit elke agent. De zeven dragen
 daarom `sourceUrl: user:eigenaar-2026-08-24` en zeggen in hun voorwaarden dat de nul op zijn gezag
 rust en niet op een zin van de aanbieder. `enumerated-absence` als losstaande bewijssoort is dus nog
@@ -417,9 +416,9 @@ steeds NIET aanvaard — er is alleen geen zaak meer die erop wacht.
 Het waren er zeven en niet zes; deze backlog telde er een te weinig. Het gaat om vier ICS-zakenkaarten,
 Knab, Triodos en Trade Republic.
 
-**De vier verdachte datums (§2.3): later.** Zijn woorden: *"datum kunnen we later testen."*
+**De vier verdachte datums (§2.3): later.** Zijn woorden: _"datum kunnen we later testen."_
 
-**De euro-waarde van een punt: niet belangrijk.** *"Eurowaarde is niet per se belangrijk."* Dat maakt
+**De euro-waarde van een punt: niet belangrijk.** _"Eurowaarde is niet per se belangrijk."_ Dat maakt
 §5.1 en §5.2 minder zwaar: een saldo in punten is een feit, en de omrekening was altijd de zwakste
 schakel. Het scherm toont geen euro-waarde meer.
 
@@ -433,22 +432,21 @@ die eindtest vond op 24 augustus meteen een ernstiger probleem — zie de bijgew
 **V4 — geen boekhouder-export; Richting A afmaken als het makkelijk is; Richting B afmaken.**
 Richting A bleek al gebouwd (niets aan te sluiten). Richting B is gebouwd in de vorm die overblijft
 zonder loonadministratie — de gebruikelijkloonmeter (signaal 1) is expliciet niet gebouwd op zijn
-eigen woorden *"het is niet voor DGA's met loon, het is gewoon inkomen al belast met btw"*, en de
-box-2-kalender (signaal 2) is ook niet gebouwd, want de spec noemt hem zelf al *"the closest thing to
-advice in the entire proposal"*. Details en de twee openstaande gebreken (dubbele rekeningen
+eigen woorden _"het is niet voor DGA's met loon, het is gewoon inkomen al belast met btw"_, en de
+box-2-kalender (signaal 2) is ook niet gebouwd, want de spec noemt hem zelf al _"the closest thing to
+advice in the entire proposal"_. Details en de twee openstaande gebreken (dubbele rekeningen
 verdubbelen een oversteek; de woordwacht mist verbogen vormen) staan in §0b. **Nog niet gepusht.**
 
 ### Nog open
 
-
-| # | De vraag | Waarom niemand anders hem kan beantwoorden |
-|---|---|---|
+| #      | De vraag                                                                                                                                                                                                                  | Waarom niemand anders hem kan beantwoorden                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **V2** | **Is `enumerated-absence` sterk genoeg bewijs?** Zes regels in `staging-points.json` leunen erop: een complete eigen productopsomming waarin punten ontbreken, terwijl de aanbieder nergens zegt "wij hebben geen punten" | Consistent met hoe ICS, ABN en Rabobank al op 0.0 staan. Accepteert hij het niet, dan blijven die zes leeg — één regel werk, maar het is zijn lat |
-| **V5** | **Kleuren en fontgroottes** | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop |
-| **V6** | **Wat de chatwidget wordt** | Uit de chrome gehaald, zijn `[later]` |
-| **V7** | **Meldingen in het profiel** | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie |
-| **V8** | **Disclaimers en voorwaarden** | Bij lancering, niet in het werkscherm |
-| **V9** | **Enable Banking met meerdere rekeningen** | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst |
+| **V5** | **Kleuren en fontgroottes**                                                                                                                                                                                               | Zijn eigen instructie: pas als de inhoud staat. Nu duur, straks goedkoop                                                                          |
+| **V6** | **Wat de chatwidget wordt**                                                                                                                                                                                               | Uit de chrome gehaald, zijn `[later]`                                                                                                             |
+| **V7** | **Meldingen in het profiel**                                                                                                                                                                                              | Er is nog geen meldingsmechanisme in de app, dus er valt nog niets in te stellen. Eerst de functie                                                |
+| **V8** | **Disclaimers en voorwaarden**                                                                                                                                                                                            | Bij lancering, niet in het werkscherm                                                                                                             |
+| **V9** | **Enable Banking met meerdere rekeningen**                                                                                                                                                                                | Zijn instructie: na de MVP. Zie ook §1.1 — dat gat komt eerst                                                                                     |
 
 ### V10 — een zachte, merknaam-gebaseerde melding op basis van de ING-lezing (GEBOUWD, 25 augustus)
 
@@ -571,7 +569,7 @@ Beperkingen van OAuth, opgeschreven zodat ze niet opnieuw ontdekt worden: restri
 jaarlijkse betaalde beoordeling; achtergrondsync vraagt een **server-side refresh token** met
 staande toegang tot de hele mailbox (de browser is dicht als de job draait — dat beëindigt
 local-first voor deze functie en botst met `CONTEXT.md`); versleutelen naar de publieke sleutel van
-de gebruiker helpt alleen *at rest*, want tijdens extractie staat de platte tekst in servergeheugen;
+de gebruiker helpt alleen _at rest_, want tijdens extractie staat de platte tekst in servergeheugen;
 n8n wordt één workflow over veel gebruikers, met een HTTP Request-node per token, want de Gmail-node
 bindt aan één credential. En **Outlook is mogelijk de goedkopere eerste OAuth** — publisher
 verification, voor zover bekend zonder betaalde jaarlijkse beoordeling; te verifiëren voordat er iets
@@ -587,7 +585,7 @@ JSON exporteren en importeren, een token maken, de Header Auth-credential aanmak
 overtypen en op "Ophalen" drukken.
 
 **Wat in geen enkele variant te automatiseren is:** de Gmail-credential koppelen. Google's consent is
-met opzet interactief, en n8n's publieke API kan bewust geen credentials *opsommen*, dus LaVega kan
+met opzet interactief, en n8n's publieke API kan bewust geen credentials _opsommen_, dus LaVega kan
 de credential die hij al maakte niet vinden en binden. Dat blijft één handmatige stap en de UI hoort
 dat gewoon te zeggen in plaats van te lijken te falen.
 

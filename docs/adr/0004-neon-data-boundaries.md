@@ -28,14 +28,14 @@ Client-supplied user IDs must not set database context. Encryption must happen b
 
 ## Table ownership
 
-| Table | Cardinality | Purpose |
-| --- | --- | --- |
-| `personal.vaults` | One per user | Encrypted personal finance vault. |
-| `investing.broker_vaults` | One per user and broker | Encrypted broker credentials and latest encrypted snapshot. |
-| `investing.price_bars` | One per user, symbol, date | Queryable daily market data. |
-| `investing.preferences` | One per user | Up to three benchmark symbols and market-data consent JSON. |
-| `investing.sync_state` | One per user and broker/sync key | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`. |
-| `investing.agent_runs` | One latest row per user | Latest agent run status and result JSON. |
+| Table                     | Cardinality                      | Purpose                                                                                                  |
+| ------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `personal.vaults`         | One per user                     | Encrypted personal finance vault.                                                                        |
+| `investing.broker_vaults` | One per user and broker          | Encrypted broker credentials and latest encrypted snapshot.                                              |
+| `investing.price_bars`    | One per user, symbol, date       | Queryable daily market data.                                                                             |
+| `investing.preferences`   | One per user                     | Up to three benchmark symbols and market-data consent JSON.                                              |
+| `investing.sync_state`    | One per user and broker/sync key | Broker sync status, resumable state JSON, and price-sync progress/lease state under `broker = 'prices'`. |
+| `investing.agent_runs`    | One latest row per user          | Latest agent run status and result JSON.                                                                 |
 
 ## Consequences
 

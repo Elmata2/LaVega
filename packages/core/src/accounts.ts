@@ -8,7 +8,9 @@ import { norm, txBase, txId } from "./hash.js";
  *  which means that suffix silently turns one real card into two accounts. It
  *  is never part of a real account identity, so it goes before any matching. */
 export function stripDownloadSuffix(key: string): string {
-  return String(key ?? "").replace(/\s*\(\d+\)\s*$/, "").trim();
+  return String(key ?? "")
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .trim();
 }
 
 /** The domestic account number used to spot the SAME real account imported two
@@ -33,13 +35,20 @@ export type DuplicateGroup = { canonicalId: string; accounts: Account[]; survivo
 /** Higher = better survivor: a full IBAN dominates, then a known balance, then a
  *  set type, then a real name (not just the key echoed back). */
 function survivorScore(a: Account): number {
-  return (findIban(a.iban) ? 8 : 0) + (a.balance != null ? 4 : 0) + (a.type ? 2 : 0) + (a.name && a.name !== a.key ? 1 : 0);
+  return (
+    (findIban(a.iban) ? 8 : 0) +
+    (a.balance != null ? 4 : 0) +
+    (a.type ? 2 : 0) +
+    (a.name && a.name !== a.key ? 1 : 0)
+  );
 }
 
 /** Auto-pick the account to keep when merging a duplicate group. Deterministic:
  *  best score wins, ties broken by key string order. */
 export function pickSurvivor(accs: Account[]): Account {
-  return [...accs].sort((a, b) => survivorScore(b) - survivorScore(a) || a.key.localeCompare(b.key))[0];
+  return [...accs].sort(
+    (a, b) => survivorScore(b) - survivorScore(a) || a.key.localeCompare(b.key),
+  )[0];
 }
 
 function addTo(map: Map<string, Account[]>, key: string, a: Account): void {
@@ -86,7 +95,9 @@ export function findDuplicateAccounts(accounts: Account[]): DuplicateGroup[] {
       if (name) addTo(byName, name, a);
     }
   }
-  return [...toGroups(byNumber), ...toGroups(byName)].sort((a, b) => a.canonicalId.localeCompare(b.canonicalId));
+  return [...toGroups(byNumber), ...toGroups(byName)].sort((a, b) =>
+    a.canonicalId.localeCompare(b.canonicalId),
+  );
 }
 
 /** Merge `duplicateKey` into `survivorKey`: reassign the duplicate's txs to the
@@ -109,12 +120,15 @@ export function mergeAccounts(
 
   const survivorTxs = txs.filter((t) => t.accountKey === survivorKey);
   const dupTxs = txs.filter((t) => t.accountKey === duplicateKey);
-  const untouched = txs.filter((t) => t.accountKey !== survivorKey && t.accountKey !== duplicateKey);
+  const untouched = txs.filter(
+    (t) => t.accountKey !== survivorKey && t.accountKey !== duplicateKey,
+  );
 
   // How many the survivor already holds per identity base. Its base already uses
   // survivorKey, and (from assignTxIds) its occurrences are exactly 1..count.
   const survivorCount = new Map<string, number>();
-  for (const t of survivorTxs) survivorCount.set(txBase(t), (survivorCount.get(txBase(t)) ?? 0) + 1);
+  for (const t of survivorTxs)
+    survivorCount.set(txBase(t), (survivorCount.get(txBase(t)) ?? 0) + 1);
 
   // Re-key the duplicate's txs to the survivor and group by base.
   const dupByBase = new Map<string, Tx[]>();

@@ -9,6 +9,7 @@
 **Tech stack:** TypeScript, React (Vite), Vitest (+ jsdom + fake-indexeddb for the headless wiring test — the repo's existing pattern; there is no component-render library and we don't add one).
 
 ## Global Constraints
+
 - **`packages/core` stays I/O-free** — the new helpers are pure functions over `Account[]`/`Tx[]`. ESM (`.js` import specifiers).
 - **Don't break existing behavior** — the Import section (incl. the `.sta` accept fix) and the Overzicht table must keep working exactly as today; `overview.test.ts` stays green.
 - **Reassignment goes through storage** — changing an account's `entity` persists via `storage.putAccounts(...)` and re-consolidates; `consolidate` already groups by `account.entity` (rebuilt from accounts each call), so its transactions regroup automatically. Do NOT change `consolidate`, `ingest`, `tx.id`, or any parser.
@@ -20,11 +21,13 @@
 ### Task 1: Pure view helpers in `@lavega/core`
 
 **Files:**
+
 - Create: `packages/core/src/views.ts`
 - Create: `packages/core/src/views.test.ts`
 - Modify: `packages/core/src/index.ts` (add one export line)
 
 **Interfaces:**
+
 - Consumes: `Account`, `Tx` from `./model.js`; `norm` from `./hash.js`.
 - Produces (later tasks rely on these exact signatures):
   - `type EnrichedTx = Tx & { entity: string; bank: string; accountName: string }`
@@ -44,14 +47,70 @@ import type { Account, Tx } from "./model.js";
 import { enrichTxs, filterTxs, accountSummaries, reassignEntity } from "./views.js";
 
 const accounts: Account[] = [
-  { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING lopend", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "NL91ABNA0417164300", iban: "NL91ABNA0417164300", name: "ABN zakelijk", bank: "ABN AMRO", entity: "BV2", currency: "EUR", balance: 3424.5 },
+  {
+    key: "NL01INGB0001",
+    iban: "NL01INGB0001",
+    name: "ING lopend",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "NL91ABNA0417164300",
+    iban: "NL91ABNA0417164300",
+    name: "ABN zakelijk",
+    bank: "ABN AMRO",
+    entity: "BV2",
+    currency: "EUR",
+    balance: 3424.5,
+  },
 ];
 const txs: Tx[] = [
-  { id: "t1", accountKey: "NL01INGB0001", date: "2026-01-03", amount: 2500, currency: "EUR", counterparty: "Salaris", description: "Loon januari", category: "", manual: false },
-  { id: "t2", accountKey: "NL01INGB0001", date: "2026-01-02", amount: -12.34, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
-  { id: "t3", accountKey: "NL91ABNA0417164300", date: "2026-01-05", amount: -45, currency: "EUR", counterparty: "Coolblue", description: "Laptop", category: "", manual: false },
-  { id: "t4", accountKey: "NL99UNKNOWN000", date: "2026-01-06", amount: -9.99, currency: "EUR", counterparty: "Onbekend", description: "x", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "NL01INGB0001",
+    date: "2026-01-03",
+    amount: 2500,
+    currency: "EUR",
+    counterparty: "Salaris",
+    description: "Loon januari",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "NL01INGB0001",
+    date: "2026-01-02",
+    amount: -12.34,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t3",
+    accountKey: "NL91ABNA0417164300",
+    date: "2026-01-05",
+    amount: -45,
+    currency: "EUR",
+    counterparty: "Coolblue",
+    description: "Laptop",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t4",
+    accountKey: "NL99UNKNOWN000",
+    date: "2026-01-06",
+    amount: -9.99,
+    currency: "EUR",
+    counterparty: "Onbekend",
+    description: "x",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("enrichTxs joins each tx to its account's entity/bank/name; missing account -> onbekend", () => {
@@ -60,7 +119,12 @@ test("enrichTxs joins each tx to its account's entity/bank/name; missing account
   expect(e[0]).toMatchObject({ id: "t1", entity: "BV1", bank: "ING", accountName: "ING lopend" });
   expect(e[2]).toMatchObject({ id: "t3", entity: "BV2", bank: "ABN AMRO" });
   // tx whose accountKey has no matching account
-  expect(e[3]).toMatchObject({ id: "t4", entity: "onbekend", bank: "", accountName: "NL99UNKNOWN000" });
+  expect(e[3]).toMatchObject({
+    id: "t4",
+    entity: "onbekend",
+    bank: "",
+    accountName: "NL99UNKNOWN000",
+  });
 });
 
 test("filterTxs filters by entity, account, and case-insensitive search, combinable", () => {
@@ -79,7 +143,15 @@ test("filterTxs filters by entity, account, and case-insensitive search, combina
 test("accountSummaries counts txs per account, including accounts with zero txs", () => {
   const accountsPlusEmpty: Account[] = [
     ...accounts,
-    { key: "NL22KNAB0000", iban: "NL22KNAB0000", name: "Knab", bank: "Knab", entity: "BV1", currency: "EUR", balance: null },
+    {
+      key: "NL22KNAB0000",
+      iban: "NL22KNAB0000",
+      name: "Knab",
+      bank: "Knab",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
   ];
   const s = accountSummaries(accountsPlusEmpty, txs);
   expect(s.find((x) => x.account.key === "NL01INGB0001")!.txCount).toBe(2);
@@ -120,7 +192,12 @@ export function enrichTxs(txs: Tx[], accounts: Account[]): EnrichedTx[] {
   const byKey = new Map(accounts.map((a) => [a.key, a]));
   return txs.map((t) => {
     const a = byKey.get(t.accountKey);
-    return { ...t, entity: a?.entity ?? "onbekend", bank: a?.bank ?? "", accountName: a?.name ?? t.accountKey };
+    return {
+      ...t,
+      entity: a?.entity ?? "onbekend",
+      bank: a?.bank ?? "",
+      accountName: a?.name ?? t.accountKey,
+    };
   });
 }
 
@@ -158,6 +235,7 @@ export function reassignEntity(accounts: Account[], key: string, entity: string)
 - [ ] **Step 4: Add the export**
 
 In `packages/core/src/index.ts`, add:
+
 ```ts
 export * from "./views.js";
 ```
@@ -178,14 +256,17 @@ git commit -m "feat(core): pure view helpers (enrichTxs, filterTxs, accountSumma
 ### Task 2: Navigation shell + Transacties view
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx` (add view state + nav + the Transacties view; keep Import + Overzicht intact)
 - Create: `apps/web/src/transactions.test.ts` (headless data-pipeline test)
 
 **Interfaces:**
+
 - Consumes: `enrichTxs`, `filterTxs`, `EnrichedTx` from `@lavega/core` (Task 1); existing `accounts`/`txs` state and `formatEuro` in App.tsx.
 - Produces: a `view` state (`"overview" | "transactions" | "accounts"`) and nav that Task 3 extends with the Rekeningen view.
 
 **Design notes for the implementer:**
+
 - Add `const [view, setView] = useState<"overview" | "transactions" | "accounts">("overview")`.
 - Render a nav (3 `<button>`s) above the sections; the active view's button is disabled or marked `aria-current="page"`.
 - The Import `<section>` stays visible in all views (it's the primary action). Only the per-view content (Overzicht table / Transacties table / Rekeningen table) switches on `view`.
@@ -205,17 +286,65 @@ import type { Account, Tx } from "@lavega/core";
 import { enrichTxs, filterTxs } from "@lavega/core";
 
 const accounts: Account[] = [
-  { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "A2", iban: "A2", name: "ABN", bank: "ABN AMRO", entity: "BV2", currency: "EUR", balance: 100 },
+  {
+    key: "A1",
+    iban: "A1",
+    name: "ING",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "A2",
+    iban: "A2",
+    name: "ABN",
+    bank: "ABN AMRO",
+    entity: "BV2",
+    currency: "EUR",
+    balance: 100,
+  },
 ];
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-01-02", amount: -10, currency: "EUR", counterparty: "Albert Heijn", description: "Eten", category: "", manual: false },
-  { id: "t2", accountKey: "A2", date: "2026-01-05", amount: 200, currency: "EUR", counterparty: "Klant", description: "Factuur", category: "", manual: false },
-  { id: "t3", accountKey: "A1", date: "2026-01-03", amount: -5, currency: "EUR", counterparty: "Coffee", description: "Koffie", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-01-02",
+    amount: -10,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Eten",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A2",
+    date: "2026-01-05",
+    amount: 200,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "Factuur",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t3",
+    accountKey: "A1",
+    date: "2026-01-03",
+    amount: -5,
+    currency: "EUR",
+    counterparty: "Coffee",
+    description: "Koffie",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("Transacties pipeline: enrich + filter(entity=BV1) + sort desc by date", () => {
-  const rows = filterTxs(enrichTxs(txs, accounts), { entity: "BV1" }).slice().sort((a, b) => b.date.localeCompare(a.date));
+  const rows = filterTxs(enrichTxs(txs, accounts), { entity: "BV1" })
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date));
   expect(rows.map((r) => r.id)).toEqual(["t3", "t1"]); // both BV1, newest first
   expect(rows[0]).toMatchObject({ bank: "ING", entity: "BV1" });
 });
@@ -245,13 +374,16 @@ git commit -m "feat(web): view navigation + Transacties (filterable transaction 
 ### Task 3: Rekeningen view + entity reassignment
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx` (fill the `view === "accounts"` block; add the reassignment handler)
 - Create: `apps/web/src/reassign.test.ts` (headless reassignment → reconsolidate flow)
 
 **Interfaces:**
+
 - Consumes: `accountSummaries`, `reassignEntity` from `@lavega/core` (Task 1); the existing `storage` (`createIndexedDbStorage`), `accounts`/`setAccounts` state, `consolidate`, `formatEuro`.
 
 **Design notes for the implementer:**
+
 - Reassignment handler in App.tsx:
   ```ts
   async function handleReassign(key: string, newEntity: string) {
@@ -281,11 +413,39 @@ import { createIndexedDbStorage } from "@lavega/adapters";
 test("Reassign flow: change an account's entity -> persist -> its txs regroup on reconsolidate", async () => {
   const storage = createIndexedDbStorage();
   const accounts: Account[] = [
-    { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
   ];
   const txs: Tx[] = [
-    { id: "t1", accountKey: "A1", date: "2026-01-02", amount: -10, currency: "EUR", counterparty: "AH", description: "Eten", category: "", manual: false },
-    { id: "t2", accountKey: "A1", date: "2026-01-03", amount: 50, currency: "EUR", counterparty: "Klant", description: "Factuur", category: "", manual: false },
+    {
+      id: "t1",
+      accountKey: "A1",
+      date: "2026-01-02",
+      amount: -10,
+      currency: "EUR",
+      counterparty: "AH",
+      description: "Eten",
+      category: "",
+      manual: false,
+    },
+    {
+      id: "t2",
+      accountKey: "A1",
+      date: "2026-01-03",
+      amount: 50,
+      currency: "EUR",
+      counterparty: "Klant",
+      description: "Factuur",
+      category: "",
+      manual: false,
+    },
   ];
   await storage.putAccounts(accounts);
   await storage.putTxs(txs);
@@ -326,8 +486,10 @@ git commit -m "feat(web): Rekeningen view with inline entity reassignment"
 ```
 
 ## Self-Review checklist
+
 - `core` stays I/O-free; the 4 helpers are pure + unit-tested. Overzicht + Import unchanged (`overview.test.ts` green, `.sta` accept preserved). Reassignment persists via `putAccounts` and regroups through the unchanged `consolidate`. No new deps, no router, no `tx.id`/parser changes. `pnpm --filter @lavega/web build` succeeds.
 
 ## Notes
+
 - No component-render tests (the repo has no render library and we don't add one) — each view's data pipeline is locked by a headless test; visuals are verified against the running dev server.
 - Deferred (not this plan): PDF import (decision: defer — CSV/MT940 cover all banks); date-range filter; pagination/virtualization; per-transaction editing/categor, a "onbekend"-entity cleanup flow.

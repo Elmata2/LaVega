@@ -2,10 +2,23 @@
      dat het niet is. De lezer moet het kapotte blok overslaan zonder de hele
      pagina op te geven — dat komt in het wild voor bij servers die JSON-LD
      samenstellen uit templatefragmenten. -->
-<!doctype html><html lang="nl"><head><title>Artikel</title>
-<script type="application/ld+json">{"@type":"Product","offers":{"@type":"Offer","price":</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Product","name":"E",
- "offers":{"@type":"Offer","price":75,"priceCurrency":"EUR"}}
-</script>
-</head><body><h1>Artikel</h1></body></html>
+<!doctype html>
+<html lang="nl">
+  <head>
+    <title>Artikel</title>
+    <script type="application/ld+json">
+      {"@type":"Product","offers":{"@type":"Offer","price":
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "E",
+        "offers": { "@type": "Offer", "price": 75, "priceCurrency": "EUR" }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Artikel</h1>
+  </body>
+</html>

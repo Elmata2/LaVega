@@ -31,7 +31,8 @@ export const BANK_LOGOS: BankLogo[] = [
     slug: "regiobank",
     label: "RegioBank",
     aliases: ["regiobank"],
-    sourceUrl: "https://www.regiobank.nl/static/design/966E27C7-8DDC-4D5A-B9BD-3849A0628C97-fsm/rel/shortcut_icon/favicon-32x32.png?random=D8A2",
+    sourceUrl:
+      "https://www.regiobank.nl/static/design/966E27C7-8DDC-4D5A-B9BD-3849A0628C97-fsm/rel/shortcut_icon/favicon-32x32.png?random=D8A2",
     fetchedAt: "2026-08-20",
     bytes: 2027,
     dataUri:
@@ -100,8 +101,9 @@ export const BANK_LOGOS: BankLogo[] = [
   {
     slug: "nn",
     label: "NN",
-    aliases: ["nn","nationalenederlanden"],
-    sourceUrl: "https://www.nn.nl/nn-static/static/design/67EE1C60-E1D6-4989-903D-8B96409C570D-D620-fsm/img/favicon-32x32.png",
+    aliases: ["nn", "nationalenederlanden"],
+    sourceUrl:
+      "https://www.nn.nl/nn-static/static/design/67EE1C60-E1D6-4989-903D-8B96409C570D-D620-fsm/img/favicon-32x32.png",
     fetchedAt: "2026-08-20",
     bytes: 1905,
     dataUri:
@@ -120,7 +122,7 @@ export const BANK_LOGOS: BankLogo[] = [
   {
     slug: "americanexpress",
     label: "American Express",
-    aliases: ["americanexpress","amex"],
+    aliases: ["americanexpress", "amex"],
     sourceUrl: "https://www.americanexpress.com/favicon.ico",
     fetchedAt: "2026-08-20",
     bytes: 1358,
@@ -160,7 +162,7 @@ export const BANK_LOGOS: BankLogo[] = [
   {
     slug: "ics",
     label: "International Card Services",
-    aliases: ["ics","icscards","internationalcardservices"],
+    aliases: ["ics", "icscards", "internationalcardservices"],
     sourceUrl: "https://assets.icscards.nl/static/images/favicons/favicon.png",
     fetchedAt: "2026-08-20",
     bytes: 930,

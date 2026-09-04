@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
-    "@lavega/database": "workspace:*",
     "@hono/node-server": "^2.0.12",
     "@lavega/adapters": "workspace:*",
     "@lavega/core": "workspace:*",
+    "@lavega/database": "workspace:*",
     "@lavega/investing-server": "workspace:*",
     "@neondatabase/serverless": "^1.1.0",
     "better-auth": "^1.7.1",

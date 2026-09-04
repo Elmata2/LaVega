@@ -1,8 +1,23 @@
 import { useMemo, useState } from "react";
-import type { Account, OwnAccounts, Rule, Tx, CategoryDecision, UnknownReason, AiCategorizeItem } from "@lavega/core";
+import type {
+  Account,
+  OwnAccounts,
+  Rule,
+  Tx,
+  CategoryDecision,
+  UnknownReason,
+  AiCategorizeItem,
+} from "@lavega/core";
 import {
-  enrichTxs, filterTxs, categorize, uncategorizedByMonth, CATEGORY_OPTIONS,
-  unknownBreakdown, unknownReason, foreignCode, aiCategorizeItems,
+  enrichTxs,
+  filterTxs,
+  categorize,
+  uncategorizedByMonth,
+  CATEGORY_OPTIONS,
+  unknownBreakdown,
+  unknownReason,
+  foreignCode,
+  aiCategorizeItems,
 } from "@lavega/core";
 import { formatEuro } from "../format";
 import { categorizeTxs } from "../api";
@@ -244,15 +259,20 @@ export default function Transacties({
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <div
             style={{
-              display: "flex", alignItems: "baseline", justifyContent: "space-between",
-              gap: "var(--sp-3)", flexWrap: "wrap",
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: "var(--sp-3)",
+              flexWrap: "wrap",
             }}
           >
             <div>
               <div className="cell-sub">Onbekend</div>
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                 {unknown.count} {unknown.count === 1 ? "transactie" : "transacties"} ·{" "}
-                <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>{formatEuro(unknown.amount)}</span>
+                <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>
+                  {formatEuro(unknown.amount)}
+                </span>
               </strong>
             </div>
             <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
@@ -273,7 +293,9 @@ export default function Transacties({
                   {/* The honest count: how many go out THIS run, out of how many
                       there are. The batch is capped at 200 per request. */}
                   Laat de AI ze lezen
-                  {batch.items.length < unknown.count ? ` (${batch.items.length} van ${unknown.count})` : ` (${batch.items.length})`}
+                  {batch.items.length < unknown.count
+                    ? ` (${batch.items.length} van ${unknown.count})`
+                    : ` (${batch.items.length})`}
                 </button>
               )}
             </div>
@@ -288,7 +310,9 @@ export default function Transacties({
                   <span style={{ fontVariantNumeric: "tabular-nums" }}>
                     {b.count}× · {formatEuro(b.amount)}
                   </span>
-                  {b.countries.length > 0 && <span className="cell-sub"> · {b.countries.join(", ")}</span>}
+                  {b.countries.length > 0 && (
+                    <span className="cell-sub"> · {b.countries.join(", ")}</span>
+                  )}
                   <div className="cell-sub">{t.what}</div>
                 </li>
               );
@@ -307,8 +331,8 @@ export default function Transacties({
           )}
           {configured && batch.items.length === 0 && (
             <p className="cell-sub">
-              Geen van deze transacties heeft tekst die de AI kan lezen — hier helpt alleen een eigen
-              regel of een categorie die je zelf geeft.
+              Geen van deze transacties heeft tekst die de AI kan lezen — hier helpt alleen een
+              eigen regel of een categorie die je zelf geeft.
             </p>
           )}
         </div>
@@ -319,9 +343,9 @@ export default function Transacties({
           <p className="cell-sub">
             Alleen de <strong>tegenpartij + omschrijving</strong> en de richting (in/uit) van je
             onbekende transacties gaan via onze server naar Claude — nooit je bedragen, saldi,
-            rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen
-            en datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk
-            voorstel voordat er iets verandert.
+            rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen en
+            datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk voorstel
+            voordat er iets verandert.
           </p>
           <button type="button" className="btn btn-primary" onClick={enableAndRun}>
             Aanzetten en categoriseren
@@ -367,7 +391,9 @@ export default function Transacties({
                         aria-label={`Categorie voor ${p.tx.counterparty}`}
                         onChange={(e) => {
                           const v = e.target.value;
-                          setProposals((prev) => prev.map((q, j) => (j === i ? { ...q, category: v } : q)));
+                          setProposals((prev) =>
+                            prev.map((q, j) => (j === i ? { ...q, category: v } : q)),
+                          );
                         }}
                       >
                         <option value="">Sla over</option>
@@ -486,7 +512,9 @@ export default function Transacties({
                   <td data-label="Datum">{t.date}</td>
                   <td data-label="Tegenpartij">{t.counterparty}</td>
                   <td data-label="Omschrijving">{t.description}</td>
-                  <td data-label="Rekening">{t.bank} · {t.accountKey}</td>
+                  <td data-label="Rekening">
+                    {t.bank} · {t.accountKey}
+                  </td>
                   <td data-label="Bedrag">
                     <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
                       {formatEuro(t.amount)}

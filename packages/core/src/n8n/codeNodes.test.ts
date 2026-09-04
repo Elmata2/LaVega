@@ -68,12 +68,18 @@ test("de tweede ingang deelt het pad van Gmail en dupliceert het niet", () => {
   // aankwam. Dat is precies het ene wat niet mag.
   expect(hook.parameters.responseMode).toBe("lastNode");
 
-  expect(workflow.connections["E-mail binnen"].main[0][0].node).toBe("Normaliseer binnengekomen mail");
+  expect(workflow.connections["E-mail binnen"].main[0][0].node).toBe(
+    "Normaliseer binnengekomen mail",
+  );
   // Eén ding bewijst dat het pad gedeeld is: de nieuwe tak komt uit op dezelfde
   // If-node, en dus op dezelfde "Bouw Claude-verzoek" → "Lees de factuur" →
   // "Zet in de wachtrij" als Gmail.
-  expect(workflow.connections["Normaliseer binnengekomen mail"].main[0][0].node).toBe("Iets te lezen?");
-  const codeNodes = workflow.nodes.filter((n) => n.type === "n8n-nodes-base.code").map((n) => n.name);
+  expect(workflow.connections["Normaliseer binnengekomen mail"].main[0][0].node).toBe(
+    "Iets te lezen?",
+  );
+  const codeNodes = workflow.nodes
+    .filter((n) => n.type === "n8n-nodes-base.code")
+    .map((n) => n.name);
   expect(codeNodes.filter((n) => n === "Bouw Claude-verzoek")).toHaveLength(1);
   expect(workflow.nodes.filter((n) => n.name === "Lees de factuur")).toHaveLength(1);
 });

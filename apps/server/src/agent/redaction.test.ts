@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 import { sanitizeExtractInput, INVOICE_TOOL } from "./redaction.js";
 
 test("sanitizeExtractInput passes only the allowed doc fields — never anything else", () => {
-  const out = sanitizeExtractInput({ pdfBase64: "AAAA", filename: "f.pdf", transactions: [1, 2, 3], balance: 99999, apiKey: "leak" } as unknown);
+  const out = sanitizeExtractInput({
+    pdfBase64: "AAAA",
+    filename: "f.pdf",
+    transactions: [1, 2, 3],
+    balance: 99999,
+    apiKey: "leak",
+  } as unknown);
   expect(out).toEqual({ pdfBase64: "AAAA", filename: "f.pdf" });
   expect((out as Record<string, unknown>).transactions).toBeUndefined();
   expect((out as Record<string, unknown>).balance).toBeUndefined();
@@ -36,6 +42,15 @@ test("sanitizeExtractInput keeps a valid mediaType and drops prototype-smuggled 
 test("INVOICE_TOOL exposes the 7 invoice fields plus a self-reported confidence", () => {
   const props = Object.keys(INVOICE_TOOL.input_schema.properties);
   expect(new Set(props)).toEqual(
-    new Set(["counterparty", "amount", "currency", "issueDate", "dueDate", "direction", "vatAmount", "confidence"]),
+    new Set([
+      "counterparty",
+      "amount",
+      "currency",
+      "issueDate",
+      "dueDate",
+      "direction",
+      "vatAmount",
+      "confidence",
+    ]),
   );
 });

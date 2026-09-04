@@ -8,7 +8,11 @@ const ING = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af
 test("ING CSV: dates ISO, outflow negative, inflow positive", () => {
   const rows = parseIngCsv(ING, "NL01INGB0001");
   expect(rows).toHaveLength(2);
-  expect(rows[0]).toMatchObject({ date: "2026-01-02", amount: -12.34, counterparty: "Albert Heijn" });
+  expect(rows[0]).toMatchObject({
+    date: "2026-01-02",
+    amount: -12.34,
+    counterparty: "Albert Heijn",
+  });
   expect(rows[1].amount).toBe(2500);
 });
 
@@ -23,7 +27,11 @@ test("ING CSV: amounts with Dutch thousands separator parse correctly", () => {
   const rows = parseIngCsv(ING_THOUSANDS, "NL01INGB0001");
   expect(rows).toHaveLength(2);
   expect(rows[0]).toMatchObject({ date: "2026-01-04", amount: 2500, counterparty: "Werkgever BV" });
-  expect(rows[1]).toMatchObject({ date: "2026-01-05", amount: -1234.56, counterparty: "Belastingdienst" });
+  expect(rows[1]).toMatchObject({
+    date: "2026-01-05",
+    amount: -1234.56,
+    counterparty: "Belastingdienst",
+  });
 });
 
 test("ING CSV: blank lines are skipped", () => {

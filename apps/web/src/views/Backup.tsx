@@ -41,14 +41,21 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
         setUpdatedAt(result.updatedAt);
         setServerBlob(result.blob);
       })
-      .catch(() => { if (current) setState("signed-out"); });
-    return () => { current = false; };
+      .catch(() => {
+        if (current) setState("signed-out");
+      });
+    return () => {
+      current = false;
+    };
   }, []);
 
   async function upload(overwrite: boolean) {
     const blob = storage.export();
     if (!blob) return setError("Ontgrendel de kluis voordat je een back-up maakt.");
-    setBusy(true); setError(""); setMessage(""); setConflict(null);
+    setBusy(true);
+    setError("");
+    setMessage("");
+    setConflict(null);
     try {
       const result = await uploadServerBackup(blob, updatedAt, overwrite);
       if (result.status === "signed-out") return setState("signed-out");
@@ -70,41 +77,72 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
 
   if (state === "checking") return null;
   if (state === "signed-out") {
-    return <>
-      <h3>Back-up op de server</h3>
-      <p>Log in om je versleutelde kluis ook op de server te bewaren. Handig voor een tweede apparaat.</p>
-    </>;
+    return (
+      <>
+        <h3>Back-up op de server</h3>
+        <p>
+          Log in om je versleutelde kluis ook op de server te bewaren. Handig voor een tweede
+          apparaat.
+        </p>
+      </>
+    );
   }
 
-  return <>
-    <h3>Back-up op de server</h3>
-    <p>
-      {updatedAt ? `Laatste back-up: ${dutchDate(updatedAt)}.` : "Nog geen back-up op de server."}
-      {" "}De server bewaart alleen versleutelde bytes en kan je gegevens niet lezen.
-    </p>
-    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void upload(false)}>
-      {busy ? "Bezig…" : "Nu back-uppen"}
-    </button>
-    {conflict && <>
-      <p role="alert" className="text-warn">
-        Een ander apparaat heeft op {dutchDate(conflict)} een nieuwere back-up opgeslagen. Overschrijven verwijdert die.
+  return (
+    <>
+      <h3>Back-up op de server</h3>
+      <p>
+        {updatedAt ? `Laatste back-up: ${dutchDate(updatedAt)}.` : "Nog geen back-up op de server."}{" "}
+        De server bewaart alleen versleutelde bytes en kan je gegevens niet lezen.
       </p>
-      <button type="button" className="btn" disabled={busy} onClick={() => void upload(true)}>Toch overschrijven</button>
-    </>}
-    {message && <p>{message}</p>}
-    {error && <p role="alert" className="text-warn">{error}</p>}
-    {serverBlob && <p>
-      Herstellen van de server? Download &apos;m eerst en gebruik het formulier hieronder.{" "}
-      <button type="button" className="btn" onClick={() => {
-        const url = URL.createObjectURL(new Blob([serializeBackup(serverBlob)], { type: "application/json" }));
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = backupFilename((updatedAt ?? "").slice(0, 10));
-        a.click();
-        URL.revokeObjectURL(url);
-      }}>Haal back-up van server</button>
-    </p>}
-  </>;
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={busy}
+        onClick={() => void upload(false)}
+      >
+        {busy ? "Bezig…" : "Nu back-uppen"}
+      </button>
+      {conflict && (
+        <>
+          <p role="alert" className="text-warn">
+            Een ander apparaat heeft op {dutchDate(conflict)} een nieuwere back-up opgeslagen.
+            Overschrijven verwijdert die.
+          </p>
+          <button type="button" className="btn" disabled={busy} onClick={() => void upload(true)}>
+            Toch overschrijven
+          </button>
+        </>
+      )}
+      {message && <p>{message}</p>}
+      {error && (
+        <p role="alert" className="text-warn">
+          {error}
+        </p>
+      )}
+      {serverBlob && (
+        <p>
+          Herstellen van de server? Download &apos;m eerst en gebruik het formulier hieronder.{" "}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              const url = URL.createObjectURL(
+                new Blob([serializeBackup(serverBlob)], { type: "application/json" }),
+              );
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = backupFilename((updatedAt ?? "").slice(0, 10));
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Haal back-up van server
+          </button>
+        </p>
+      )}
+    </>
+  );
 }
 
 export default function Backup({ storage, asOf, onRestored }: BackupProps) {
@@ -118,7 +156,9 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
   function handleDownload() {
     const blob = storage.export();
     if (!blob) return; // locked/empty — nothing to download
-    const url = URL.createObjectURL(new Blob([serializeBackup(blob)], { type: "application/json" }));
+    const url = URL.createObjectURL(
+      new Blob([serializeBackup(blob)], { type: "application/json" }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = backupFilename(asOf);
@@ -158,8 +198,8 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
 
       <h3>Download</h3>
       <p>
-        Download een versleutelde back-up. Bewaar &apos;m veilig; je hebt je wachtwoord nodig om &apos;m te
-        herstellen.
+        Download een versleutelde back-up. Bewaar &apos;m veilig; je hebt je wachtwoord nodig om
+        &apos;m te herstellen.
       </p>
       <button type="button" className="btn btn-primary" onClick={handleDownload}>
         Download back-up

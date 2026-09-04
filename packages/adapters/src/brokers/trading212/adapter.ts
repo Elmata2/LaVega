@@ -7,7 +7,12 @@ import {
   type TradeSide,
   type TradeWithoutId,
 } from "@lavega/core";
-import { historyPending, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "../BrokerAccessAdapter.js";
+import {
+  historyPending,
+  type BrokerAccessAdapter,
+  type BrokerResult,
+  type BrokerSyncResume,
+} from "../BrokerAccessAdapter.js";
 
 export type Trading212Config = {
   token: string;
@@ -23,10 +28,24 @@ export type Trading212Config = {
 };
 
 export type Trading212DiagnosticEvent =
-  | { type: "response"; endpoint: string; attempt: number; status: number; limit: number | null; remaining: number | null; resetAt: string | null }
+  | {
+      type: "response";
+      endpoint: string;
+      attempt: number;
+      status: number;
+      limit: number | null;
+      remaining: number | null;
+      resetAt: string | null;
+    }
   | { type: "wait"; endpoint: string; reason: "budget-exhausted" | "http-429"; waitMs: number }
   | { type: "history-page"; page: number; pageItems: number; ordersRead: number; hasNext: boolean }
-  | { type: "cash-history-page"; history: "transactions" | "dividends"; page: number; pageItems: number; hasNext: boolean }
+  | {
+      type: "cash-history-page";
+      history: "transactions" | "dividends";
+      page: number;
+      pageItems: number;
+      hasNext: boolean;
+    }
   | { type: "positions"; count: number };
 
 type Trading212Order = Record<string, unknown>;
@@ -48,8 +67,10 @@ const MAX_RATE_LIMIT_WAIT_MS = 120_000;
 const RATE_LIMIT_MARGIN_MS = 1_000;
 /** Leave time to persist the snapshot and answer the HTTP request. */
 const HOST_DEADLINE_MARGIN_MS = 5_000;
-const HOST_DEADLINE_MESSAGE = "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
-const RATE_LIMIT_MESSAGE = "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
+const HOST_DEADLINE_MESSAGE =
+  "Trading 212 sync paused before the host time limit; remaining history resumes on the next run";
+const RATE_LIMIT_MESSAGE =
+  "Trading 212 rate limit reached; the sync stopped early and resumes after the provider cooldown";
 
 /** Signals that the provider window or the host time limit ended the sync. Carries the cooldown. */
 class Trading212SyncPausedError extends Error {
@@ -91,16 +112,19 @@ function rateLimitWaitMs(response: Response, retry: number): number {
   const retryAfter = response.headers.get("retry-after")?.trim();
   if (retryAfter) {
     const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, MAX_RATE_LIMIT_WAIT_MS);
+    if (Number.isFinite(seconds) && seconds >= 0)
+      return Math.min(seconds * 1_000, MAX_RATE_LIMIT_WAIT_MS);
     const timestamp = Date.parse(retryAfter);
-    if (Number.isFinite(timestamp)) return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
+    if (Number.isFinite(timestamp))
+      return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
   }
   // Trading 212 does not document or send Retry-After. `x-ratelimit-reset` is the
   // only header that states when the window actually reopens; blind exponential
   // backoff tops out at 7s against a 60s window and always gives up too early.
   const reset = resetAtMs(response);
-  if (reset !== null) return Math.min(Math.max(0, reset - Date.now()) + RATE_LIMIT_MARGIN_MS, MAX_RATE_LIMIT_WAIT_MS);
-  return Math.min(1_000 * (2 ** retry), MAX_RATE_LIMIT_WAIT_MS);
+  if (reset !== null)
+    return Math.min(Math.max(0, reset - Date.now()) + RATE_LIMIT_MARGIN_MS, MAX_RATE_LIMIT_WAIT_MS);
+  return Math.min(1_000 * 2 ** retry, MAX_RATE_LIMIT_WAIT_MS);
 }
 
 function wait(milliseconds: number): Promise<void> {
@@ -114,7 +138,10 @@ type RateLimiter = ReturnType<typeof createRateLimiter>;
  * response, so a sync waits out a spent window instead of spending a request to
  * discover it is spent.
  */
-function createRateLimiter(diagnostics: (event: Trading212DiagnosticEvent) => void, deadlineMs?: number) {
+function createRateLimiter(
+  diagnostics: (event: Trading212DiagnosticEvent) => void,
+  deadlineMs?: number,
+) {
   const budgets = new Map<string, { remaining: number; resetAtMs: number }>();
 
   const sleep = async (milliseconds: number): Promise<void> => {
@@ -160,7 +187,8 @@ function optionalObject(valueToParse: unknown, field: string): Trading212Order |
 }
 
 function string(valueToParse: unknown, field: string): string {
-  if (typeof valueToParse !== "string" || !valueToParse) throw new Error(`Trading 212 ${field} is missing or invalid`);
+  if (typeof valueToParse !== "string" || !valueToParse)
+    throw new Error(`Trading 212 ${field} is missing or invalid`);
   return valueToParse;
 }
 
@@ -177,7 +205,8 @@ function number(valueToParse: unknown, field: string): number {
 function date(valueToParse: unknown, field: string): string {
   const raw = String(valueToParse ?? "");
   const parsed = new Date(raw);
-  if (!raw || Number.isNaN(parsed.getTime())) throw new Error(`Trading 212 ${field} is missing or invalid`);
+  if (!raw || Number.isNaN(parsed.getTime()))
+    throw new Error(`Trading 212 ${field} is missing or invalid`);
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -204,7 +233,11 @@ function stableId(entity: string, kind: "cash" | "dividend", reference: string):
   return `trading212:${encodeURIComponent(entity)}:${kind}:${reference}`;
 }
 
-function mapCashBalance(raw: Trading212Order, entity: string, asOf: string): { balance: CashBalance | null; problems: string[] } {
+function mapCashBalance(
+  raw: Trading212Order,
+  entity: string,
+  asOf: string,
+): { balance: CashBalance | null; problems: string[] } {
   const cash = object(raw.cash, "account summary cash");
   const currency = string(raw.currency, "account summary currency");
   const available = number(cash.availableToTrade, "account summary available cash");
@@ -213,36 +246,59 @@ function mapCashBalance(raw: Trading212Order, entity: string, asOf: string): { b
   // the owner still holds, so they count toward the balance instead of
   // discarding the record. pieCash on /account/cash is the same pie money.
   return {
-    balance: { entity, broker: "trading212", currency, amount: available + (nullableNumber(cash.inPies) ?? 0) + (nullableNumber(cash.reservedForOrders) ?? 0), asOf },
+    balance: {
+      entity,
+      broker: "trading212",
+      currency,
+      amount:
+        available +
+        (nullableNumber(cash.inPies) ?? 0) +
+        (nullableNumber(cash.reservedForOrders) ?? 0),
+      asOf,
+    },
     problems: [],
   };
 }
 
 function transactionKind(type: string): CashFlowKind | null {
   switch (type) {
-    case "DEPOSIT": return "deposit";
-    case "WITHDRAW": return "withdrawal";
-    case "FEE": return "fee";
+    case "DEPOSIT":
+      return "deposit";
+    case "WITHDRAW":
+      return "withdrawal";
+    case "FEE":
+      return "fee";
     case "INTEREST_ON_FREE_CASH":
-    case "LENDING_INTEREST": return "interest";
-    case "TRANSFER": return null;
-    default: return "other";
+    case "LENDING_INTEREST":
+      return "interest";
+    case "TRANSFER":
+      return null;
+    default:
+      return "other";
   }
 }
 
-function mapTransaction(raw: Trading212Order, entity: string, accountCurrency: string): { flow: CashFlow | null; problem?: string } {
+function mapTransaction(
+  raw: Trading212Order,
+  entity: string,
+  accountCurrency: string,
+): { flow: CashFlow | null; problem?: string } {
   const reference = string(raw.reference, "transaction reference");
   const sourceType = string(raw.type, "transaction type").toUpperCase();
   const kind = transactionKind(sourceType);
   if (kind === null) {
-    return { flow: null, problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction` };
+    return {
+      flow: null,
+      problem: `Trading 212 transaction ${reference} has ambiguous TRANSFER direction`,
+    };
   }
   const sourceAmount = number(raw.amount, "transaction amount");
-  const amount = sourceAmount < 0
-    ? sourceAmount
-    : kind === "withdrawal" || kind === "fee"
-      ? -sourceAmount
-      : sourceAmount;
+  const amount =
+    sourceAmount < 0
+      ? sourceAmount
+      : kind === "withdrawal" || kind === "fee"
+        ? -sourceAmount
+        : sourceAmount;
   const currency = string(raw.currency ?? accountCurrency, "transaction currency");
   const flow: CashFlow = {
     id: stableId(entity, "cash", reference),
@@ -255,9 +311,16 @@ function mapTransaction(raw: Trading212Order, entity: string, accountCurrency: s
     description: `Trading 212 ${sourceType}`,
     brokerFlowId: reference,
   };
-  return sourceType === "DEPOSIT" || sourceType === "WITHDRAW" || sourceType === "FEE" || sourceType === "INTEREST_ON_FREE_CASH" || sourceType === "LENDING_INTEREST"
+  return sourceType === "DEPOSIT" ||
+    sourceType === "WITHDRAW" ||
+    sourceType === "FEE" ||
+    sourceType === "INTEREST_ON_FREE_CASH" ||
+    sourceType === "LENDING_INTEREST"
     ? { flow }
-    : { flow, problem: `Trading 212 transaction ${reference} has unknown type ${sourceType}; provider sign was preserved` };
+    : {
+        flow,
+        problem: `Trading 212 transaction ${reference} has unknown type ${sourceType}; provider sign was preserved`,
+      };
 }
 
 function mapDividend(raw: Trading212Order, entity: string, accountCurrency: string): Dividend {
@@ -274,7 +337,13 @@ function mapDividend(raw: Trading212Order, entity: string, accountCurrency: stri
     date: date(raw.paidOn, "dividend date"),
     symbol,
     ...(isin ? { isin } : {}),
-    ...((name || sourceType) ? { description: [name, sourceType && `Trading 212 ${sourceType}`].filter(Boolean).join(" — ") } : {}),
+    ...(name || sourceType
+      ? {
+          description: [name, sourceType && `Trading 212 ${sourceType}`]
+            .filter(Boolean)
+            .join(" — "),
+        }
+      : {}),
     amount: Math.abs(number(raw.amount, "dividend amount")),
     currency: string(raw.currency ?? accountCurrency, "dividend currency"),
     brokerDividendId: reference,
@@ -292,7 +361,13 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   // Trading 212 order at all, and swallowing it turns a changed provider schema
   // into a silent empty sync.
   const envelope = optionalObject(historyOrder.order, "historical order");
-  if (envelope && (!historyOrder.fill || typeof historyOrder.fill !== "object" || Array.isArray(historyOrder.fill))) return null;
+  if (
+    envelope &&
+    (!historyOrder.fill ||
+      typeof historyOrder.fill !== "object" ||
+      Array.isArray(historyOrder.fill))
+  )
+    return null;
   const fill = object(historyOrder.fill, "historical order fill");
   if (value(fill, "type") !== "TRADE") return null;
   const order = envelope ?? object(historyOrder.order, "historical order");
@@ -306,12 +381,13 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
   const walletImpact = optionalObject(fill.walletImpact, "order fill wallet impact");
   const isin = optionalString(value(instrument, "isin"));
   const description = optionalString(value(instrument, "name"));
-  const commission = walletImpact && Array.isArray(walletImpact.taxes)
-    ? walletImpact.taxes.reduce((total, tax) => {
-        if (!tax || typeof tax !== "object" || Array.isArray(tax)) return total;
-        return total + (nullableNumber((tax as Trading212Order).fillAmount) ?? 0);
-      }, 0)
-    : null;
+  const commission =
+    walletImpact && Array.isArray(walletImpact.taxes)
+      ? walletImpact.taxes.reduce((total, tax) => {
+          if (!tax || typeof tax !== "object" || Array.isArray(tax)) return total;
+          return total + (nullableNumber((tax as Trading212Order).fillAmount) ?? 0);
+        }, 0)
+      : null;
   return {
     entity,
     date: date(fill.filledAt, "order fill date"),
@@ -324,7 +400,9 @@ function mapOrder(historyOrder: Trading212Order, entity: string): TradeWithoutId
     amount: fillPrice * fillQuantity,
     currency: string(value(instrument, "currency") ?? order.currency, "order currency"),
     commission,
-    ...(brokerTradeId !== undefined && brokerTradeId !== null ? { brokerTradeId: String(brokerTradeId) } : {}),
+    ...(brokerTradeId !== undefined && brokerTradeId !== null
+      ? { brokerTradeId: String(brokerTradeId) }
+      : {}),
   };
 }
 
@@ -375,61 +453,114 @@ function result(
     tradesComplete,
     ...(completeness?.positionsComplete === false ? { positionsComplete: false } : {}),
     ...(completeness?.cashBalancesComplete === false ? { cashBalancesComplete: false } : {}),
-    ...(retryAfterMs !== null ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() } : {}),
+    ...(retryAfterMs !== null
+      ? { retryAfter: new Date(Date.now() + retryAfterMs).toISOString() }
+      : {}),
     ...(historyPending(resume) ? { resume } : {}),
   };
 }
 
-async function accountSummary(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Order> {
+async function accountSummary(
+  url: string,
+  config: Trading212Config,
+  limiter: RateLimiter,
+): Promise<Trading212Order> {
   const response = await request(url, config, limiter);
-  if (!response.ok) throw new Error(`Trading 212 account-summary request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
+  if (!response.ok)
+    throw new Error(`Trading 212 account-summary request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json().catch(() => {
+    throw new Error(
+      `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
+    );
+  });
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Trading 212 account-summary response is malformed");
   }
   return payload as Trading212Order;
 }
 
-async function historyPage(url: string, label: "transaction" | "dividend", config: Trading212Config, limiter: RateLimiter): Promise<Trading212Page> {
+async function historyPage(
+  url: string,
+  label: "transaction" | "dividend",
+  config: Trading212Config,
+  limiter: RateLimiter,
+): Promise<Trading212Page> {
   const response = await request(url, config, limiter);
-  if (!response.ok) throw new Error(`Trading 212 ${label}-history request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
-  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
+  if (!response.ok)
+    throw new Error(`Trading 212 ${label}-history request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json().catch(() => {
+    throw new Error(
+      `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
+    );
+  });
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !Array.isArray((payload as { items?: unknown }).items)
+  ) {
     throw new Error(`Trading 212 ${label}-history response is malformed`);
   }
   const data = payload as { items: unknown[]; nextPagePath?: unknown };
-  if (!data.items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
+  if (
+    !data.items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))
+  ) {
     throw new Error(`Trading 212 ${label}-history items are malformed`);
   }
-  if (data.nextPagePath !== undefined && data.nextPagePath !== null && typeof data.nextPagePath !== "string") {
+  if (
+    data.nextPagePath !== undefined &&
+    data.nextPagePath !== null &&
+    typeof data.nextPagePath !== "string"
+  ) {
     throw new Error(`Trading 212 ${label}-history nextPagePath is malformed`);
   }
   return {
     items: data.items as Trading212Order[],
-    ...(typeof data.nextPagePath === "string" && data.nextPagePath ? { nextPagePath: data.nextPagePath } : {}),
+    ...(typeof data.nextPagePath === "string" && data.nextPagePath
+      ? { nextPagePath: data.nextPagePath }
+      : {}),
   };
 }
 
-async function page(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Page> {
+async function page(
+  url: string,
+  config: Trading212Config,
+  limiter: RateLimiter,
+): Promise<Trading212Page> {
   // Order history allows 6 requests per minute. `limiter` waits out a spent
   // window between cursors, so sync stays one sequential request per cursor.
   const response = await request(url, config, limiter);
   if (!response.ok) throw new Error(`Trading 212 request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
-  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { items?: unknown }).items)) {
+  const payload: unknown = await response.json().catch(() => {
+    throw new Error(
+      `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
+    );
+  });
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !Array.isArray((payload as { items?: unknown }).items)
+  ) {
     throw new Error("Trading 212 order-history response is malformed");
   }
   const data = payload as { items: unknown[]; nextPagePath?: unknown };
-  if (!data.items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
+  if (
+    !data.items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))
+  ) {
     throw new Error("Trading 212 order-history items are malformed");
   }
   return {
     items: data.items as Trading212Order[],
-    ...(typeof data.nextPagePath === "string" && data.nextPagePath ? { nextPagePath: data.nextPagePath } : {}),
+    ...(typeof data.nextPagePath === "string" && data.nextPagePath
+      ? { nextPagePath: data.nextPagePath }
+      : {}),
   };
 }
 
-async function request(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Response> {
+async function request(
+  url: string,
+  config: Trading212Config,
+  limiter: RateLimiter,
+): Promise<Response> {
   const path = new URL(url).pathname;
   for (let retry = 0; ; retry += 1) {
     await limiter.reserve(path);
@@ -448,7 +579,8 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
     });
     limiter.observe(path, response);
     if (response.status !== 429) return response;
-    if (retry >= MAX_RATE_LIMIT_RETRIES) throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
+    if (retry >= MAX_RATE_LIMIT_RETRIES)
+      throw new Trading212RateLimitError(rateLimitWaitMs(response, retry));
     const waitMs = rateLimitWaitMs(response, retry);
     throwIfHostDeadline(config.deadlineMs, waitMs);
     config.diagnostics?.({ type: "wait", endpoint: path, reason: "http-429", waitMs });
@@ -456,18 +588,27 @@ async function request(url: string, config: Trading212Config, limiter: RateLimit
   }
 }
 
-async function positions(url: string, config: Trading212Config, limiter: RateLimiter): Promise<Trading212Positions> {
+async function positions(
+  url: string,
+  config: Trading212Config,
+  limiter: RateLimiter,
+): Promise<Trading212Positions> {
   const response = await request(url, config, limiter);
-  if (!response.ok) throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
-  const payload: unknown = await response.json().catch(() => { throw new Error(`Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`); });
+  if (!response.ok)
+    throw new Error(`Trading 212 holdings request failed with HTTP ${response.status}`);
+  const payload: unknown = await response.json().catch(() => {
+    throw new Error(
+      `Trading 212 response from ${new URL(response.url).pathname} is not valid JSON`,
+    );
+  });
   // The published schema returns a bare array. The envelope forms are kept as a
   // tolerated fallback; everything else becomes a visible problem.
   const items = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object"
-      ? (payload as { items?: unknown; positions?: unknown; holdings?: unknown }).items
-        ?? (payload as { positions?: unknown }).positions
-        ?? (payload as { holdings?: unknown }).holdings
+      ? ((payload as { items?: unknown; positions?: unknown; holdings?: unknown }).items ??
+        (payload as { positions?: unknown }).positions ??
+        (payload as { holdings?: unknown }).holdings)
       : undefined;
   if (!Array.isArray(items)) throw new Error("Trading 212 holdings response is malformed");
   if (!items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
@@ -498,7 +639,8 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       const limiter = createRateLimiter(config.diagnostics ?? (() => undefined), config.deadlineMs);
       let retryAfterMs: number | null = null;
       const notePaused = (error: unknown) => {
-        if (error instanceof Trading212SyncPausedError) retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
+        if (error instanceof Trading212SyncPausedError)
+          retryAfterMs = Math.max(retryAfterMs ?? 0, error.retryAfterMs);
       };
       const firstHistoryUrl = () => {
         const historyUrl = new URL(ORDER_HISTORY_PATH, config.baseUrl);
@@ -513,9 +655,15 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let ordersComplete = resume.ordersComplete === true;
       let transactionsComplete = resume.transactionsComplete === true;
       let dividendsComplete = resume.dividendsComplete === true;
-      let ordersResume = !ordersComplete ? (resume.ordersNextPagePath ?? firstHistoryUrl()) : undefined;
-      let transactionsResume = !transactionsComplete ? (resume.transactionsNextPagePath ?? undefined) : undefined;
-      let dividendsResume = !dividendsComplete ? (resume.dividendsNextPagePath ?? undefined) : undefined;
+      let ordersResume = !ordersComplete
+        ? (resume.ordersNextPagePath ?? firstHistoryUrl())
+        : undefined;
+      let transactionsResume = !transactionsComplete
+        ? (resume.transactionsNextPagePath ?? undefined)
+        : undefined;
+      let dividendsResume = !dividendsComplete
+        ? (resume.dividendsNextPagePath ?? undefined)
+        : undefined;
       let holdingsComplete = false;
       let summaryComplete = false;
 
@@ -538,7 +686,9 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           try {
             positionsResult.push(mapPosition(holding, entity, asOf));
           } catch (error) {
-            problems.push(error instanceof Error ? error.message : "Trading 212 holding is invalid");
+            problems.push(
+              error instanceof Error ? error.message : "Trading 212 holding is invalid",
+            );
           }
         }
       } catch (error) {
@@ -549,7 +699,11 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
       let accountCurrency = "";
       try {
         throwIfHostDeadline(config.deadlineMs, 0);
-        const summary = await accountSummary(new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(), config, limiter);
+        const summary = await accountSummary(
+          new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
+          config,
+          limiter,
+        );
         summaryComplete = true;
         accountCurrency = string(summary.currency, "account summary currency");
         const mapped = mapCashBalance(summary, entity, snapshotDate());
@@ -557,7 +711,9 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         problems.push(...mapped.problems);
       } catch (error) {
         notePaused(error);
-        problems.push(error instanceof Error ? error.message : "Trading 212 account-summary sync failed");
+        problems.push(
+          error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
+        );
       }
 
       let historyComplete = ordersComplete;
@@ -571,16 +727,26 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             const current = await page(nextUrl, config, limiter);
             historyPages += 1;
             ordersRead += current.items.length;
-            config.diagnostics?.({ type: "history-page", page: historyPages, pageItems: current.items.length, ordersRead, hasNext: Boolean(current.nextPagePath) });
+            config.diagnostics?.({
+              type: "history-page",
+              page: historyPages,
+              pageItems: current.items.length,
+              ordersRead,
+              hasNext: Boolean(current.nextPagePath),
+            });
             for (const order of current.items) {
               try {
                 const trade = mapOrder(order, entity);
                 if (trade) trades.push(trade);
               } catch (error) {
-                problems.push(error instanceof Error ? error.message : "Trading 212 order is invalid");
+                problems.push(
+                  error instanceof Error ? error.message : "Trading 212 order is invalid",
+                );
               }
             }
-            nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
+            nextUrl = current.nextPagePath
+              ? new URL(current.nextPagePath, config.baseUrl).toString()
+              : "";
           }
           ordersComplete = true;
           historyComplete = true;
@@ -604,14 +770,29 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         try {
           while (nextUrl) {
             throwIfHostDeadline(config.deadlineMs, 0);
-            if (seenPaths.has(nextUrl)) throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
+            if (seenPaths.has(nextUrl))
+              throw new Error(`Trading 212 ${history} pagination repeated nextPagePath`);
             seenPaths.add(nextUrl);
-            const current = await historyPage(nextUrl, history === "transactions" ? "transaction" : "dividend", config, limiter);
+            const current = await historyPage(
+              nextUrl,
+              history === "transactions" ? "transaction" : "dividend",
+              config,
+              limiter,
+            );
             pageNumber += 1;
-            config.diagnostics?.({ type: "cash-history-page", history, page: pageNumber, pageItems: current.items.length, hasNext: Boolean(current.nextPagePath) });
+            config.diagnostics?.({
+              type: "cash-history-page",
+              history,
+              page: pageNumber,
+              pageItems: current.items.length,
+              hasNext: Boolean(current.nextPagePath),
+            });
             for (const row of current.items) {
               try {
-                const reference = string(row.reference, `${history === "transactions" ? "transaction" : "dividend"} reference`);
+                const reference = string(
+                  row.reference,
+                  `${history === "transactions" ? "transaction" : "dividend"} reference`,
+                );
                 if (seenReferences.has(reference)) continue;
                 seenReferences.add(reference);
                 if (history === "transactions") {
@@ -622,10 +803,14 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                   dividends.push(mapDividend(row, entity, accountCurrency));
                 }
               } catch (error) {
-                problems.push(error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`);
+                problems.push(
+                  error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`,
+                );
               }
             }
-            nextUrl = current.nextPagePath ? new URL(current.nextPagePath, config.baseUrl).toString() : "";
+            nextUrl = current.nextPagePath
+              ? new URL(current.nextPagePath, config.baseUrl).toString()
+              : "";
           }
         } catch (error) {
           if (history === "transactions") transactionsResume = nextUrl || firstCashUrl(path);
@@ -651,20 +836,45 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             }
           } catch (error) {
             notePaused(error);
-            problems.push(error instanceof Error ? error.message : `Trading 212 ${history} sync failed`);
+            problems.push(
+              error instanceof Error ? error.message : `Trading 212 ${history} sync failed`,
+            );
           }
         }
       }
 
       const nextResume: BrokerSyncResume = {
-        ...(ordersComplete ? { ordersComplete: true } : ordersResume ? { ordersNextPagePath: ordersResume } : {}),
-        ...(transactionsComplete ? { transactionsComplete: true } : transactionsResume ? { transactionsNextPagePath: transactionsResume } : {}),
-        ...(dividendsComplete ? { dividendsComplete: true } : dividendsResume ? { dividendsNextPagePath: dividendsResume } : {}),
+        ...(ordersComplete
+          ? { ordersComplete: true }
+          : ordersResume
+            ? { ordersNextPagePath: ordersResume }
+            : {}),
+        ...(transactionsComplete
+          ? { transactionsComplete: true }
+          : transactionsResume
+            ? { transactionsNextPagePath: transactionsResume }
+            : {}),
+        ...(dividendsComplete
+          ? { dividendsComplete: true }
+          : dividendsResume
+            ? { dividendsNextPagePath: dividendsResume }
+            : {}),
       };
-      return result(positionsResult, trades, dividends, cashBalances, cashFlows, problems, retryAfterMs, historyComplete, nextResume, {
-        positionsComplete: holdingsComplete,
-        cashBalancesComplete: summaryComplete,
-      });
+      return result(
+        positionsResult,
+        trades,
+        dividends,
+        cashBalances,
+        cashFlows,
+        problems,
+        retryAfterMs,
+        historyComplete,
+        nextResume,
+        {
+          positionsComplete: holdingsComplete,
+          cashBalancesComplete: summaryComplete,
+        },
+      );
     },
   };
 }

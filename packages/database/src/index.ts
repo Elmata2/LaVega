@@ -1,11 +1,21 @@
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "@neondatabase/serverless";
+import {
+  Pool,
+  type PoolClient,
+  type QueryResult,
+  type QueryResultRow,
+} from "@neondatabase/serverless";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 export type Database = Pool;
 
 export function createDatabase(connectionString = process.env.DATABASE_URL): Database {
   if (!connectionString?.trim()) throw new Error("DATABASE_URL is required");
-  return new Pool({ connectionString, max: 5, connectionTimeoutMillis: 5_000, idleTimeoutMillis: 10_000 });
+  return new Pool({
+    connectionString,
+    max: 5,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000,
+  });
 }
 
 export function requireUserId(userId: string | undefined | null): string {
@@ -14,7 +24,11 @@ export function requireUserId(userId: string | undefined | null): string {
 }
 
 /** Every request gets its own transaction. SET LOCAL cannot leak to another request. */
-export async function withTenant<T>(db: Database, userId: string | undefined | null, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function withTenant<T>(
+  db: Database,
+  userId: string | undefined | null,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
   const identity = requireUserId(userId);
   const client = await db.connect();
   try {
@@ -34,7 +48,9 @@ export async function withTenant<T>(db: Database, userId: string | undefined | n
 function encryptionKey(): Buffer {
   const value = process.env.LAVEGA_ENCRYPTION_KEY;
   if (!value) throw new Error("LAVEGA_ENCRYPTION_KEY is required");
-  const key = /^[0-9a-f]{64}$/i.test(value) ? Buffer.from(value, "hex") : Buffer.from(value, "base64");
+  const key = /^[0-9a-f]{64}$/i.test(value)
+    ? Buffer.from(value, "hex")
+    : Buffer.from(value, "base64");
   if (key.length !== 32) throw new Error("LAVEGA_ENCRYPTION_KEY must decode to 32 bytes");
   return key;
 }
@@ -55,7 +71,9 @@ export function encryptBlob(value: unknown): Buffer {
  * that hold a cache can carry on without it; callers that hold the only copy of
  * something must not pretend it was never there.
  */
-export function tryDecryptBlob<T>(blob: Buffer | Uint8Array): { readable: true; value: T } | { readable: false } {
+export function tryDecryptBlob<T>(
+  blob: Buffer | Uint8Array,
+): { readable: true; value: T } | { readable: false } {
   try {
     return { readable: true, value: decryptBlob<T>(blob) };
   } catch {
@@ -65,12 +83,15 @@ export function tryDecryptBlob<T>(blob: Buffer | Uint8Array): { readable: true; 
 
 export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
   const bytes = Buffer.from(blob);
-  if (bytes[0] !== 1 || bytes[1] !== 12 || bytes.length < 30) throw new Error("Invalid encrypted blob");
+  if (bytes[0] !== 1 || bytes[1] !== 12 || bytes.length < 30)
+    throw new Error("Invalid encrypted blob");
   const iv = bytes.subarray(2, 14);
   const tag = bytes.subarray(14, 30);
   const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), iv);
   decipher.setAuthTag(tag);
-  return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(30)), decipher.final()]).toString("utf8")) as T;
+  return JSON.parse(
+    Buffer.concat([decipher.update(bytes.subarray(30)), decipher.final()]).toString("utf8"),
+  ) as T;
 }
 
 export type VaultRepository = {
@@ -78,7 +99,10 @@ export type VaultRepository = {
   put(value: unknown): Promise<void>;
 };
 
-export function createVaultRepository(db: Database, userId: string | undefined | null): VaultRepository {
+export function createVaultRepository(
+  db: Database,
+  userId: string | undefined | null,
+): VaultRepository {
   return {
     async get<T>() {
       return withTenant(db, userId, async (client) => {
@@ -89,7 +113,10 @@ export function createVaultRepository(db: Database, userId: string | undefined |
     async put(value) {
       const blob = encryptBlob(value);
       await withTenant(db, userId, async (client) => {
-        await client.query("INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP", [blob]);
+        await client.query(
+          "INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP",
+          [blob],
+        );
       });
     },
   };
@@ -100,29 +127,44 @@ export type EncryptedBrokerRepository = {
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
 };
 
-export function createBrokerRepository(db: Database, userId: string | undefined | null): EncryptedBrokerRepository {
+export function createBrokerRepository(
+  db: Database,
+  userId: string | undefined | null,
+): EncryptedBrokerRepository {
   return {
     async get<T>(broker: string) {
       return withTenant(db, userId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT credentials_blob, snapshot_blob FROM investing.broker_vaults WHERE broker = $1", [broker]);
+        const result = await client.query<QueryResultRow>(
+          "SELECT credentials_blob, snapshot_blob FROM investing.broker_vaults WHERE broker = $1",
+          [broker],
+        );
         const row = result.rows[0];
         if (!row) return null;
         const credentials = tryDecryptBlob<T>(row.credentials_blob as Buffer);
         /* Credentials are the only copy there is. Reporting them as missing
          * would send the user to re-enter their broker tokens, and that write
          * would replace ciphertext a restored key could still have opened. */
-        if (!credentials.readable) throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+        if (!credentials.readable)
+          throw new Error(
+            "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
+          );
         // The snapshot is a cache of broker data. A sync rebuilds it, so an
         // unreadable one is dropped rather than taking the account down.
         const snapshot = row.snapshot_blob ? tryDecryptBlob(row.snapshot_blob as Buffer) : null;
-        return { credentials: credentials.value, snapshot: snapshot?.readable ? snapshot.value : null };
+        return {
+          credentials: credentials.value,
+          snapshot: snapshot?.readable ? snapshot.value : null,
+        };
       });
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const credentialsBlob = encryptBlob(credentials);
       const snapshotBlob = snapshot === undefined ? null : encryptBlob(snapshot);
       await withTenant(db, userId, async (client) => {
-        await client.query("INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), updated_at = CURRENT_TIMESTAMP", [broker, credentialsBlob, snapshotBlob]);
+        await client.query(
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), updated_at = CURRENT_TIMESTAMP",
+          [broker, credentialsBlob, snapshotBlob],
+        );
       });
     },
   };
@@ -153,7 +195,11 @@ export type PriceBarRow = { symbol: string; date: string; close: number; currenc
  * Daily bars for one user. `provider` records where a bar came from; the bar
  * itself does not carry that, so the caller names its provider once.
  */
-export function createPriceBarRepository(db: Database, userId: string | undefined | null, provider = "yahoo"): PriceBarRepository {
+export function createPriceBarRepository(
+  db: Database,
+  userId: string | undefined | null,
+  provider = "yahoo",
+): PriceBarRepository {
   const tenantId = requireUserId(userId);
   return {
     async getRange(symbol, from, to) {
@@ -170,7 +216,12 @@ export function createPriceBarRepository(db: Database, userId: string | undefine
           values,
         );
         // NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-        return result.rows.map((row) => ({ symbol: row.symbol as string, date: row.date as string, close: Number(row.close), currency: row.currency as string }));
+        return result.rows.map((row) => ({
+          symbol: row.symbol as string,
+          date: row.date as string,
+          close: Number(row.close),
+          currency: row.currency as string,
+        }));
       });
     },
     async lastDate(symbol) {
@@ -213,13 +264,18 @@ export type PreferencesRepository = {
 };
 
 /** Benchmarks and market-data consent share one row, so each write names its own column. */
-export function createPreferencesRepository(db: Database, userId: string | undefined | null): PreferencesRepository {
+export function createPreferencesRepository(
+  db: Database,
+  userId: string | undefined | null,
+): PreferencesRepository {
   const tenantId = requireUserId(userId);
   const read = async <T>(column: string, fallback: T): Promise<T> =>
     withTenant(db, tenantId, async (client) => {
-      const result = await client.query<QueryResultRow>(`SELECT ${column} FROM investing.preferences`);
+      const result = await client.query<QueryResultRow>(
+        `SELECT ${column} FROM investing.preferences`,
+      );
       const value = result.rows[0]?.[column];
-      return value == null ? fallback : value as T;
+      return value == null ? fallback : (value as T);
     });
   const write = async (column: string, value: unknown) => {
     await withTenant(db, tenantId, async (client) => {
@@ -255,12 +311,18 @@ export type SyncStateRepository = {
   put(broker: string, state: SyncStateRow): Promise<void>;
 };
 
-export function createSyncStateRepository(db: Database, userId: string | undefined | null): SyncStateRepository {
+export function createSyncStateRepository(
+  db: Database,
+  userId: string | undefined | null,
+): SyncStateRepository {
   const tenantId = requireUserId(userId);
   return {
     async get(broker) {
       return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT state FROM investing.sync_state WHERE broker = $1", [broker]);
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [broker],
+        );
         const state = result.rows[0]?.state as SyncStateRow | undefined;
         return state ?? { lastSyncedAt: null, retryAfter: null };
       });
@@ -289,15 +351,28 @@ export type PriceSyncStateRepository = {
  * state table under its own name rather than in a table of its own. `broker`
  * is the key of what was synchronized, and 'prices' is what this one reads. */
 const PRICE_SYNC_KEY = "prices";
-const PRICE_SYNC_STATUS_COLUMN: Record<string, string> = { idle: "idle", running: "running", waiting: "running", paused: "partial", completed: "succeeded", problem: "failed" };
+const PRICE_SYNC_STATUS_COLUMN: Record<string, string> = {
+  idle: "idle",
+  running: "running",
+  waiting: "running",
+  paused: "partial",
+  completed: "succeeded",
+  problem: "failed",
+};
 
 /** The progress of a price run, readable by whichever instance is asked for it. */
-export function createPriceSyncStateRepository(db: Database, userId: string | undefined | null): PriceSyncStateRepository {
+export function createPriceSyncStateRepository(
+  db: Database,
+  userId: string | undefined | null,
+): PriceSyncStateRepository {
   const tenantId = requireUserId(userId);
   return {
     async get() {
       return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT state FROM investing.sync_state WHERE broker = $1", [PRICE_SYNC_KEY]);
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [PRICE_SYNC_KEY],
+        );
         const state = result.rows[0]?.state as Record<string, unknown> | undefined;
         // A row written before this repository existed holds `{}`, which is not progress.
         return state && Object.keys(state).length > 0 ? state : null;
@@ -314,7 +389,15 @@ export function createPriceSyncStateRepository(db: Database, userId: string | un
         }
         const result = await client.query<QueryResultRow>(
           "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->>'leaseId' = $4 RETURNING state",
-          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "idle", JSON.stringify(progress), leaseId, (progress as { problems?: unknown }).problems instanceof Array ? (progress as { problems: unknown[] }).problems.join("; ") : null],
+          [
+            PRICE_SYNC_KEY,
+            PRICE_SYNC_STATUS_COLUMN[status] ?? "idle",
+            JSON.stringify(progress),
+            leaseId,
+            (progress as { problems?: unknown }).problems instanceof Array
+              ? (progress as { problems: unknown[] }).problems.join("; ")
+              : null,
+          ],
         );
         return result.rows.length > 0;
       });
@@ -344,7 +427,12 @@ export function createPriceSyncStateRepository(db: Database, userId: string | un
            FROM investing.sync_state
            WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
            LIMIT 1`,
-          [PRICE_SYNC_KEY, PRICE_SYNC_STATUS_COLUMN[status] ?? "running", JSON.stringify(progress), staleBefore],
+          [
+            PRICE_SYNC_KEY,
+            PRICE_SYNC_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(progress),
+            staleBefore,
+          ],
         );
         const row = result.rows[0];
         return row?.claimed ? null : (row?.state ?? null);
@@ -353,10 +441,25 @@ export function createPriceSyncStateRepository(db: Database, userId: string | un
   };
 }
 
-export type AgentRunRow = { id: string; agentId?: string; startedAt: string; finishedAt: string | null; status: "running" | "done" | "error"; summary: string | null; error: string | null; result?: unknown };
+export type AgentRunRow = {
+  id: string;
+  agentId?: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: "running" | "done" | "error";
+  summary: string | null;
+  error: string | null;
+  result?: unknown;
+};
 
 const AGENT_STATUS_TO_COLUMN = { running: "running", done: "succeeded", error: "failed" } as const;
-const AGENT_STATUS_FROM_COLUMN: Record<string, AgentRunRow["status"]> = { running: "running", queued: "running", succeeded: "done", failed: "error", cancelled: "error" };
+const AGENT_STATUS_FROM_COLUMN: Record<string, AgentRunRow["status"]> = {
+  running: "running",
+  queued: "running",
+  succeeded: "done",
+  failed: "error",
+  cancelled: "error",
+};
 
 /** Only the latest run per user is kept; this is operational state, not history. */
 export function createAgentRunRepository(db: Database, userId: string | undefined | null) {
@@ -364,10 +467,17 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
   return {
     async get(): Promise<AgentRunRow | null> {
       return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT run_id, status, run_result, started_at, finished_at FROM investing.agent_runs");
+        const result = await client.query<QueryResultRow>(
+          "SELECT run_id, status, run_result, started_at, finished_at FROM investing.agent_runs",
+        );
         const row = result.rows[0];
         if (!row) return null;
-        const runResult = (row.run_result ?? {}) as { agentId?: string | null; summary?: string | null; error?: string | null; result?: unknown };
+        const runResult = (row.run_result ?? {}) as {
+          agentId?: string | null;
+          summary?: string | null;
+          error?: string | null;
+          result?: unknown;
+        };
         return {
           id: row.run_id as string,
           agentId: runResult.agentId ?? undefined,
@@ -384,7 +494,18 @@ export function createAgentRunRepository(db: Database, userId: string | undefine
       await withTenant(db, tenantId, async (client) => {
         await client.query(
           "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP",
-          [record.id, AGENT_STATUS_TO_COLUMN[record.status], JSON.stringify({ agentId: record.agentId, summary: record.summary, error: record.error, result: record.result }), record.startedAt, record.finishedAt],
+          [
+            record.id,
+            AGENT_STATUS_TO_COLUMN[record.status],
+            JSON.stringify({
+              agentId: record.agentId,
+              summary: record.summary,
+              error: record.error,
+              result: record.result,
+            }),
+            record.startedAt,
+            record.finishedAt,
+          ],
         );
       });
     },
@@ -422,9 +543,13 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   return {
     async get(): Promise<OpaqueVaultRow | null> {
       return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(`SELECT vault_blob, ${VAULT_VERSION} FROM personal.vaults`);
+        const result = await client.query<QueryResultRow>(
+          `SELECT vault_blob, ${VAULT_VERSION} FROM personal.vaults`,
+        );
         const row = result.rows[0];
-        return row ? { blob: Buffer.from(row.vault_blob as Buffer), updatedAt: row.updated_at as string } : null;
+        return row
+          ? { blob: Buffer.from(row.vault_blob as Buffer), updatedAt: row.updated_at as string }
+          : null;
       });
     },
     /** `expectedUpdatedAt` is the copy the client is replacing; `null` means it believes there is none. */
@@ -436,7 +561,9 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
           [blob, expectedUpdatedAt],
         );
         const row = result.rows[0];
-        return row ? { status: "stored", updatedAt: row.updated_at as string } : { status: "conflict" };
+        return row
+          ? { status: "stored", updatedAt: row.updated_at as string }
+          : { status: "conflict" };
       });
     },
     /** Replace whatever the server holds. Only for a user who has been shown the conflict and chose. */

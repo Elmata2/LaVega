@@ -84,7 +84,8 @@ test("parseInvoiceFile: dispatches XML content (an <Invoice> root) to the UBL pa
 });
 
 test("parseInvoiceFile: dispatches non-XML content to the CSV parser", () => {
-  const csv = "Relatie;Bedrag;Factuurdatum;Vervaldatum\nCoolblue B.V.;1210,00;01-08-2026;01-09-2026";
+  const csv =
+    "Relatie;Bedrag;Factuurdatum;Vervaldatum\nCoolblue B.V.;1210,00;01-08-2026;01-09-2026";
   const rows = parseInvoiceFile("facturen.csv", csv);
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({ sourceType: "csv", counterparty: "Coolblue B.V.", amount: 1210 });

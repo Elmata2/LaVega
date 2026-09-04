@@ -33,7 +33,9 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 });
 
 function respond(response: ServerResponse, body: string, status = 200): void {
@@ -56,41 +58,65 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
   let polls = 0;
   handler = (request, response) => {
     requests.push(request.url ?? "");
-    if (request.url?.startsWith("/SendRequest")) return respond(response, "<FlexStatementResponse><ReferenceCode>ref-1</ReferenceCode></FlexStatementResponse>");
+    if (request.url?.startsWith("/SendRequest"))
+      return respond(
+        response,
+        "<FlexStatementResponse><ReferenceCode>ref-1</ReferenceCode></FlexStatementResponse>",
+      );
     polls += 1;
-    respond(response, polls === 1 ? "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>" : report);
+    respond(
+      response,
+      polls === 1
+        ? "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>"
+        : report,
+    );
   };
 
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     source: "ibkr-flex",
     problems: [],
     dividends: [],
-    cashBalances: [{ entity: "personal", broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }],
-    cashFlows: [expect.objectContaining({ entity: "personal", broker: "ibkr", currency: "USD", amount: 100, kind: "deposit", brokerFlowId: "U1:deposit-1" })],
-    positions: [{
-      entity: "personal",
-      symbol: "AAPL",
-      isin: "US0378331005",
-      description: "Apple & Co",
-      quantity: 2,
-      averagePrice: 100,
-      marketPrice: 110,
-      marketValue: 220,
-      currency: "USD",
-      asOf: "2026-08-18",
-    }],
-    trades: [{
-      entity: "personal",
-      date: "2026-08-18",
-      symbol: "AAPL",
-      side: "buy",
-      quantity: 2,
-      price: 100,
-      amount: -200,
-      currency: "USD",
-      commission: 1,
-      brokerTradeId: "tx-1",
-    }],
+    cashBalances: [
+      { entity: "personal", broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" },
+    ],
+    cashFlows: [
+      expect.objectContaining({
+        entity: "personal",
+        broker: "ibkr",
+        currency: "USD",
+        amount: 100,
+        kind: "deposit",
+        brokerFlowId: "U1:deposit-1",
+      }),
+    ],
+    positions: [
+      {
+        entity: "personal",
+        symbol: "AAPL",
+        isin: "US0378331005",
+        description: "Apple & Co",
+        quantity: 2,
+        averagePrice: 100,
+        marketPrice: 110,
+        marketValue: 220,
+        currency: "USD",
+        asOf: "2026-08-18",
+      },
+    ],
+    trades: [
+      {
+        entity: "personal",
+        date: "2026-08-18",
+        symbol: "AAPL",
+        side: "buy",
+        quantity: 2,
+        price: 100,
+        amount: -200,
+        currency: "USD",
+        commission: 1,
+        brokerTradeId: "tx-1",
+      },
+    ],
   });
   expect(requests).toHaveLength(3);
   expect(requests[0]).toContain("t=valid-token");
@@ -98,12 +124,13 @@ test("sync completes SendRequest plus not-ready then ready GetStatement flow", a
 });
 
 test("sync reports bounded timeout without throwing", async () => {
-  handler = (request, response) => respond(
-    response,
-    request.url?.startsWith("/SendRequest")
-      ? "<FlexStatementResponse><ReferenceCode>never-ready</ReferenceCode></FlexStatementResponse>"
-      : "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
-  );
+  handler = (request, response) =>
+    respond(
+      response,
+      request.url?.startsWith("/SendRequest")
+        ? "<FlexStatementResponse><ReferenceCode>never-ready</ReferenceCode></FlexStatementResponse>"
+        : "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
+    );
 
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     positions: [],
@@ -114,7 +141,11 @@ test("sync reports bounded timeout without throwing", async () => {
 });
 
 test("sync reports rejected token without throwing", async () => {
-  handler = (_request, response) => respond(response, "<FlexStatementResponse><ErrorCode>1019</ErrorCode><ErrorMessage>Invalid token</ErrorMessage></FlexStatementResponse>");
+  handler = (_request, response) =>
+    respond(
+      response,
+      "<FlexStatementResponse><ErrorCode>1019</ErrorCode><ErrorMessage>Invalid token</ErrorMessage></FlexStatementResponse>",
+    );
 
   await expect(adapter("expired-token").sync({ entity: "personal" })).resolves.toEqual({
     positions: [],
@@ -125,12 +156,13 @@ test("sync reports rejected token without throwing", async () => {
 });
 
 test("sync reports malformed or unexpected payload without throwing", async () => {
-  handler = (request, response) => respond(
-    response,
-    request.url?.startsWith("/SendRequest")
-      ? "<FlexStatementResponse><ReferenceCode>malformed</ReferenceCode></FlexStatementResponse>"
-      : "<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol=\"AAPL\"",
-  );
+  handler = (request, response) =>
+    respond(
+      response,
+      request.url?.startsWith("/SendRequest")
+        ? "<FlexStatementResponse><ReferenceCode>malformed</ReferenceCode></FlexStatementResponse>"
+        : '<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol="AAPL"',
+    );
 
   await expect(adapter().sync({ entity: "personal" })).resolves.toEqual({
     positions: [],
@@ -148,14 +180,14 @@ test("separate syncs do not share in-flight statement state", async () => {
   handler = (request, response) => {
     if (request.url?.startsWith("/SendRequest")) {
       reference += 1;
-      return respond(response, `<FlexStatementResponse><ReferenceCode>ref-${reference}</ReferenceCode></FlexStatementResponse>`);
+      return respond(
+        response,
+        `<FlexStatementResponse><ReferenceCode>ref-${reference}</ReferenceCode></FlexStatementResponse>`,
+      );
     }
     respond(response, report);
   };
 
-  await Promise.all([
-    adapter().sync({ entity: "one" }),
-    adapter().sync({ entity: "two" }),
-  ]);
+  await Promise.all([adapter().sync({ entity: "one" }), adapter().sync({ entity: "two" })]);
   expect(reference).toBe(2);
 });

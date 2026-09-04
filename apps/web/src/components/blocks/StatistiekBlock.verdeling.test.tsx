@@ -27,8 +27,22 @@ import { own } from "./fixtures";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const tx = (id: string, date: string, amount: number, counterparty: string, description = ""): Tx => ({
-  id, accountKey: "A1", date, amount, currency: "EUR", counterparty, description, category: "", manual: false,
+const tx = (
+  id: string,
+  date: string,
+  amount: number,
+  counterparty: string,
+  description = "",
+): Tx => ({
+  id,
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 });
 
 /** A realistic August: income, two real expenses, one transfer to an account the
@@ -80,7 +94,17 @@ function tab(el: HTMLElement, label: string) {
  *  stated — what is under test is the angle, not the layout. */
 function box(el: HTMLElement, size = 168) {
   el.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: size, bottom: size, width: size, height: size, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    ({
+      left: 0,
+      top: 0,
+      right: size,
+      bottom: size,
+      width: size,
+      height: size,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 }
 
 test("the ring prints euros, not cents read as euros", () => {

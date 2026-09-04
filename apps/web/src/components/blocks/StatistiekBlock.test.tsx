@@ -6,7 +6,9 @@ import StatistiekBlock, { customWindow, STAT_PERIODS } from "./StatistiekBlock";
 import { freshTxs, own, rules, txs } from "./fixtures";
 
 const render = (t = txs) =>
-  renderToStaticMarkup(<StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />);
+  renderToStaticMarkup(
+    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />,
+  );
 
 test("StatistiekBlock leads with the per-category-per-month view from the reference", () => {
   const html = render();
@@ -42,10 +44,16 @@ test("StatistiekBlock offers his five periods plus a real custom range", () => {
 });
 
 test("customWindow refuses to turn half a range into a window", () => {
-  expect(customWindow("2026-06-01", "2026-08-01")).toEqual({ start: "2026-06-01", end: "2026-08-01" });
+  expect(customWindow("2026-06-01", "2026-08-01")).toEqual({
+    start: "2026-06-01",
+    end: "2026-08-01",
+  });
   // A single day is a legitimate range; an empty field or a backwards range is
   // not a window at all — and is never quietly replaced by a preset.
-  expect(customWindow("2026-06-01", "2026-06-01")).toEqual({ start: "2026-06-01", end: "2026-06-01" });
+  expect(customWindow("2026-06-01", "2026-06-01")).toEqual({
+    start: "2026-06-01",
+    end: "2026-06-01",
+  });
   expect(customWindow("", "2026-08-01")).toBeNull();
   expect(customWindow("2026-06-01", "")).toBeNull();
   expect(customWindow("2026-08-01", "2026-06-01")).toBeNull();
@@ -80,9 +88,30 @@ test("the 'smaller categories' line names the window and the floor it is true fo
 
   const many = [
     ...txs,
-    { ...txs[1], id: "m1", date: "2026-08-04", amount: -40, counterparty: "NS", description: "Trein" },
-    { ...txs[1], id: "m2", date: "2026-08-05", amount: -30, counterparty: "Apotheek", description: "Zorg" },
-    { ...txs[1], id: "m3", date: "2026-08-06", amount: -20, counterparty: "Bioscoop", description: "Film" },
+    {
+      ...txs[1],
+      id: "m1",
+      date: "2026-08-04",
+      amount: -40,
+      counterparty: "NS",
+      description: "Trein",
+    },
+    {
+      ...txs[1],
+      id: "m2",
+      date: "2026-08-05",
+      amount: -30,
+      counterparty: "Apotheek",
+      description: "Zorg",
+    },
+    {
+      ...txs[1],
+      id: "m3",
+      date: "2026-08-06",
+      amount: -20,
+      counterparty: "Bioscoop",
+      description: "Film",
+    },
   ];
   // Three small ones, each under core's window-scaled floor: the line names the
   // window it is true for, the floor, and that a shorter window moves it.

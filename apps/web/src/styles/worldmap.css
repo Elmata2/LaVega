@@ -202,16 +202,36 @@
   height: 0;
   overflow: hidden;
 }
-.lv-globe-inks [data-ink="sea"] { color: var(--lv-globe-sea); }
-.lv-globe-inks [data-ink="grid"] { color: var(--lv-globe-grid); }
-.lv-globe-inks [data-ink="rim"] { color: var(--lv-globe-rim); }
-.lv-globe-inks [data-ink="euro"] { color: var(--lv-globe-euro); }
-.lv-globe-inks [data-ink="rate"] { color: var(--lv-globe-rate); }
-.lv-globe-inks [data-ink="norate"] { color: var(--lv-globe-norate); }
-.lv-globe-inks [data-ink="notender"] { color: var(--lv-globe-notender); }
-.lv-globe-inks [data-ink="hover"] { color: var(--lv-globe-hover); }
-.lv-globe-inks [data-ink="selected"] { color: var(--lv-globe-selected); }
-.lv-globe-inks [data-ink="pin"] { color: var(--lv-globe-pin); }
+.lv-globe-inks [data-ink="sea"] {
+  color: var(--lv-globe-sea);
+}
+.lv-globe-inks [data-ink="grid"] {
+  color: var(--lv-globe-grid);
+}
+.lv-globe-inks [data-ink="rim"] {
+  color: var(--lv-globe-rim);
+}
+.lv-globe-inks [data-ink="euro"] {
+  color: var(--lv-globe-euro);
+}
+.lv-globe-inks [data-ink="rate"] {
+  color: var(--lv-globe-rate);
+}
+.lv-globe-inks [data-ink="norate"] {
+  color: var(--lv-globe-norate);
+}
+.lv-globe-inks [data-ink="notender"] {
+  color: var(--lv-globe-notender);
+}
+.lv-globe-inks [data-ink="hover"] {
+  color: var(--lv-globe-hover);
+}
+.lv-globe-inks [data-ink="selected"] {
+  color: var(--lv-globe-selected);
+}
+.lv-globe-inks [data-ink="pin"] {
+  color: var(--lv-globe-pin);
+}
 
 /* ---------- Legenda ---------- */
 

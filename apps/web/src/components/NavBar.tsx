@@ -16,7 +16,16 @@ import { INVESTING_URL } from "../investing.js";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       {children}
     </svg>
   );
@@ -69,7 +78,9 @@ export default function NavBar({ view, modules, onNavigate, onOpenProfile }: Nav
         {INVESTING_URL && (
           <a
             href={INVESTING_URL}
-            {...(INVESTING_URL.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            {...(INVESTING_URL.startsWith("http")
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
             className="appbar-investing"
           >
             <Icon>

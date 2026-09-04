@@ -85,7 +85,8 @@ function ForecastBanner({
       : state === "none"
         ? "forecast-banner-none"
         : "forecast-banner-unknown";
-  const titleClass = state === "shortfall" ? "text-neg" : state === "none" ? "text-pos" : "text-muted";
+  const titleClass =
+    state === "shortfall" ? "text-neg" : state === "none" ? "text-pos" : "text-muted";
   const atRisk = f.atRisk ?? null;
 
   return (
@@ -94,32 +95,39 @@ function ForecastBanner({
         <p className={`forecast-banner-title ${titleClass}`}>
           {state === "shortfall" && f.shortfall && (
             <>
-              Tekort verwacht rond {f.shortfall.date} — laagste saldo ~{formatEuro(f.shortfall.balanceCents / 100)} (buffer €
-              {euroNumber(bufferCents)}).
+              Tekort verwacht rond {f.shortfall.date} — laagste saldo ~
+              {formatEuro(f.shortfall.balanceCents / 100)} (buffer €{euroNumber(bufferCents)}).
             </>
           )}
           {state === "unknown" && (
-            <>Positie onbekend (alleen CSV-rekeningen zonder saldo) — we tonen de verwachte stromen, geen saldo-lijn.</>
+            <>
+              Positie onbekend (alleen CSV-rekeningen zonder saldo) — we tonen de verwachte stromen,
+              geen saldo-lijn.
+            </>
           )}
-          {state === "insufficient" && <>Nog geen prognose te maken — er is niets om op te projecteren.</>}
+          {state === "insufficient" && (
+            <>Nog geen prognose te maken — er is niets om op te projecteren.</>
+          )}
           {state === "none" && <>Geen tekort verwacht in de komende 13 weken.</>}
         </p>
         {state === "none" && lowest && (
           <p className="forecast-banner-sub">
             Krapste punt: week {lowest.weekNumber} — verwacht €{euroNumber(lowest.closingCents)}
-            {lowest.lowerCents !== null && <> (ondergrens €{euroNumber(lowest.lowerCents)})</>}, boven je buffer van €
-            {euroNumber(bufferCents)}.
+            {lowest.lowerCents !== null && <> (ondergrens €{euroNumber(lowest.lowerCents)})</>},
+            boven je buffer van €{euroNumber(bufferCents)}.
           </p>
         )}
         {state === "none" && atRisk && (
           <p className="forecast-banner-sub">
-            Wel een risico: binnen de gemeten bandbreedte kan het saldo rond {atRisk.date} tot {formatEuro(atRisk.balanceCents / 100)} zakken
-            — onder je buffer van €{euroNumber(bufferCents)}.
+            Wel een risico: binnen de gemeten bandbreedte kan het saldo rond {atRisk.date} tot{" "}
+            {formatEuro(atRisk.balanceCents / 100)} zakken — onder je buffer van €
+            {euroNumber(bufferCents)}.
           </p>
         )}
         {thin && state !== "insufficient" && (
           <p className="forecast-banner-note">
-            Geen lopende terugkerende stromen herkend — de prognose leunt volledig op losse uitgaven en ingeplande posten.
+            Geen lopende terugkerende stromen herkend — de prognose leunt volledig op losse uitgaven
+            en ingeplande posten.
           </p>
         )}
       </div>
@@ -141,7 +149,15 @@ function ForecastBanner({
  *  so it must never be drawn from a constant again. It is one standard deviation
  *  of measured variation — not a percentile, despite what this comment used to
  *  call it. */
-function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: LowestPoint | null; bufferCents: number }) {
+function ForecastChart({
+  f,
+  lowest,
+  bufferCents,
+}: {
+  f: EntityForecast;
+  lowest: LowestPoint | null;
+  bufferCents: number;
+}) {
   if (f.openingCents === null) {
     return <p className="forecast-chart-empty">Positie onbekend — alleen stromen.</p>;
   }
@@ -153,15 +169,25 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
   const showBand = hasBand(f);
   const points: TrendPoint[] = [
     { label: "nu", value: opening / 100 },
-    ...f.points.map((p, i) => ({ label: `w${i + 1}`, value: (p.projectedClosingCents ?? opening) / 100 })),
+    ...f.points.map((p, i) => ({
+      label: `w${i + 1}`,
+      value: (p.projectedClosingCents ?? opening) / 100,
+    })),
   ];
   const band = showBand
     ? {
-        lower: [opening / 100, ...f.points.map((p) => (p.lowerCents ?? p.projectedClosingCents ?? opening) / 100)],
-        upper: [opening / 100, ...f.points.map((p) => (p.upperCents ?? p.projectedClosingCents ?? opening) / 100)],
+        lower: [
+          opening / 100,
+          ...f.points.map((p) => (p.lowerCents ?? p.projectedClosingCents ?? opening) / 100),
+        ],
+        upper: [
+          opening / 100,
+          ...f.points.map((p) => (p.upperCents ?? p.projectedClosingCents ?? opening) / 100),
+        ],
       }
     : undefined;
-  const lowestIsShortfall = lowest !== null && f.shortfall !== null && lowest.date === f.shortfall.date;
+  const lowestIsShortfall =
+    lowest !== null && f.shortfall !== null && lowest.date === f.shortfall.date;
 
   return (
     <>
@@ -173,7 +199,11 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
         format={(v) => `€${wholeEuroFormatter.format(Math.round(v))}`}
         ariaLabel="Verwachte kaspositie komende 13 weken"
         readoutLabel="Verwacht saldo"
-        mark={lowest ? { index: lowest.columnIndex, color: lowestIsShortfall ? "var(--neg)" : "var(--pos)" } : null}
+        mark={
+          lowest
+            ? { index: lowest.columnIndex, color: lowestIsShortfall ? "var(--neg)" : "var(--pos)" }
+            : null
+        }
         height={220}
         showAxis
       />
@@ -198,7 +228,11 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
           </span>
         )}
         <span className="forecast-chart-legend-item">
-          <span className="forecast-chart-legend-swatch" style={{ background: "var(--warn)" }} aria-hidden="true" />
+          <span
+            className="forecast-chart-legend-swatch"
+            style={{ background: "var(--warn)" }}
+            aria-hidden="true"
+          />
           Buffer €{euroNumber(bufferCents)}
         </span>
         {lowest && (
@@ -211,8 +245,20 @@ function ForecastChart({ f, lowest, bufferCents }: { f: EntityForecast; lowest: 
   );
 }
 
-export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents, scheduledFlows }: ForecastProps) {
-  const fc = forecastCashflow(txs, accounts, { asOf, horizonDays: HORIZON_DAYS, bufferCents, scheduledFlows });
+export default function Forecast({
+  txs,
+  accounts,
+  entityScope,
+  asOf,
+  bufferCents,
+  scheduledFlows,
+}: ForecastProps) {
+  const fc = forecastCashflow(txs, accounts, {
+    asOf,
+    horizonDays: HORIZON_DAYS,
+    bufferCents,
+    scheduledFlows,
+  });
   // Honor entityScope, but fall back to the consolidated view if the scope
   // isn't (or is no longer) present in byEntity — App.tsx self-heals a stale
   // entityScope already, but this component stays correct on its own too.
@@ -270,7 +316,9 @@ export default function Forecast({ txs, accounts, entityScope, asOf, bufferCents
                   {uitgaven.map((d) => (
                     <div className="driver-row" key={`${d.label}-${d.sign}`}>
                       <span className="driver-label">{d.label}</span>
-                      <span className="text-neg driver-amount">−€{euroNumber(Math.abs(d.perWeekCents))}</span>
+                      <span className="text-neg driver-amount">
+                        −€{euroNumber(Math.abs(d.perWeekCents))}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -2,7 +2,9 @@ import { expect, test, vi } from "vitest";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
 import type { EncryptedBrokerRepository } from "@lavega/database";
 
-function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, { credentials: unknown; snapshot: unknown | null }> } {
+function fakeRepository(): EncryptedBrokerRepository & {
+  rows: Map<string, { credentials: unknown; snapshot: unknown | null }>;
+} {
   const rows = new Map<string, { credentials: unknown; snapshot: unknown | null }>();
   return {
     rows,
@@ -12,7 +14,10 @@ function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, { cre
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const existing = rows.get(broker);
-      rows.set(broker, { credentials, snapshot: snapshot === undefined ? existing?.snapshot ?? null : snapshot });
+      rows.set(broker, {
+        credentials,
+        snapshot: snapshot === undefined ? (existing?.snapshot ?? null) : snapshot,
+      });
     },
   };
 }
@@ -40,7 +45,9 @@ test("the vault refuses to read or write another tenant's credentials", async ()
   const store = createNeonCredentialStore(fakeRepository(), "user-123");
 
   await expect(store.getCredentials("user-456", "trading212")).rejects.toThrow(/tenant/i);
-  await expect(store.putCredentials({ ...trading212, tenantId: "user-456" })).rejects.toThrow(/tenant/i);
+  await expect(store.putCredentials({ ...trading212, tenantId: "user-456" })).rejects.toThrow(
+    /tenant/i,
+  );
 });
 
 test("the server key means there is nothing to unlock", async () => {
@@ -61,7 +68,9 @@ test("broker snapshots round-trip per broker and leave credentials intact", asyn
 
   await store.putBrokerData({ trading212: { positions: [], trades: [], dividends: [] } });
 
-  expect(await store.getBrokerData()).toEqual({ trading212: { positions: [], trades: [], dividends: [] } });
+  expect(await store.getBrokerData()).toEqual({
+    trading212: { positions: [], trades: [], dividends: [] },
+  });
   expect(await store.getCredentials("user-123", "trading212")).toEqual(trading212);
 });
 
@@ -84,7 +93,9 @@ test("an empty vault reports no broker data instead of failing", async () => {
 test("an unreadable hosted broker row does not block reconnecting", async () => {
   const repository = fakeRepository();
   repository.get = vi.fn(async () => {
-    throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    throw new Error(
+      "Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY",
+    );
   });
   const store = createNeonCredentialStore(repository, "user-123");
 

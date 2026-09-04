@@ -94,13 +94,19 @@ export function trackingQuestion(t: Pick<TrackedBalance, "label" | "unit">): str
 /** Where one tracked number stands at `asOf`. `snoozed` only ever masks a number
  *  that WOULD be due — a fresh one is fresh regardless of a snooze. */
 export function trackingStatus(t: TrackedBalance, asOf: string): TrackedStatus {
-  const interval = t.intervalDays != null && t.intervalDays > 0 ? Math.floor(t.intervalDays) : DEFAULT_TRACKING_INTERVAL_DAYS;
+  const interval =
+    t.intervalDays != null && t.intervalDays > 0
+      ? Math.floor(t.intervalDays)
+      : DEFAULT_TRACKING_INTERVAL_DAYS;
   const dueDate = addDays(t.updatedAt, interval);
   const past = daysBetween(dueDate, asOf); // asOf - dueDate
   const state: TrackingState =
-    past < 0 ? "fresh"
-      : t.snoozedUntil != null && asOf < t.snoozedUntil ? "snoozed"
-        : past > TRACKING_OVERDUE_AFTER_DAYS ? "overdue"
+    past < 0
+      ? "fresh"
+      : t.snoozedUntil != null && asOf < t.snoozedUntil
+        ? "snoozed"
+        : past > TRACKING_OVERDUE_AFTER_DAYS
+          ? "overdue"
           : "due";
   return {
     id: t.id,
@@ -177,7 +183,13 @@ function tokenToNumber(token: string): number {
   return neg ? -n : n;
 }
 
-const MULTIPLIERS: Record<string, number> = { k: 1_000, m: 1_000_000, mln: 1_000_000, mio: 1_000_000, miljoen: 1_000_000 };
+const MULTIPLIERS: Record<string, number> = {
+  k: 1_000,
+  m: 1_000_000,
+  mln: 1_000_000,
+  mio: 1_000_000,
+  miljoen: 1_000_000,
+};
 
 /** Read a WhatsApp-style reply that is meant to be *just the number*.
  *
@@ -189,7 +201,11 @@ const MULTIPLIERS: Record<string, number> = { k: 1_000, m: 1_000_000, mln: 1_000
  *  asks again. The sign is preserved; whether a negative makes sense is the
  *  source's business (a points balance rejects it, a card debt would not). */
 export function parseBalanceReply(text: string): number | null {
-  const cleaned = joinSpacedThousands(String(text ?? "").toLowerCase().replace(/[€$£]/g, " "));
+  const cleaned = joinSpacedThousands(
+    String(text ?? "")
+      .toLowerCase()
+      .replace(/[€$£]/g, " "),
+  );
   const re = /(-?\d+(?:[.,]\d+)*)\s*(miljoen|mln|mio|k|m)?(?![a-z])/g;
   const found: number[] = [];
   for (const m of cleaned.matchAll(re)) {

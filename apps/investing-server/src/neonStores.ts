@@ -1,6 +1,17 @@
-import { createAgentRunRepository, createPreferencesRepository, createPriceBarRepository, createPriceSyncStateRepository, createSyncStateRepository, type Database } from "@lavega/database";
+import {
+  createAgentRunRepository,
+  createPreferencesRepository,
+  createPriceBarRepository,
+  createPriceSyncStateRepository,
+  createSyncStateRepository,
+  type Database,
+} from "@lavega/database";
 import { validateBenchmarkSymbols, type BenchmarkSelectionStore } from "@lavega/core";
-import { YAHOO_DISCLOSURE_VERSION, type MarketDataConsentDecision, type MarketDataConsentStore } from "./marketDataConsent.js";
+import {
+  YAHOO_DISCLOSURE_VERSION,
+  type MarketDataConsentDecision,
+  type MarketDataConsentStore,
+} from "./marketDataConsent.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type { BrokerSyncStateStore, PriceStore, ScheduledBroker } from "@lavega/adapters";
 import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
@@ -15,9 +26,13 @@ import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestra
  * that costs nothing and keeps the interfaces unchanged.
  */
 
-export function createNeonPriceStore(db: Database, resolveTenantId: () => string | Promise<string>): PriceStore {
+export function createNeonPriceStore(
+  db: Database,
+  resolveTenantId: () => string | Promise<string>,
+): PriceStore {
   return {
-    getRange: (tenantId, symbol, from, to) => createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
+    getRange: (tenantId, symbol, from, to) =>
+      createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
     lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),
     upsert: (tenantId, bars) => createPriceBarRepository(db, tenantId).upsert(bars),
     async purgeAll() {
@@ -30,10 +45,17 @@ export function createNeonPriceStore(db: Database, resolveTenantId: () => string
 export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelectionStore {
   return {
     async get(tenantId) {
-      return { tenantId, symbols: validateBenchmarkSymbols(await createPreferencesRepository(db, tenantId).getBenchmarkSymbols()) };
+      return {
+        tenantId,
+        symbols: validateBenchmarkSymbols(
+          await createPreferencesRepository(db, tenantId).getBenchmarkSymbols(),
+        ),
+      };
     },
     async set(selection) {
-      await createPreferencesRepository(db, selection.tenantId).setBenchmarkSymbols(validateBenchmarkSymbols(selection.symbols));
+      await createPreferencesRepository(db, selection.tenantId).setBenchmarkSymbols(
+        validateBenchmarkSymbols(selection.symbols),
+      );
     },
   };
 }
@@ -41,12 +63,26 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
 export function createNeonMarketDataConsentStore(db: Database): MarketDataConsentStore {
   return {
     async get(tenantId) {
-      const stored = await createPreferencesRepository(db, tenantId).getMarketDataConsent() as Partial<MarketDataConsentDecision> | null;
+      const stored = (await createPreferencesRepository(
+        db,
+        tenantId,
+      ).getMarketDataConsent()) as Partial<MarketDataConsentDecision> | null;
       /* Consent is to a specific disclosure. An older version is not consent to
        * this one, so it reads as no decision at all rather than as a yes. */
-      return stored?.disclosureVersion === YAHOO_DISCLOSURE_VERSION && typeof stored.accepted === "boolean"
-        ? { tenantId, accepted: stored.accepted, decidedAt: stored.decidedAt ?? null, disclosureVersion: YAHOO_DISCLOSURE_VERSION }
-        : { tenantId, accepted: false, decidedAt: null, disclosureVersion: YAHOO_DISCLOSURE_VERSION };
+      return stored?.disclosureVersion === YAHOO_DISCLOSURE_VERSION &&
+        typeof stored.accepted === "boolean"
+        ? {
+            tenantId,
+            accepted: stored.accepted,
+            decidedAt: stored.decidedAt ?? null,
+            disclosureVersion: YAHOO_DISCLOSURE_VERSION,
+          }
+        : {
+            tenantId,
+            accepted: false,
+            decidedAt: null,
+            disclosureVersion: YAHOO_DISCLOSURE_VERSION,
+          };
     },
     async set(decision) {
       await createPreferencesRepository(db, decision.tenantId).setMarketDataConsent(decision);
@@ -54,7 +90,10 @@ export function createNeonMarketDataConsentStore(db: Database): MarketDataConsen
   };
 }
 
-export function createNeonBrokerSyncStateStore(db: Database, tenantId: string): BrokerSyncStateStore {
+export function createNeonBrokerSyncStateStore(
+  db: Database,
+  tenantId: string,
+): BrokerSyncStateStore {
   const repository = createSyncStateRepository(db, tenantId);
   return {
     get: (broker: ScheduledBroker) => repository.get(broker),
@@ -64,13 +103,23 @@ export function createNeonBrokerSyncStateStore(db: Database, tenantId: string): 
 
 export function createNeonPriceSyncProgressStore(db: Database): PriceSyncProgressStore {
   return {
-    get: async (tenantId) => (await createPriceSyncStateRepository(db, tenantId).get()) as PriceSyncProgress | null,
-    put: (tenantId, progress, leaseId) => createPriceSyncStateRepository(db, tenantId).put(progress, progress.status, leaseId),
-    claim: async (tenantId, progress, staleBefore) => (await createPriceSyncStateRepository(db, tenantId).claim(progress, progress.status, staleBefore)) as PriceSyncProgress | null,
+    get: async (tenantId) =>
+      (await createPriceSyncStateRepository(db, tenantId).get()) as PriceSyncProgress | null,
+    put: (tenantId, progress, leaseId) =>
+      createPriceSyncStateRepository(db, tenantId).put(progress, progress.status, leaseId),
+    claim: async (tenantId, progress, staleBefore) =>
+      (await createPriceSyncStateRepository(db, tenantId).claim(
+        progress,
+        progress.status,
+        staleBefore,
+      )) as PriceSyncProgress | null,
   };
 }
 
-export function createNeonAgentRunStore(db: Database, resolveTenantId: () => string | Promise<string>): AgentRunStore {
+export function createNeonAgentRunStore(
+  db: Database,
+  resolveTenantId: () => string | Promise<string>,
+): AgentRunStore {
   return {
     async get(): Promise<AgentRunRecord | null> {
       return createAgentRunRepository(db, await resolveTenantId()).get();

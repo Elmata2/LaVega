@@ -130,8 +130,21 @@ test("openInvoiceSummary telt de kanten los en houdt te-laat per kant bij", () =
   );
   expect(s.inScope).toBe(3);
   expect(s.open).toBe(3);
-  expect(s.ontvangen).toMatchObject({ count: 1, eurCount: 1, eurTotal: 1_200, lateCount: 1, lateEurTotal: 1_200 });
+  expect(s.ontvangen).toMatchObject({
+    count: 1,
+    eurCount: 1,
+    eurTotal: 1_200,
+    lateCount: 1,
+    lateEurTotal: 1_200,
+  });
   // De late GBP-factuur telt wel als te laat, maar niet in een euro-bedrag.
-  expect(s.betalen).toMatchObject({ count: 2, eurCount: 1, eurTotal: 400, lateCount: 1, lateEurCount: 0, lateEurTotal: 0 });
+  expect(s.betalen).toMatchObject({
+    count: 2,
+    eurCount: 1,
+    eurTotal: 400,
+    lateCount: 1,
+    lateEurCount: 0,
+    lateEurTotal: 0,
+  });
   expect(s.zonderEuroBedrag).toBe(1);
 });

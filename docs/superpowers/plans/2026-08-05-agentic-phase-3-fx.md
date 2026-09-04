@@ -36,13 +36,26 @@
 **Files:** Create `packages/core/src/fx.ts`, `packages/core/src/fx.test.ts`; modify `packages/core/src/index.ts`.
 
 **Interfaces produced:**
+
 ```ts
 export type FxRate = { base: string; date: string; rates: Record<string, number> }; // base->ccy multipliers
 export type FxRoute = { provider: string; spreadPct: number; fixedFeeFrom?: number; note?: string };
-export type FxRouteResult = { provider: string; netReceived: number; effectiveRate: number; totalCostPct: number; note?: string };
+export type FxRouteResult = {
+  provider: string;
+  netReceived: number;
+  effectiveRate: number;
+  totalCostPct: number;
+  note?: string;
+};
 export function crossRate(from: string, to: string, rate: FxRate): number;
 export function routeNet(amountFrom: number, mid: number, route: FxRoute): FxRouteResult;
-export function rankRoutes(amountFrom: number, from: string, to: string, rate: FxRate, routes?: readonly FxRoute[]): FxRouteResult[];
+export function rankRoutes(
+  amountFrom: number,
+  from: string,
+  to: string,
+  rate: FxRate,
+  routes?: readonly FxRoute[],
+): FxRouteResult[];
 export function parseFxRatePayload(raw: unknown): FxRate | null;
 export const FX_ROUTES_AS_OF: string;
 export const FX_ROUTES: readonly FxRoute[];
@@ -53,7 +66,14 @@ export const FX_RATE_FALLBACK: FxRate;
 
 ```ts
 import { expect, test } from "vitest";
-import { crossRate, routeNet, rankRoutes, parseFxRatePayload, FX_ROUTES, FX_RATE_FALLBACK } from "./fx.js";
+import {
+  crossRate,
+  routeNet,
+  rankRoutes,
+  parseFxRatePayload,
+  FX_ROUTES,
+  FX_RATE_FALLBACK,
+} from "./fx.js";
 
 const RATE = { base: "EUR", date: "2026-08-04", rates: { USD: 1.15, GBP: 0.85 } };
 
@@ -92,7 +112,12 @@ test("rankRoutes sorts by net received, best first", () => {
 });
 
 test("parseFxRatePayload accepts a Frankfurter-shaped payload and rejects junk", () => {
-  const ok = parseFxRatePayload({ amount: 1, base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } });
+  const ok = parseFxRatePayload({
+    amount: 1,
+    base: "EUR",
+    date: "2026-08-04",
+    rates: { USD: 1.15 },
+  });
   expect(ok).toEqual({ base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } });
   expect(parseFxRatePayload({ base: "EUR" })).toBeNull();
   expect(parseFxRatePayload(null)).toBeNull();
@@ -128,9 +153,9 @@ export type FxRoute = {
 };
 export type FxRouteResult = {
   provider: string;
-  netReceived: number;   // amount in `to` after this route's costs
+  netReceived: number; // amount in `to` after this route's costs
   effectiveRate: number; // netReceived / amountFrom
-  totalCostPct: number;  // % less than pure mid-market on the full amount
+  totalCostPct: number; // % less than pure mid-market on the full amount
   note?: string;
 };
 
@@ -165,7 +190,9 @@ export function rankRoutes(
   routes: readonly FxRoute[] = FX_ROUTES,
 ): FxRouteResult[] {
   const mid = crossRate(from, to, rate);
-  return routes.map((r) => routeNet(amountFrom, mid, r)).sort((a, b) => b.netReceived - a.netReceived);
+  return routes
+    .map((r) => routeNet(amountFrom, mid, r))
+    .sort((a, b) => b.netReceived - a.netReceived);
 }
 
 /** Validate an external rate payload (e.g. Frankfurter's `{amount,base,date,rates}`)
@@ -173,7 +200,13 @@ export function rankRoutes(
 export function parseFxRatePayload(raw: unknown): FxRate | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.base !== "string" || typeof o.date !== "string" || !o.rates || typeof o.rates !== "object") return null;
+  if (
+    typeof o.base !== "string" ||
+    typeof o.date !== "string" ||
+    !o.rates ||
+    typeof o.rates !== "object"
+  )
+    return null;
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(o.rates as Record<string, unknown>)) {
     if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
@@ -186,11 +219,25 @@ export function parseFxRatePayload(raw: unknown): FxRate | null {
 /* Indicative provider costs — owner-maintained, re-verify periodically. */
 export const FX_ROUTES_AS_OF = "2026-08-05";
 export const FX_ROUTES: readonly FxRoute[] = [
-  { provider: "Wise", spreadPct: 0.45, fixedFeeFrom: 1.0, note: "Mid-market + ~0,45% + kleine vaste fee" },
-  { provider: "Revolut (weekdag, Standard)", spreadPct: 0.0, note: "Mid-market tot plan-limiet, daarna 0,5%" },
+  {
+    provider: "Wise",
+    spreadPct: 0.45,
+    fixedFeeFrom: 1.0,
+    note: "Mid-market + ~0,45% + kleine vaste fee",
+  },
+  {
+    provider: "Revolut (weekdag, Standard)",
+    spreadPct: 0.0,
+    note: "Mid-market tot plan-limiet, daarna 0,5%",
+  },
   { provider: "Revolut (weekend)", spreadPct: 1.0, note: "Weekend-opslag ~1%" },
   { provider: "bunq", spreadPct: 0.5, note: "Indicatief" },
-  { provider: "Typische bank (overboeking)", spreadPct: 1.5, fixedFeeFrom: 7.0, note: "Wisselopslag ~1,5% + kosten buitenlandse overboeking" },
+  {
+    provider: "Typische bank (overboeking)",
+    spreadPct: 1.5,
+    fixedFeeFrom: 7.0,
+    note: "Wisselopslag ~1,5% + kosten buitenlandse overboeking",
+  },
   { provider: "Creditcard (typisch)", spreadPct: 2.0, note: "Bij kaartbetaling in vreemde valuta" },
 ];
 
@@ -198,7 +245,18 @@ export const FX_ROUTES: readonly FxRoute[] = [
 export const FX_RATE_FALLBACK: FxRate = {
   base: "EUR",
   date: "2026-08-04",
-  rates: { USD: 1.1515, GBP: 0.85639, CHF: 0.9319, JPY: 170.0, SEK: 11.2, NOK: 11.6, DKK: 7.46, PLN: 4.27, CAD: 1.58, AUD: 1.74 },
+  rates: {
+    USD: 1.1515,
+    GBP: 0.85639,
+    CHF: 0.9319,
+    JPY: 170.0,
+    SEK: 11.2,
+    NOK: 11.6,
+    DKK: 7.46,
+    PLN: 4.27,
+    CAD: 1.58,
+    AUD: 1.74,
+  },
 };
 ```
 
@@ -221,12 +279,24 @@ import { afterEach, expect, test, vi } from "vitest";
 afterEach(() => vi.restoreAllMocks());
 
 test("getFxRate returns the parsed live payload on a good response", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () =>
-    new Response(JSON.stringify({ amount: 1, base: "EUR", date: "2026-08-04", rates: { USD: 1.15, GBP: 0.85 } }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-  ));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            amount: 1,
+            base: "EUR",
+            date: "2026-08-04",
+            rates: { USD: 1.15, GBP: 0.85 },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    ),
+  );
   const { getFxRate } = await import("./fx.js");
   const r = await getFxRate();
   expect(r.base).toBe("EUR");
@@ -300,7 +370,13 @@ import { FX_ROUTES } from "@lavega/core";
 import { ownedProviders } from "./views/Valuta.js";
 
 const acct = (bank: string): Account => ({
-  key: bank, iban: "", name: bank, bank, entity: "BV1", currency: "EUR", balance: 0,
+  key: bank,
+  iban: "",
+  name: bank,
+  bank,
+  entity: "BV1",
+  currency: "EUR",
+  balance: 0,
 });
 
 test("ownedProviders matches a route to a bank the user holds (Revolut)", () => {
@@ -321,7 +397,13 @@ test("ownedProviders is empty when no bank matches any route", () => {
 ```tsx
 import { useEffect, useMemo, useState } from "react";
 import type { Account } from "@lavega/core";
-import { FX_ROUTES, FX_ROUTES_AS_OF, FX_RATE_FALLBACK, parseFxRatePayload, rankRoutes } from "@lavega/core";
+import {
+  FX_ROUTES,
+  FX_ROUTES_AS_OF,
+  FX_RATE_FALLBACK,
+  parseFxRatePayload,
+  rankRoutes,
+} from "@lavega/core";
 import type { FxRate, FxRoute } from "@lavega/core";
 import { API_BASE } from "../api";
 
@@ -358,8 +440,12 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
           setSource("live");
         }
       })
-      .catch(() => {/* keep fallback */});
-    return () => { ok = false; };
+      .catch(() => {
+        /* keep fallback */
+      });
+    return () => {
+      ok = false;
+    };
   }, []);
 
   const currencies = useMemo(
@@ -381,7 +467,11 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
   }, [amt, from, to, rate]);
 
   const fmt = (n: number, ccy: string) =>
-    new Intl.NumberFormat("nl-NL", { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(n);
+    new Intl.NumberFormat("nl-NL", {
+      style: "currency",
+      currency: ccy,
+      maximumFractionDigits: 2,
+    }).format(n);
 
   return (
     <section className="card" aria-label="Valuta">
@@ -391,8 +481,8 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
       </div>
       <p className="cell-sub">
         Vergelijk wat je overhoudt bij het omwisselen van valuta. Middenkoers via de ECB
-        (Frankfurter); de kosten per aanbieder zijn <strong>indicatief</strong> (peildatum {FX_ROUTES_AS_OF}).
-        Er wordt niets over je rekeningen verstuurd.
+        (Frankfurter); de kosten per aanbieder zijn <strong>indicatief</strong> (peildatum{" "}
+        {FX_ROUTES_AS_OF}). Er wordt niets over je rekeningen verstuurd.
       </p>
 
       {foreignHoldings.length > 0 && (
@@ -400,25 +490,58 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
       )}
 
       <div className="facturen-form">
-        <label>Bedrag{" "}
-          <input className="saldo-input" type="number" step={0.01} min={0} value={amount}
-            aria-label="Bedrag" onChange={(e) => setAmount(e.target.value)} />
+        <label>
+          Bedrag{" "}
+          <input
+            className="saldo-input"
+            type="number"
+            step={0.01}
+            min={0}
+            value={amount}
+            aria-label="Bedrag"
+            onChange={(e) => setAmount(e.target.value)}
+          />
         </label>{" "}
-        <label>Van{" "}
+        <label>
+          Van{" "}
           <select value={from} aria-label="Van valuta" onChange={(e) => setFrom(e.target.value)}>
-            {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
+            {currencies.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </label>{" "}
-        <label>Naar{" "}
+        <label>
+          Naar{" "}
           <select value={to} aria-label="Naar valuta" onChange={(e) => setTo(e.target.value)}>
-            {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
+            {currencies.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </label>
       </div>
 
       <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>
-        Middenkoers 1 {from} = {(() => { try { return rankRoutes(1, from, to, rate); } catch { return null; } })() ? "" : ""}
-        {(() => { try { return (results.length ? (rankRoutes(1, from, to, rate)[0] ? "" : "") : ""); } catch { return ""; } })()}
+        Middenkoers 1 {from} ={" "}
+        {(() => {
+          try {
+            return rankRoutes(1, from, to, rate);
+          } catch {
+            return null;
+          }
+        })()
+          ? ""
+          : ""}
+        {(() => {
+          try {
+            return results.length ? (rankRoutes(1, from, to, rate)[0] ? "" : "") : "";
+          } catch {
+            return "";
+          }
+        })()}
       </p>
 
       {results.length === 0 ? (
@@ -427,14 +550,24 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>Aanbieder</th><th>Effectieve koers</th><th>Je ontvangt</th><th>Kosten vs midden</th><th></th></tr>
+              <tr>
+                <th>Aanbieder</th>
+                <th>Effectieve koers</th>
+                <th>Je ontvangt</th>
+                <th>Kosten vs midden</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               {results.map((r, i) => (
                 <tr key={r.provider}>
                   <td>
                     {r.provider}
-                    {owned.has(r.provider) ? <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>in bezit</span> : null}
+                    {owned.has(r.provider) ? (
+                      <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>
+                        in bezit
+                      </span>
+                    ) : null}
                     {r.note ? <span className="cell-sub"> · {r.note}</span> : null}
                   </td>
                   <td>{r.effectiveRate.toFixed(4)}</td>
@@ -454,6 +587,7 @@ export default function Valuta({ accounts }: { accounts: Account[] }) {
   );
 }
 ```
+
 NOTE to implementer: the two `eyebrow` mid-koers lines above are placeholder-ugly — REPLACE that `<p className="eyebrow">` block with a clean single line showing the mid-market rate, computed ONCE: `const mid = useMemo(() => { try { return crossRate(from, to, rate); } catch { return null; } }, [from, to, rate]);` (import `crossRate`) and render `Middenkoers: 1 {from} = {mid ? mid.toFixed(4) : "—"} {to}`. Do not ship the placeholder IIFE lines.
 
 - [ ] **Step 4: Wire the view:**
@@ -462,6 +596,7 @@ NOTE to implementer: the two `eyebrow` mid-koers lines above are placeholder-ugl
 - [ ] **Step 5: Verify** — `pnpm vitest run apps/web/src/valuta.test.ts` (PASS), `pnpm test`, `pnpm typecheck`, `pnpm --filter @lavega/web build`. **Step 6: Commit** (`Valuta.tsx`, `valuta.test.ts`, `App.tsx`, `Sidebar.tsx`): `feat(web): Valuta tab — ranked FX conversion routes`.
 
 ## Self-Review notes
+
 - No LLM, no credentials — Frankfurter is keyless; the feature is fully testable/verifiable now (unlike Phase 2c).
 - Privacy: the rate endpoint receives no user data (always EUR-based ECB rates); route ranking + the amount/currency choice stay in the browser.
 - Route costs are INDICATIVE and labelled as such in the UI (open decision #7 upkeep chore accepted; live Wise `/v4/comparisons` intentionally deferred per the design's "graceful fallback" — noted, not built).

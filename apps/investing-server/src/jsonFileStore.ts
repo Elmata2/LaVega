@@ -22,7 +22,10 @@ export type JsonFileStore<T> = {
  * atomic tmp+rename replacement. Corruption policy belongs to `validate` — some
  * stores must refuse bad rows (prices), others must survive them (sync state).
  */
-export function createJsonFileStore<T>(filePath: string, options: { empty: T; validate: (contents: string) => T }): JsonFileStore<T> {
+export function createJsonFileStore<T>(
+  filePath: string,
+  options: { empty: T; validate: (contents: string) => T },
+): JsonFileStore<T> {
   let writeQueue = Promise.resolve();
 
   // ponytail: process-local parse cache; external file edits need a restart.
@@ -34,7 +37,8 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
     try {
       contents = await readFile(filePath, "utf8");
     } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return options.empty;
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return options.empty;
       throw error;
     }
     cache = options.validate(contents);
@@ -46,14 +50,19 @@ export function createJsonFileStore<T>(filePath: string, options: { empty: T; va
   const read = (): Promise<T> => {
     if (cache !== null) return Promise.resolve(cache);
     if (!inflight) {
-      inflight = doRead().finally(() => { inflight = null; });
+      inflight = doRead().finally(() => {
+        inflight = null;
+      });
     }
     return inflight;
   };
 
   const queue = <R>(operation: () => Promise<R>): Promise<R> => {
     const result = writeQueue.then(operation);
-    writeQueue = result.then(() => undefined, () => undefined);
+    writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 

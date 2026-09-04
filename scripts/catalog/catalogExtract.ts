@@ -113,7 +113,7 @@ export function buildExtractPrompt(req: ExtractRequest): { system: string; user:
     "   Describing the scope is almost always the better answer.",
     "",
     "3. conditionsKnown — false when the page does not let you settle the question",
-    "   either way. \"I could not establish the conditions\" is a CORRECT answer and it",
+    '   either way. "I could not establish the conditions" is a CORRECT answer and it',
     "   is the one we want in that case: the figure is kept, marked not-covered and",
     "   never served. Setting this true to make a number usable is the one failure",
     "   this whole design exists to prevent. But naming the conditions IS settling",
@@ -386,7 +386,9 @@ const DOCUMENT_KINDS: readonly DocumentKind[] = ["tariff-schedule", "terms", "ma
 const EXHAUSTIVE_KINDS: readonly DocumentKind[] = ["tariff-schedule", "terms"];
 
 function asDocumentKind(v: unknown): DocumentKind | null {
-  return typeof v === "string" && (DOCUMENT_KINDS as readonly string[]).includes(v) ? (v as DocumentKind) : null;
+  return typeof v === "string" && (DOCUMENT_KINDS as readonly string[]).includes(v)
+    ? (v as DocumentKind)
+    : null;
 }
 
 function asBasis(v: unknown): UnconditionalBasis | null {
@@ -394,7 +396,9 @@ function asBasis(v: unknown): UnconditionalBasis | null {
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
 }
 
 /** Turn a model reply into a figure, or refuse.
@@ -454,7 +458,8 @@ export function parseExtractReply(
   // null means "no condition governs this rate". Everything else — an empty
   // string, a missing field — is silence, and silence is carried by
   // conditionsKnown, not by pretending the rate is flat.
-  const conditions = typeof r.conditions === "string" && r.conditions.trim() ? r.conditions.trim() : null;
+  const conditions =
+    typeof r.conditions === "string" && r.conditions.trim() ? r.conditions.trim() : null;
 
   // Strictly `=== true`. A missing, absent or malformed field means the model did
   // not claim to have established anything, and defaulting that to true is how a
@@ -497,7 +502,8 @@ export function parseExtractReply(
   // customers it is wrong for — Revolut's 0% in a different hat. The scope IS a
   // condition, so it belongs in `conditions`, and a null alongside a scope is a
   // contradiction the parser refuses rather than a judgement it defers to.
-  const documentScope = typeof r.documentScope === "string" && r.documentScope.trim() ? r.documentScope.trim() : null;
+  const documentScope =
+    typeof r.documentScope === "string" && r.documentScope.trim() ? r.documentScope.trim() : null;
   if (documentScope !== null) unconditionalBasis = null;
 
   if (
@@ -516,5 +522,14 @@ export function parseExtractReply(
   const conditionsKnown = claimedKnown && (conditions !== null || unconditionalBasis !== null);
   if (!conditionsKnown) unconditionalBasis = null;
 
-  return { value, conditions, conditionsKnown, quote, documentKind, documentScope, capsExpressedElsewhere, unconditionalBasis };
+  return {
+    value,
+    conditions,
+    conditionsKnown,
+    quote,
+    documentKind,
+    documentScope,
+    capsExpressedElsewhere,
+    unconditionalBasis,
+  };
 }

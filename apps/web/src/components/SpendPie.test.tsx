@@ -52,7 +52,17 @@ function mount(ui: ReactElement): HTMLDivElement {
  *  stated here — the geometry under test is the angle, not the layout. */
 function box(el: HTMLElement, size = 168) {
   el.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: size, bottom: size, width: size, height: size, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    ({
+      left: 0,
+      top: 0,
+      right: size,
+      bottom: size,
+      width: size,
+      height: size,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 }
 
 function point(el: HTMLElement, type: string, clientX: number, clientY: number) {
@@ -150,7 +160,13 @@ test("a tap on a filterable row still filters; a tap on 'Overig' does nothing", 
     share: (10 - i) / 55,
   }));
   const el = mount(
-    <SpendPie slices={many} totalCents={55_000} euro={euro} maxSlices={8} onSelect={(c) => picked.push(c)} />,
+    <SpendPie
+      slices={many}
+      totalCents={55_000}
+      euro={euro}
+      maxSlices={8}
+      onSelect={(c) => picked.push(c)}
+    />,
   );
   const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
   act(() => rows[0].click());

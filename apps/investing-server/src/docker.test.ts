@@ -4,7 +4,13 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createDockerFetch } from "./docker.js";
 
 const temporaryDirectories: string[] = [];
-afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 async function fixture() {
   const directory = await mkdtemp(join(process.env.TMPDIR ?? "/tmp", "lavega-investing-docker-"));
@@ -17,11 +23,18 @@ async function fixture() {
 
 test("Docker fetch serves SPA, assets, and forwards API requests", async () => {
   const root = await fixture();
-  const apiFetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }));
+  const apiFetch = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { "content-type": "application/json" },
+      }),
+  );
   const fetch = createDockerFetch(apiFetch, root);
 
   expect(await (await fetch(new Request("http://localhost/"))).text()).toContain("dashboard");
-  expect((await fetch(new Request("http://localhost/assets/app.js"))).headers.get("content-type")).toContain("text/javascript");
+  expect(
+    (await fetch(new Request("http://localhost/assets/app.js"))).headers.get("content-type"),
+  ).toContain("text/javascript");
   expect((await fetch(new Request("http://localhost/positions"))).status).toBe(200);
   expect(await (await fetch(new Request("http://localhost/health"))).json()).toEqual({ ok: true });
   expect(apiFetch).toHaveBeenCalledOnce();
@@ -32,5 +45,7 @@ test("Docker fetch rejects traversal and serves SPA for missing client routes", 
   const fetch = createDockerFetch(vi.fn(), root);
 
   expect((await fetch(new Request("http://localhost/%2e%2e%2fsecret"))).status).toBe(404);
-  expect(await (await fetch(new Request("http://localhost/unknown-route"))).text()).toContain("dashboard");
+  expect(await (await fetch(new Request("http://localhost/unknown-route"))).text()).toContain(
+    "dashboard",
+  );
 });

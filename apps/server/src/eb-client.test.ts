@@ -102,7 +102,12 @@ describe("eb", () => {
     rmSync(keyDir, { recursive: true, force: true });
   });
 
-  async function listen(handler: (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void) {
+  async function listen(
+    handler: (
+      req: import("node:http").IncomingMessage,
+      res: import("node:http").ServerResponse,
+    ) => void,
+  ) {
     server = createServer(handler);
     await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
     const { port } = server.address() as AddressInfo;

@@ -15,14 +15,19 @@ export async function hasLegacyData(): Promise<boolean> {
  *  plaintext intact) on any failure before verification. */
 export async function migrateToVault(vault: VaultStorage, passphrase: string): Promise<void> {
   const legacy = createIndexedDbStorage();
-  const [accounts, txs, rules] = await Promise.all([legacy.getAccounts(), legacy.getTxs(), legacy.getRules()]);
+  const [accounts, txs, rules] = await Promise.all([
+    legacy.getAccounts(),
+    legacy.getTxs(),
+    legacy.getRules(),
+  ]);
   await vault.setup(passphrase, { accounts, txs, rules }); // writes + unlocks the vault
   // VERIFY: re-open the vault fresh, unlock, and confirm the data decrypts back.
   vault.lock();
   const ok = await vault.unlock(passphrase);
   if (!ok) throw new Error("kluis-verificatie mislukt — plaintext blijft behouden");
   const back = await vault.getAccounts();
-  if (back.length !== accounts.length) throw new Error("kluis-verificatie mislukt — plaintext blijft behouden");
+  if (back.length !== accounts.length)
+    throw new Error("kluis-verificatie mislukt — plaintext blijft behouden");
   // Only now is it safe to delete the plaintext DB.
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase(LEGACY_DB);

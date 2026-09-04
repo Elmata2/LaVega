@@ -94,16 +94,52 @@ export const FX_CONVERSION_HORIZON_MONTHS = 0;
 /** Words that name the KIND of card. A trailing run of these (with its tier
  *  words) is packaging, not the bank. */
 const TYPE_WORDS = new Set([
-  "card", "cards", "kaart", "creditcard", "credit", "betaalpas", "pas", "prepaid",
-  "debit", "visa", "mastercard", "maestro", "platinumcard", "goldcard",
+  "card",
+  "cards",
+  "kaart",
+  "creditcard",
+  "credit",
+  "betaalpas",
+  "pas",
+  "prepaid",
+  "debit",
+  "visa",
+  "mastercard",
+  "maestro",
+  "platinumcard",
+  "goldcard",
 ]);
 
 /** Words that name the TIER of a card. Stripped only in the company of a type
  *  word — "Flying Blue" is half a brand, "American Express Blue Card" is a tier. */
 const TIER_WORDS = new Set([
-  "classic", "silver", "gold", "platinum", "black", "panda", "world", "business",
-  "corporate", "entry", "green", "blue", "standard", "plus", "premium", "metal",
-  "smart", "go", "free", "core", "elite", "pro", "basic", "private", "max", "extra", "more",
+  "classic",
+  "silver",
+  "gold",
+  "platinum",
+  "black",
+  "panda",
+  "world",
+  "business",
+  "corporate",
+  "entry",
+  "green",
+  "blue",
+  "standard",
+  "plus",
+  "premium",
+  "metal",
+  "smart",
+  "go",
+  "free",
+  "core",
+  "elite",
+  "pro",
+  "basic",
+  "private",
+  "max",
+  "extra",
+  "more",
 ]);
 
 /** The few brands whose own product name does not carry them. Kept deliberately
@@ -151,8 +187,15 @@ export function fxBrandOf(product: string, issuer?: string): string {
   let sawType = false;
   for (let i = words.length - 1; i >= 0; i--) {
     const w = wordOf(words[i]);
-    if (TYPE_WORDS.has(w)) { sawType = true; cut = i; continue; }
-    if (TIER_WORDS.has(w)) { cut = i; continue; }
+    if (TYPE_WORDS.has(w)) {
+      sawType = true;
+      cut = i;
+      continue;
+    }
+    if (TIER_WORDS.has(w)) {
+      cut = i;
+      continue;
+    }
     break;
   }
   const kept = sawType ? words.slice(0, cut) : words;
@@ -167,7 +210,9 @@ export function fxBrandOf(product: string, issuer?: string): string {
  *  "ASN Bank" are the same bank; the trailing "Bank" is dropped only when a name
  *  survives it, so "N26 Bank" keys as "n26" and plain "Bank" keys as itself. */
 export function fxBankKey(name: string): string {
-  const flat = String(name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const flat = String(name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
   const stripped = flat.endsWith("bank") && flat.length - 4 >= 3 ? flat.slice(0, -4) : flat;
   return KEY_ALIASES[stripped] ?? stripped;
 }
@@ -270,7 +315,8 @@ export type FxRouteOption = {
   totalCostKnown: boolean;
 };
 
-const pctText = (n: number): string => `${n.toFixed(2).replace(/0+$/, "").replace(/[.,]$/, "").replace(".", ",")}%`;
+const pctText = (n: number): string =>
+  `${n.toFixed(2).replace(/0+$/, "").replace(/[.,]$/, "").replace(".", ",")}%`;
 
 /** Which candidate speaks for the bank.
  *
@@ -377,7 +423,9 @@ export function rankFxRoutes(input: {
     if (product && !entry.products.includes(product)) entry.products.push(product);
     heldByKey.set(key, entry);
   }
-  const myProducts = new Set([...heldByKey.values()].flatMap((h) => h.products.map((p) => p.toLowerCase())));
+  const myProducts = new Set(
+    [...heldByKey.values()].flatMap((h) => h.products.map((p) => p.toLowerCase())),
+  );
 
   const candidates: Candidate[] = [];
 
@@ -451,14 +499,18 @@ export function rankFxRoutes(input: {
   const rows = groups.map((g): FxRouteOption => {
     const held = [...heldByKey.entries()].find(([k]) => sameBank(k, g.key));
     const chosen = pickCandidate(g.items);
-    const cheapest = g.items.reduce<Candidate | null>((best, c) => (best === null || c.pct < best.pct ? c : best), null);
+    const cheapest = g.items.reduce<Candidate | null>(
+      (best, c) => (best === null || c.pct < best.pct ? c : best),
+      null,
+    );
     const cheaper =
       chosen && cheapest && chosen.mine && cheapest.pct < chosen.pct - 0.0001
         ? { product: cheapest.product, pct: cheapest.pct }
         : null;
     const fromCatalogue = g.items.filter((c) => c.fromCatalogue);
     const uniform =
-      fromCatalogue.length > 1 && fromCatalogue.every((c) => Math.abs(c.pct - fromCatalogue[0].pct) < 0.0001);
+      fromCatalogue.length > 1 &&
+      fromCatalogue.every((c) => Math.abs(c.pct - fromCatalogue[0].pct) < 0.0001);
 
     // WAT DEZE ROUTE KOST OM TE OPENEN, marginaal. Bij een bank die hij heeft is
     // dat een BEKENDE nul — die prijs loopt toch al door — en bij een bank die hij
@@ -516,12 +568,17 @@ export function rankFxRoutes(input: {
   return rows.sort((a, b) => {
     // 1. GEEN TARIEF IS GEEN GOEDKOPE ROUTE. Onbekend gaat onderaan; het is een
     //    risico, niet een aanbieding.
-    if ((a.totalCostCents === null) !== (b.totalCostCents === null)) return a.totalCostCents === null ? 1 : -1;
+    if ((a.totalCostCents === null) !== (b.totalCostCents === null))
+      return a.totalCostCents === null ? 1 : -1;
     // 2. HET GOEDKOOPST OVER DE HELE CONVERSIE: de opslag op dit bedrag plus wat de
     //    rekening kost om te openen. Op de opslag alleen won een kaart van 0% met
     //    € 16,90 per maand van een kaart van 1,4% die hij al heeft, terwijl die
     //    eerste hem bijna drie euro kost.
-    if (a.totalCostCents !== null && b.totalCostCents !== null && a.totalCostCents !== b.totalCostCents) {
+    if (
+      a.totalCostCents !== null &&
+      b.totalCostCents !== null &&
+      a.totalCostCents !== b.totalCostCents
+    ) {
       return a.totalCostCents - b.totalCostCents;
     }
     // 3. WAT WE KUNNEN AANTONEN, boven wat we niet weten. Bij hetzelfde bedrag wint
@@ -554,12 +611,7 @@ export function rankFxRoutes(input: {
  *  would understate a transfer by six times. */
 export function fxRouteDefault(options: readonly FxRouteOption[]): FxRouteOption | null {
   const usable = options.filter((o) => o.held && o.pct !== null);
-  return (
-    usable.find((o) => o.mine) ??
-    usable.find((o) => o.uniformAcrossBank) ??
-    usable[0] ??
-    null
-  );
+  return usable.find((o) => o.mine) ?? usable.find((o) => o.uniformAcrossBank) ?? usable[0] ?? null;
 }
 
 /* ─────────────────────────────────────────── wat een andere route zou schelen */
@@ -603,7 +655,9 @@ export function fxRouteDelta(option: FxRouteOption, base: FxRouteOption | null):
   if (gap === null) {
     const mine = option.totalCostCents;
     const theirs = base.totalCostCents;
-    return mine === null || theirs === null ? { kind: "unknown" } : { kind: "net", cents: mine - theirs };
+    return mine === null || theirs === null
+      ? { kind: "unknown" }
+      : { kind: "net", cents: mine - theirs };
   }
   const mine = option.conversionCostCents;
   const theirs = base.conversionCostCents;
@@ -642,7 +696,10 @@ export type FxRouteSwitch = {
   net: NetBenefit;
 };
 
-export function fxRouteSwitch(base: FxRouteOption | null, options: readonly FxRouteOption[]): FxRouteSwitch | null {
+export function fxRouteSwitch(
+  base: FxRouteOption | null,
+  options: readonly FxRouteOption[],
+): FxRouteSwitch | null {
   if (base === null || base.conversionCostCents === null) return null;
   const option = options.find((o) => o.key !== base.key && o.conversionCostCents !== null);
   if (!option || option.conversionCostCents === null) return null;

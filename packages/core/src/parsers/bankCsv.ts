@@ -1,6 +1,13 @@
 import type { Account, Tx } from "../model.js";
 import { norm } from "../hash.js";
-import { splitRows, parseDate, parseAmount, headerIndex, findIban, bankFromIban } from "./primitives.js";
+import {
+  splitRows,
+  parseDate,
+  parseAmount,
+  headerIndex,
+  findIban,
+  bankFromIban,
+} from "./primitives.js";
 
 /* Ported from Kasoverzicht.html's PARSERS block: the `profiles` table (486-500),
  * `headerIndex`/`pick` column mapping (502-516), `parseABN` (523-547) and
@@ -118,7 +125,8 @@ const PROFILES: Profile[] = [
   },
   {
     bank: "Knab",
-    test: (h) => h.includes("creditdebet") || (h.includes("rekeningnummer") && h.includes("transactiedatum")),
+    test: (h) =>
+      h.includes("creditdebet") || (h.includes("rekeningnummer") && h.includes("transactiedatum")),
     map: {
       date: ["transactiedatum"],
       cp: ["tegenrekeninghouder"],
@@ -136,7 +144,9 @@ const PROFILES: Profile[] = [
     // Currency/Fee/Balance. "product" (Betaalrekening/Spaarrekening/Current/
     // Savings) is the per-row account; "saldo"/"balance" is the running balance.
     bank: "Revolut",
-    test: (h) => (h.includes("completed date") || h.includes("datum voltooid")) && (h.includes("amount") || h.includes("bedrag")),
+    test: (h) =>
+      (h.includes("completed date") || h.includes("datum voltooid")) &&
+      (h.includes("amount") || h.includes("bedrag")),
     map: {
       date: ["completed date", "datum voltooid"],
       cp: ["description", "beschrijving"],
@@ -185,10 +195,40 @@ const PROFILES: Profile[] = [
  * (best-effort "generic" CSV support), ported from parseGenericCSV's inline
  * `m` object (557-569). --- */
 const GENERIC_MAP: ColumnMap = {
-  date: ["datum", "date", "boekdatum", "transactiedatum", "valutadatum", "completed date", "started date", "time", "datum boeking"],
+  date: [
+    "datum",
+    "date",
+    "boekdatum",
+    "transactiedatum",
+    "valutadatum",
+    "completed date",
+    "started date",
+    "time",
+    "datum boeking",
+  ],
   amount: ["bedrag", "amount", "bedrag (eur)", "transactiebedrag", "total", "value", "mutatie"],
-  cp: ["naam", "naam / beschrijving", "naam tegenpartij", "tegenrekeninghouder", "description", "merchant", "payee", "omschrijving", "beschrijving", "counterparty"],
-  desc: ["mededelingen", "omschrijving", "omschrijving-1", "description", "notes", "details", "extended details", "toelichting"],
+  cp: [
+    "naam",
+    "naam / beschrijving",
+    "naam tegenpartij",
+    "tegenrekeninghouder",
+    "description",
+    "merchant",
+    "payee",
+    "omschrijving",
+    "beschrijving",
+    "counterparty",
+  ],
+  desc: [
+    "mededelingen",
+    "omschrijving",
+    "omschrijving-1",
+    "description",
+    "notes",
+    "details",
+    "extended details",
+    "toelichting",
+  ],
   acc: ["rekening", "rekeningnummer", "iban/bban", "iban", "account", "tegenrekening", "product"],
   cur: ["munt", "currency", "valuta", "valutacode"],
   dc: ["af bij", "af/bij", "creditdebet", "debet/credit", "bij/af", "cdtdbtind", "type mutatie"],
@@ -214,7 +254,12 @@ function pick(idx: Record<string, number>, names: string[]): number {
  * favour ';' > ',' > '\t' > '|' (candidate order), default ',' if none found. --- */
 function sniffDelim(text: string): string {
   const head = text.split(/\r?\n/).slice(0, 5).join("\n");
-  const cands: Array<[string, number]> = [[";", 0], [",", 0], ["\t", 0], ["|", 0]];
+  const cands: Array<[string, number]> = [
+    [";", 0],
+    [",", 0],
+    ["\t", 0],
+    ["|", 0],
+  ];
   for (const c of cands) c[1] = head.split(c[0]).length - 1;
   cands.sort((a, b) => b[1] - a[1]);
   return cands[0][1] > 0 ? cands[0][0] : ",";
@@ -231,7 +276,10 @@ function looksLikeABN(rows: string[][]): boolean {
   );
 }
 
-function parseABN(rows: string[][]): { accounts: Record<string, Account>; txs: Array<Omit<Tx, "id">> } {
+function parseABN(rows: string[][]): {
+  accounts: Record<string, Account>;
+  txs: Array<Omit<Tx, "id">>;
+} {
   const accounts: Record<string, Account> = {};
   const txs: Array<Omit<Tx, "id">> = [];
   for (const r of rows) {
@@ -244,21 +292,38 @@ function parseABN(rows: string[][]): { accounts: Record<string, Account>; txs: A
     const info = (r.slice(7).join(" ") || "").replace(/\s+/g, " ").trim();
     if (date == null || amount == null) continue;
     accounts[acc] = accounts[acc] || {
-      key: acc, iban: findIban(acc) ?? "", name: acc, bank: "ABN AMRO", entity: "", currency: cur, balance: close,
+      key: acc,
+      iban: findIban(acc) ?? "",
+      name: acc,
+      bank: "ABN AMRO",
+      entity: "",
+      currency: cur,
+      balance: close,
     };
     accounts[acc].balance = close;
     // The running balance is "as of" this row's date; each row overwrites like
     // `balance` above, so the last (max-date) row wins.
     accounts[acc].balanceDate = date;
     let cp = "";
-    const nm = info.match(/(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+([^\n]+?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i);
+    const nm = info.match(
+      /(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+([^\n]+?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i,
+    );
     if (nm) cp = nm[1].trim().slice(0, 60);
     if (!cp) {
       const bea = info.match(/(?:BEA|GEA)[^,]*,[^,]*,\s*([^,]{3,40})/i);
       if (bea) cp = bea[1].trim();
     }
     if (!cp) cp = info.split(/\s{2,}/)[0].slice(0, 60);
-    txs.push({ accountKey: acc, date, amount, currency: cur, counterparty: cp, description: info, category: "", manual: false });
+    txs.push({
+      accountKey: acc,
+      date,
+      amount,
+      currency: cur,
+      counterparty: cp,
+      description: info,
+      category: "",
+      manual: false,
+    });
   }
   return { accounts, txs };
 }
@@ -270,10 +335,16 @@ function parseABN(rows: string[][]): { accounts: Record<string, Account>; txs: A
  * path: one account per Rekening, its balance set from the latest-date row's
  * Boeksaldo. Detected by the distinctive "rekening naam" + "boeksaldo" pair. --- */
 function looksLikeSavingsBalance(hNorm: string): boolean {
-  return hNorm.includes("boeksaldo") && (hNorm.includes("rekening naam") || hNorm.includes("rekeningnaam"));
+  return (
+    hNorm.includes("boeksaldo") &&
+    (hNorm.includes("rekening naam") || hNorm.includes("rekeningnaam"))
+  );
 }
 
-function parseSavingsBalances(header: string[], rows: string[][]): { accounts: Account[]; txs: Array<Omit<Tx, "id">> } {
+function parseSavingsBalances(
+  header: string[],
+  rows: string[][],
+): { accounts: Account[]; txs: Array<Omit<Tx, "id">> } {
   const idx = headerIndex(header);
   const ci = {
     date: pick(idx, ["datum", "boekdatum", "date"]),
@@ -307,8 +378,17 @@ function parseSavingsBalances(header: string[], rows: string[][]): { accounts: A
   for (const [acc, v] of latest) {
     // ING's "Oranje Spaarrekening" carries no IBAN (old-style account number),
     // so derive the bank from the product name; fall back to the IBAN prefix.
-    const bank = /oranje/i.test(v.name) ? "ING" : bankFromIban(acc) ?? "";
-    accounts.push({ key: acc, iban: findIban(acc) ?? "", name: v.name, bank, entity: "", currency: v.cur, balance: v.balance, balanceDate: v.date });
+    const bank = /oranje/i.test(v.name) ? "ING" : (bankFromIban(acc) ?? "");
+    accounts.push({
+      key: acc,
+      iban: findIban(acc) ?? "",
+      name: v.name,
+      bank,
+      entity: "",
+      currency: v.cur,
+      balance: v.balance,
+      balanceDate: v.date,
+    });
   }
   return { accounts, txs: [] };
 }
@@ -377,7 +457,7 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     if (date == null || amount == null) continue;
     if (ci.dc > -1) {
       const d = norm(r[ci.dc]);
-      amount = Math.abs(amount) * (dcNeg.includes(d) || /^d/.test(d) ? -1 : 1);
+      amount = Math.abs(amount) * (dcNeg.includes(d) || d.startsWith("d") ? -1 : 1);
     }
     if (ci.fee > -1) {
       const f = parseAmount(r[ci.fee]);
@@ -392,7 +472,15 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     const acc = findIban(accRaw) || accRaw || fallbackAccountKey;
     const cur = (ci.cur > -1 ? String(r[ci.cur] ?? "").trim() : "") || "EUR";
     const bank = prof?.bank ?? bankFromIban(acc) ?? "";
-    accounts[acc] = accounts[acc] || { key: acc, iban: findIban(acc) ?? "", name: acc, bank, entity: "", currency: cur, balance: null };
+    accounts[acc] = accounts[acc] || {
+      key: acc,
+      iban: findIban(acc) ?? "",
+      name: acc,
+      bank,
+      entity: "",
+      currency: cur,
+      balance: null,
+    };
     if (ci.bal > -1) {
       const b = parseAmount(r[ci.bal]);
       if (b != null) {

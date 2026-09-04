@@ -6,8 +6,8 @@ import {
   setN8nInvoiceUrl,
   getInvoiceForwardAddress,
   ensureInvoiceForwardAddress,
-
-  setInvoiceForwardAddress,} from "../settings";
+  setInvoiceForwardAddress,
+} from "../settings";
 
 /* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
  *
@@ -28,7 +28,18 @@ import {
  *  the owner opened his bank-integration screen. */
 function EyeIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
       <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z" />
       <circle cx="12" cy="12" r="2.6" />
     </svg>
@@ -39,7 +50,17 @@ type InfoKey = "koppeling" | "url" | "token";
 
 /** The eye beside a value. A button only — the panel it opens is rendered where
  *  the layout wants it, so a heading never has to contain a paragraph. */
-function InfoEye({ id, what, open, onToggle }: { id: InfoKey; what: string; open: boolean; onToggle: () => void }) {
+function InfoEye({
+  id,
+  what,
+  open,
+  onToggle,
+}: {
+  id: InfoKey;
+  what: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
       type="button"
@@ -172,26 +193,33 @@ export default function Koppelingen() {
         <h2>Koppeling met n8n</h2>
         <span className="eyebrow">
           voor de facturenwachtrij{" "}
-          <InfoEye id="koppeling" what="deze koppeling" open={info === "koppeling"} onToggle={toggle("koppeling")} />
+          <InfoEye
+            id="koppeling"
+            what="deze koppeling"
+            open={info === "koppeling"}
+            onToggle={toggle("koppeling")}
+          />
         </span>
       </div>
       <p className="cell-sub">
-        Plak hier de <em>Production URL</em> van de webhook-node in jouw n8n en het token dat je daar
-        bij <em>Header Auth</em> hebt gezet. Facturen gebruikt die twee om de wachtrij op te halen.
+        Plak hier de <em>Production URL</em> van de webhook-node in jouw n8n en het token dat je
+        daar bij <em>Header Auth</em> hebt gezet. Facturen gebruikt die twee om de wachtrij op te
+        halen.
       </p>
 
       {info === "koppeling" && (
         <InfoNote id="koppeling">
-          Je eigen n8n leest je mailbox, laat Claude bepalen of er een factuur in zit, en houdt die vast
-          in een wachtrij. LaVega haalt die rij rechtstreeks op:{" "}
-          <strong>jouw mailbox → jouw n8n → jouw browser</strong>. De LaVega-server komt er niet aan te
-          pas en ziet dus nooit een factuurbedrag.
+          Je eigen n8n leest je mailbox, laat Claude bepalen of er een factuur in zit, en houdt die
+          vast in een wachtrij. LaVega haalt die rij rechtstreeks op:{" "}
+          <strong>jouw mailbox → jouw n8n → jouw browser</strong>. De LaVega-server komt er niet aan
+          te pas en ziet dus nooit een factuurbedrag.
           <br />
           <br />
-          Opzetten doe je één keer, in n8n zelf: importeer <code>docs/n8n/lavega-invoices.json</code>,
-          zet een Header Auth-credential op de webhook-node, activeer de workflow, en plak de
-          Production URL en dat token hieronder. Beide blijven in deze browser — niet in de kluis, niet
-          in een back-up; op een andere computer vul je ze opnieuw in.
+          Opzetten doe je één keer, in n8n zelf: importeer{" "}
+          <code>docs/n8n/lavega-invoices.json</code>, zet een Header Auth-credential op de
+          webhook-node, activeer de workflow, en plak de Production URL en dat token hieronder.
+          Beide blijven in deze browser — niet in de kluis, niet in een back-up; op een andere
+          computer vul je ze opnieuw in.
           <br />
           <br />
           <strong>Er is met opzet geen testknop.</strong> De webhook leegt de wachtrij zodra hij
@@ -244,23 +272,22 @@ export default function Koppelingen() {
       {info === "url" && (
         <InfoNote id="url">
           Het adres waarop jouw n8n luistert. In n8n staat hij op de Webhook-node onder{" "}
-          <em>Production URL</em> — niet de Test URL, die werkt alleen zolang je in n8n op “Listen” hebt
-          geklikt. Hij begint met http:// of https://.
+          <em>Production URL</em> — niet de Test URL, die werkt alleen zolang je in n8n op “Listen”
+          hebt geklikt. Hij begint met http:// of https://.
         </InfoNote>
       )}
       {info === "token" && (
         <InfoNote id="token">
-          Een wachtwoord dat je zelf verzint, zodat alleen jouw browser die wachtrij mag leegmaken. Maak
-          er een met <code>openssl rand -hex 24</code> en zet dezelfde waarde in n8n bij{" "}
-          <em>Header Auth</em>, headernaam <code>x-lavega-token</code>. Hij blijft in deze browser en
-          gaat nooit naar de LaVega-server.
+          Een wachtwoord dat je zelf verzint, zodat alleen jouw browser die wachtrij mag leegmaken.
+          Maak er een met <code>openssl rand -hex 24</code> en zet dezelfde waarde in n8n bij{" "}
+          <em>Header Auth</em>, headernaam <code>x-lavega-token</code>. Hij blijft in deze browser
+          en gaat nooit naar de LaVega-server.
         </InfoNote>
       )}
 
       {urlLooksWrong && (
         <p className="cell-sub text-neg">
-          Dit ziet er niet uit als een webhook-URL — hij hoort met http:// of https:// te
-          beginnen.
+          Dit ziet er niet uit als een webhook-URL — hij hoort met http:// of https:// te beginnen.
         </p>
       )}
       {note && <p className="cell-sub">{note}</p>}

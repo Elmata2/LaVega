@@ -18,15 +18,15 @@ datum dragen, en alle acht doen dat.
 
 ## De vijf die erin kunnen
 
-| rij | bedrag | eenheid | documentdatum | bron |
-|---|---|---|---|---|
-| `abn-amro-betaalpas` | € 1,50 | per maand | 1 januari 2026 | Informatiedocument BasisPakket Betalen |
-| `ing-creditcard` | € 2,00 | per maand | 1 januari 2026 | Informatiedocument OranjePakket |
-| `ing-platinumcard` | € 4,35 | per maand | 1 januari 2026 | idem |
-| `rabo-goldcard` | € 2,00 | per maand | 1 juli 2026 | Informatiedocument Rabo Standaard |
-| `knab-creditcard` | € 28,00 | **per jaar** | 1 november 2025 | ICS-wijzigingspagina jaarbijdrage (Wayback) |
+| rij                  | bedrag  | eenheid      | documentdatum   | bron                                        |
+| -------------------- | ------- | ------------ | --------------- | ------------------------------------------- |
+| `abn-amro-betaalpas` | € 1,50  | per maand    | 1 januari 2026  | Informatiedocument BasisPakket Betalen      |
+| `ing-creditcard`     | € 2,00  | per maand    | 1 januari 2026  | Informatiedocument OranjePakket             |
+| `ing-platinumcard`   | € 4,35  | per maand    | 1 januari 2026  | idem                                        |
+| `rabo-goldcard`      | € 2,00  | per maand    | 1 juli 2026     | Informatiedocument Rabo Standaard           |
+| `knab-creditcard`    | € 28,00 | **per jaar** | 1 november 2025 | ICS-wijzigingspagina jaarbijdrage (Wayback) |
 
-Knab staat in **jaren** omdat ICS de post zo noemt — *jaarbijdrage*. De andere vier staan op
+Knab staat in **jaren** omdat ICS de post zo noemt — _jaarbijdrage_. De andere vier staan op
 maand omdat hun document ze zo zet. Er is nergens omgerekend, ook niet waar het document zelf
 beide noemt: ABN drukt naast "Per maand € 1,50" ook "Per jaar € 18,00" af, en Rabobank naast
 "Per maand € 2,00" ook "Totale jaarlijkse vergoeding € 24,00". Die jaarbedragen staan in de
@@ -34,7 +34,7 @@ voorwaarden en niet in het veld.
 
 ### Knab was de enige die een route nodig had
 
-Het Informatiedocument van Knab (01-10-2025) zet bij *Aanbieden van een creditcard* de woorden
+Het Informatiedocument van Knab (01-10-2025) zet bij _Aanbieden van een creditcard_ de woorden
 **"Dienst niet beschikbaar"**, met een voetnoot die precies zegt waarom:
 
 > De Knab Creditcard is een product van International Card Services (ICS). Knab heeft de
@@ -54,15 +54,14 @@ en die is **live** — maar hij gaat inmiddels over de vólgende verhoging:
 > Bekijk op deze pagina de antwoorden op vragen over de jaarbijdrage van uw Knab Creditcard **vanaf
 > 1 november 2026**. […] Waarom wordt de jaarbijdrage voor de Knab Creditcard **€ 31**?
 
-€ 31 is dus niet wat je vandaag betaalt. De Wayback-kopie van **dezelfde URL** (snapshot 15 april
-2026) draagt de vorige ronde:
+€ 31 is dus niet wat je vandaag betaalt. De Wayback-kopie van **dezelfde URL** (snapshot 15 april 2026) draagt de vorige ronde:
 
 > …de jaarbijdrage van uw Knab Creditcard **vanaf 1 november 2025**. […] Waarom wordt de
 > jaarbijdrage voor de Knab Creditcard **€ 28**?
 
 De Wayback-timestamp is niet als datum gebruikt; alleen de ingangsdatum in de tekst telt, en dat
 is 1 november 2025. Twee dingen bevestigen dat € 28 het geldende bedrag is: de live pagina zegt
-zelf *"Ook de jaarbijdrage voor uw Extra Card wijzigt van € 28 in € 31"*, en `knab.nl` toont op
+zelf _"Ook de jaarbijdrage voor uw Extra Card wijzigt van € 28 in € 31"_, en `knab.nl` toont op
 zijn eigen productpagina vandaag **"€ 28 per jaar"** — ongedateerd, dus niet als bron gebruikt,
 alleen als bevestiging dat het cijfer niet is verschoven. De aangekondigde € 31 per 1 november
 2026 staat in de voorwaarden, net als bij de ICS- en ANWB-rijen van 21 augustus.
@@ -74,11 +73,11 @@ Zeven van de acht zeggen "de pas zit in het pakket". ABN AMRO niet:
 > **Aanbieden van een betaalpas** — 1e betaalpas zonder BasisPakket Betalen | Per maand **€ 1,50**
 > | Per jaar € 18,00 — extra betaalpas | Per maand € 1,50 | Per jaar € 18,00
 >
-> — Informatiedocument betreffende de vergoedingen, BasisPakket Betalen, *Datum: 1 januari 2026*
+> — Informatiedocument betreffende de vergoedingen, BasisPakket Betalen, _Datum: 1 januari 2026_
 
 Het Informatieblad Betaaldiensten Particulieren (Januari 2026) zegt hetzelfde met een iets
-ruimere voorwaarde: *"1e betaalpas € 1,50 per maand (Als u geen BasisPakket Betalen **of Studenten
-Pakket** heeft)"*. Twee documenten, dezelfde uitgever, dezelfde maand, hetzelfde bedrag. De ruimere
+ruimere voorwaarde: _"1e betaalpas € 1,50 per maand (Als u geen BasisPakket Betalen **of Studenten
+Pakket** heeft)"_. Twee documenten, dezelfde uitgever, dezelfde maand, hetzelfde bedrag. De ruimere
 lezing is aangehouden.
 
 Dit is de spiegel van `abn-losse-betaalrekening`: ABN is de enige die zowel zijn losse rekening
@@ -100,10 +99,11 @@ Het Informatiedocument van het ING OranjePakket stond al in de catalogus — als
 koersopslag van `ing-platinumcard`. Op pagina 3 van datzelfde stuk staat wat er nog niet in stond:
 
 > • Aanbieden van een creditcard
+>
 > - Creditcard **€ 2,00 per maand** — extra Creditcard € 1,25 per maand
 > - Platinumcard **€ 4,35 per maand** — extra Platinumcard € 2,60 per maand
 
-Vier bedragen, en dat is meteen het probleem — zie *Wat ik niet heb opgelost* hieronder.
+Vier bedragen, en dat is meteen het probleem — zie _Wat ik niet heb opgelost_ hieronder.
 
 ### Rabo GoldCard staat er letterlijk, in een jonger document
 
@@ -123,26 +123,26 @@ Standaard en Rabo Comfort komen allebei met de GoldCard. Die rij is dus met rust
 Dit is het echte werk van deze ronde, en het levert géén bedrag op. Zeven van de acht banken
 zeggen in hun gedateerde document dat de eerste betaalpas **in de pakketprijs zit**:
 
-| bank | wat het document zegt | datum |
-|---|---|---|
-| ING | "Met inbegrip van een dienstenpakket dat bestaat uit: […] • betaalpas" (€ 4,00/mnd) | 1 jan 2026 |
-| Rabobank | "Met inbegrip van een dienstenpakket dat bestaat uit: […] • 1 Betaalpas [Rabo WereldPas]" (€ 3,45/mnd) | 1 jul 2026 |
-| SNS | "SNS Basis € 4,00 […] z 1 betaalpas" | 1 feb 2026 |
-| ASN | "€ 4,00 per rekening per kalendermaand. **Dit is inclusief één betaalpas.**" | 1 jul 2026 |
-| RegioBank | "Aanhouden van de betaalrekening, inclusief […] een betaalpas — € 4,00 per maand" | 1 feb 2026 |
-| Knab | "Met inbegrip van een dienstenpakket dat bestaat uit: […] Aanbieden van een betaalpas" (€ 6/€ 7 p/mnd) | 1 okt 2025 |
-| Triodos | "Met een dienstenpakket dat bestaat uit: - Een betaalpas [Triodos Betaalpas]" (€ 0,00–€ 8,00) | mei 2026 |
+| bank      | wat het document zegt                                                                                  | datum      |
+| --------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| ING       | "Met inbegrip van een dienstenpakket dat bestaat uit: […] • betaalpas" (€ 4,00/mnd)                    | 1 jan 2026 |
+| Rabobank  | "Met inbegrip van een dienstenpakket dat bestaat uit: […] • 1 Betaalpas [Rabo WereldPas]" (€ 3,45/mnd) | 1 jul 2026 |
+| SNS       | "SNS Basis € 4,00 […] z 1 betaalpas"                                                                   | 1 feb 2026 |
+| ASN       | "€ 4,00 per rekening per kalendermaand. **Dit is inclusief één betaalpas.**"                           | 1 jul 2026 |
+| RegioBank | "Aanhouden van de betaalrekening, inclusief […] een betaalpas — € 4,00 per maand"                      | 1 feb 2026 |
+| Knab      | "Met inbegrip van een dienstenpakket dat bestaat uit: […] Aanbieden van een betaalpas" (€ 6/€ 7 p/mnd) | 1 okt 2025 |
+| Triodos   | "Met een dienstenpakket dat bestaat uit: - Een betaalpas [Triodos Betaalpas]" (€ 0,00–€ 8,00)          | mei 2026   |
 
-Een nul invullen zou zeggen: *een ING-betaalpas is gratis*. Dat is onwaar op de enige manier
+Een nul invullen zou zeggen: _een ING-betaalpas is gratis_. Dat is onwaar op de enige manier
 waarop het ertoe doet — de enige manier om er een te hébben is een pakket van minstens € 4,00 per
 maand. `netBenefit.ts` heeft hier al een naam voor, en die staat er woord voor woord:
-`needs-another-product` — *"de bron noemt wél een bedrag, maar het is de prijs van dit product
+`needs-another-product` — _"de bron noemt wél een bedrag, maar het is de prijs van dit product
 BINNEN een ander product […] het genoemde bedrag doorgeven zou een te lage prijs zijn, wat erger
-is dan geen prijs."* Deze zeven horen daar, en niet in `accountFee`.
+is dan geen prijs."_ Deze zeven horen daar, en niet in `accountFee`.
 
 ### Drie valstrikken die in deze zeven documenten liggen
 
-**ASN.** Onder *ASN Studentenrekening en ASN Jongerenpakket* staat: "Aanbieden van een ASN
+**ASN.** Onder _ASN Studentenrekening en ASN Jongerenpakket_ staat: "Aanbieden van een ASN
 Betaalpas — **Eerste verstrekking betaalpas: € 0**". Een gedateerde, uitgesproken nul, over de
 goede kaart. En toch niet bruikbaar: hij prijst het **verstrekken**, een eenmalige handeling, en
 zwijgt over het **aanhouden**. Dat is precies de NIBC/Ayvens/DHB-valstrik uit de spaarronde,
@@ -165,14 +165,14 @@ voegen; hij zou hier langs de andere deur weer naar binnen komen.
 Wat de acht wél apart prijzen is de **extra** pas. Dat zijn zes gedateerde, doorlopende
 kaartprijzen die op precies één ding stranden: de catalogus kent geen rij "extra betaalpas".
 
-| bank | bedrag | eenheid | datum |
-|---|---|---|---|
-| ING (voor gemachtigde) | € 1,20 | per maand | 1 jan 2026 |
-| Rabobank [Rabo WereldPas] | € 1,20 | per maand | 1 jul 2026 |
-| SNS (Basis en overige) | € 1,35 | per maand | 1 feb 2026 |
-| ASN | € 1,35 | per kalendermaand | 1 jul 2026 |
-| RegioBank | € 1,35 | per maand | 1 feb 2026 |
-| Triodos (voor gemachtigde) | € 4,00 | per maand | mei 2026 |
+| bank                       | bedrag | eenheid           | datum      |
+| -------------------------- | ------ | ----------------- | ---------- |
+| ING (voor gemachtigde)     | € 1,20 | per maand         | 1 jan 2026 |
+| Rabobank [Rabo WereldPas]  | € 1,20 | per maand         | 1 jul 2026 |
+| SNS (Basis en overige)     | € 1,35 | per maand         | 1 feb 2026 |
+| ASN                        | € 1,35 | per kalendermaand | 1 jul 2026 |
+| RegioBank                  | € 1,35 | per maand         | 1 feb 2026 |
+| Triodos (voor gemachtigde) | € 4,00 | per maand         | mei 2026   |
 
 ABN staat hier niet omdat zijn extra pas hetzelfde kost als zijn eerste (€ 1,50) en dus in de
 voorwaarden van de rij hierboven past. Knab staat er niet omdat bij Knab ook de extra pas in het
@@ -197,8 +197,8 @@ RegioBank zet één kop en daaronder twee bullets, en die bullets zijn geen kaar
 > • Betaalrekening Plus Betalen € 37,50 per jaar
 > • Studentenrekening € 27,50 per jaar
 
-De prijs hangt aan de rekening; de kaart is er één. De productpagina zegt het in één zin: *"De
-creditcard kost € 37,50 per jaar en voor studenten € 27,50 per jaar."* Geen eigen naam, geen eigen
+De prijs hangt aan de rekening; de kaart is er één. De productpagina zegt het in één zin: _"De
+creditcard kost € 37,50 per jaar en voor studenten € 27,50 per jaar."_ Geen eigen naam, geen eigen
 pagina, geen eigen voorwaarden. **Geen tweede rij.** Het bedrag staat al waar het hoort: in de
 voorwaarden van `regiobank-creditcard`.
 
@@ -208,8 +208,8 @@ voorwaarden van `regiobank-creditcard`.
 > Studentenrekening (jaarlijkse kosten) € 27,50
 
 Eén kop, één kaartnaam, twee prijzen, en het verschil is de rekening ernaast. De productpagina:
-*"De creditcard van ICS kost elk jaar € 37,50. […] Heb je een SNS Jongeren- of Studentenrekening?
-Dan betaal je € 27,50 per jaar."* **Geen tweede rij.**
+_"De creditcard van ICS kost elk jaar € 37,50. […] Heb je een SNS Jongeren- of Studentenrekening?
+Dan betaal je € 27,50 per jaar."_ **Geen tweede rij.**
 
 Er is nog een argument dat uit de code komt en dat de zaak beslist: `isPricedOnItsOwn` in
 `accountCosts.ts` zet `pricedOnItsOwn` op false zodra de **productnaam** het woord "bij" bevat. De
@@ -227,18 +227,18 @@ Openbank sluit de vraag zelf in één zin:
 > **Het pasnummer, de geldigheidsdatum en de CVC zijn in beide gevallen dezelfde**, d.w.z. ongeacht
 > of Travel+ wel of niet is ingeschakeld.
 >
-> — Standaard precontractueel informatiedocument, Я42 Betaalpas, *Geldig vanaf 01-07-2024*
+> — Standaard precontractueel informatiedocument, Я42 Betaalpas, _Geldig vanaf 01-07-2024_
 
 Zelfde pasnummer, zelfde vervaldatum, zelfde CVC, twee kolommen in één tabel: "Travel + uitgeschakeld
 € 0" en "Travel+ ingeschakeld € 4,99/maand". Het is niet eens een tweede kaart die hetzelfde heet —
-het is dezelfde plastic met een schakelaar. En *"Wanneer de Pas geleverd wordt, zijn de voordelen
-uitgeschakeld"*, dus € 0 is de stand waarin je hem krijgt.
+het is dezelfde plastic met een schakelaar. En _"Wanneer de Pas geleverd wordt, zijn de voordelen
+uitgeschakeld"_, dus € 0 is de stand waarin je hem krijgt.
 
 **Deze rij hoeft niet gebouwd te worden en hoeft ook niet meer op de lijst.**
 `openbank-betaalpas-r42-betaalpas` draagt vandaag al `accountFee € 0,00 per maand` met in de
 voorwaarden "met Travel+ ingeschakeld € 4,99 per maand". Dat is de juiste vorm. Eén ding ontbreekt
-er nog: voetnoot 1 zegt *"Deze abonnementskosten zijn niet van toepassing op de eerste Betaalpas in
-het geval een klant recht heeft op Travel+ voor altijd gratis"* — een vrijstelling waarvan de
+er nog: voetnoot 1 zegt _"Deze abonnementskosten zijn niet van toepassing op de eerste Betaalpas in
+het geval een klant recht heeft op Travel+ voor altijd gratis"_ — een vrijstelling waarvan de
 voorwaarde in dit document niet staat.
 
 ### ABN AMRO — hier doet de bank het allebei, en de twee spreken elkaar tegen
@@ -247,11 +247,11 @@ Dit is de enige van de vier waar het antwoord niet eenduidig is, en dat komt doo
 verschillende dingen zegt.
 
 **Het tariefdocument zegt variant.** De regel heet gewoon "ABN AMRO Credit Card" — dezelfde naam
-als de kaart van € 2,55 — en staat binnen het blok *Studenten Pakket*: "ABN AMRO Credit Card €
+als de kaart van € 2,55 — en staat binnen het blok _Studenten Pakket_: "ABN AMRO Credit Card €
 1,31 per maand (€ 15,72 per jaar)". Eén kaart, twee prijzen, verschil is het pakket. Precies SNS.
 
 **De website zegt apart product**, en niet zwakjes: een eigen naam ("ABN AMRO Studenten Card",
-elders "ABN AMRO Studentencreditcard"), een eigen menu-item onder *Studeren*, een eigen pagina
+elders "ABN AMRO Studentencreditcard"), een eigen menu-item onder _Studeren_, een eigen pagina
 ("Meer over de Studenten Creditcard"), een eigen aanvraagknop, een eigen inkomenseis (€ 500 per
 maand tot 25 jaar in plaats van € 1.500), en een eigen antwoord in de FAQ op de vraag "Wat is het
 verschil tussen de ABN AMRO Creditcard, de ABN AMRO Gold Card en de ABN AMRO Studentencreditcard?":
@@ -278,12 +278,12 @@ heeft** — en de enige van de vier, want de andere drie zijn dan nog steeds var
 
 Twee levende ING-documenten kennen elkaars kaartnamen niet:
 
-| Informatiedocument, 1 januari 2026 | Kostenoverzicht, 15 juni 2026 |
-|---|---|
-| Creditcard **€ 2,00** | ING Creditcard More **€ 2,00** |
-| extra Creditcard **€ 1,25** | extra ING Creditcard More **€ 1,25** |
-| Platinumcard **€ 4,35** | ING Creditcard Extra **€ 4,35** |
-| extra Platinumcard **€ 2,60** | additionele ING Creditcard Extra **€ 2,60** |
+| Informatiedocument, 1 januari 2026 | Kostenoverzicht, 15 juni 2026               |
+| ---------------------------------- | ------------------------------------------- |
+| Creditcard **€ 2,00**              | ING Creditcard More **€ 2,00**              |
+| extra Creditcard **€ 1,25**        | extra ING Creditcard More **€ 1,25**        |
+| Platinumcard **€ 4,35**            | ING Creditcard Extra **€ 4,35**             |
+| extra Platinumcard **€ 2,60**      | additionele ING Creditcard Extra **€ 2,60** |
 
 Vier bedragen, paarsgewijs identiek. En het is niet alleen de prijs: de koersopslagclausule van de
 Platinumcard ("0% voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00%") is
@@ -307,8 +307,7 @@ Nog twee dingen van dezelfde soort, kleiner:
   dit moment onschadelijk — ze staan allebei op € 37,50 per jaar — maar het is dezelfde soort
   dubbeling als bij ING.
 - **De ICS-verhoging van 1 november 2026 komt er aan.** Knab gaat van € 28 naar € 31. De ASN-, SNS-
-  en RegioBank-kaarten in de catalogus staan op € 37,50 uit november 2025 respectievelijk februari
-  2026. Er is vandaag geen ICS-wijzigingspagina voor die drie in `sitemap.xml`, dus er is niets te
+  en RegioBank-kaarten in de catalogus staan op € 37,50 uit november 2025 respectievelijk februari 2026. Er is vandaag geen ICS-wijzigingspagina voor die drie in `sitemap.xml`, dus er is niets te
   melden — maar dit is de plek om in oktober te kijken.
 
 ## Routes: wat werkte
@@ -330,13 +329,13 @@ Nog twee dingen van dezelfde soort, kleiner:
 
 ## De telling
 
-| | aantal |
-|---|---|
+|                                                                                                                | aantal |
+| -------------------------------------------------------------------------------------------------------------- | ------ |
 | **Gevonden** — een doorlopend maand- of jaarbedrag bij een product van deze groep dat nog geen `accountFee` is | **15** |
-| Daarvan **door de toelatingseis** (waarde + bron + datum + voorwaarden) | **15** |
-| **Stranden op ALLEEN de datum** | **0** |
-| **Stranden op iets anders** | **10** |
-| **Voorgesteld voor `entries`** | **5** |
+| Daarvan **door de toelatingseis** (waarde + bron + datum + voorwaarden)                                        | **15** |
+| **Stranden op ALLEEN de datum**                                                                                | **0**  |
+| **Stranden op iets anders**                                                                                    | **10** |
+| **Voorgesteld voor `entries`**                                                                                 | **5**  |
 
 De vijftien dragen alle vier de onderdelen. Dat de datumcategorie leeg is, is de kern van deze
 groep: elk van deze acht banken publiceert een wettelijk verplicht, gedateerd document, en dat
@@ -345,18 +344,18 @@ en toe te wijzen.
 
 De tien die buiten blijven, met per stuk de reden:
 
-| wat | bedrag | waarom niet |
-|---|---|---|
-| ING extra betaalpas gemachtigde | € 1,20/mnd | geen catalogusrij "extra betaalpas" |
-| Rabobank extra betaalpas | € 1,20/mnd | idem; bovendien € 0,00 in Rabo Comfort |
-| SNS extra betaalpas | € 1,35/mnd | idem; drie bedragen naar pakket |
-| ASN extra betaalpas | € 1,35/kal.mnd | idem |
-| RegioBank extra betaalpas | € 1,35/mnd | idem |
-| Triodos extra betaalpas gemachtigde | € 4,00/mnd | idem |
-| SNS Creditcard bij Studentenrekening | € 27,50/jr | voorwaardelijke variant — hoort in de voorwaarden van `sns-creditcard`, waar hij staat |
-| RegioBank Creditcard bij Studentenrekening | € 27,50/jr | idem, bij `regiobank-creditcard` |
-| Openbank betaalpas met Travel+ | € 4,99/mnd | voorwaardelijke variant — zelfde pasnummer, zelfde CVC; staat al in `openbank-betaalpas-r42-betaalpas` |
-| ABN AMRO Studenten Creditcard | € 1,31/mnd | apart product volgens de website, variant volgens het tariefdocument; wacht op het onderscheid in `catalogueProductFor` |
+| wat                                        | bedrag         | waarom niet                                                                                                             |
+| ------------------------------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| ING extra betaalpas gemachtigde            | € 1,20/mnd     | geen catalogusrij "extra betaalpas"                                                                                     |
+| Rabobank extra betaalpas                   | € 1,20/mnd     | idem; bovendien € 0,00 in Rabo Comfort                                                                                  |
+| SNS extra betaalpas                        | € 1,35/mnd     | idem; drie bedragen naar pakket                                                                                         |
+| ASN extra betaalpas                        | € 1,35/kal.mnd | idem                                                                                                                    |
+| RegioBank extra betaalpas                  | € 1,35/mnd     | idem                                                                                                                    |
+| Triodos extra betaalpas gemachtigde        | € 4,00/mnd     | idem                                                                                                                    |
+| SNS Creditcard bij Studentenrekening       | € 27,50/jr     | voorwaardelijke variant — hoort in de voorwaarden van `sns-creditcard`, waar hij staat                                  |
+| RegioBank Creditcard bij Studentenrekening | € 27,50/jr     | idem, bij `regiobank-creditcard`                                                                                        |
+| Openbank betaalpas met Travel+             | € 4,99/mnd     | voorwaardelijke variant — zelfde pasnummer, zelfde CVC; staat al in `openbank-betaalpas-r42-betaalpas`                  |
+| ABN AMRO Studenten Creditcard              | € 1,31/mnd     | apart product volgens de website, variant volgens het tariefdocument; wacht op het onderscheid in `catalogueProductFor` |
 
 En daarnaast, buiten de telling omdat er geen bedrag is gevonden maar wel een antwoord: **zeven
 betaalpasrijen** waarvan het gedateerde document zegt dat de pas in de pakketprijs zit, en **vier

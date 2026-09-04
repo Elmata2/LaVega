@@ -3,8 +3,16 @@ import type { CountryCode, VatFrequency } from "./taxpacks/index.js";
 // cyclus met crossScope.ts (dat Account/Tx hiervandaan haalt).
 import type { CrossScopeAnswer } from "./crossScope.js";
 
-export type Account = { key: string; iban: string; name: string; bank: string;
-  entity: string; currency: string; balance: number | null; balanceDate?: string; type?: string;
+export type Account = {
+  key: string;
+  iban: string;
+  name: string;
+  bank: string;
+  entity: string;
+  currency: string;
+  balance: number | null;
+  balanceDate?: string;
+  type?: string;
   /** Optional annual interest rate (%) for the Optimisatie tab. User-set;
    *  suggested from detected "rente" bijschrijvingen when absent. */
   interestRate?: number;
@@ -32,7 +40,8 @@ export type Account = { key: string; iban: string; name: string; bank: string;
    *  van ophalen werd ingevuld voor een saldo van drie weken oud. `withLinkedAt`
    *  stempelt daarom alleen wat aantoonbaar nieuw is; de rest blijft leeg en het
    *  scherm zegt dat het onbekend is. */
-  linkedAt?: string };
+  linkedAt?: string;
+};
 
 /** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.
  *
@@ -67,8 +76,17 @@ export function withLinkedAt(
     return prev.linkedAt ? { ...a, linkedAt: prev.linkedAt } : a;
   });
 }
-export type Tx = { id: string; accountKey: string; date: string; amount: number;
-  currency: string; counterparty: string; description: string; category: string; manual: boolean };
+export type Tx = {
+  id: string;
+  accountKey: string;
+  date: string;
+  amount: number;
+  currency: string;
+  counterparty: string;
+  description: string;
+  category: string;
+  manual: boolean;
+};
 export type Rule = { id: string; match: string; category: string };
 
 /** A signed, dated future cash movement the forecast can see BEFORE the bank
@@ -100,8 +118,8 @@ export type Invoice = {
   counterparty: string;
   invoiceNumber?: string;
   issueDate: string; // ISO
-  dueDate: string;   // ISO
-  amount: number;    // decimal euros (gross)
+  dueDate: string; // ISO
+  amount: number; // decimal euros (gross)
   vatAmount?: number;
   currency: string;
   status: "expected" | "paid" | "cancelled";
@@ -135,8 +153,8 @@ export type VatSettings = {
   entity: string;
   frequency: VatFrequency;
   defaultRatePct: number; // e.g. 21
-  mixedRates: boolean;    // true => don't auto-estimate; manual-only
-  manualCents?: number;   // manual override of the amount to set aside this period
+  mixedRates: boolean; // true => don't auto-estimate; manual-only
+  manualCents?: number; // manual override of the amount to set aside this period
   /** Which country's rule pack applies. Absent = "NL". */
   country?: CountryCode;
   /** Override of the pack's indicative profit-tax rate (%), e.g. a known

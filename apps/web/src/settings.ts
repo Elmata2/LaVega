@@ -21,7 +21,8 @@ export function getBufferCents(): number {
 
 export function setBufferCents(cents: number): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(BUFFER_KEY, String(Math.max(0, Math.round(cents))));
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(BUFFER_KEY, String(Math.max(0, Math.round(cents))));
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
@@ -129,7 +130,8 @@ export function getCashbackAssumptionEnabled(): boolean {
 
 export function setCashbackAssumptionEnabled(on: boolean): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
@@ -155,7 +157,8 @@ export function getN8nInvoiceUrl(): string {
 
 export function setN8nInvoiceUrl(url: string): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_URL_KEY, String(url ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(N8N_URL_KEY, String(url ?? "").trim());
   } catch {
     /* non-fatal for a preference */
   }
@@ -171,7 +174,8 @@ export function getN8nInvoiceToken(): string {
 
 export function setN8nInvoiceToken(token: string): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_TOKEN_KEY, String(token ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(N8N_TOKEN_KEY, String(token ?? "").trim());
   } catch {
     /* non-fatal for a preference */
   }
@@ -198,7 +202,8 @@ export function getN8nBaseUrl(): string {
 
 export function setN8nBaseUrl(url: string): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_BASE_KEY, String(url ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(N8N_BASE_KEY, String(url ?? "").trim());
   } catch {
     /* non-fatal for a preference */
   }
@@ -206,7 +211,9 @@ export function setN8nBaseUrl(url: string): void {
 
 export function getN8nApiKey(): string {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_API_KEY_KEY)) ?? "";
+    return (
+      (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_API_KEY_KEY)) ?? ""
+    );
   } catch {
     return "";
   }
@@ -214,7 +221,8 @@ export function getN8nApiKey(): string {
 
 export function setN8nApiKey(key: string): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_API_KEY_KEY, String(key ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(N8N_API_KEY_KEY, String(key ?? "").trim());
   } catch {
     /* non-fatal for a preference */
   }
@@ -254,7 +262,8 @@ const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: di
  * Wat de validatie nog wél doet: het moet één adres zijn, met een @ en een domein,
  * zonder spaties. Dat houdt een half overgetikt adres tegen zonder te doen alsof wij
  * weten welk adres zijn provider aanvaardt. */
-const FORWARD_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i;
+const FORWARD_PATTERN =
+  /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
 /** Het opgeslagen adres, of "" als er nog nooit een gemaakt is. "" betekent
  *  "nog geen", nooit "gebruik maar iets" — er wordt hier niets verzonnen. */
@@ -270,7 +279,9 @@ export function getInvoiceForwardAddress(): string {
 function randomLocalSuffix(): string {
   const c = globalThis.crypto;
   if (!c || typeof c.getRandomValues !== "function") {
-    throw new Error("Deze browser heeft geen crypto.getRandomValues — LaVega weigert een raadbaar adres te maken.");
+    throw new Error(
+      "Deze browser heeft geen crypto.getRandomValues — LaVega weigert een raadbaar adres te maken.",
+    );
   }
   const buf = new Uint8Array(FORWARD_RANDOM_CHARS);
   c.getRandomValues(buf);
@@ -336,7 +347,10 @@ export function getHandledInvoiceMessageIds(): string[] {
 export function addHandledInvoiceMessageIds(ids: string[]): void {
   try {
     if (typeof localStorage === "undefined") return;
-    const merged = [...getHandledInvoiceMessageIds(), ...ids.filter((id) => typeof id === "string" && id.length > 0)];
+    const merged = [
+      ...getHandledInvoiceMessageIds(),
+      ...ids.filter((id) => typeof id === "string" && id.length > 0),
+    ];
     const deduped = Array.from(new Set(merged));
     localStorage.setItem(N8N_HANDLED_KEY, JSON.stringify(deduped.slice(-HANDLED_MAX)));
   } catch {
@@ -393,8 +407,11 @@ export function getHomeCountry(): string {
 
 export function setHomeCountry(code: string): void {
   try {
-    const c = String(code ?? "").trim().toUpperCase();
-    if (typeof localStorage !== "undefined" && /^[A-Z]{2}$/.test(c)) localStorage.setItem(HOME_COUNTRY_KEY, c);
+    const c = String(code ?? "")
+      .trim()
+      .toUpperCase();
+    if (typeof localStorage !== "undefined" && /^[A-Z]{2}$/.test(c))
+      localStorage.setItem(HOME_COUNTRY_KEY, c);
   } catch {
     /* non-fatal for a preference */
   }
@@ -414,7 +431,9 @@ const REGION_MAX = 80;
  *  different thing from a region — nothing downstream may read it as one. */
 export function getHomeRegion(): string {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_REGION_KEY)) ?? "";
+    return (
+      (typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_REGION_KEY)) ?? ""
+    );
   } catch {
     return "";
   }
@@ -423,7 +442,12 @@ export function getHomeRegion(): string {
 export function setHomeRegion(region: string): void {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(HOME_REGION_KEY, String(region ?? "").trim().slice(0, REGION_MAX));
+      localStorage.setItem(
+        HOME_REGION_KEY,
+        String(region ?? "")
+          .trim()
+          .slice(0, REGION_MAX),
+      );
     }
   } catch {
     /* non-fatal for a preference */
@@ -462,8 +486,18 @@ export function getOwnerName(): OwnerName {
 export function setOwnerName(name: OwnerName): void {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(NAME_FIRST_KEY, String(name.first ?? "").trim().slice(0, NAME_MAX));
-    localStorage.setItem(NAME_LAST_KEY, String(name.last ?? "").trim().slice(0, NAME_MAX));
+    localStorage.setItem(
+      NAME_FIRST_KEY,
+      String(name.first ?? "")
+        .trim()
+        .slice(0, NAME_MAX),
+    );
+    localStorage.setItem(
+      NAME_LAST_KEY,
+      String(name.last ?? "")
+        .trim()
+        .slice(0, NAME_MAX),
+    );
   } catch {
     /* non-fatal for a preference */
   }
@@ -473,5 +507,8 @@ export function setOwnerName(name: OwnerName): void {
  *  nothing at all when he gave neither — the header says something else then,
  *  rather than greeting an empty space. */
 export function ownerDisplayName(name: OwnerName): string {
-  return [name.first, name.last].map((s) => s.trim()).filter(Boolean).join(" ");
+  return [name.first, name.last]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" ");
 }

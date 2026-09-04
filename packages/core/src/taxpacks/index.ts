@@ -17,10 +17,12 @@ export type CountryCode = (typeof TAX_PACKS)[number]["country"];
 export const DEFAULT_COUNTRY: CountryCode = "NL";
 
 /** For a country picker: `[{ code: "NL", label: "Nederland" }, …]`. */
-export const COUNTRY_OPTIONS: readonly { code: CountryCode; label: string }[] = TAX_PACKS.map((p) => ({
-  code: p.country,
-  label: p.label,
-}));
+export const COUNTRY_OPTIONS: readonly { code: CountryCode; label: string }[] = TAX_PACKS.map(
+  (p) => ({
+    code: p.country,
+    label: p.label,
+  }),
+);
 
 const BY_CODE = new Map<string, TaxPack>(TAX_PACKS.map((p) => [p.country, p]));
 

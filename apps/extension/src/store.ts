@@ -144,7 +144,12 @@ function schoonSaldi(v: unknown, max = 50): PointsBalance[] {
     if (program === "") continue;
 
     const punten = typeof r.points === "number" ? r.points : Number.NaN;
-    if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten < 0 || punten > 1_000_000_000) {
+    if (
+      !Number.isFinite(punten) ||
+      !Number.isInteger(punten) ||
+      punten < 0 ||
+      punten > 1_000_000_000
+    ) {
       continue;
     }
 
@@ -269,7 +274,12 @@ function schoonPrijs(v: unknown): Puntenprijs | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const r = v as Record<string, unknown>;
   const punten = typeof r.punten === "number" ? r.punten : Number.NaN;
-  if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten <= 0 || punten > 100_000_000) {
+  if (
+    !Number.isFinite(punten) ||
+    !Number.isInteger(punten) ||
+    punten <= 0 ||
+    punten > 100_000_000
+  ) {
     return null;
   }
   const bijRuw = typeof r.bij === "string" ? r.bij.trim().slice(0, 20) : "";
@@ -337,7 +347,8 @@ function schoonLezing(v: unknown): Lezing | null {
   if (!UITKOMSTEN.includes(uitkomst as LezingUitkomst)) return null;
   const op = typeof r.op === "string" ? r.op.trim() : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(op)) return null;
-  const aantal = typeof r.aantal === "number" && Number.isInteger(r.aantal) && r.aantal >= 0 ? r.aantal : 0;
+  const aantal =
+    typeof r.aantal === "number" && Number.isInteger(r.aantal) && r.aantal >= 0 ? r.aantal : 0;
   const citaat = typeof r.citaat === "string" ? r.citaat.trim().slice(0, 120) : "";
   return { uitkomst: uitkomst as LezingUitkomst, aantal, op, citaat };
 }

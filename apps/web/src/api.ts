@@ -17,7 +17,9 @@ export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
  *  Anthropic directly). Returns one `{id, category}` per transaction the model
  *  could classify; ids it couldn't place are simply absent. Throws with the
  *  server's `{error}` message on a non-OK response (503/429/400/502). */
-export async function categorizeTxs(items: CategorizeItem[]): Promise<{ id: string; category: string }[]> {
+export async function categorizeTxs(
+  items: CategorizeItem[],
+): Promise<{ id: string; category: string }[]> {
   const res = await fetch(`${API_BASE}/api/agent/categorize`, {
     method: "POST",
     headers: { "content-type": "application/json" },

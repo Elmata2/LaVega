@@ -1,23 +1,38 @@
 import { expect, test, describe } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseBankNlPage, comparisonTermsFor, splitProductName, bankNameMatches, type BankNlRow } from "./bankNl.js";
+import {
+  parseBankNlPage,
+  comparisonTermsFor,
+  splitProductName,
+  bankNameMatches,
+  type BankNlRow,
+} from "./bankNl.js";
 
 /* The fixture is the REAL page, saved verbatim on 2026-08-16 (HTTP 200, 96 kB,
  * with a browser User-Agent). The tests never touch the network — a parser that
  * only passes against the live site is a parser nobody can run. */
 const FIXTURE = readFileSync(
-  fileURLToPath(new URL("./__fixtures__/bank-nl-betalen-in-buitenland-2026-08-16.html", import.meta.url)),
+  fileURLToPath(
+    new URL("./__fixtures__/bank-nl-betalen-in-buitenland-2026-08-16.html", import.meta.url),
+  ),
   "utf8",
 );
 
 const parsed = parseBankNlPage(FIXTURE);
-const row = (bank: string, card: string) => parsed.rows.find((r) => r.bank === bank && r.card === card);
+const row = (bank: string, card: string) =>
+  parsed.rows.find((r) => r.bank === bank && r.card === card);
 
 describe("parsing the real page", () => {
   test("every bank that has a tariff table is found, and only those", () => {
     expect([...new Set(parsed.rows.map((r) => r.bank))]).toEqual([
-      "ABN AMRO", "ING", "Rabobank", "ASN Bank", "Triodos Bank", "Knab", "Bunq",
+      "ABN AMRO",
+      "ING",
+      "Rabobank",
+      "ASN Bank",
+      "Triodos Bank",
+      "Knab",
+      "Bunq",
     ]);
   });
 
@@ -71,11 +86,17 @@ describe("parsing the real page", () => {
   });
 
   test("an asterisked cell carries its footnote into the note", () => {
-    expect(row("Triodos Bank", "betaalpas")!.note).toContain("De buitenlandse bank kan bijkomende kosten rekenen");
+    expect(row("Triodos Bank", "betaalpas")!.note).toContain(
+      "De buitenlandse bank kan bijkomende kosten rekenen",
+    );
   });
 
   test("every note says where the figure came from and when it was checked", () => {
-    expect(parsed.rows.every((r) => r.note.includes("Bron: bank.nl-vergelijking, laatst gecontroleerd 2026-01-15."))).toBe(true);
+    expect(
+      parsed.rows.every((r) =>
+        r.note.includes("Bron: bank.nl-vergelijking, laatst gecontroleerd 2026-01-15."),
+      ),
+    ).toBe(true);
   });
 
   test("bunq's per-plan table collapses to ONE row at the dearest plan", () => {
@@ -105,7 +126,9 @@ describe("parsing rules on synthetic tables", () => {
     `<tbody><tr><td>Betalen in euro&#8217;s</td><td>Gratis</td></tr><tr><td>Betalen in vreemde valuta</td><td>${fx}</td></tr></tbody>`;
 
   test("several surcharge components in one cell are summed", () => {
-    const out = parseBankNlPage(page("Testbank", twoColumn("1,5% van het bedrag + 0,5% netwerkkosten")));
+    const out = parseBankNlPage(
+      page("Testbank", twoColumn("1,5% van het bedrag + 0,5% netwerkkosten")),
+    );
     expect(out.rows[0].fxFeePct).toBe(2);
   });
 
@@ -117,7 +140,8 @@ describe("parsing rules on synthetic tables", () => {
   });
 
   test("a table with no foreign-currency row yields nothing", () => {
-    const table = "<thead><tr><th></th><th>Met betaalpas</th></tr></thead><tbody><tr><td>Betalen in euro&#8217;s</td><td>Gratis</td></tr></tbody>";
+    const table =
+      "<thead><tr><th></th><th>Met betaalpas</th></tr></thead><tbody><tr><td>Betalen in euro&#8217;s</td><td>Gratis</td></tr></tbody>";
     expect(parseBankNlPage(page("Testbank", table)).rows).toEqual([]);
   });
 
@@ -129,7 +153,7 @@ describe("parsing rules on synthetic tables", () => {
     expect(out.rows.map((r) => [r.card, r.fxFeePct])).toEqual([["betaalpas", 1.4]]);
   });
 
-  test("\"Met creditcard of platinumcard\" is a credit card, not a debit card", () => {
+  test('"Met creditcard of platinumcard" is a credit card, not a debit card', () => {
     const table =
       "<thead><tr><th></th><th>Met creditcard of platinumcard</th></tr></thead>" +
       "<tbody><tr><td>Betalen in vreemde valuta</td><td>2,0% koersopslag</td></tr></tbody>";
@@ -137,7 +161,10 @@ describe("parsing rules on synthetic tables", () => {
   });
 
   test("a table with no heading above it is skipped rather than attributed to nobody", () => {
-    const orphan = '<figure class="wp-block-table"><table>' + twoColumn("1,4% koersopslag") + "</table></figure>";
+    const orphan =
+      '<figure class="wp-block-table"><table>' +
+      twoColumn("1,4% koersopslag") +
+      "</table></figure>";
     expect(parseBankNlPage(orphan).rows).toEqual([]);
   });
 
@@ -149,7 +176,9 @@ describe("parsing rules on synthetic tables", () => {
   });
 
   test("a single-digit day and month become a real ISO date", () => {
-    const out = parseBankNlPage(page("Testbank", twoColumn("1,4% koersopslag"), "Laatst gecontroleerd op 5-3-2026"));
+    const out = parseBankNlPage(
+      page("Testbank", twoColumn("1,4% koersopslag"), "Laatst gecontroleerd op 5-3-2026"),
+    );
     expect(out.checkedAt).toBe("2026-03-05");
   });
 
@@ -164,7 +193,10 @@ describe("mapping a table row onto a LaVega product", () => {
 
   test("a product name splits into bank and card kind", () => {
     expect(splitProductName("ING betaalpas")).toEqual({ bank: "ING", card: "betaalpas" });
-    expect(splitProductName("ABN AMRO creditcard")).toEqual({ bank: "ABN AMRO", card: "creditcard" });
+    expect(splitProductName("ABN AMRO creditcard")).toEqual({
+      bank: "ABN AMRO",
+      card: "creditcard",
+    });
     // Not a product name productOf could ever have built.
     expect(splitProductName("ING")).toBeNull();
     expect(splitProductName("betaalpas")).toBeNull();
@@ -172,15 +204,24 @@ describe("mapping a table row onto a LaVega product", () => {
   });
 
   test("the figure lands on the right product, debit and credit apart", () => {
-    expect(comparisonTermsFor(rows, "ING betaalpas")).toMatchObject({ provider: "ING betaalpas", fxFeePct: 1.4 });
-    expect(comparisonTermsFor(rows, "ING creditcard")).toMatchObject({ provider: "ING creditcard", fxFeePct: 2 });
+    expect(comparisonTermsFor(rows, "ING betaalpas")).toMatchObject({
+      provider: "ING betaalpas",
+      fxFeePct: 1.4,
+    });
+    expect(comparisonTermsFor(rows, "ING creditcard")).toMatchObject({
+      provider: "ING creditcard",
+      fxFeePct: 2,
+    });
     expect(comparisonTermsFor(rows, "ABN AMRO betaalpas")).toMatchObject({ fxFeePct: 1.2 });
   });
 
   test("the owner's own spelling of a bank still matches", () => {
     // `account.bank` is free text he can edit in Rekeningen, so "ASN" and "ASN
     // Bank" are the same bank and must not be two different unknowns.
-    expect(comparisonTermsFor(rows, "ASN betaalpas")).toMatchObject({ provider: "ASN betaalpas", fxFeePct: 1.4 });
+    expect(comparisonTermsFor(rows, "ASN betaalpas")).toMatchObject({
+      provider: "ASN betaalpas",
+      fxFeePct: 1.4,
+    });
     expect(comparisonTermsFor(rows, "Triodos betaalpas")).toMatchObject({ fxFeePct: 1 });
     expect(comparisonTermsFor(rows, "bunq betaalpas")).toMatchObject({ fxFeePct: 2 });
     expect(comparisonTermsFor(rows, "abn amro creditcard")).toMatchObject({ fxFeePct: 2 });

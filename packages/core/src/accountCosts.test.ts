@@ -30,7 +30,9 @@ const fee = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const entry = (over: Partial<AccountFeeEntryLike> & { fee?: Record<string, unknown> } = {}): AccountFeeEntryLike => {
+const entry = (
+  over: Partial<AccountFeeEntryLike> & { fee?: Record<string, unknown> } = {},
+): AccountFeeEntryLike => {
   const { fee: f, ...rest } = over;
   return {
     id: "ing-go",
@@ -91,7 +93,9 @@ const ICS_VISA_WORLD_CARD = entry({
 describe("readAccountFee", () => {
   test("leest de eenheid uit `period`, en anders uit het `unit`-veld van de zoeklane", () => {
     expect(readAccountFee(entry())?.period).toBe("maand");
-    expect(readAccountFee(entry({ fee: { period: undefined, unit: "EUR per jaar" } }))?.period).toBe("jaar");
+    expect(
+      readAccountFee(entry({ fee: { period: undefined, unit: "EUR per jaar" } }))?.period,
+    ).toBe("jaar");
   });
 
   test("WEIGERT een bedrag zonder eenheid — dat scheelt een factor twaalf", () => {
@@ -100,7 +104,9 @@ describe("readAccountFee", () => {
   });
 
   test("WEIGERT een eenheid die twee kanten op wijst", () => {
-    expect(readAccountFee(entry({ fee: { period: "€ 48,00 per jaar, dus € 4,00 per maand" } }))).toBeNull();
+    expect(
+      readAccountFee(entry({ fee: { period: "€ 48,00 per jaar, dus € 4,00 per maand" } })),
+    ).toBeNull();
   });
 
   test("WEIGERT een bedrag waarvan de voorwaarden nooit zijn vastgesteld", () => {
@@ -136,7 +142,9 @@ describe("maand versus jaar", () => {
   });
 
   test("de markt staat goedkoopst-per-jaar eerst, over de eenheden heen", () => {
-    const ids = accountFees([ICS_VISA_WORLD_CARD, ING_MORE, ING_GO, ING_STUDENT]).map((f) => f.productId);
+    const ids = accountFees([ICS_VISA_WORLD_CARD, ING_MORE, ING_GO, ING_STUDENT]).map(
+      (f) => f.productId,
+    );
     // ING Student € 0 · ING Go € 48/jr · ING More € 84/jr · ICS € 42,95/jr staat
     // dus TUSSEN Student en Go, niet onderaan omdat het toevallig per jaar is.
     expect(ids).toEqual(["ing-student", "ics-visa-world-card", "ing-go", "ing-more"]);
@@ -160,7 +168,10 @@ describe("bekende nul versus onbekend", () => {
   });
 
   test("een bank die de catalogus niet kent is ONBEKEND, niet gratis", () => {
-    const { rows, total } = accountCosts([account({ bank: "Bank Ergens", name: "Betaalrekening" })], catalogue);
+    const { rows, total } = accountCosts(
+      [account({ bank: "Bank Ergens", name: "Betaalrekening" })],
+      catalogue,
+    );
     expect(rows[0].cost).toEqual({ kind: "unknown", reason: "provider-unknown" });
     expect(total).toEqual({ kind: "none" });
   });
@@ -171,7 +182,11 @@ describe("bekende nul versus onbekend", () => {
     // duurste — is een gok met een prijskaartje.
     const { rows } = accountCosts([account({ name: "NL01INGB0000000001" })], catalogue);
     expect(rows[0].cost).toEqual({ kind: "unknown", reason: "product-unknown" });
-    expect(rows[0].candidates.map((c) => c.productId)).toEqual(["ing-student", "ing-go", "ing-more"]);
+    expect(rows[0].candidates.map((c) => c.productId)).toEqual([
+      "ing-student",
+      "ing-go",
+      "ing-more",
+    ]);
   });
 
   test("een rekening zonder banknaam kan niet opgezocht worden", () => {
@@ -186,7 +201,11 @@ describe("bekende nul versus onbekend", () => {
       product: "Wise-rekening",
       issuer: "Wise Europe SA",
       kind: "betaalrekening",
-      fee: { value: 0, conditions: "De pagina zegt expliciet 'geen abonnementen of plannen'.", checkedAt: "2026-08-20" },
+      fee: {
+        value: 0,
+        conditions: "De pagina zegt expliciet 'geen abonnementen of plannen'.",
+        checkedAt: "2026-08-20",
+      },
     });
     const wiseEu = entry({
       id: "wise-eu-rekening",
@@ -195,7 +214,10 @@ describe("bekende nul versus onbekend", () => {
       kind: "betaalrekening",
       fee: { value: 0, conditions: "Geen abonnementskosten.", checkedAt: "2026-08-21" },
     });
-    const { rows, total } = accountCosts([account({ bank: "Wise", name: "Wise" })], [wiseAccount, wiseEu]);
+    const { rows, total } = accountCosts(
+      [account({ bank: "Wise", name: "Wise" })],
+      [wiseAccount, wiseEu],
+    );
     const cost = rows[0].cost;
     expect(cost.kind).toBe("known");
     if (cost.kind !== "known") throw new Error("onbereikbaar");
@@ -208,7 +230,13 @@ describe("bekende nul versus onbekend", () => {
   });
 
   test("één product bij een bank is geen consensus maar gewoon dat ene product", () => {
-    const solo = entry({ id: "knab-prive", product: "Knab Privérekening", issuer: "Knab (Aegon Bank N.V.)", kind: "betaalrekening", fee: { value: 6 } });
+    const solo = entry({
+      id: "knab-prive",
+      product: "Knab Privérekening",
+      issuer: "Knab (Aegon Bank N.V.)",
+      kind: "betaalrekening",
+      fee: { value: 6 },
+    });
     const { rows } = accountCosts([account({ bank: "Knab", name: "Betaalrekening" })], [solo]);
     expect(rows[0].cost).toEqual({ kind: "unknown", reason: "product-unknown" });
     // Maar het bedrag dat we WEL kennen gaat niet verloren.
@@ -249,7 +277,10 @@ describe("het totaal", () => {
   });
 
   test("een spaarrekening staat niet in deze telling", () => {
-    const { rows } = accountCosts([account({ name: "Oranje Spaarrekening", bank: "ING" })], catalogue);
+    const { rows } = accountCosts(
+      [account({ name: "Oranje Spaarrekening", bank: "ING" })],
+      catalogue,
+    );
     expect(rows).toHaveLength(0);
   });
 });
@@ -275,7 +306,9 @@ describe("waar het loont", () => {
     const { rows } = accountCosts([account({ name: "ING More", bank: "ING" })], catalogue);
     expect(rows[0].cheaperAtProvider?.fee.productId).toBe("ing-student");
     expect(rows[0].cheaperAtProvider?.fee.productId).not.toBe("ing-basispakket");
-    expect(accountFees(catalogue).find((f) => f.productId === "ing-basispakket")?.openToNewCustomers).toBe(false);
+    expect(
+      accountFees(catalogue).find((f) => f.productId === "ing-basispakket")?.openToNewCustomers,
+    ).toBe(false);
   });
 
   test("een creditcard wordt niet vergeleken met een betaalpakket", () => {
@@ -307,7 +340,10 @@ describe("waar het loont", () => {
   test("van bank wisselen voor hetzelfde bedrag is geen tweede tip", () => {
     // Met ING Student erbij levert de eigen bank net zoveel op als bunq. Twee
     // regels met hetzelfde bedrag lezen als twee adviezen waar er maar één is.
-    const { rows } = accountCosts([account({ name: "ING More", bank: "ING" })], [...catalogue, BUNQ_FREE]);
+    const { rows } = accountCosts(
+      [account({ name: "ING More", bank: "ING" })],
+      [...catalogue, BUNQ_FREE],
+    );
     expect(rows[0].cheaperAtProvider?.savingPerYearCents).toBe(8400);
     expect(rows[0].cheaperElsewhere).toBeNull();
   });
@@ -322,7 +358,8 @@ describe("waar het loont", () => {
       kind: "creditcard",
       fee: {
         value: 0,
-        conditions: "Alleen binnen het ING Max-pakket (€ 44,99 per maand); de kaart zelf kost daarbovenop niets.",
+        conditions:
+          "Alleen binnen het ING Max-pakket (€ 44,99 per maand); de kaart zelf kost daarbovenop niets.",
       },
     });
     const acc = account({ name: "ICS Visa World Card", bank: "ICS", type: "Creditcard" });
@@ -330,7 +367,16 @@ describe("waar het loont", () => {
     expect(accountFees([ingCardMax])[0].pricedOnItsOwn).toBe(false);
     expect(rows[0].cheaperElsewhere).toBeNull();
     // Een kaart die zijn afhankelijkheid in zijn NAAM draagt gaat er ook uit.
-    expect(accountFees([entry({ id: "x", product: "SNS Creditcard bij Studentenrekening", kind: "creditcard", fee: { value: 27.5, period: "jaar" } })])[0].pricedOnItsOwn).toBe(false);
+    expect(
+      accountFees([
+        entry({
+          id: "x",
+          product: "SNS Creditcard bij Studentenrekening",
+          kind: "creditcard",
+          fee: { value: 27.5, period: "jaar" },
+        }),
+      ])[0].pricedOnItsOwn,
+    ).toBe(false);
   });
 
   test("een besparing onder een euro per maand is ruis, geen advies", () => {
@@ -367,9 +413,24 @@ describe("de co-branded kaarten", () => {
   });
 
   test("Rabobank noemt zijn pakketten 'Rabo …' en dat is dezelfde bank", () => {
-    const raboStandaard = entry({ id: "rabo-standaard", product: "Rabo Standaard", issuer: "Coöperatieve Rabobank U.A.", kind: "betaalpakket", fee: { value: 3.45 } });
-    const raboFree = entry({ id: "rabo-free", product: "Rabo Free", issuer: "Coöperatieve Rabobank U.A.", kind: "betaalpakket", fee: { value: 0, conditions: "Bedoeld voor rekeninghouders van 18 tot en met 24 jaar." } });
-    const { rows } = accountCosts([account({ bank: "Rabobank", name: "Rabo Standaard" })], [raboStandaard, raboFree]);
+    const raboStandaard = entry({
+      id: "rabo-standaard",
+      product: "Rabo Standaard",
+      issuer: "Coöperatieve Rabobank U.A.",
+      kind: "betaalpakket",
+      fee: { value: 3.45 },
+    });
+    const raboFree = entry({
+      id: "rabo-free",
+      product: "Rabo Free",
+      issuer: "Coöperatieve Rabobank U.A.",
+      kind: "betaalpakket",
+      fee: { value: 0, conditions: "Bedoeld voor rekeninghouders van 18 tot en met 24 jaar." },
+    });
+    const { rows } = accountCosts(
+      [account({ bank: "Rabobank", name: "Rabo Standaard" })],
+      [raboStandaard, raboFree],
+    );
     const cost = rows[0].cost;
     expect(cost.kind).toBe("known");
     if (cost.kind !== "known") throw new Error("onbereikbaar");
@@ -378,12 +439,18 @@ describe("de co-branded kaarten", () => {
   });
 
   test("'Trading 212' bevat 'ing' en is geen ING-rekening", () => {
-    const { rows } = accountCosts([account({ bank: "Trading 212", name: "Trading 212" })], [ING_GO, ING_MORE]);
+    const { rows } = accountCosts(
+      [account({ bank: "Trading 212", name: "Trading 212" })],
+      [ING_GO, ING_MORE],
+    );
     expect(rows[0].cost).toEqual({ kind: "unknown", reason: "provider-unknown" });
   });
 
   test("'ING Go' slaat niet aan op een rekening die 'ING Gouden' heet", () => {
-    const { rows } = accountCosts([account({ bank: "ING", name: "ING Gouden Rekening" })], [ING_GO, ING_MORE]);
+    const { rows } = accountCosts(
+      [account({ bank: "ING", name: "ING Gouden Rekening" })],
+      [ING_GO, ING_MORE],
+    );
     expect(rows[0].cost.kind).toBe("unknown");
   });
 });
@@ -471,7 +538,6 @@ describe("feeCostOverMonths", () => {
   });
 });
 
-
 /* ═════════ DE PAKKETMATCHER, want de prijs staat vaak op een ANDERE rij ══════
  *
  * De rijen hieronder staan LETTERLIJK zo in docs/catalog/catalog.json, en dat is
@@ -500,10 +566,17 @@ describe("productFeesById: de prijs van de kaart staat op de pakketrij", () => {
     fields: { accountFee: fee({ value: 16.9, period: "maand", conditions: "Membership fee." }) },
   };
   const ING_BETAALPAS: AccountFeeEntryLike = {
-    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas", fields: {},
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    issuer: "ING Bank N.V.",
+    kind: "betaalpas",
+    fields: {},
   };
   const ING_PAKKET: AccountFeeEntryLike = {
-    id: "ing-betaalpakket", product: "ING BetaalPakket", issuer: "ING Bank N.V.", kind: "betaalpakket",
+    id: "ing-betaalpakket",
+    product: "ING BetaalPakket",
+    issuer: "ING Bank N.V.",
+    kind: "betaalpakket",
     fields: { accountFee: fee({ value: 6.85 }) },
   };
 
@@ -528,11 +601,18 @@ describe("productFeesById: de prijs van de kaart staat op de pakketrij", () => {
     // Het pakket moet een REKENING zijn. ABN's creditcardbijdrage van € 2,55 hoort
     // bij de creditcard en niet bij de betaalpas van dezelfde bank.
     const CARD_FEE: AccountFeeEntryLike = {
-      id: "abn-amro-creditcard", product: "ABN AMRO creditcard", issuer: "International Card Services B.V.",
-      kind: "creditcard", fields: { accountFee: fee({ value: 2.55, conditions: "Maandelijkse bijdrage." }) },
+      id: "abn-amro-creditcard",
+      product: "ABN AMRO creditcard",
+      issuer: "International Card Services B.V.",
+      kind: "creditcard",
+      fields: { accountFee: fee({ value: 2.55, conditions: "Maandelijkse bijdrage." }) },
     };
     const PAS: AccountFeeEntryLike = {
-      id: "abn-amro-betaalpas", product: "ABN AMRO betaalpas", issuer: "ABN AMRO Bank N.V.", kind: "betaalpas", fields: {},
+      id: "abn-amro-betaalpas",
+      product: "ABN AMRO betaalpas",
+      issuer: "ABN AMRO Bank N.V.",
+      kind: "betaalpas",
+      fields: {},
     };
     const fees = productFeesById([PAS, CARD_FEE]);
     expect(fees.get("abn-amro-betaalpas")).toBeUndefined();
@@ -541,13 +621,22 @@ describe("productFeesById: de prijs van de kaart staat op de pakketrij", () => {
 
   test("de eigen rij gaat voor de pakketrij", () => {
     // Anders besliste de leesvolgorde de prijs.
-    const OWN: AccountFeeEntryLike = { ...N26_METAL_CARD, fields: { accountFee: fee({ value: 0, conditions: "Uitgesproken nul." }) } };
+    const OWN: AccountFeeEntryLike = {
+      ...N26_METAL_CARD,
+      fields: { accountFee: fee({ value: 0, conditions: "Uitgesproken nul." }) },
+    };
     expect(productFeesById([OWN, N26_METAL_PLAN]).get("n26-metal-betaalpas")?.amount.cents).toBe(0);
   });
 
   test("twee pakketten met dezelfde naam is geen keuze die wij mogen maken", () => {
-    const TWIN: AccountFeeEntryLike = { ...N26_METAL_PLAN, id: "n26-metal-2", fields: { accountFee: fee({ value: 9.9 }) } };
-    expect(productFeesById([N26_METAL_CARD, N26_METAL_PLAN, TWIN]).get("n26-metal-betaalpas")).toBeUndefined();
+    const TWIN: AccountFeeEntryLike = {
+      ...N26_METAL_PLAN,
+      id: "n26-metal-2",
+      fields: { accountFee: fee({ value: 9.9 }) },
+    };
+    expect(
+      productFeesById([N26_METAL_CARD, N26_METAL_PLAN, TWIN]).get("n26-metal-betaalpas"),
+    ).toBeUndefined();
   });
 
   test("een spaarrekening vindt hier niets, en dat hoort zo", () => {
@@ -556,8 +645,11 @@ describe("productFeesById: de prijs van de kaart staat op de pakketrij", () => {
     // een betaalpakket nodig" staat in de catalogus alleen in proza, en die zin
     // machinaal tot een prijs promoveren zou een bedrag verzinnen.
     const SPAAR: AccountFeeEntryLike = {
-      id: "ing-oranje-spaarrekening", product: "ING Oranje Spaarrekening", issuer: "ING Bank N.V.",
-      kind: "spaarrekening", fields: {},
+      id: "ing-oranje-spaarrekening",
+      product: "ING Oranje Spaarrekening",
+      issuer: "ING Bank N.V.",
+      kind: "spaarrekening",
+      fields: {},
     };
     expect(productFeesById([SPAAR, ING_PAKKET]).get("ing-oranje-spaarrekening")).toBeUndefined();
   });

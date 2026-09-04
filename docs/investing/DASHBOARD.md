@@ -203,9 +203,7 @@ type ChartMode = "euros" | "indexed";
 
 function deriveChartMode(benchmarkIds: string[]): ChartMode;
 
-function computeReturnSeries(
-  points: { date: string; value: number | null }[],
-): ReturnPoint[];
+function computeReturnSeries(points: { date: string; value: number | null }[]): ReturnPoint[];
 
 type IndexedSeriesPoint = {
   date: string;

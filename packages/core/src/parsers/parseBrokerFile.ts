@@ -55,7 +55,12 @@ function finish(trades: Omit<TradeWithoutId, "tenantId">[], source: string): Par
 
 function finishPositions(positions: Omit<Position, "entity" | "tenantId">[]): ParsedBrokerFile {
   if (positions.length) return { positions, trades: [], source: "DeGiro", problems: [] };
-  return { positions: [], trades: [], source: "DeGiro", problems: ["formaat herkend (DeGiro portfolio) maar geen posities gevonden"] };
+  return {
+    positions: [],
+    trades: [],
+    source: "DeGiro",
+    problems: ["formaat herkend (DeGiro portfolio) maar geen posities gevonden"],
+  };
 }
 
 /**
@@ -66,10 +71,22 @@ function finishPositions(positions: Omit<Position, "entity" | "tenantId">[]): Pa
  * Portfolio exports are parsed as positions when no transaction shape matches.
  */
 export function parseBrokerFile(filename: string, text: string): ParsedBrokerFile {
-  if (!text.trim()) return { positions: [], trades: [], source: "", problems: ["onbekend of leeg bestand — geen transacties herkend"] };
+  if (!text.trim())
+    return {
+      positions: [],
+      trades: [],
+      source: "",
+      problems: ["onbekend of leeg bestand — geen transacties herkend"],
+    };
 
   const rows = splitRows(text, delimiter(text));
-  if (!rows.length) return { positions: [], trades: [], source: "", problems: ["onbekend of leeg bestand — geen transacties herkend"] };
+  if (!rows.length)
+    return {
+      positions: [],
+      trades: [],
+      source: "",
+      problems: ["onbekend of leeg bestand — geen transacties herkend"],
+    };
   const header = rows[0].map((cell) => cell.trim());
   const h = header.map(norm).join("|");
   const idx = headerIndex(header);
@@ -86,20 +103,67 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
 
   const symbol = pick(idx, ["symbol", "ticker", "product", "instrument", "naam"]);
   const positionQuantity = pick(idx, ["quantity", "aantal", "qty", "amount", "units", "positie"]);
-  const averagePrice = pick(idx, ["average price", "average price per unit", "gemiddelde koers", "gemiddelde prijs", "average cost"]);
-  const marketPrice = pick(idx, ["market price", "price", "koers", "current price", "huidige koers"]);
-  const marketValue = pick(idx, ["market value", "value", "waarde", "total value", "value in eur", "waarde in eur", "local value"]);
+  const averagePrice = pick(idx, [
+    "average price",
+    "average price per unit",
+    "gemiddelde koers",
+    "gemiddelde prijs",
+    "average cost",
+  ]);
+  const marketPrice = pick(idx, [
+    "market price",
+    "price",
+    "koers",
+    "current price",
+    "huidige koers",
+  ]);
+  const marketValue = pick(idx, [
+    "market value",
+    "value",
+    "waarde",
+    "total value",
+    "value in eur",
+    "waarde in eur",
+    "local value",
+  ]);
   const asOf = pick(idx, ["as of", "date", "datum", "peildatum", "valuation date"]);
 
-  const identifiedAsDeGiro = /degiro/i.test(filename) ||
+  const identifiedAsDeGiro =
+    /degiro/i.test(filename) ||
     (isin > -1 && currency > -1 && (product > -1 || symbol > -1) && (date > -1 || asOf > -1));
-  const transactionExport = identifiedAsDeGiro && date > -1 && product > -1 && quantity > -1 && price > -1 && total > -1 && (isin > -1 || orderId > -1);
-  const cashflowExport = date > -1 && total > -1 && product < 0 && (/cash ?flow|cashflow|value date|valutadatum|description|omschrijving/.test(h) || /degiro/i.test(filename));
+  const transactionExport =
+    identifiedAsDeGiro &&
+    date > -1 &&
+    product > -1 &&
+    quantity > -1 &&
+    price > -1 &&
+    total > -1 &&
+    (isin > -1 || orderId > -1);
+  const cashflowExport =
+    date > -1 &&
+    total > -1 &&
+    product < 0 &&
+    (/cash ?flow|cashflow|value date|valutadatum|description|omschrijving/.test(h) ||
+      /degiro/i.test(filename));
   if (!transactionExport) {
-    if (cashflowExport) return { positions: [], trades: [], source: "DeGiro cashflow", problems: ["DeGiro cashflow-export bevat geen transacties"] };
-    const portfolioHint = /portfolio|position|posities|overzicht/i.test(filename) ||
-      (symbol > -1 && positionQuantity > -1 && (marketValue > -1 || marketPrice > -1 || averagePrice > -1));
-    if (portfolioHint && symbol > -1 && positionQuantity > -1 && (isin > -1 || pick(idx, ["symbol", "ticker"]) > -1)) {
+    if (cashflowExport)
+      return {
+        positions: [],
+        trades: [],
+        source: "DeGiro cashflow",
+        problems: ["DeGiro cashflow-export bevat geen transacties"],
+      };
+    const portfolioHint =
+      /portfolio|position|posities|overzicht/i.test(filename) ||
+      (symbol > -1 &&
+        positionQuantity > -1 &&
+        (marketValue > -1 || marketPrice > -1 || averagePrice > -1));
+    if (
+      portfolioHint &&
+      symbol > -1 &&
+      positionQuantity > -1 &&
+      (isin > -1 || pick(idx, ["symbol", "ticker"]) > -1)
+    ) {
       const positions: Omit<Position, "entity" | "tenantId">[] = [];
       for (let rowNo = 1; rowNo < rows.length; rowNo++) {
         const row = rows[rowNo];
@@ -119,7 +183,12 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
       }
       return finishPositions(positions);
     }
-    return { positions: [], trades: [], source: "", problems: ["onbekend of leeg bestand — geen transacties of posities herkend"] };
+    return {
+      positions: [],
+      trades: [],
+      source: "",
+      problems: ["onbekend of leeg bestand — geen transacties of posities herkend"],
+    };
   }
 
   const trades: Omit<TradeWithoutId, "tenantId">[] = [];

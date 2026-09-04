@@ -23,7 +23,13 @@ export function isCardAccount(a: Account): boolean {
   return READS_AS_CREDIT_CARD.test(`${a.bank ?? ""} ${a.name ?? ""}`);
 }
 
-export const ACCOUNT_TYPES = ["Betaalrekening", "Spaarrekening", "Creditcard", "Beleggingsrekening", "Overig"] as const;
+export const ACCOUNT_TYPES = [
+  "Betaalrekening",
+  "Spaarrekening",
+  "Creditcard",
+  "Beleggingsrekening",
+  "Overig",
+] as const;
 
 /** The account's soort: the user-set `type` if present, else a smart default —
  *  a card => Creditcard; a name that reads as savings (ING "Oranje
@@ -63,6 +69,10 @@ export function withCurrentBalances(accounts: Account[], txs: Tx[], asOf: string
 /** Spendable cash = total balance (euros) minus money earmarked for VAT
  *  (reservations), in integer cents. The forecast still places the actual VAT
  *  outflow on its due date; this is the "beschikbaar NU" view. */
-export function availableBalanceCents(totalBalanceEuros: number, flows: ScheduledFlow[], asOf: string): number {
+export function availableBalanceCents(
+  totalBalanceEuros: number,
+  flows: ScheduledFlow[],
+  asOf: string,
+): number {
   return Math.round(totalBalanceEuros * 100) - reservedCents(flows, asOf);
 }

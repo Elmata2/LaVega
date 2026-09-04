@@ -7,12 +7,27 @@ import { LOCAL_TENANT_ID } from "@lavega/core";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
 import { createEncryptedStorage } from "./encryptedStorage.js";
 
-const acc = (key: string, balance: number | null = null): Account =>
-  ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance });
+const acc = (key: string, balance: number | null = null): Account => ({
+  key,
+  iban: key,
+  name: key,
+  bank: "",
+  entity: "BV1",
+  currency: "EUR",
+  balance,
+});
 
-const tx = (id: string, accountKey: string): Tx =>
-  ({ id, accountKey, date: "2026-06-01", amount: -5, currency: "EUR",
-     counterparty: "", description: "", category: "", manual: false });
+const tx = (id: string, accountKey: string): Tx => ({
+  id,
+  accountKey,
+  date: "2026-06-01",
+  amount: -5,
+  currency: "EUR",
+  counterparty: "",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 test("setup -> put -> lock -> unlock(correct) round-trips; wrong passphrase stays locked", async () => {
   globalThis.indexedDB = new IDBFactory();
@@ -63,14 +78,27 @@ test("putRules replaces, putAccounts/putTxs upsert (parity with plaintext adapte
   expect(await v.getAccounts()).toHaveLength(2);
 
   // putTxs upserts by id
-  const t = (id: string, amount: number): Tx => ({ id, accountKey: "A1", date: "2026-06-01", amount, currency: "EUR", counterparty: "", description: "", category: "", manual: false });
+  const t = (id: string, amount: number): Tx => ({
+    id,
+    accountKey: "A1",
+    date: "2026-06-01",
+    amount,
+    currency: "EUR",
+    counterparty: "",
+    description: "",
+    category: "",
+    manual: false,
+  });
   await v.putTxs([t("x", 10), t("y", 20)]);
   await v.putTxs([t("x", 99)]); // upsert x
   expect((await v.getTxs()).find((tx) => tx.id === "x")!.amount).toBe(99);
   expect(await v.getTxs()).toHaveLength(2);
 
   // putRules replaces the whole set
-  await v.putRules([{ id: "r1", match: "a", category: "X" }, { id: "r2", match: "b", category: "Y" }]);
+  await v.putRules([
+    { id: "r1", match: "a", category: "X" },
+    { id: "r2", match: "b", category: "Y" },
+  ]);
   await v.putRules([{ id: "r2", match: "b", category: "Z" }]);
   const rules = await v.getRules();
   expect(rules).toHaveLength(1);
@@ -181,7 +209,17 @@ test("concurrent puts are serialized — neither write reverts the other", async
   globalThis.indexedDB = new IDBFactory();
   const v = createEncryptedStorage();
   await v.setup("pw");
-  const t = (id: string): Tx => ({ id, accountKey: "A1", date: "2026-06-01", amount: 1, currency: "EUR", counterparty: "", description: "", category: "", manual: false });
+  const t = (id: string): Tx => ({
+    id,
+    accountKey: "A1",
+    date: "2026-06-01",
+    amount: 1,
+    currency: "EUR",
+    counterparty: "",
+    description: "",
+    category: "",
+    manual: false,
+  });
   // Fire two writes without awaiting between them; the write-queue must serialize
   // so a stale snapshot's encrypt can't land last and drop the other's data.
   await Promise.all([v.putAccounts([acc("A1", 5)]), v.putTxs([t("x")])]);
@@ -224,9 +262,20 @@ test("scheduledFlows + vatSettings round-trip; legacy vault defaults to empty", 
   const s = createEncryptedStorage("lavega-vault-test-sf");
   await s.setup("pw");
   expect(await s.getScheduledFlows()).toEqual([]); // default
-  const flow = { id: "f1", entity: "BV1", label: "BTW", sign: -1 as const, amountCents: 1000, dueDate: "2026-05-01", source: "vat" as const, status: "confirmed" as const };
+  const flow = {
+    id: "f1",
+    entity: "BV1",
+    label: "BTW",
+    sign: -1 as const,
+    amountCents: 1000,
+    dueDate: "2026-05-01",
+    source: "vat" as const,
+    status: "confirmed" as const,
+  };
   await s.putScheduledFlows([flow]);
-  await s.putVatSettings([{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false }]);
+  await s.putVatSettings([
+    { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false },
+  ]);
   expect(await s.getScheduledFlows()).toEqual([flow]);
   expect(await s.getVatSettings()).toHaveLength(1);
 });
@@ -236,7 +285,18 @@ test("invoices round-trip; legacy vault defaults to []", async () => {
   const s = createEncryptedStorage("lavega-vault-test-inv");
   await s.setup("pw");
   expect(await s.getInvoices()).toEqual([]);
-  const invoice = { id: "i1", entity: "BV1", direction: "out" as const, counterparty: "X", issueDate: "2026-08-01", dueDate: "2026-09-01", amount: 100, currency: "EUR", status: "expected" as const, sourceType: "manual" as const };
+  const invoice = {
+    id: "i1",
+    entity: "BV1",
+    direction: "out" as const,
+    counterparty: "X",
+    issueDate: "2026-08-01",
+    dueDate: "2026-09-01",
+    amount: 100,
+    currency: "EUR",
+    status: "expected" as const,
+    sourceType: "manual" as const,
+  };
   await s.putInvoices([invoice]);
   expect(await s.getInvoices()).toEqual([invoice]);
 });
@@ -246,7 +306,12 @@ test("rewards round-trip; legacy vault defaults to []", async () => {
   const s = createEncryptedStorage("lavega-vault-test-rewards");
   await s.setup("pw");
   expect(await s.getRewards()).toEqual([]);
-  const reward = { id: "amex", program: "American Express Membership Rewards", points: 10000, updatedAt: "2026-06-01" };
+  const reward = {
+    id: "amex",
+    program: "American Express Membership Rewards",
+    points: 10000,
+    updatedAt: "2026-06-01",
+  };
   await s.putRewards([reward]);
   expect(await s.getRewards()).toEqual([reward]);
 });
@@ -314,7 +379,15 @@ test("learned facts round-trip and survive lock/unlock; legacy vault defaults to
   const v = createEncryptedStorage("lavega-vault-test-facts");
   await v.setup("pw");
   expect(await v.getFacts()).toEqual([]); // legacy/new vault
-  const learned = { id: "f1", agent: "travel", subject: "Trading 212", key: "fxFeePct", value: "0", source: "agent" as const, updatedAt: "2026-08-13" };
+  const learned = {
+    id: "f1",
+    agent: "travel",
+    subject: "Trading 212",
+    key: "fxFeePct",
+    value: "0",
+    source: "agent" as const,
+    updatedAt: "2026-08-13",
+  };
   await v.putFacts([learned]);
   v.lock();
   expect(await v.unlock("pw")).toBe(true);
@@ -326,7 +399,10 @@ test("entityProfiles round-trip; legacy vault defaults to [] and stays decryptab
   const s = createEncryptedStorage("lavega-vault-test-entities");
   await s.setup("pw");
   expect(await s.getEntityProfiles()).toEqual([]); // a vault written before item 4
-  const profiles = [{ entity: "BV1", scope: "business" as const }, { entity: "Privé", scope: "personal" as const }];
+  const profiles = [
+    { entity: "BV1", scope: "business" as const },
+    { entity: "Privé", scope: "personal" as const },
+  ];
   await s.putEntityProfiles(profiles);
   expect(await s.getEntityProfiles()).toEqual(profiles);
 
@@ -341,7 +417,14 @@ test("a stale-tracked rewards balance round-trips with its interval and snooze",
   globalThis.indexedDB = new IDBFactory();
   const s = createEncryptedStorage("lavega-vault-test-tracking");
   await s.setup("pw");
-  const reward = { id: "amex", program: "American Express Membership Rewards", points: 240000, updatedAt: "2026-01-10", intervalDays: 30, snoozedUntil: "2026-09-01" };
+  const reward = {
+    id: "amex",
+    program: "American Express Membership Rewards",
+    points: 240000,
+    updatedAt: "2026-01-10",
+    intervalDays: 30,
+    snoozedUntil: "2026-09-01",
+  };
   await s.putRewards([reward]);
   s.lock();
   expect(await s.unlock("pw")).toBe(true);
@@ -352,8 +435,18 @@ test("broker credentials stay encrypted, are absent while locked, and restore wi
   globalThis.indexedDB = new IDBFactory();
   const source = createEncryptedStorage("lavega-vault-test-credentials-source");
   await source.setup("pw");
-  const ibkr = { broker: "ibkr" as const, tenantId: LOCAL_TENANT_ID, token: "flex-token-secret", queryId: "987654" };
-  const trading212 = { broker: "trading212" as const, tenantId: LOCAL_TENANT_ID, token: "t212-key", secret: "t212-secret" };
+  const ibkr = {
+    broker: "ibkr" as const,
+    tenantId: LOCAL_TENANT_ID,
+    token: "flex-token-secret",
+    queryId: "987654",
+  };
+  const trading212 = {
+    broker: "trading212" as const,
+    tenantId: LOCAL_TENANT_ID,
+    token: "t212-key",
+    secret: "t212-secret",
+  };
 
   expect(await source.getCredentials(LOCAL_TENANT_ID, "ibkr")).toBeNull();
   await source.putCredentials(ibkr);

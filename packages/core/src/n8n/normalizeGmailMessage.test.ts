@@ -1,7 +1,16 @@
 import { expect, test } from "vitest";
 import { normalizeGmailMessage, MAX_TEXT_CHARS } from "./normalizeGmailMessage.js";
-import { encodeBase64Url, simulateGmailNode, type GmailNodeItem } from "./__fixtures__/gmailNode.js";
-import { RAW_HTML_ONLY, RAW_LINK_ONLY, RAW_NO_BODY, RAW_PDF_INVOICE } from "./__fixtures__/rawMail.js";
+import {
+  encodeBase64Url,
+  simulateGmailNode,
+  type GmailNodeItem,
+} from "./__fixtures__/gmailNode.js";
+import {
+  RAW_HTML_ONLY,
+  RAW_LINK_ONLY,
+  RAW_NO_BODY,
+  RAW_PDF_INVOICE,
+} from "./__fixtures__/rawMail.js";
 import { legacyNormalise } from "./__fixtures__/legacyNode.js";
 
 /** Zoals de Gmail-node hem VÓÓR de fix leverde: Download Attachments stond
@@ -144,7 +153,12 @@ test("een PDF die n8n niet kon meesturen wordt gemeld, niet weggelaten", () => {
 test("een PDF boven de limiet valt af met de reden erbij", () => {
   const tooBig = "A".repeat(Math.ceil((5 * 1024 * 1024 * 4) / 3));
   const message = normalizeGmailMessage({ id: "m-groot" }, [
-    { key: "attachment_0", fileName: "jaarrekening.pdf", mimeType: "application/pdf", data: tooBig },
+    {
+      key: "attachment_0",
+      fileName: "jaarrekening.pdf",
+      mimeType: "application/pdf",
+      data: tooBig,
+    },
   ]);
   expect(message.pdfs).toEqual([]);
   expect(message.skipped[0]).toContain("groter dan de limiet van 4 MB");

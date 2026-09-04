@@ -15,11 +15,16 @@ export function RequireAuth() {
 
   useEffect(() => {
     let current = true;
-    void getSession().then((next) => { if (current) setState(next); });
-    return () => { current = false; };
+    void getSession().then((next) => {
+      if (current) setState(next);
+    });
+    return () => {
+      current = false;
+    };
   }, []);
 
   if (state === "loading") return null;
-  if (state.status === "anonymous") return <Navigate to="/sign-in" state={{ from: location }} replace />;
+  if (state.status === "anonymous")
+    return <Navigate to="/sign-in" state={{ from: location }} replace />;
   return <Outlet />;
 }

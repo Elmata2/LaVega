@@ -1,7 +1,15 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool, type ToolSet } from "ai";
 import { createHash } from "node:crypto";
-import { computePortfolioValueSeries, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
+import {
+  computePortfolioValueSeries,
+  type CashBalance,
+  type CashFlow,
+  type Dividend,
+  type InvestingDashboardData,
+  type Position,
+  type Trade,
+} from "@lavega/core";
 import type { PriceStore } from "@lavega/adapters";
 
 const TENANT_ID = "local";
@@ -31,31 +39,61 @@ export function createPortfolioAgentTools(deps: PortfolioAgentDeps): ToolSet {
   return {
     get_positions: tool({
       description: "Current broker positions with symbol and quantity",
-      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
+      inputSchema: jsonSchema<Record<string, never>>({
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => deps.readBrokerData().positions,
     }),
     get_price: tool({
       description: "Latest known closing price for a symbol, optionally as of a date (YYYY-MM-DD)",
       inputSchema: jsonSchema<{ symbol: string; date?: string }>({
         type: "object",
-        properties: { symbol: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" } },
+        properties: {
+          symbol: { type: "string" },
+          date: { type: "string", description: "YYYY-MM-DD" },
+        },
         required: ["symbol"],
         additionalProperties: false,
       }),
       execute: async ({ symbol, date }) => {
         const bar = await getPriceBar(symbol.trim().toUpperCase(), date);
-        return bar ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency } : null;
+        return bar
+          ? { symbol: bar.symbol, date: bar.date, close: bar.close, currency: bar.currency }
+          : null;
       },
     }),
     compute_portfolio_value: tool({
       description: "Latest computed total portfolio value in EUR with its date",
-      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
+      inputSchema: jsonSchema<Record<string, never>>({
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => {
         const { positions, trades, dividends, cashBalances, cashFlows } = deps.readBrokerData();
-        const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
-        const bars = (await Promise.all(symbols.map((symbol) => deps.priceStore.getRange(TENANT_ID, symbol)))).flat();
-        const today = bars.map((bar) => bar.date).sort().at(-1);
-        const series = computePortfolioValueSeries(positions, trades, bars, "EUR", deps.fxRate ?? IDENTITY_FX, { cashBalances, cashFlows, dividends, today });
+        const symbols = [
+          ...new Set([
+            ...positions.map((position) => position.symbol),
+            ...trades.map((trade) => trade.symbol),
+          ]),
+        ];
+        const bars = (
+          await Promise.all(symbols.map((symbol) => deps.priceStore.getRange(TENANT_ID, symbol)))
+        ).flat();
+        const today = bars
+          .map((bar) => bar.date)
+          .sort()
+          .at(-1);
+        const series = computePortfolioValueSeries(
+          positions,
+          trades,
+          bars,
+          "EUR",
+          deps.fxRate ?? IDENTITY_FX,
+          { cashBalances, cashFlows, dividends, today },
+        );
         return series.at(-1) ?? null;
       },
     }),
@@ -70,8 +108,15 @@ export type RunPortfolioAgentOptions = {
   dashboard?: InvestingDashboardData;
 };
 
-export const PORTFOLIO_AGENT_IDS = ["warren_buffett", "charlie_munger", "bill_ackman", "ben_graham", "peter_lynch", "stanley_druckenmiller"] as const;
-export type PortfolioAgentId = typeof PORTFOLIO_AGENT_IDS[number];
+export const PORTFOLIO_AGENT_IDS = [
+  "warren_buffett",
+  "charlie_munger",
+  "bill_ackman",
+  "ben_graham",
+  "peter_lynch",
+  "stanley_druckenmiller",
+] as const;
+export type PortfolioAgentId = (typeof PORTFOLIO_AGENT_IDS)[number];
 export type PortfolioAgentSignal = "bullish" | "bearish" | "neutral";
 
 export type PortfolioAgentDefinition = {
@@ -122,7 +167,8 @@ const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
     id: "charlie_munger",
     displayName: "Charlie Munger",
     description: "Quality filter",
-    investingStyle: "Avoid stupidity first: quality, predictability, incentives, low leverage, fair price.",
+    investingStyle:
+      "Avoid stupidity first: quality, predictability, incentives, low leverage, fair price.",
     systemPrompt: [
       "You are a Charlie Munger-style portfolio analyst. You review one user's real positions with severe standards.",
       "Invert first: what could make this portfolio fail? Look for weak position evidence, concentration in things the user may not understand, leverage-like exposure, bad cost basis, low-quality winners, and too-hard positions.",
@@ -134,7 +180,8 @@ const PERSONAS: Record<PortfolioAgentId, PortfolioAgentDefinition> = {
     id: "bill_ackman",
     displayName: "Bill Ackman",
     description: "Activist lens",
-    investingStyle: "Concentrated high-quality brands, value unlock, catalysts, financial discipline.",
+    investingStyle:
+      "Concentrated high-quality brands, value unlock, catalysts, financial discipline.",
     systemPrompt: [
       "You are a Bill Ackman-style portfolio analyst. You review one user's real positions through an activist investor lens.",
       "Look for concentrated high-conviction holdings, brand or platform strength implied by position choice, underperformance where operational change could unlock value, catalysts, downside from leverage or poor capital allocation, and whether position size matches conviction.",
@@ -192,7 +239,10 @@ export function getPortfolioAgent(id: string | undefined): PortfolioAgentDefinit
 
 export function resolveAgentConfig(model?: string) {
   const apiKey = process.env.LAVEGA_AGENT_API_KEY?.trim();
-  if (!apiKey) throw new Error("LAVEGA_AGENT_API_KEY is not set; configure an OpenAI-compatible API key to run the portfolio agent");
+  if (!apiKey)
+    throw new Error(
+      "LAVEGA_AGENT_API_KEY is not set; configure an OpenAI-compatible API key to run the portfolio agent",
+    );
   return {
     apiKey,
     baseURL: process.env.LAVEGA_AGENT_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
@@ -200,10 +250,21 @@ export function resolveAgentConfig(model?: string) {
   };
 }
 
-export async function runPortfolioAgent({ prompt, tools, model, agentId, dashboard }: RunPortfolioAgentOptions): Promise<PortfolioAgentInsight> {
+export async function runPortfolioAgent({
+  prompt,
+  tools,
+  model,
+  agentId,
+  dashboard,
+}: RunPortfolioAgentOptions): Promise<PortfolioAgentInsight> {
   const config = resolveAgentConfig(model);
-  if (!config.modelId) throw new Error("LAVEGA_AGENT_MODEL is not set and no model override was given");
-  const provider = createOpenAICompatible({ name: "lavega-agent", baseURL: config.baseURL, apiKey: config.apiKey });
+  if (!config.modelId)
+    throw new Error("LAVEGA_AGENT_MODEL is not set and no model override was given");
+  const provider = createOpenAICompatible({
+    name: "lavega-agent",
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+  });
   const agent = getPortfolioAgent(agentId);
   const userPrompt = prompt ?? buildPortfolioAgentPrompt(agent, dashboard);
   const { text } = await generateText({
@@ -229,7 +290,10 @@ export async function runPortfolioAgent({ prompt, tools, model, agentId, dashboa
   return parsePortfolioAgentResponse(text, agent, config.modelId, portfolioSnapshotHash(dashboard));
 }
 
-export function buildPortfolioAgentPrompt(agent: PortfolioAgentDefinition, dashboard: InvestingDashboardData | undefined): string {
+export function buildPortfolioAgentPrompt(
+  agent: PortfolioAgentDefinition,
+  dashboard: InvestingDashboardData | undefined,
+): string {
   if (!dashboard) return `Give a concise ${agent.displayName} view on this portfolio.`;
   return [
     `Agent: ${agent.displayName}`,
@@ -261,30 +325,57 @@ export function renderPortfolioSnapshot(dashboard: InvestingDashboardData): stri
       totalReturnPercentage: round(position.returns.totalReturnPercentage, 4),
       firstBuyDate: position.returns.firstBuyDate,
     }));
-  return JSON.stringify({
-    dataVersion: dashboard.dataVersion,
-    currency: dashboard.presentationCurrency,
-    latestValue,
-    totalPricedValue: round(totalValue, 2),
-    positionCount: dashboard.positions.length,
-    pricedPositionCount: priced.length,
-    unpriced: dashboard.allocation.instrument.unpriced,
-    allocation: dashboard.allocation.instrument.buckets.slice(0, 10),
-    sectors: dashboard.allocation.entity.buckets.slice(0, 10),
-    topPositions,
-    problems: dashboard.problems,
-  }, null, 2);
+  return JSON.stringify(
+    {
+      dataVersion: dashboard.dataVersion,
+      currency: dashboard.presentationCurrency,
+      latestValue,
+      totalPricedValue: round(totalValue, 2),
+      positionCount: dashboard.positions.length,
+      pricedPositionCount: priced.length,
+      unpriced: dashboard.allocation.instrument.unpriced,
+      allocation: dashboard.allocation.instrument.buckets.slice(0, 10),
+      sectors: dashboard.allocation.entity.buckets.slice(0, 10),
+      topPositions,
+      problems: dashboard.problems,
+    },
+    null,
+    2,
+  );
 }
 
-function parsePortfolioAgentResponse(text: string, agent: PortfolioAgentDefinition, model: string, snapshotHash: string): PortfolioAgentInsight {
+function parsePortfolioAgentResponse(
+  text: string,
+  agent: PortfolioAgentDefinition,
+  model: string,
+  snapshotHash: string,
+): PortfolioAgentInsight {
   const parsed = extractJsonObject(text);
   const rawSignal = String(parsed.signal ?? "").toLowerCase();
-  const signal: PortfolioAgentSignal = rawSignal === "bullish" || rawSignal === "bearish" || rawSignal === "neutral" ? rawSignal : "neutral";
+  const signal: PortfolioAgentSignal =
+    rawSignal === "bullish" || rawSignal === "bearish" || rawSignal === "neutral"
+      ? rawSignal
+      : "neutral";
   const confidence = clamp(Number(parsed.confidence), 0, 100);
   const reasoning = String(parsed.reasoning ?? parsed.summary ?? "");
   const summary = String(parsed.summary ?? reasoning);
-  const insights = Array.isArray(parsed.insights) ? parsed.insights.map((item) => String(item)).filter(Boolean).slice(0, 5) : [];
-  return { agentId: agent.id, displayName: agent.displayName, signal, confidence, summary, reasoning, insights, model, snapshotHash };
+  const insights = Array.isArray(parsed.insights)
+    ? parsed.insights
+        .map((item) => String(item))
+        .filter(Boolean)
+        .slice(0, 5)
+    : [];
+  return {
+    agentId: agent.id,
+    displayName: agent.displayName,
+    signal,
+    confidence,
+    summary,
+    reasoning,
+    insights,
+    model,
+    snapshotHash,
+  };
 }
 
 function extractJsonObject(text: string): Record<string, unknown> {

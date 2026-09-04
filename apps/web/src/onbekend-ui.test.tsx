@@ -20,12 +20,27 @@ import Regels from "./views/Regels";
  */
 
 const ACCOUNTS: Account[] = [
-  { key: "NL01INGB", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 100 },
+  {
+    key: "NL01INGB",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 100,
+  },
 ];
 
 const tx = (id: string, cp: string, desc: string, amount = -20): Tx => ({
-  id, accountKey: "NL01INGB", date: "2026-07-14", amount, currency: "EUR",
-  counterparty: cp, description: desc, category: "", manual: false,
+  id,
+  accountKey: "NL01INGB",
+  date: "2026-07-14",
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: desc,
+  category: "",
+  manual: false,
 });
 
 const props = (txs: Tx[], configured = true) =>
@@ -36,12 +51,18 @@ const props = (txs: Tx[], configured = true) =>
     own: { all: [], byKey: new Map<string, string[]>() },
     entityOptions: ["Prive"],
     entityScope: "",
-    fEntity: "", onFEntityChange: () => {},
-    fAccount: "", onFAccountChange: () => {},
-    fSearch: "", onFSearchChange: () => {},
-    fFrom: "", onFFromChange: () => {},
-    fTo: "", onFToChange: () => {},
-    fCategory: "", onFCategoryChange: () => {},
+    fEntity: "",
+    onFEntityChange: () => {},
+    fAccount: "",
+    onFAccountChange: () => {},
+    fSearch: "",
+    onFSearchChange: () => {},
+    fFrom: "",
+    onFFromChange: () => {},
+    fTo: "",
+    onFToChange: () => {},
+    fCategory: "",
+    onFCategoryChange: () => {},
     configured,
     onApplyCategories: async () => {},
   }) as unknown as Parameters<typeof Transacties>[0];
@@ -69,7 +90,12 @@ test("the onbekend pile is quantified on screen, per named reason", () => {
 
 test("the AI button reports what it will actually send, not the batch cap", () => {
   const html = renderToStaticMarkup(
-    <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"), tx("t2", "QUIOSC 4412", "priveopname")])} />,
+    <Transacties
+      {...props([
+        tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"),
+        tx("t2", "QUIOSC 4412", "priveopname"),
+      ])}
+    />,
   );
   expect(html).toContain("Laat de AI ze lezen");
   expect(html).toContain("(2)"); // both fit in one run, so no "x van y" theatre
@@ -114,7 +140,9 @@ test("each onbekend row in the table says why, with its country when we have one
 });
 
 test("a placed row shows its category and no reason badge", () => {
-  const html = renderToStaticMarkup(<Transacties {...props([tx("t1", "MERCADONA", "VALENCIA ESP")])} />);
+  const html = renderToStaticMarkup(
+    <Transacties {...props([tx("t1", "MERCADONA", "VALENCIA ESP")])} />,
+  );
   // The Zuid-Europese block places this one, so there is no onbekend pile at all.
   expect(html).toContain("Boodschappen");
   expect(html).not.toContain("Onbekend</div>");
@@ -122,8 +150,12 @@ test("a placed row shows its category and no reason badge", () => {
 
 test("Regels warns when a typed category is a new one, and offers the existing list", () => {
   const base = {
-    rules: [], busy: false, ruleMatch: "mercadona",
-    onRuleMatchChange: () => {}, onRuleCategoryChange: () => {}, onSaveRules: () => {},
+    rules: [],
+    busy: false,
+    ruleMatch: "mercadona",
+    onRuleMatchChange: () => {},
+    onRuleCategoryChange: () => {},
+    onSaveRules: () => {},
   };
   const listed = renderToStaticMarkup(<Regels {...base} ruleCategory="Boodschappen" />);
   expect(listed).toContain('list="regel-categorieen"');

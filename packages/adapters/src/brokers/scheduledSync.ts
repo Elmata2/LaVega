@@ -1,9 +1,20 @@
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
-import { cashBalancesComplete, historyPending, positionsComplete, tradesComplete, type BrokerAccessAdapter, type BrokerResult, type BrokerSyncResume } from "./BrokerAccessAdapter.js";
+import {
+  cashBalancesComplete,
+  historyPending,
+  positionsComplete,
+  tradesComplete,
+  type BrokerAccessAdapter,
+  type BrokerResult,
+  type BrokerSyncResume,
+} from "./BrokerAccessAdapter.js";
 
 /** The brokers a scheduled sync knows how to drive. The type is derived from
  *  this list so a broker can only be added in one place. */
-export const SCHEDULED_BROKERS = ["ibkr", "trading212"] as const satisfies readonly CredentialBroker[];
+export const SCHEDULED_BROKERS = [
+  "ibkr",
+  "trading212",
+] as const satisfies readonly CredentialBroker[];
 export type ScheduledBroker = (typeof SCHEDULED_BROKERS)[number];
 export type BrokerSyncState = {
   lastSyncedAt: string | null;
@@ -21,8 +32,12 @@ export interface BrokerSyncStateStore {
 export function createMemoryBrokerSyncStateStore(): BrokerSyncStateStore {
   const states = new Map<ScheduledBroker, BrokerSyncState>();
   return {
-    async get(broker) { return states.get(broker) ?? { lastSyncedAt: null, retryAfter: null }; },
-    async put(broker, state) { states.set(broker, state); },
+    async get(broker) {
+      return states.get(broker) ?? { lastSyncedAt: null, retryAfter: null };
+    },
+    async put(broker, state) {
+      states.set(broker, state);
+    },
   };
 }
 
@@ -74,7 +89,8 @@ export async function syncScheduledBrokers(input: {
       outcomes.push({ broker: entry.broker, status: "skipped", lastSyncedAt, result: null });
       continue;
     }
-    const recent = lastSyncedAt != null && now.getTime() - new Date(lastSyncedAt).getTime() < DAY_MS;
+    const recent =
+      lastSyncedAt != null && now.getTime() - new Date(lastSyncedAt).getTime() < DAY_MS;
     if (!input.force && recent) {
       outcomes.push({ broker: entry.broker, status: "skipped", lastSyncedAt, result: null });
       continue;
@@ -98,21 +114,28 @@ export async function syncScheduledBrokers(input: {
 
     let result: BrokerResult;
     try {
-      result = await entry.adapter.sync({ entity: input.entity, resume: previous.resume ?? undefined });
+      result = await entry.adapter.sync({
+        entity: input.entity,
+        resume: previous.resume ?? undefined,
+      });
     } catch (error) {
       const problem = `${entry.broker}: ${readableError(error, entry.broker)}`;
       problems.push(problem);
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result: null });
       continue;
     }
-    const resume = historyPending(result.resume) ? result.resume ?? null : null;
+    const resume = historyPending(result.resume) ? (result.resume ?? null) : null;
     if (result.problems.length > 0) {
       problems.push(...result.problems.map((problem) => `${entry.broker}: ${problem}`));
       // Only a rate limit gets a cooldown. Every other problem (missing
       // credentials above all) must stay retryable, or saving credentials would
       // not be able to trigger the sync that follows it.
       if (result.retryAfter) {
-        await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter, resume });
+        await input.state.put(entry.broker, {
+          lastSyncedAt,
+          retryAfter: result.retryAfter,
+          resume,
+        });
         outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
         continue;
       }
@@ -122,14 +145,40 @@ export async function syncScheduledBrokers(input: {
       // requests per minute, restarting the moment it finished.
       // Unfinished pagination is not "delivered": the next run must continue
       // the cursor instead of waiting 24 hours.
-      const delivered = tradesComplete(result) && positionsComplete(result) && cashBalancesComplete(result) && !resume && (result.positions.length > 0 || result.trades.length > 0 || (result.cashBalances?.length ?? 0) > 0);
-      if (delivered) await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
-      else await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter ?? null, resume });
-      outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt: delivered ? nowIso : lastSyncedAt, result });
+      const delivered =
+        tradesComplete(result) &&
+        positionsComplete(result) &&
+        cashBalancesComplete(result) &&
+        !resume &&
+        (result.positions.length > 0 ||
+          result.trades.length > 0 ||
+          (result.cashBalances?.length ?? 0) > 0);
+      if (delivered)
+        await input.state.put(entry.broker, {
+          lastSyncedAt: nowIso,
+          retryAfter: null,
+          resume: null,
+        });
+      else
+        await input.state.put(entry.broker, {
+          lastSyncedAt,
+          retryAfter: result.retryAfter ?? null,
+          resume,
+        });
+      outcomes.push({
+        broker: entry.broker,
+        status: "problem",
+        lastSyncedAt: delivered ? nowIso : lastSyncedAt,
+        result,
+      });
       continue;
     }
     if (resume) {
-      await input.state.put(entry.broker, { lastSyncedAt, retryAfter: result.retryAfter ?? null, resume });
+      await input.state.put(entry.broker, {
+        lastSyncedAt,
+        retryAfter: result.retryAfter ?? null,
+        resume,
+      });
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
       continue;
     }

@@ -83,11 +83,21 @@ const holding = {
   },
 };
 
-function fakeTrading212(totalOrders = TOTAL_ORDERS): { fetch: typeof globalThis.fetch; requests: string[]; rejections: number } {
+function fakeTrading212(totalOrders = TOTAL_ORDERS): {
+  fetch: typeof globalThis.fetch;
+  requests: string[];
+  rejections: number;
+} {
   const orders = Array.from({ length: totalOrders }, (_, index) => order(index));
   const buckets = new Map<string, Bucket>([
-    ["orders", { limit: ORDER_HISTORY_LIMIT, periodMs: ORDER_HISTORY_PERIOD_MS, start: START_MS, used: 0 }],
-    ["positions", { limit: POSITIONS_LIMIT, periodMs: POSITIONS_PERIOD_MS, start: START_MS, used: 0 }],
+    [
+      "orders",
+      { limit: ORDER_HISTORY_LIMIT, periodMs: ORDER_HISTORY_PERIOD_MS, start: START_MS, used: 0 },
+    ],
+    [
+      "positions",
+      { limit: POSITIONS_LIMIT, periodMs: POSITIONS_PERIOD_MS, start: START_MS, used: 0 },
+    ],
   ]);
   const requests: string[] = [];
   const state = { rejections: 0 };
@@ -101,13 +111,27 @@ function fakeTrading212(totalOrders = TOTAL_ORDERS): { fetch: typeof globalThis.
   });
 
   const fetchImpl = (async (input: string | URL | Request) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     requests.push(`${url.pathname}${url.search}`);
     if (url.pathname.endsWith("/account/summary")) {
-      return new Response(JSON.stringify({ currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(
+        JSON.stringify({
+          currency: "EUR",
+          cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
     }
-    if (url.pathname.endsWith("/history/transactions") || url.pathname.endsWith("/history/dividends")) {
-      return new Response(JSON.stringify({ items: [], nextPagePath: null }), { status: 200, headers: { "content-type": "application/json" } });
+    if (
+      url.pathname.endsWith("/history/transactions") ||
+      url.pathname.endsWith("/history/dividends")
+    ) {
+      return new Response(JSON.stringify({ items: [], nextPagePath: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
     const name = url.pathname.endsWith("/positions") ? "positions" : "orders";
     const bucket = buckets.get(name)!;
@@ -117,20 +141,38 @@ function fakeTrading212(totalOrders = TOTAL_ORDERS): { fetch: typeof globalThis.
     }
     if (bucket.used >= bucket.limit) {
       state.rejections += 1;
-      return new Response(JSON.stringify({ error: "Limited" }), { status: 429, headers: headers(bucket) });
+      return new Response(JSON.stringify({ error: "Limited" }), {
+        status: 429,
+        headers: headers(bucket),
+      });
     }
     bucket.used += 1;
     if (name === "positions") {
-      return new Response(JSON.stringify([holding]), { status: 200, headers: { ...headers(bucket), "content-type": "application/json" } });
+      return new Response(JSON.stringify([holding]), {
+        status: 200,
+        headers: { ...headers(bucket), "content-type": "application/json" },
+      });
     }
     const size = Math.min(Number(url.searchParams.get("limit") ?? 20) || 20, 50);
     const cursor = Number(url.searchParams.get("cursor") ?? 0) || 0;
     const items = orders.slice(cursor, cursor + size);
-    const next = cursor + size < orders.length ? `/api/v0/equity/history/orders?limit=${size}&cursor=${cursor + size}` : null;
-    return new Response(JSON.stringify({ items, nextPagePath: next }), { status: 200, headers: { ...headers(bucket), "content-type": "application/json" } });
+    const next =
+      cursor + size < orders.length
+        ? `/api/v0/equity/history/orders?limit=${size}&cursor=${cursor + size}`
+        : null;
+    return new Response(JSON.stringify({ items, nextPagePath: next }), {
+      status: 200,
+      headers: { ...headers(bucket), "content-type": "application/json" },
+    });
   }) as typeof globalThis.fetch;
 
-  return { fetch: fetchImpl, requests, get rejections() { return state.rejections; } };
+  return {
+    fetch: fetchImpl,
+    requests,
+    get rejections() {
+      return state.rejections;
+    },
+  };
 }
 
 afterEach(() => {
@@ -143,14 +185,20 @@ test("full order history syncs within the published Trading 212 rate limits", as
   const provider = fakeTrading212();
   vi.stubGlobal("fetch", provider.fetch);
   try {
-    const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com" }).sync({ entity: "BV" });
+    const result = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+    }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.trades).toHaveLength(TOTAL_ORDERS);
     expect(result.positions).toHaveLength(1);
     // 150 orders at the provider maximum of 50 per page is 3 requests, well
     // inside the 6-per-minute window: no waiting, no rejection.
-    expect(provider.requests.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toHaveLength(3);
+    expect(
+      provider.requests.filter((path) => path.startsWith("/api/v0/equity/history/orders")),
+    ).toHaveLength(3);
     expect(clock.now()).toBe(START_MS);
   } finally {
     clock.restore();
@@ -164,7 +212,12 @@ test("paces across windows instead of burning retries on rejected requests", asy
   const diagnostics = vi.fn();
   vi.stubGlobal("fetch", provider.fetch);
   try {
-    const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com", diagnostics }).sync({ entity: "BV" });
+    const result = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+      diagnostics,
+    }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.trades).toHaveLength(400);
@@ -173,8 +226,21 @@ test("paces across windows instead of burning retries on rejected requests", asy
     // up front rather than spending a request to be told it is spent.
     expect(provider.rejections).toBe(0);
     expect(clock.now() - START_MS).toBeGreaterThanOrEqual(ORDER_HISTORY_PERIOD_MS);
-    expect(diagnostics).toHaveBeenCalledWith(expect.objectContaining({ type: "wait", endpoint: "/api/v0/equity/history/orders", reason: "budget-exhausted" }));
-    expect(diagnostics).toHaveBeenCalledWith(expect.objectContaining({ type: "response", endpoint: "/api/v0/equity/history/orders", status: 200, remaining: 0 }));
+    expect(diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "wait",
+        endpoint: "/api/v0/equity/history/orders",
+        reason: "budget-exhausted",
+      }),
+    );
+    expect(diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "response",
+        endpoint: "/api/v0/equity/history/orders",
+        status: 200,
+        remaining: 0,
+      }),
+    );
   } finally {
     clock.restore();
   }
@@ -187,7 +253,11 @@ test("large order history continues across every required provider window", asyn
   const provider = fakeTrading212(3_000);
   vi.stubGlobal("fetch", provider.fetch);
   try {
-    const result = await createTrading212Adapter({ token: "key", secret: "secret", baseUrl: "https://live.trading212.com" }).sync({ entity: "BV" });
+    const result = await createTrading212Adapter({
+      token: "key",
+      secret: "secret",
+      baseUrl: "https://live.trading212.com",
+    }).sync({ entity: "BV" });
 
     expect(result.problems).toEqual([]);
     expect(result.trades).toHaveLength(3_000);
@@ -215,12 +285,16 @@ test("a host deadline stops before the rate-limit wait and leaves a resume curso
     expect(result.trades).toHaveLength(300);
     expect(result.positions).toHaveLength(1);
     expect(result.resume?.ordersNextPagePath).toContain("cursor=300");
-    expect(result.problems).toEqual(expect.arrayContaining([
-      "Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
-    ]));
+    expect(result.problems).toEqual(
+      expect.arrayContaining([
+        "Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+      ]),
+    );
     expect(result.retryAfter).toBeDefined();
     expect(clock.now()).toBe(START_MS);
-    expect(provider.requests.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toHaveLength(6);
+    expect(
+      provider.requests.filter((path) => path.startsWith("/api/v0/equity/history/orders")),
+    ).toHaveLength(6);
   } finally {
     clock.restore();
   }

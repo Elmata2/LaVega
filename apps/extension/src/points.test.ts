@@ -21,7 +21,11 @@ function reken(
   amountCents: number | null,
 ) {
   return pointsCoverage({
-    balances: saldi.map((s) => ({ program: s.program, points: s.points, updatedAt: s.updatedAt ?? "2026-08-12" })),
+    balances: saldi.map((s) => ({
+      program: s.program,
+      points: s.points,
+      updatedAt: s.updatedAt ?? "2026-08-12",
+    })),
     rates: POINTS_RATES,
     amountCents,
     asOf: ASOF,
@@ -115,7 +119,11 @@ describe("er zijn VIER soorten onbekend, en de uitkomst laat ze uit elkaar", () 
       ],
       36000,
     );
-    const zin = (naam: string) => puntenRegel(rijen.find((r) => r.program === naam)!, 36000);
+    const zin = (naam: string) =>
+      puntenRegel(
+        rijen.find((r) => r.program === naam)!,
+        36000,
+      );
 
     /* ING mag de nul noemen omdat ING hem zelf uitspreekt — maar alleen binnen
      * zijn reikwijdte, en die staat erbij. */

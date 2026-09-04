@@ -3,12 +3,22 @@ import { ladderOrder, partialOrder, runLadder, type RouteAttempt } from "./catal
 import { isCovered, type CatalogValue } from "@lavega/core";
 
 const value = (route: CatalogValue["route"]): CatalogValue => ({
-  value: 1.4, route, sourceUrl: "https://x", checkedAt: "2026-08-18",
-  conditions: null, conditionsKnown: true,
+  value: 1.4,
+  route,
+  sourceUrl: "https://x",
+  checkedAt: "2026-08-18",
+  conditions: null,
+  conditionsKnown: true,
 });
 
 test("the ladder prefers the provider's own document over anything derived", () => {
-  expect(ladderOrder()).toEqual(["provider-page", "provider-pdf", "wayback", "comparison", "agent"]);
+  expect(ladderOrder()).toEqual([
+    "provider-page",
+    "provider-pdf",
+    "wayback",
+    "comparison",
+    "agent",
+  ]);
 });
 
 test("the first route that answers wins, and later ones are not run", async () => {
@@ -16,7 +26,13 @@ test("the first route that answers wins, and later ones are not run", async () =
   const attempts: RouteAttempt[] = [
     { route: "provider-page", run: async () => null },
     { route: "provider-pdf", run: async () => value("provider-pdf") },
-    { route: "agent", run: async () => { agentRan = true; return value("agent"); } },
+    {
+      route: "agent",
+      run: async () => {
+        agentRan = true;
+        return value("agent");
+      },
+    },
   ];
   const out = await runLadder(attempts);
 
@@ -27,7 +43,12 @@ test("the first route that answers wins, and later ones are not run", async () =
 
 test("a route that throws does not end the sweep — the next one is still tried", async () => {
   const attempts: RouteAttempt[] = [
-    { route: "provider-page", run: async () => { throw new Error("connection killed"); } },
+    {
+      route: "provider-page",
+      run: async () => {
+        throw new Error("connection killed");
+      },
+    },
     { route: "comparison", run: async () => value("comparison") },
   ];
   const out = await runLadder(attempts);
@@ -38,7 +59,12 @@ test("a route that throws does not end the sweep — the next one is still tried
 
 test("when every route fails the reason is recorded, never a zero", async () => {
   const out = await runLadder([
-    { route: "provider-page", run: async () => { throw new Error("403 Cloudflare"); } },
+    {
+      route: "provider-page",
+      run: async () => {
+        throw new Error("403 Cloudflare");
+      },
+    },
     { route: "wayback", run: async () => null },
   ]);
 
@@ -62,8 +88,17 @@ test("a figure whose conditions were never established does not stop the ladder"
   // still) — that is the host's behaviour, not the ladder's design.
   let pdfRan = false;
   const out = await runLadder([
-    { route: "provider-page", run: async () => ({ ...value("provider-page"), conditionsKnown: false }) },
-    { route: "provider-pdf", run: async () => { pdfRan = true; return value("provider-pdf"); } },
+    {
+      route: "provider-page",
+      run: async () => ({ ...value("provider-page"), conditionsKnown: false }),
+    },
+    {
+      route: "provider-pdf",
+      run: async () => {
+        pdfRan = true;
+        return value("provider-pdf");
+      },
+    },
   ]);
 
   expect(pdfRan).toBe(true);
@@ -97,9 +132,27 @@ test("attempts are tried in ladder order however the caller listed them", async 
   // ladder order. This is the only test holding the ladder's shape.
   const seen: string[] = [];
   const out = await runLadder([
-    { route: "agent", run: async () => { seen.push("agent"); return value("agent"); } },
-    { route: "provider-pdf", run: async () => { seen.push("provider-pdf"); return null; } },
-    { route: "provider-page", run: async () => { seen.push("provider-page"); return null; } },
+    {
+      route: "agent",
+      run: async () => {
+        seen.push("agent");
+        return value("agent");
+      },
+    },
+    {
+      route: "provider-pdf",
+      run: async () => {
+        seen.push("provider-pdf");
+        return null;
+      },
+    },
+    {
+      route: "provider-page",
+      run: async () => {
+        seen.push("provider-page");
+        return null;
+      },
+    },
   ]);
 
   expect(seen).toEqual(["provider-page", "provider-pdf", "agent"]);
@@ -149,7 +202,9 @@ test("when nothing is covered the best-EVIDENCED partial is kept, not the highes
   // Both shortfalls are still reported: the surviving partial does not erase the
   // fact that the free rung also produced something.
   expect(out.tried).toEqual(["provider-page", "agent"]);
-  expect(out.reason).toBe("provider-page: conditions not established · agent: conditions not established");
+  expect(out.reason).toBe(
+    "provider-page: conditions not established · agent: conditions not established",
+  );
 });
 
 test("the partial order is by evidence, and the caller can read it", () => {
@@ -157,7 +212,13 @@ test("the partial order is by evidence, and the caller can read it", () => {
   // sentence is in the page, the number is in that sentence, and the heading
   // stands at or before it), then the tariff-PDF parser, then the two that
   // pattern-match a percentage with nothing tying it to the product asked about.
-  expect(partialOrder()).toEqual(["wayback", "agent", "provider-pdf", "provider-page", "comparison"]);
+  expect(partialOrder()).toEqual([
+    "wayback",
+    "agent",
+    "provider-pdf",
+    "provider-page",
+    "comparison",
+  ]);
   // And it is NOT the ladder order — if these ever coincide, one of them is wrong.
   expect(partialOrder()).not.toEqual(ladderOrder());
 });
@@ -168,7 +229,13 @@ test("a covered answer still beats a better-evidenced partial, and stops the lad
   let agentRan = false;
   const out = await runLadder([
     { route: "provider-pdf", run: async () => value("provider-pdf") },
-    { route: "agent", run: async () => { agentRan = true; return value("agent"); } },
+    {
+      route: "agent",
+      run: async () => {
+        agentRan = true;
+        return value("agent");
+      },
+    },
   ]);
 
   expect(out.value?.route).toBe("provider-pdf");

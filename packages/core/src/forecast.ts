@@ -9,17 +9,21 @@ import { categorize, ownAccounts } from "./views.js";
  * a locale/TZ hazard). */
 
 export type RecurringStream = {
-  key: string;             // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
-  counterparty: string;    // raw counterparty of the first occurrence in the group
-  sign: 1 | -1;             // 1 = inflow, -1 = outflow
-  cadenceDays: number;      // snapped: 7 | 14 | 30 | 91 | 365
-  amountCents: number;      // representative magnitude = round(median(|amount| in cents)), POSITIVE integer
+  key: string; // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
+  counterparty: string; // raw counterparty of the first occurrence in the group
+  sign: 1 | -1; // 1 = inflow, -1 = outflow
+  cadenceDays: number; // snapped: 7 | 14 | 30 | 91 | 365
+  amountCents: number; // representative magnitude = round(median(|amount| in cents)), POSITIVE integer
   occurrences: number;
-  lastDate: string;         // ISO date of the most recent occurrence
-  intervalCv: number;       // std/mean of day-gaps (0 when < 2 gaps)
+  lastDate: string; // ISO date of the most recent occurrence
+  intervalCv: number; // std/mean of day-gaps (0 when < 2 gaps)
 };
 
-export type DetectOptions = { minOccurrences?: number; maxIntervalCv?: number; amountTolerance?: number };
+export type DetectOptions = {
+  minOccurrences?: number;
+  maxIntervalCv?: number;
+  amountTolerance?: number;
+};
 
 /** Minimum days of transaction history before the incidental (non-recurring)
  *  daily baseline is extrapolated into the forecast. Below this, one lumpy
@@ -201,7 +205,8 @@ export function detectRecurringStreams(txs: Tx[], opts: DetectOptions = {}): Rec
     const sorted = [...group].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     const gaps: number[] = [];
-    for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
+    for (let i = 1; i < sorted.length; i++)
+      gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
 
     const cadenceDays = snapCadence(median(gaps));
     if (cadenceDays === null) continue;
@@ -276,7 +281,12 @@ export function streamOccurrences(s: RecurringStream, asOf: string, horizonEnd: 
     const overdueDays = daysBetween(missed, asOf);
     const grace = Math.max(3, Math.round(s.cadenceDays * 0.2));
     const catchUp = addDays(asOf, 1);
-    if (overdueDays > grace && overdueDays <= s.cadenceDays && catchUp <= horizonEnd && dates[0] !== catchUp) {
+    if (
+      overdueDays > grace &&
+      overdueDays <= s.cadenceDays &&
+      catchUp <= horizonEnd &&
+      dates[0] !== catchUp
+    ) {
       dates.unshift(catchUp);
     }
   }
@@ -324,11 +334,11 @@ export type ForecastBasis = {
   /** Days spanned by this scope's transaction history (0 for none or one tx). */
   historyDays: number;
   firstTxDate: string; // "" when the scope has no transactions
-  lastTxDate: string;  // ""; also the answer to "how stale is this?"
+  lastTxDate: string; // ""; also the answer to "how stale is this?"
   /** Whole calendar weeks fully inside the observed window. */
   fullWeeks: number;
-  accountsTotal: number;        // accounts in this scope
-  accountsWithHistory: number;  // ...of which contributed at least one transaction
+  accountsTotal: number; // accounts in this scope
+  accountsWithHistory: number; // ...of which contributed at least one transaction
   /** The SHORTEST history among the accounts that contributed any — "three
    *  weeks of one account" is literally this number. null when none did. */
   shortestAccountDays: number | null;
@@ -368,13 +378,18 @@ export type EntityForecast = {
   /** Optional for the same reason. `forecastCashflow` always produces it. */
   basis?: ForecastBasis;
 };
-export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number; scheduledFlows?: ScheduledFlow[] };
+export type ForecastOptions = {
+  asOf: string;
+  horizonDays?: number;
+  bufferCents?: number;
+  scheduledFlows?: ScheduledFlow[];
+};
 
 /** Per-week "recurring flow" contribution of a stream, used for the driver
  *  ranking. Note this is an AVERAGE rate, not a schedule — the projection
  *  itself uses the real calendar dates from `streamOccurrences`. */
 function perWeekCents(s: RecurringStream): number {
-  return Math.round(s.sign * s.amountCents * 7 / s.cadenceDays);
+  return Math.round((s.sign * s.amountCents * 7) / s.cadenceDays);
 }
 
 /** Build one scope's forecast (an entity, or the "geconsolideerd" total)
@@ -393,9 +408,10 @@ function buildForecast(
 
   // No accounts (e.g. the "onbekend" scope of orphan txs) => opening is UNKNOWN,
   // not a confident €0 — otherwise it could surface a spurious shortfall.
-  const openingCents = scopeAccounts.length === 0 || scopeAccounts.some((a) => a.balance === null)
-    ? null
-    : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
+  const openingCents =
+    scopeAccounts.length === 0 || scopeAccounts.some((a) => a.balance === null)
+      ? null
+      : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
 
   const streams = detectRecurringStreams(scopeTxs);
   const liveStreams = streams.filter((s) => !streamHasEnded(s, asOf));
@@ -442,7 +458,8 @@ function buildForecast(
       if (t.date > s.last) s.last = t.date;
     }
   }
-  const firstTxDate = dated.length > 0 ? dated.reduce((a, b) => (a.date < b.date ? a : b)).date : "";
+  const firstTxDate =
+    dated.length > 0 ? dated.reduce((a, b) => (a.date < b.date ? a : b)).date : "";
   const lastTxDate = dated.length > 0 ? dated.reduce((a, b) => (a.date > b.date ? a : b)).date : "";
   const historyDays = dated.length > 0 ? daysBetween(firstTxDate, lastTxDate) : 0;
   const accountDays = [...spanByAccount.values()].map((s) => daysBetween(s.first, s.last));
@@ -456,7 +473,9 @@ function buildForecast(
   // recurring streams only (honest "not enough history for a spend baseline").
   const incidentalIncluded = historyDays >= MIN_HISTORY_DAYS;
   const incidentalSumCents = incidental.reduce((s, t) => s + Math.round(t.amount * 100), 0);
-  const incidentalPerDayCents = incidentalIncluded ? Math.round(incidentalSumCents / Math.max(1, historyDays)) : 0;
+  const incidentalPerDayCents = incidentalIncluded
+    ? Math.round(incidentalSumCents / Math.max(1, historyDays))
+    : 0;
 
   // Week-to-week spread of the incidental flow, over EVERY whole week in the
   // observed window — quiet weeks included as real zeros. The old version built
@@ -472,7 +491,7 @@ function buildForecast(
   let incidentalWeeklyStd = 0;
   const bandHasIncidental = fullWeeks >= MIN_BAND_WEEKS;
   if (bandHasIncidental) {
-    const netByWeek = new Array<number>(fullWeeks).fill(0);
+    const netByWeek = Array.from({ length: fullWeeks }, () => 0);
     for (const t of incidental) {
       const w = Math.floor(dayIndex(t.date) / 7) - firstFullWeek;
       if (w >= 0 && w < fullWeeks) netByWeek[w] += Math.round(t.amount * 100);
@@ -481,7 +500,13 @@ function buildForecast(
   }
   const bandHasStreams = liveStreams.length > 0;
   const bandBasis: BandBasis =
-    bandHasStreams && bandHasIncidental ? "both" : bandHasStreams ? "streams" : bandHasIncidental ? "incidental" : "none";
+    bandHasStreams && bandHasIncidental
+      ? "both"
+      : bandHasStreams
+        ? "streams"
+        : bandHasIncidental
+          ? "incidental"
+          : "none";
 
   // The projected calendar: what lands on which day, and how uncertain each
   // landing is. Streams carry their own measured amount spread; a scheduled flow
@@ -549,7 +574,8 @@ function buildForecast(
   if (openingCents !== null) {
     for (const p of points) {
       const closing = p.projectedClosingCents as number;
-      if (shortfall === null && closing < bufferCents) shortfall = { date: p.date, balanceCents: closing };
+      if (shortfall === null && closing < bufferCents)
+        shortfall = { date: p.date, balanceCents: closing };
       if (atRisk === null && p.lowerCents !== null && p.lowerCents < bufferCents) {
         atRisk = { date: p.date, balanceCents: p.lowerCents };
       }
@@ -587,7 +613,18 @@ function buildForecast(
     }),
   };
 
-  return { scope, asOf, horizonDays, openingCents, points, shortfall, atRisk, streams, drivers, basis };
+  return {
+    scope,
+    asOf,
+    horizonDays,
+    openingCents,
+    points,
+    shortfall,
+    atRisk,
+    streams,
+    drivers,
+    basis,
+  };
 }
 
 /** The confidence ladder, as a rule anyone can check against the basis:
@@ -677,7 +714,15 @@ export function forecastCashflow(
     );
   }
 
-  const consolidated = buildForecast(txs, accounts, "geconsolideerd", asOf, horizonDays, bufferCents, allFlows);
+  const consolidated = buildForecast(
+    txs,
+    accounts,
+    "geconsolideerd",
+    asOf,
+    horizonDays,
+    bufferCents,
+    allFlows,
+  );
 
   return { byEntity, consolidated };
 }

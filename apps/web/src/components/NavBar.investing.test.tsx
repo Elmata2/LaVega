@@ -27,7 +27,9 @@ test("the investing link is a link out, not a nav-item that changes view", async
     container.remove();
   };
   await act(async () => {
-    root.render(<NavBar view="overview" modules={[]} onNavigate={() => {}} onOpenProfile={() => {}} />);
+    root.render(
+      <NavBar view="overview" modules={[]} onNavigate={() => {}} onOpenProfile={() => {}} />,
+    );
   });
   const html = container.innerHTML;
   const right = html.slice(html.indexOf('class="appbar-right"'));

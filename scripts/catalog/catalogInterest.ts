@@ -76,11 +76,11 @@ export function buildInterestPrompt(req: InterestRequest): { system: string; use
     "tool at all — a neighbouring account's rate is not this one's.",
     "",
     "1. standardPct — the rate kept long-term, per annum, as a number: 1.25 for",
-    "   \"1,25%\". Never the promo, never a band that only applies above a threshold",
+    '   "1,25%". Never the promo, never a band that only applies above a threshold',
     "   most savers never reach.",
     "",
     "2. promoPct and promoUntil — the temporary rate and when it ends, or null. Copy",
-    "   the end date in the document's words (\"t/m 01-01-2027\", \"6 maanden\").",
+    '   the end date in the document\'s words ("t/m 01-01-2027", "6 maanden").',
     "",
     "3. conditions — the bands, the promo terms, notice periods and withdrawal",
     "   restrictions, in the document's own words. Write them out; a saver needs to",
@@ -99,7 +99,7 @@ export function buildInterestPrompt(req: InterestRequest): { system: string; use
     "   in it is thrown away, so copy rather than paraphrase.",
     "",
     "7. documentScope — the account this document is scoped to, verbatim from its",
-    "   header (\"Naam van de rekening: BasisPakket Betalen\"), or null when it covers",
+    '   header ("Naam van de rekening: BasisPakket Betalen"), or null when it covers',
     "   the whole range. A document pricing one account says nothing about another.",
     "",
     "DOCUMENT TEXT:",
@@ -127,7 +127,8 @@ export const INTEREST_TOOL: { name: string; description: string; input_schema: o
       },
       promoUntil: {
         type: ["string", "null"],
-        description: "When the promotion ends, in the document's own words (\"t/m 01-01-2027\", \"6 maanden\"), else null.",
+        description:
+          'When the promotion ends, in the document\'s own words ("t/m 01-01-2027", "6 maanden"), else null.',
       },
       conditions: {
         type: ["string", "null"],
@@ -136,22 +137,35 @@ export const INTEREST_TOOL: { name: string; description: string; input_schema: o
       },
       conditionsKnown: {
         type: "boolean",
-        description: "false when the document does not let you settle what the rate depends on. Never true merely to look decisive.",
+        description:
+          "false when the document does not let you settle what the rate depends on. Never true merely to look decisive.",
       },
       freeWithdrawal: {
         type: ["boolean", "null"],
-        description: "true if withdrawable without notice or penalty, false if a notice period or fee applies, null if the document is silent. Silence is null.",
+        description:
+          "true if withdrawable without notice or penalty, false if a notice period or fee applies, null if the document is silent. Silence is null.",
       },
       quote: {
         type: "string",
-        description: "The sentence or table row standardPct was read from, copied verbatim from the supplied text.",
+        description:
+          "The sentence or table row standardPct was read from, copied verbatim from the supplied text.",
       },
       documentScope: {
         type: ["string", "null"],
-        description: "The account this document is scoped to, verbatim from its header, or null when it covers the provider's whole range.",
+        description:
+          "The account this document is scoped to, verbatim from its header, or null when it covers the provider's whole range.",
       },
     },
-    required: ["standardPct", "promoPct", "promoUntil", "conditions", "conditionsKnown", "freeWithdrawal", "quote", "documentScope"],
+    required: [
+      "standardPct",
+      "promoPct",
+      "promoUntil",
+      "conditions",
+      "conditionsKnown",
+      "freeWithdrawal",
+      "quote",
+      "documentScope",
+    ],
   },
 };
 
@@ -163,9 +177,9 @@ function asRate(v: unknown): number | null {
 }
 
 export function parseInterestReply(raw: unknown, req: InterestRequest): ExtractedRate | null {
-  const r = (raw && typeof raw === "object" && "input" in raw ? (raw as { input: unknown }).input : raw) as
-    | Record<string, unknown>
-    | null;
+  const r = (
+    raw && typeof raw === "object" && "input" in raw ? (raw as { input: unknown }).input : raw
+  ) as Record<string, unknown> | null;
   if (!r || typeof r !== "object" || Array.isArray(r)) return null;
 
   const standardPct = asRate(r.standardPct);
@@ -180,11 +194,12 @@ export function parseInterestReply(raw: unknown, req: InterestRequest): Extracte
   // neighbouring row's number cannot be imported onto a correct quote.
   if (!percentagesIn(quote).some((p) => Math.abs(p - standardPct) < 1e-9)) return null;
 
-  const conditions = typeof r.conditions === "string" && r.conditions.trim() ? r.conditions.trim() : null;
+  const conditions =
+    typeof r.conditions === "string" && r.conditions.trim() ? r.conditions.trim() : null;
   const documentScope =
     typeof r.documentScope === "string" && r.documentScope.trim() ? r.documentScope.trim() : null;
 
-  let conditionsKnown = r.conditionsKnown === true && (conditions !== null);
+  let conditionsKnown = r.conditionsKnown === true && conditions !== null;
   // A SCOPED DOCUMENT CANNOT DECLARE A FLAT RATE, for the same reason it cannot on
   // the card side: the scope is itself a condition, so a null alongside one is a
   // contradiction rather than a finding.
@@ -194,14 +209,20 @@ export function parseInterestReply(raw: unknown, req: InterestRequest): Extracte
   if (conditions === null && asRate(r.promoPct) !== null) conditionsKnown = false;
   // A flat rate CAN be genuinely unconditional, so an unscoped, promo-free reply
   // that claims so is allowed through.
-  if (conditions === null && documentScope === null && asRate(r.promoPct) === null && r.conditionsKnown === true) {
+  if (
+    conditions === null &&
+    documentScope === null &&
+    asRate(r.promoPct) === null &&
+    r.conditionsKnown === true
+  ) {
     conditionsKnown = true;
   }
 
   return {
     standardPct,
     promoPct: asRate(r.promoPct),
-    promoUntil: typeof r.promoUntil === "string" && r.promoUntil.trim() ? r.promoUntil.trim() : null,
+    promoUntil:
+      typeof r.promoUntil === "string" && r.promoUntil.trim() ? r.promoUntil.trim() : null,
     conditions,
     conditionsKnown,
     freeWithdrawal: typeof r.freeWithdrawal === "boolean" ? r.freeWithdrawal : null,

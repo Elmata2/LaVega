@@ -29,7 +29,9 @@ const REF_PATTERN = /\b(src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
  *  qualified (`https://…`), protocol-relative (`//cdn…`), inline (`data:`),
  *  non-http schemes (`mailto:`), and in-document anchors (`#main`). */
 function isBaseIndependent(url: string): boolean {
-  return url === "" || url.startsWith("#") || url.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(url);
+  return (
+    url === "" || url.startsWith("#") || url.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(url)
+  );
 }
 
 /** Vite always resolves a base to a trailing slash, so compare that way — a

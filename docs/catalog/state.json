@@ -89,10 +89,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2,
@@ -113,11 +110,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "conditions",
-        "(merchant offers)"
-      ],
+      "fieldsOnPage": ["fxFee", "conditions", "(merchant offers)"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -137,9 +130,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "conditions"
-      ],
+      "fieldsOnPage": ["conditions"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -219,10 +210,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "conditions"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -242,11 +230,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -266,9 +250,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee"
-      ],
+      "fieldsOnPage": ["fxFee"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -288,11 +270,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -312,9 +290,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee"
-      ],
+      "fieldsOnPage": ["fxFee"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -334,10 +310,7 @@
       "httpStatus": "200 (serves PDF bytes)",
       "readable": "yes (PDF extractor required)",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -357,11 +330,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 1.4,
@@ -382,11 +351,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 1.4,
@@ -407,9 +372,7 @@
       "httpStatus": "200",
       "readable": "marketing-only",
       "route": "agent",
-      "fieldsOnPage": [
-        "conditions only"
-      ],
+      "fieldsOnPage": ["conditions only"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -429,12 +392,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -454,12 +412,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -479,11 +432,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -503,12 +452,7 @@
       "httpStatus": "200 (after refetch)",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -528,10 +472,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -551,10 +492,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -573,9 +511,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "conditions"
-      ],
+      "fieldsOnPage": ["conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -595,9 +531,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "conditions"
-      ],
+      "fieldsOnPage": ["conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -617,10 +551,7 @@
       "httpStatus": "200 (after refetch)",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -640,10 +571,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -663,10 +591,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -686,10 +611,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -792,13 +714,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "cashback",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "cashback", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -818,13 +734,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "cashback",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "cashback", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -844,13 +754,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "cashback",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "cashback", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -870,13 +774,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "cashback",
-        "interest",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "cashback", "interest", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -896,10 +794,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -919,10 +814,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -942,11 +834,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -965,10 +853,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -987,10 +872,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1010,12 +892,7 @@
       "httpStatus": "200 (payload) / 200 shell (HTML)",
       "readable": "yes via SSR payload",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1035,10 +912,7 @@
       "httpStatus": "200 (payload) / 200 shell (HTML)",
       "readable": "yes via SSR payload",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1058,12 +932,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1083,9 +952,7 @@
       "httpStatus": "200",
       "readable": "yes (conditions only)",
       "route": "fetch",
-      "fieldsOnPage": [
-        "conditions"
-      ],
+      "fieldsOnPage": ["conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1101,9 +968,7 @@
       "httpStatus": "200",
       "readable": "yes (conditions only)",
       "route": "fetch",
-      "fieldsOnPage": [
-        "conditions"
-      ],
+      "fieldsOnPage": ["conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1121,10 +986,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1144,12 +1006,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1167,12 +1024,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1190,12 +1042,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1213,12 +1060,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1236,12 +1078,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1259,11 +1096,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1281,12 +1114,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1304,11 +1132,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1326,11 +1150,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1350,11 +1170,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1374,11 +1190,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1398,11 +1210,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1422,11 +1230,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1446,10 +1250,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "points",
-        "conditions"
-      ],
+      "fieldsOnPage": ["points", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1469,12 +1270,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1491,11 +1287,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1515,12 +1307,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1537,12 +1324,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1559,12 +1341,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1581,12 +1358,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1603,12 +1375,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1625,12 +1392,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1651,12 +1413,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1677,12 +1434,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1703,12 +1455,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": 2.5,
@@ -1729,11 +1476,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1753,10 +1496,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1776,10 +1516,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1799,11 +1536,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1823,11 +1556,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1847,11 +1576,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1871,11 +1596,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1895,11 +1616,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1919,12 +1636,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "fxFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "fxFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1940,12 +1652,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "fxFee",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "fxFee", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1964,11 +1671,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -1987,10 +1690,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "conditions"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2010,12 +1710,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "cashback",
-        "fxFee",
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["cashback", "fxFee", "interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2097,10 +1792,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "annualFee",
-        "conditions"
-      ],
+      "fieldsOnPage": ["annualFee", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2140,11 +1832,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2164,10 +1852,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2187,10 +1872,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2225,11 +1907,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2249,10 +1927,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2272,10 +1947,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2294,10 +1966,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2313,10 +1982,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "annualFee"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2336,9 +2002,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest"
-      ],
+      "fieldsOnPage": ["interest"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2358,9 +2022,7 @@
       "httpStatus": "200",
       "readable": "marketing-only",
       "route": "agent",
-      "fieldsOnPage": [
-        "interest (wrong product only)"
-      ],
+      "fieldsOnPage": ["interest (wrong product only)"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2378,11 +2040,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2402,11 +2060,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2426,10 +2080,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2449,11 +2100,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2473,11 +2120,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2497,11 +2140,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": false,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2520,10 +2159,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2542,10 +2178,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2565,11 +2198,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions",
-        "annualFee"
-      ],
+      "fieldsOnPage": ["interest", "conditions", "annualFee"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2647,10 +2276,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2668,10 +2294,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2687,10 +2310,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2706,10 +2326,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2725,10 +2342,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,
@@ -2748,10 +2362,7 @@
       "httpStatus": "200",
       "readable": "yes",
       "route": "fetch",
-      "fieldsOnPage": [
-        "interest",
-        "conditions"
-      ],
+      "fieldsOnPage": ["interest", "conditions"],
       "conditionalHeadlineRate": true,
       "lastChecked": "2026-08-31",
       "lastValue": null,

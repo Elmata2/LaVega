@@ -8,7 +8,8 @@ const KEY_ENV_VARS: Record<KeyName, string> = {
 };
 
 function processEnvironment(): Environment {
-  const processLike = (globalThis as typeof globalThis & { process?: { env?: Environment } }).process;
+  const processLike = (globalThis as typeof globalThis & { process?: { env?: Environment } })
+    .process;
   return processLike?.env ?? {};
 }
 

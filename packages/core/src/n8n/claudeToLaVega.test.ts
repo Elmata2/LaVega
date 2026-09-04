@@ -125,7 +125,9 @@ test("een onleesbare mail wordt een melding met de reden uit de normalisatie", (
     reason: "Geen leesbare tekst en geen PDF-bijlage in dit bericht.",
   });
   expect(notice.kind).toBe("unreadable");
-  expect(notice.reason).toBe("Geen leesbare tekst en geen PDF-bijlage in dit bericht. Open hem zelf.");
+  expect(notice.reason).toBe(
+    "Geen leesbare tekst en geen PDF-bijlage in dit bericht. Open hem zelf.",
+  );
   expect(notice.mailUrl).toBe(gmailUrl(MSG.messageId));
 });
 
@@ -161,7 +163,11 @@ test("een doorgestuurde factuur draagt adres én afzender mee tot in de rij", ()
 
 test("een afzender die SPF/DKIM niet haalt levert een gemarkeerde regel op, geen weggegooide", () => {
   const entry = toQueueEntry(
-    { ...INBOUND_MSG, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    {
+      ...INBOUND_MSG,
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+    },
     INVOICE_ANSWER,
   );
   expect(entry.invoice?.senderCheck).toBe("failed");
@@ -175,7 +181,11 @@ test("een onbekende senderCheck wordt 'unknown', nooit 'passed'", () => {
 });
 
 test("een doorgestuurde mail krijgt GEEN Gmail-link: die zou nergens op uitkomen", () => {
-  const entry = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "notification", note: "Log in bij de leverancier." });
+  const entry = toQueueEntry(INBOUND_MSG, {
+    isInvoice: false,
+    kind: "notification",
+    note: "Log in bij de leverancier.",
+  });
   expect(entry.notice?.mailUrl).toBe("");
   expect(entry.notice?.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
 

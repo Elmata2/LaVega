@@ -136,7 +136,10 @@ function CashbackCorrigeren({
     let alive = true;
     (async () => {
       try {
-        const [loadedAccounts, loadedFacts] = await Promise.all([storage.getAccounts(), storage.getFacts()]);
+        const [loadedAccounts, loadedFacts] = await Promise.all([
+          storage.getAccounts(),
+          storage.getFacts(),
+        ]);
         if (!alive) return;
         setCards(loadedAccounts.filter(isSpendable));
         setFacts(loadedFacts);
@@ -156,12 +159,20 @@ function CashbackCorrigeren({
      vraag met één antwoord — twee regels zouden suggereren dat je ze los kunt
      zetten, en de tweede zou de eerste stil overschrijven. */
   const rows = useMemo(() => {
-    const byProduct = new Map<string, { product: string; bank: string; kind: "betaalpas" | "creditcard"; names: string[] }>();
+    const byProduct = new Map<
+      string,
+      { product: string; bank: string; kind: "betaalpas" | "creditcard"; names: string[] }
+    >();
     for (const a of cards ?? []) {
       const product = productOf(a);
       if (!product) continue;
       const kind = accountType(a) === "Creditcard" ? "creditcard" : "betaalpas";
-      const row = byProduct.get(product) ?? { product, bank: String(a.bank ?? ""), kind, names: [] };
+      const row = byProduct.get(product) ?? {
+        product,
+        bank: String(a.bank ?? ""),
+        kind,
+        names: [],
+      };
       row.names.push(a.name || a.key);
       byProduct.set(product, row);
     }
@@ -228,13 +239,15 @@ function CashbackCorrigeren({
     <section className="card" aria-label="Cashback corrigeren">
       <div className="card-header">
         <h2>Cashback corrigeren</h2>
-        <span className="eyebrow">{rows.length} {rows.length === 1 ? "kaart" : "kaarten"}</span>
+        <span className="eyebrow">
+          {rows.length} {rows.length === 1 ? "kaart" : "kaarten"}
+        </span>
       </div>
       <p className="cell-sub">
-        Bij een gewone Nederlandse betaalpas of grootbankcreditcard neemt LaVega aan dat er geen cashback is.
-        Dat is een aanname van ons en geen zin uit een document, dus je kunt hem hier terugdraaien: vul het
-        percentage in dat jouw kaart echt geeft. Wat jij invult gaat vóór alles wat LaVega zelf vindt, ook na
-        een volgende zoekopdracht.
+        Bij een gewone Nederlandse betaalpas of grootbankcreditcard neemt LaVega aan dat er geen
+        cashback is. Dat is een aanname van ons en geen zin uit een document, dus je kunt hem hier
+        terugdraaien: vul het percentage in dat jouw kaart echt geeft. Wat jij invult gaat vóór
+        alles wat LaVega zelf vindt, ook na een volgende zoekopdracht.
       </p>
       <p className="cell-sub">
         Er gaat niets naar een server. Je correctie blijft in je eigen kluis, op dit apparaat.
@@ -245,8 +258,9 @@ function CashbackCorrigeren({
           staat er geen aanname meer maar zijn eigen vaststelling, en die
           verdwijnt niet als de aanname ooit wordt teruggedraaid. */}
       <p className="cell-sub">
-        Weet je zeker dat een kaart niets teruggeeft? Vul dan <strong>0</strong> in. Dat is geen aanname meer
-        maar jouw eigen vaststelling, en die blijft staan ook als je de aanname hieronder uitzet.
+        Weet je zeker dat een kaart niets teruggeeft? Vul dan <strong>0</strong> in. Dat is geen
+        aanname meer maar jouw eigen vaststelling, en die blijft staan ook als je de aanname
+        hieronder uitzet.
       </p>
 
       <label>
@@ -266,14 +280,15 @@ function CashbackCorrigeren({
 
       {loadProblem !== null ? (
         <p role="alert" className="text-warn">
-          LaVega kon je rekeningen niet uit de kluis lezen: {loadProblem}. Zonder die lijst is er niets om te
-          corrigeren.
+          LaVega kon je rekeningen niet uit de kluis lezen: {loadProblem}. Zonder die lijst is er
+          niets om te corrigeren.
         </p>
       ) : cards === null ? (
         <p className="text-muted">Bezig met lezen uit je kluis…</p>
       ) : rows.length === 0 ? (
         <p className="text-muted">
-          Nog geen betaalrekening of creditcard in je kluis. Importeer er één, dan verschijnt hij hier.
+          Nog geen betaalrekening of creditcard in je kluis. Importeer er één, dan verschijnt hij
+          hier.
         </p>
       ) : (
         <ul className="scope-list">
@@ -284,17 +299,29 @@ function CashbackCorrigeren({
               issuer: row.bank,
               kind: row.kind,
               productName: row.product,
-              fact: pctNow !== null && entry ? { pct: pctNow, source: entry.source, updatedAt: entry.updatedAt } : null,
+              fact:
+                pctNow !== null && entry
+                  ? { pct: pctNow, source: entry.source, updatedAt: entry.updatedAt }
+                  : null,
               assumptionOn,
               // Dezelfde omweg als op Optimalisatie: zijn eigen kaart heeft geen
               // catalogusrij, dus de peildatum komt van de rijen van DEZE bank in
               // DIT soort product. Zonder die datum heet elke aanname voor altijd
               // "nog nooit nagekeken" en zegt de jaarlijkse blik niets meer.
-              lastCheckedAt: lastTermsCheckedForIssuer(CATALOGUE_ENTRIES, row.bank, CATALOGUE_KINDS_FOR[row.kind]),
+              lastCheckedAt: lastTermsCheckedForIssuer(
+                CATALOGUE_ENTRIES,
+                row.bank,
+                CATALOGUE_KINDS_FOR[row.kind],
+              ),
             });
-            const due = known.tier === "aangenomen" && assumptionDueForReview(known.lastCheckedAt, asOf);
+            const due =
+              known.tier === "aangenomen" && assumptionDueForReview(known.lastCheckedAt, asOf);
             return (
-              <li key={row.product} className="scope-item" data-testid={`cashback-fix-${row.product}`}>
+              <li
+                key={row.product}
+                className="scope-item"
+                data-testid={`cashback-fix-${row.product}`}
+              >
                 <div className="scope-item-text">
                   <span className="scope-item-name">{row.product}</span>
                   <span className="mp-what">
@@ -314,11 +341,19 @@ function CashbackCorrigeren({
                       onChange={(e) => setDrafts((d) => ({ ...d, [row.product]: e.target.value }))}
                     />
                   </label>{" "}
-                  <button type="button" className="btn btn-primary" onClick={() => void saveCorrection(row.product)}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void saveCorrection(row.product)}
+                  >
                     Opslaan
                   </button>{" "}
                   {entry !== null && entry.source === "user" && (
-                    <button type="button" className="btn" onClick={() => void clearCorrection(row.product)}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void clearCorrection(row.product)}
+                    >
                       Wis mijn correctie
                     </button>
                   )}
@@ -436,8 +471,8 @@ export default function Profiel({
           <span className="eyebrow">{enabledModules.length} in je navigatie</span>
         </div>
         <p className="cell-sub">
-          Zet aan wat jij gebruikt. Wat aan staat verschijnt in de balk bovenin; wat uit staat verdwijnt
-          daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
+          Zet aan wat jij gebruikt. Wat aan staat verschijnt in de balk bovenin; wat uit staat
+          verdwijnt daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
         </p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
       </section>
@@ -464,15 +499,20 @@ export default function Profiel({
       <section className="card" aria-label="Persoonlijk of zakelijk">
         <div className="card-header">
           <h2>Persoonlijk of zakelijk</h2>
-          <span className="eyebrow">{entities.length} {entities.length === 1 ? "eenheid" : "eenheden"}</span>
+          <span className="eyebrow">
+            {entities.length} {entities.length === 1 ? "eenheid" : "eenheden"}
+          </span>
         </div>
         <p className="cell-sub">
-          De schakelaar bovenin toont één helft van je geld. Hier bepaal je zelf welke helft een bedrijf of
-          rekening bij hoort. Wat je niet indeelt telt als persoonlijk — LaVega gokt dat nooit voor je.
+          De schakelaar bovenin toont één helft van je geld. Hier bepaal je zelf welke helft een
+          bedrijf of rekening bij hoort. Wat je niet indeelt telt als persoonlijk — LaVega gokt dat
+          nooit voor je.
         </p>
 
         {entities.length === 0 ? (
-          <p className="text-muted">Nog geen rekeningen. Importeer er één, dan verschijnt hij hier.</p>
+          <p className="text-muted">
+            Nog geen rekeningen. Importeer er één, dan verschijnt hij hier.
+          </p>
         ) : (
           <ul className="scope-list">
             {entities.map((e) => (
@@ -481,12 +521,19 @@ export default function Profiel({
                   <span className="scope-item-name">{e.entity}</span>
                   <span className="mp-what">
                     {e.accountKeys.length} {e.accountKeys.length === 1 ? "rekening" : "rekeningen"}
-                    {!e.explicit && ` · niet ingedeeld, telt als ${SCOPE_LABELS.personal.toLowerCase()}`}
-                    {!e.explicit && e.suggested !== e.scope && ` · de naam leest als ${SCOPE_LABELS[e.suggested].toLowerCase()}`}
+                    {!e.explicit &&
+                      ` · niet ingedeeld, telt als ${SCOPE_LABELS.personal.toLowerCase()}`}
+                    {!e.explicit &&
+                      e.suggested !== e.scope &&
+                      ` · de naam leest als ${SCOPE_LABELS[e.suggested].toLowerCase()}`}
                   </span>
                 </div>
 
-                <div className="scope-switch" role="group" aria-label={`${e.entity}: persoonlijk of zakelijk`}>
+                <div
+                  className="scope-switch"
+                  role="group"
+                  aria-label={`${e.entity}: persoonlijk of zakelijk`}
+                >
                   {SCOPE_ORDER.map((s, i) => (
                     <Fragment key={s}>
                       {i > 0 && <span className="scope-rule" aria-hidden="true" />}
@@ -511,16 +558,21 @@ export default function Profiel({
       <section className="card" aria-label="Land en regio">
         <h2>Land en regio</h2>
         <p className="cell-sub">
-          Bepaalt welke belastingregels LaVega gebruikt en in welke markt het de voorwaarden van je kaarten
-          opzoekt. De belastingmodules zijn op dit moment alleen voor Nederland uitgewerkt.
+          Bepaalt welke belastingregels LaVega gebruikt en in welke markt het de voorwaarden van je
+          kaarten opzoekt. De belastingmodules zijn op dit moment alleen voor Nederland uitgewerkt.
         </p>
         <p className="cell-sub">
-          Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.
+          Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen
+          tijdzone.
         </p>
         <div className="facturen-form">
           <label>
             Land{" "}
-            <select value={homeCountry} onChange={(e) => onHomeCountryChange(e.target.value)} aria-label="Land">
+            <select
+              value={homeCountry}
+              onChange={(e) => onHomeCountryChange(e.target.value)}
+              aria-label="Land"
+            >
               {countries.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.name}
@@ -558,7 +610,13 @@ export default function Profiel({
         </p>
       </section>
 
-      <Import entity={entity} onEntityChange={onEntityChange} busy={busy} problems={problems} onImport={onImport} />
+      <Import
+        entity={entity}
+        onEntityChange={onEntityChange}
+        busy={busy}
+        problems={problems}
+        onImport={onImport}
+      />
 
       <Koppelingen />
 
@@ -579,8 +637,8 @@ export default function Profiel({
       <section className="card" aria-label="Vergrendelen">
         <h2>Vergrendelen</h2>
         <p className="cell-sub">
-          Sluit de kluis en wist alles uit het geheugen van deze browser. Je hebt je wachtwoord nodig om weer
-          binnen te komen.
+          Sluit de kluis en wist alles uit het geheugen van deze browser. Je hebt je wachtwoord
+          nodig om weer binnen te komen.
         </p>
         <button type="button" className="btn" onClick={onLock}>
           Vergrendel

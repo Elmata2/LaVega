@@ -9,10 +9,15 @@ type YahooAssetProfileResponse = {
 };
 
 /** Fetches sector + industry for one symbol via the shared crumb client. Returns null on any failure — never throws. */
-export async function fetchYahooSectorProfile(symbol: string, client?: YahooHttpClient): Promise<SectorProfile | null> {
+export async function fetchYahooSectorProfile(
+  symbol: string,
+  client?: YahooHttpClient,
+): Promise<SectorProfile | null> {
   try {
     const httpClient = client ?? new YahooHttpClient();
-    const data = await httpClient.fetchJsonWithCrumb<YahooAssetProfileResponse>(`${QUOTE_SUMMARY_URL}${encodeURIComponent(symbol.toUpperCase())}?modules=assetProfile`);
+    const data = await httpClient.fetchJsonWithCrumb<YahooAssetProfileResponse>(
+      `${QUOTE_SUMMARY_URL}${encodeURIComponent(symbol.toUpperCase())}?modules=assetProfile`,
+    );
     const profile = data.quoteSummary?.result?.[0]?.assetProfile;
     if (!profile?.sector && !profile?.industry) return null;
     return { sector: profile.sector ?? "Unknown", industry: profile.industry ?? "Unknown" };

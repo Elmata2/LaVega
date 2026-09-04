@@ -127,7 +127,9 @@ export default function CategoryBars({
                   // does not; with two it is half the answer to "which number
                   // is this?".
                   const when =
-                    series.length > 1 ? `${g.title ?? g.label} · ${series[i]?.label}` : (g.title ?? g.label);
+                    series.length > 1
+                      ? `${g.title ?? g.label} · ${series[i]?.label}`
+                      : (g.title ?? g.label);
                   return (
                     <button
                       key={series[i]?.label ?? i}
@@ -145,7 +147,10 @@ export default function CategoryBars({
                       }}
                       onBlur={() => setTapped((t) => (t === key ? null : t))}
                     >
-                      <span className={`lv-tip${pct > TALL_BAR ? " lv-tip-inside" : ""}`} aria-hidden="true">
+                      <span
+                        className={`lv-tip${pct > TALL_BAR ? " lv-tip-inside" : ""}`}
+                        aria-hidden="true"
+                      >
                         <span className="lv-tip-when">{when}</span>
                         <span className="lv-tip-value">{format(v)}</span>
                       </span>

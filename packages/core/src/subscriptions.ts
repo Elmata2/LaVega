@@ -19,13 +19,13 @@ export type Subscription = {
    *  the price. Two streams at the SAME merchant are not two competing
    *  services, and `subscriptionOverlaps` needs to be able to see that. */
   merchant: string;
-  name: string;             // raw counterparty of the first occurrence
-  function: string;         // "Videostreaming" | "Muziekstreaming" | ... | "Overig"
-  cadenceDays: number;      // 30 | 61 | 91 | 182 | 365
-  monthlyCents: number;     // current price normalized to per-month (positive)
+  name: string; // raw counterparty of the first occurrence
+  function: string; // "Videostreaming" | "Muziekstreaming" | ... | "Overig"
+  cadenceDays: number; // 30 | 61 | 91 | 182 | 365
+  monthlyCents: number; // current price normalized to per-month (positive)
   firstAmountCents: number; // earliest REPEATING charge (the old price)
-  lastAmountCents: number;  // latest REPEATING charge (the current price)
-  changePct: number;        // (last - first) / first, rounded to 0.001
+  lastAmountCents: number; // latest REPEATING charge (the current price)
+  changePct: number; // (last - first) / first, rounded to 0.001
   occurrences: number;
   lastDate: string;
   /** Cycles that were expected inside the observed history and never arrived —
@@ -123,9 +123,32 @@ export function subscriptionFunction(name: string): string {
  * form and the payment-scheme boilerplate. Dropped when building the merchant
  * key, so "Incasso Simyo B.V." and "SIMYO" are one merchant. */
 const NAME_NOISE_TOKENS = new Set([
-  "bv", "nv", "vof", "cv", "bvba", "ltd", "llc", "inc", "gmbh", "ag", "sa", "sarl", "plc", "kg",
-  "sepa", "incasso", "machtiging", "doorlopend", "doorlopende", "eenmalig", "eenmalige",
-  "ideal", "bea", "gea", "betaling", "betaalautomaat",
+  "bv",
+  "nv",
+  "vof",
+  "cv",
+  "bvba",
+  "ltd",
+  "llc",
+  "inc",
+  "gmbh",
+  "ag",
+  "sa",
+  "sarl",
+  "plc",
+  "kg",
+  "sepa",
+  "incasso",
+  "machtiging",
+  "doorlopend",
+  "doorlopende",
+  "eenmalig",
+  "eenmalige",
+  "ideal",
+  "bea",
+  "gea",
+  "betaling",
+  "betaalautomaat",
 ]);
 
 /** The identity of the MERCHANT behind a counterparty string — the group key of
@@ -149,8 +172,8 @@ export function merchantKey(counterparty: string): string {
   if (known) return known.match;
   const kept: string[] = [];
   for (const t of h.replace(/[^a-z0-9]+/g, " ").split(" ")) {
-    if (t.length < 2) continue;                     // initials, "b" + "v" of b.v.
-    if (/^\d+$/.test(t)) continue;                  // invoice / customer number
+    if (t.length < 2) continue; // initials, "b" + "v" of b.v.
+    if (/^\d+$/.test(t)) continue; // invoice / customer number
     /* EEN NAAM MET EEN FILIAALNUMMER ERAAN VAST verliest alleen het nummer, niet
      * zichzelf. Gemeten in zijn eigen data (24 augustus): "MONOP4767" leverde een
      * LEGE sleutel op — negen afschrijvingen, EUR 763,54, en het scherm meldde
@@ -166,7 +189,7 @@ export function merchantKey(counterparty: string): string {
       if (!NAME_NOISE_TOKENS.has(gesplitst[1])) kept.push(gesplitst[1]);
       continue;
     }
-    if (/\d/.test(t) && t.length >= 4) continue;     // "m0123456", "20260115"
+    if (/\d/.test(t) && t.length >= 4) continue; // "m0123456", "20260115"
     if (NAME_NOISE_TOKENS.has(t)) continue;
     kept.push(t);
   }
@@ -177,8 +200,16 @@ export function merchantKey(counterparty: string): string {
  * not a subscription — so a recurring "Overschrijving naar <persoon>" or an
  * Amex/creditcard settlement is never listed as an abonnement. */
 const TRANSFER_HINTS = [
-  "overschrijving", "overboeking", "spaarrekening", "tikkie", "geld toegevoegd",
-  "geld toevoegen", "kosten zakelijk", "american express", "incasso ing creditcard", "naar creditcard",
+  "overschrijving",
+  "overboeking",
+  "spaarrekening",
+  "tikkie",
+  "geld toegevoegd",
+  "geld toevoegen",
+  "kosten zakelijk",
+  "american express",
+  "incasso ing creditcard",
+  "naar creditcard",
   // A payment arrangement with the tax office is a fixed monthly outflow with a
   // stable counterparty — a textbook match for this detector, and the one thing
   // in the list nobody can cancel. The tax modules own it (VAT set-aside, BTW
@@ -192,14 +223,35 @@ const TRANSFER_HINTS = [
  * "abonnement he could cancel" is exactly the kind of entry that costs trust.
  * Anchored at both ends and deliberately narrow: a wrong hit here COSTS a real
  * subscription, so anything with extra words in it is left alone. */
-const PERSON_NAME = /^[a-z]\.\s?(?:[a-z]\.\s?)*(?:(?:van|van der|van den|van de|de|den|der|ten|ter|te|op|in|het) )?([a-z]{2,})$/;
+const PERSON_NAME =
+  /^[a-z]\.\s?(?:[a-z]\.\s?)*(?:(?:van|van der|van den|van de|de|den|der|ten|ter|te|op|in|het) )?([a-z]{2,})$/;
 /* Dutch companies are written with initials too — "A.S.R. Verzekeringen",
  * "D.A.S. Rechtsbijstand" — and an insurance premium IS a subscription. Stems,
  * because the plural and the compound both occur. */
 const COMPANY_WORD_STEMS = [
-  "verzeker", "assurant", "hypothe", "bank", "telecom", "mobile", "energie", "pensioen",
-  "zorg", "groep", "group", "holding", "beheer", "vastgoed", "service", "system", "media",
-  "fonds", "uitgever", "rechtsbijstand", "advocat", "notaris", "accountant",
+  "verzeker",
+  "assurant",
+  "hypothe",
+  "bank",
+  "telecom",
+  "mobile",
+  "energie",
+  "pensioen",
+  "zorg",
+  "groep",
+  "group",
+  "holding",
+  "beheer",
+  "vastgoed",
+  "service",
+  "system",
+  "media",
+  "fonds",
+  "uitgever",
+  "rechtsbijstand",
+  "advocat",
+  "notaris",
+  "accountant",
 ];
 function looksLikePerson(normalized: string): boolean {
   const m = PERSON_NAME.exec(normalized);
@@ -222,8 +274,15 @@ function looksLikeTransfer(counterparty: string): boolean {
  * deliberately NOT here: nothing else surfaces them.
  * Matched on a word start so "schuur" is not "huur" and "vve" is not "vveel". */
 const HOUSING_HINTS = [
-  "huur", "verhuur", "hypothe", "vve", "vereniging van eigenaren",
-  "woningstichting", "woningcorporatie", "woonstichting", "servicekosten",
+  "huur",
+  "verhuur",
+  "hypothe",
+  "vve",
+  "vereniging van eigenaren",
+  "woningstichting",
+  "woningcorporatie",
+  "woonstichting",
+  "servicekosten",
 ];
 const HOUSING_RES = HOUSING_HINTS.map((w) => new RegExp(`(^|[^a-z0-9])${w}`));
 function looksLikeHousing(counterparty: string): boolean {
@@ -271,7 +330,12 @@ function std(nums: number[]): number {
  *
  * The real constraint is therefore HISTORY, not a window: see
  * `minHistoryDaysFor` and `subscriptionCoverage`. */
-const CADENCE_BANDS: ReadonlyArray<{ cadenceDays: number; min: number; max: number; minOcc: number }> = [
+const CADENCE_BANDS: ReadonlyArray<{
+  cadenceDays: number;
+  min: number;
+  max: number;
+  minOcc: number;
+}> = [
   { cadenceDays: 30, min: 26, max: 36, minOcc: 3 },
   { cadenceDays: 61, min: 55, max: 68, minOcc: 3 },
   { cadenceDays: 91, min: 80, max: 100, minOcc: 2 },
@@ -393,7 +457,10 @@ function chainFrom(days: number[], start: number, band: CadenceBand): CadenceFit
         const gj = days[j] - days[last];
         if (gj > target + tol) break;
         const dj = Math.abs(gj - target);
-        if (dj < pickDrift) { pick = j; pickDrift = dj; }
+        if (dj < pickDrift) {
+          pick = j;
+          pickDrift = dj;
+        }
       }
       members.push(pick);
       gaps.push(days[pick] - days[last]);
@@ -568,8 +635,9 @@ function amountGroups(days: number[], amountsCents: number[]): number[][] {
   }
   /* First charge, then amount: two groups starting on the same day must still
    * come out in the same order on every machine. */
-  const bare = [...byAmount.values()].sort((x, y) =>
-    days[x[0]] - days[y[0]] || amountsCents[x[0]] - amountsCents[y[0]]);
+  const bare = [...byAmount.values()].sort(
+    (x, y) => days[x[0]] - days[y[0]] || amountsCents[x[0]] - amountsCents[y[0]],
+  );
 
   const merged: number[][] = [];
   for (const g of bare) {
@@ -585,7 +653,10 @@ function amountGroups(days: number[], amountsCents: number[]): number[][] {
       // A group that has already repeated may take a real price step; a lone
       // charge may only be joined by something within a hair of it.
       if (step > (open.length >= 2 ? MAX_PRICE_STEP : TIGHT_PRICE_STEP)) continue;
-      if (step < bestStep) { bestStep = step; into = open; }
+      if (step < bestStep) {
+        bestStep = step;
+        into = open;
+      }
     }
     if (into) {
       into.push(...g);
@@ -651,7 +722,9 @@ export function fitMerchantStreams(
    * de bedragstoets komt — een restaurant met wisselende rekeningen faalt in
    * beide lezingen. */
   const wholeClaimed =
-    whole === null || !amountsCoherent(whole.members, amountsCents, maxAmountCv) ? 0 : whole.members.length;
+    whole === null || !amountsCoherent(whole.members, amountsCents, maxAmountCv)
+      ? 0
+      : whole.members.length;
 
   const split: CadenceFit[] = [];
   let splitClaimed = 0;
@@ -794,7 +867,10 @@ export type MerchantTally = {
 };
 
 export function merchantTallies(txs: Tx[]): MerchantTally[] {
-  const groups = new Map<string, { label: string; rows: Tx[]; excluded: MerchantTally["excluded"] }>();
+  const groups = new Map<
+    string,
+    { label: string; rows: Tx[]; excluded: MerchantTally["excluded"] }
+  >();
   for (const t of txs) {
     if (t.amount >= 0) continue;
     const h = norm(t.counterparty);
@@ -812,7 +888,11 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
       g.rows.push(t);
       g.label = t.counterparty || g.label;
     } else {
-      groups.set(key, { label: t.counterparty, rows: [t], excluded: merchant === "" ? "geen-naam" : excluded });
+      groups.set(key, {
+        label: t.counterparty,
+        rows: [t],
+        excluded: merchant === "" ? "geen-naam" : excluded,
+      });
     }
   }
 
@@ -822,7 +902,9 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
     const cents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
     const gaps: number[] = [];
     for (let i = 1; i < sorted.length; i++) {
-      gaps.push(Math.round((Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date)) / 86400000));
+      gaps.push(
+        Math.round((Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date)) / 86400000),
+      );
     }
     const med = (xs: number[]): number | null => {
       if (xs.length === 0) return null;
@@ -857,7 +939,8 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
   const bandAfstand = (gap: number | null): number => {
     if (gap === null) return 999;
     let best = 999;
-    for (const b of CADENCE_BANDS) best = Math.min(best, Math.abs(gap - b.cadenceDays) / b.cadenceDays);
+    for (const b of CADENCE_BANDS)
+      best = Math.min(best, Math.abs(gap - b.cadenceDays) / b.cadenceDays);
     return best;
   };
   return out.sort((a, b) => {
@@ -869,7 +952,10 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
   });
 }
 
-export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions = {}): Subscription[] {
+export function detectSubscriptions(
+  txs: Tx[],
+  opts: DetectSubscriptionOptions = {},
+): Subscription[] {
   // 0.6 let three ordinary dinners at one restaurant (€ 42,50 / € 18,90 / € 71)
   // through as a € 71-a-month subscription. A real price change is far tamer:
   // Netflix 13,99 -> 15,99 over five charges is a CV of 0.07.
@@ -922,7 +1008,11 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
      * not at every row the merchant produced, so the price is read off the
      * stream and `occurrences` counts what was actually billed on the cadence. */
     const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts, maxAmountCv);
+    const { streams } = fitMerchantStreams(
+      sorted.map((t) => t.date),
+      groupAmounts,
+      maxAmountCv,
+    );
 
     for (const fit of streams) {
       const band = fit.band;
@@ -934,10 +1024,11 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
       // the line: one skipped charge is a billing hiccup, two is a cancellation.
       const lastDate = stream[stream.length - 1].date;
       let asOf = opts.asOf ?? "";
-      if (asOf === "") for (const t of stream) {
-        const end = accountEnd.get(t.accountKey) ?? "";
-        if (end > asOf) asOf = end;
-      }
+      if (asOf === "")
+        for (const t of stream) {
+          const end = accountEnd.get(t.accountKey) ?? "";
+          if (end > asOf) asOf = end;
+        }
       if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
       const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
@@ -965,10 +1056,16 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
       let lastAmountCents = amountsCents[amountsCents.length - 1];
       if (!repeats(lastAmountCents)) {
         for (let i = amountsCents.length - 1; i >= 0; i--) {
-          if (repeats(amountsCents[i])) { lastAmountCents = amountsCents[i]; break; }
+          if (repeats(amountsCents[i])) {
+            lastAmountCents = amountsCents[i];
+            break;
+          }
         }
       }
-      const changePct = firstAmountCents > 0 ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000 : 0;
+      const changePct =
+        firstAmountCents > 0
+          ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000
+          : 0;
       const monthlyCents = Math.round((lastAmountCents * 30) / band.cadenceDays);
 
       subs.push({
@@ -995,14 +1092,24 @@ export function detectSubscriptions(txs: Tx[], opts: DetectSubscriptionOptions =
   return subs.sort((a, b) => b.monthlyCents - a.monthlyCents || a.key.localeCompare(b.key));
 }
 
-export type PriceIncrease = { sub: Subscription; fromCents: number; toCents: number; changePct: number };
+export type PriceIncrease = {
+  sub: Subscription;
+  fromCents: number;
+  toCents: number;
+  changePct: number;
+};
 
 /** Subscriptions whose price rose meaningfully (>= 3% AND >= €0.50), so a
  *  one-cent rounding wobble isn't reported. */
 export function subscriptionPriceIncreases(subs: Subscription[]): PriceIncrease[] {
   return subs
     .filter((s) => s.changePct >= 0.03 && s.lastAmountCents - s.firstAmountCents >= 50)
-    .map((s) => ({ sub: s, fromCents: s.firstAmountCents, toCents: s.lastAmountCents, changePct: s.changePct }))
+    .map((s) => ({
+      sub: s,
+      fromCents: s.firstAmountCents,
+      toCents: s.lastAmountCents,
+      changePct: s.changePct,
+    }))
     .sort((a, b) => b.toCents - a.toCents);
 }
 
@@ -1027,16 +1134,27 @@ export function subscriptionOverlaps(subs: Subscription[]): SubscriptionOverlap[
   for (const s of subs) {
     if (s.function === "Overig") continue;
     let perMerchant = byFn.get(s.function);
-    if (!perMerchant) { perMerchant = new Map(); byFn.set(s.function, perMerchant); }
+    if (!perMerchant) {
+      perMerchant = new Map();
+      byFn.set(s.function, perMerchant);
+    }
     const held = perMerchant.get(s.merchant);
-    if (held === undefined || s.monthlyCents < held.monthlyCents
-        || (s.monthlyCents === held.monthlyCents && s.key < held.key)) perMerchant.set(s.merchant, s);
+    if (
+      held === undefined ||
+      s.monthlyCents < held.monthlyCents ||
+      (s.monthlyCents === held.monthlyCents && s.key < held.key)
+    )
+      perMerchant.set(s.merchant, s);
   }
   const out: SubscriptionOverlap[] = [];
   for (const [fn, perMerchant] of byFn) {
     if (perMerchant.size < 2) continue;
     const group = [...perMerchant.values()];
-    out.push({ function: fn, subs: group, monthlyCents: group.reduce((s, x) => s + x.monthlyCents, 0) });
+    out.push({
+      function: fn,
+      subs: group,
+      monthlyCents: group.reduce((s, x) => s + x.monthlyCents, 0),
+    });
   }
   return out.sort((a, b) => b.monthlyCents - a.monthlyCents);
 }
@@ -1107,37 +1225,63 @@ export type ScheduleStream = {
  * description says "Gemeentebelastingen termijn 4"). `needs`, when present, is a
  * plain substring that must also appear: the gemeente charges tax AND sells
  * parking, and only the first is a monthly agenda item. */
-const INSTITUTIONS: ReadonlyArray<{ id: string; label: string; any: string[]; needs?: string[] }> = [
-  { id: "duo", label: "DUO", any: ["duo", "dienst uitvoering onderwijs", "studiefinanciering"] },
-  {
-    id: "gemeentebelasting", label: "Gemeentebelasting", any: ["gemeente", "gem"],
-    needs: ["belasting", "aanslag", "woz", "afvalstoffen", "rioolheffing", "hondenbelasting", "ozb"],
-  },
-  { id: "waterschapsbelasting", label: "Waterschapsbelasting", any: ["waterschap", "hoogheemraadschap"] },
-  { id: "belastingdienst", label: "Belastingdienst", any: ["belastingdienst"] },
-  { id: "cjib", label: "CJIB", any: ["cjib", "centraal justitieel"] },
-  { id: "uwv", label: "UWV", any: ["uwv"] },
-  { id: "svb", label: "SVB", any: ["sociale verzekeringsbank"] },
-];
+const INSTITUTIONS: ReadonlyArray<{ id: string; label: string; any: string[]; needs?: string[] }> =
+  [
+    { id: "duo", label: "DUO", any: ["duo", "dienst uitvoering onderwijs", "studiefinanciering"] },
+    {
+      id: "gemeentebelasting",
+      label: "Gemeentebelasting",
+      any: ["gemeente", "gem"],
+      needs: [
+        "belasting",
+        "aanslag",
+        "woz",
+        "afvalstoffen",
+        "rioolheffing",
+        "hondenbelasting",
+        "ozb",
+      ],
+    },
+    {
+      id: "waterschapsbelasting",
+      label: "Waterschapsbelasting",
+      any: ["waterschap", "hoogheemraadschap"],
+    },
+    { id: "belastingdienst", label: "Belastingdienst", any: ["belastingdienst"] },
+    { id: "cjib", label: "CJIB", any: ["cjib", "centraal justitieel"] },
+    { id: "uwv", label: "UWV", any: ["uwv"] },
+    { id: "svb", label: "SVB", any: ["sociale verzekeringsbank"] },
+  ];
 
 const INSTITUTION_MATCHERS = INSTITUTIONS.map((i) => ({
   ...i,
-  res: i.any.map((a) => new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`)),
+  res: i.any.map(
+    (a) => new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`),
+  ),
 }));
 
 /* Counterparties that are the owner's own money moving between his own places.
  * Matched on the COUNTERPARTY only: a rent payment often carries
  * "overschrijving" in its description while the counterparty is the landlord. */
 const OWN_MONEY_HINTS = [
-  "spaarrekening", "geld toegevoegd", "geld toevoegen", "eigen rekening",
-  "overschrijving", "overboeking", "naar creditcard", "incasso ing creditcard",
+  "spaarrekening",
+  "geld toegevoegd",
+  "geld toevoegen",
+  "eigen rekening",
+  "overschrijving",
+  "overboeking",
+  "naar creditcard",
+  "incasso ing creditcard",
 ];
 
 /** The identity of the party on the other side of a recurring flow, and the name
  *  to show for it. Institution first (it collapses the most spellings), then the
  *  merchant key the subscription detector already uses. `key` is "" when the row
  *  carries no name at all — those are refused rather than shown nameless. */
-export function scheduleParty(counterparty: string, description = ""): { key: string; label: string } {
+export function scheduleParty(
+  counterparty: string,
+  description = "",
+): { key: string; label: string } {
   const cp = norm(counterparty);
   const ctx = `${cp} ${norm(description)}`;
   for (const inst of INSTITUTION_MATCHERS) {
@@ -1172,7 +1316,10 @@ export type DetectScheduleOptions = {
  *
  *  Sorted by amount, descending, so the order is deterministic; the agenda
  *  re-sorts by date. */
-export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {}): ScheduleStream[] {
+export function detectScheduleStreams(
+  txs: Tx[],
+  opts: DetectScheduleOptions = {},
+): ScheduleStream[] {
   const accountEnd = new Map<string, string>();
   for (const t of txs) {
     if (!t.date) continue;
@@ -1204,7 +1351,10 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
      * dates on the agenda, not none. The device credit ends one day and its row
      * stops with it — that is what the asOf check below is for. */
     const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
-    const { streams } = fitMerchantStreams(sorted.map((t) => t.date), groupAmounts);
+    const { streams } = fitMerchantStreams(
+      sorted.map((t) => t.date),
+      groupAmounts,
+    );
 
     for (const fit of streams) {
       const band = fit.band;
@@ -1214,10 +1364,11 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
       // forward would put a payment on the agenda that nobody is going to make.
       const lastDate = stream[stream.length - 1].date;
       let asOf = opts.asOf ?? "";
-      if (asOf === "") for (const t of stream) {
-        const end = accountEnd.get(t.accountKey) ?? "";
-        if (end > asOf) asOf = end;
-      }
+      if (asOf === "")
+        for (const t of stream) {
+          const end = accountEnd.get(t.accountKey) ?? "";
+          if (end > asOf) asOf = end;
+        }
       if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
       /* The amount. An agenda that prints a figure nobody was ever charged is
@@ -1237,7 +1388,10 @@ export function detectScheduleStreams(txs: Tx[], opts: DetectScheduleOptions = {
       let amountCents = amountsCents[amountsCents.length - 1];
       if (!repeats(amountCents)) {
         for (let i = amountsCents.length - 1; i >= 0; i--) {
-          if (repeats(amountsCents[i])) { amountCents = amountsCents[i]; break; }
+          if (repeats(amountsCents[i])) {
+            amountCents = amountsCents[i];
+            break;
+          }
         }
       }
 

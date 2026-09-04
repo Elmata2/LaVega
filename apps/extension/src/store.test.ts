@@ -72,7 +72,11 @@ describe("de zeef over de puntensaldi is strenger, want hier komt een GETAL door
   });
 
   it("kapt een absurd lange lijst af", () => {
-    const veel = Array.from({ length: 300 }, (_, i) => ({ program: `p${i}`, points: 1, updatedAt: "2026-08-12" }));
+    const veel = Array.from({ length: 300 }, (_, i) => ({
+      program: `p${i}`,
+      points: 1,
+      updatedAt: "2026-08-12",
+    }));
     expect(_schoonSaldi(veel)).toHaveLength(50);
   });
 });

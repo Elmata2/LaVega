@@ -15,23 +15,66 @@ import { BtwBlock, btwRows } from "./BtwWidget";
 const ASOF = "2026-08-16";
 
 const accounts: Account[] = [
-  { key: "A1", iban: "NL01INGB0001", name: "Zakelijk", bank: "ING", entity: "Holding BV", currency: "EUR", balance: 10_000 },
-  { key: "A2", iban: "NL02RABO0001", name: "Zakelijk", bank: "Rabobank", entity: "Café BV", currency: "EUR", balance: 4_000 },
+  {
+    key: "A1",
+    iban: "NL01INGB0001",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "Holding BV",
+    currency: "EUR",
+    balance: 10_000,
+  },
+  {
+    key: "A2",
+    iban: "NL02RABO0001",
+    name: "Zakelijk",
+    bank: "Rabobank",
+    entity: "Café BV",
+    currency: "EUR",
+    balance: 4_000,
+  },
 ];
 
 /** Eén omzettransactie per onderneming, zodat de marge-benadering ALTIJD een
  *  getal zou kunnen opleveren. Dat is precies wat de eerste test moet kunnen
  *  bewijzen: het getal bestaat, en de kaart toont het toch niet. */
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-07-05", amount: 12_100, currency: "EUR", counterparty: "Klant BV", description: "Omzet", category: "", manual: false },
-  { id: "t2", accountKey: "A2", date: "2026-07-06", amount: 6_050, currency: "EUR", counterparty: "Gast", description: "Omzet", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-07-05",
+    amount: 12_100,
+    currency: "EUR",
+    counterparty: "Klant BV",
+    description: "Omzet",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A2",
+    date: "2026-07-06",
+    amount: 6_050,
+    currency: "EUR",
+    counterparty: "Gast",
+    description: "Omzet",
+    category: "",
+    manual: false,
+  },
 ];
 
 /** Wat de marge-benadering van Holding BV zou opleveren: 12.100 × 21 / 121. */
 const PROXY_HOLDING = 2_100;
 
 function settings(entity: string, extra: Partial<VatSettings> = {}): VatSettings {
-  return { entity, frequency: "quarterly", defaultRatePct: 21, mixedRates: false, country: "NL", ...extra };
+  return {
+    entity,
+    frequency: "quarterly",
+    defaultRatePct: 21,
+    mixedRates: false,
+    country: "NL",
+    ...extra,
+  };
 }
 
 function invoice(i: Partial<Invoice> & { id: string }): Invoice {
@@ -49,11 +92,7 @@ function invoice(i: Partial<Invoice> & { id: string }): Invoice {
   };
 }
 
-function render(opts: {
-  entities: string[];
-  vatSettings: VatSettings[];
-  invoices?: Invoice[];
-}) {
+function render(opts: { entities: string[]; vatSettings: VatSettings[]; invoices?: Invoice[] }) {
   return renderToStaticMarkup(
     <BtwBlock
       entities={opts.entities}

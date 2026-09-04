@@ -54,7 +54,8 @@ const GAP_MS = 1_200; // polite: one request per issuer-ish, not a crawl
 // betaalde bedrag" and never write "koersopslag" at all — a term list built from
 // ING's wording alone would have called both documents unusable while they carry
 // exactly the rows we need.
-const FX_TERMS = /koersopslag|wisselkoers|valutakoers|valutawisselkosten|valutakosten|vreemde valuta|buitenlands geld|currency conversion|exchange rate fee|foreign (?:exchange|transaction) fee/gi;
+const FX_TERMS =
+  /koersopslag|wisselkoers|valutakoers|valutawisselkosten|valutakosten|vreemde valuta|buitenlands geld|currency conversion|exchange rate fee|foreign (?:exchange|transaction) fee/gi;
 /** Anchor text and filenames that suggest a fee document. Deliberately broad —
  *  verification below is what decides, not this. */
 const LINK_HINT = /tarie|kosten|fee|prijs|charges|vergoeding|voorwaarden|productinfo|pricing/i;
@@ -62,14 +63,23 @@ const LINK_HINT = /tarie|kosten|fee|prijs|charges|vergoeding|voorwaarden|product
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Product = {
-  product: string; issuer: string; termsUrl?: string; pdfUrl?: string; pdfReason?: string;
-  pdfCheckedAt?: string; readable?: string; [k: string]: unknown;
+  product: string;
+  issuer: string;
+  termsUrl?: string;
+  pdfUrl?: string;
+  pdfReason?: string;
+  pdfCheckedAt?: string;
+  readable?: string;
+  [k: string]: unknown;
 };
 type State = { products: Record<string, Product>; [k: string]: unknown };
 
 const state: State = JSON.parse(readFileSync(STATE, "utf8"));
 
-async function get(url: string, binary = false): Promise<{ ok: boolean; status: number; text: string; bytes?: ArrayBuffer; type: string }> {
+async function get(
+  url: string,
+  binary = false,
+): Promise<{ ok: boolean; status: number; text: string; bytes?: ArrayBuffer; type: string }> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA, "Accept-Language": "nl-NL,nl;q=0.9" },
@@ -78,7 +88,8 @@ async function get(url: string, binary = false): Promise<{ ok: boolean; status: 
     });
     const type = res.headers.get("content-type") ?? "";
     if (!res.ok) return { ok: false, status: res.status, text: "", type };
-    if (binary) return { ok: true, status: res.status, text: "", bytes: await res.arrayBuffer(), type };
+    if (binary)
+      return { ok: true, status: res.status, text: "", bytes: await res.arrayBuffer(), type };
     return { ok: true, status: res.status, text: await res.text(), type };
   } catch (e) {
     return { ok: false, status: 0, text: `${(e as Error).message}`, type: "" };
@@ -92,7 +103,11 @@ function links(html: string, base: string): string[] {
     const [, href, label] = m;
     if (/^(mailto|tel|javascript):/i.test(href)) continue;
     let abs: string;
-    try { abs = new URL(href, base).toString(); } catch { continue; }
+    try {
+      abs = new URL(href, base).toString();
+    } catch {
+      continue;
+    }
     // Keep a PDF regardless of its label; keep an HTML page only if it looks
     // like a fees page worth one more hop.
     if (/\.pdf(\?|$)/i.test(abs) || LINK_HINT.test(href) || LINK_HINT.test(label)) out.add(abs);
@@ -102,18 +117,29 @@ function links(html: string, base: string): string[] {
 
 function pdfText(bytes: ArrayBuffer): string {
   writeFileSync("/tmp/find-tariff.pdf", Buffer.from(bytes));
-  return execFileSync("pdftotext", ["-layout", "/tmp/find-tariff.pdf", "-"], { encoding: "utf8", maxBuffer: 64e6 });
+  return execFileSync("pdftotext", ["-layout", "/tmp/find-tariff.pdf", "-"], {
+    encoding: "utf8",
+    maxBuffer: 64e6,
+  });
 }
 
 /** VERIFY, do not assume. A candidate is pinned only when it is really a PDF, it
  *  really yields text, and that text really discusses foreign currency. */
-async function verify(url: string): Promise<{ ok: true; chars: number; hits: number } | { ok: false; why: string }> {
+async function verify(
+  url: string,
+): Promise<{ ok: true; chars: number; hits: number } | { ok: false; why: string }> {
   const r = await get(url, true);
-  if (!r.ok) return { ok: false, why: r.status ? `HTTP ${r.status}` : `fetch: ${r.text.slice(0, 60)}` };
+  if (!r.ok)
+    return { ok: false, why: r.status ? `HTTP ${r.status}` : `fetch: ${r.text.slice(0, 60)}` };
   const buf = Buffer.from(r.bytes!);
-  if (buf.subarray(0, 5).toString() !== "%PDF-") return { ok: false, why: `not a PDF (${r.type.split(";")[0] || "unknown type"})` };
+  if (buf.subarray(0, 5).toString() !== "%PDF-")
+    return { ok: false, why: `not a PDF (${r.type.split(";")[0] || "unknown type"})` };
   let text: string;
-  try { text = pdfText(r.bytes!); } catch (e) { return { ok: false, why: `pdftotext failed: ${(e as Error).message.slice(0, 50)}` }; }
+  try {
+    text = pdfText(r.bytes!);
+  } catch (e) {
+    return { ok: false, why: `pdftotext failed: ${(e as Error).message.slice(0, 50)}` };
+  }
   // THE GATE, and it is deliberately strict. An earlier version accepted any PDF
   // containing a foreign-currency WORD and promptly pinned ICS's
   // "Polisvoorwaarden Reisverzekering" — a travel-insurance policy — as the
@@ -126,13 +152,20 @@ async function verify(url: string): Promise<{ ok: true; chars: number; hits: num
   // PERCENTAGE within a short window of a foreign-currency term, which is the
   // signature of a priced row rather than prose.
   const hits = [...text.matchAll(FX_TERMS)];
-  if (!hits.length) return { ok: false, why: `no foreign-currency terms (${Math.round(text.length / 1000)}k chars)` };
+  if (!hits.length)
+    return {
+      ok: false,
+      why: `no foreign-currency terms (${Math.round(text.length / 1000)}k chars)`,
+    };
   const priced = hits.filter((m) => {
     const at = m.index ?? 0;
     return /\d[\d.,]*\s?%/.test(text.slice(Math.max(0, at - 120), at + 160));
   });
   if (!priced.length) {
-    return { ok: false, why: `${hits.length} fx term(s) but no rate beside any of them — prose, not a tariff` };
+    return {
+      ok: false,
+      why: `${hits.length} fx term(s) but no rate beside any of them — prose, not a tariff`,
+    };
   }
   // Reject the documents that pass the window test by accident: a policy or an
   // annual report can quote a rate in passing.
@@ -141,7 +174,6 @@ async function verify(url: string): Promise<{ ok: true; chars: number; hits: num
   }
   return { ok: true, chars: text.length, hits: priced.length };
 }
-
 
 /** robots.txt names the sitemaps; the well-known paths cover publishers that do
  *  not. Nested sitemap indexes are followed one level, which is where the PDFs
@@ -169,7 +201,10 @@ async function sitemapPdfs(origin: string): Promise<string[]> {
       if (!r.ok || !/<(urlset|sitemapindex)/i.test(r.text)) continue;
       for (const m of r.text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)) {
         const u = m[1];
-        if (/\.pdf(\?|$)/i.test(u)) { if (LINK_HINT.test(u)) pdfs.add(u); continue; }
+        if (/\.pdf(\?|$)/i.test(u)) {
+          if (LINK_HINT.test(u)) pdfs.add(u);
+          continue;
+        }
         if (/sitemap[^/]*\.xml/i.test(u) && depth === 0) next.push(u);
       }
     }
@@ -189,14 +224,18 @@ for (const [id, p] of Object.entries(state.products)) {
 }
 
 const today = new Date().toISOString().slice(0, 10);
-let pinned = 0, issuersDone = 0;
+let pinned = 0,
+  issuersDone = 0;
 const report: string[] = [];
 
 for (const [issuer, members] of byIssuer) {
   issuersDone++;
   // Already solved for this issuer? Then nothing to find.
   const existing = members.find((m) => m.p.pdfUrl)?.p.pdfUrl;
-  if (existing) { report.push(`= ${issuer}: already pinned ${existing.slice(0, 70)}`); continue; }
+  if (existing) {
+    report.push(`= ${issuer}: already pinned ${existing.slice(0, 70)}`);
+    continue;
+  }
   // A DELIBERATE UNPINNING MUST STICK. ICS's general terms were removed after
   // measurement — they refuse where the marketing page settles — and a consumer
   // agreement was removed from ten business products where it states the wrong
@@ -205,7 +244,9 @@ for (const [issuer, members] of byIssuer) {
   // down in pdfReason and would be contradicted by the file itself.
   const refused = members.filter((m) => m.p.pdfReason);
   if (refused.length === members.length) {
-    report.push(`= ${issuer}: skipped, its document was deliberately unpinned (${String(refused[0].p.pdfReason).slice(0, 60)}…)`);
+    report.push(
+      `= ${issuer}: skipped, its document was deliberately unpinned (${String(refused[0].p.pdfReason).slice(0, 60)}…)`,
+    );
     continue;
   }
 
@@ -217,15 +258,21 @@ for (const [issuer, members] of byIssuer) {
   for (const seed of seeds) {
     await sleep(GAP_MS);
     const page = await get(seed);
-    if (!page.ok) { notes.push(`seed ${seed.slice(0, 50)}: ${page.status || page.text.slice(0, 40)}`); continue; }
+    if (!page.ok) {
+      notes.push(`seed ${seed.slice(0, 50)}: ${page.status || page.text.slice(0, 40)}`);
+      continue;
+    }
     const found = links(page.text, seed);
     const pdfs = found.filter((u) => /\.pdf(\?|$)/i.test(u));
     // One hop: a "Tarieven" HTML page that itself links the PDF.
     const hops = found.filter((u) => !/\.pdf(\?|$)/i.test(u) && LINK_HINT.test(u)).slice(0, 4);
     candidates.push(...pdfs);
     if (useSitemap) {
-      try { candidates.push(...(await sitemapPdfs(new URL(seed).origin))); }
-      catch (e) { notes.push(`sitemap: ${(e as Error).message.slice(0, 40)}`); }
+      try {
+        candidates.push(...(await sitemapPdfs(new URL(seed).origin)));
+      } catch (e) {
+        notes.push(`sitemap: ${(e as Error).message.slice(0, 40)}`);
+      }
     }
     for (const h of hops) {
       await sleep(GAP_MS);
@@ -236,21 +283,33 @@ for (const [issuer, members] of byIssuer) {
   }
 
   // Most-promising first, so verification stops early on the obvious winner.
-  const ranked = [...new Set(candidates)].sort((a, b) => Number(LINK_HINT.test(b)) - Number(LINK_HINT.test(a)));
-  if (!ranked.length) { report.push(`✗ ${issuer}: no PDF links found${notes.length ? ` — ${notes.join("; ").slice(0, 130)}` : " (seeds fetched, zero .pdf hrefs)"}`); continue; }
+  const ranked = [...new Set(candidates)].sort(
+    (a, b) => Number(LINK_HINT.test(b)) - Number(LINK_HINT.test(a)),
+  );
+  if (!ranked.length) {
+    report.push(
+      `✗ ${issuer}: no PDF links found${notes.length ? ` — ${notes.join("; ").slice(0, 130)}` : " (seeds fetched, zero .pdf hrefs)"}`,
+    );
+    continue;
+  }
 
   let hit: { url: string; chars: number; hits: number } | null = null;
   const tried: string[] = [];
   for (const url of ranked.slice(0, 6)) {
     await sleep(GAP_MS);
     const v = await verify(url);
-    if (!v.ok) { tried.push(`${url.split("/").pop()?.slice(0, 34)}: ${v.why}`); continue; }
+    if (!v.ok) {
+      tried.push(`${url.split("/").pop()?.slice(0, 34)}: ${v.why}`);
+      continue;
+    }
     hit = { url, chars: v.chars, hits: v.hits };
     break;
   }
 
   if (!hit) {
-    report.push(`✗ ${issuer}: ${ranked.length} PDF(s), none usable — ${tried.slice(0, 2).join("; ")}`);
+    report.push(
+      `✗ ${issuer}: ${ranked.length} PDF(s), none usable — ${tried.slice(0, 2).join("; ")}`,
+    );
     continue;
   }
 
@@ -263,12 +322,20 @@ for (const [issuer, members] of byIssuer) {
     state.products[m.id].pdfFoundAt = today;
   }
   pinned += members.length;
-  report.push(`✓ ${issuer}: ${hit.url.slice(0, 84)}  (${Math.round(hit.chars / 1000)}k chars, ${hit.hits} priced fx row(s)) → ${members.length} product(s)`);
+  report.push(
+    `✓ ${issuer}: ${hit.url.slice(0, 84)}  (${Math.round(hit.chars / 1000)}k chars, ${hit.hits} priced fx row(s)) → ${members.length} product(s)`,
+  );
 }
 
 console.log(report.join("\n"));
 console.log(`\n${issuersDone} issuer(s) walked · ${pinned} product(s) newly pinned`);
-if (!write) { console.log("--dry by default: nothing written. Pass --write to persist."); process.exit(0); }
-if (pinned === 0) { console.log("nothing to write."); process.exit(0); }
+if (!write) {
+  console.log("--dry by default: nothing written. Pass --write to persist.");
+  process.exit(0);
+}
+if (pinned === 0) {
+  console.log("nothing to write.");
+  process.exit(0);
+}
 writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
 console.log(`wrote ${STATE}`);

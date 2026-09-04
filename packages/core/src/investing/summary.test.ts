@@ -11,19 +11,25 @@ function seriesFromReturns(start: number, returns: readonly number[]): MetricPoi
   return points;
 }
 
-const day = (index: number): string => `2026-${String(Math.floor(index / 28) + 2).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}`;
+const day = (index: number): string =>
+  `2026-${String(Math.floor(index / 28) + 2).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}`;
 
 test("volatility matches hand-computed sample stdev, annualized", () => {
   // 22 returns: eleven +2%, eleven 0% interleaved -> mean 0.01, var = 22*(0.01)^2/21.
   const returns = Array.from({ length: 22 }, (_, index) => (index % 2 === 0 ? 0.02 : 0));
   const metrics = computePortfolioMetrics({ valuePoints: seriesFromReturns(100, returns) });
   expect(metrics.observationDays).toBe(22);
-  expect(metrics.dailyVolatility).toBeCloseTo(Math.sqrt(22 * 0.0001 / 21), 12);
-  expect(metrics.annualizedVolatility).toBeCloseTo(Math.sqrt(22 * 0.0001 / 21) * Math.sqrt(252), 12);
+  expect(metrics.dailyVolatility).toBeCloseTo(Math.sqrt((22 * 0.0001) / 21), 12);
+  expect(metrics.annualizedVolatility).toBeCloseTo(
+    Math.sqrt((22 * 0.0001) / 21) * Math.sqrt(252),
+    12,
+  );
 });
 
 test("beta and alpha match hand-computed covariance ratio and annualized excess", () => {
-  const benchmarkReturns = Array.from({ length: 24 }, (_, index) => (index % 3 === 0 ? 0.01 : index % 3 === 1 ? -0.004 : 0.002));
+  const benchmarkReturns = Array.from({ length: 24 }, (_, index) =>
+    index % 3 === 0 ? 0.01 : index % 3 === 1 ? -0.004 : 0.002,
+  );
   // Portfolio tracks 2x the benchmark plus a constant 0.1% daily edge.
   const portfolioReturns = benchmarkReturns.map((ret) => 2 * ret + 0.001);
   const metrics = computePortfolioMetrics({
@@ -47,7 +53,10 @@ test("max drawdown measures worst peak-to-trough of the cumulative series", () =
 });
 
 test("too few observations yields null statistics but keeps drawdown", () => {
-  const short = seriesFromReturns(100, Array.from({ length: 19 }, (_, index) => (index % 2 === 0 ? 0.01 : -0.01)));
+  const short = seriesFromReturns(
+    100,
+    Array.from({ length: 19 }, (_, index) => (index % 2 === 0 ? 0.01 : -0.01)),
+  );
   const metrics = computePortfolioMetrics({ valuePoints: short, benchmarkPoints: short });
   expect(metrics.observationDays).toBe(19);
   expect(metrics.dailyVolatility).toBeNull();
@@ -58,8 +67,14 @@ test("too few observations yields null statistics but keeps drawdown", () => {
 });
 
 test("null value gaps are skipped and dates align portfolio to benchmark", () => {
-  const benchmark = seriesFromReturns(100, Array.from({ length: 30 }, (_, index) => (index % 2 === 0 ? 0.005 : -0.005)));
-  const portfolio = benchmark.map((point, index) => ({ ...point, value: index === 5 ? null : point.value }));
+  const benchmark = seriesFromReturns(
+    100,
+    Array.from({ length: 30 }, (_, index) => (index % 2 === 0 ? 0.005 : -0.005)),
+  );
+  const portfolio = benchmark.map((point, index) => ({
+    ...point,
+    value: index === 5 ? null : point.value,
+  }));
   const metrics = computePortfolioMetrics({ valuePoints: portfolio, benchmarkPoints: benchmark });
   // One gap removes one paired observation but still leaves >= 20 pairs.
   expect(metrics.observationDays).toBe(29);
@@ -67,14 +82,20 @@ test("null value gaps are skipped and dates align portfolio to benchmark", () =>
 });
 
 test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc", () => {
-  const sectors = new Map([["ACME", "Technology"], ["BLOK", "Industrials"]]);
-  const exposure = buildSectorExposure([
-    { symbol: "ACME", marketValue: 300 },
-    { symbol: "blok", marketValue: 100 },
-    { symbol: "MYST", marketValue: 100 },
-    { symbol: "ZERO", marketValue: null },
-    { symbol: "NEG", marketValue: -50 },
-  ], sectors);
+  const sectors = new Map([
+    ["ACME", "Technology"],
+    ["BLOK", "Industrials"],
+  ]);
+  const exposure = buildSectorExposure(
+    [
+      { symbol: "ACME", marketValue: 300 },
+      { symbol: "blok", marketValue: 100 },
+      { symbol: "MYST", marketValue: 100 },
+      { symbol: "ZERO", marketValue: null },
+      { symbol: "NEG", marketValue: -50 },
+    ],
+    sectors,
+  );
   expect(exposure).toEqual([
     { sector: "Technology", weight: 0.6 },
     { sector: "Industrials", weight: 0.2 },

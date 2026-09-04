@@ -26,23 +26,27 @@ describe("parseFlexStatement", () => {
     const result = parseFlexStatement(xml, "personal");
 
     expect(result.problems).toEqual([]);
-    expect(result.positions).toEqual([expect.objectContaining({
-      entity: "personal",
-      symbol: "AAPL",
-      isin: "US0378331005",
-      quantity: 2,
-      marketValue: 220,
-      asOf: "2026-08-18",
-      description: "Apple & Co",
-    })]);
-    expect(result.trades).toEqual([expect.objectContaining({
-      entity: "personal",
-      side: "buy",
-      date: "2026-08-18",
-      quantity: 2,
-      amount: -200,
-      brokerTradeId: "tx-1",
-    })]);
+    expect(result.positions).toEqual([
+      expect.objectContaining({
+        entity: "personal",
+        symbol: "AAPL",
+        isin: "US0378331005",
+        quantity: 2,
+        marketValue: 220,
+        asOf: "2026-08-18",
+        description: "Apple & Co",
+      }),
+    ]);
+    expect(result.trades).toEqual([
+      expect.objectContaining({
+        entity: "personal",
+        side: "buy",
+        date: "2026-08-18",
+        quantity: 2,
+        amount: -200,
+        brokerTradeId: "tx-1",
+      }),
+    ]);
     expect(result.cashBalances).toEqual([
       expect.objectContaining({ broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }),
       expect.objectContaining({ broker: "ibkr", currency: "EUR", amount: 80, asOf: "2026-08-18" }),
@@ -54,16 +58,21 @@ describe("parseFlexStatement", () => {
       expect.objectContaining({ brokerFlowId: "U1:fee-1", kind: "fee", amount: -3 }),
       expect.objectContaining({ brokerFlowId: "U1:trade-cash-1", kind: "other", amount: -200 }),
     ]);
-    expect(result.dividends).toEqual([expect.objectContaining({
-      broker: "ibkr",
-      brokerDividendId: "U1:dividend-1",
-      symbol: "AAPL",
-      amount: 2.5,
-    })]);
+    expect(result.dividends).toEqual([
+      expect.objectContaining({
+        broker: "ibkr",
+        brokerDividendId: "U1:dividend-1",
+        symbol: "AAPL",
+        amount: 2.5,
+      }),
+    ]);
   });
 
   test("keeps valid rows when one row is malformed", () => {
-    const result = parseFlexStatement(xml.replace('symbol="AAPL" transactionID', 'transactionID'), "personal");
+    const result = parseFlexStatement(
+      xml.replace('symbol="AAPL" transactionID', "transactionID"),
+      "personal",
+    );
 
     expect(result.positions).toHaveLength(1);
     expect(result.trades).toHaveLength(0);
@@ -86,7 +95,9 @@ describe("parseFlexStatement", () => {
     const result = parseFlexStatement(partial, "personal");
 
     expect(result.cashBalances).toEqual([expect.objectContaining({ currency: "GBP", amount: 25 })]);
-    expect(result.cashFlows).toEqual([expect.objectContaining({ brokerFlowId: "ok", kind: "deposit" })]);
+    expect(result.cashFlows).toEqual([
+      expect.objectContaining({ brokerFlowId: "ok", kind: "deposit" }),
+    ]);
     expect(result.problems).toEqual(["IBKR Flex Statement of Funds amount is missing or invalid"]);
   });
 });

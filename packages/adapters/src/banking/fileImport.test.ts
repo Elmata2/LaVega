@@ -9,11 +9,16 @@ const RABOBANK = `"IBAN/BBAN","Munt","BIC","Volgnr","Datum","Rentedatum","Bedrag
 "NL39RABO0300065264","EUR","RABONL2U","1","20260105","20260105","-45,00","1000,00","NL12ABNA0123456789","Albert Heijn","","","ABNANL2A","BA","","","","","","Boodschappen","","","","","",""`;
 
 const MT940 = [
-  ":20:STARTUMS", ":25:NL91ABNA0417164300", ":28C:00001/001",
+  ":20:STARTUMS",
+  ":25:NL91ABNA0417164300",
+  ":28C:00001/001",
   ":60F:C260101EUR1000,00",
-  ":61:2601020102D75,50NTRFNONREF", ":86:/NAME/Albert Heijn/REMI/Boodschappen betaalpas",
-  ":61:2601030103C2500,00NTRFNONREF", ":86:/NAME/Werkgever BV/REMI/Salaris januari",
-  ":62F:C260103EUR3424,50", ":64:C260103EUR3424,50",
+  ":61:2601020102D75,50NTRFNONREF",
+  ":86:/NAME/Albert Heijn/REMI/Boodschappen betaalpas",
+  ":61:2601030103C2500,00NTRFNONREF",
+  ":86:/NAME/Werkgever BV/REMI/Salaris januari",
+  ":62F:C260103EUR3424,50",
+  ":64:C260103EUR3424,50",
 ].join("\n");
 
 test("FileImport: detects ING CSV, builds one account (balance null), parses txs", async () => {
@@ -37,7 +42,11 @@ test("FileImport: derives the correct Rekening account key when an earlier colum
 "20260102";"Albert Heijn; filiaal 12";"NL01INGB0001";"";"BA";"Af";"12,34";"Betaalautomaat";"Boodschappen"
 "20260103";"Salaris";"NL01INGB0001";"NL99";"OV";"Bij";"2500,00";"Overschrijving";"Loon"`;
 
-  const result = await adapter.load({ filename: "ing.csv", text: ING_QUOTED_SEMICOLON, entity: "BV1" });
+  const result = await adapter.load({
+    filename: "ing.csv",
+    text: ING_QUOTED_SEMICOLON,
+    entity: "BV1",
+  });
 
   expect(result.accounts).toHaveLength(1);
   expect(result.accounts[0].key).toBe("NL01INGB0001");

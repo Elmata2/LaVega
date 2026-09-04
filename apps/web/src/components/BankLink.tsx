@@ -57,24 +57,51 @@ export default function BankLink({ busy }: { busy: boolean }) {
   }
 
   return (
-    <div style={{ marginTop: "var(--sp-4)", borderTop: "1px solid var(--line)", paddingTop: "var(--sp-4)" }}>
+    <div
+      style={{
+        marginTop: "var(--sp-4)",
+        borderTop: "1px solid var(--line)",
+        paddingTop: "var(--sp-4)",
+      }}
+    >
       <h3 style={{ marginTop: 0 }}>Of koppel je bank direct</h3>
       {aspsps === null ? (
-        <button type="button" className="btn" disabled={busy || loading} onClick={() => void loadBanks()}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy || loading}
+          onClick={() => void loadBanks()}
+        >
           {loading ? "Laden…" : "Koppel bank (Enable Banking)"}
         </button>
       ) : aspsps.length === 0 ? (
         <p className="cell-sub">Geen banken beschikbaar.</p>
       ) : (
-        <span style={{ display: "inline-flex", gap: "var(--sp-2)", alignItems: "center", flexWrap: "wrap" }}>
-          <select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={busy || loading}>
+        <span
+          style={{
+            display: "inline-flex",
+            gap: "var(--sp-2)",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            disabled={busy || loading}
+          >
             {aspsps.map((a) => (
               <option key={a.name} value={a.name}>
                 {a.name}
               </option>
             ))}
           </select>
-          <button type="button" className="btn btn-primary" disabled={busy || loading} onClick={() => void connect()}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || loading}
+            onClick={() => void connect()}
+          >
             {loading ? "Doorsturen…" : "Autoriseer"}
           </button>
         </span>
@@ -85,8 +112,8 @@ export default function BankLink({ busy }: { busy: boolean }) {
         </p>
       )}
       <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
-        Alleen-lezen toegang via Enable Banking — je autoriseert bij je eigen bank; gegevens komen versleuteld in je
-        eigen kluis.
+        Alleen-lezen toegang via Enable Banking — je autoriseert bij je eigen bank; gegevens komen
+        versleuteld in je eigen kluis.
       </p>
     </div>
   );

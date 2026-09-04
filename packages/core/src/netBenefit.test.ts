@@ -41,7 +41,9 @@ const cost = (cents: number, period: FeePeriod = "maand"): HoldingCost => ({
 
 const unknown: HoldingCost = { kind: "unknown", reason: "no-source" };
 
-const entry = (over: Partial<AccountFeeEntryLike> & { fee?: Record<string, unknown> }): AccountFeeEntryLike => {
+const entry = (
+  over: Partial<AccountFeeEntryLike> & { fee?: Record<string, unknown> },
+): AccountFeeEntryLike => {
   const { fee, ...rest } = over;
   return {
     id: "x",
@@ -69,7 +71,10 @@ describe("kosten bekend: er wordt netto gerekend", () => {
   test("EEN KAART DIE MEER KOST DAN HIJ OPLEVERT IS GEEN AANBEVELING", () => {
     // Zijn woorden: "als een kaart 5 euro per maand kost en ons 3 oplevert gaan we
     // er op achteruit." Terugkerend tegen terugkerend, dus schoon af te trekken.
-    const b = netBenefit({ benefit: { kind: "recurring", cents: 300, period: "maand" }, cost: cost(500) });
+    const b = netBenefit({
+      benefit: { kind: "recurring", cents: 300, period: "maand" },
+      cost: cost(500),
+    });
     expect(b.kind).toBe("no-recommendation");
     expect(isRecommendation(b)).toBe(false);
     // Het bedrag valt NIET weg: hij moet kunnen zien staan dat het € 2 per maand
@@ -81,13 +86,19 @@ describe("kosten bekend: er wordt netto gerekend", () => {
   });
 
   test("netto precies nul is ook geen aanbeveling — een stap zonder uitkomst", () => {
-    const b = netBenefit({ benefit: { kind: "recurring", cents: 445, period: "maand" }, cost: cost(445) });
+    const b = netBenefit({
+      benefit: { kind: "recurring", cents: 445, period: "maand" },
+      cost: cost(445),
+    });
     expect(b.kind).toBe("no-recommendation");
     expect(describeNetBenefit(b)).toMatch(/levert niets op/);
   });
 
   test("blijft er iets over, dan is dát het bedrag en heet het netto", () => {
-    const b = netBenefit({ benefit: { kind: "recurring", cents: 800, period: "maand" }, cost: cost(445) });
+    const b = netBenefit({
+      benefit: { kind: "recurring", cents: 800, period: "maand" },
+      cost: cost(445),
+    });
     expect(b.kind).toBe("net");
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     expect(b.netCents).toBe(355);
@@ -100,12 +111,20 @@ describe("kosten bekend: er wordt netto gerekend", () => {
     // € 14 op € 1.000 is EENMALIG; € 4,45 per maand loopt door. Bij één maand is
     // het voordeel; bij vier maanden is het verlies. Zonder horizon betekent
     // 14 − 4,45 niets, en dat is precies wat hier vastligt.
-    const one = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(445), horizonMonths: 1 });
+    const one = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: cost(445),
+      horizonMonths: 1,
+    });
     expect(one.kind).toBe("net");
     if (one.kind !== "net") throw new Error("verkeerde toestand");
     expect(one.netCents).toBe(955);
 
-    const four = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(445), horizonMonths: 4 });
+    const four = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: cost(445),
+      horizonMonths: 4,
+    });
     expect(four.kind).toBe("no-recommendation");
     if (four.kind !== "no-recommendation") throw new Error("verkeerde toestand");
     expect(four.costCents).toBe(1780); // 4 × € 4,45, niet één keer
@@ -113,7 +132,11 @@ describe("kosten bekend: er wordt netto gerekend", () => {
   });
 
   test("zijn eigen voorbeeld: € 14 winst tegen € 16,99 per maand is achteruit", () => {
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(1699), horizonMonths: 1 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: cost(1699),
+      horizonMonths: 1,
+    });
     expect(b.kind).toBe("no-recommendation");
     if (b.kind !== "no-recommendation") throw new Error("verkeerde toestand");
     expect(b.netCents).toBe(-299);
@@ -124,7 +147,11 @@ describe("de horizon en zijn ondergrens", () => {
   test("EEN REIS VAN EEN WEEK KOST EEN HELE MAAND KAART, en dat staat op het scherm", () => {
     // Wie een kaart opent voor één reis betaalt minstens één maandnota. Een kwart
     // maand rekenen zou € 1,11 kaartkosten opleveren, en dat bedrag bestaat niet.
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(445), horizonMonths: 0.25 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: cost(445),
+      horizonMonths: 0.25,
+    });
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     expect(b.costCents).toBe(445);
     if (b.basis.kind !== "one-off") throw new Error("verkeerde basis");
@@ -138,14 +165,22 @@ describe("de horizon en zijn ondergrens", () => {
 
   test("een ontbrekende of onzinnige horizon valt op de ondergrens terug, nooit op nul", () => {
     for (const months of [undefined, 0, -3, Number.NaN]) {
-      const b = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(445), horizonMonths: months });
+      const b = netBenefit({
+        benefit: { kind: "one-off", cents: 1400 },
+        cost: cost(445),
+        horizonMonths: months,
+      });
       if (b.kind !== "net") throw new Error("verkeerde toestand");
       expect(b.costCents).toBe(445); // niet 0 — dat zou de kosten laten verdampen
     }
   });
 
   test("anderhalve maand zijn twee maandnota's, want je koopt geen halve maand", () => {
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 5000 }, cost: cost(445), horizonMonths: 1.5 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 5000 },
+      cost: cost(445),
+      horizonMonths: 1.5,
+    });
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     expect(b.costCents).toBe(890);
   });
@@ -160,7 +195,11 @@ describe("maand tegenover jaar — een factor twaalf", () => {
     // € 100 voordeel is precies het bedrag waarop de twee antwoorden verschillen:
     // gedeeld door twaalf zou de kaart € 22,50 kosten en € 77,50 opleveren, dus een
     // aanbeveling. Heel afgerekend kost hij € 270 en ga je € 170 achteruit.
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 10000 }, cost: cost(27000, "jaar"), horizonMonths: 1 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 10000 },
+      cost: cost(27000, "jaar"),
+      horizonMonths: 1,
+    });
     expect(b.kind).toBe("no-recommendation");
     if (b.kind !== "no-recommendation") throw new Error("verkeerde toestand");
     expect(b.costCents).toBe(27000);
@@ -175,9 +214,18 @@ describe("maand tegenover jaar — een factor twaalf", () => {
     // € 270 per jaar en € 22,50 per maand hebben hetzelfde jaarbedrag en zijn over
     // één maand € 247,50 van elkaar verwijderd. Dát is de fout die deze scheiding
     // voorkomt.
-    const perYear = netBenefit({ benefit: { kind: "one-off", cents: 10000 }, cost: cost(27000, "jaar"), horizonMonths: 1 });
-    const perMonth = netBenefit({ benefit: { kind: "one-off", cents: 10000 }, cost: cost(2250, "maand"), horizonMonths: 1 });
-    if (perYear.kind === "gross-cost-unknown" || perMonth.kind === "gross-cost-unknown") throw new Error("verkeerde toestand");
+    const perYear = netBenefit({
+      benefit: { kind: "one-off", cents: 10000 },
+      cost: cost(27000, "jaar"),
+      horizonMonths: 1,
+    });
+    const perMonth = netBenefit({
+      benefit: { kind: "one-off", cents: 10000 },
+      cost: cost(2250, "maand"),
+      horizonMonths: 1,
+    });
+    if (perYear.kind === "gross-cost-unknown" || perMonth.kind === "gross-cost-unknown")
+      throw new Error("verkeerde toestand");
     expect(perYear.costCents - perMonth.costCents).toBe(24750);
     expect(perYear.kind).toBe("no-recommendation");
     expect(perMonth.kind).toBe("net");
@@ -187,7 +235,10 @@ describe("maand tegenover jaar — een factor twaalf", () => {
     // € 5 cashback per maand tegen een kaart van € 48 per jaar: per jaar € 60
     // tegen € 48, dus € 12 over. Naar maanden gaan zou van € 48 per jaar een
     // maandbedrag maken dat nergens staat.
-    const b = netBenefit({ benefit: { kind: "recurring", cents: 500, period: "maand" }, cost: cost(4800, "jaar") });
+    const b = netBenefit({
+      benefit: { kind: "recurring", cents: 500, period: "maand" },
+      cost: cost(4800, "jaar"),
+    });
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     expect(b.grossCents).toBe(6000);
     expect(b.costCents).toBe(4800);
@@ -200,7 +251,10 @@ describe("maand tegenover jaar — een factor twaalf", () => {
   });
 
   test("beide per maand blijft per maand — dan is er niets om te ver­talen", () => {
-    const b = netBenefit({ benefit: { kind: "recurring", cents: 500, period: "maand" }, cost: cost(255) });
+    const b = netBenefit({
+      benefit: { kind: "recurring", cents: 500, period: "maand" },
+      cost: cost(255),
+    });
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     if (b.basis.kind !== "recurring") throw new Error("verkeerde basis");
     expect(b.basis.period).toBe("maand");
@@ -212,7 +266,11 @@ describe("maand tegenover jaar — een factor twaalf", () => {
 
 describe("kosten onbekend: bruto, met het gat erbij", () => {
   test("HET WOORD NETTO VALT HIER NOOIT, en er is geen veld dat zo heet", () => {
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: unknown, horizonMonths: 1 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: unknown,
+      horizonMonths: 1,
+    });
     expect(b.kind).toBe("gross-cost-unknown");
     if (b.kind !== "gross-cost-unknown") throw new Error("verkeerde toestand");
     expect(b.grossCents).toBe(1400);
@@ -256,7 +314,11 @@ describe("een kaart die hij AL HEEFT kost hem marginaal niets", () => {
     expect(marginal.amount.cents).toBe(0);
     expect(marginal.why).toBe("already-held");
 
-    const b = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: marginal, horizonMonths: 6 });
+    const b = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: marginal,
+      horizonMonths: 6,
+    });
     if (b.kind !== "net") throw new Error("verkeerde toestand");
     expect(b.costCents).toBe(0);
     expect(b.netCents).toBe(1400); // het volle voordeel, ook over zes maanden
@@ -279,7 +341,9 @@ describe("een kaart die hij AL HEEFT kost hem marginaal niets", () => {
 
 describe("holdingCostOfProduct: van catalogusrij naar kostenpost", () => {
   test("een geprijsde rij wordt een bekende prijs, met bron en datum", () => {
-    const c = holdingCostOfProduct(feeOf(entry({ id: "abn-amro-gold-card", product: "ABN AMRO Gold Card" })));
+    const c = holdingCostOfProduct(
+      feeOf(entry({ id: "abn-amro-gold-card", product: "ABN AMRO Gold Card" })),
+    );
     if (c.kind !== "known") throw new Error("verkeerde toestand");
     expect(c.amount.cents).toBe(445);
     expect(c.amount.period).toBe("maand");
@@ -289,7 +353,9 @@ describe("holdingCostOfProduct: van catalogusrij naar kostenpost", () => {
   test("een UITGESPROKEN nul is een bekende nul, geen ontbrekend cijfer", () => {
     // 212 Card en Trade Republic staan letterlijk op € 0 per maand in hun eigen
     // prijslijst. Die nul telt gewoon mee.
-    const c = holdingCostOfProduct(feeOf(entry({ id: "212-card", product: "212 Card", kind: "betaalpas", fee: { value: 0 } })));
+    const c = holdingCostOfProduct(
+      feeOf(entry({ id: "212-card", product: "212 Card", kind: "betaalpas", fee: { value: 0 } })),
+    );
     if (c.kind !== "known") throw new Error("verkeerde toestand");
     expect(c.amount.cents).toBe(0);
     expect(c.why).toBe("stated");
@@ -318,8 +384,13 @@ describe("holdingCostOfProduct: van catalogusrij naar kostenpost", () => {
 
 describe("de rangschikking", () => {
   const net = (netCents: number): NetBenefit =>
-    netBenefit({ benefit: { kind: "one-off", cents: netCents + 445 }, cost: cost(445), horizonMonths: 1 });
-  const gross = (cents: number): NetBenefit => netBenefit({ benefit: { kind: "one-off", cents }, cost: unknown });
+    netBenefit({
+      benefit: { kind: "one-off", cents: netCents + 445 },
+      cost: cost(445),
+      horizonMonths: 1,
+    });
+  const gross = (cents: number): NetBenefit =>
+    netBenefit({ benefit: { kind: "one-off", cents }, cost: unknown });
 
   test("BIJ GELIJKE WAARDE STAAT NETTO-BEKEND BOVEN BRUTO-ONBEKEND", () => {
     // Van de eerste weten we dat het klopt; van de tweede weten we alleen dat er
@@ -335,7 +406,11 @@ describe("de rangschikking", () => {
   });
 
   test("iets waarop je achteruitgaat staat altijd onderaan, hoe hoog het brutobedrag ook is", () => {
-    const loss = netBenefit({ benefit: { kind: "one-off", cents: 1400 }, cost: cost(9999), horizonMonths: 1 });
+    const loss = netBenefit({
+      benefit: { kind: "one-off", cents: 1400 },
+      cost: cost(9999),
+      horizonMonths: 1,
+    });
     const sorted = [loss, gross(10), net(5)].sort(compareNetBenefit);
     expect(sorted[sorted.length - 1]).toBe(loss);
   });

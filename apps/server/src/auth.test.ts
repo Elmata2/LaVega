@@ -33,7 +33,10 @@ test("an explicit base URL wins over the deployment's own hostname", () => {
   try {
     expect(authBaseUrl()).toBe("https://www.lavega.dev");
     // The deployment still trusts itself, or its own /api/auth calls fail.
-    expect(authTrustedOrigins()).toEqual(["https://www.lavega.dev", "https://lavega-git-feature-abc123.vercel.app"]);
+    expect(authTrustedOrigins()).toEqual([
+      "https://www.lavega.dev",
+      "https://lavega-git-feature-abc123.vercel.app",
+    ]);
   } finally {
     delete process.env.VERCEL_URL;
     delete process.env.BETTER_AUTH_URL;
@@ -49,7 +52,11 @@ test("configured trusted origins are kept alongside the deployment's own", () =>
   process.env.BETTER_AUTH_TRUSTED_ORIGINS = "https://www.lavega.dev, https://lavega.dev";
   process.env.VERCEL_URL = "lavega-git-feature-abc123.vercel.app";
   try {
-    expect(authTrustedOrigins()).toEqual(["https://www.lavega.dev", "https://lavega.dev", "https://lavega-git-feature-abc123.vercel.app"]);
+    expect(authTrustedOrigins()).toEqual([
+      "https://www.lavega.dev",
+      "https://lavega.dev",
+      "https://lavega-git-feature-abc123.vercel.app",
+    ]);
   } finally {
     delete process.env.BETTER_AUTH_TRUSTED_ORIGINS;
     delete process.env.VERCEL_URL;

@@ -523,7 +523,9 @@ table tbody tr:hover {
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 .nav-item:hover:not(:disabled) {
   color: var(--ink);
@@ -856,7 +858,9 @@ table tbody tr:hover {
   border: 1px solid var(--line);
   background: var(--surface-2);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 .mp-toggle .mp-knob {
   display: block;
@@ -864,7 +868,9 @@ table tbody tr:hover {
   height: 18px;
   border-radius: var(--pill);
   background: var(--muted);
-  transition: transform 0.12s ease, background 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
 }
 .mp-toggle.on {
   background: linear-gradient(180deg, var(--ink), var(--ink-soft));

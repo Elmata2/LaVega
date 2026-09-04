@@ -514,7 +514,10 @@ function place(input: CrossScopeInput): Placed {
   const scopeCache = new Map<string, EntityScope>();
   const scopeFor = (entity: string): EntityScope => {
     let s = scopeCache.get(entity);
-    if (s === undefined) { s = entityScope(entity, profiles); scopeCache.set(entity, s); }
+    if (s === undefined) {
+      s = entityScope(entity, profiles);
+      scopeCache.set(entity, s);
+    }
     return s;
   };
 
@@ -526,9 +529,15 @@ function place(input: CrossScopeInput): Placed {
   for (const t of txs) {
     if (t.date < from || t.date > asOf) continue;
     const account = byKey.get(t.accountKey);
-    if (!account) { unseen.noAccount++; continue; }
+    if (!account) {
+      unseen.noAccount++;
+      continue;
+    }
     const entity = (account.entity ?? "").trim();
-    if (!entity) { unseen.noEntity++; continue; }
+    if (!entity) {
+      unseen.noEntity++;
+      continue;
+    }
     if (obsFrom === null || t.date < obsFrom) obsFrom = t.date;
     if (obsTo === null || t.date > obsTo) obsTo = t.date;
     const c = cents(t.amount);
@@ -601,12 +610,15 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
   for (const l of legs) {
     if (l.sign !== 1) continue;
     const pool = pools.get(l.cents);
-    if (pool) pool.push(l); else pools.set(l.cents, [l]);
+    if (pool) pool.push(l);
+    else pools.set(l.cents, [l]);
   }
 
   const outs = legs
     .filter((l) => l.sign === -1)
-    .sort((a, b) => (a.tx.date === b.tx.date ? a.tx.id.localeCompare(b.tx.id) : a.tx.date.localeCompare(b.tx.date)));
+    .sort((a, b) =>
+      a.tx.date === b.tx.date ? a.tx.id.localeCompare(b.tx.id) : a.tx.date.localeCompare(b.tx.date),
+    );
 
   const claimed = new Set<string>();
   const crossings: CrossScopeCrossing[] = [];
@@ -627,7 +639,10 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
   const linked = (a: Leg, b: Leg): boolean => {
     const idsA = own.byKey.get(a.tx.accountKey) ?? [];
     const idsB = own.byKey.get(b.tx.accountKey) ?? [];
-    return (a.namedId !== null && idsB.includes(a.namedId)) || (b.namedId !== null && idsA.includes(b.namedId));
+    return (
+      (a.namedId !== null && idsB.includes(a.namedId)) ||
+      (b.namedId !== null && idsA.includes(b.namedId))
+    );
   };
 
   for (const out of outs) {
@@ -637,19 +652,28 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     let blockedByCurrency = false;
     for (const cand of pool) {
       if (claimed.has(cand.tx.id)) continue;
-      if (cand.scope === out.scope) continue;              // (d) one side each
-      const d = dayDiff(out.tx.date, cand.tx.date);        // cand.date - out.date
-      if (d < 0 || d > PAIR_WINDOW_DAYS) continue;         // (c)
-      if (norm(cand.tx.currency) !== norm(out.tx.currency)) { blockedByCurrency = true; continue; } // (b)
+      if (cand.scope === out.scope) continue; // (d) one side each
+      const d = dayDiff(out.tx.date, cand.tx.date); // cand.date - out.date
+      if (d < 0 || d > PAIR_WINDOW_DAYS) continue; // (c)
+      if (norm(cand.tx.currency) !== norm(out.tx.currency)) {
+        blockedByCurrency = true;
+        continue;
+      } // (b)
       const score: [number, number, string] = [linked(out, cand) ? 0 : 1, d, cand.tx.id];
       if (
         bestScore === null ||
         score[0] < bestScore[0] ||
         (score[0] === bestScore[0] && score[1] < bestScore[1]) ||
         (score[0] === bestScore[0] && score[1] === bestScore[1] && score[2] < bestScore[2])
-      ) { best = cand; bestScore = score; }
+      ) {
+        best = cand;
+        bestScore = score;
+      }
     }
-    if (!best) { if (blockedByCurrency) currencyMismatch++; continue; }
+    if (!best) {
+      if (blockedByCurrency) currencyMismatch++;
+      continue;
+    }
     claimed.add(out.tx.id);
     claimed.add(best.tx.id);
     const streamKey = crossScopeStreamKey(out.entity, best.entity);
@@ -661,8 +685,8 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
       toEntity: best.entity,
       fromScope: out.scope,
       toScope: best.scope,
-      date: out.tx.date,           // the day the money left
-      amountCents: out.cents,      // ONE amount for TWO legs
+      date: out.tx.date, // the day the money left
+      amountCents: out.cents, // ONE amount for TWO legs
       currency: out.tx.currency,
       matched: true,
       evidence: "twee-benen",
@@ -675,12 +699,19 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
   //
   // Only on evidence printed on the row itself (see `CrossScopeEvidence`), and
   // OUTFLOWS FIRST — the order is load-bearing, see the suppression rule below.
-  const evidenceFor = (l: Leg): { evidence: CrossScopeEvidence; otherEntity: string | null; otherScope: EntityScope } | null => {
+  const evidenceFor = (
+    l: Leg,
+  ): {
+    evidence: CrossScopeEvidence;
+    otherEntity: string | null;
+    otherScope: EntityScope;
+  } | null => {
     if (l.namedId !== null) {
       const entity = idOwner.get(l.namedId) ?? null; // null = ambiguous or blank: proves nothing
       if (entity !== null) {
         const scope = scopeFor(entity);
-        if (scope !== l.scope) return { evidence: "eigen-rekening-genoemd", otherEntity: entity, otherScope: scope };
+        if (scope !== l.scope)
+          return { evidence: "eigen-rekening-genoemd", otherEntity: entity, otherScope: scope };
       }
       return null; // his own account, but on THIS side of the boundary: BV1->BV2 is not a crossing
     }
@@ -689,7 +720,8 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     // overboeking". WHICH personal entity is not knowable, hence null. It only
     // crosses the boundary when this leg is on the business side; his own name
     // on a private row is privé-to-privé and not a crossing.
-    if (l.ownName && l.scope === "business") return { evidence: "eigen-naam-genoemd", otherEntity: null, otherScope: "personal" };
+    if (l.ownName && l.scope === "business")
+      return { evidence: "eigen-naam-genoemd", otherEntity: null, otherScope: "personal" };
     return null;
   };
 
@@ -710,7 +742,7 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
    * many, which claims LESS coverage than we have. That is the safe direction
    * for this particular number and the only one it is allowed to err in. */
   const namesUnknownAccount = (l: Leg): boolean => {
-    if (l.namedId !== null) return false;               // it names one of HIS: not a stranger
+    if (l.namedId !== null) return false; // it names one of HIS: not a stranger
     const found = findIban(`${l.tx.counterparty} ${l.tx.description}`);
     if (found === null) return false;
     const id = norm(found).replace(/\s+/g, "");
@@ -724,14 +756,20 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
   const byDateThenId = (a: Leg, b: Leg) =>
     a.tx.date === b.tx.date ? a.tx.id.localeCompare(b.tx.id) : a.tx.date.localeCompare(b.tx.date);
 
-  const make = (l: Leg, ev: { evidence: CrossScopeEvidence; otherEntity: string | null; otherScope: EntityScope }): CrossScopeCrossing => {
+  const make = (
+    l: Leg,
+    ev: { evidence: CrossScopeEvidence; otherEntity: string | null; otherScope: EntityScope },
+  ): CrossScopeCrossing => {
     const out = l.sign === -1;
     const fromEntity = out ? l.entity : ev.otherEntity;
     const toEntity = out ? ev.otherEntity : l.entity;
     const streamKey = crossScopeStreamKey(fromEntity, toEntity);
     const id = crossingId([l.tx.id]);
     return {
-      id, streamKey, fromEntity, toEntity,
+      id,
+      streamKey,
+      fromEntity,
+      toEntity,
       fromScope: out ? l.scope : ev.otherScope,
       toScope: out ? ev.otherScope : l.scope,
       date: l.tx.date,
@@ -810,7 +848,7 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
    *  joined and no crossing gains a leg — the only effect is that the inflow is
    *  not counted a second time. */
   const isMirror = (out: CrossScopeCrossing, inflow: CrossScopeCrossing): boolean => {
-    const gap = dayDiff(out.date, inflow.date);   // inflow.date - out.date
+    const gap = dayDiff(out.date, inflow.date); // inflow.date - out.date
     return (
       out.amountCents === inflow.amountCents &&
       norm(out.currency) === norm(inflow.currency) &&
@@ -818,7 +856,8 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
       out.toScope === inflow.toScope &&
       sameParty(out.fromEntity, inflow.fromEntity) &&
       sameParty(out.toEntity, inflow.toEntity) &&
-      gap >= 0 && gap <= SAME_MOVEMENT_DAYS
+      gap >= 0 &&
+      gap <= SAME_MOVEMENT_DAYS
     );
   };
 
@@ -829,7 +868,11 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     if (!ev) continue;
     const candidate = make(l, ev);
     const hit = suppressors.find((s) => !s.used && isMirror(s.c, candidate));
-    if (hit) { hit.used = true; mirrorSuppressed++; continue; }
+    if (hit) {
+      hit.used = true;
+      mirrorSuppressed++;
+      continue;
+    }
     singles.push(candidate);
   }
   crossings.push(...singles);
@@ -847,7 +890,9 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     if (namesUnknownAccount(l)) unknownCounterAccount++;
   }
 
-  crossings.sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
+  crossings.sort((a, b) =>
+    a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date),
+  );
 
   // ── Streams ────────────────────────────────────────────────────────────────
   const streams: CrossScopeStream[] = [];
@@ -857,24 +902,37 @@ export function crossScopeTransfers(input: CrossScopeInput): CrossScopeReport {
     if (!s) {
       s = {
         key: c.streamKey,
-        fromEntity: c.fromEntity, toEntity: c.toEntity,
-        fromScope: c.fromScope, toScope: c.toScope,
-        count: 0, totalCents: 0, matchedCents: 0, unmatchedCents: 0,
-        unknownCents: 0, unknownCount: 0,
-        firstDate: c.date, lastDate: c.date,
+        fromEntity: c.fromEntity,
+        toEntity: c.toEntity,
+        fromScope: c.fromScope,
+        toScope: c.toScope,
+        count: 0,
+        totalCents: 0,
+        matchedCents: 0,
+        unmatchedCents: 0,
+        unknownCents: 0,
+        unknownCount: 0,
+        firstDate: c.date,
+        lastDate: c.date,
         ...resolveKind(answers, [c.streamKey]),
       };
       streamIndex.set(c.streamKey, s);
       streams.push(s);
     }
     s.count++;
-    s.totalCents += c.amountCents;                        // crossings, never legs
-    if (c.matched) s.matchedCents += c.amountCents; else s.unmatchedCents += c.amountCents;
-    if (c.kind === "onbekend") { s.unknownCents += c.amountCents; s.unknownCount++; }
+    s.totalCents += c.amountCents; // crossings, never legs
+    if (c.matched) s.matchedCents += c.amountCents;
+    else s.unmatchedCents += c.amountCents;
+    if (c.kind === "onbekend") {
+      s.unknownCents += c.amountCents;
+      s.unknownCount++;
+    }
     if (c.date < s.firstDate) s.firstDate = c.date;
     if (c.date > s.lastDate) s.lastDate = c.date;
   }
-  streams.sort((a, b) => (b.totalCents === a.totalCents ? a.key.localeCompare(b.key) : b.totalCents - a.totalCents));
+  streams.sort((a, b) =>
+    b.totalCents === a.totalCents ? a.key.localeCompare(b.key) : b.totalCents - a.totalCents,
+  );
 
   const totalCents = crossings.reduce((n, c) => n + c.amountCents, 0);
   const matchedCents = crossings.reduce((n, c) => (c.matched ? n + c.amountCents : n), 0);
@@ -946,39 +1004,65 @@ export function businessCostsPaidPrivately(input: CrossScopeInput): PrivatelyPai
   if (placed.state !== null) return { ...placed.context, state: placed.state };
 
   type Acc = {
-    merchant: string; label: string; labelDate: string;
-    businessCents: number; businessCount: number;
-    personalCents: number; personalCount: number;
-    personalTxIds: string[]; firstDate: string; lastDate: string;
+    merchant: string;
+    label: string;
+    labelDate: string;
+    businessCents: number;
+    businessCount: number;
+    personalCents: number;
+    personalCount: number;
+    personalTxIds: string[];
+    firstDate: string;
+    lastDate: string;
   };
   const byMerchant = new Map<string, Acc>();
 
   for (const l of placed.legs) {
-    if (l.sign !== -1) continue;                       // costs only
-    if (l.namedId !== null || l.ownName) continue;     // his own money moving
+    if (l.sign !== -1) continue; // costs only
+    if (l.namedId !== null || l.ownName) continue; // his own money moving
     if (norm(l.tx.category) === "eigen overboeking") continue;
     const merchant = merchantKey(l.tx.counterparty);
-    if (!merchant) continue;                           // no name on the row: refuse to invent one
+    if (!merchant) continue; // no name on the row: refuse to invent one
     let a = byMerchant.get(merchant);
     if (!a) {
-      a = { merchant, label: l.tx.counterparty.trim(), labelDate: l.tx.date,
-        businessCents: 0, businessCount: 0, personalCents: 0, personalCount: 0,
-        personalTxIds: [], firstDate: l.tx.date, lastDate: l.tx.date };
+      a = {
+        merchant,
+        label: l.tx.counterparty.trim(),
+        labelDate: l.tx.date,
+        businessCents: 0,
+        businessCount: 0,
+        personalCents: 0,
+        personalCount: 0,
+        personalTxIds: [],
+        firstDate: l.tx.date,
+        lastDate: l.tx.date,
+      };
       byMerchant.set(merchant, a);
     }
-    if (l.scope === "business") { a.businessCents += l.cents; a.businessCount++; }
-    else { a.personalCents += l.cents; a.personalCount++; a.personalTxIds.push(l.tx.id); }
+    if (l.scope === "business") {
+      a.businessCents += l.cents;
+      a.businessCount++;
+    } else {
+      a.personalCents += l.cents;
+      a.personalCount++;
+      a.personalTxIds.push(l.tx.id);
+    }
     if (l.tx.date < a.firstDate) a.firstDate = l.tx.date;
     if (l.tx.date > a.lastDate) a.lastDate = l.tx.date;
-    if (l.tx.date >= a.labelDate && l.tx.counterparty.trim()) { a.label = l.tx.counterparty.trim(); a.labelDate = l.tx.date; }
+    if (l.tx.date >= a.labelDate && l.tx.counterparty.trim()) {
+      a.label = l.tx.counterparty.trim();
+      a.labelDate = l.tx.date;
+    }
   }
 
   const rows = [...byMerchant.values()]
     .filter((a) => a.businessCount > 0 && a.personalCount > 0) // BOTH sides, or it is not a crossing of anything
     .map(({ labelDate: _labelDate, ...row }) => row)
-    .sort((a, b) => (b.personalCents === a.personalCents
-      ? a.merchant.localeCompare(b.merchant)
-      : b.personalCents - a.personalCents));
+    .sort((a, b) =>
+      b.personalCents === a.personalCents
+        ? a.merchant.localeCompare(b.merchant)
+        : b.personalCents - a.personalCents,
+    );
 
   return { ...placed.context, state: "gemeten", rows };
 }

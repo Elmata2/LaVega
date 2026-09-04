@@ -1,7 +1,26 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { Account, Tx, Rule, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import type {
+  Account,
+  Tx,
+  Rule,
+  ScheduledFlow,
+  VatSettings,
+  Invoice,
+  RewardsBalance,
+  LearnedFact,
+  EntityProfile,
+  BrokerCredentials,
+  CredentialBroker,
+  CredentialStore,
+} from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
-import { newSalt, deriveKey, encryptJSON, decryptJSON, PBKDF2_ITERATIONS } from "../crypto/vaultCrypto.js";
+import {
+  newSalt,
+  deriveKey,
+  encryptJSON,
+  decryptJSON,
+  PBKDF2_ITERATIONS,
+} from "../crypto/vaultCrypto.js";
 import type { CipherBlob } from "../crypto/vaultCrypto.js";
 
 const DEFAULT_DB_NAME = "lavega-vault";
@@ -11,11 +30,25 @@ const RECORD_KEY = "blob";
 
 export type VaultStatus = "empty" | "locked" | "unlocked";
 
-type VaultData = { accounts: Account[]; txs: Tx[]; rules: Rule[]; scheduledFlows?: ScheduledFlow[]; vatSettings?: VatSettings[]; invoices?: Invoice[]; rewards?: RewardsBalance[]; facts?: LearnedFact[]; entityProfiles?: EntityProfile[]; credentials?: BrokerCredentials[] };
+type VaultData = {
+  accounts: Account[];
+  txs: Tx[];
+  rules: Rule[];
+  scheduledFlows?: ScheduledFlow[];
+  vatSettings?: VatSettings[];
+  invoices?: Invoice[];
+  rewards?: RewardsBalance[];
+  facts?: LearnedFact[];
+  entityProfiles?: EntityProfile[];
+  credentials?: BrokerCredentials[];
+};
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
   status(): Promise<VaultStatus>;
-  setup(passphrase: string, seed?: { accounts: Account[]; txs: Tx[]; rules: Rule[] }): Promise<void>;
+  setup(
+    passphrase: string,
+    seed?: { accounts: Account[]; txs: Tx[]; rules: Rule[] },
+  ): Promise<void>;
   unlock(passphrase: string): Promise<boolean>; // false on wrong passphrase (never throws for that)
   lock(): void;
   export(): CipherBlob | null; // the current on-memory-encrypted blob (Task 5 downloads it); null if locked/empty
@@ -318,18 +351,27 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       });
     },
 
-    async getCredentials<T extends CredentialBroker>(tenantId: string, broker: T): Promise<Extract<BrokerCredentials, { broker: T }> | null> {
+    async getCredentials<T extends CredentialBroker>(
+      tenantId: string,
+      broker: T,
+    ): Promise<Extract<BrokerCredentials, { broker: T }> | null> {
       // Credential reads are deliberately different from ordinary vault reads:
       // locked state is an absent secret, not an error-producing data path.
       if (data == null) return null;
-      const credentials = data.credentials?.find((item) => item.tenantId === tenantId && item.broker === broker);
-      return credentials == null ? null : credentials as Extract<BrokerCredentials, { broker: T }>;
+      const credentials = data.credentials?.find(
+        (item) => item.tenantId === tenantId && item.broker === broker,
+      );
+      return credentials == null
+        ? null
+        : (credentials as Extract<BrokerCredentials, { broker: T }>);
     },
     putCredentials(credentials: BrokerCredentials): Promise<void> {
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         const existing = data.credentials ?? [];
-        const withoutCurrent = existing.filter((item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker);
+        const withoutCurrent = existing.filter(
+          (item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker,
+        );
         data = { ...data, credentials: [...withoutCurrent, credentials] };
         await persist();
       });

@@ -1,10 +1,10 @@
 # n8n-workflows voor LaVega
 
-| Bestand | Waarover |
-|---|---|
-| `FACTUREN.md` | facturen uit Gmail → Claude → wachtrij (`lavega-invoices.json`) |
+| Bestand             | Waarover                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `FACTUREN.md`       | facturen uit Gmail → Claude → wachtrij (`lavega-invoices.json`)                                              |
 | `DOORSTUURADRES.md` | facturen doorsturen naar een eigen adres, via een Cloudflare Email Worker — dezelfde workflow, tweede ingang |
-| deze pagina | kaartvoorwaarden (`lavega-card-terms.json`) |
+| deze pagina         | kaartvoorwaarden (`lavega-card-terms.json`)                                                                  |
 
 ---
 
@@ -19,14 +19,14 @@ iemand het reisblok opent. Vier nodes, geen URL's, geen modelaanroep.
 De vorige versie haalde per product een vaste tarievenpagina op en liet Claude
 die lezen. Gemeten op 16 en 17 augustus 2026 werkte dat niet:
 
-| Bron | Wat er gebeurde |
-|---|---|
-| American Express | 404 — de pagina was verhuisd |
-| ABN AMRO betaalpas | 200, maar het is marketingtekst zonder tarieven |
-| ABN AMRO creditcard | 200, maar een lege JS-schil zonder inhoud |
-| Revolut, Trading 212 | 403 achter Cloudflare |
-| ING, Rabobank | verbinding verbroken / 403 |
-| **Knab** | leverde de **creditcard** (2%) terwijl om de **betaalpas** was gevraagd — die kost 1,4% |
+| Bron                 | Wat er gebeurde                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| American Express     | 404 — de pagina was verhuisd                                                            |
+| ABN AMRO betaalpas   | 200, maar het is marketingtekst zonder tarieven                                         |
+| ABN AMRO creditcard  | 200, maar een lege JS-schil zonder inhoud                                               |
+| Revolut, Trading 212 | 403 achter Cloudflare                                                                   |
+| ING, Rabobank        | verbinding verbroken / 403                                                              |
+| **Knab**             | leverde de **creditcard** (2%) terwijl om de **betaalpas** was gevraagd — die kost 1,4% |
 
 Van zes bronnen leverden er twee een getal, en één daarvan was verkeerd. Eén
 verkeerd getal is erger dan geen getal, want een verkeerd getal wordt gebruikt.
@@ -53,10 +53,10 @@ elkaar laten groeien. Eén implementatie, op één plek.
 
 ### Waar de cijfers vandaan komen
 
-| Bron | Dekt | Versheid | Rol |
-|---|---|---|---|
-| Jouw eigen correctie | wat jij verbetert | permanent | wint altijd |
-| Agent + web search | alles, ook wat ons buitensluit | vandaag | **primair** |
+| Bron                 | Dekt                                          | Versheid                 | Rol                                     |
+| -------------------- | --------------------------------------------- | ------------------------ | --------------------------------------- |
+| Jouw eigen correctie | wat jij verbetert                             | permanent                | wint altijd                             |
+| Agent + web search   | alles, ook wat ons buitensluit                | vandaag                  | **primair**                             |
 | bank.nl-vergelijking | 7 Nederlandse banken, pas en creditcard apart | eigen datum, maanden oud | **vloer**, zodat het blok nooit leeg is |
 
 De voorrangsladder weegt sinds `79ab906` ook **leeftijd**: een cijfer dat veel

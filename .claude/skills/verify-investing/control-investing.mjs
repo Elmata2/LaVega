@@ -13,7 +13,15 @@
  */
 
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -112,7 +120,8 @@ function loadCookies() {
 }
 
 function saveCookies(response) {
-  const raw = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+  const raw =
+    typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
   if (raw.length === 0) return;
   const jar = new Map();
   for (const pair of loadCookies().split("; ").filter(Boolean)) {
@@ -143,9 +152,18 @@ async function request(flags, method, path, body) {
   const started = Date.now();
   let response;
   try {
-    response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" });
+    const init = { method, headers, redirect: "manual" };
+    if (body !== undefined && method !== "GET") init.body = JSON.stringify(body);
+    response = await fetch(url, init);
   } catch (error) {
-    return { url, method, ok: false, status: 0, ms: Date.now() - started, error: error instanceof Error ? error.message : String(error) };
+    return {
+      url,
+      method,
+      ok: false,
+      status: 0,
+      ms: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
   saveCookies(response);
   const text = await response.text();
@@ -195,7 +213,10 @@ async function commandUp(flags) {
 
   const distDir = join(repoRoot, "apps/investing-web/dist");
   if (!existsSync(distDir)) {
-    fail("apps/investing-web/dist is missing — the SPA has not been built", "run: pnpm --filter @lavega/investing-web build");
+    fail(
+      "apps/investing-web/dist is missing — the SPA has not been built",
+      "run: pnpm --filter @lavega/investing-web build",
+    );
   }
 
   /* Run tsx directly rather than through `pnpm --filter`: pnpm's deps-status
@@ -240,7 +261,14 @@ async function commandUp(flags) {
     print({ started: false, pid: child.pid, port, log: logFile, tail: tailLog() });
     return 1;
   }
-  print({ started: true, pid: child.pid, port, base: `http://127.0.0.1:${port}`, data: dataDir, log: logFile });
+  print({
+    started: true,
+    pid: child.pid,
+    port,
+    base: `http://127.0.0.1:${port}`,
+    data: dataDir,
+    log: logFile,
+  });
   return 0;
 }
 
@@ -288,7 +316,9 @@ function commandDown(flags) {
     try {
       process.kill(pid, "SIGTERM");
       stopped = true;
-    } catch { /* already gone */ }
+    } catch {
+      /* already gone */
+    }
   }
   rmSync(pidFile, { force: true });
   rmSync(portFile, { force: true });
@@ -318,18 +348,34 @@ async function commandDoctor(flags) {
    * the personal server and never reaches the investing app. Only the forwarded
    * path proves which app replied. */
   const health = await request(flags, "GET", "/api/investing/health");
-  note("health", health.ok && health.json?.service === "investing-server", { status: health.status, body: health.json ?? health.text, error: health.error });
+  note("health", health.ok && health.json?.service === "investing-server", {
+    status: health.status,
+    body: health.json ?? health.text,
+    error: health.error,
+  });
 
   const session = await request(flags, "GET", "/api/auth/get-session");
   const authed = Boolean(session.json?.user);
   const unconfigured = session.status === 503 || session.status === 404;
-  report.auth = unconfigured ? "unconfigured" : authed ? `authenticated:${session.json.user.email ?? session.json.user.id}` : "anonymous";
+  report.auth = unconfigured
+    ? "unconfigured"
+    : authed
+      ? `authenticated:${session.json.user.email ?? session.json.user.id}`
+      : "anonymous";
 
   const dashboard = await request(flags, "GET", "/api/investing/dashboard");
   if (dashboard.status === 401) {
-    note("dashboard", false, { status: 401, reason: "no session — the mount refuses to guess a tenant", fix: "control-investing.mjs login --target prod --email <you> --password <pw>" });
+    note("dashboard", false, {
+      status: 401,
+      reason: "no session — the mount refuses to guess a tenant",
+      fix: "control-investing.mjs login --target prod --email <you> --password <pw>",
+    });
   } else {
-    note("dashboard", dashboard.ok, { status: dashboard.status, problems: problemsOf(dashboard.json), positions: dashboard.json?.positions?.length ?? null });
+    note("dashboard", dashboard.ok, {
+      status: dashboard.status,
+      problems: problemsOf(dashboard.json),
+      positions: dashboard.json?.positions?.length ?? null,
+    });
   }
 
   /* A dashboard that returns 200 with no problems still shows a user nothing if
@@ -337,10 +383,31 @@ async function commandDoctor(flags) {
    * else, so name it here. */
   const positions = Array.isArray(dashboard.json?.positions) ? dashboard.json.positions : [];
   if (positions.length > 0) {
-    const priced = positions.filter((position) => position.priceStatus === "priced" || position.priceStatus === "forward-filled").length;
-    const withCost = positions.filter((position) => position.returns?.status === "available").length;
-    note("positionsPriced", priced > 0, { priced, of: positions.length, unpricedSample: positions.filter((position) => position.priceStatus === "unpriced").slice(0, 5).map((position) => position.symbol) });
-    note("positionsCosted", withCost > 0, { withCostBasis: withCost, of: positions.length, reasons: [...new Set(positions.map((position) => position.returns?.status).filter((status) => status && status !== "available"))] });
+    const priced = positions.filter(
+      (position) => position.priceStatus === "priced" || position.priceStatus === "forward-filled",
+    ).length;
+    const withCost = positions.filter(
+      (position) => position.returns?.status === "available",
+    ).length;
+    note("positionsPriced", priced > 0, {
+      priced,
+      of: positions.length,
+      unpricedSample: positions
+        .filter((position) => position.priceStatus === "unpriced")
+        .slice(0, 5)
+        .map((position) => position.symbol),
+    });
+    note("positionsCosted", withCost > 0, {
+      withCostBasis: withCost,
+      of: positions.length,
+      reasons: [
+        ...new Set(
+          positions
+            .map((position) => position.returns?.status)
+            .filter((status) => status && status !== "available"),
+        ),
+      ],
+    });
   }
 
   const config = await request(flags, "GET", "/api/config/status");
@@ -362,33 +429,52 @@ async function commandDoctor(flags) {
  * is visible in shell history and in any transcript of the run.
  */
 function resolveCredentials(flags) {
-  const path = flags["credentials-file"] ? resolve(String(flags["credentials-file"])) : credentialsFile;
+  const path = flags["credentials-file"]
+    ? resolve(String(flags["credentials-file"]))
+    : credentialsFile;
   if (existsSync(path)) {
     try {
       const stored = JSON.parse(readFileSync(path, "utf8"));
-      if (stored.email && stored.password) return { email: String(stored.email), password: String(stored.password), from: path };
+      if (stored.email && stored.password)
+        return { email: String(stored.email), password: String(stored.password), from: path };
     } catch {
       fail(`${path} is not readable JSON`, 'expected: {"email":"...","password":"..."}');
     }
   }
   const email = flags.email ?? process.env.LAVEGA_VERIFY_EMAIL;
   const password = flags.password ?? process.env.LAVEGA_VERIFY_PASSWORD;
-  if (email && password) return { email: String(email), password: String(password), from: flags.password ? "--password flag" : "environment" };
+  if (email && password)
+    return {
+      email: String(email),
+      password: String(password),
+      from: flags.password ? "--password flag" : "environment",
+    };
   return null;
 }
 
 async function commandLogin(flags) {
   const credentials = resolveCredentials(flags);
   if (!credentials) {
-    fail("no credentials found", `write ${credentialsFile} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`);
+    fail(
+      "no credentials found",
+      `write ${credentialsFile} as {"email":"...","password":"..."} (chmod 600), or set LAVEGA_VERIFY_EMAIL and LAVEGA_VERIFY_PASSWORD`,
+    );
   }
-  const response = await request(flags, "POST", "/api/auth/sign-in/email", { email: credentials.email, password: credentials.password });
+  const response = await request(flags, "POST", "/api/auth/sign-in/email", {
+    email: credentials.email,
+    password: credentials.password,
+  });
   if (!response.ok) {
     print({ signedIn: false, status: response.status, body: response.json ?? response.text });
     return 1;
   }
   const session = await request(flags, "GET", "/api/auth/get-session");
-  print({ signedIn: Boolean(session.json?.user), user: session.json?.user ?? null, cookieJar: cookieFile, credentialsFrom: credentials.from });
+  print({
+    signedIn: Boolean(session.json?.user),
+    user: session.json?.user ?? null,
+    cookieJar: cookieFile,
+    credentialsFrom: credentials.from,
+  });
   return session.json?.user ? 0 : 1;
 }
 
@@ -397,7 +483,11 @@ async function commandWhoami(flags) {
   /* 503 is better-auth without a DATABASE_URL; 404 is the standalone local
    * server, which has no auth routes at all. Neither is a signed-out user. */
   const unconfigured = session.status === 503 || session.status === 404;
-  print({ status: session.status, user: session.json?.user ?? null, state: unconfigured ? "unconfigured" : session.json?.user ? "authenticated" : "anonymous" });
+  print({
+    status: session.status,
+    user: session.json?.user ?? null,
+    state: unconfigured ? "unconfigured" : session.json?.user ? "authenticated" : "anonymous",
+  });
   return 0;
 }
 
@@ -420,14 +510,20 @@ async function commandDashboard(flags) {
     ms: response.ms,
     problems: problemsOf(data),
     positions: data.positions?.length ?? null,
-    pricedPositions: data.positions?.filter((position) => position.marketValue !== null && position.marketValue > 0).length ?? null,
+    pricedPositions:
+      data.positions?.filter(
+        (position) => position.marketValue !== null && position.marketValue > 0,
+      ).length ?? null,
     portfolioPoints: data.portfolio?.All?.length ?? null,
     benchmarks: data.benchmarks?.map((series) => series.symbol ?? series.name) ?? null,
     trades: data.trades?.length ?? null,
     dividends: data.dividends?.length ?? null,
     // An empty-but-valid dashboard is the deliberate degraded shape: the UI
     // stays usable so reconnect and resync remain reachable.
-    shape: (data.positions?.length ?? 0) === 0 && problemsOf(data).length > 0 ? "degraded (empty + problems)" : "normal",
+    shape:
+      (data.positions?.length ?? 0) === 0 && problemsOf(data).length > 0
+        ? "degraded (empty + problems)"
+        : "normal",
   });
   return response.ok ? 0 : 1;
 }
@@ -444,14 +540,22 @@ async function commandSyncStatus(flags) {
     request(flags, "GET", "/api/prices/sync/status"),
     request(flags, "GET", "/api/brokers/credentials/status"),
   ]);
-  print({ broker: { status: broker.status, body: broker.json ?? broker.text }, prices: { status: prices.status, body: prices.json ?? prices.text }, credentials: { status: vault.status, body: vault.json ?? vault.text } });
+  print({
+    broker: { status: broker.status, body: broker.json ?? broker.text },
+    prices: { status: prices.status, body: prices.json ?? prices.text },
+    credentials: { status: vault.status, body: vault.json ?? vault.text },
+  });
   return broker.ok && prices.ok && vault.ok ? 0 : 1;
 }
 
 async function commandSync(flags) {
   const force = flags.force ? "?force=true" : "";
   if (flags["dry-run"]) {
-    print({ dryRun: true, wouldPost: `${baseUrl(flags)}/api/brokers/sync${force}`, note: "a real sync calls the broker API and writes the vault" });
+    print({
+      dryRun: true,
+      wouldPost: `${baseUrl(flags)}/api/brokers/sync${force}`,
+      note: "a real sync calls the broker API and writes the vault",
+    });
     return 0;
   }
   const response = await request(flags, "POST", `/api/brokers/sync${force}`);
@@ -471,8 +575,14 @@ async function commandSync(flags) {
 }
 
 async function commandUnlock(flags) {
-  if (!flags.passphrase) fail("unlock needs --passphrase", "the vault key is derived from it; nothing else can open the vault");
-  const response = await request(flags, "POST", "/api/brokers/credentials/unlock", { passphrase: String(flags.passphrase) });
+  if (!flags.passphrase)
+    fail(
+      "unlock needs --passphrase",
+      "the vault key is derived from it; nothing else can open the vault",
+    );
+  const response = await request(flags, "POST", "/api/brokers/credentials/unlock", {
+    passphrase: String(flags.passphrase),
+  });
   print({ status: response.status, body: response.json ?? response.text });
   return response.ok ? 0 : 1;
 }
@@ -484,10 +594,17 @@ async function commandConsent(flags) {
     return response.ok ? 0 : 1;
   }
   if (flags["dry-run"]) {
-    print({ dryRun: true, wouldPut: "/api/market-data/consent", note: "accepting consent lets the server call Yahoo Finance" });
+    print({
+      dryRun: true,
+      wouldPut: "/api/market-data/consent",
+      note: "accepting consent lets the server call Yahoo Finance",
+    });
     return 0;
   }
-  const response = await request(flags, "PUT", "/api/market-data/consent", { accepted: true, disclosureVersion: flags.version ? String(flags.version) : undefined });
+  const response = await request(flags, "PUT", "/api/market-data/consent", {
+    accepted: true,
+    disclosureVersion: flags.version ? String(flags.version) : undefined,
+  });
   print({ status: response.status, body: response.json ?? response.text });
   return response.ok ? 0 : 1;
 }
@@ -496,10 +613,18 @@ async function commandPrices(flags, sub) {
   if (sub === "status") return commandSyncStatus(flags);
   if (sub === "sync") {
     if (flags["dry-run"]) {
-      print({ dryRun: true, wouldPost: "/api/prices/sync", note: "a real price sync calls Yahoo Finance and writes the price store" });
+      print({
+        dryRun: true,
+        wouldPost: "/api/prices/sync",
+        note: "a real price sync calls Yahoo Finance and writes the price store",
+      });
       return 0;
     }
-    const response = await request(flags, "POST", `/api/prices/sync${flags.force ? "?force=true" : ""}`);
+    const response = await request(
+      flags,
+      "POST",
+      `/api/prices/sync${flags.force ? "?force=true" : ""}`,
+    );
     print({ status: response.status, body: response.json ?? response.text });
     return response.ok ? 0 : 1;
   }
@@ -512,7 +637,10 @@ async function commandPrices(flags, sub) {
     print({ status: response.status, body: response.json ?? response.text });
     return response.ok ? 0 : 1;
   }
-  fail(`unknown prices subcommand "${sub}"`, "use: prices status | prices sync | prices purge --yes");
+  fail(
+    `unknown prices subcommand "${sub}"`,
+    "use: prices status | prices sync | prices purge --yes",
+  );
 }
 
 /**
@@ -531,7 +659,7 @@ async function commandProbe(flags) {
       ms: response.ms,
       ok: response.ok,
       problems: problemsOf(response.json),
-      body: flags.verbose ? response.json ?? response.text : undefined,
+      body: flags.verbose ? (response.json ?? response.text) : undefined,
       error: response.error,
     });
   }
@@ -541,7 +669,9 @@ async function commandProbe(flags) {
     unreachable: results.filter((entry) => entry.status === 0).map((entry) => entry.path),
     unauthorized: results.filter((entry) => entry.status === 401).map((entry) => entry.path),
     serverErrors: results.filter((entry) => entry.status >= 500).map((entry) => entry.path),
-    degraded: results.filter((entry) => entry.ok && entry.problems.length > 0).map((entry) => ({ path: entry.path, problems: entry.problems })),
+    degraded: results
+      .filter((entry) => entry.ok && entry.problems.length > 0)
+      .map((entry) => ({ path: entry.path, problems: entry.problems })),
     results,
   };
   if (flags.out) {
@@ -570,22 +700,45 @@ async function commandAssets(flags) {
     .filter((reference) => /\.(js|css)$/.test(reference));
   const checks = [];
   for (const reference of references) {
-    const path = reference.startsWith("http") ? new URL(reference).pathname : reference.startsWith("/") ? reference : `${shellPath}${reference}`;
+    const path = reference.startsWith("http")
+      ? new URL(reference).pathname
+      : reference.startsWith("/")
+        ? reference
+        : `${shellPath}${reference}`;
     const asset = await request(flags, "GET", path);
     const servedAsHtml = (asset.contentType ?? "").includes("text/html");
-    checks.push({ path, status: asset.status, contentType: asset.contentType, ok: asset.ok && !servedAsHtml, note: servedAsHtml ? "served index.html instead of the asset — base path mismatch" : undefined });
+    checks.push({
+      path,
+      status: asset.status,
+      contentType: asset.contentType,
+      ok: asset.ok && !servedAsHtml,
+      note: servedAsHtml
+        ? "served index.html instead of the asset — base path mismatch"
+        : undefined,
+    });
   }
-  const report = { shell: { path: shellPath, status: shell.status, contentType: shell.contentType }, references: references.length, checks, verdict: checks.every((check) => check.ok) && shell.ok ? "ok" : "problem" };
+  const report = {
+    shell: { path: shellPath, status: shell.status, contentType: shell.contentType },
+    references: references.length,
+    checks,
+    verdict: checks.every((check) => check.ok) && shell.ok ? "ok" : "problem",
+  };
   print(report);
   return report.verdict === "ok" ? 0 : 1;
 }
 
 async function commandApi(flags, positional) {
   const [method, path] = positional;
-  if (!method || !path) fail("api needs a method and a path", 'example: api GET /api/investing/benchmarks');
+  if (!method || !path)
+    fail("api needs a method and a path", "example: api GET /api/investing/benchmarks");
   const body = flags.body ? JSON.parse(String(flags.body)) : undefined;
   const response = await request(flags, method.toUpperCase(), path, body);
-  print({ status: response.status, ms: response.ms, contentType: response.contentType, body: response.json ?? response.text });
+  print({
+    status: response.status,
+    ms: response.ms,
+    contentType: response.contentType,
+    body: response.json ?? response.text,
+  });
   return response.ok ? 0 : 1;
 }
 
@@ -650,31 +803,52 @@ async function main() {
     return 0;
   }
   switch (command) {
-    case "up": return commandUp(flags);
-    case "down": return commandDown(flags);
-    case "cleanup": return commandCleanup(flags);
-    case "logs": return commandLogs(flags);
-    case "evidence": return commandEvidence();
-    case "doctor": return commandDoctor(flags);
-    case "probe": return commandProbe(flags);
-    case "assets": return commandAssets(flags);
-    case "login": return commandLogin(flags);
-    case "whoami": return commandWhoami(flags);
-    case "logout": return commandLogout();
-    case "dashboard": return commandDashboard(flags);
-    case "summary": return commandSummary(flags);
-    case "sync-status": return commandSyncStatus(flags);
-    case "sync": return commandSync(flags);
-    case "unlock": return commandUnlock(flags);
-    case "consent": return commandConsent(flags);
-    case "prices": return commandPrices(flags, rest[0]);
-    case "api": return commandApi(flags, rest);
+    case "up":
+      return commandUp(flags);
+    case "down":
+      return commandDown(flags);
+    case "cleanup":
+      return commandCleanup(flags);
+    case "logs":
+      return commandLogs(flags);
+    case "evidence":
+      return commandEvidence();
+    case "doctor":
+      return commandDoctor(flags);
+    case "probe":
+      return commandProbe(flags);
+    case "assets":
+      return commandAssets(flags);
+    case "login":
+      return commandLogin(flags);
+    case "whoami":
+      return commandWhoami(flags);
+    case "logout":
+      return commandLogout();
+    case "dashboard":
+      return commandDashboard(flags);
+    case "summary":
+      return commandSummary(flags);
+    case "sync-status":
+      return commandSyncStatus(flags);
+    case "sync":
+      return commandSync(flags);
+    case "unlock":
+      return commandUnlock(flags);
+    case "consent":
+      return commandConsent(flags);
+    case "prices":
+      return commandPrices(flags, rest[0]);
+    case "api":
+      return commandApi(flags, rest);
     default:
       fail(`unknown command "${command}"`, "run with --help for the command list");
   }
 }
 
-main().then((code) => process.exit(code ?? 0)).catch((error) => {
-  console.error(error instanceof Error ? error.stack : String(error));
-  process.exit(1);
-});
+main()
+  .then((code) => process.exit(code ?? 0))
+  .catch((error) => {
+    console.error(error instanceof Error ? error.stack : String(error));
+    process.exit(1);
+  });

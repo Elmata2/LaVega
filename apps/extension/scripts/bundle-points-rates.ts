@@ -182,7 +182,9 @@ const telling: Record<Soort, number> = {
   "niet-gepubliceerd": 0,
 };
 
-for (const [programma, v] of [...perProgramma.entries()].sort((a, b) => a[0].localeCompare(b[0], "nl"))) {
+for (const [programma, v] of [...perProgramma.entries()].sort((a, b) =>
+  a[0].localeCompare(b[0], "nl"),
+)) {
   const soort = soortVan(v);
   telling[soort]++;
   const aliassen = ALIASSEN[programma] ?? [];

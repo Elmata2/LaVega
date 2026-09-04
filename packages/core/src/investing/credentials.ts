@@ -22,7 +22,10 @@ export type CredentialBroker = BrokerCredentials["broker"];
 
 /** Narrow credential seam. Implementations must not expose credentials while locked. */
 export interface CredentialStore {
-  getCredentials<T extends CredentialBroker>(tenantId: string, broker: T): Promise<Extract<BrokerCredentials, { broker: T }> | null>;
+  getCredentials<T extends CredentialBroker>(
+    tenantId: string,
+    broker: T,
+  ): Promise<Extract<BrokerCredentials, { broker: T }> | null>;
   putCredentials(credentials: BrokerCredentials): Promise<void>;
 }
 

@@ -97,7 +97,15 @@ test("categoryPerWindow buckets a one-week window per day", () => {
   const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4);
   expect(s.unit).toBe("dag");
   // 5–11 August, clamped to the newest transaction on the 11th.
-  expect(s.buckets.map((b) => b.key)).toEqual(["2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10", "2026-08-11"]);
+  expect(s.buckets.map((b) => b.key)).toEqual([
+    "2026-08-05",
+    "2026-08-06",
+    "2026-08-07",
+    "2026-08-08",
+    "2026-08-09",
+    "2026-08-10",
+    "2026-08-11",
+  ]);
   expect(s.buckets.every((b) => !b.partial)).toBe(true);
   expect(s.categories).toEqual(["Inkoop"]);
   // Only the 11th holds spending; the other days were observed and were empty.
@@ -152,13 +160,30 @@ test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", ()
   // against the six days it happened in, it is not.
   const withSmall: Tx[] = [
     ...txs,
-    { ...txs[1], id: "s1", date: "2026-06-10", amount: -20, counterparty: "Apotheek", description: "Zorg", category: "Zorg", manual: true },
+    {
+      ...txs[1],
+      id: "s1",
+      date: "2026-06-10",
+      amount: -20,
+      counterparty: "Apotheek",
+      description: "Zorg",
+      category: "Zorg",
+      manual: true,
+    },
   ];
   const year = categoryPerWindow(withSmall, rules, own, YEAR, 4);
   expect(year.categories).not.toContain("Zorg");
-  expect(year.selection?.hidden.map((h) => [h.category, h.belowThreshold])).toEqual([["Zorg", true]]);
+  expect(year.selection?.hidden.map((h) => [h.category, h.belowThreshold])).toEqual([
+    ["Zorg", true],
+  ]);
 
-  const week = categoryPerWindow(withSmall, rules, own, { start: "2026-06-08", end: "2026-06-13" }, 4);
+  const week = categoryPerWindow(
+    withSmall,
+    rules,
+    own,
+    { start: "2026-06-08", end: "2026-06-13" },
+    4,
+  );
   expect(week.categories).toContain("Zorg");
   expect(week.selection?.hidden).toEqual([]);
 });
@@ -258,8 +283,22 @@ test("weekdaySpend reports nothing at all rather than a flat week with no data",
 const AUG = { start: "2026-08-01", end: "2026-08-31" };
 const JUL = { start: "2026-07-01", end: "2026-07-31" };
 
-const parkTx = (id: string, date: string, amount: number, counterparty: string, description = ""): Tx => ({
-  id, accountKey: "A1", date, amount, currency: "EUR", counterparty, description, category: "", manual: false,
+const parkTx = (
+  id: string,
+  date: string,
+  amount: number,
+  counterparty: string,
+  description = "",
+): Tx => ({
+  id,
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 });
 
 /** A realistic month: income, two real expenses, a transfer to an account the
@@ -330,10 +369,28 @@ test("a weekday average is not made expensive by a savings deposit landing on it
  */
 test("een geldopname telt mee als uitgave, een storting op de eigen spaarrekening niet", () => {
   const txs: Tx[] = [
-    { id: "a", accountKey: "A", date: "2026-08-05", amount: -200, currency: "EUR",
-      counterparty: "GELDMAAT AMSTERDAM", description: "Opname", category: "Geldopname", manual: true },
-    { id: "b", accountKey: "A", date: "2026-08-06", amount: -15000, currency: "EUR",
-      counterparty: "Eigen beleggingsrekening", description: "Storting", category: "Sparen & beleggen", manual: true },
+    {
+      id: "a",
+      accountKey: "A",
+      date: "2026-08-05",
+      amount: -200,
+      currency: "EUR",
+      counterparty: "GELDMAAT AMSTERDAM",
+      description: "Opname",
+      category: "Geldopname",
+      manual: true,
+    },
+    {
+      id: "b",
+      accountKey: "A",
+      date: "2026-08-06",
+      amount: -15000,
+      currency: "EUR",
+      counterparty: "Eigen beleggingsrekening",
+      description: "Storting",
+      category: "Sparen & beleggen",
+      manual: true,
+    },
   ];
   const share = categoryShare(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
   expect(share.slices.map((s) => s.category)).toEqual(["Geldopname"]);

@@ -50,6 +50,7 @@ bestaande ING/Amex-regels (die blijven staan, ongewijzigd).
 
 **2. Opslag — één vlag, zelfde patroon als `getBronAan`/`setBronAan`
 (`store.ts:248-254`).**
+
 ```ts
 const KEY_KASSA_OVERAL = "lavega.kassa.overal";
 export async function getKassaOveralAan(): Promise<boolean> { ... }

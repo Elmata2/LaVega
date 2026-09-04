@@ -4,7 +4,12 @@ import { buildClaudeRequest, requestSize } from "./buildClaudeRequest.js";
 import { noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
 import { addToQueue } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
-import { RAW_HTML_ONLY, RAW_LINK_ONLY, RAW_NO_BODY, RAW_PDF_INVOICE } from "./__fixtures__/rawMail.js";
+import {
+  RAW_HTML_ONLY,
+  RAW_LINK_ONLY,
+  RAW_NO_BODY,
+  RAW_PDF_INVOICE,
+} from "./__fixtures__/rawMail.js";
 import { normalizeInboundMail } from "./normalizeInboundMail.js";
 import { INBOUND_STORAGE_REFERENCE, INBOUND_WITH_PDF } from "./__fixtures__/inboundPayload.js";
 
@@ -107,7 +112,11 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
   ]);
 
   const store: Record<string, unknown> = {};
-  const result = addToQueue(store, { invoices, notices, processedIds } as never, "2026-08-17T08:00:00.000Z");
+  const result = addToQueue(
+    store,
+    { invoices, notices, processedIds } as never,
+    "2026-08-17T08:00:00.000Z",
+  );
   expect(result).toEqual({
     addedInvoices: 2,
     addedNotices: 2,
@@ -117,9 +126,18 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
   });
 
   // Het antwoord aan LaVega, zoals "Geef de rij en leeg hem" het samenstelt.
-  const body = { invoices: store.queue, notices: store.notices, servedAt: "2026-08-17T08:00:01.000Z" };
-  expect((body.invoices as { amountCents: number }[]).map((i) => i.amountCents)).toEqual([181500, 18069]);
-  expect((body.notices as { kind: string }[]).map((n) => n.kind)).toEqual(["notification", "unreadable"]);
+  const body = {
+    invoices: store.queue,
+    notices: store.notices,
+    servedAt: "2026-08-17T08:00:01.000Z",
+  };
+  expect((body.invoices as { amountCents: number }[]).map((i) => i.amountCents)).toEqual([
+    181500, 18069,
+  ]);
+  expect((body.notices as { kind: string }[]).map((n) => n.kind)).toEqual([
+    "notification",
+    "unreadable",
+  ]);
   // Geen enkele melding draagt een bedrag: er is niets om per ongeluk te boeken.
   for (const notice of body.notices as Record<string, unknown>[]) {
     expect("amount" in notice).toBe(false);

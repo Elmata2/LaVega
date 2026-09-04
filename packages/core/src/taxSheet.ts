@@ -76,12 +76,50 @@ export const TAX_SHEET_FIELD_LABELS: Record<TaxSheetField, string> = {
  *  accountant's. Matched exactly first, then as a substring (same two-pass
  *  approach as the bank/invoice CSV importers). */
 const SYNONYMS: Record<TaxSheetField, readonly string[]> = {
-  period: ["periode", "maand", "kwartaal", "datum", "period", "month", "quarter", "date", "monat", "zeitraum"],
-  revenue: ["omzet", "opbrengst", "inkomsten", "revenue", "turnover", "sales", "income", "umsatz", "erlöse"],
+  period: [
+    "periode",
+    "maand",
+    "kwartaal",
+    "datum",
+    "period",
+    "month",
+    "quarter",
+    "date",
+    "monat",
+    "zeitraum",
+  ],
+  revenue: [
+    "omzet",
+    "opbrengst",
+    "inkomsten",
+    "revenue",
+    "turnover",
+    "sales",
+    "income",
+    "umsatz",
+    "erlöse",
+  ],
   expenses: ["kosten", "uitgaven", "inkoop", "expenses", "costs", "spend", "aufwand", "ausgaben"],
   profit: ["winst", "resultaat", "profit", "result", "gewinn", "ergebnis"],
-  vatCharged: ["btw over omzet", "af te dragen btw", "btw hoog", "btw", "vat charged", "output vat", "vat", "umsatzsteuer", "ust"],
-  vatPaid: ["voorbelasting", "btw over kosten", "terug te vragen btw", "input vat", "vat paid", "vorsteuer"],
+  vatCharged: [
+    "btw over omzet",
+    "af te dragen btw",
+    "btw hoog",
+    "btw",
+    "vat charged",
+    "output vat",
+    "vat",
+    "umsatzsteuer",
+    "ust",
+  ],
+  vatPaid: [
+    "voorbelasting",
+    "btw over kosten",
+    "terug te vragen btw",
+    "input vat",
+    "vat paid",
+    "vorsteuer",
+  ],
 };
 
 /** Read a CSV the owner exported from his sheet. Delimiter is sniffed (`;` in
@@ -99,14 +137,23 @@ export function readSheetRows(cells: string[][]): SheetTable {
   const rows = cells.filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
   if (rows.length === 0) return { header: [], rows: [] };
   return {
-    header: rows[0].map((h) => String(h ?? "").replace(/^"|"$/g, "").trim()),
+    header: rows[0].map((h) =>
+      String(h ?? "")
+        .replace(/^"|"$/g, "")
+        .trim(),
+    ),
     rows: rows.slice(1).map((r) => r.map((c) => String(c ?? "").trim())),
   };
 }
 
 function sniffDelim(text: string): string {
   const head = text.split(/\r?\n/).slice(0, 5).join("\n");
-  const cands: Array<[string, number]> = [[";", 0], [",", 0], ["\t", 0], ["|", 0]];
+  const cands: Array<[string, number]> = [
+    [";", 0],
+    [",", 0],
+    ["\t", 0],
+    ["|", 0],
+  ];
   for (const c of cands) c[1] = head.split(c[0]).length - 1;
   cands.sort((a, b) => b[1] - a[1]);
   return cands[0][1] > 0 ? cands[0][0] : ",";
@@ -148,10 +195,14 @@ function matchHeader(header: readonly string[], names: readonly string[]): strin
  *
  * A field with no match is left out, for the owner to point at himself.
  */
-export function suggestTaxSheetMapping(header: string[], facts: readonly LearnedFact[] = []): TaxSheetMapping {
+export function suggestTaxSheetMapping(
+  header: string[],
+  facts: readonly LearnedFact[] = [],
+): TaxSheetMapping {
   const remembered = new Map<string, string>();
   for (const f of facts) {
-    if (norm(f.agent) === AGENTS.belasting && norm(f.key) === "kolom") remembered.set(norm(f.subject), f.value);
+    if (norm(f.agent) === AGENTS.belasting && norm(f.key) === "kolom")
+      remembered.set(norm(f.subject), f.value);
   }
   const mapping: TaxSheetMapping = {};
   const taken = new Set<string>();
@@ -165,7 +216,10 @@ export function suggestTaxSheetMapping(header: string[], facts: readonly Learned
   }
   for (const field of TAX_SHEET_FIELDS) {
     if (mapping[field] !== undefined) continue;
-    const chosen = matchHeader(header.filter((h) => !taken.has(norm(h))), SYNONYMS[field]);
+    const chosen = matchHeader(
+      header.filter((h) => !taken.has(norm(h))),
+      SYNONYMS[field],
+    );
     if (chosen !== undefined) {
       mapping[field] = chosen;
       taken.add(norm(chosen));
@@ -185,17 +239,43 @@ export function taxSheetMappingFacts(mapping: TaxSheetMapping, updatedAt: string
   for (const field of TAX_SHEET_FIELDS) {
     const column = mapping[field];
     if (!column) continue;
-    out.push(makeFact({ agent: AGENTS.belasting, subject: field, key: "kolom", value: column, source: "user", updatedAt }));
+    out.push(
+      makeFact({
+        agent: AGENTS.belasting,
+        subject: field,
+        key: "kolom",
+        value: column,
+        source: "user",
+        updatedAt,
+      }),
+    );
   }
   return out;
 }
 
-const firstOf = (year: string, month: number): string => `${year}-${String(month).padStart(2, "0")}-01`;
+const firstOf = (year: string, month: number): string =>
+  `${year}-${String(month).padStart(2, "0")}-01`;
 
 /** First three letters of a month name in Dutch, English or German. */
 const MONTH_BY_PREFIX: Record<string, number> = {
-  jan: 1, feb: 2, mrt: 3, mar: 3, mär: 3, apr: 4, mei: 5, may: 5, mai: 5, jun: 6,
-  jul: 7, aug: 8, sep: 9, okt: 10, oct: 10, nov: 11, dec: 12, dez: 12,
+  jan: 1,
+  feb: 2,
+  mrt: 3,
+  mar: 3,
+  mär: 3,
+  apr: 4,
+  mei: 5,
+  may: 5,
+  mai: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  okt: 10,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+  dez: 12,
 };
 
 /**
@@ -238,7 +318,10 @@ function cents(raw: string | undefined, signed: boolean): number | null {
  * `problems` is the honest surface for the UI: which figures LaVega could not
  * find a column for, and how many rows had no readable period.
  */
-export function readTaxSheet(table: SheetTable, mapping: TaxSheetMapping): { rows: TaxSheetRow[]; problems: string[] } {
+export function readTaxSheet(
+  table: SheetTable,
+  mapping: TaxSheetMapping,
+): { rows: TaxSheetRow[]; problems: string[] } {
   const col: Partial<Record<TaxSheetField, number>> = {};
   const missing: string[] = [];
   for (const field of TAX_SHEET_FIELDS) {
@@ -267,8 +350,12 @@ export function readTaxSheet(table: SheetTable, mapping: TaxSheetMapping): { row
       vatPaidCents: cents(at(r, "vatPaid"), false),
     };
     // A row with no figures at all is a spacer or a header repeat, not data.
-    const empty = row.revenueCents === null && row.expensesCents === null && row.profitCents === null
-      && row.vatChargedCents === null && row.vatPaidCents === null;
+    const empty =
+      row.revenueCents === null &&
+      row.expensesCents === null &&
+      row.profitCents === null &&
+      row.vatChargedCents === null &&
+      row.vatPaidCents === null;
     if (empty) continue;
     if (row.date === null) undated++;
     rows.push(row);
@@ -289,7 +376,13 @@ export function readTaxSheet(table: SheetTable, mapping: TaxSheetMapping): { row
  */
 export function sumTaxFigures(rows: readonly TaxSheetRow[], from: string, to: string): TaxFigures {
   type Sums = Omit<TaxFigures, "from" | "to" | "rowCount">;
-  const acc: Sums = { revenueCents: null, expensesCents: null, profitCents: null, vatChargedCents: null, vatPaidCents: null };
+  const acc: Sums = {
+    revenueCents: null,
+    expensesCents: null,
+    profitCents: null,
+    vatChargedCents: null,
+    vatPaidCents: null,
+  };
   const add = (k: keyof Sums, v: number | null) => {
     if (v === null) return;
     acc[k] = (acc[k] ?? 0) + v;

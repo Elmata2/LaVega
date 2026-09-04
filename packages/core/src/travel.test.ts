@@ -1,11 +1,27 @@
 import { describe, expect, test } from "vitest";
 import type { Account } from "./model.js";
 import {
-  countryCurrency, rankSpendOptions, rankJourneys, journeyHeadline, planTravel, TRAVEL_AGENT,
-  parseWithdrawalFee, withdrawalCost, withdrawalEffectivePct, rankWithdrawOptions, marketCardOffers,
-  withdrawalHeadline, catalogueCandidates, cheapestPerIssuer,
-  bestPayAdvice, payHeadline, marketWithdrawOptions, bestWithdrawAdvice,
-  compareCardOffers, offerSwitchGain, TRAVEL_TRIP_MONTHS,
+  countryCurrency,
+  rankSpendOptions,
+  rankJourneys,
+  journeyHeadline,
+  planTravel,
+  TRAVEL_AGENT,
+  parseWithdrawalFee,
+  withdrawalCost,
+  withdrawalEffectivePct,
+  rankWithdrawOptions,
+  marketCardOffers,
+  withdrawalHeadline,
+  catalogueCandidates,
+  cheapestPerIssuer,
+  bestPayAdvice,
+  payHeadline,
+  marketWithdrawOptions,
+  bestWithdrawAdvice,
+  compareCardOffers,
+  offerSwitchGain,
+  TRAVEL_TRIP_MONTHS,
 } from "./travel.js";
 import { describeNetBenefit } from "./netBenefit.js";
 import type { CatalogueEntryLike } from "./catalogRates.js";
@@ -13,10 +29,24 @@ import { makeFact, upsertFacts } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
 function acc(over: Partial<Account>): Account {
-  return { key: "k", iban: "", name: "Rekening", bank: "ING", entity: "Prive", currency: "EUR", balance: null, ...over };
+  return {
+    key: "k",
+    iban: "",
+    name: "Rekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: null,
+    ...over,
+  };
 }
 
-const fact = (subject: string, key: string, value: string, source: "agent" | "user" = "agent"): LearnedFact =>
+const fact = (
+  subject: string,
+  key: string,
+  value: string,
+  source: "agent" | "user" = "agent",
+): LearnedFact =>
   makeFact({ agent: TRAVEL_AGENT, subject, key, value, source, updatedAt: "2026-08-13" });
 
 const CARDS = [
@@ -33,14 +63,21 @@ test("countryCurrency maps destinations, marks euro countries, and refuses to gu
 });
 
 test("rankSpendOptions puts the cheapest net cost first and unknown terms LAST", () => {
-  const facts = upsertFacts([], [
-    fact("Trading 212 creditcard", "fxFeePct", "0"),
-    fact("Trading 212 creditcard", "cashbackPct", "1"), // net -1% — pays you to use it
-    fact("ING betaalpas", "fxFeePct", "1.2"),
-    // American Express deliberately unknown
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Trading 212 creditcard", "fxFeePct", "0"),
+      fact("Trading 212 creditcard", "cashbackPct", "1"), // net -1% — pays you to use it
+      fact("ING betaalpas", "fxFeePct", "1.2"),
+      // American Express deliberately unknown
+    ],
+  );
   const ranked = rankSpendOptions(CARDS, facts);
-  expect(ranked.map((o) => o.provider)).toEqual(["Trading 212 creditcard", "ING betaalpas", "American Express creditcard"]);
+  expect(ranked.map((o) => o.provider)).toEqual([
+    "Trading 212 creditcard",
+    "ING betaalpas",
+    "American Express creditcard",
+  ]);
   expect(ranked[0].netCostPct).toBe(-1);
   expect(ranked[2].known).toBe(false);
   expect(ranked[2].netCostPct).toBeNull(); // never assumed free
@@ -54,13 +91,23 @@ test("an unknown card does not outrank a known cheap one even at 0% cashback", (
 });
 
 test("planTravel combines the three answers for a non-euro destination", () => {
-  const facts = upsertFacts([], [
-    fact("Trading 212 creditcard", "fxFeePct", "0"),
-    fact("Trading 212 creditcard", "cashbackPct", "1"),
-    fact("Trading 212 creditcard", "transferFreeViaIdeal", "1"),
-    fact("ING betaalpas", "fxFeePct", "1.2"),
-  ]);
-  const plan = planTravel({ accounts: CARDS, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-13" });
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Trading 212 creditcard", "fxFeePct", "0"),
+      fact("Trading 212 creditcard", "cashbackPct", "1"),
+      fact("Trading 212 creditcard", "transferFreeViaIdeal", "1"),
+      fact("ING betaalpas", "fxFeePct", "1.2"),
+    ],
+  );
+  const plan = planTravel({
+    accounts: CARDS,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-13",
+  });
 
   expect(plan.currency).toBe("USD");
   expect(plan.spend[0].provider).toBe("Trading 212 creditcard"); // pay with this
@@ -73,23 +120,50 @@ test("planTravel combines the three answers for a non-euro destination", () => {
 
 test("planTravel skips conversion advice entirely for a euro destination", () => {
   const facts = upsertFacts([], [fact("Trading 212 creditcard", "fxFeePct", "0")]);
-  const plan = planTravel({ accounts: CARDS, txs: [], rates: [], facts, destination: "ES", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts: CARDS,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "ES",
+    asOf: "2026-08-13",
+  });
   expect(plan.currency).toBe("EUR");
   expect(plan.convert.method).toBeNull();
   expect(plan.convert.note).toContain("euro");
 });
 
 test("planTravel says what it needs when no card terms are known yet", () => {
-  const plan = planTravel({ accounts: CARDS, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts: CARDS,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   expect(plan.spend.every((o) => !o.known)).toBe(true);
   expect(plan.convert.note).toContain("ververs");
-  expect(plan.unknownProviders.sort()).toEqual(["American Express creditcard", "ING betaalpas", "Trading 212 creditcard"]);
+  expect(plan.unknownProviders.sort()).toEqual([
+    "American Express creditcard",
+    "ING betaalpas",
+    "Trading 212 creditcard",
+  ]);
 });
 
 test("planTravel surfaces the best place to keep savings", () => {
-  const accounts = [acc({ key: "spaar", bank: "ING", type: "Spaarrekening", balance: 20000, interestRate: 1.0 })];
+  const accounts = [
+    acc({ key: "spaar", bank: "ING", type: "Spaarrekening", balance: 20000, interestRate: 1.0 }),
+  ];
   const rates = [{ bank: "BigBank", product: "Spaarrekening", ratePct: 2.5, freeWithdrawal: true }];
-  const plan = planTravel({ accounts, txs: [], rates, facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates,
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   expect(plan.store.suggestion?.account.key).toBe("spaar");
   expect(plan.store.note).toContain("BigBank");
 });
@@ -108,7 +182,14 @@ const REAL_WORLD = [
 ];
 
 test("an account number is NEVER offered as a provider — no identifier can reach the agent", () => {
-  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts: REAL_WORLD,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   const providers = plan.spend.map((o) => o.provider);
   expect(providers).not.toContain("A 286-41213");
   expect(providers).not.toContain("D 128-83091");
@@ -117,13 +198,31 @@ test("an account number is NEVER offered as a provider — no identifier can rea
 });
 
 test("one row per PROVIDER, not per account — two ING accounts are one product", () => {
-  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
-  expect(plan.spend.map((o) => o.provider).sort()).toEqual(["ABN AMRO betaalpas", "American Express creditcard", "ING betaalpas"]);
+  const plan = planTravel({
+    accounts: REAL_WORLD,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
+  expect(plan.spend.map((o) => o.provider).sort()).toEqual([
+    "ABN AMRO betaalpas",
+    "American Express creditcard",
+    "ING betaalpas",
+  ]);
   expect(plan.spend.find((o) => o.provider === "ING betaalpas")!.accounts).toHaveLength(2);
 });
 
 test("accounts whose bank is unknown are counted, not silently dropped", () => {
-  const plan = planTravel({ accounts: REAL_WORLD, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts: REAL_WORLD,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   expect(plan.unidentifiedCount).toBe(2); // the two stale savings rows
 });
 
@@ -133,14 +232,37 @@ test("savings and investment accounts are not something you pay with abroad", ()
     acc({ key: "b", bank: "Trading 212", type: "Beleggingsrekening" }),
     acc({ key: "c", bank: "Revolut", type: "Betaalrekening" }),
   ];
-  const plan = planTravel({ accounts, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   expect(plan.spend.map((o) => o.provider)).toEqual(["Revolut betaalpas"]);
 });
 
 test("the savings advice names an account even when it has no bank (display, not provider)", () => {
-  const accounts = [acc({ key: "A28641213", bank: "", name: "A 286-41213", type: "Spaarrekening", balance: 20000, interestRate: 1.0 })];
+  const accounts = [
+    acc({
+      key: "A28641213",
+      bank: "",
+      name: "A 286-41213",
+      type: "Spaarrekening",
+      balance: 20000,
+      interestRate: 1.0,
+    }),
+  ];
   const rates = [{ bank: "BigBank", product: "Spaarrekening", ratePct: 3.1, freeWithdrawal: true }];
-  const plan = planTravel({ accounts, txs: [], rates, facts: [], destination: "US", asOf: "2026-08-13" });
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates,
+    facts: [],
+    destination: "US",
+    asOf: "2026-08-13",
+  });
   expect(plan.store.note).toContain("A 286-41213"); // no dangling "op  —"
   expect(plan.store.note).not.toMatch(/op\s+—/);
   // ...and it is still never offered as a provider to look up.
@@ -148,10 +270,21 @@ test("the savings advice names an account even when it has no bank (display, not
 });
 
 test("a spend option carries where its fee came from, so the owner can judge it", () => {
-  const facts = upsertFacts([], [
-    fact("Trading 212 creditcard", "fxFeePct", "0", "agent"),
-    makeFact({ agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "fxFeePct", value: "1.4", source: "user", updatedAt: "2026-08-13", note: "zelf nagekeken" }),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Trading 212 creditcard", "fxFeePct", "0", "agent"),
+      makeFact({
+        agent: TRAVEL_AGENT,
+        subject: "ING betaalpas",
+        key: "fxFeePct",
+        value: "1.4",
+        source: "user",
+        updatedAt: "2026-08-13",
+        note: "zelf nagekeken",
+      }),
+    ],
+  );
   const ranked = rankSpendOptions(CARDS, facts);
   const t212 = ranked.find((o) => o.provider === "Trading 212 creditcard")!;
   const ing = ranked.find((o) => o.provider === "ING betaalpas")!;
@@ -172,13 +305,20 @@ test("a debit card and a credit card at the SAME bank are separate products", ()
     acc({ key: "ing-cc", bank: "ING", type: "Creditcard" }),
     acc({ key: "abn-pas", bank: "ABN AMRO", type: "Betaalrekening" }),
   ];
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("ING creditcard", "fxFeePct", "2"),
-    fact("ABN AMRO betaalpas", "fxFeePct", "1"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+      fact("ING creditcard", "fxFeePct", "2"),
+      fact("ABN AMRO betaalpas", "fxFeePct", "1"),
+    ],
+  );
   const ranked = rankSpendOptions(accounts, facts);
-  expect(ranked.map((o) => o.provider)).toEqual(["ABN AMRO betaalpas", "ING betaalpas", "ING creditcard"]);
+  expect(ranked.map((o) => o.provider)).toEqual([
+    "ABN AMRO betaalpas",
+    "ING betaalpas",
+    "ING creditcard",
+  ]);
   expect(ranked[0].fxFeePct).toBe(1); // the cheapest product wins, not the cheapest bank
 });
 
@@ -187,16 +327,28 @@ test("points are shown but never priced into the ranking", () => {
     acc({ key: "amex", bank: "American Express", type: "Creditcard" }),
     acc({ key: "ing", bank: "ING", type: "Betaalrekening" }),
   ];
-  const facts = upsertFacts([], [
-    fact("American Express creditcard", "fxFeePct", "2.5"),
-    fact("American Express creditcard", "pointsPerEuro", "1"),
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-  ]);
-  const plan = planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-15" });
+  const facts = upsertFacts(
+    [],
+    [
+      fact("American Express creditcard", "fxFeePct", "2.5"),
+      fact("American Express creditcard", "pointsPerEuro", "1"),
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+    ],
+  );
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-15",
+  });
   // Cash still decides the order — a point has no honest euro value.
   expect(plan.spend[0].provider).toBe("ING betaalpas");
   expect(plan.spend[0].netCostPct).toBe(1.4);
-  expect(plan.spend.find((o) => o.provider === "American Express creditcard")!.netCostPct).toBe(2.5);
+  expect(plan.spend.find((o) => o.provider === "American Express creditcard")!.netCostPct).toBe(
+    2.5,
+  );
   // ...but the trade-off is stated instead of buried.
   expect(plan.spendNote).toContain("1.10% meer");
   expect(plan.spendNote).toContain("1 punt per euro");
@@ -204,11 +356,17 @@ test("points are shown but never priced into the ranking", () => {
 
 test("no points note when the cheapest card is also the one earning points", () => {
   const accounts = [acc({ key: "amex", bank: "American Express", type: "Creditcard" })];
-  const facts = upsertFacts([], [
-    fact("American Express creditcard", "fxFeePct", "0"),
-    fact("American Express creditcard", "pointsPerEuro", "1"),
-  ]);
-  expect(planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-15" }).spendNote).toBeNull();
+  const facts = upsertFacts(
+    [],
+    [
+      fact("American Express creditcard", "fxFeePct", "0"),
+      fact("American Express creditcard", "pointsPerEuro", "1"),
+    ],
+  );
+  expect(
+    planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-15" })
+      .spendNote,
+  ).toBeNull();
 });
 
 /* --- Journeys: the whole route priced, not just the card. Ranking cards alone
@@ -219,12 +377,15 @@ const ROUTE_ACCOUNTS = [
   acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
 ];
 
-const ROUTE_FACTS = upsertFacts([], [
-  fact("ING betaalpas", "fxFeePct", "1.4"),
-  fact("Revolut betaalpas", "fxFeePct", "0.5"), // paying direct still carries a surcharge
-  fact("Revolut betaalpas", "convertFeePct", "0"), // converting inside the app is free
-  fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
-]);
+const ROUTE_FACTS = upsertFacts(
+  [],
+  [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "0.5"), // paying direct still carries a surcharge
+    fact("Revolut betaalpas", "convertFeePct", "0"), // converting inside the app is free
+    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+  ],
+);
 
 test("rankJourneys prices the transfer and conversion legs, which can change the winner", () => {
   const js = rankJourneys(ROUTE_ACCOUNTS, ROUTE_FACTS);
@@ -248,11 +409,14 @@ test("rankJourneys prices the transfer and conversion legs, which can change the
 
 test("a journey with any unknown leg is unknown as a whole and ranks last", () => {
   // Revolut's conversion cost is deliberately absent.
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("Revolut betaalpas", "fxFeePct", "0"),
-    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+      fact("Revolut betaalpas", "fxFeePct", "0"),
+      fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+    ],
+  );
   const js = rankJourneys(ROUTE_ACCOUNTS, facts);
   const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
 
@@ -262,11 +426,14 @@ test("a journey with any unknown leg is unknown as a whole and ranks last", () =
 });
 
 test("an unknown transfer cost is not treated as free either", () => {
-  const facts = upsertFacts([], [
-    fact("Revolut betaalpas", "fxFeePct", "0"),
-    fact("Revolut betaalpas", "convertFeePct", "0"),
-    // transferFreeViaIdeal deliberately absent
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("Revolut betaalpas", "fxFeePct", "0"),
+      fact("Revolut betaalpas", "convertFeePct", "0"),
+      // transferFreeViaIdeal deliberately absent
+    ],
+  );
   const js = rankJourneys(ROUTE_ACCOUNTS, facts);
   const via = js.find((j) => j.via !== null && j.provider === "Revolut betaalpas");
 
@@ -290,13 +457,27 @@ test("journeyHeadline says nothing to convert for a euro destination, and asks f
 });
 
 test("planTravel carries the priced journeys and leads with one sentence", () => {
-  const plan = planTravel({ accounts: ROUTE_ACCOUNTS, txs: [], rates: [], facts: ROUTE_FACTS, destination: "US", asOf: "2026-08-16" });
+  const plan = planTravel({
+    accounts: ROUTE_ACCOUNTS,
+    txs: [],
+    rates: [],
+    facts: ROUTE_FACTS,
+    destination: "US",
+    asOf: "2026-08-16",
+  });
   expect(plan.journeys.length).toBeGreaterThan(0);
   expect(plan.journeys[0].totalCostPct).toBe(0);
   expect(plan.headline).toContain("Revolut");
 
   // A euro destination has nothing to rank.
-  const es = planTravel({ accounts: ROUTE_ACCOUNTS, txs: [], rates: [], facts: ROUTE_FACTS, destination: "ES", asOf: "2026-08-16" });
+  const es = planTravel({
+    accounts: ROUTE_ACCOUNTS,
+    txs: [],
+    rates: [],
+    facts: ROUTE_FACTS,
+    destination: "ES",
+    asOf: "2026-08-16",
+  });
   expect(es.journeys).toEqual([]);
   expect(es.headline).toContain("euro");
 });
@@ -304,11 +485,16 @@ test("planTravel carries the priced journeys and leads with one sentence", () =>
 test("the winning journey carries the provider's caveat, so a capped rate cannot read as absolute", () => {
   // Revolut converts at 0% up to EUR 1.000 a month and 1% above it. Reported as
   // a bare 0% it made LaVega rank it first and say "dat kost je niets".
-  const facts = upsertFacts([], [
-    { ...fact("Revolut betaalpas", "fxFeePct", "0"),
-      note: "0% tot € 1.000 per maand, daarna 1% fair-usage." },
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      {
+        ...fact("Revolut betaalpas", "fxFeePct", "0"),
+        note: "0% tot € 1.000 per maand, daarna 1% fair-usage.",
+      },
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+    ],
+  );
   const js = rankJourneys(ROUTE_ACCOUNTS, facts);
   const winner = js.find((j) => j.known);
 
@@ -332,9 +518,13 @@ const CAT_ING_BETAALPAS: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 1.4, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+      value: 1.4,
+      route: "agent",
+      sourceUrl: "https://assets.ing.com/kosten.pdf",
+      checkedAt: "2026-06-15",
       conditionsKnown: true,
-      conditions: "Geldt bij betalen met de Betaalpas in het buitenland in vreemde valuta (betalingen in euro's € 0,00); bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
+      conditions:
+        "Geldt bij betalen met de Betaalpas in het buitenland in vreemde valuta (betalingen in euro's € 0,00); bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
     },
   },
 };
@@ -346,9 +536,13 @@ const CAT_ING_CREDITCARD: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 2, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+      value: 2,
+      route: "agent",
+      sourceUrl: "https://assets.ing.com/kosten.pdf",
+      checkedAt: "2026-06-15",
       conditionsKnown: true,
-      conditions: "Geldt bij betalen met een creditcard in vreemde valuta. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+      conditions:
+        "Geldt bij betalen met een creditcard in vreemde valuta. Bij geldopnemen met de creditcard in vreemde valuta geldt een andere prijs: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
     },
   },
 };
@@ -360,9 +554,13 @@ const CAT_ING_PLATINUM: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 0, route: "agent", sourceUrl: "https://www.ing.nl/platinum", checkedAt: "2026-06-15",
+      value: 0,
+      route: "agent",
+      sourceUrl: "https://www.ing.nl/platinum",
+      checkedAt: "2026-06-15",
       conditionsKnown: true,
-      conditions: "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
+      conditions:
+        "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00% koersopslag per transactie",
     },
   },
 };
@@ -374,9 +572,13 @@ const CAT_ABN_CREDITCARD: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 2, route: "provider-pdf", sourceUrl: "https://abnamro.nl/voorwaarden.pdf", checkedAt: "2026-05-01",
+      value: 2,
+      route: "provider-pdf",
+      sourceUrl: "https://abnamro.nl/voorwaarden.pdf",
+      checkedAt: "2026-05-01",
       conditionsKnown: true,
-      conditions: "Geldt voor betalingen en geldopnames in vreemde valuta, omgerekend door Mastercard. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
+      conditions:
+        "Geldt voor betalingen en geldopnames in vreemde valuta, omgerekend door Mastercard. Voor geldopnames gelden daarnaast aparte transactiekosten (1% met maximum € 1,50 uit positief saldo, anders 4%).",
     },
   },
 };
@@ -388,9 +590,13 @@ const CAT_ABN_GOLD: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 2, route: "provider-pdf", sourceUrl: "https://abnamro.nl/gold.pdf", checkedAt: "2026-05-01",
+      value: 2,
+      route: "provider-pdf",
+      sourceUrl: "https://abnamro.nl/gold.pdf",
+      checkedAt: "2026-05-01",
       conditionsKnown: true,
-      conditions: "de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
+      conditions:
+        "de opslag is 2%. Voor geldopnames brengen wij daarnaast aparte kosten in rekening (artikel 13.3).",
     },
   },
 };
@@ -402,7 +608,10 @@ const CAT_212: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 0, route: "provider-page", sourceUrl: "https://trading212.com/card", checkedAt: "2026-08-01",
+      value: 0,
+      route: "provider-page",
+      sourceUrl: "https://trading212.com/card",
+      checkedAt: "2026-08-01",
       conditionsKnown: true,
       conditions: "Geen wisselkoersopslag op kaartbetalingen in vreemde valuta.",
     },
@@ -419,9 +628,13 @@ const CAT_N26_GO: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 0, route: "agent", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      value: 0,
+      route: "agent",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
       conditionsKnown: true,
-      conditions: "WORDING CAVEAT \u2014 the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
+      conditions:
+        "WORDING CAVEAT \u2014 the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. SCOPE: NL named on the price list's country cover. Unlike Standard/Smart, Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal and N26               Free / Business Metal users'. EUR-ATM fair use on Go is 5 free withdrawals per calendar month, EUR 2.00 each thereafter.",
     },
   },
 };
@@ -433,7 +646,10 @@ const CAT_REVOLUT: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 1, route: "provider-page", sourceUrl: "https://revolut.com/fees", checkedAt: "2026-08-01",
+      value: 1,
+      route: "provider-page",
+      sourceUrl: "https://revolut.com/fees",
+      checkedAt: "2026-08-01",
       conditionsKnown: true,
       conditions: "1% opslag buiten de maandelijkse vrije ruimte op het Standard-plan.",
     },
@@ -447,14 +663,22 @@ const CAT_CRYPTO_OBSIDIAN: CatalogueEntryLike = {
   kind: "prepaid",
   fields: {
     fxFeePct: {
-      value: 0, route: "provider-page", sourceUrl: "https://crypto.com/cards", checkedAt: "2026-08-01",
+      value: 0,
+      route: "provider-page",
+      sourceUrl: "https://crypto.com/cards",
+      checkedAt: "2026-08-01",
       conditionsKnown: true,
-      conditions: "No fee on non-EUR purchases. ATM Withdrawal: 2% on amounts above the monthly free ATM limit.",
+      conditions:
+        "No fee on non-EUR purchases. ATM Withdrawal: 2% on amounts above the monthly free ATM limit.",
     },
     cashbackPct: {
-      value: 5, route: "provider-page", sourceUrl: "https://crypto.com/cards", checkedAt: "2026-08-01",
+      value: 5,
+      route: "provider-page",
+      sourceUrl: "https://crypto.com/cards",
+      checkedAt: "2026-08-01",
       conditionsKnown: true,
-      conditions: "TIER GATE: crypto.com/nl/cards prices Obsidian at '€450,000 12-month CRO staking'. Paid in CRO to the Token Wallet, not euro.",
+      conditions:
+        "TIER GATE: crypto.com/nl/cards prices Obsidian at '€450,000 12-month CRO staking'. Paid in CRO to the Token Wallet, not euro.",
     },
   },
 };
@@ -468,26 +692,48 @@ const CAT_UNCOVERED: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 0, route: "agent", sourceUrl: "https://example.org/mystery", checkedAt: "2026-08-01",
-      conditionsKnown: false, conditions: null,
+      value: 0,
+      route: "agent",
+      sourceUrl: "https://example.org/mystery",
+      checkedAt: "2026-08-01",
+      conditionsKnown: false,
+      conditions: null,
     },
   },
 };
 
 const CATALOGUE = [
-  CAT_ING_BETAALPAS, CAT_ING_CREDITCARD, CAT_ING_PLATINUM, CAT_ABN_CREDITCARD,
-  CAT_ABN_GOLD, CAT_212, CAT_N26_GO, CAT_REVOLUT, CAT_CRYPTO_OBSIDIAN, CAT_UNCOVERED,
+  CAT_ING_BETAALPAS,
+  CAT_ING_CREDITCARD,
+  CAT_ING_PLATINUM,
+  CAT_ABN_CREDITCARD,
+  CAT_ABN_GOLD,
+  CAT_212,
+  CAT_N26_GO,
+  CAT_REVOLUT,
+  CAT_CRYPTO_OBSIDIAN,
+  CAT_UNCOVERED,
 ];
 
 test("a withdrawal priced as a percentage PLUS a fixed fee is read in either order", () => {
-  const ing = parseWithdrawalFee("bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%)");
+  const ing = parseWithdrawalFee(
+    "bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%)",
+  );
   expect(ing.known).toBe(true);
-  expect(ing.components).toEqual([{ kind: "fixed", eur: 3.5 }, { kind: "pct", pct: 1.4, minEur: null }]);
+  expect(ing.components).toEqual([
+    { kind: "fixed", eur: 3.5 },
+    { kind: "pct", pct: 1.4, minEur: null },
+  ]);
 
   // SNS writes the same two components the other way round.
-  const sns = parseWithdrawalFee("Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname)");
+  const sns = parseWithdrawalFee(
+    "Contant geld opnemen met de betaalpas in vreemde valuta is een apart tarief (1,4% + € 3,50 per opname)",
+  );
   expect(sns.known).toBe(true);
-  expect(sns.components).toEqual([{ kind: "pct", pct: 1.4, minEur: null }, { kind: "fixed", eur: 3.5 }]);
+  expect(sns.components).toEqual([
+    { kind: "pct", pct: 1.4, minEur: null },
+    { kind: "fixed", eur: 3.5 },
+  ]);
 });
 
 test("a minimum attaches to the percentage it qualifies, and two percentages stack", () => {
@@ -540,14 +786,21 @@ test("rankWithdrawOptions prices his own cards for cash, cheapest first, unknown
     acc({ key: "ingc", bank: "ING", type: "Creditcard" }),
     acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening" }),
   ];
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("ING creditcard", "fxFeePct", "2"), // narrows ING's two creditcards to the plain one
-    fact("Trading 212 betaalpas", "fxFeePct", "0"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+      fact("ING creditcard", "fxFeePct", "2"), // narrows ING's two creditcards to the plain one
+      fact("Trading 212 betaalpas", "fxFeePct", "0"),
+    ],
+  );
   const ranked = rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE);
 
-  expect(ranked.map((o) => o.provider)).toEqual(["ING betaalpas", "ING creditcard", "Trading 212 betaalpas"]);
+  expect(ranked.map((o) => o.provider)).toEqual([
+    "ING betaalpas",
+    "ING creditcard",
+    "Trading 212 betaalpas",
+  ]);
   expect(ranked[0].costOnReference).toBe(6.3); // € 3,50 + 1,4% of € 200
   expect(ranked[1].costOnReference).toBe(12);
   expect(ranked[2].fee.known).toBe(false); // Trading 212's page prices no withdrawal
@@ -604,12 +857,18 @@ test("planTravel answers 'what could I switch to' beside 'what should I pay with
     acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 500 }),
     acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
   ];
-  const facts = upsertFacts([], [
-    fact("Revolut betaalpas", "fxFeePct", "1"),
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [fact("Revolut betaalpas", "fxFeePct", "1"), fact("ING betaalpas", "fxFeePct", "1.4")],
+  );
   const plan = planTravel({
-    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
   });
 
   // What he holds still decides what he can pay with TODAY.
@@ -626,7 +885,14 @@ test("planTravel answers 'what could I switch to' beside 'what should I pay with
 test("without a catalogue nothing is invented — no offers, no switch, no cash price", () => {
   const accounts = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
-  const plan = planTravel({ accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20" });
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+  });
   expect(plan.offers).toEqual([]);
   // Nothing to switch to, so the advice is his own card and claims no saving.
   expect(plan.pay?.held).toBe(true);
@@ -644,7 +910,7 @@ test("a figure whose document prices withdrawal differently elsewhere carries th
   // and the clause that tiers it never says "ATM" again — so a cash-only scan
   // would have shown 0,2% bare to someone flying outside the EU.
   const fee = parseWithdrawalFee(
-    'Effective 1 October 2026, Ruby tier: non-EUR purchases and ATM transactions within the EU & UK 0.2%; outside the EU & UK no fee up to EUR 400 per calendar month, 2.0% thereafter',
+    "Effective 1 October 2026, Ruby tier: non-EUR purchases and ATM transactions within the EU & UK 0.2%; outside the EU & UK no fee up to EUR 400 per calendar month, 2.0% thereafter",
   );
   expect(fee.known).toBe(true);
   expect(fee.components).toEqual([{ kind: "pct", pct: 0.2, minEur: null }]);
@@ -667,14 +933,19 @@ test("the same figure quoted twice in one row is one charge, not two", () => {
   );
   expect(fee.components).toEqual([{ kind: "pct", pct: 1.7, minEur: null }]);
   // Genuinely stacked charges differ from each other, so they still both count.
-  const stacked = parseWithdrawalFee("Opname van contant geld in vreemde valuta 4% van opgenomen bedrag + 2% wisselkoersopslag");
+  const stacked = parseWithdrawalFee(
+    "Opname van contant geld in vreemde valuta 4% van opgenomen bedrag + 2% wisselkoersopslag",
+  );
   expect(stacked.components).toHaveLength(2);
 });
 
 test("withdrawalHeadline leads with the euros and warns about small withdrawals", () => {
   const accounts = [acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 })];
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
-  const line = withdrawalHeadline(rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE), "USD");
+  const line = withdrawalHeadline(
+    rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE),
+    "USD",
+  );
 
   expect(line).toContain("ING betaalpas");
   expect(line).toContain("€ 6,30");
@@ -685,7 +956,10 @@ test("withdrawalHeadline leads with the euros and warns about small withdrawals"
 test("with no cash price anywhere the headline says that, and never says free", () => {
   const accounts = [acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening" })];
   const facts = upsertFacts([], [fact("Trading 212 betaalpas", "fxFeePct", "0")]);
-  const line = withdrawalHeadline(rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE), "USD");
+  const line = withdrawalHeadline(
+    rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE),
+    "USD",
+  );
   expect(line).toMatch(/weten we .*niet|weten we wat|onbekend/i);
   expect(line).not.toMatch(/gratis|kost je niets/i);
 });
@@ -695,12 +969,19 @@ test("a card is matched by its product name too, because the issuer is often a d
   // the issuer alone found ING's debit card and missed both of its credit
   // cards — the same mismatch the review reports for the savings table.
   const ics: CatalogueEntryLike = {
-    id: "ing-creditcard", product: "ING creditcard", issuer: "International Card Services (ICS)", kind: "creditcard",
+    id: "ing-creditcard",
+    product: "ING creditcard",
+    issuer: "International Card Services (ICS)",
+    kind: "creditcard",
     fields: {
       fxFeePct: {
-        value: 2, route: "provider-pdf", sourceUrl: "https://ing.nl/tarieven.pdf", checkedAt: "2026-06-15",
+        value: 2,
+        route: "provider-pdf",
+        sourceUrl: "https://ing.nl/tarieven.pdf",
+        checkedAt: "2026-06-15",
         conditionsKnown: true,
-        conditions: "Bij geldopnemen met de creditcard in vreemde valuta: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
+        conditions:
+          "Bij geldopnemen met de creditcard in vreemde valuta: 4,00% van het opgenomen bedrag met minimum € 4,50 + 2,00% koersopslag.",
       },
     },
   };
@@ -714,15 +995,24 @@ test("a card is matched by its product name too, because the issuer is often a d
 
 test("one row per issuer, so four N26 plans are not four near-identical answers", () => {
   const plan = (id: string, value: number): CatalogueEntryLike => ({
-    id, product: `N26 ${id} betaalpas`, issuer: "N26 Bank AG (Germany); Mastercard Debit", kind: "betaalpas",
+    id,
+    product: `N26 ${id} betaalpas`,
+    issuer: "N26 Bank AG (Germany); Mastercard Debit",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value, route: "provider-pdf", sourceUrl: "https://n26.com/prices", checkedAt: "2026-08-01",
-        conditionsKnown: true, conditions: "0% op kaartbetalingen.",
+        value,
+        route: "provider-pdf",
+        sourceUrl: "https://n26.com/prices",
+        checkedAt: "2026-08-01",
+        conditionsKnown: true,
+        conditions: "0% op kaartbetalingen.",
       },
     },
   });
-  const collapsed = cheapestPerIssuer(marketCardOffers([plan("go", 0), plan("metal", 0), plan("smart", 0.5)], []));
+  const collapsed = cheapestPerIssuer(
+    marketCardOffers([plan("go", 0), plan("metal", 0), plan("smart", 0.5)], []),
+  );
   expect(collapsed).toHaveLength(1);
   expect(collapsed[0].productId).toBe("go"); // the cheapest, and stable between renders
 });
@@ -730,7 +1020,15 @@ test("one row per issuer, so four N26 plans are not four near-identical answers"
 test("in euroland the cash advice is withdrawn, not repeated — those tariffs are for foreign currency", () => {
   const accounts = [acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 })];
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
-  const es = planTravel({ accounts, txs: [], rates: [], facts, destination: "ES", asOf: "2026-08-20", catalogue: CATALOGUE });
+  const es = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "ES",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
+  });
 
   expect(es.withdraw).toEqual([]);
   expect(es.withdrawHeadline).toContain("euro");
@@ -754,7 +1052,9 @@ describe("parseWithdrawalFee: gratis", () => {
   });
 
   test("Engels net zo goed — de catalogus bevat beide talen", () => {
-    expect(parseWithdrawalFee("Foreign-currency ATM withdrawals are free for these plans.").known).toBe(true);
+    expect(
+      parseWithdrawalFee("Foreign-currency ATM withdrawals are free for these plans.").known,
+    ).toBe(true);
   });
 
   test("GRATIS MET EEN VRIJE RUIMTE IS NIET GRATIS en blijft onbekend", () => {
@@ -772,7 +1072,9 @@ describe("parseWithdrawalFee: gratis", () => {
   test("een geprijsde regel wint nog steeds van het woord gratis in dezelfde tekst", () => {
     // "Betalen gratis, opnemen € 3,50 + 1,4%" mag geen 0 worden omdat het woord
     // gratis erin staat.
-    const f = parseWithdrawalFee("Betalen is gratis; bij geldopname in vreemde valuta geldt € 3,50 + 1,40%.");
+    const f = parseWithdrawalFee(
+      "Betalen is gratis; bij geldopname in vreemde valuta geldt € 3,50 + 1,40%.",
+    );
     expect(f.known).toBe(true);
     expect(withdrawalEffectivePct(f, 100)).toBe(4.9);
   });
@@ -793,7 +1095,13 @@ test("the recommendation is the cheapest proven card, even one he does not hold,
   const accounts = [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })];
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
   const plan = planTravel({
-    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
   });
 
   expect(plan.pay?.product).toBe("212 Card");
@@ -820,14 +1128,23 @@ test("a card he does not hold never wins a tie — opening an account for nothin
     acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
     acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
   ];
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("Revolut betaalpas", "fxFeePct", "0"),
-    fact("Revolut betaalpas", "convertFeePct", "0"),
-    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+      fact("Revolut betaalpas", "fxFeePct", "0"),
+      fact("Revolut betaalpas", "convertFeePct", "0"),
+      fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+    ],
+  );
   const plan = planTravel({
-    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
   });
 
   expect(plan.pay?.held).toBe(true);
@@ -844,14 +1161,23 @@ test("the baseline is the cheapest thing he can ALREADY do, route included — n
     acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
     acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
   ];
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("Revolut betaalpas", "fxFeePct", "0.5"),
-    fact("Revolut betaalpas", "convertFeePct", "0.2"),
-    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact("ING betaalpas", "fxFeePct", "1.4"),
+      fact("Revolut betaalpas", "fxFeePct", "0.5"),
+      fact("Revolut betaalpas", "convertFeePct", "0.2"),
+      fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+    ],
+  );
   const plan = planTravel({
-    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
   });
 
   expect(plan.pay?.product).toBe("212 Card");
@@ -888,12 +1214,18 @@ test("the cash advice is the proven cheapest, and it names the cards whose price
     acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 }),
     acc({ key: "rev", bank: "Revolut", type: "Betaalrekening", balance: 100 }),
   ];
-  const facts = upsertFacts([], [
-    fact("ING betaalpas", "fxFeePct", "1.4"),
-    fact("Revolut betaalpas", "fxFeePct", "1"),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [fact("ING betaalpas", "fxFeePct", "1.4"), fact("Revolut betaalpas", "fxFeePct", "1")],
+  );
   const plan = planTravel({
-    accounts, txs: [], rates: [], facts, destination: "US", asOf: "2026-08-20", catalogue: CATALOGUE,
+    accounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: "2026-08-20",
+    catalogue: CATALOGUE,
   });
 
   const a = plan.withdrawAdvice!;
@@ -918,7 +1250,10 @@ test("his own card still wins the cash advice when nothing proven beats it", () 
   const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
   const own = rankWithdrawOptions(rankSpendOptions(accounts, facts), CATALOGUE);
   // A market of one, and it is his.
-  const market = marketWithdrawOptions([CAT_ING_BETAALPAS], [{ provider: "ING betaalpas", fxFeePct: 1.4 }]);
+  const market = marketWithdrawOptions(
+    [CAT_ING_BETAALPAS],
+    [{ provider: "ING betaalpas", fxFeePct: 1.4 }],
+  );
 
   const a = bestWithdrawAdvice(own, market)!;
   expect(a.held).toBe(true);
@@ -940,10 +1275,21 @@ test("his own card still wins the cash advice when nothing proven beats it", () 
  * op 21 augustus bijkwam werd hier niet getoetst. Vandaar dat de functie een eigen
  * export en een eigen invoertype heeft. */
 describe("gelijkspel in de aanbevelingen", () => {
-  const offer = (id: string, tripEur: number, held: boolean, conditional = false, tripCostKnown = true) => ({
-    productId: id, tripCostCents: Math.round(tripEur * 100), tripCostKnown, conditional, held,
+  const offer = (
+    id: string,
+    tripEur: number,
+    held: boolean,
+    conditional = false,
+    tripCostKnown = true,
+  ) => ({
+    productId: id,
+    tripCostCents: Math.round(tripEur * 100),
+    tripCostKnown,
+    conditional,
+    held,
   });
-  const first = (...offers: ReturnType<typeof offer>[]) => [...offers].sort(compareCardOffers)[0].productId;
+  const first = (...offers: ReturnType<typeof offer>[]) =>
+    [...offers].sort(compareCardOffers)[0].productId;
 
   test("bij dezelfde prijs staat zijn eigen kaart bovenaan", () => {
     expect(first(offer("nieuw", 0, false), offer("zijne", 0, true))).toBe("zijne");
@@ -955,19 +1301,25 @@ describe("gelijkspel in de aanbevelingen", () => {
   });
 
   test("en een onvoorwaardelijke 0% wint van zijn eigen 0% met een plafond", () => {
-    expect(first(offer("zijne-met-plafond", 0, true, true), offer("nieuw-vrij", 0, false, false))).toBe("nieuw-vrij");
+    expect(
+      first(offer("zijne-met-plafond", 0, true, true), offer("nieuw-vrij", 0, false, false)),
+    ).toBe("nieuw-vrij");
   });
 
   test("bij gelijke stand wint de prijs die we KUNNEN AANTONEN", () => {
     // Van een onbekende kaartprijs weten we alleen dat er nog iets af kan gaan,
     // dus het gelijke bedrag is bij hem een ondergrens en bij de ander een feit.
-    expect(first(offer("onbekend", 0, false, false, false), offer("bewezen", 0, false, false, true))).toBe("bewezen");
+    expect(
+      first(offer("onbekend", 0, false, false, false), offer("bewezen", 0, false, false, true)),
+    ).toBe("bewezen");
   });
 
   test("en de kaartkosten beslissen: 0% opslag voor € 16,90 per maand verliest van 1% gratis", () => {
     // ZIJN ZIN, in één assert: "als een kaart 5 euro per maand kost en ons 3
     // oplevert gaan we er op achteruit." Op de opslag alleen won de duurste kaart.
-    expect(first(offer("metal-0%-maar-16,90", 16.9, false), offer("gratis-1%", 10, false))).toBe("gratis-1%");
+    expect(first(offer("metal-0%-maar-16,90", 16.9, false), offer("gratis-1%", 10, false))).toBe(
+      "gratis-1%",
+    );
   });
 });
 
@@ -995,9 +1347,13 @@ const CAT_N26_METAL_CARD: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 0, route: "agent", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      value: 0,
+      route: "agent",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
       conditionsKnown: true,
-      conditions: "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
+      conditions:
+        "WORDING CAVEAT — the 0 is written as 'Free' / 'without foreign currency surcharge'; no numeral in the row. Metal costs '16.90 € per month (membership fee)'; a replacement Metal card is 45.00 €.",
     },
   },
 };
@@ -1011,10 +1367,14 @@ const CAT_N26_METAL_PLAN: CatalogueEntryLike = {
   kind: "betaalrekening",
   fields: {
     accountFee: {
-      value: 16.9, period: "maand", route: "provider-pdf",
-      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
+      value: 16.9,
+      period: "maand",
+      route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
       conditionsKnown: true,
-      conditions: "Membership fee. N26 kan korting geven bij vooruitbetaling per jaar of half jaar; de hoogte daarvan staat niet in de prijslijst.",
+      conditions:
+        "Membership fee. N26 kan korting geven bij vooruitbetaling per jaar of half jaar; de hoogte daarvan staat niet in de prijslijst.",
       // `CatalogValue` kent geen `period`, de accountFee-rij wel — `readAccountFee`
       // valideert hem apart. Vandaar de cast: het veld is echt, het type hier niet.
     } as unknown as import("./catalog.js").CatalogValue,
@@ -1029,9 +1389,13 @@ const CAT_N26_GO_PLAN: CatalogueEntryLike = {
   kind: "betaalrekening",
   fields: {
     accountFee: {
-      value: 9.9, period: "maand", route: "provider-pdf",
-      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
-      conditionsKnown: true, conditions: "Membership fee. Dit is het abonnement dat vroeger 'N26 You' heette.",
+      value: 9.9,
+      period: "maand",
+      route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
+      conditionsKnown: true,
+      conditions: "Membership fee. Dit is het abonnement dat vroeger 'N26 You' heette.",
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
@@ -1045,15 +1409,23 @@ const CAT_TRADE_REPUBLIC: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 0, route: "agent", sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json", checkedAt: "2026-05-11",
+      value: 0,
+      route: "agent",
+      sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      checkedAt: "2026-05-11",
       conditionsKnown: true,
-      conditions: "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. Card carries no subscription fee.",
+      conditions:
+        "WORDING CAVEAT — the 0 is written as 'brengen wij geen extra omwisselkosten in rekening'; no numeral. Card carries no subscription fee.",
     },
     accountFee: {
-      value: 0, period: "maand", route: "provider-page",
-      sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json", checkedAt: "2025-09-10",
+      value: 0,
+      period: "maand",
+      route: "provider-page",
+      sourceUrl: "https://traderepublic.com/nl-nl/kaart/_payload.json",
+      checkedAt: "2025-09-10",
       conditionsKnown: true,
-      conditions: "De pagina zegt 'Wij rekenen geen kosten voor onze betaalrekening'. Uitgesproken nul.",
+      conditions:
+        "De pagina zegt 'Wij rekenen geen kosten voor onze betaalrekening'. Uitgesproken nul.",
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
@@ -1068,10 +1440,15 @@ const CAT_ING_BETAALPAKKET: CatalogueEntryLike = {
   kind: "betaalpakket",
   fields: {
     accountFee: {
-      value: 6.85, period: "maand", route: "provider-pdf",
-      sourceUrl: "https://assets.ing.com/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf", checkedAt: "2026-06-15",
+      value: 6.85,
+      period: "maand",
+      route: "provider-pdf",
+      sourceUrl:
+        "https://assets.ing.com/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
+      checkedAt: "2026-06-15",
       conditionsKnown: true,
-      conditions: "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
+      conditions:
+        "Niet meer te openen pakket; geldt alleen voor bestaande klanten. Prijs is voor de betaalrekening op één naam inclusief betaalpas.",
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
@@ -1083,9 +1460,13 @@ const CAT_ABN_CREDITCARD_PRICED: CatalogueEntryLike = {
   fields: {
     ...CAT_ABN_CREDITCARD.fields,
     accountFee: {
-      value: 2.55, period: "maand", route: "provider-pdf",
-      sourceUrl: "https://www.icscards.nl/webdocuments/666/av-abn-amro", checkedAt: "2026-08-19",
-      conditionsKnown: true, conditions: "Maandelijkse bijdrage voor de creditcard.",
+      value: 2.55,
+      period: "maand",
+      route: "provider-pdf",
+      sourceUrl: "https://www.icscards.nl/webdocuments/666/av-abn-amro",
+      checkedAt: "2026-08-19",
+      conditionsKnown: true,
+      conditions: "Maandelijkse bijdrage voor de creditcard.",
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
@@ -1097,9 +1478,13 @@ const CAT_ABN_BETAALPAS: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: 1.2, route: "agent", sourceUrl: "https://assets.abnamro.com/informatiedocument-basispakket-betalen.pdf", checkedAt: "2026-01-01",
+      value: 1.2,
+      route: "agent",
+      sourceUrl: "https://assets.abnamro.com/informatiedocument-basispakket-betalen.pdf",
+      checkedAt: "2026-01-01",
       conditionsKnown: true,
-      conditions: "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop.",
+      conditions:
+        "Geldt binnen het BasisPakket Betalen bij betalen met een betaalpas in vreemde valuta; per keer komt daar € 0,15 bovenop.",
     },
   },
 };
@@ -1113,14 +1498,22 @@ const CAT_AMEX_BUSINESS_GOLD: CatalogueEntryLike = {
   kind: "creditcard",
   fields: {
     fxFeePct: {
-      value: 2.5, route: "agent", sourceUrl: "https://www.americanexpress.com/NL-Overeenkomst-Business-Card.pdf", checkedAt: "2023-03-15",
+      value: 2.5,
+      route: "agent",
+      sourceUrl: "https://www.americanexpress.com/NL-Overeenkomst-Business-Card.pdf",
+      checkedAt: "2023-03-15",
       conditionsKnown: true,
-      conditions: "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd.",
+      conditions:
+        "Wisselkoersopslag op het omgewisselde bedrag in euro bij transacties die niet in Euro zijn uitgevoerd.",
     },
     accountFee: {
-      value: 270, period: "jaar", route: "provider-pdf",
-      sourceUrl: "https://www.americanexpress.com/business-gold-card/actievoorwaarden.pdf", checkedAt: "2026-06-02",
-      conditionsKnown: true, conditions: "Het jaarbedrag van € 270 staat op de Business Companion Gold-pagina.",
+      value: 270,
+      period: "jaar",
+      route: "provider-pdf",
+      sourceUrl: "https://www.americanexpress.com/business-gold-card/actievoorwaarden.pdf",
+      checkedAt: "2026-06-02",
+      conditionsKnown: true,
+      conditions: "Het jaarbedrag van € 270 staat op de Business Companion Gold-pagina.",
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
@@ -1132,7 +1525,11 @@ describe("de prijs van de kaart staat vaak op een ANDERE catalogusrij", () => {
     expect(metal.holdingCost.kind).toBe("known");
     // De EENHEID blijft die van het document. Een jaarbedrag van hem maken is
     // een factor twaalf, en dat is de fout die accountCosts.ts bewaakt.
-    expect(metal.holdingCost).toMatchObject({ kind: "known", why: "stated", amount: { cents: 1690, period: "maand" } });
+    expect(metal.holdingCost).toMatchObject({
+      kind: "known",
+      why: "stated",
+      amount: { cents: 1690, period: "maand" },
+    });
     expect(metal.tripCostKnown).toBe(true);
     // 0% opslag op € 1.000 is niets; de reis kost dus precies één maandnota.
     expect(metal.tripCostCents).toBe(1690);
@@ -1142,8 +1539,15 @@ describe("de prijs van de kaart staat vaak op een ANDERE catalogusrij", () => {
     // Beide 0% opslag. Op de opslag alleen was dit een gelijkspel dat door de
     // catalogusvolgorde werd beslist — en dan kon de kaart van € 16,90 bovenaan
     // komen. Nu niet meer.
-    const offers = marketCardOffers([CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN, CAT_TRADE_REPUBLIC], [], 1);
-    expect(offers.map((o) => o.productId)).toEqual(["trade-republic-betaalpas", "n26-metal-betaalpas"]);
+    const offers = marketCardOffers(
+      [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN, CAT_TRADE_REPUBLIC],
+      [],
+      1,
+    );
+    expect(offers.map((o) => o.productId)).toEqual([
+      "trade-republic-betaalpas",
+      "n26-metal-betaalpas",
+    ]);
     expect(offers[0].tripCostCents).toBe(0);
     expect(offers[1].tripCostCents).toBe(1690);
   });
@@ -1174,7 +1578,10 @@ describe("de prijs van de kaart staat vaak op een ANDERE catalogusrij", () => {
     expect(pas.holdingCost.kind).toBe("unknown");
     // De creditcard houdt zijn eigen prijs wel, want die staat op zijn eigen rij.
     const card = offers.find((o) => o.productId === "abn-amro-creditcard")!;
-    expect(card.holdingCost).toMatchObject({ kind: "known", amount: { cents: 255, period: "maand" } });
+    expect(card.holdingCost).toMatchObject({
+      kind: "known",
+      amount: { cents: 255, period: "maand" },
+    });
   });
 
   test("de eigen rij gaat voor de pakketrij", () => {
@@ -1194,7 +1601,11 @@ describe("een kaart die hij AL HEEFT kost hem marginaal niets", () => {
     expect(metal.held).toBe(true);
     // Nul, en met de REDEN erbij: dezelfde nul in de rekensom en een heel ander
     // verhaal op het scherm dan een prijs die niemand noemt.
-    expect(metal.holdingCost).toMatchObject({ kind: "known", why: "already-held", amount: { cents: 0 } });
+    expect(metal.holdingCost).toMatchObject({
+      kind: "known",
+      why: "already-held",
+      amount: { cents: 0 },
+    });
     expect(metal.tripCostCents).toBe(0);
   });
 
@@ -1257,8 +1668,14 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
 
   test("...en dan blijft de aanbeveling zijn EIGEN kaart", () => {
     const plan = planTravel({
-      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
-      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], tripMonths: 1,
+      accounts: HIS,
+      txs: [],
+      rates: [],
+      facts: HIS_FACTS,
+      destination: "US",
+      asOf: "2026-08-21",
+      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN],
+      tripMonths: 1,
     });
     expect(plan.pay?.held).toBe(true);
     expect(plan.pay?.product).toBe("ING betaalpas");
@@ -1287,8 +1704,14 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
 
   test("en de kop zegt bij onbekende kosten dat er een gat zit, zonder 'netto'", () => {
     const plan = planTravel({
-      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
-      catalogue: [CAT_ING_PLATINUM], tripMonths: 1,
+      accounts: HIS,
+      txs: [],
+      rates: [],
+      facts: HIS_FACTS,
+      destination: "US",
+      asOf: "2026-08-21",
+      catalogue: [CAT_ING_PLATINUM],
+      tripMonths: 1,
     });
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.netSavingOnReference).toBeNull(); // er is geen netto
@@ -1300,8 +1723,14 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
   test("KOSTEN BEKEND en netto positief: dan mag het woord netto er staan", () => {
     // N26 Go kost € 9,90 per maand en scheelt € 14 opslag: € 4,10 over.
     const plan = planTravel({
-      accounts: HIS, txs: [], rates: [], facts: HIS_FACTS, destination: "US", asOf: "2026-08-21",
-      catalogue: [CAT_N26_GO, CAT_N26_GO_PLAN], tripMonths: 1,
+      accounts: HIS,
+      txs: [],
+      rates: [],
+      facts: HIS_FACTS,
+      destination: "US",
+      asOf: "2026-08-21",
+      catalogue: [CAT_N26_GO, CAT_N26_GO_PLAN],
+      tripMonths: 1,
     });
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.netSavingOnReference).toBe(4.1);
@@ -1320,8 +1749,14 @@ describe("de aanbeveling zelf: netto, bruto, of geen aanbeveling", () => {
     // € 1.000" over een kaart van € 16,90 per maand is de misleiding waar deze
     // hele lane voor bestaat.
     const plan = planTravel({
-      accounts: HIS, txs: [], rates: [], facts: [], destination: "US", asOf: "2026-08-21",
-      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN], tripMonths: 1,
+      accounts: HIS,
+      txs: [],
+      rates: [],
+      facts: [],
+      destination: "US",
+      asOf: "2026-08-21",
+      catalogue: [CAT_N26_METAL_CARD, CAT_N26_METAL_PLAN],
+      tripMonths: 1,
     });
     expect(plan.pay?.held).toBe(false);
     expect(plan.pay?.benefit).toBeNull(); // niets om te verrekenen
@@ -1337,8 +1772,13 @@ test("een kaart die niets kost krijgt geen rekensom over een periode", () => {
   // dat betaal je minstens één maand" is waar en onleesbaar.
   const plan = planTravel({
     accounts: [acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 4000 })],
-    txs: [], rates: [], facts: upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]),
-    destination: "US", asOf: "2026-08-21", catalogue: [CAT_TRADE_REPUBLIC], tripMonths: 6,
+    txs: [],
+    rates: [],
+    facts: upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]),
+    destination: "US",
+    asOf: "2026-08-21",
+    catalogue: [CAT_TRADE_REPUBLIC],
+    tripMonths: 6,
   });
   expect(plan.headline).toContain("kost zelf niets om aan te houden");
   expect(plan.headline).toContain("je houdt € 14,00 over");

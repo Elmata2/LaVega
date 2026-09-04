@@ -1,4 +1,9 @@
-export type InvoiceExtractInput = { pdfBase64?: string; text?: string; filename?: string; mediaType?: string };
+export type InvoiceExtractInput = {
+  pdfBase64?: string;
+  text?: string;
+  filename?: string;
+  mediaType?: string;
+};
 
 const MAX_PDF_B64 = 14_000_000; // ~14 MB of base64 (~10 MB binary)
 const MAX_TEXT = 200_000;
@@ -38,14 +43,28 @@ export const INVOICE_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      counterparty: { type: "string", description: "Naam van de wederpartij (leverancier bij inkoop, klant bij verkoop)" },
+      counterparty: {
+        type: "string",
+        description: "Naam van de wederpartij (leverancier bij inkoop, klant bij verkoop)",
+      },
       amount: { type: "number", description: "Totaalbedrag incl. btw, in de factuurvaluta" },
       currency: { type: "string", description: "ISO-valuta, bv. EUR" },
       issueDate: { type: "string", description: "Factuurdatum, ISO YYYY-MM-DD" },
-      dueDate: { type: "string", description: "Vervaldatum, ISO YYYY-MM-DD (indien afwezig: gelijk aan factuurdatum)" },
-      direction: { type: "string", enum: ["in", "out"], description: "'in' = jij ontvangt geld (verkoopfactuur); 'out' = jij betaalt (inkoopfactuur)" },
+      dueDate: {
+        type: "string",
+        description: "Vervaldatum, ISO YYYY-MM-DD (indien afwezig: gelijk aan factuurdatum)",
+      },
+      direction: {
+        type: "string",
+        enum: ["in", "out"],
+        description:
+          "'in' = jij ontvangt geld (verkoopfactuur); 'out' = jij betaalt (inkoopfactuur)",
+      },
       vatAmount: { type: "number", description: "Btw-bedrag indien vermeld" },
-      confidence: { type: "number", description: "Je eigen zekerheid over deze extractie, 0 (onzeker) tot 1 (zeker)." },
+      confidence: {
+        type: "number",
+        description: "Je eigen zekerheid over deze extractie, 0 (onzeker) tot 1 (zeker).",
+      },
     },
     required: ["counterparty", "amount", "currency", "issueDate", "dueDate", "direction"],
   },

@@ -5,8 +5,15 @@ import { FOREIGN_COUNTRY_CODES } from "./categories.js";
 import { NL_CATEGORY_RULES, matchNorm } from "./categories.js";
 
 const tx = (counterparty: string, description = "", category = ""): Tx => ({
-  id: counterparty + description, accountKey: "A1", date: "2026-06-01", amount: -10,
-  currency: "EUR", counterparty, description, category, manual: false,
+  id: counterparty + description,
+  accountKey: "A1",
+  date: "2026-06-01",
+  amount: -10,
+  currency: "EUR",
+  counterparty,
+  description,
+  category,
+  manual: false,
 });
 const cat = (t: Tx, rules: Rule[] = []) => categorize(t, rules);
 
@@ -82,7 +89,9 @@ test("punctuation in the counterparty no longer defeats a built-in default", () 
 });
 
 test("a user rule written with punctuation still matches plain bank text", () => {
-  const rules: Rule[] = [{ id: "r1", match: "Van der Meer-Advies B.V.", category: "Zakelijk advies" }];
+  const rules: Rule[] = [
+    { id: "r1", match: "Van der Meer-Advies B.V.", category: "Zakelijk advies" },
+  ];
   expect(cat(tx("VAN DER MEER ADVIES BV", "factuur"), rules)).toBe("Zakelijk advies");
 });
 
@@ -122,38 +131,100 @@ import type { Account } from "./model.js";
 import { ownAccounts } from "./views.js";
 
 const OWN: Account[] = [
-  { key: "NL95INGB0674843703", iban: "NL95INGB0674843703", name: "ING zakelijk", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "NL88INGB0793113504", iban: "NL88INGB0793113504", name: "ING prive", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "A28641213", iban: "", name: "Oranje Spaarrekening", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "Betaalrekening", iban: "", name: "Betaalrekening", bank: "Revolut", entity: "BV1", currency: "EUR", balance: null }, // generic key -> NOT an identifier
+  {
+    key: "NL95INGB0674843703",
+    iban: "NL95INGB0674843703",
+    name: "ING zakelijk",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "NL88INGB0793113504",
+    iban: "NL88INGB0793113504",
+    name: "ING prive",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "A28641213",
+    iban: "",
+    name: "Oranje Spaarrekening",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "Betaalrekening",
+    iban: "",
+    name: "Betaalrekening",
+    bank: "Revolut",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  }, // generic key -> NOT an identifier
 ];
 const own = ownAccounts(OWN);
 
 const onKey = (accountKey: string, counterparty: string, description = ""): Tx => ({
-  id: accountKey + counterparty, accountKey, date: "2026-06-01", amount: -100,
-  currency: "EUR", counterparty, description, category: "", manual: false,
+  id: accountKey + counterparty,
+  accountKey,
+  date: "2026-06-01",
+  amount: -100,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 });
 
 test("Eigen overboeking: counterparty/description naming another own account is flagged", () => {
   // tx on NL95, transfer to own NL88
-  expect(categorize(onKey("NL95INGB0674843703", "Overboeking naar betaalrekening NL88INGB0793113504"), [], own)).toBe("Eigen overboeking");
+  expect(
+    categorize(
+      onKey("NL95INGB0674843703", "Overboeking naar betaalrekening NL88INGB0793113504"),
+      [],
+      own,
+    ),
+  ).toBe("Eigen overboeking");
   // spaced IBAN in description still matches (compact comparison)
-  expect(categorize(onKey("NL95INGB0674843703", "", "Naar NL88 INGB 0793 1135 04"), [], own)).toBe("Eigen overboeking");
+  expect(categorize(onKey("NL95INGB0674843703", "", "Naar NL88 INGB 0793 1135 04"), [], own)).toBe(
+    "Eigen overboeking",
+  );
   // transfer to own savings account number
-  expect(categorize(onKey("NL95INGB0674843703", "Oranje Spaarrekening A28641213"), [], own)).toBe("Eigen overboeking");
+  expect(categorize(onKey("NL95INGB0674843703", "Oranje Spaarrekening A28641213"), [], own)).toBe(
+    "Eigen overboeking",
+  );
 });
 
 test("Eigen overboeking: a row citing only its OWN account IBAN is NOT a transfer", () => {
   // Bank-fee row on NL95 that references its own IBAN -> should be Bankkosten, not a transfer
-  const fee = onKey("NL95INGB0674843703", "Kosten Zakelijk Betalingsverkeer", "Betreft IBAN: NL95INGB0674843703");
+  const fee = onKey(
+    "NL95INGB0674843703",
+    "Kosten Zakelijk Betalingsverkeer",
+    "Betreft IBAN: NL95INGB0674843703",
+  );
   expect(categorize(fee, [], own)).toBe("Bankkosten");
 });
 
 test("Eigen overboeking: generic keys never match, and manual label still wins", () => {
   // "betaalrekening" is a generic key, not an identifier -> a payment to some third party's betaalrekening is not flagged
-  expect(categorize(onKey("NL95INGB0674843703", "Betaling aan leverancier", "iets met betaalrekening"), [], own)).toBe("onbekend");
+  expect(
+    categorize(
+      onKey("NL95INGB0674843703", "Betaling aan leverancier", "iets met betaalrekening"),
+      [],
+      own,
+    ),
+  ).toBe("onbekend");
   // manual category overrides even an internal transfer
-  const manual = { ...onKey("NL95INGB0674843703", "Naar NL88INGB0793113504"), category: "Handmatig" };
+  const manual = {
+    ...onKey("NL95INGB0674843703", "Naar NL88INGB0793113504"),
+    category: "Handmatig",
+  };
   expect(categorize(manual, [], own)).toBe("Handmatig");
 });
 
@@ -188,36 +259,40 @@ test("FOREIGN_COUNTRY_CODES holds only well-formed codes, and none that is also 
  * Third parties' names from a bank export do not belong in a public repo.
  */
 import {
-  isPersonName, directDebit, parseOwnName, isOwnName,
-  PERSON_CATEGORY, DIRECT_DEBIT_CATEGORY,
+  isPersonName,
+  directDebit,
+  parseOwnName,
+  isOwnName,
+  PERSON_CATEGORY,
+  DIRECT_DEBIT_CATEGORY,
 } from "./categories.js";
 
 describe("a counterparty that is a person's name", () => {
   test("the shapes Dutch exports actually print are recognised", () => {
     for (const name of [
-      "Mustafa Habib",            // Firstname Lastname
-      "MARTA TOKARZ",             // ALL CAPS full name
-      "J WANG",                   // initial + ALL-CAPS surname
-      "SS CHEN",                  // two initials, no vowel, + surname
-      "Y LAI",                    // initial + 3-letter surname
-      "K. Chen",                  // dotted initial
-      "A.A. Kovalchuk",           // two dotted initials
-      "J.W. van 't Veer",         // initials + tussenvoegsels
+      "Mustafa Habib", // Firstname Lastname
+      "MARTA TOKARZ", // ALL CAPS full name
+      "J WANG", // initial + ALL-CAPS surname
+      "SS CHEN", // two initials, no vowel, + surname
+      "Y LAI", // initial + 3-letter surname
+      "K. Chen", // dotted initial
+      "A.A. Kovalchuk", // two dotted initials
+      "J.W. van 't Veer", // initials + tussenvoegsels
       "N.D. van Laar",
-      "Hr R Swennen",             // honorific + initial + surname
+      "Hr R Swennen", // honorific + initial + surname
       "Mevr A de Vries",
       "Mw DK Azzahra",
-      "Hr JAJ Wiebrens",          // three initials, no dots
+      "Hr JAJ Wiebrens", // three initials, no dots
       "T.J. van Wijngaarden",
-      "Hr J v d Fliert",          // abbreviated tussenvoegsels
+      "Hr J v d Fliert", // abbreviated tussenvoegsels
       "Hr Z el Aimani",
       "Mlle FELICIE MOULY-AIGROT", // French honorific, hyphenated surname
-      "Jenewein  Patrick",        // surname first, double space
+      "Jenewein  Patrick", // surname first, double space
       "Frederik-Moritz Buhrig",
       "Laura Amado Baltazar Marquez", // four name words
       "Anh Tran Huu Nam",
       "AE Terjesen",
-      "Steunenberg A",            // surname first with initial
+      "Steunenberg A", // surname first with initial
     ]) {
       expect(isPersonName(name), name).toBe(true);
     }
@@ -225,7 +300,7 @@ describe("a counterparty that is a person's name", () => {
 
   test("a shop, an institution or a bank's own wording is NOT a person", () => {
     for (const name of [
-      "Coolblue",                         // one word is never enough
+      "Coolblue", // one word is never enough
       "Newtone Belastingadviseurs B.V.",
       "Maes Law B.V.",
       "Simmons + Simmons LLP",
@@ -237,8 +312,8 @@ describe("a counterparty that is a person's name", () => {
       "Erasmus Universiteit Rotterdam",
       "BELASTINGDIENST",
       "Centraal Justitieel Incasso Bureau",
-      "Eau Lounge",                       // a bar he paid by bank transfer
-      "De Smitse",                        // a leading tussenvoegsel is not a name
+      "Eau Lounge", // a bar he paid by bank transfer
+      "De Smitse", // a leading tussenvoegsel is not a name
       "Oranje Spaarrekening",
       "DUO Hoofdrekening",
       "ING Bank NV OS Bedrijfsrekening",
@@ -246,9 +321,9 @@ describe("a counterparty that is a person's name", () => {
       "Betaling naar creditcard",
       "Creditcard More",
       "Incasso ING creditcard",
-      "Betaling aan leverancier",         // a lowercase word is not a name part
+      "Betaling aan leverancier", // a lowercase word is not a name part
       "Trans.Reference: 5A0ACE43FC8947BA",
-      "Albert Heijn 1405 NOOTDORP NLD",   // digits, and a country token
+      "Albert Heijn 1405 NOOTDORP NLD", // digits, and a country token
       "MERCADONA PZA. REYES M MADRID ESP",
       "V Business",
       "Fenna Voorbeeld fennav outlook.com",
@@ -274,15 +349,32 @@ describe("a counterparty that is a person's name", () => {
     // reads like a person is caught by the MECHANISM instead: a row carrying a
     // card number was paid at a till, and a row ending in a country token is a
     // card descriptor. Both are purchases, not bookings to a person.
-    expect(categorize({
-      id: "y", accountKey: "A1", date: "2026-07-14", amount: -20, currency: "EUR",
-      counterparty: "TIENDA J LOPEZ", description: "VALENCIA ESP", category: "", manual: false,
-    }, [])).toBe("onbekend");
+    expect(
+      categorize(
+        {
+          id: "y",
+          accountKey: "A1",
+          date: "2026-07-14",
+          amount: -20,
+          currency: "EUR",
+          counterparty: "TIENDA J LOPEZ",
+          description: "VALENCIA ESP",
+          category: "",
+          manual: false,
+        },
+        [],
+      ),
+    ).toBe("onbekend");
     const t: Tx = {
-      id: "x", accountKey: "A1", date: "2026-07-19", amount: -12.4, currency: "EUR",
+      id: "x",
+      accountKey: "A1",
+      date: "2026-07-19",
+      amount: -12.4,
+      currency: "EUR",
       counterparty: "Jorien Bastiaans",
       description: "Jorien Bastiaans Kaartnr: 5238 53** **** 1748 Tijd: 09:12 Term: 11223344",
-      category: "", manual: false,
+      category: "",
+      manual: false,
     };
     expect(categorize(t, [])).toBe("onbekend");
   });
@@ -290,41 +382,77 @@ describe("a counterparty that is a person's name", () => {
   test("the description decides first; only a silent description leaves it between people", () => {
     // His words: "check the description — and if the description says something,
     // use that to categorise. If not, just see it as a transaction between people."
-    expect(cat(tx("Mustafa Habib", "Naam: Mustafa Habib Omschrijving: Albert Heijn boodschappen"))).toBe("Boodschappen");
-    expect(cat(tx("Mustafa Habib", "Naam: Mustafa Habib Omschrijving: Expense reimbursement"))).toBe(PERSON_CATEGORY);
+    expect(
+      cat(tx("Mustafa Habib", "Naam: Mustafa Habib Omschrijving: Albert Heijn boodschappen")),
+    ).toBe("Boodschappen");
+    expect(
+      cat(tx("Mustafa Habib", "Naam: Mustafa Habib Omschrijving: Expense reimbursement")),
+    ).toBe(PERSON_CATEGORY);
     // and a user rule still outranks the reading
-    expect(cat(tx("Mustafa Habib", "huur juli"), [{ id: "r1", match: "Mustafa Habib", category: "Wonen & energie" }])).toBe("Wonen & energie");
+    expect(
+      cat(tx("Mustafa Habib", "huur juli"), [
+        { id: "r1", match: "Mustafa Habib", category: "Wonen & energie" },
+      ]),
+    ).toBe("Wonen & energie");
   });
 
   test("a betaalverzoek from a person is booked between people, not as an Overboeking", () => {
     // He is explicit that a person-to-person booking is NOT "Overboekingen".
     // "via Rabo Betaalverzoek" is the mechanism, not the counterparty.
-    expect(cat(tx("T.J. van Wijngaarden via Rabo Betaalverzoek", "Omschrijving: Vacance"))).toBe(PERSON_CATEGORY);
+    expect(cat(tx("T.J. van Wijngaarden via Rabo Betaalverzoek", "Omschrijving: Vacance"))).toBe(
+      PERSON_CATEGORY,
+    );
     // A payment request from something that is NOT a person keeps the old, still
     // honest reading — the mechanism is all we know about it.
-    expect(cat(tx("Turing Students via ING Betaalverzoek", "Omschrijving: contributie"))).toBe("Overboekingen");
+    expect(cat(tx("Turing Students via ING Betaalverzoek", "Omschrijving: contributie"))).toBe(
+      "Overboekingen",
+    );
   });
 });
 
 describe("an incasso is recognised from its code", () => {
   const row = (counterparty: string, description: string): Tx => ({
-    id: "d", accountKey: "NL88INGB0793113504", date: "2026-07-24", amount: -11.89,
-    currency: "EUR", counterparty, description, category: "", manual: false,
+    id: "d",
+    accountKey: "NL88INGB0793113504",
+    date: "2026-07-24",
+    amount: -11.89,
+    currency: "EUR",
+    counterparty,
+    description,
+    category: "",
+    manual: false,
   });
 
   test("ING's Machtiging ID / Incassant ID are read off the row", () => {
-    const t = row("Sportclub Voorbeeld", "Naam: Sportclub Voorbeeld Omschrijving: contributie IBAN: NL83INGB0007811682 Kenmerk: FDA4C7 Machtiging ID: 014-M162245502 Incassant ID: NL12ZZZ271247010002 Doorlopende incasso");
-    expect(directDebit(t)).toEqual({ machtigingId: "014-M162245502", incassantId: "NL12ZZZ271247010002" });
+    const t = row(
+      "Sportclub Voorbeeld",
+      "Naam: Sportclub Voorbeeld Omschrijving: contributie IBAN: NL83INGB0007811682 Kenmerk: FDA4C7 Machtiging ID: 014-M162245502 Incassant ID: NL12ZZZ271247010002 Doorlopende incasso",
+    );
+    expect(directDebit(t)).toEqual({
+      machtigingId: "014-M162245502",
+      incassantId: "NL12ZZZ271247010002",
+    });
     expect(categorize(t, [])).toBe(DIRECT_DEBIT_CATEGORY);
   });
 
   test("the phrase forms other banks print count too", () => {
-    expect(directDebit(row("X", "SEPA Incasso algemeen doorlopend Incassant: NL34ZZZ123456780000 Naam: X"))).toEqual({
-      machtigingId: null, incassantId: "NL34ZZZ123456780000",
+    expect(
+      directDebit(
+        row("X", "SEPA Incasso algemeen doorlopend Incassant: NL34ZZZ123456780000 Naam: X"),
+      ),
+    ).toEqual({
+      machtigingId: null,
+      incassantId: "NL34ZZZ123456780000",
     });
-    expect(directDebit(row("X", "Eenmalige incasso"))).toEqual({ machtigingId: null, incassantId: null });
-    expect(directDebit(row("X", "Machtigingskenmerk: 4711 Incassant ID: NL01ZZZ000000000000"))).toEqual({
-      machtigingId: "4711", incassantId: "NL01ZZZ000000000000",
+    expect(directDebit(row("X", "Eenmalige incasso"))).toEqual({
+      machtigingId: null,
+      incassantId: null,
+    });
+    expect(
+      directDebit(row("X", "Machtigingskenmerk: 4711 Incassant ID: NL01ZZZ000000000000")),
+    ).toEqual({
+      machtigingId: "4711",
+      incassantId: "NL01ZZZ000000000000",
     });
   });
 
@@ -332,12 +460,17 @@ describe("an incasso is recognised from its code", () => {
     // "Centraal Justitieel Incasso Bureau" and ING's own "Incasso ING creditcard"
     // both carry the word and neither is a SEPA mandate.
     expect(directDebit(row("Centraal Justitieel Incasso Bureau", "boete"))).toBeNull();
-    expect(directDebit(row("Incasso ING creditcard", "Accountnr 210036258304 Periode juni 2026"))).toBeNull();
+    expect(
+      directDebit(row("Incasso ING creditcard", "Accountnr 210036258304 Periode juni 2026")),
+    ).toBeNull();
   });
 
   test("a merchant rule still wins — the mechanism only speaks when nothing else does", () => {
     // His phone bill arrives as an incasso and is still Abonnementen.
-    const simyo = row("SIMYO", "Naam: SIMYO Omschrijving: Simyo FACTUURNUMMER Machtiging ID: 014-M162245502 Incassant ID: NL12ZZZ271247010002 Doorlopende incasso");
+    const simyo = row(
+      "SIMYO",
+      "Naam: SIMYO Omschrijving: Simyo FACTUURNUMMER Machtiging ID: 014-M162245502 Incassant ID: NL12ZZZ271247010002 Doorlopende incasso",
+    );
     expect(categorize(simyo, [])).toBe("Abonnementen");
   });
 });
@@ -347,9 +480,15 @@ describe("his own name goes to the own-transfer section", () => {
 
   test("surname alone, initial plus surname, and the full name all match", () => {
     for (const n of [
-      "Steunenberg", "A Steunenberg", "A. Steunenberg", "Steunenberg A",
-      "Hr A Steunenberg", "Alexander Steunenberg", "ALEXANDER STEUNENBERG",
-      "A.Steunenberg", "Hr JAJ Wiebrens,Hr A Steunenberg", // a joint account he is on
+      "Steunenberg",
+      "A Steunenberg",
+      "A. Steunenberg",
+      "Steunenberg A",
+      "Hr A Steunenberg",
+      "Alexander Steunenberg",
+      "ALEXANDER STEUNENBERG",
+      "A.Steunenberg",
+      "Hr JAJ Wiebrens,Hr A Steunenberg", // a joint account he is on
     ]) {
       expect(isOwnName(n, [own]), n).toBe(true);
     }
@@ -357,8 +496,12 @@ describe("his own name goes to the own-transfer section", () => {
 
   test("a relative with the same surname is NOT him", () => {
     for (const n of [
-      "Hr B Steunenberg", "Mw NL Steunenberg", "Nadia Lina Steunenberg",
-      "Hr B Steunenberg en/of Mw A L Dimitrova", "Steunenberg B.V.", "Steunenbergen",
+      "Hr B Steunenberg",
+      "Mw NL Steunenberg",
+      "Nadia Lina Steunenberg",
+      "Hr B Steunenberg en/of Mw A L Dimitrova",
+      "Steunenberg B.V.",
+      "Steunenbergen",
     ]) {
       expect(isOwnName(n, [own]), n).toBe(false);
     }
@@ -402,7 +545,9 @@ describe("his own name goes to the own-transfer section", () => {
 
   test("in categorize it is an own transfer, and it outranks the person reading", () => {
     const t = tx("A Steunenberg", "Naam: A Steunenberg IBAN: NL48ABNA0155430750");
-    expect(categorize(t, [], { all: [], byKey: new Map(), names: [own] })).toBe("Eigen overboeking");
+    expect(categorize(t, [], { all: [], byKey: new Map(), names: [own] })).toBe(
+      "Eigen overboeking",
+    );
     // without the name, the same row is only a booking between people
     expect(categorize(t, [])).toBe(PERSON_CATEGORY);
   });

@@ -31,7 +31,11 @@ async function withApiKey(value: string | undefined, fn: () => Promise<void>): P
 }
 
 function jsonPost(body: unknown): RequestInit {
-  return { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } };
+  return {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+  };
 }
 
 test("GET /api/agent/status reflects whether the API key is configured", async () => {
@@ -70,7 +74,10 @@ test("with a key set and an injected extractor, returns 200 with the extracted f
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
     registerAgentRoutes(app, { extract: async () => FAKE_RESULT });
-    const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "Factuur van Acme BV" }));
+    const res = await app.request(
+      "/api/agent/extract-invoice",
+      jsonPost({ text: "Factuur van Acme BV" }),
+    );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(FAKE_RESULT);
   });
@@ -113,7 +120,10 @@ test("an oversize pdfBase64 payload is rejected with 400 before the extractor", 
         return FAKE_RESULT;
       },
     });
-    const res = await app.request("/api/agent/extract-invoice", jsonPost({ pdfBase64: "A".repeat(14_000_001) }));
+    const res = await app.request(
+      "/api/agent/extract-invoice",
+      jsonPost({ pdfBase64: "A".repeat(14_000_001) }),
+    );
     expect(res.status).toBe(400);
     expect(called).toBe(false);
   });
@@ -209,7 +219,10 @@ test("POST /api/agent/categorize returns 503 when no API key is configured", asy
         return [];
       },
     });
-    const res = await app.request("/api/agent/categorize", jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }));
+    const res = await app.request(
+      "/api/agent/categorize",
+      jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }),
+    );
     expect(res.status).toBe(503);
     expect(called).toBe(false);
   });
@@ -219,7 +232,10 @@ test("with a key set and an injected categorizer, returns 200 with the results",
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
     registerAgentRoutes(app, { categorize: async () => [{ id: "t1", category: "Boodschappen" }] });
-    const res = await app.request("/api/agent/categorize", jsonPost({ items: [{ id: "t1", text: "Albert Heijn", sign: "out" }] }));
+    const res = await app.request(
+      "/api/agent/categorize",
+      jsonPost({ items: [{ id: "t1", text: "Albert Heijn", sign: "out" }] }),
+    );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([{ id: "t1", category: "Boodschappen" }]);
   });
@@ -237,7 +253,9 @@ test("only the sanitized items reach the categorizer — amount/accountKey are s
     });
     const res = await app.request(
       "/api/agent/categorize",
-      jsonPost({ items: [{ id: "t1", text: "Albert Heijn", sign: "out", amount: -20, accountKey: "A1" }] }),
+      jsonPost({
+        items: [{ id: "t1", text: "Albert Heijn", sign: "out", amount: -20, accountKey: "A1" }],
+      }),
     );
     expect(res.status).toBe(200);
     expect(captured?.items).toEqual([{ id: "t1", text: "Albert Heijn", sign: "out" }]);
@@ -256,7 +274,11 @@ test("an oversize categorize batch is rejected with 400 before the categorizer",
         return [];
       },
     });
-    const items = Array.from({ length: 201 }, (_, i) => ({ id: String(i), text: "x", sign: "out" }));
+    const items = Array.from({ length: 201 }, (_, i) => ({
+      id: String(i),
+      text: "x",
+      sign: "out",
+    }));
     const res = await app.request("/api/agent/categorize", jsonPost({ items }));
     expect(res.status).toBe(400);
     expect(called).toBe(false);
@@ -281,7 +303,12 @@ test("the categorize route forwards only namespace-legal facts to the agent", as
       jsonPost({
         items: [{ id: "t1", text: "x", sign: "out" }],
         facts: [
-          { subject: "Overboekingen", key: "corrigeerNaar", value: "Eigen overboeking", source: "user" },
+          {
+            subject: "Overboekingen",
+            key: "corrigeerNaar",
+            value: "Eigen overboeking",
+            source: "user",
+          },
           { subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen", source: "user" }, // counterparty
           { subject: "Overboekingen", key: "saldo", value: "12450", source: "user" }, // a balance
           { agent: "travel", subject: "ING betaalpas", key: "fxFeePct", value: "1.4" }, // wrong namespace
@@ -290,7 +317,11 @@ test("the categorize route forwards only namespace-legal facts to the agent", as
     );
     expect(res.status).toBe(200);
     expect(captured).toHaveLength(1);
-    expect(captured[0]).toMatchObject({ agent: "categorize", subject: "Overboekingen", value: "Eigen overboeking" });
+    expect(captured[0]).toMatchObject({
+      agent: "categorize",
+      subject: "Overboekingen",
+      value: "Eigen overboeking",
+    });
     const serialized = JSON.stringify(captured);
     expect(serialized).not.toContain("Albert Heijn");
     expect(serialized).not.toContain("12450");

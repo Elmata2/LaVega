@@ -12,8 +12,9 @@ import {
 import { makeFact, upsertFacts, learnFacts } from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
-const fact = (over: Partial<LearnedFact> & Pick<LearnedFact, "agent" | "subject" | "key" | "value">): LearnedFact =>
-  makeFact({ source: "agent", updatedAt: "2026-08-16", ...over });
+const fact = (
+  over: Partial<LearnedFact> & Pick<LearnedFact, "agent" | "subject" | "key" | "value">,
+): LearnedFact => makeFact({ source: "agent", updatedAt: "2026-08-16", ...over });
 
 const travelFact = (over: Partial<LearnedFact> = {}) =>
   fact({ agent: AGENTS.travel, subject: "ING betaalpas", key: "fxFeePct", value: "1.4", ...over });
@@ -21,7 +22,13 @@ const travelFact = (over: Partial<LearnedFact> = {}) =>
 /* ── the namespace itself ─────────────────────────────────────────────── */
 
 test("every agent in the namespace is documented and has at least one key", () => {
-  expect(AGENT_SPECS.map((s) => s.agent).sort()).toEqual(["belasting", "categorize", "chat", "facturen", "travel"]);
+  expect(AGENT_SPECS.map((s) => s.agent).sort()).toEqual([
+    "belasting",
+    "categorize",
+    "chat",
+    "facturen",
+    "travel",
+  ]);
   for (const spec of AGENT_SPECS) {
     expect(spec.what.length).toBeGreaterThan(0);
     expect(spec.subjectWhat.length).toBeGreaterThan(0);
@@ -32,11 +39,39 @@ test("every agent in the namespace is documented and has at least one key", () =
 
 test("one valid fact per agent passes the guard", () => {
   expect(checkFact(travelFact())).toBeNull();
-  expect(checkFact(fact({ agent: AGENTS.travel, subject: "Trading 212 creditcard", key: "transferFreeViaIdeal", value: "1" }))).toBeNull();
-  expect(checkFact(fact({ agent: AGENTS.categorize, subject: "Overboekingen", key: "corrigeerNaar", value: "Eigen overboeking" }))).toBeNull();
-  expect(checkFact(fact({ agent: AGENTS.facturen, subject: "dueDate", key: "voorkeur", value: "issueDate+30" }))).toBeNull();
-  expect(checkFact(fact({ agent: AGENTS.chat, subject: "antwoord", key: "lengte", value: "kort" }))).toBeNull();
-  expect(checkFact(fact({ agent: AGENTS.belasting, subject: "revenue", key: "kolom", value: "Omzet excl. btw" }))).toBeNull();
+  expect(
+    checkFact(
+      fact({
+        agent: AGENTS.travel,
+        subject: "Trading 212 creditcard",
+        key: "transferFreeViaIdeal",
+        value: "1",
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkFact(
+      fact({
+        agent: AGENTS.categorize,
+        subject: "Overboekingen",
+        key: "corrigeerNaar",
+        value: "Eigen overboeking",
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkFact(
+      fact({ agent: AGENTS.facturen, subject: "dueDate", key: "voorkeur", value: "issueDate+30" }),
+    ),
+  ).toBeNull();
+  expect(
+    checkFact(fact({ agent: AGENTS.chat, subject: "antwoord", key: "lengte", value: "kort" })),
+  ).toBeNull();
+  expect(
+    checkFact(
+      fact({ agent: AGENTS.belasting, subject: "revenue", key: "kolom", value: "Omzet excl. btw" }),
+    ),
+  ).toBeNull();
 });
 
 /* ── the belasting namespace: a column header, never a figure ─────────────
@@ -61,26 +96,57 @@ test("belasting learns WHERE a figure lives, and only that", () => {
   // and only the six tax figures are legal subjects — a client or a BV has
   // nowhere to live here either
   expect(col("Omzet", "Klant BV")).toBe("subject valt buiten de namespace");
-  expect(checkFact(fact({ agent: AGENTS.belasting, subject: "revenue", key: "waarde", value: "10000" })))
-    .toBe("key valt buiten de namespace");
+  expect(
+    checkFact(fact({ agent: AGENTS.belasting, subject: "revenue", key: "waarde", value: "10000" })),
+  ).toBe("key valt buiten de namespace");
 });
 
 test("an agent, subject or key outside the namespace is refused", () => {
-  expect(checkFact(fact({ agent: "spionage", subject: "x", key: "y", value: "z" }))).toBe("onbekende agent");
+  expect(checkFact(fact({ agent: "spionage", subject: "x", key: "y", value: "z" }))).toBe(
+    "onbekende agent",
+  );
   // categorize may only talk about categories — a merchant has nowhere to live.
-  expect(checkFact(fact({ agent: AGENTS.categorize, subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen" })))
-    .toBe("subject valt buiten de namespace");
-  expect(checkFact(fact({ agent: AGENTS.facturen, subject: "ACME BV", key: "voorkeur", value: "30 dagen" })))
-    .toBe("subject valt buiten de namespace");
-  expect(checkFact(fact({ agent: AGENTS.travel, subject: "ING betaalpas", key: "saldo", value: "12" })))
-    .toBe("key valt buiten de namespace");
-  expect(checkFact(fact({ agent: AGENTS.categorize, subject: "Boodschappen", key: "corrigeerNaar", value: "Verzonnen categorie" })))
-    .toBe("waarde is geen bestaande categorie");
+  expect(
+    checkFact(
+      fact({
+        agent: AGENTS.categorize,
+        subject: "Albert Heijn",
+        key: "corrigeerNaar",
+        value: "Boodschappen",
+      }),
+    ),
+  ).toBe("subject valt buiten de namespace");
+  expect(
+    checkFact(
+      fact({ agent: AGENTS.facturen, subject: "ACME BV", key: "voorkeur", value: "30 dagen" }),
+    ),
+  ).toBe("subject valt buiten de namespace");
+  expect(
+    checkFact(fact({ agent: AGENTS.travel, subject: "ING betaalpas", key: "saldo", value: "12" })),
+  ).toBe("key valt buiten de namespace");
+  expect(
+    checkFact(
+      fact({
+        agent: AGENTS.categorize,
+        subject: "Boodschappen",
+        key: "corrigeerNaar",
+        value: "Verzonnen categorie",
+      }),
+    ),
+  ).toBe("waarde is geen bestaande categorie");
   // A percentage is bounded, so nothing bigger than 100 can hide in one.
   expect(checkFact(travelFact({ value: "150" }))).toBe("waarde valt buiten 0..100");
   expect(checkFact(travelFact({ value: "veel" }))).toBe("waarde is geen getal");
-  expect(checkFact(fact({ agent: AGENTS.travel, subject: "ING betaalpas", key: "transferFreeViaIdeal", value: "misschien" })))
-    .toBe("waarde moet 0 of 1 zijn");
+  expect(
+    checkFact(
+      fact({
+        agent: AGENTS.travel,
+        subject: "ING betaalpas",
+        key: "transferFreeViaIdeal",
+        value: "misschien",
+      }),
+    ),
+  ).toBe("waarde moet 0 of 1 zijn");
 });
 
 /* ── the redaction rule: no balances, amounts, IBANs or counterparties ── */
@@ -91,7 +157,12 @@ test("a fact carrying a balance, an amount, an IBAN or an account number is REJE
     travelFact({ key: "fxFeePct", value: "12450" }),
     travelFact({ key: "cashbackPct", value: "1.234,56" }),
     // An amount in a free-text value.
-    fact({ agent: AGENTS.chat, subject: "antwoord", key: "toon", value: "let op mijn saldo van € 12.450" }),
+    fact({
+      agent: AGENTS.chat,
+      subject: "antwoord",
+      key: "toon",
+      value: "let op mijn saldo van € 12.450",
+    }),
     fact({ agent: AGENTS.facturen, subject: "currency", key: "voorkeur", value: "1234 EUR" }),
     // An IBAN or an account number as the subject.
     travelFact({ subject: "NL91ABNA0417164300" }),
@@ -120,10 +191,27 @@ test("a fact carrying a balance, an amount, an IBAN or an account number is REJE
 });
 
 test("carriesPersonalData spots money and identifiers but not a fee percentage", () => {
-  for (const s of ["NL91ABNA0417164300", "0417164300", "€ 12,50", "12,50 EUR", "1.234,56", "$40", "A 286-41213"]) {
+  for (const s of [
+    "NL91ABNA0417164300",
+    "0417164300",
+    "€ 12,50",
+    "12,50 EUR",
+    "1.234,56",
+    "$40",
+    "A 286-41213",
+  ]) {
     expect(carriesPersonalData(s)).toBe(true);
   }
-  for (const s of ["1.4", "0", "0,5%", "Trading 212", "N26", "ING betaalpas", "EUR", "issueDate+30"]) {
+  for (const s of [
+    "1.4",
+    "0",
+    "0,5%",
+    "Trading 212",
+    "N26",
+    "ING betaalpas",
+    "EUR",
+    "issueDate+30",
+  ]) {
     expect(carriesPersonalData(s)).toBe(false);
   }
 });
@@ -133,7 +221,12 @@ test("a real brand fact still gets through — the guard must not eat the featur
     travelFact({ subject: "Trading 212 creditcard", key: "fxFeePct", value: "0" }),
     travelFact({ subject: "Trading 212 creditcard", key: "cashbackPct", value: "1" }),
     // A public tariff threshold in a note is a provider's amount, not the owner's.
-    travelFact({ subject: "Revolut betaalpas", key: "fxFeePct", value: "0", note: "gratis tot €1000 per maand" }),
+    travelFact({
+      subject: "Revolut betaalpas",
+      key: "fxFeePct",
+      value: "0",
+      note: "gratis tot €1000 per maand",
+    }),
   ];
   expect(validateFacts(real).rejected).toEqual([]);
   expect(upsertFacts([], real)).toHaveLength(3);
@@ -142,11 +235,26 @@ test("a real brand fact still gets through — the guard must not eat the featur
 /* ── reading facts back before an agent answers ───────────────────────── */
 
 test("each agent reads only its own facts, and the briefing marks the owner's", () => {
-  const facts = upsertFacts([], [
-    travelFact({ subject: "ING betaalpas", key: "fxFeePct", value: "1.4", source: "user", note: "zelf nagekeken" }),
-    travelFact({ subject: "Trading 212 creditcard", key: "fxFeePct", value: "0" }),
-    fact({ agent: AGENTS.chat, subject: "antwoord", key: "lengte", value: "kort", source: "user" }),
-  ]);
+  const facts = upsertFacts(
+    [],
+    [
+      travelFact({
+        subject: "ING betaalpas",
+        key: "fxFeePct",
+        value: "1.4",
+        source: "user",
+        note: "zelf nagekeken",
+      }),
+      travelFact({ subject: "Trading 212 creditcard", key: "fxFeePct", value: "0" }),
+      fact({
+        agent: AGENTS.chat,
+        subject: "antwoord",
+        key: "lengte",
+        value: "kort",
+        source: "user",
+      }),
+    ],
+  );
 
   expect(agentFacts(facts, AGENTS.travel)).toHaveLength(2);
   expect(agentFacts(facts, AGENTS.chat)).toHaveLength(1);

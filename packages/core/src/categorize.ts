@@ -1,7 +1,12 @@
 import type { Tx, Rule } from "./model.js";
 import { categorize, type OwnAccounts } from "./views.js";
 import { hash, norm } from "./hash.js";
-import { CREDIT_CARD_PAYMENT_CATEGORY, DIRECT_DEBIT_CATEGORY, foreignCodeIn, PERSON_CATEGORY } from "./categories.js";
+import {
+  CREDIT_CARD_PAYMENT_CATEGORY,
+  DIRECT_DEBIT_CATEGORY,
+  foreignCodeIn,
+  PERSON_CATEGORY,
+} from "./categories.js";
 
 /** The categories the AI may assign + the review dropdown offers — LaVega's
  *  existing taxonomy so results stay consistent with the rules engine. */
@@ -56,7 +61,11 @@ export type UncategorizedMonth = { month: string; txs: Tx[] };
  *  would ever reach. Running the pass month by month, newest month first, fixes
  *  what the owner is actually looking at, and keeps each request inside the
  *  server's 200-item cap on a realistic month. */
-export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts): UncategorizedMonth[] {
+export function uncategorizedByMonth(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): UncategorizedMonth[] {
   const byMonth = new Map<string, Tx[]>();
   for (const t of uncategorizedTxs(txs, rules, own)) {
     const month = t.date.slice(0, 7);
@@ -65,7 +74,10 @@ export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts
     else byMonth.set(month, [t]);
   }
   return [...byMonth.entries()]
-    .map(([month, list]) => ({ month, txs: list.slice().sort((a, b) => b.date.localeCompare(a.date)) }))
+    .map(([month, list]) => ({
+      month,
+      txs: list.slice().sort((a, b) => b.date.localeCompare(a.date)),
+    }))
     .sort((a, b) => b.month.localeCompare(a.month));
 }
 
@@ -158,7 +170,11 @@ export function foreignCode(tx: Tx): string | null {
  *   - "alleen-nummers"        only identifiers survive redaction; nothing any
  *                             model can read — this one needs a manual label
  *   - "geen-tekst"            the export carried no counterparty or description */
-export type UnknownReason = "buitenland" | "onbekende-tegenpartij" | "alleen-nummers" | "geen-tekst";
+export type UnknownReason =
+  | "buitenland"
+  | "onbekende-tegenpartij"
+  | "alleen-nummers"
+  | "geen-tekst";
 
 export function unknownReason(tx: Tx): UnknownReason {
   return classifyUnknown(tx).reason;
@@ -192,7 +208,10 @@ export function unknownBreakdown(
   rules: Rule[],
   own?: OwnAccounts,
 ): { count: number; amount: number; byReason: UnknownBucket[] } {
-  const buckets = new Map<UnknownReason, { count: number; amount: number; countries: Set<string> }>();
+  const buckets = new Map<
+    UnknownReason,
+    { count: number; amount: number; countries: Set<string> }
+  >();
   let count = 0;
   let amount = 0;
   for (const t of uncategorizedTxs(txs, rules, own)) {
@@ -206,7 +225,12 @@ export function unknownBreakdown(
     if (code) b.countries.add(code);
   }
   const byReason = [...buckets.entries()]
-    .map(([reason, b]) => ({ reason, count: b.count, amount: b.amount, countries: [...b.countries].sort() }))
+    .map(([reason, b]) => ({
+      reason,
+      count: b.count,
+      amount: b.amount,
+      countries: [...b.countries].sort(),
+    }))
     // Biggest bucket first so the UI leads with what actually matters; ties fall
     // back to the reason name so the order is stable across renders.
     .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
@@ -230,7 +254,11 @@ export function unknownBreakdown(
  *
  *  Returns fresh arrays plus the number of transactions whose category changed,
  *  so the caller can say what the run actually did. Pure. */
-export function recategorize(txs: Tx[], rules: Rule[], own?: OwnAccounts): { txs: Tx[]; changed: number } {
+export function recategorize(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): { txs: Tx[]; changed: number } {
   let changed = 0;
   const next = txs.map((t) => {
     if (t.manual) return t;
@@ -257,7 +285,9 @@ export function applyCategorizations(
   const byId = new Map<string, string>();
   for (const d of decisions) if (VALID.has(d.category)) byId.set(d.id, d.category);
 
-  const nextTxs = txs.map((t) => (byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t));
+  const nextTxs = txs.map((t) =>
+    byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t,
+  );
 
   // One rule per (counterparty, category), deduped against existing rules + within the batch.
   const seen = new Set(rules.map((r) => `${norm(r.match)}|${r.category}`));

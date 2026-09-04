@@ -39,12 +39,12 @@ Amex Membership Rewards, `1.000 punten = € 3`, zelf opgehaald met kale curl
 er alleen dát je punten hebt, met per programma een andere reden waarom er geen
 bedrag bij staat:
 
-| Programma | Wat er op het scherm mag | Waarom |
-| --- | --- | --- |
-| Amex Membership Rewards | bedrag én percentage | de uitgever publiceert de koers |
-| ING Punten | geen percentage, wel de nul | ING zegt zélf "geen geldwaarde" — een uitgesproken nul, maar alleen voor géld; wat een punt in de ING Winkel aan korting doet is onbekend |
-| Revolut RevPoints | alleen het saldo | Revolut zegt zelf dat er géén vaste waarde is. Dat is iets anders dan nul |
-| Flying Blue Miles | alleen het saldo | **wij** konden geen koers lezen (404 op het inwisselpad). Een gat in onze meting, geen uitspraak van de uitgever |
+| Programma               | Wat er op het scherm mag    | Waarom                                                                                                                                    |
+| ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Amex Membership Rewards | bedrag én percentage        | de uitgever publiceert de koers                                                                                                           |
+| ING Punten              | geen percentage, wel de nul | ING zegt zélf "geen geldwaarde" — een uitgesproken nul, maar alleen voor géld; wat een punt in de ING Winkel aan korting doet is onbekend |
+| Revolut RevPoints       | alleen het saldo            | Revolut zegt zelf dat er géén vaste waarde is. Dat is iets anders dan nul                                                                 |
+| Flying Blue Miles       | alleen het saldo            | **wij** konden geen koers lezen (404 op het inwisselpad). Een gat in onze meting, geen uitspraak van de uitgever                          |
 
 Een programma dat niet in die lijst staat, mag hij zelf toevoegen. Dan staat er
 "we weten niet wat een punt hier waard is" — nooit een verzonnen bedrag.
@@ -335,6 +335,7 @@ opzet de complete lijst van wat deze extensie mag aanroepen.
   geldt voor de extensiepagina's en de worker; het content script draait in de
   pagina van de winkel en valt daarbuiten. Daar is hek 1 de dekking — `content.js`
   wordt net zo hard gescand als de rest.
+
 - **Geen leestoestemming zonder dat jij hem geeft.** `host_permissions` in het
   manifest is leeg — de extensie krijgt bij installatie nul toegang tot enige
   pagina. Alles loopt via `optional_host_permissions`
@@ -362,6 +363,7 @@ opzet de complete lijst van wat deze extensie mag aanroepen.
   aantal punten en de dag waarop je het opschreef. En dat aantal gaat nooit als
   getal naar een winkelpagina: het content script krijgt afgemaakte zinnen, net
   als bij de kaarten.
+
 - **Niets van de pagina behalve het bedrag.** Wat de extensie uit een pagina
   meeneemt is de host plus de bedragen die er machineleesbaar op staan. Geen
   titel, geen artikelnaam, geen omschrijving. `read.test.ts` bewaakt die grens

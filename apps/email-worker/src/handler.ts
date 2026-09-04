@@ -103,7 +103,8 @@ async function readRaw(stream: ReadableStream<Uint8Array>, limit: number): Promi
       total += value.byteLength;
       // rawSize is al gecontroleerd; dit is de vangnetgrens voor het geval die
       // waarde niet klopt. Stoppen met een fout, niet met een halve mail.
-      if (total > limit) throw new Error("het bericht bleek tijdens het lezen groter dan " + mb(limit));
+      if (total > limit)
+        throw new Error("het bericht bleek tijdens het lezen groter dan " + mb(limit));
       chunks.push(value);
     }
   }
@@ -253,7 +254,8 @@ export async function handleInboundEmail(
   }
 
   const capProblem = checkAttachmentCaps(mail);
-  if (capProblem) return { kind: "reject", reason: "LaVega heeft deze mail niet aangenomen: " + capProblem };
+  if (capProblem)
+    return { kind: "reject", reason: "LaVega heeft deze mail niet aangenomen: " + capProblem };
 
   const payload = buildPayload(message, mail);
 
@@ -351,7 +353,9 @@ export async function handleInboundEmail(
         "",
         "Dat gebeurt in drie gevallen:",
         "  1. het was een betaalbewijs — dat staat al in je bankafschriften en wordt niet als verwachte factuur ingeboekt;",
-        "  2. deze mail stond al in de wachtrij (ontdubbeld op Message-ID " + (mail.messageId || "(ontbrak)") + ");",
+        "  2. deze mail stond al in de wachtrij (ontdubbeld op Message-ID " +
+          (mail.messageId || "(ontbrak)") +
+          ");",
         "  3. er zat geen factuur in en ook niets waarover een melding nodig was.",
         "",
         "Wil je weten welke van de drie: n8n → Executions → de laatste run van 'LaVega — facturen'.",
@@ -419,7 +423,9 @@ export async function applyVerdict(
   message.setReject(
     short(
       verdict.body.split("\n")[0] +
-        (raw ? "" : " (er was geen Message-ID om op te antwoorden, dus dit is een bounce geworden)"),
+        (raw
+          ? ""
+          : " (er was geen Message-ID om op te antwoorden, dus dit is een bounce geworden)"),
       400,
     ),
   );

@@ -14,13 +14,17 @@ function requestUrl(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const response = await app.fetch(new Request(requestUrl(req), {
-    method: req.method,
-    headers: new Headers(Object.entries(req.headers).flatMap(([key, value]) =>
-      value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
-    )),
-    body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
-  }));
+  const response = await app.fetch(
+    new Request(requestUrl(req), {
+      method: req.method,
+      headers: new Headers(
+        Object.entries(req.headers).flatMap(([key, value]) =>
+          value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
+        ),
+      ),
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
+    }),
+  );
 
   res.status(response.status);
   response.headers.forEach((value, key) => res.setHeader(key, value));

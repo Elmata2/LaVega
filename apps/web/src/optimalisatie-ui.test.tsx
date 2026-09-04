@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, CatalogueEntryLike, CatalogValue, RateBenchmark, Rule, Tx } from "@lavega/core";
+import type {
+  Account,
+  CatalogueEntryLike,
+  CatalogValue,
+  RateBenchmark,
+  Rule,
+  Tx,
+} from "@lavega/core";
 import { ownAccounts } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 
@@ -13,11 +20,29 @@ import Optimalisatie from "./views/Optimalisatie";
  */
 
 const ACCOUNTS: Account[] = [
-  { key: "ABN1", iban: "NL01ABNA", name: "Spaarrekening", bank: "ABN AMRO", entity: "Prive", currency: "EUR", balance: 50_000 },
+  {
+    key: "ABN1",
+    iban: "NL01ABNA",
+    name: "Spaarrekening",
+    bank: "ABN AMRO",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 50_000,
+  },
 ];
 
 function tx(id: string, date: string, amount: number, counterparty: string): Tx {
-  return { id, accountKey: "ABN1", date, amount, currency: "EUR", counterparty, description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey: "ABN1",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty,
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 
 const RULES: Rule[] = [];
@@ -166,7 +191,9 @@ test("a year of history moves the quarterly window from 'cannot see' to 'can see
 test("woonlasten is gone from Optimalisatie, detected or not", () => {
   const withRent: Tx[] = [];
   for (let m = 1; m <= 6; m++) {
-    withRent.push(tx(`h${m}`, `2026-${String(m).padStart(2, "0")}-01`, -1450, "Woningstichting Rochdale"));
+    withRent.push(
+      tx(`h${m}`, `2026-${String(m).padStart(2, "0")}-01`, -1450, "Woningstichting Rochdale"),
+    );
   }
   for (const html of [render(withRent), render([tx("x1", "2026-08-01", -12.5, "Albert Heijn")])]) {
     expect(html).not.toContain("Woonlasten");
@@ -236,9 +263,20 @@ test("an ING account is never left at a bare 'aangenomen 0%' — the row says wh
   // be right for one of his two ING accounts, but the screen has to name the rate
   // ING does pay and ask which account this is instead of asserting a
   // measurement it never made.
-  const html = render([], [
-    { key: "ING1", iban: "NL88INGB0793113504", name: "NL88INGB0793113504", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000 },
-  ]);
+  const html = render(
+    [],
+    [
+      {
+        key: "ING1",
+        iban: "NL88INGB0793113504",
+        name: "NL88INGB0793113504",
+        bank: "ING",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 20_000,
+      },
+    ],
+  );
   expect(html).toContain("aangenomen 0%");
   expect(html).toContain("Oranje Spaarrekening");
   expect(html).toContain("1,25%");
@@ -246,9 +284,21 @@ test("an ING account is never left at a bare 'aangenomen 0%' — the row says wh
 });
 
 test("a savings account at ING is estimated from ING's own tariff, and the row names it", () => {
-  const html = render([], [
-    { key: "ING2", iban: "NL95INGB0674843703", name: "NL95INGB0674843703", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000, type: "Spaarrekening" },
-  ]);
+  const html = render(
+    [],
+    [
+      {
+        key: "ING2",
+        iban: "NL95INGB0674843703",
+        name: "NL95INGB0674843703",
+        bank: "ING",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 20_000,
+        type: "Spaarrekening",
+      },
+    ],
+  );
   expect(html).toContain("geschat via banktarief");
   expect(html).toContain("ING Oranje Spaarrekening");
   expect(html).toContain("1,25%");
@@ -263,7 +313,6 @@ test("the comparison table separates what you get now from what you keep", () =>
   expect(html).toContain("Wat je houdt");
   expect(html).toContain("Rente nu");
 });
-
 
 /* ══════ WAT DE REKENING WAAR HET ADVIES HEEN WIJST ZELF KOST ════════════════
  *
@@ -297,11 +346,24 @@ const row = (html: string, testid: string): string => {
  *  € 25,00 per jaar, en dan eet een pakket van € 4,50 per maand (€ 54,00 per
  *  jaar) de winst op. Zo hangt de uitkomst aan de KOSTEN en niet aan het saldo. */
 const IDLE: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  },
 ];
 
 const TESTBANK: RateBenchmark = {
-  bank: "Testbank", product: "Spaarrekening", ratePct: 2.5, freeWithdrawal: true, productId: "test-spaar",
+  bank: "Testbank",
+  product: "Spaarrekening",
+  ratePct: 2.5,
+  freeWithdrawal: true,
+  productId: "test-spaar",
 };
 
 /** De catalogusrij achter die rente, met of zonder prijs. De periode staat er
@@ -309,13 +371,20 @@ const TESTBANK: RateBenchmark = {
  *  een factor twaalf, en dat is precies wat hieronder getoetst wordt. */
 const spaar = (fee?: { value: number; period: "maand" | "jaar" }): CatalogueEntryLike[] => [
   {
-    id: "test-spaar", product: "Testbank Spaarrekening", issuer: "Testbank N.V.", kind: "betaalrekening",
+    id: "test-spaar",
+    product: "Testbank Spaarrekening",
+    issuer: "Testbank N.V.",
+    kind: "betaalrekening",
     fields: fee
       ? {
           accountFee: {
-            value: fee.value, period: fee.period, route: "provider-pdf",
-            sourceUrl: "https://example.test/kosten", checkedAt: "2026-08-01",
-            conditions: null, conditionsKnown: true,
+            value: fee.value,
+            period: fee.period,
+            route: "provider-pdf",
+            sourceUrl: "https://example.test/kosten",
+            checkedAt: "2026-08-01",
+            conditions: null,
+            conditionsKnown: true,
           } as unknown as CatalogValue,
         }
       : {},
@@ -323,10 +392,15 @@ const spaar = (fee?: { value: number; period: "maand" | "jaar" }): CatalogueEntr
 ];
 
 test("een renteadvies dat door de rekeningkosten netto negatief wordt is GEEN aanbeveling", () => {
-  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  const html = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "maand" }),
+  });
   // Het brutobedrag blijft staan — de kaart wordt niet verzwegen — maar het heet
   // nu ook bruto.
-  expect(html).toContain("<strong>€\u00a025,00</strong> per jaar op, vóór wat die rekening zelf kost");
+  expect(html).toContain(
+    "<strong>€\u00a025,00</strong> per jaar op, vóór wat die rekening zelf kost",
+  );
   // 12 × € 4,50 = € 54,00 per jaar, dus € 29,00 achteruit. Hij moet dat kunnen
   // ZIEN staan in plaats van het zelf uit te rekenen.
   expect(row(html, "rente-kosten")).toContain("4,50 per maand");
@@ -342,7 +416,10 @@ test("een renteadvies dat door de rekeningkosten netto negatief wordt is GEEN aa
 test("jaar tegen maand: hetzelfde getal, een ander advies", () => {
   // € 4,50 per maand eet € 25 rente op; € 4,50 per jaar laat € 20,50 staan. Geven
   // deze twee ooit hetzelfde antwoord, dan wordt er ergens een eenheid genegeerd.
-  const perJaar = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "jaar" }) });
+  const perJaar = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "jaar" }),
+  });
   expect(row(perJaar, "rente-kosten")).toContain("4,50 per jaar");
   // Geen "12 ×": dit bedrag staat zo in het document.
   expect(row(perJaar, "rente-kosten")).not.toContain("12 × ");
@@ -368,7 +445,10 @@ test("onbekende rekeningkosten zijn geen nul, en het woord netto valt daar niet"
 test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () => {
   // De keerzijde van "onbekend is geen nul". Openbank zegt letterlijk dat openen,
   // aanhouden en opzeggen gratis is; dat is een gemeten feit.
-  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 0, period: "maand" }) });
+  const html = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 0, period: "maand" }),
+  });
   expect(row(html, "rente-kosten")).toContain("0,00 per maand");
   expect(row(html, "rente-netto")).toContain("25,00");
   expect(html).not.toContain("weten we niet");
@@ -377,7 +457,10 @@ test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () =>
 test("zonder rentewinst komt er geen leeg kostenblok", () => {
   // "Render geen leeg blok." Is er niets te verplaatsen, dan is er ook niets te
   // verrekenen — en dan hoort er geen zin over rekeningkosten te staan.
-  const html = render([], [{ ...IDLE[0], balance: 0 }], { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  const html = render([], [{ ...IDLE[0], balance: 0 }], {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "maand" }),
+  });
   expect(html).toContain("Nog geen rentewinst berekend");
   expect(html).not.toContain('data-testid="rente-kosten"');
   expect(html).not.toContain("vóór rekeningkosten");
@@ -404,7 +487,16 @@ test("zonder rentewinst komt er geen leeg kostenblok", () => {
  *  pakket het is. Dan zijn de kosten onbekend — en juist dán moet de gratis
  *  optie in beeld komen. */
 const ING_NAAMLOOS: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  },
 ];
 
 test("een onherkende ING-rekening ziet de gratis pakketten staan, elk met zijn eis", () => {

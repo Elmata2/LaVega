@@ -36,7 +36,13 @@ export function crossRate(from: string, to: string, rate: FxRate): number {
 export function parseFxRatePayload(raw: unknown): FxRate | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.base !== "string" || typeof o.date !== "string" || !o.rates || typeof o.rates !== "object") return null;
+  if (
+    typeof o.base !== "string" ||
+    typeof o.date !== "string" ||
+    !o.rates ||
+    typeof o.rates !== "object"
+  )
+    return null;
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(o.rates as Record<string, unknown>)) {
     if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
@@ -50,5 +56,16 @@ export function parseFxRatePayload(raw: unknown): FxRate | null {
 export const FX_RATE_FALLBACK: FxRate = {
   base: "EUR",
   date: "2026-08-04",
-  rates: { USD: 1.1515, GBP: 0.85639, CHF: 0.9319, JPY: 170.0, SEK: 11.2, NOK: 11.6, DKK: 7.46, PLN: 4.27, CAD: 1.58, AUD: 1.74 },
+  rates: {
+    USD: 1.1515,
+    GBP: 0.85639,
+    CHF: 0.9319,
+    JPY: 170.0,
+    SEK: 11.2,
+    NOK: 11.6,
+    DKK: 7.46,
+    PLN: 4.27,
+    CAD: 1.58,
+    AUD: 1.74,
+  },
 };

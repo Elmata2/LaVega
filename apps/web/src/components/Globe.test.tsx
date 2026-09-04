@@ -52,7 +52,10 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   // Valuta haalt de middenkoers op. Hier niet: de test moet over de bol gaan,
   // niet over het netwerk, en de terugval is een geldige toestand.
-  vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("geen netwerk in de test"))));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.reject(new Error("geen netwerk in de test"))),
+  );
 });
 
 afterEach(() => {
@@ -122,12 +125,16 @@ function screenAt(lon: number, lat: number, rot: { lon: number; lat: number }) {
   return project(lon, lat, globeFrame(rot, VIEW));
 }
 
-const answer = (el: HTMLElement) => el.querySelector('[data-testid="bol-antwoord"]')!.textContent ?? "";
-const readout = (el: HTMLElement) => el.querySelector('[data-testid="bol-readout"]')!.textContent ?? "";
+const answer = (el: HTMLElement) =>
+  el.querySelector('[data-testid="bol-antwoord"]')!.textContent ?? "";
+const readout = (el: HTMLElement) =>
+  el.querySelector('[data-testid="bol-readout"]')!.textContent ?? "";
 
 /** Elke knop met deze tekst, ongeacht waar hij in het antwoordpaneel staat. */
 function button(el: HTMLElement, text: string): HTMLButtonElement {
-  const found = [...el.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes(text));
+  const found = [...el.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes(text),
+  );
   if (!found) throw new Error(`geen knop met "${text}"`);
   return found as HTMLButtonElement;
 }
@@ -293,7 +300,8 @@ test("de lijst is met het toetsenbord te bedienen", () => {
   const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED} />);
   const input = type(el, "Japan");
 
-  const active = () => el.querySelector('#lv-globe-list [data-active="1"]')?.getAttribute("data-country") ?? null;
+  const active = () =>
+    el.querySelector('#lv-globe-list [data-active="1"]')?.getAttribute("data-country") ?? null;
   expect(active()).toBeNull();
 
   press(input, "ArrowDown");
@@ -588,7 +596,9 @@ test("een prijsbaar land laat de berekening met die valuta verder rekenen", () =
 test("Antarctica laat geen route en geen 0% in de berekening achter", () => {
   const el = mount(<Valuta accounts={accounts} facts={[]} entries={entries} />);
   const naar = () =>
-    [...el.querySelectorAll<HTMLSelectElement>("select")].find((s) => s.getAttribute("aria-label") === "Naar valuta")!;
+    [...el.querySelectorAll<HTMLSelectElement>("select")].find(
+      (s) => s.getAttribute("aria-label") === "Naar valuta",
+    )!;
   const before = naar().value;
 
   click(option(el, "AQ"));
@@ -607,7 +617,9 @@ test("Antarctica laat geen route en geen 0% in de berekening achter", () => {
 test("een land zonder koers verandert de berekening niet", () => {
   const el = mount(<Valuta accounts={accounts} facts={[]} entries={entries} />);
   const naar = () =>
-    [...el.querySelectorAll<HTMLSelectElement>("select")].find((s) => s.getAttribute("aria-label") === "Naar valuta")!;
+    [...el.querySelectorAll<HTMLSelectElement>("select")].find(
+      (s) => s.getAttribute("aria-label") === "Naar valuta",
+    )!;
   const before = naar().value;
 
   click(option(el, "CU"));
@@ -659,7 +671,9 @@ test("de bol, dan de legenda, dan het antwoord, dan het zoekveld met de lijst", 
   expect(figure.contains(el.querySelector(".lv-globe-search")!)).toBe(false);
 
   // De vijf vlakjes van de legenda, met de kleurrol die het doek ook gebruikt.
-  const tonen = [...el.querySelectorAll(".lv-globe-legend .lv-globe-swatch")].map((s) => s.getAttribute("data-tone"));
+  const tonen = [...el.querySelectorAll(".lv-globe-legend .lv-globe-swatch")].map((s) =>
+    s.getAttribute("data-tone"),
+  );
   expect(tonen).toEqual(["euro", "rate", "norate", "notender", "selected"]);
 });
 
@@ -718,12 +732,18 @@ const TOKENS_CSS = blad("tokens.css");
  *  daar een hex, en een token dat het niet is hoort hier niet stil als zwart
  *  binnen te komen. */
 const TOKENS: Record<string, string> = Object.fromEntries(
-  [...TOKENS_CSS.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((m) => [m[1], m[2].toLowerCase()]),
+  [...TOKENS_CSS.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((m) => [
+    m[1],
+    m[2].toLowerCase(),
+  ]),
 );
 
 /** De kleurrollen van de bol, zoals ze in .lv-globe staan. */
 const ROLLEN: Record<string, string> = Object.fromEntries(
-  [...CSS.matchAll(/(--lv-globe-[a-z]+):\s*([^;]+);/g)].map((m) => [m[1].replace("--lv-globe-", ""), m[2].trim()]),
+  [...CSS.matchAll(/(--lv-globe-[a-z]+):\s*([^;]+);/g)].map((m) => [
+    m[1].replace("--lv-globe-", ""),
+    m[2].trim(),
+  ]),
 );
 
 type RGB = [number, number, number];
@@ -746,7 +766,10 @@ function kleur(waarde: string): RGB {
     if (!hex) throw new Error(`onbekend token: ${token[1]}`);
     return hexNaarRgb(hex);
   }
-  const gemengd = /^color-mix\(in srgb,\s*var\((--[a-z0-9-]+)\)\s*([\d.]+)%,\s*var\((--[a-z0-9-]+)\)\s*\)$/.exec(waarde);
+  const gemengd =
+    /^color-mix\(in srgb,\s*var\((--[a-z0-9-]+)\)\s*([\d.]+)%,\s*var\((--[a-z0-9-]+)\)\s*\)$/.exec(
+      waarde,
+    );
   if (gemengd) {
     const a = kleur(`var(${gemengd[1]})`);
     const b = kleur(`var(${gemengd[3]})`);
@@ -822,7 +845,9 @@ test("aanwijzen en kiezen vallen op tegen elk van de vier vullingen", () => {
   expect(paar("selected", "sea")).toBeGreaterThan(4);
   // En geen twee rollen zijn dezelfde kleur: dan zou een van de zes antwoorden op
   // het doek verdwijnen in een ander.
-  const gebruikt = ["euro", "rate", "norate", "notender", "hover", "selected"].map((r) => kleur(ROLLEN[r]).join(","));
+  const gebruikt = ["euro", "rate", "norate", "notender", "hover", "selected"].map((r) =>
+    kleur(ROLLEN[r]).join(","),
+  );
   expect(new Set(gebruikt).size).toBe(gebruikt.length);
 });
 
@@ -874,7 +899,9 @@ test("een land dat alleen de tweede laag kent, wordt prijsbaar zodra die laag er
   expect(countryById("MA")!.currencies).toEqual([{ code: "MAD", priceable: false }]);
 
   const zonder = vi.fn();
-  click(option(mount(<Globe value="USD" from="EUR" onPick={zonder} supported={SUPPORTED} />), "MA"));
+  click(
+    option(mount(<Globe value="USD" from="EUR" onPick={zonder} supported={SUPPORTED} />), "MA"),
+  );
   expect(zonder).not.toHaveBeenCalled();
 
   act(() => root?.unmount());
@@ -892,7 +919,9 @@ test("een land dat alleen de tweede laag kent, wordt prijsbaar zodra die laag er
 
 test("met de bredere lijst blijven alle vijf de antwoordsoorten van elkaar te onderscheiden", () => {
   const onPick = vi.fn();
-  const el = mount(<Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED_TWEE_LAGEN} />);
+  const el = mount(
+    <Globe value="USD" from="EUR" onPick={onPick} supported={SUPPORTED_TWEE_LAGEN} />,
+  );
 
   // 1. eurozone — geen omwisseling, en nog steeds geen percentage.
   click(option(el, "NL"));
@@ -926,8 +955,12 @@ test("met de bredere lijst blijven alle vijf de antwoordsoorten van elkaar te on
 });
 
 test("de legenda blijft waar met een bredere lijst, en geen regel wordt een dode letter", () => {
-  const el = mount(<Globe value="USD" from="EUR" onPick={vi.fn()} supported={SUPPORTED_TWEE_LAGEN} />);
-  const regels = [...el.querySelectorAll(".lv-globe-legend li")].map((li) => (li.textContent ?? "").trim());
+  const el = mount(
+    <Globe value="USD" from="EUR" onPick={vi.fn()} supported={SUPPORTED_TWEE_LAGEN} />,
+  );
+  const regels = [...el.querySelectorAll(".lv-globe-legend li")].map((li) =>
+    (li.textContent ?? "").trim(),
+  );
 
   /* De legenda zegt "LaVega heeft een koers" en "geen koers bij LaVega" — over
    * ONS, niet over welke instelling de koers publiceerde. Dat is precies waarom

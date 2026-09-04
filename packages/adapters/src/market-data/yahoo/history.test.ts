@@ -4,13 +4,18 @@ import { loadYahooPriceHistory } from "./history.js";
 
 type Chart = { currency?: string; closes?: number[] };
 
-function stubClient(charts: Record<string, Chart>, search: Record<string, string> = {}): { client: YahooHttpClient; charts: string[] } {
+function stubClient(
+  charts: Record<string, Chart>,
+  search: Record<string, string> = {},
+): { client: YahooHttpClient; charts: string[] } {
   const requested: string[] = [];
   const fetchFn = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === "https://fc.yahoo.com/") return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (url === "https://fc.yahoo.com/")
+      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
     if (url.includes("getcrumb")) return new Response("crumb-value");
-    const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
     if (url.includes("/v1/finance/search")) {
       const query = new URL(url).searchParams.get("q")!;
       return json({ quotes: search[query] ? [{ symbol: search[query] }] : [] });
@@ -18,18 +23,31 @@ function stubClient(charts: Record<string, Chart>, search: Record<string, string
     const symbol = decodeURIComponent(url.slice(url.indexOf("/chart/") + 7, url.indexOf("?")));
     requested.push(symbol);
     const chart = charts[symbol];
-    if (!chart) return new Response(JSON.stringify({ chart: { result: null, error: { description: "No data found" } } }), { status: 404 });
-    return json({ chart: { result: [{
-      meta: { currency: chart.currency },
-      timestamp: (chart.closes ?? []).map((_, index) => index * 86400),
-      indicators: { quote: [{ close: chart.closes ?? [] }] },
-    }] } });
+    if (!chart)
+      return new Response(
+        JSON.stringify({ chart: { result: null, error: { description: "No data found" } } }),
+        { status: 404 },
+      );
+    return json({
+      chart: {
+        result: [
+          {
+            meta: { currency: chart.currency },
+            timestamp: (chart.closes ?? []).map((_, index) => index * 86400),
+            indicators: { quote: [{ close: chart.closes ?? [] }] },
+          },
+        ],
+      },
+    });
   }) as typeof fetch;
   return { client: new YahooHttpClient(fetchFn, 20_000, 1), charts: requested };
 }
 
 test("passes over a listing that carries no closes and keeps looking", async () => {
-  const { client, charts } = stubClient({ "BY6.DE": { currency: "EUR", closes: [] }, "BY6.VI": { currency: "EUR", closes: [10, 11] } });
+  const { client, charts } = stubClient({
+    "BY6.DE": { currency: "EUR", closes: [] },
+    "BY6.VI": { currency: "EUR", closes: [10, 11] },
+  });
 
   const history = await loadYahooPriceHistory({ ticker: "BY6d_EQ", exchange: "UNKNOWN", client });
 
@@ -39,9 +57,17 @@ test("passes over a listing that carries no closes and keeps looking", async () 
 });
 
 test("resolves the exact listing from the ISIN before guessing suffixes", async () => {
-  const { client, charts } = stubClient({ "NOVN.SW": { currency: "CHF", closes: [90] } }, { CH0012005267: "NOVN.SW" });
+  const { client, charts } = stubClient(
+    { "NOVN.SW": { currency: "CHF", closes: [90] } },
+    { CH0012005267: "NOVN.SW" },
+  );
 
-  const history = await loadYahooPriceHistory({ ticker: "NOVCd_EQ", exchange: "UNKNOWN", isin: "CH0012005267", client });
+  const history = await loadYahooPriceHistory({
+    ticker: "NOVCd_EQ",
+    exchange: "UNKNOWN",
+    isin: "CH0012005267",
+    client,
+  });
 
   expect(history).toMatchObject({ symbol: "NOVN.SW", currency: "CHF" });
   expect(charts).toEqual(["NOVN.SW"]);

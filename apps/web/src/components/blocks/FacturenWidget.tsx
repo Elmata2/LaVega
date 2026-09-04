@@ -144,7 +144,8 @@ function lateSentence(s: FacturenSummary): string | null {
   const total = s.ontvangen.lateCount + s.betalen.lateCount;
   if (total === 0) return null;
   const parts: string[] = [];
-  if (s.ontvangen.lateEurCount > 0) parts.push(`${formatEuro(s.ontvangen.lateEurTotal)} te ontvangen`);
+  if (s.ontvangen.lateEurCount > 0)
+    parts.push(`${formatEuro(s.ontvangen.lateEurTotal)} te ontvangen`);
   if (s.betalen.lateEurCount > 0) parts.push(`${formatEuro(s.betalen.lateEurTotal)} te betalen`);
   const bedragen = parts.length > 0 ? `: ${parts.join(", ")}` : "";
   return `${total} factu${total === 1 ? "ur is" : "ren zijn"} over de vervaldatum${bedragen}.`;
@@ -183,8 +184,9 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
       footer={
         s.zonderEuroBedrag > 0 ? (
           <>
-            Van {s.zonderEuroBedrag} factu{s.zonderEuroBedrag === 1 ? "ur" : "ren"} is het bedrag niet in euro&apos;s
-            bekend; {s.zonderEuroBedrag === 1 ? "die zit" : "die zitten"} niet in de bedragen hierboven.
+            Van {s.zonderEuroBedrag} factu{s.zonderEuroBedrag === 1 ? "ur" : "ren"} is het bedrag
+            niet in euro&apos;s bekend; {s.zonderEuroBedrag === 1 ? "die zit" : "die zitten"} niet
+            in de bedragen hierboven.
           </>
         ) : undefined
       }
@@ -193,8 +195,8 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
         /* Een UITGESPROKEN nul: er zijn facturen, en geen enkele staat nog
            open. Dat is iets anders dan niets weten, en mag dus gezegd worden. */
         <p className="module-figure-label">
-          Niets staat open — alle {s.inScope} factu{s.inScope === 1 ? "ur" : "ren"} die LaVega kent zijn betaald of
-          vervallen.
+          Niets staat open — alle {s.inScope} factu{s.inScope === 1 ? "ur" : "ren"} die LaVega kent
+          zijn betaald of vervallen.
         </p>
       ) : (
         <>
@@ -202,7 +204,9 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
             <span className="module-figure-value">{s.open}</span>
             <span className="figure-vs">openstaand</span>
           </div>
-          <p className="module-figure-label">{late ?? "Geen enkele openstaande factuur is over zijn vervaldatum."}</p>
+          <p className="module-figure-label">
+            {late ?? "Geen enkele openstaande factuur is over zijn vervaldatum."}
+          </p>
           <div className="entity-rows">
             <SideRow label="Te ontvangen" side={s.ontvangen} />
             <SideRow label="Te betalen" side={s.betalen} />

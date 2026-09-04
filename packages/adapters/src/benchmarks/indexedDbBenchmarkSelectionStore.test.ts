@@ -3,7 +3,18 @@ import { afterEach, expect, test } from "vitest";
 import { createIndexedDbBenchmarkSelectionStore } from "./indexedDbBenchmarkSelectionStore.js";
 
 const names: string[] = [];
-afterEach(async () => Promise.all(names.splice(0).map((name) => new Promise<void>((resolve, reject) => { const request = indexedDB.deleteDatabase(name); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); }))));
+afterEach(async () =>
+  Promise.all(
+    names.splice(0).map(
+      (name) =>
+        new Promise<void>((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(name);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        }),
+    ),
+  ),
+);
 
 test("stores one ordered selection row per tenant", async () => {
   const name = `benchmark-selection-${Date.now()}`;

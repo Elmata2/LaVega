@@ -34,7 +34,11 @@ export type GmailNodeItem = {
 
 /** Gmail levert `raw` base64url-gecodeerd; n8n decodeert dat. */
 export function encodeBase64Url(text: string): string {
-  return Buffer.from(text, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return Buffer.from(text, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 export function decodeBase64Url(data: string): string {
@@ -92,7 +96,9 @@ function parseMime(message: string, root: boolean): MimePart {
     headers,
     contentType: contentType.split(";")[0].trim(),
     disposition: disposition.split(";")[0].trim(),
-    fileName: param(headers["content-disposition"] || "", "filename") || param(headers["content-type"] || "", "name"),
+    fileName:
+      param(headers["content-disposition"] || "", "filename") ||
+      param(headers["content-type"] || "", "name"),
     body: "",
     parts: [],
     root,
@@ -115,9 +121,7 @@ function parseMime(message: string, root: boolean): MimePart {
   const isAttachment = part.disposition === "attachment" || part.fileName !== "";
   // Een bijlage houden we als base64 — dat is ook wat n8n uiteindelijk in
   // `binary[..].data` zet.
-  part.body = isAttachment
-    ? raw64(bodyStart, encoding)
-    : decodeBody(bodyStart, encoding);
+  part.body = isAttachment ? raw64(bodyStart, encoding) : decodeBody(bodyStart, encoding);
   return part;
 }
 
@@ -146,7 +150,9 @@ export function simulateGmailNode(
   const htmlParts: string[] = [];
   const attachments: { fileName: string; mimeType: string; data: string }[] = [];
   walk(root, (part) => {
-    const isAttachment = part.disposition === "attachment" || (part.fileName !== "" && !part.contentType.startsWith("multipart/"));
+    const isAttachment =
+      part.disposition === "attachment" ||
+      (part.fileName !== "" && !part.contentType.startsWith("multipart/"));
     if (isAttachment) {
       attachments.push({ fileName: part.fileName, mimeType: part.contentType, data: part.body });
       return;
@@ -160,13 +166,20 @@ export function simulateGmailNode(
     textParts.length > 0
       ? textParts.join("\n").trim()
       : htmlIsWholeMessage
-        ? htmlParts.join("\n").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+        ? htmlParts
+            .join("\n")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
         : "";
 
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(root.headers)) {
     // mailparser zet in `headers` de HELE regel, niet alleen de waarde.
-    headers[key] = key.replace(/(^|-)([a-z])/g, (_m, dash: string, ch: string) => dash + ch.toUpperCase()) + ": " + value;
+    headers[key] =
+      key.replace(/(^|-)([a-z])/g, (_m, dash: string, ch: string) => dash + ch.toUpperCase()) +
+      ": " +
+      value;
   }
 
   const json: Record<string, unknown> = {
@@ -175,7 +188,10 @@ export function simulateGmailNode(
     labelIds: ["INBOX"],
     sizeEstimate: raw.length,
     subject: root.headers.subject ?? "",
-    from: { value: [{ address: root.headers.from ?? "", name: "" }], text: root.headers.from ?? "" },
+    from: {
+      value: [{ address: root.headers.from ?? "", name: "" }],
+      text: root.headers.from ?? "",
+    },
     to: { value: [{ address: root.headers.to ?? "", name: "" }], text: root.headers.to ?? "" },
     date: root.headers.date ?? "",
     messageId: root.headers["message-id"] ?? "",

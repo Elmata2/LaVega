@@ -58,7 +58,11 @@ test("GET /api/rates returns a valid rates payload with open CORS", async () => 
   const body = await res.json();
   expect(typeof body.asOf).toBe("string");
   expect(Array.isArray(body.rates)).toBe(true);
-  expect(body.rates[0]).toMatchObject({ bank: expect.any(String), ratePct: expect.any(Number), freeWithdrawal: expect.any(Boolean) });
+  expect(body.rates[0]).toMatchObject({
+    bank: expect.any(String),
+    ratePct: expect.any(Number),
+    freeWithdrawal: expect.any(Boolean),
+  });
 });
 
 /* --- Dev CORS. Without this, an agent call from Vite on :5173 is blocked by the

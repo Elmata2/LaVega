@@ -26,7 +26,11 @@ const PDF_BYTES =
 const PNG_BYTES = "\x89PNG\r\n\x1a\n" + "logo-bytes-die-er-niet-toe-doen".repeat(4);
 
 function base64Lines(bytes: string): string {
-  return (Buffer.from(bytes, "binary").toString("base64").match(/.{1,76}/g) ?? []).join("\n");
+  return (
+    Buffer.from(bytes, "binary")
+      .toString("base64")
+      .match(/.{1,76}/g) ?? []
+  ).join("\n");
 }
 
 const PDF_BASE64 = base64Lines(PDF_BYTES);
@@ -130,7 +134,7 @@ export const RAW_HTML_ONLY = [
   "<p>Factuurnummer FN-2026-08-8831. Factuurdatum 15 augustus 2026.",
   "Het bedrag wordt op 22 augustus 2026 automatisch ge&iuml;ncasseerd van",
   "rekening NL91 INGB 0002 4455 66. U hoeft niets te doen.</p>",
-  "<p style=3D\"color:#888\">Fastned B.V., James Wattstraat 77-79, Amsterdam.</p>",
+  '<p style=3D"color:#888">Fastned B.V., James Wattstraat 77-79, Amsterdam.</p>',
   "</body></html>",
   "",
   "--fn-9911",

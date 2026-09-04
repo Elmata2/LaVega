@@ -606,7 +606,11 @@
   height: 180px;
   margin: -90px 0 0 -90px;
   border-radius: 50%;
-  background: radial-gradient(circle closest-side, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  background: radial-gradient(
+    circle closest-side,
+    rgba(255, 255, 255, 0.14),
+    rgba(255, 255, 255, 0)
+  );
   opacity: 0;
   pointer-events: none;
   will-change: transform;
@@ -616,7 +620,9 @@
  * de hover aan en blijft de glans hangen op een plek waar geen vinger meer is. */
 @media (hover: hover) and (pointer: fine) {
   .bank-card-sheen {
-    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition:
+      opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   .bank-card:hover .bank-card-sheen {
     opacity: 1;
@@ -1029,10 +1035,14 @@
   animation: lavega-spin 900ms linear infinite;
 }
 @keyframes lavega-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 /* A turning thing is motion someone may have asked not to see. Stated rather
    than animated: the border alone still reads as "working". */
 @media (prefers-reduced-motion: reduce) {
-  .travel-searching .spinner { animation: none; }
+  .travel-searching .spinner {
+    animation: none;
+  }
 }

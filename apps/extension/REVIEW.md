@@ -28,26 +28,26 @@ niets bruikbaars. Het eindoordeel staat onderaan, met de letterlijke zin erbij.
 
 ## 1. De oude bevindingen, één voor één
 
-| # | oordeel | in één regel |
-| --- | --- | --- |
-| A1 | **anders opgelost dan bedoeld** | de onware belofte is weg, de lege doorsnede niet: nog steeds 0 van 77 |
-| A2 | **opgelost** | `conditions` wordt gelezen; geen euroteken meer boven een CRO-uitkering |
-| A3 | **half opgelost** | de zin is waar geworden, de groepskop erboven niet |
-| A4 | **opgelost** | jaarkaart staat nu boven maandkaart, met de periode in de zin |
-| A5 | **opgelost** | `openBackwards` telt mee in de leegtest |
-| A6 | **half opgelost** | de bedragen lopen door `money.ts`, de punten niet |
-| A7 | **opgelost** | `korteUitgever`, 0 van 77 onbruikbaar |
-| B1 | **opgelost** | onafhankelijk nagemeten: exit 1 met bestand en regelnummer |
-| B2 | **opgelost** | en nu ook in een draaiende Chrome gemeten |
-| B3 | **niet opgelost** | de zin in `chrome.d.ts` is ongewijzigd |
-| L1 | **opgelost** | `AggregateOffer` → `prijsbereik` |
-| L2 | **opgelost** | kiloprijs → `geen-artikelprijs` |
-| L3 | **opgelost** | verzendkosten → `geen-artikelprijs` |
-| L4 | **opgelost** | dollarteken bij EUR → `munt-spreekt-tegen` |
-| L5 | **opgelost** | zelfde bedrag, één kopie zonder munt → één lezing |
-| L6 | **opgelost, met een prijs** | IKEA-actiepagina wordt nu helemaal niet meer gelezen |
-| R1 | **opgelost** | het pad wordt in onze eigen code afgedwongen; de zin klopt |
-| R2 | **opgelost** | `keurPatroon` valt om op `https://www.ikea.com/*` |
+| #   | oordeel                         | in één regel                                                            |
+| --- | ------------------------------- | ----------------------------------------------------------------------- |
+| A1  | **anders opgelost dan bedoeld** | de onware belofte is weg, de lege doorsnede niet: nog steeds 0 van 77   |
+| A2  | **opgelost**                    | `conditions` wordt gelezen; geen euroteken meer boven een CRO-uitkering |
+| A3  | **half opgelost**               | de zin is waar geworden, de groepskop erboven niet                      |
+| A4  | **opgelost**                    | jaarkaart staat nu boven maandkaart, met de periode in de zin           |
+| A5  | **opgelost**                    | `openBackwards` telt mee in de leegtest                                 |
+| A6  | **half opgelost**               | de bedragen lopen door `money.ts`, de punten niet                       |
+| A7  | **opgelost**                    | `korteUitgever`, 0 van 77 onbruikbaar                                   |
+| B1  | **opgelost**                    | onafhankelijk nagemeten: exit 1 met bestand en regelnummer              |
+| B2  | **opgelost**                    | en nu ook in een draaiende Chrome gemeten                               |
+| B3  | **niet opgelost**               | de zin in `chrome.d.ts` is ongewijzigd                                  |
+| L1  | **opgelost**                    | `AggregateOffer` → `prijsbereik`                                        |
+| L2  | **opgelost**                    | kiloprijs → `geen-artikelprijs`                                         |
+| L3  | **opgelost**                    | verzendkosten → `geen-artikelprijs`                                     |
+| L4  | **opgelost**                    | dollarteken bij EUR → `munt-spreekt-tegen`                              |
+| L5  | **opgelost**                    | zelfde bedrag, één kopie zonder munt → één lezing                       |
+| L6  | **opgelost, met een prijs**     | IKEA-actiepagina wordt nu helemaal niet meer gelezen                    |
+| R1  | **opgelost**                    | het pad wordt in onze eigen code afgedwongen; de zin klopt              |
+| R2  | **opgelost**                    | `keurPatroon` valt om op `https://www.ikea.com/*`                       |
 
 ### A1 — geen enkele kaart kan een netto-uitkomst opleveren — ANDERS OPGELOST
 
@@ -97,8 +97,8 @@ nu  : Van jouw kaarten staat Crypto.com Prepaid Card — Plus (Ruby Steel) met 2
 
 Nul eurotekens in kop én regel; plafond, drempel en uitsluitingen staan eronder.
 Het plafond dat wél in euro's leesbaar is wordt ook echt gebruikt — Bleap bij
-€ 4.000: *"Levert hooguit € 5,00 op. Gerekend met het plafond van € 500,00 per
-transactie, niet met het hele aankoopbedrag."* Dat is 1% van € 500 en niet van
+€ 4.000: _"Levert hooguit € 5,00 op. Gerekend met het plafond van € 500,00 per
+transactie, niet met het hele aankoopbedrag."_ Dat is 1% van € 500 en niet van
 € 4.000, en het staat erbij.
 
 De kleinere helft (`ing-platinumcard` met een voorwaardelijke nul in de
@@ -131,8 +131,8 @@ KAARTKOSTEN ONBEKEND
   Deze kaart geeft 5% terug, maar in CRO en niet in euro's …
 ```
 
-Bij Obsidian staat in dezelfde record letterlijk: *"TIER GATE: crypto.com/nl/cards
-prices Obsidian at '€450,000 12-month CRO staking'."* De kaartkosten zijn daar
+Bij Obsidian staat in dezelfde record letterlijk: _"TIER GATE: crypto.com/nl/cards
+prices Obsidian at '€450,000 12-month CRO staking'."_ De kaartkosten zijn daar
 niet onbekend; ze staan er. De rij zegt het niet meer, de kop erboven wel — en
 een groepskop is de sterkste uitspraak in dat blok. Dit is dezelfde onwaarheid
 als A3, één regel hoger. Bovenstaande is afgelezen uit de echte popup in een
@@ -158,8 +158,8 @@ nu : [openWorthIt] Jaarkaart   resultCents= 4000  span=12  "1 jaar"
 De duurste kaart is van de eerste plaats naar de groep "achteruit" verhuisd. De
 oorzaak zat dieper dan de sorteerfunctie: `DEFAULT_HORIZON_MONTHS` is nu 12 en
 elke horizon wordt naar boven op hele jaren afgerond, zodat `charge.spanMonths`
-bij elke rij gelijk is. De regel noemt de periode: *"Over 1 jaar kost dat
-minstens € 108,00 (12 maanden)."* Het woord "minstens" blijft daarmee waar.
+bij elke rij gelijk is. De regel noemt de periode: _"Over 1 jaar kost dat
+minstens € 108,00 (12 maanden)."_ Het woord "minstens" blijft daarmee waar.
 
 ### A5 — "er is niets bekend" boven een uitgerekende rij — OPGELOST
 
@@ -228,8 +228,7 @@ EXITCODE=1
 ```
 
 De regel "ok — geen netwerkverkeer in de bundel" verschijnt niet meer boven een
-controle die iets gevonden heeft. Op de echte bundel: 22 bestanden gescand, exit
-0. De zelftest in het script betrapt zeven gevallen en laat vier schone
+controle die iets gevonden heeft. Op de echte bundel: 22 bestanden gescand, exit 0. De zelftest in het script betrapt zeven gevallen en laat vier schone
 bestanden met rust, bij elke build.
 
 ### B2 — de CSP — OPGELOST, EN NU IN EEN DRAAIENDE CHROME GEMETEN
@@ -431,8 +430,8 @@ om dit levend te maken.
 
 ### N4 — "bedrag-onduidelijk" is een vergaarbak met één uitleg — MATIG (regel 3)
 
-De kop van `read.ts` zegt: *"Er zijn zeven redenen om te weigeren, en alle zeven
-noemen de ECHTE oorzaak."* Nagemeten met `parseAmountToCents`:
+De kop van `read.ts` zegt: _"Er zijn zeven redenen om te weigeren, en alle zeven
+noemen de ECHTE oorzaak."_ Nagemeten met `parseAmountToCents`:
 
 ```
 "96,99 €"      → bedrag-onduidelijk    (achterstaand euroteken, de gewone NL-schrijfwijze)
@@ -443,9 +442,9 @@ noemen de ECHTE oorzaak."* Nagemeten met `parseAmountToCents`:
 "1.234"        → bedrag-onduidelijk    ← het enige geval waar de tekst over gaat
 ```
 
-De tekst die daarbij op het scherm komt (`read.ts:552`): *"Het bedrag op de
+De tekst die daarbij op het scherm komt (`read.ts:552`): _"Het bedrag op de
 pagina is niet eenduidig te lezen — bij één punt met drie cijfers erachter kan
-het duizend keer schelen."* Bij vijf van de zes gemeten gevallen is dat de
+het duizend keer schelen."_ Bij vijf van de zes gemeten gevallen is dat de
 verkeerde oorzaak. `parseAmountToCents` strijkt alleen een VOORAANSTAAND
 `€ $ £` weg, dus `content="96,99 €"` — geen exotische opmaak — valt in de
 vergaarbak. `popup.ts:71-81` heeft diezelfde tekst hard ingebakken, met het
@@ -453,7 +452,7 @@ ruwe invoerveld ervoor.
 
 ### N5 — "prijsbereik" beweert twee uiteinden waar er één staat — KLEIN (regel 3)
 
-`read.ts:544`: *"een laagste en een hoogste bedrag"*. Gemeten op
+`read.ts:544`: _"een laagste en een hoogste bedrag"_. Gemeten op
 `kunstmatig-aggregateoffer-vanafprijs.html` (alleen `lowPrice`) en op een
 `AggregateOffer` met alleen `highPrice`: allebei `prijsbereik`. De weigering is
 juist — de bovenkant is onbekend, en onbekend is niet de onderkant — maar de
@@ -473,8 +472,8 @@ De reparatie van L2/L3 keurt een genest bedrag af op `@type`, en `kaal`
 
 Er staat geen `unitCode`, geen `referenceQuantity`, geen `unitText`: dit IS de
 prijs van het artikel, alleen opgeschreven zoals Shopware en Magento het
-schrijven. De gebruiker leest dan (`read.ts:542`): *"het is een bedrag van een
-andere soort, zoals een prijs per kilo of de verzendkosten"* — op een pagina
+schrijven. De gebruiker leest dan (`read.ts:542`): _"het is een bedrag van een
+andere soort, zoals een prijs per kilo of de verzendkosten"_ — op een pagina
 waar geen kiloprijs en geen verzendtarief staat. Bijt vandaag niet op IKEA
 (dat schrijft een kale `price`), bijt wel op het pad "meten en toevoegen"
 waarvan `sites.ts` het hele vertrouwen ophangt.
@@ -499,8 +498,8 @@ vinkje waarmee iemand leestoestemming geeft — de tekst met de hoogste inzet in
 deze map.
 
 Praktisch gevolg dat niemand heeft opgeschreven: op precies de IKEA-pagina's
-waar korting staat, zegt de extensie voortaan *"Het bedrag is hier niet te
-lezen."* Ik kon niet nameten hoe vaak dat is: `curl` met een gewone browser-UA
+waar korting staat, zegt de extensie voortaan _"Het bedrag is hier niet te
+lezen."_ Ik kon niet nameten hoe vaak dat is: `curl` met een gewone browser-UA
 gaf mij op 21 augustus **HTTP 403** op de BILLY-URL, en botdetectie omzeilen doe
 ik niet. De sitelijst rust dus op de fixtures van de vorige lane, niet op een
 meting van mijzelf.
@@ -531,7 +530,7 @@ is waarop de gebruiker kan afgaan.
 
 ### N9 — Escape sluit het paneel alleen als de aandacht er al in zit — KLEIN
 
-`README.md:96`: *"Je sluit het met het kruisje of met Escape."* De
+`README.md:96`: _"Je sluit het met het kruisje of met Escape."_ De
 `keydown`-luisteraar hangt aan het paneel (`content.ts`), dat geen `tabindex`
 heeft. Wie er niet eerst in klikt, heeft geen Escape. De code legt de keuze uit
 (een globale Escape-vanger zou de winkel in de weg zitten) — de README doet de
@@ -539,9 +538,9 @@ belofte zonder het voorbehoud.
 
 ### N10 — de README zegt dat de extensie nooit in een echte Chrome is geladen, en dat is met één commando te weerleggen
 
-`README.md:324-330`: *"Het toestemmingsdialoog van Chrome is nog nooit in het
+`README.md:324-330`: _"Het toestemmingsdialoog van Chrome is nog nooit in het
 echt gedraaid. Chrome 151 weigert `--load-extension` zodra de sessie
-geautomatiseerd is, dus de extensie is hier niet in een echte Chrome geladen."*
+geautomatiseerd is, dus de extensie is hier niet in een echte Chrome geladen."_
 
 Dat eerste klopt nog. Het tweede niet. Wat ik heb gedraaid:
 
@@ -600,7 +599,7 @@ op de BILLY-fixture van € 49,99:
 > Aantal, bezorgkosten en korting zitten er niet in.
 >
 > **Kaartkosten onbekend**
-> *Bleap Card* — Levert hooguit € 0,50 op. Dat is het brutobedrag: wat deze
+> _Bleap Card_ — Levert hooguit € 0,50 op. Dat is het brutobedrag: wat deze
 > kaart kost om te hebben, staat niet in onze gegevens. Zoek dat op bij Bleap
 > SIA voordat je hem opent — wat je overhoudt, hangt daarvan af. Bij dit cijfer
 > horen voorwaarden: er telt hooguit € 500,00 per transactie mee; een deel van
@@ -608,16 +607,16 @@ op de BILLY-fixture van € 49,99:
 > weten we niet.
 >
 > **Hier kunnen we niets over zeggen**
-> *ING betaalpas* — we weten niet of deze kaart iets teruggeeft. Onbekend is
+> _ING betaalpas_ — we weten niet of deze kaart iets teruggeeft. Onbekend is
 > niet nul, dus deze kaart staat niet in de ranglijst.
-> *ABN AMRO creditcard* — we weten niet of deze kaart iets teruggeeft. Onbekend
+> _ABN AMRO creditcard_ — we weten niet of deze kaart iets teruggeeft. Onbekend
 > is niet nul, dus deze kaart staat niet in de ranglijst.
 >
 > Kaartgegevens van 19 augustus 2026.
 
-Uitgeschreven: *over jouw twee kaarten weten we niets; open een Letse
+Uitgeschreven: _over jouw twee kaarten weten we niets; open een Letse
 self-custodial crypto-Mastercard om vijftig cent te verdienen op een boekenkast,
-en zoek zelf uit wat die kaart kost.* Elk woord daarvan is nu waar. Het is nog
+en zoek zelf uit wat die kaart kost._ Elk woord daarvan is nu waar. Het is nog
 steeds geen antwoord op de vraag waarom iemand deze extensie installeert.
 
 En op de IKEA-pagina's waar er iets te winnen valt — die met een
@@ -695,11 +694,11 @@ en hij vangt N1 en N2 allebei.
 
 # Wat de bouwlane hierna heeft gedaan — 22 augustus 2026
 
-*Toegevoegd door de bouwlane. Boven deze streep is niets veranderd: het oordeel
-van de tegenspraak hoort te blijven staan zoals het geschreven is.*
+_Toegevoegd door de bouwlane. Boven deze streep is niets veranderd: het oordeel
+van de tegenspraak hoort te blijven staan zoals het geschreven is._
 
 De opdracht van deze ronde was niet "de bevindingen afvinken" maar de **eerste**
-reden van het oordeel wegnemen: *hij zegt niets nuttigs.* Dat is gedaan door de
+reden van het oordeel wegnemen: _hij zegt niets nuttigs._ Dat is gedaan door de
 puntenkant te bouwen, langs het herschreven plan
 (`docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md`).
 De bevindingen die klein waren, zijn onderweg meegenomen.
@@ -714,15 +713,15 @@ is daar ook gemeten, met een gestubde worker, in beide toestanden.
 ## De kop van het oordeel: "hij zegt niets nuttigs"
 
 Op een IKEA-productpagina met twee gewone Nederlandse kaarten aangevinkt stond
-er: *"van de kaarten die je hebt aangevinkt, weten we bij geen enkele wat deze
-aankoop oplevert"*, met een advies van vijftig cent eronder. Dat staat er nog —
+er: _"van de kaarten die je hebt aangevinkt, weten we bij geen enkele wat deze
+aankoop oplevert"_, met een advies van vijftig cent eronder. Dat staat er nog —
 het is waar, en de datalaag (A1) is niet in deze map te repareren.
 
 Wat er nu **boven** staat, letterlijk afgelezen uit de popup in Chrome 151, bij
 een saldo van 42.000 punten en een bedrag van € 360:
 
 > **PUNTEN DIE JE HIER HEBT LIGGEN**
-> *Amex* — Je hebt hier 42.000 punten liggen. Bij de gepubliceerde koers van
+> _Amex_ — Je hebt hier 42.000 punten liggen. Bij de gepubliceerde koers van
 > Membership Rewards is dat € 126,00 — 35% van deze € 360,00. Inwisselen gaat via
 > Betalen met Punten via de Amex App / online account — niet in de kassa van deze
 > winkel. Of deze winkel dit programma accepteert, kunnen we hier niet zien.
@@ -749,21 +748,21 @@ het is getest (`points.test.ts`, 20 tests).
 
 ## De openstaande bevindingen
 
-| # | wat er is gebeurd |
-| --- | --- |
-| **A3** | **dicht.** Eigen `PaneelGroep` `geen-euro-uitkomst` met de kop "Opbrengst niet in euro's". Afgelezen in Chrome: Bleap staat onder "Kaartkosten onbekend", de zeven tokenkaarten onder de nieuwe kop. Test in `panel.test.ts`. |
-| **A6** | **dicht.** `getal()` in `money.ts`; `options.ts:90` gebruikt hem. "0.5 punt(en) per euro" is "0,5 punt(en) per euro". Test in `money.test.ts`. |
-| **B3** | **dicht.** De zin in `chrome.d.ts` zegt nu dat `connect-src 'none'` alleen voor `extension_pages` geldt, dat een content script daar buiten valt, en wat de dekking daar wél is (de buildpoort, met de zeven naalden opgesomd). |
-| **N4** | **dicht, en de vergaarbak is opgesplitst.** `bedrag-onduidelijk` gaat nu alleen nog over het duizendteken. Erbij: `bedrag-afgekapt`, `bedrag-niet-leesbaar`, `bedrag-negatief`. Bijvangst: `"96,99 €"` en `"EUR 96,99"` werden geweigerd en worden nu gewoon gelezen — de strip keek alleen naar een vooraanstaand teken. En `popup.ts` heeft zijn hardgecodeerde tekst niet meer: er is een tweede lijst `HANDMATIG_TEXT`, want "vul het bedrag zelf in" is onder het veld waar je dat net deed geen advies. |
-| **N5** | **dicht.** Eén uiteinde van een reeks geeft `prijs-vanaf` met een eigen tekst; twee verschillende uiteinden blijven `prijsbereik`. |
-| **N6** | **dicht.** Een `UnitPriceSpecification` **zonder** `unitCode`, `unitText` of `referenceQuantity` is de artikelprijs (Shopware/Magento). De kiloprijs-fixture weigert nog steeds — die draagt `referenceQuantity: 1 KGM`, en dát is wat een eenheidsprijs een eenheidsprijs maakt. Nieuwe fixture erbij. |
-| **N7** | **dicht.** De SLÄKT-meting staat onder het vinkje (`sites.ts`) en in de README-tabel, met de consequentie erbij: op actiepagina's zegt de extensie niets over het bedrag. Plus wat er dan wél staat. |
-| **N8** | **dicht, maar anders.** De voetregel noemt niet één datum maar de **spreiding**: "Kaartgegevens gecontroleerd tussen 1 maart 2022 en 20 augustus 2026; bij elke regel staat de datum van dat ene cijfer." Geen enkele losse datum kan hier waar zijn — de bouwdatum verzwijgt het oudste cijfer, de nieuwste controledatum verklaart alles vers. Afgeleid uit de bundel zelf, dus het beweegt mee. `docs/catalog/catalog.json` is **niet** aangeraakt: dat is niet van deze lane. |
-| **N9** | **dicht.** Het Escape-voorbehoud staat in de README, met de reden dat er geen globale vanger hangt. |
-| **N10** | **dicht.** De alinea is vervangen door de meting: het commando, de extensie-id, en wat er wel en niet te meten viel. Het toestemmingsvenster blijft onmeetbaar in headless en dat staat er ook. |
-| **11** | **dicht.** Het `style`-attribuut is naar `stijl.css`; `style-src` staat op `'self'`. De build weigert het nu als `'unsafe-inline'` terugkomt, en dat is nagemeten door het opzettelijk terug te zetten in een kopie buiten de repo. |
-| **N1/N2/N3** | waren al dicht vóór deze lane, in commit `a4147ec`. Zelf nagelezen in `rank.ts` (`bepaalClaim` neemt `veld`; `feeClaim.soort !== "vast"` maakt van een voorwaardelijke nul een brutoregel) en de tests staan er (`rank.test.ts:479` e.v.). 37 rank-tests groen. |
-| **A1** | **niet dicht, en niet hier te repareren.** 0 van de 77 kaarten heeft zowel een cashbackcijfer als een prijs. De puntenkant is geen oplossing voor A1 — het is een tweede antwoord naast een leeg antwoord. |
+| #            | wat er is gebeurd                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A3**       | **dicht.** Eigen `PaneelGroep` `geen-euro-uitkomst` met de kop "Opbrengst niet in euro's". Afgelezen in Chrome: Bleap staat onder "Kaartkosten onbekend", de zeven tokenkaarten onder de nieuwe kop. Test in `panel.test.ts`.                                                                                                                                                                                                                                                                                 |
+| **A6**       | **dicht.** `getal()` in `money.ts`; `options.ts:90` gebruikt hem. "0.5 punt(en) per euro" is "0,5 punt(en) per euro". Test in `money.test.ts`.                                                                                                                                                                                                                                                                                                                                                                |
+| **B3**       | **dicht.** De zin in `chrome.d.ts` zegt nu dat `connect-src 'none'` alleen voor `extension_pages` geldt, dat een content script daar buiten valt, en wat de dekking daar wél is (de buildpoort, met de zeven naalden opgesomd).                                                                                                                                                                                                                                                                               |
+| **N4**       | **dicht, en de vergaarbak is opgesplitst.** `bedrag-onduidelijk` gaat nu alleen nog over het duizendteken. Erbij: `bedrag-afgekapt`, `bedrag-niet-leesbaar`, `bedrag-negatief`. Bijvangst: `"96,99 €"` en `"EUR 96,99"` werden geweigerd en worden nu gewoon gelezen — de strip keek alleen naar een vooraanstaand teken. En `popup.ts` heeft zijn hardgecodeerde tekst niet meer: er is een tweede lijst `HANDMATIG_TEXT`, want "vul het bedrag zelf in" is onder het veld waar je dat net deed geen advies. |
+| **N5**       | **dicht.** Eén uiteinde van een reeks geeft `prijs-vanaf` met een eigen tekst; twee verschillende uiteinden blijven `prijsbereik`.                                                                                                                                                                                                                                                                                                                                                                            |
+| **N6**       | **dicht.** Een `UnitPriceSpecification` **zonder** `unitCode`, `unitText` of `referenceQuantity` is de artikelprijs (Shopware/Magento). De kiloprijs-fixture weigert nog steeds — die draagt `referenceQuantity: 1 KGM`, en dát is wat een eenheidsprijs een eenheidsprijs maakt. Nieuwe fixture erbij.                                                                                                                                                                                                       |
+| **N7**       | **dicht.** De SLÄKT-meting staat onder het vinkje (`sites.ts`) en in de README-tabel, met de consequentie erbij: op actiepagina's zegt de extensie niets over het bedrag. Plus wat er dan wél staat.                                                                                                                                                                                                                                                                                                          |
+| **N8**       | **dicht, maar anders.** De voetregel noemt niet één datum maar de **spreiding**: "Kaartgegevens gecontroleerd tussen 1 maart 2022 en 20 augustus 2026; bij elke regel staat de datum van dat ene cijfer." Geen enkele losse datum kan hier waar zijn — de bouwdatum verzwijgt het oudste cijfer, de nieuwste controledatum verklaart alles vers. Afgeleid uit de bundel zelf, dus het beweegt mee. `docs/catalog/catalog.json` is **niet** aangeraakt: dat is niet van deze lane.                             |
+| **N9**       | **dicht.** Het Escape-voorbehoud staat in de README, met de reden dat er geen globale vanger hangt.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **N10**      | **dicht.** De alinea is vervangen door de meting: het commando, de extensie-id, en wat er wel en niet te meten viel. Het toestemmingsvenster blijft onmeetbaar in headless en dat staat er ook.                                                                                                                                                                                                                                                                                                               |
+| **11**       | **dicht.** Het `style`-attribuut is naar `stijl.css`; `style-src` staat op `'self'`. De build weigert het nu als `'unsafe-inline'` terugkomt, en dat is nagemeten door het opzettelijk terug te zetten in een kopie buiten de repo.                                                                                                                                                                                                                                                                           |
+| **N1/N2/N3** | waren al dicht vóór deze lane, in commit `a4147ec`. Zelf nagelezen in `rank.ts` (`bepaalClaim` neemt `veld`; `feeClaim.soort !== "vast"` maakt van een voorwaardelijke nul een brutoregel) en de tests staan er (`rank.test.ts:479` e.v.). 37 rank-tests groen.                                                                                                                                                                                                                                               |
+| **A1**       | **niet dicht, en niet hier te repareren.** 0 van de 77 kaarten heeft zowel een cashbackcijfer als een prijs. De puntenkant is geen oplossing voor A1 — het is een tweede antwoord naast een leeg antwoord.                                                                                                                                                                                                                                                                                                    |
 
 ## Wat er bij is gekomen aan poorten
 

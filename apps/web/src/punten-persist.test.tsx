@@ -60,7 +60,8 @@ function click(el: HTMLElement) {
 }
 
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -68,15 +69,19 @@ function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
   });
 }
 
-const programField = () => container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+const programField = () =>
+  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
 const pointsField = () =>
-  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]')
-  ?? container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Cashback in hele euro\'s"]')!;
+  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]') ??
+  container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Cashback in hele euro\'s"]')!;
 /** The form's own save button, whatever it currently calls itself. */
-const saveButton = () => container!.querySelector<HTMLButtonElement>(".stack-form-actions .btn-primary")!;
+const saveButton = () =>
+  container!.querySelector<HTMLButtonElement>(".stack-form-actions .btn-primary")!;
 const formNote = () => container!.querySelector(".punt-overwrite")?.textContent ?? "";
 const cardFor = (program: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(".punt-card")].find((n) => (n.textContent ?? "").includes(program))!;
+  [...container!.querySelectorAll<HTMLElement>(".punt-card")].find((n) =>
+    (n.textContent ?? "").includes(program),
+  )!;
 const valueOf = (program: string) => cardFor(program).querySelector(".punt-value")!.textContent;
 const interval = (program: string) =>
   container!.querySelector<HTMLSelectElement>(`[aria-label="Herinnering ${program}"]`)!.value;
@@ -151,7 +156,10 @@ test("upsertBalance carries the owner's own settings over, and answers the snooz
     snoozedUntil: "2026-09-16",
     note: "saldo uit de Amex-app",
   };
-  const next = upsertBalance([kept], makeRewardsBalance({ program: AMEX, points: 250_000, updatedAt: ASOF }));
+  const next = upsertBalance(
+    [kept],
+    makeRewardsBalance({ program: AMEX, points: 250_000, updatedAt: ASOF }),
+  );
   expect(next).toHaveLength(1);
   expect(next[0].points).toBe(250_000);
   expect(next[0].updatedAt).toBe(ASOF);
@@ -167,8 +175,8 @@ test("a removed balance can be put back — one click never destroys a hand-type
     makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" }),
     makeRewardsBalance({ program: FLYING_BLUE, points: 60_000, updatedAt: "2026-05-12" }),
   ]);
-  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find(
-    (n) => (n.textContent ?? "").includes("Verwijder"),
+  const del = [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+    (n.textContent ?? "").includes("Verwijder"),
   )!;
   click(del);
   expect(container!.querySelectorAll(".punt-card")).toHaveLength(1);
@@ -184,15 +192,28 @@ test("a removed balance can be put back — one click never destroys a hand-type
 });
 
 test("the undo keeps the reminder the owner set on the row he removed", () => {
-  render([{ ...makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" }), intervalDays: 30 }]);
-  click([...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) => (n.textContent ?? "").includes("Verwijder"))!);
+  render([
+    {
+      ...makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" }),
+      intervalDays: 30,
+    },
+  ]);
+  click(
+    [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+      (n.textContent ?? "").includes("Verwijder"),
+    )!,
+  );
   click(container!.querySelector<HTMLButtonElement>(".punt-undo button")!);
   expect(interval(AMEX)).toBe("30");
 });
 
 test("saving something else lets the undo go, so it can never overwrite a newer figure", () => {
   render([makeRewardsBalance({ program: AMEX, points: 245_000, updatedAt: "2026-05-12" })]);
-  click([...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) => (n.textContent ?? "").includes("Verwijder"))!);
+  click(
+    [...cardFor(AMEX).querySelectorAll<HTMLElement>(".card-link-danger")].find((n) =>
+      (n.textContent ?? "").includes("Verwijder"),
+    )!,
+  );
   expect(container!.querySelector(".punt-undo")).not.toBeNull();
 
   addBalance(AMEX, "1000"); // he re-entered it himself

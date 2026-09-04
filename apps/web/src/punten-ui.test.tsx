@@ -4,7 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import type { RewardsBalance } from "@lavega/core";
 import { makeRewardsBalance } from "@lavega/core";
-import Punten, { programUnit, programCategory, puntenRows, addDaysISO, dateNL } from "./views/Punten";
+import Punten, {
+  programUnit,
+  programCategory,
+  puntenRows,
+  addDaysISO,
+  dateNL,
+} from "./views/Punten";
 
 /* B5 — the Punten tracker.
  *
@@ -17,7 +23,11 @@ import Punten, { programUnit, programCategory, puntenRows, addDaysISO, dateNL } 
 
 const ASOF = "2026-08-17";
 
-const mr = (points: number, updatedAt: string, extra: Partial<RewardsBalance> = {}): RewardsBalance => ({
+const mr = (
+  points: number,
+  updatedAt: string,
+  extra: Partial<RewardsBalance> = {},
+): RewardsBalance => ({
   ...makeRewardsBalance({ program: "American Express Membership Rewards", points, updatedAt }),
   ...extra,
 });
@@ -97,13 +107,17 @@ function render(balances: RewardsBalance[], busy = false) {
   document.body.appendChild(container);
   root = createRoot(container);
   act(() =>
-    root!.render(<Punten balances={balances} asOf={ASOF} busy={busy} onSave={(next) => saved.push(next)} />),
+    root!.render(
+      <Punten balances={balances} asOf={ASOF} busy={busy} onSave={(next) => saved.push(next)} />,
+    ),
   );
   return container;
 }
 
 const byText = (sel: string, text: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) => (n.textContent ?? "").includes(text))!;
+  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  )!;
 
 const cardFor = (program: string): HTMLElement => byText(".punt-card", program);
 
@@ -114,7 +128,8 @@ function click(el: HTMLElement) {
 }
 
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -187,7 +202,10 @@ test("answering with just the number stores it and re-dates it to today", () => 
 test("a reply that is a sentence is refused out loud — nothing is guessed into the vault", () => {
   render([mr(200_000, "2026-01-01")]);
   click(byText(".punt-card .card-link", "Saldo bijwerken"));
-  type(container!.querySelector<HTMLInputElement>(".punt-ask input")!, "ergens tussen 240000 en 250000");
+  type(
+    container!.querySelector<HTMLInputElement>(".punt-ask input")!,
+    "ergens tussen 240000 en 250000",
+  );
   click(byText(".punt-ask .btn-primary", "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector(".punt-error")!.textContent).toContain("stuur alleen het saldo");
@@ -201,7 +219,12 @@ test("'Niet nu' snoozes exactly one month and asks nothing in between", () => {
 
 test("the reminder interval is set per programme", () => {
   render([fb(60_000, "2026-08-01")]);
-  type(container!.querySelector<HTMLSelectElement>('[aria-label="Herinnering Flying Blue (KLM/Air France)"]')!, "30");
+  type(
+    container!.querySelector<HTMLSelectElement>(
+      '[aria-label="Herinnering Flying Blue (KLM/Air France)"]',
+    )!,
+    "30",
+  );
   expect(saved[0][0].intervalDays).toBe(30);
 });
 
@@ -213,7 +236,10 @@ test("a balance can be removed", () => {
 
 test("the add form takes '245k' and refuses text, saying why", () => {
   render([]);
-  type(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]')!, "geen idee");
+  type(
+    container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]')!,
+    "geen idee",
+  );
   click(byText(".stack-form-actions .btn-primary", "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector(".punt-error")!.textContent).toContain("geen getal");
@@ -227,12 +253,16 @@ test("the add form names the unit of the chosen programme", () => {
   render([]);
   expect(container!.querySelector('.punt-form [aria-label="Punten"]')).toBeTruthy();
   type(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!, "bunq");
-  expect(container!.querySelector('.punt-form [aria-label="Cashback in hele euro\'s"]')).toBeTruthy();
+  expect(
+    container!.querySelector('.punt-form [aria-label="Cashback in hele euro\'s"]'),
+  ).toBeTruthy();
 });
 
 test("with nothing tracked the screen explains what to do, and claims nothing", () => {
   render([]);
-  expect(container!.querySelector(".empty-guide")!.textContent).toContain("Nog geen punten- of cashback-saldi");
+  expect(container!.querySelector(".empty-guide")!.textContent).toContain(
+    "Nog geen punten- of cashback-saldi",
+  );
   expect(container!.querySelectorAll(".punt-card")).toHaveLength(0);
   /* "0 SALDI" EN NIET "0 PROGRAMMA'S", en dat is een correctie en geen
    * naamswijziging. Sinds hij vroeg om ALLE programma's te tonen — ook ING, ook
@@ -244,7 +274,11 @@ test("with nothing tracked the screen explains what to do, and claims nothing", 
 
 test("busy disables every control that would write", () => {
   render([mr(1, "2026-01-01")], true);
-  const live = [...container!.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button, input, select")];
+  const live = [
+    ...container!.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>(
+      "button, input, select",
+    ),
+  ];
   expect(live.length).toBeGreaterThan(0);
   expect(live.every((el) => el.disabled)).toBe(true);
 });

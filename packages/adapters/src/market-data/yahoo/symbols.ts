@@ -1,10 +1,42 @@
 const EXCHANGE_SUFFIX_MAP: Record<string, string> = {
-  NASDAQ: "", NMS: "", NYSE: "", AMEX: "", ARCA: "", LSE: ".L", LSEETF: ".L",
-  XETRA: ".DE", XETR: ".DE", IBIS: ".DE", FWB: ".F", GETTEX: ".DE",
-  AMS: ".AS", XAMS: ".AS", AEB: ".AS", EURONEXT: ".AS", SBF: ".PA", "ENEXT.BE": ".BR", BVL: ".LS",
-  BVME: ".MI", BM: ".MC", SIX: ".SW", SWX: ".SW", OMX: ".ST", Stockholm: ".ST",
-  CPH: ".CO", HEX: ".HE", OSE: ".OL", VSE: ".VI", WSE: ".WA", ATHEX: ".AT",
-  HKEX: ".HK", SEHK: ".HK", TYO: ".T", ASX: ".AX", NSE: ".NS", BSE: ".BO", TSX: ".TO",
+  NASDAQ: "",
+  NMS: "",
+  NYSE: "",
+  AMEX: "",
+  ARCA: "",
+  LSE: ".L",
+  LSEETF: ".L",
+  XETRA: ".DE",
+  XETR: ".DE",
+  IBIS: ".DE",
+  FWB: ".F",
+  GETTEX: ".DE",
+  AMS: ".AS",
+  XAMS: ".AS",
+  AEB: ".AS",
+  EURONEXT: ".AS",
+  SBF: ".PA",
+  "ENEXT.BE": ".BR",
+  BVL: ".LS",
+  BVME: ".MI",
+  BM: ".MC",
+  SIX: ".SW",
+  SWX: ".SW",
+  OMX: ".ST",
+  Stockholm: ".ST",
+  CPH: ".CO",
+  HEX: ".HE",
+  OSE: ".OL",
+  VSE: ".VI",
+  WSE: ".WA",
+  ATHEX: ".AT",
+  HKEX: ".HK",
+  SEHK: ".HK",
+  TYO: ".T",
+  ASX: ".AX",
+  NSE: ".NS",
+  BSE: ".BO",
+  TSX: ".TO",
 };
 const TRADING212_COUNTRY_SUFFIX_MAP: Record<string, string> = {
   BE: ".BR",
@@ -21,7 +53,24 @@ const TRADING212_VENUE_SUFFIX_MAP: Record<string, string> = {
   p: ".PA",
   s: ".SW",
 };
-const FALLBACKS = ["", ".AS", ".PA", ".BR", ".DE", ".F", ".L", ".MI", ".MC", ".SW", ".ST", ".CO", ".HE", ".OL", ".VI", ".WA"];
+const FALLBACKS = [
+  "",
+  ".AS",
+  ".PA",
+  ".BR",
+  ".DE",
+  ".F",
+  ".L",
+  ".MI",
+  ".MC",
+  ".SW",
+  ".ST",
+  ".CO",
+  ".HE",
+  ".OL",
+  ".VI",
+  ".WA",
+];
 const KNOWN = new Set(Object.values(EXCHANGE_SUFFIX_MAP).concat(FALLBACKS));
 
 export function getYahooSymbol(ticker: string, exchange: string): string {
@@ -54,7 +103,9 @@ function trading212YahooCandidates(ticker: string): string[] {
 
   const venueBody = /^(?<body>.+)_EQ$/.exec(ticker)?.groups?.body;
   if (venueBody) {
-    const venues = Object.keys(TRADING212_VENUE_SUFFIX_MAP).sort((left, right) => right.length - left.length);
+    const venues = Object.keys(TRADING212_VENUE_SUFFIX_MAP).sort(
+      (left, right) => right.length - left.length,
+    );
     for (const venue of venues) {
       if (!venueBody.endsWith(venue) || venueBody.length === venue.length) continue;
       const base = yahooClassSymbol(venueBody.slice(0, -venue.length));
@@ -67,14 +118,11 @@ function trading212YahooCandidates(ticker: string): string[] {
 }
 
 function yahooClassSymbol(value: string): string {
-  return value.replace(/[\/_]/g, "-");
+  return value.replace(/[/_]/g, "-");
 }
 
 function expandTrading212Base(base: string, preferredSuffix: string): string[] {
-  return [
-    `${base}${preferredSuffix}`,
-    ...FALLBACKS.map((suffix) => `${base}${suffix}`),
-  ];
+  return [`${base}${preferredSuffix}`, ...FALLBACKS.map((suffix) => `${base}${suffix}`)];
 }
 
 function unique(values: string[]): string[] {

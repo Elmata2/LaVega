@@ -66,7 +66,9 @@ async function collectSourceFiles(directory: string, result: string[] = []): Pro
 }
 
 async function collectModules(): Promise<SourceModule[]> {
-  const files = (await Promise.all(SOURCE_ROOTS.map((root) => collectSourceFiles(join(REPOSITORY_ROOT, root))))).flat();
+  const files = (
+    await Promise.all(SOURCE_ROOTS.map((root) => collectSourceFiles(join(REPOSITORY_ROOT, root))))
+  ).flat();
   const modules: SourceModule[] = [];
   for (const file of files) {
     const source = await readFile(file, "utf8");
@@ -87,7 +89,11 @@ function collectImports(modules: SourceModule[]): ImportEdge[] {
   return modules.flatMap(({ imports }) => imports);
 }
 
-function resolveLocalImport(file: string, specifier: string, files: Set<string>): string | undefined {
+function resolveLocalImport(
+  file: string,
+  specifier: string,
+  files: Set<string>,
+): string | undefined {
   const packageRoots: Record<string, string> = {
     "@lavega/adapters": "packages/adapters/src/index.ts",
     "@lavega/core": "packages/core/src/index.ts",
@@ -96,8 +102,16 @@ function resolveLocalImport(file: string, specifier: string, files: Set<string>)
   if (!specifier.startsWith(".")) return undefined;
 
   const base = resolve(REPOSITORY_ROOT, dirname(file), specifier.replace(/\.js$/, ""));
-  const candidates = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
-  return candidates.map((candidate) => relative(REPOSITORY_ROOT, candidate)).find((candidate) => files.has(candidate));
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, "index.ts"),
+    join(base, "index.tsx"),
+  ];
+  return candidates
+    .map((candidate) => relative(REPOSITORY_ROOT, candidate))
+    .find((candidate) => files.has(candidate));
 }
 
 function isInvestingServerEntry(file: string): boolean {
@@ -121,7 +135,9 @@ const INVESTING_SERVER_NODE_ADAPTERS = new Set([
 ]);
 
 function isInvestingServerNodeAdapter(file: string, specifier: string): boolean {
-  return file === "apps/investing-server/src/index.ts" && INVESTING_SERVER_NODE_ADAPTERS.has(specifier);
+  return (
+    file === "apps/investing-server/src/index.ts" && INVESTING_SERVER_NODE_ADAPTERS.has(specifier)
+  );
 }
 
 function findInvestingServerNodeImports(modules: SourceModule[]): ImportEdge[] {
@@ -161,11 +177,13 @@ function isCoreFile(file: string): boolean {
 }
 
 function isStorageAdapterFile(file: string): boolean {
-  return file === "packages/adapters/src/index.ts"
-    || file.startsWith("packages/adapters/src/storage/")
+  return (
+    file === "packages/adapters/src/index.ts" ||
+    file.startsWith("packages/adapters/src/storage/") ||
     // CredentialStore's local implementation is the one intentional consumer
     // of encrypted storage outside the storage barrel.
-    || file === "packages/adapters/src/credentials/localCredentialStore.ts";
+    file === "packages/adapters/src/credentials/localCredentialStore.ts"
+  );
 }
 
 function isNodeBuiltinOrIo(specifier: string): boolean {
@@ -178,9 +196,11 @@ describe("import boundaries", () => {
   test("core does not import adapters or I/O", async () => {
     const violations = collectImports(await collectModules()).filter(({ file, specifier }) => {
       if (!isCoreFile(file)) return false;
-      return specifier === "@lavega/adapters"
-        || specifier.startsWith("@lavega/adapters/")
-        || isNodeBuiltinOrIo(specifier);
+      return (
+        specifier === "@lavega/adapters" ||
+        specifier.startsWith("@lavega/adapters/") ||
+        isNodeBuiltinOrIo(specifier)
+      );
     });
 
     expect(violations).toEqual([]);

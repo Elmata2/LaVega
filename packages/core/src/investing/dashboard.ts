@@ -10,9 +10,22 @@ import { placePositionMarkers, type PositionPricePoint } from "./markers.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import type { BenchmarkInstrument, BenchmarkSeries } from "./benchmarks.js";
-import { brokerCostLegs, buildCurrentPositions, calculatePositionReturn, type CurrentPosition, type PositionReturn, type PositionReturnStatus } from "./positions.js";
+import {
+  brokerCostLegs,
+  buildCurrentPositions,
+  calculatePositionReturn,
+  type CurrentPosition,
+  type PositionReturn,
+  type PositionReturnStatus,
+} from "./positions.js";
 
-export const PORTFOLIO_RANGES = ["1M", "6M", "1Y", "YTD", "All"] as const satisfies readonly PortfolioRange[];
+export const PORTFOLIO_RANGES = [
+  "1M",
+  "6M",
+  "1Y",
+  "YTD",
+  "All",
+] as const satisfies readonly PortfolioRange[];
 
 export type InvestingDashboardPosition = CurrentPosition;
 
@@ -140,22 +153,30 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
   const selectedPositions = selected
     ? input.positions.filter((position) => position.symbol.toUpperCase() === selected)
     : [];
-  const selectedBars = selected ? input.priceBars.filter((bar) => bar.symbol.toUpperCase() === selected) : [];
-  const selectedTrades = selected ? input.trades.filter((trade) => trade.symbol.toUpperCase() === selected) : [];
-  const selectedDividends = selected ? input.dividends.filter((dividend) => dividend.symbol.toUpperCase() === selected) : [];
-  const sample = selectedPositions[0] ?? selectedTrades[0] ?? selectedDividends[0] ?? selectedBars[0];
-  const position = selected && sample
-    ? buildPositionDetail({
-        selected,
-        sampleCurrency: sample.currency,
-        positions: selectedPositions,
-        trades: selectedTrades,
-        dividends: selectedDividends,
-        bars: selectedBars,
-        presentationCurrency: input.presentationCurrency,
-        fxRates: input.fxRates,
-      })
-    : null;
+  const selectedBars = selected
+    ? input.priceBars.filter((bar) => bar.symbol.toUpperCase() === selected)
+    : [];
+  const selectedTrades = selected
+    ? input.trades.filter((trade) => trade.symbol.toUpperCase() === selected)
+    : [];
+  const selectedDividends = selected
+    ? input.dividends.filter((dividend) => dividend.symbol.toUpperCase() === selected)
+    : [];
+  const sample =
+    selectedPositions[0] ?? selectedTrades[0] ?? selectedDividends[0] ?? selectedBars[0];
+  const position =
+    selected && sample
+      ? buildPositionDetail({
+          selected,
+          sampleCurrency: sample.currency,
+          positions: selectedPositions,
+          trades: selectedTrades,
+          dividends: selectedDividends,
+          bars: selectedBars,
+          presentationCurrency: input.presentationCurrency,
+          fxRates: input.fxRates,
+        })
+      : null;
 
   const externalByDate = new Map<string, number | null>();
   const seenFlows = new Set<string>();
@@ -166,12 +187,21 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
     seenFlows.add(identity);
     let converted: number | null = null;
     try {
-      converted = convertCurrency(flow.amount, flow.currency, input.presentationCurrency, flow.date, input.fxRates);
+      converted = convertCurrency(
+        flow.amount,
+        flow.currency,
+        input.presentationCurrency,
+        flow.date,
+        input.fxRates,
+      );
     } catch {
       // Keep unknown owner flow visible. TWR must not skip or move it.
     }
     const current = externalByDate.get(flow.date);
-    externalByDate.set(flow.date, current === null || converted === null ? null : (current ?? 0) + converted);
+    externalByDate.set(
+      flow.date,
+      current === null || converted === null ? null : (current ?? 0) + converted,
+    );
   }
 
   return {
@@ -185,7 +215,9 @@ export function buildInvestingDashboard(input: InvestingDashboardInput): Investi
         .sort((left, right) => left.date.localeCompare(right.date))
         .map((bar) => ({ date: bar.date, value: bar.close })),
     })),
-    externalCashFlows: [...externalByDate].sort(([left], [right]) => left.localeCompare(right)).map(([date, amount]) => ({ date, amount })),
+    externalCashFlows: [...externalByDate]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, amount]) => ({ date, amount })),
     allocation: {
       instrument: bucketPricedAllocation(positions, "instrument"),
       entity: bucketPricedAllocation(positions, "entity"),
@@ -206,15 +238,25 @@ function buildPositionDetail(input: {
   presentationCurrency: string;
   fxRates: FxRates;
 }): InvestingPositionDetail {
-  const orderedTrades = input.trades.map((trade, sourceOrder) => ({ trade, sourceOrder }))
-    .sort((left, right) => left.trade.date.localeCompare(right.trade.date) || left.sourceOrder - right.sourceOrder);
+  const orderedTrades = input.trades
+    .map((trade, sourceOrder) => ({ trade, sourceOrder }))
+    .sort(
+      (left, right) =>
+        left.trade.date.localeCompare(right.trade.date) || left.sourceOrder - right.sourceOrder,
+    );
   let reconstructedQuantity = 0;
   const quantityHistory: PositionQuantityChange[] = [];
   for (const { trade, sourceOrder } of orderedTrades) {
     if (trade.side === "other") continue;
     const delta = trade.side === "buy" ? trade.quantity : -trade.quantity;
     reconstructedQuantity += delta;
-    quantityHistory.push({ date: trade.date, quantity: reconstructedQuantity, delta, reason: trade.side, sourceOrder });
+    quantityHistory.push({
+      date: trade.date,
+      quantity: reconstructedQuantity,
+      delta,
+      reason: trade.side,
+      sourceOrder,
+    });
   }
   const snapshotQuantity = input.positions.reduce((sum, item) => sum + item.quantity, 0);
   const quantity = input.positions.length > 0 ? snapshotQuantity : reconstructedQuantity;
@@ -228,12 +270,25 @@ function buildPositionDetail(input: {
   let dailyChangePercentage: number | null = null;
   if (status === "open" && latest) {
     try {
-      currentPrice = convertCurrency(latest.close, latest.currency, input.presentationCurrency, latest.date, input.fxRates);
+      currentPrice = convertCurrency(
+        latest.close,
+        latest.currency,
+        input.presentationCurrency,
+        latest.date,
+        input.fxRates,
+      );
       currentValue = currentPrice * quantity;
       if (previous) {
-        const priorPrice = convertCurrency(previous.close, previous.currency, input.presentationCurrency, previous.date, input.fxRates);
+        const priorPrice = convertCurrency(
+          previous.close,
+          previous.currency,
+          input.presentationCurrency,
+          previous.date,
+          input.fxRates,
+        );
         dailyChange = (currentPrice - priorPrice) * quantity;
-        dailyChangePercentage = Math.abs(priorPrice) <= 1e-9 ? null : (currentPrice - priorPrice) / priorPrice;
+        dailyChangePercentage =
+          Math.abs(priorPrice) <= 1e-9 ? null : (currentPrice - priorPrice) / priorPrice;
       }
     } catch {
       currentPrice = null;
@@ -242,22 +297,45 @@ function buildPositionDetail(input: {
       dailyChangePercentage = null;
     }
   }
-  const valuationDate = status === "open"
-    ? latest?.date
-    : [...input.trades.map((trade) => trade.date), ...input.dividends.map((dividend) => dividend.date)].sort().at(-1);
-  const returns = calculatePositionReturn(quantity, status === "closed" ? 0 : currentValue, input.trades, input.dividends, input.presentationCurrency, input.fxRates, { valuationDate, brokerCost: brokerCostLegs(input.positions) });
-  const averageCost = returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9 ? null : returns.remainingCostBasis / quantity;
+  const valuationDate =
+    status === "open"
+      ? latest?.date
+      : [
+          ...input.trades.map((trade) => trade.date),
+          ...input.dividends.map((dividend) => dividend.date),
+        ]
+          .sort()
+          .at(-1);
+  const returns = calculatePositionReturn(
+    quantity,
+    status === "closed" ? 0 : currentValue,
+    input.trades,
+    input.dividends,
+    input.presentationCurrency,
+    input.fxRates,
+    { valuationDate, brokerCost: brokerCostLegs(input.positions) },
+  );
+  const averageCost =
+    returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9
+      ? null
+      : returns.remainingCostBasis / quantity;
   const activity: PositionActivity[] = [
-    ...input.trades.flatMap((trade, sourceOrder): PositionActivity[] => trade.side === "other" ? [] : [{
-      date: trade.date,
-      kind: trade.side,
-      quantity: trade.quantity,
-      executionPrice: trade.price,
-      amount: trade.amount,
-      commission: trade.commission,
-      currency: trade.currency,
-      sourceOrder,
-    }]),
+    ...input.trades.flatMap((trade, sourceOrder): PositionActivity[] =>
+      trade.side === "other"
+        ? []
+        : [
+            {
+              date: trade.date,
+              kind: trade.side,
+              quantity: trade.quantity,
+              executionPrice: trade.price,
+              amount: trade.amount,
+              commission: trade.commission,
+              currency: trade.currency,
+              sourceOrder,
+            },
+          ],
+    ),
     ...input.dividends.map((dividend, index): PositionActivity => ({
       date: dividend.date,
       kind: "dividend",
@@ -266,10 +344,13 @@ function buildPositionDetail(input: {
       currency: dividend.currency,
       sourceOrder: input.trades.length + index,
     })),
-  ].sort((left, right) => right.date.localeCompare(left.date) || left.sourceOrder - right.sourceOrder);
-  const description = input.positions.find((item) => item.description)?.description
-    ?? input.trades.find((item) => item.description)?.description
-    ?? input.dividends.find((item) => item.description)?.description;
+  ].sort(
+    (left, right) => right.date.localeCompare(left.date) || left.sourceOrder - right.sourceOrder,
+  );
+  const description =
+    input.positions.find((item) => item.description)?.description ??
+    input.trades.find((item) => item.description)?.description ??
+    input.dividends.find((item) => item.description)?.description;
   return {
     symbol: input.selected,
     ...(description ? { description } : {}),

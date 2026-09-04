@@ -2,7 +2,15 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import type { Account, EntityProfile, ScheduledFlow, Tx } from "@lavega/core";
 import { accountsInScope } from "@lavega/core";
-import { SCOPE_LABELS, SCOPE_ORDER, entityOptionsFor, flowsForScope, screenOnSwitch, txsForAccounts, unfilteredScreen } from "./scope.js";
+import {
+  SCOPE_LABELS,
+  SCOPE_ORDER,
+  entityOptionsFor,
+  flowsForScope,
+  screenOnSwitch,
+  txsForAccounts,
+  unfilteredScreen,
+} from "./scope.js";
 
 /* The Persoonlijk | Zakelijk switch: what the shell actually filters when it is
  * flipped. The classification itself is core's (entities.ts) — these prove the
@@ -49,7 +57,10 @@ test("switching to zakelijk shows the classified entity's accounts and nothing e
 });
 
 test("switching to persoonlijk shows everything not classified as a company", () => {
-  expect(accountsInScope(accounts, "personal", profiles).map((a) => a.key)).toEqual(["prive", "bv2"]);
+  expect(accountsInScope(accounts, "personal", profiles).map((a) => a.key)).toEqual([
+    "prive",
+    "bv2",
+  ]);
 });
 
 test("a transaction follows its account's half — never its own", () => {
@@ -69,13 +80,20 @@ test("a company's VAT reservation never surfaces while you look at your private 
 test("the entity scope the views still receive is built from the half in view", () => {
   // Belasting's per-BV modules and Transacties' company filter read this list.
   expect(entityOptionsFor(accountsInScope(accounts, "business", profiles))).toEqual(["BV1"]);
-  expect(entityOptionsFor(accountsInScope(accounts, "personal", profiles))).toEqual(["Privé", "BV2"]);
+  expect(entityOptionsFor(accountsInScope(accounts, "personal", profiles))).toEqual([
+    "Privé",
+    "BV2",
+  ]);
 });
 
 test("an unclassified vault opens on the half that holds everything it has", () => {
   // No profiles at all: core's default is personal, so nothing is hidden on a
   // first run and nothing is silently promoted to zakelijk.
-  expect(accountsInScope(accounts, "personal", []).map((a) => a.key)).toEqual(["prive", "bv1", "bv2"]);
+  expect(accountsInScope(accounts, "personal", []).map((a) => a.key)).toEqual([
+    "prive",
+    "bv1",
+    "bv2",
+  ]);
   expect(accountsInScope(accounts, "business", [])).toEqual([]);
 });
 
@@ -92,13 +110,20 @@ test("the shell scopes on the classification, not on a second axis of its own", 
 
 /* --- The screen each half is left on -------------------------------------- */
 
-const screen = (view: Parameters<typeof unfilteredScreen>[0], over: Partial<ReturnType<typeof unfilteredScreen>> = {}) => ({
+const screen = (
+  view: Parameters<typeof unfilteredScreen>[0],
+  over: Partial<ReturnType<typeof unfilteredScreen>> = {},
+) => ({
   ...unfilteredScreen(view),
   ...over,
 });
 
 test("a half you have never opened starts on the module you are on, with no filters", () => {
-  const current = screen("transactions", { fAccount: "prive", fCategory: "Boodschappen", fSearch: "ah" });
+  const current = screen("transactions", {
+    fAccount: "prive",
+    fCategory: "Boodschappen",
+    fSearch: "ah",
+  });
   expect(screenOnSwitch({}, "business", current)).toEqual(unfilteredScreen("transactions"));
 });
 

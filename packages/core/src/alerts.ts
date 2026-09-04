@@ -22,7 +22,10 @@ function addDays(iso: string, n: number): string {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 function eur(cents: number): string {
-  return "€ " + (cents / 100).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    "€ " +
+    (cents / 100).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  );
 }
 
 export type ComputeAlertsInput = {
@@ -44,7 +47,14 @@ export type ComputeAlertsInput = {
  *  Missed-payment detection uses each stream's lastDate: a real arrival would
  *  have extended it. Only flagged when overdue past a grace window and by no
  *  more than two cadence cycles (older ⇒ assume the stream simply ended). */
-export function computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows, tracking }: ComputeAlertsInput): Alert[] {
+export function computeAlerts({
+  accounts,
+  forecast,
+  asOf,
+  bufferCents,
+  scheduledFlows,
+  tracking,
+}: ComputeAlertsInput): Alert[] {
   const alerts: Alert[] = [];
 
   if (forecast.shortfall) {

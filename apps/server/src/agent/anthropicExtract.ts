@@ -82,7 +82,6 @@ export async function extractInvoiceFields(
   // we never fabricate a number, so the UI only shows a percentage it actually
   // reported.
   const rawConf = f.confidence;
-  const confidence =
-    typeof rawConf === "number" && rawConf >= 0 && rawConf <= 1 ? rawConf : null;
+  const confidence = typeof rawConf === "number" && rawConf >= 0 && rawConf <= 1 ? rawConf : null;
   return { fields, confidence };
 }

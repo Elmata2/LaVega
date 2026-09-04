@@ -46,7 +46,10 @@ const D2R = Math.PI / 180;
  *  niet. Hij hoort hier ook zo te staan — met de platte afstand zou de test bij
  *  Groenland stukken van 20° lengtegraad goedkeuren die op de bol kort zijn, en
  *  bij de evenaar niets. */
-function angularSpan([lon1, lat1]: readonly [number, number], [lon2, lat2]: readonly [number, number]): number {
+function angularSpan(
+  [lon1, lat1]: readonly [number, number],
+  [lon2, lat2]: readonly [number, number],
+): number {
   const k = Math.cos(((lat1 + lat2) / 2) * D2R);
   return Math.hypot((lon2 - lon1) * k, lat2 - lat1);
 }
@@ -148,9 +151,13 @@ describe("de ringen zijn ruwe graden", () => {
         // Impliciet gesloten: het eerste punt staat er niet nog een keer aan het
         // eind. Zou dat er wel staan, dan tekent de component een segment van nul
         // lengte en rekent de klikbepaling een kruising dubbel.
-        expect(ring[0], `${c.id} ring ${i} is expliciet gesloten`).not.toEqual(ring[ring.length - 1]);
+        expect(ring[0], `${c.id} ring ${i} is expliciet gesloten`).not.toEqual(
+          ring[ring.length - 1],
+        );
         for (let k = 1; k < ring.length; k++) {
-          expect(ring[k], `${c.id} ring ${i} heeft een dubbel punt op ${k}`).not.toEqual(ring[k - 1]);
+          expect(ring[k], `${c.id} ring ${i} heeft een dubbel punt op ${k}`).not.toEqual(
+            ring[k - 1],
+          );
         }
       }
     }
@@ -284,14 +291,19 @@ describe("van een punt op de bol naar een land", () => {
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
           const [xi, yi] = ring[i];
           const [xj, yj] = ring[j];
-          if (yi > opDeGrens[1] !== yj > opDeGrens[1] && opDeGrens[0] < ((xj - xi) * (opDeGrens[1] - yi)) / (yj - yi) + xi)
+          if (
+            yi > opDeGrens[1] !== yj > opDeGrens[1] &&
+            opDeGrens[0] < ((xj - xi) * (opDeGrens[1] - yi)) / (yj - yi) + xi
+          )
             inside = !inside;
         }
       }
       expect(inside, `${c.id} bevat het grenspunt niet meer — kies een nieuw punt`).toBe(true);
     }
     // Tien keer hetzelfde antwoord, en het is het kleinste van de twee.
-    const antwoorden = new Set(Array.from({ length: 10 }, () => countryAtLonLat(opDeGrens[0], opDeGrens[1])?.id));
+    const antwoorden = new Set(
+      Array.from({ length: 10 }, () => countryAtLonLat(opDeGrens[0], opDeGrens[1])?.id),
+    );
     expect([...antwoorden]).toEqual(["BE"]);
   });
 
@@ -343,8 +355,12 @@ describe("waar de bol naartoe draait", () => {
     for (const c of mapCountries()) {
       const f = countryFocus(c.id)!;
       expect(f.from, c.id).toBe("bbox");
-      expect(f.center[0] >= c.bbox[0] && f.center[0] <= c.bbox[2], `${c.id} lengtegraad`).toBe(true);
-      expect(f.center[1] >= c.bbox[1] && f.center[1] <= c.bbox[3], `${c.id} breedtegraad`).toBe(true);
+      expect(f.center[0] >= c.bbox[0] && f.center[0] <= c.bbox[2], `${c.id} lengtegraad`).toBe(
+        true,
+      );
+      expect(f.center[1] >= c.bbox[1] && f.center[1] <= c.bbox[3], `${c.id} breedtegraad`).toBe(
+        true,
+      );
       expect(f.span![0]).toBeCloseTo(c.bbox[2] - c.bbox[0], 1);
       expect(f.span![1]).toBeCloseTo(c.bbox[3] - c.bbox[1], 1);
     }
@@ -395,7 +411,16 @@ describe("waar de bol naartoe draait", () => {
      * staan: niet weten waar iets ligt is geen reden om ook niet te weten waarmee
      * er betaald wordt. */
     const zonderPlek = allCountries().filter((c) => countryFocus(c.id) === null);
-    expect(zonderPlek.map((c) => c.id).sort()).toEqual(["BV", "CC", "CX", "GF", "RE", "SJ", "UM", "YT"]);
+    expect(zonderPlek.map((c) => c.id).sort()).toEqual([
+      "BV",
+      "CC",
+      "CX",
+      "GF",
+      "RE",
+      "SJ",
+      "UM",
+      "YT",
+    ]);
     for (const c of zonderPlek) {
       expect(c.rings, `${c.id} heeft wel ringen`).toBeNull();
       expect(c.pin, `${c.id} heeft wel een speld`).toBeNull();
@@ -403,7 +428,10 @@ describe("waar de bol naartoe draait", () => {
       // suggereren die er niet is.
       expect(conversionFor(c.id).kind, c.id).not.toBe("unknown");
       // En te vinden op naam, anders is de eerlijke mededeling onbereikbaar.
-      expect(searchCountries(countryLabel(c.id), 20).map((x) => x.id), c.id).toContain(c.id);
+      expect(
+        searchCountries(countryLabel(c.id), 20).map((x) => x.id),
+        c.id,
+      ).toContain(c.id);
     }
   });
 
@@ -509,7 +537,8 @@ describe("van land naar valuta", () => {
       // Geen valuta mag, maar dan moet de bron gezegd hebben dat er geen is. Een
       // leeg lijstje zonder die vlag is een land waarover niemand iets weet, en
       // dat hoort op te vallen.
-      if (c.currencies.length === 0) expect(c.noTender, `${c.id} heeft geen valuta en geen reden`).toBe(true);
+      if (c.currencies.length === 0)
+        expect(c.noTender, `${c.id} heeft geen valuta en geen reden`).toBe(true);
       expect(a.currencies.map((x) => x.code)).toEqual(c.currencies.map((x) => x.code));
     }
   });

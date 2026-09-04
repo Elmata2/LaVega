@@ -1,8 +1,8 @@
 name: catalog sweep
 on:
   schedule:
-    - cron: "0 5 * * 1"        # Monday 05:00 UTC — terms move yearly, not daily
-  workflow_dispatch:            # and on demand, because the first runs need watching
+    - cron: "0 5 * * 1" # Monday 05:00 UTC — terms move yearly, not daily
+  workflow_dispatch: # and on demand, because the first runs need watching
 permissions:
   contents: write
 # A manual dispatch racing the Monday cron would give two jobs committing and
@@ -25,7 +25,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
-      - run: sudo apt-get update && sudo apt-get install -y poppler-utils   # pdftotext
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils # pdftotext
       - run: pnpm install --frozen-lockfile
       - run: pnpm catalog:sweep
       - name: Commit whatever changed

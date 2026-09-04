@@ -23,10 +23,19 @@ import { own, rules, txs } from "./fixtures";
  * getest, waar een echte DOM is. */
 
 const render = (t: Tx[] = txs) =>
-  renderToStaticMarkup(<StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />);
+  renderToStaticMarkup(
+    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />,
+  );
 
 const tx = (id: string, date: string, amount: number, counterparty: string, category = ""): Tx => ({
-  id, accountKey: "A1", date, amount, currency: "EUR", counterparty, description: "", category,
+  id,
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty,
+  description: "",
+  category,
   manual: category !== "",
 });
 

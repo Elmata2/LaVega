@@ -7,10 +7,7 @@
       "name": "Handmatig starten",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        -620,
-        60
-      ]
+      "position": [-620, 60]
     },
     {
       "parameters": {
@@ -27,10 +24,7 @@
       "name": "Elke dag 06:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        -620,
-        240
-      ]
+      "position": [-620, 240]
     },
     {
       "parameters": {
@@ -40,10 +34,7 @@
       "name": "Producten + bestemmingen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -380,
-        150
-      ]
+      "position": [-380, 150]
     },
     {
       "parameters": {
@@ -69,10 +60,7 @@
       "name": "Warm de cache",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        -140,
-        150
-      ]
+      "position": [-140, 150]
     }
   ],
   "connections": {

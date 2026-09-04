@@ -26,10 +26,12 @@
 `ontleedMatch`/`padIsSpecifiek` are generic string parsers with no dependency on `SITES` — they're needed later (Task 4) by `copy-static.mjs` to keep validating `bronnen.ts`'s own match patterns after `sites.ts` is deleted (Task 8). Move them now, while `sites.ts` still exists, so nothing is ever broken mid-plan.
 
 **Files:**
+
 - Modify: `apps/extension/src/bronnen.ts`
 - Test: `apps/extension/src/bronnen.test.ts` (new file)
 
 **Interfaces:**
+
 - Produces: `ontleedMatch(match: string): { host: string; padPrefix: string } | null`, `padIsSpecifiek(match: string): boolean` — both exported from `bronnen.js`, used by `copy-static.mjs` (Task 4).
 
 - [ ] **Step 1: Write the failing test**
@@ -138,9 +140,11 @@ git commit -m "feat(extensie): ontleedMatch/padIsSpecifiek verhuizen naar bronne
 ### Task 2: Add the broad kassa toggle to `store.ts`
 
 **Files:**
+
 - Modify: `apps/extension/src/store.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `getKassaOveralAan(): Promise<boolean>`, `setKassaOveralAan(aan: boolean): Promise<void>` — used by `background.ts` (Task 5) and `options.ts` (Task 7).
 
@@ -187,6 +191,7 @@ git commit -m "feat(extensie): opslagvlag voor de brede kassa-toestemming"
 ### Task 3: Manifest — add `<all_urls>`, remove the IKEA-specific entry
 
 **Files:**
+
 - Modify: `apps/extension/public/manifest.json`
 
 - [ ] **Step 1: Edit `optional_host_permissions`**
@@ -227,6 +232,7 @@ git commit -m "feat(extensie): manifest vraagt <all_urls> i.p.v. het IKEA-specif
 This build script has two checks that hard-code the old model: (1) an unconditional assertion that the manifest must NEVER contain `<all_urls>` ("Dat mag nooit: elke host moet apart te verantwoorden zijn" — written when every host needed individual justification; superseded by the 26 August decision to accept broader, unvetted coverage for personal use), and (2) an equality check between `sites.SITE_MATCHES` + `bronnen.BRON_MATCHES` and the manifest. Both need rewriting.
 
 **Files:**
+
 - Modify: `apps/extension/scripts/copy-static.mjs`
 
 - [ ] **Step 1: Remove the `<all_urls>`-forbid check**
@@ -234,10 +240,10 @@ This build script has two checks that hard-code the old model: (1) an unconditio
 Find and delete this block (it sits right after the `style-src` check, before the `host_permissions` check):
 
 ```js
-  eis(
-    !JSON.stringify(manifest).includes("<all_urls>"),
-    "manifest bevat <all_urls>. Dat mag nooit: elke host moet apart te verantwoorden zijn.",
-  );
+eis(
+  !JSON.stringify(manifest).includes("<all_urls>"),
+  "manifest bevat <all_urls>. Dat mag nooit: elke host moet apart te verantwoorden zijn.",
+);
 ```
 
 The line directly after it (`eis((manifest.host_permissions ?? []).length === 0, ...)`) stays — `<all_urls>` belongs in `optional_host_permissions`, not `host_permissions`, and that distinction still holds.
@@ -320,16 +326,11 @@ eis(
  * er nog steeds buiten). <all_urls> is geen https-patroon en heeft geen pad om
  * op te controleren, dus die staat hier terecht buiten de lus. */
 for (const patroon of bronnen.BRON_MATCHES) {
-  eis(
-    bronnen.padIsSpecifiek(patroon),
-    `${patroon} wijst een heel domein aan, geen pad.`,
-  );
+  eis(bronnen.padIsSpecifiek(patroon), `${patroon} wijst een heel domein aan, geen pad.`);
 }
 
 if (fouten.length === voorSitelijst) {
-  gedaan.push(
-    `hostrechten gelijk aan het manifest (${uitCode.length}: ${uitCode.join(", ")})`,
-  );
+  gedaan.push(`hostrechten gelijk aan het manifest (${uitCode.length}: ${uitCode.join(", ")})`);
 }
 ```
 
@@ -408,9 +409,11 @@ git commit -m "fix(build): copy-static valideert <all_urls> + bronnen.ts i.p.v. 
 ### Task 5: Rewrite `background.ts` — one broad registration, origin-based message validation
 
 **Files:**
+
 - Modify: `apps/extension/src/background.ts`
 
 **Interfaces:**
+
 - Consumes: `getKassaOveralAan` from `store.ts` (Task 2).
 - Produces: `kassaMagDraaien(): Promise<boolean>` (internal), `hostVanAfzender(sender): string | null` (internal) — referenced by Task 6's tests indirectly through `beantwoord`'s behavior, not imported directly.
 
@@ -534,7 +537,9 @@ async function syncRegistraties(): Promise<void> {
     gewensteIds.add(`${REG_PREFIX}${bron.id}`);
   }
 
-  const wegHalen = [...bestaandeIds].filter((id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id));
+  const wegHalen = [...bestaandeIds].filter(
+    (id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id),
+  );
   if (wegHalen.length > 0) {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
@@ -580,7 +585,9 @@ async function syncRegistraties(): Promise<void> {
     gewensteIds.add(`${REG_PREFIX}${bron.id}`);
   }
 
-  const wegHalen = [...bestaandeIds].filter((id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id));
+  const wegHalen = [...bestaandeIds].filter(
+    (id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id),
+  );
   if (wegHalen.length > 0) {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
@@ -645,7 +652,10 @@ chrome.permissions.onRemoved.addListener(() => {
      * dan hoort het vinkje in het optiescherm dat ook te tonen — anders zoekt
      * hij naar een fout die er niet is (zie het commentaar bij
      * kassaMagDraaien). */
-    if ((await getKassaOveralAan()) && !(await chrome.permissions.contains({ origins: [KASSA_MATCH] }))) {
+    if (
+      (await getKassaOveralAan()) &&
+      !(await chrome.permissions.contains({ origins: [KASSA_MATCH] }))
+    ) {
       await setKassaOveralAan(false);
     }
 
@@ -783,18 +793,18 @@ async function beantwoord(sender: chrome.runtime.MessageSender): Promise<PaneelA
 Then, further down in the same function, replace the post-injection host recheck:
 
 ```ts
-  const verwachteHost = ontleedMatch(site.match)?.host;
-  if (!verwachteHost || evidence.host.toLowerCase() !== verwachteHost) {
-    return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
-  }
+const verwachteHost = ontleedMatch(site.match)?.host;
+if (!verwachteHost || evidence.host.toLowerCase() !== verwachteHost) {
+  return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
+}
 ```
 
 with:
 
 ```ts
-  if (evidence.host.toLowerCase() !== host) {
-    return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
-  }
+if (evidence.host.toLowerCase() !== host) {
+  return { soort: "zwijg", reden: "de pagina is tijdens het lezen veranderd" };
+}
 ```
 
 Everything else in `beantwoord` (the `tabId` check, the `executeScript` call, `readCheckout`, `pointsCoverage`, `rankCheckout`, the `aanbodVoorWinkel` loop, `buildPanel`) stays exactly as it is — none of it referenced `Site`.
@@ -816,6 +826,7 @@ git commit -m "feat(extensie): background.ts registreert kassa-paneel breed i.p.
 ### Task 6: Update `background.test.ts`
 
 **Files:**
+
 - Modify: `apps/extension/src/background.test.ts`
 
 - [ ] **Step 1: Replace the `IKEA_MATCH` constant and its usages**
@@ -837,21 +848,21 @@ const KASSA_MATCH = "<all_urls>";
 This is the only place in the file that actually sets up `enabledSiteIds`/`IKEA_MATCH` (search confirmed: `IKEA_MATCH` appears at the constant declaration, in this one test, and once more in an unrelated Amex cross-tab test — see the note at the end of this step). Find, inside the `describe` block that compares which `js` file gets registered for a bron vs. a site:
 
 ```ts
-    reset();
-    opslag.set("enabledSiteIds", ["ikea-nl"]);
-    toegestaan.add(IKEA_MATCH);
-    await sync();
-    expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
+reset();
+opslag.set("enabledSiteIds", ["ikea-nl"]);
+toegestaan.add(IKEA_MATCH);
+await sync();
+expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
 ```
 
 Replace with:
 
 ```ts
-    reset();
-    opslag.set("kassaOveralAan", true);
-    toegestaan.add(KASSA_MATCH);
-    await sync();
-    expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
+reset();
+opslag.set("kassaOveralAan", true);
+toegestaan.add(KASSA_MATCH);
+await sync();
+expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
 ```
 
 The other `IKEA_MATCH`-adjacent reference (a hardcoded `"https://www.ikea.com/nl/nl/p/billy"` tab URL inside an Amex cross-tab-mismatch test, in the `describe("wie er antwoord krijgt op een leesverzoek")` block) is unrelated to the site list — it's only used there as an arbitrary "the tab is on some other page" foil for testing `bronVanAfzender`'s tab/sender mismatch detection. Leave it exactly as it is; it doesn't reference `IKEA_MATCH` or any site-list concept and needs no change.
@@ -911,11 +922,14 @@ describe("wie er antwoord krijgt op een paneel-vraag", () => {
   it("zwijgt zolang kassa-overal uitstaat, ook als de toestemming er is", async () => {
     toegestaan.add(KASSA_MATCH);
     opslag.set("kassaOveralAan", false);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
-      url: "https://www.ikea.com/nl/nl/p/billy",
-      origin: "https://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
+        url: "https://www.ikea.com/nl/nl/p/billy",
+        origin: "https://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
     expect(a.reden).toBe("kassa-overal staat uit");
   });
@@ -923,11 +937,14 @@ describe("wie er antwoord krijgt op een paneel-vraag", () => {
   it("zwijgt tegen een afzender die geen https is", async () => {
     toegestaan.add(KASSA_MATCH);
     opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "http://www.ikea.com/nl/nl/p/billy" },
-      url: "http://www.ikea.com/nl/nl/p/billy",
-      origin: "http://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "http://www.ikea.com/nl/nl/p/billy" },
+        url: "http://www.ikea.com/nl/nl/p/billy",
+        origin: "http://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
     expect(a.reden).toBe("afzender is geen geldige https-pagina");
   });
@@ -935,11 +952,14 @@ describe("wie er antwoord krijgt op een paneel-vraag", () => {
   it("zwijgt als het tabblad ergens anders staat dan het frame dat vraagt", async () => {
     toegestaan.add(KASSA_MATCH);
     opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.hema.nl/" },
-      url: "https://www.ikea.com/nl/nl/p/billy",
-      origin: "https://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.hema.nl/" },
+        url: "https://www.ikea.com/nl/nl/p/billy",
+        origin: "https://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
     expect(a.reden).toBe("afzender is geen geldige https-pagina");
   });
@@ -947,11 +967,14 @@ describe("wie er antwoord krijgt op een paneel-vraag", () => {
   it("zwijgt tegen een afwijkende poort", async () => {
     toegestaan.add(KASSA_MATCH);
     opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.ikea.com:8443/nl/nl/p/billy" },
-      url: "https://www.ikea.com:8443/nl/nl/p/billy",
-      origin: "https://www.ikea.com:8443",
-    })) as { soort: string; reden?: string };
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com:8443/nl/nl/p/billy" },
+        url: "https://www.ikea.com:8443/nl/nl/p/billy",
+        origin: "https://www.ikea.com:8443",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
     expect(a.reden).toBe("afzender is geen geldige https-pagina");
   });
@@ -977,6 +1000,7 @@ git commit -m "test(extensie): background.test.ts dekt de brede kassa-toestemmin
 ### Task 7: Options UI — one checkbox instead of the per-site list
 
 **Files:**
+
 - Modify: `apps/extension/public/options.html`
 - Modify: `apps/extension/src/options.ts`
 
@@ -985,38 +1009,37 @@ git commit -m "test(extensie): background.test.ts dekt de brede kassa-toestemmin
 Replace:
 
 ```html
-  <h2>Op welke winkels mag het paneel verschijnen?</h2>
-  <p class="hint">
-    Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een
-    winkel aan, dan vraagt Chrome je apart om toestemming voor dat ene adres; die kun je in
-    <code>chrome://extensions</code> altijd weer intrekken. De lijst is kort omdat er alleen
-    winkels in staan waarvan we hebben gemeten dat het bedrag dat we lezen ook echt bij de
-    pagina hoort.
-  </p>
-  <div id="siteslijst"></div>
-  <p class="hint" id="sites-melding"></p>
+<h2>Op welke winkels mag het paneel verschijnen?</h2>
+<p class="hint">
+  Standaard staat alles uit en heeft de extensie geen enkele leestoestemming. Vink je een winkel
+  aan, dan vraagt Chrome je apart om toestemming voor dat ene adres; die kun je in
+  <code>chrome://extensions</code> altijd weer intrekken. De lijst is kort omdat er alleen winkels
+  in staan waarvan we hebben gemeten dat het bedrag dat we lezen ook echt bij de pagina hoort.
+</p>
+<div id="siteslijst"></div>
+<p class="hint" id="sites-melding"></p>
 ```
 
 with:
 
 ```html
-  <h2>Mag het paneel op winkelpagina's verschijnen?</h2>
-  <p class="hint">
-    Standaard staat dit uit. Zet je het aan, dan vraagt Chrome toestemming om alle websites te
-    lezen — niet per winkel, en dat kun je in <code>chrome://extensions</code> altijd weer
-    intrekken. LaVega leest daarbij alleen de machineleesbare productgegevens die een winkel zelf
-    op de pagina zet (dezelfde gegevens die zoekmachines gebruiken) — nooit de rest van de pagina.
-    Het vergelijkt dat niet met wat er verder op de pagina staat: een winkel die dat verkeerd zet
-    (gemeten dat dit gebeurt), kan LaVega niet opvangen. Zwijgen bij twijfel blijft gelden; een
-    geldig maar verkeerd bedrag is de uitzondering die dit vinkje accepteert.
-  </p>
-  <div class="vinkrij">
-    <input type="checkbox" id="kassa-overal" />
-    <label for="kassa-overal">
-      <div class="titel">Paneel op winkelpagina's</div>
-    </label>
-  </div>
-  <p class="hint" id="kassa-melding"></p>
+<h2>Mag het paneel op winkelpagina's verschijnen?</h2>
+<p class="hint">
+  Standaard staat dit uit. Zet je het aan, dan vraagt Chrome toestemming om alle websites te lezen —
+  niet per winkel, en dat kun je in <code>chrome://extensions</code> altijd weer intrekken. LaVega
+  leest daarbij alleen de machineleesbare productgegevens die een winkel zelf op de pagina zet
+  (dezelfde gegevens die zoekmachines gebruiken) — nooit de rest van de pagina. Het vergelijkt dat
+  niet met wat er verder op de pagina staat: een winkel die dat verkeerd zet (gemeten dat dit
+  gebeurt), kan LaVega niet opvangen. Zwijgen bij twijfel blijft gelden; een geldig maar verkeerd
+  bedrag is de uitzondering die dit vinkje accepteert.
+</p>
+<div class="vinkrij">
+  <input type="checkbox" id="kassa-overal" />
+  <label for="kassa-overal">
+    <div class="titel">Paneel op winkelpagina's</div>
+  </label>
+</div>
+<p class="hint" id="kassa-melding"></p>
 ```
 
 - [ ] **Step 2: Replace the site-rendering code in `options.ts`**
@@ -1163,19 +1186,19 @@ kassaVink.addEventListener("change", () => {
 Replace:
 
 ```ts
-  const aangevinkteSites = new Set<string>(await getEnabledSiteIds());
-  const toegestaan = new Set<string>();
-  for (const site of SITES) {
-    if (await chrome.permissions.contains({ origins: [site.match] })) toegestaan.add(site.id);
-  }
-  tekenSites(aangevinkteSites, toegestaan);
+const aangevinkteSites = new Set<string>(await getEnabledSiteIds());
+const toegestaan = new Set<string>();
+for (const site of SITES) {
+  if (await chrome.permissions.contains({ origins: [site.match] })) toegestaan.add(site.id);
+}
+tekenSites(aangevinkteSites, toegestaan);
 ```
 
 with:
 
 ```ts
-  kassaVink.checked =
-    (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
+kassaVink.checked =
+  (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
 ```
 
 - [ ] **Step 4: Remove the now-dead `getEnabledSiteIds`/`setEnabledSiteIds` from `store.ts`**
@@ -1221,6 +1244,7 @@ git commit -m "feat(extensie): optiescherm krijgt één breed kassa-vinkje i.p.v
 Everything either file tested now lives elsewhere: `ontleedMatch`/`padIsSpecifiek` moved to `bronnen.ts` (Task 1, with its own test), and the one behavioral assertion about Coolblue that wasn't sites.ts-specific (`readCheckout` returning a confident-but-wrong answer) already exists independently in `read.test.ts` (see Task 9).
 
 **Files:**
+
 - Delete: `apps/extension/src/sites.ts`
 - Delete: `apps/extension/src/sites.test.ts`
 
@@ -1253,6 +1277,7 @@ git commit -m "chore(extensie): sites.ts en sites.test.ts weg — vervangen door
 The existing test at `read.test.ts`'s `"echt opgehaalde winkelpagina's"` describe block (`"coolblue.nl: leest 420 EUR uit het JSON-LD Offer, als ARTIKELprijs"`) already proves the exact behavior that used to justify Coolblue's exclusion from `sites.ts`. The assertions don't need to change — only the surrounding comment, since there's no more list for Coolblue to be excluded from.
 
 **Files:**
+
 - Modify: `apps/extension/src/read.test.ts`
 
 - [ ] **Step 1: Add a comment above the existing test**

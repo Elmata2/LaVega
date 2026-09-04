@@ -131,7 +131,8 @@ export function consolidate(accounts: Account[], txs: Tx[]) {
   for (const t of txs) {
     const e = entityOf.get(t.accountKey) ?? "onbekend";
     const b = (byEntity[e] ??= { in: 0, out: 0, balance: null });
-    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += t.amount;
   }
   const balances = Object.values(byEntity).map((b) => b.balance);
   const totalBalance =

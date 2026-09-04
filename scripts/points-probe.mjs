@@ -6,7 +6,9 @@ const CASES = [
   {
     name: "scanTerms finds a Dutch points rate and quotes the whole sentence",
     run: () => {
-      const hits = scanTerms("Blabla. Met uw business Gold Card spaart u 1 MR punt per uitgegeven euro. Enz.");
+      const hits = scanTerms(
+        "Blabla. Met uw business Gold Card spaart u 1 MR punt per uitgegeven euro. Enz.",
+      );
       assert(hits.length === 1, `expected 1 hit, got ${hits.length}`);
       assert(
         hits[0].sentence === "Met uw business Gold Card spaart u 1 MR punt per uitgegeven euro.",
@@ -34,16 +36,22 @@ const CASES = [
       // Amex's Dutch pages say "per uitgegeven euro", its Corporate pages say
       // this instead -- and a probe that only speaks Dutch reported those three
       // cards as having no rate at all.
-      const a = scanTerms("With the Corporate Card you can earn 1 Membership Reward (MR) for every euro spent.");
+      const a = scanTerms(
+        "With the Corporate Card you can earn 1 Membership Reward (MR) for every euro spent.",
+      );
       assert(a.length === 1, `Dutch-only probe missed the MR sentence: ${JSON.stringify(a)}`);
-      const b = scanTerms("For bookings with KLM, AIR FRANCE, Transavia and Hertz, you get 1.5 Miles for every euro spent.");
+      const b = scanTerms(
+        "For bookings with KLM, AIR FRANCE, Transavia and Hertz, you get 1.5 Miles for every euro spent.",
+      );
       assert(b.length === 1, `Dutch-only probe missed the Miles sentence: ${JSON.stringify(b)}`);
     },
   },
   {
     name: "htmlToText drops script and style bodies",
     run: () => {
-      const t = htmlToText("<style>.a{cursor:pointer}</style><p>1 punt per euro</p><script>var x='punt'</script>");
+      const t = htmlToText(
+        "<style>.a{cursor:pointer}</style><p>1 punt per euro</p><script>var x='punt'</script>",
+      );
       assert(!t.includes("cursor"), `style leaked: ${t}`);
       assert(!t.includes("var x"), `script leaked: ${t}`);
       assert(t.includes("1 punt per euro"), `text lost: ${t}`);
@@ -150,7 +158,17 @@ async function fetchText(url) {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
   const tmp = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "points-")), "body");
   const { stdout: code } = await run("curl", [
-    "-sS", "-L", "--max-time", "90", "-A", ua, "-o", tmp, "-w", "%{http_code}", url,
+    "-sS",
+    "-L",
+    "--max-time",
+    "90",
+    "-A",
+    ua,
+    "-o",
+    tmp,
+    "-w",
+    "%{http_code}",
+    url,
   ]);
   const head = await fs.readFile(tmp).then((b) => b.subarray(0, 5).toString("latin1"));
   if (head.startsWith("%PDF")) {
@@ -167,9 +185,12 @@ async function probe(urls) {
   for (const url of urls) {
     const { code, text, kind } = await fetchText(url);
     const hits = scanTerms(text);
-    console.log(`\n=== ${url}\n    HTTP ${code} · ${kind} · ${text.length} chars · ${hits.length} hit(s)`);
+    console.log(
+      `\n=== ${url}\n    HTTP ${code} · ${kind} · ${text.length} chars · ${hits.length} hit(s)`,
+    );
     for (const h of hits) console.log(`  * ${h.sentence}`);
-    if (!hits.length) console.log("  (geen puntenkoers op deze bron — stilte is hier het antwoord)");
+    if (!hits.length)
+      console.log("  (geen puntenkoers op deze bron — stilte is hier het antwoord)");
   }
 }
 
@@ -180,7 +201,8 @@ async function verify(file) {
   let drift = 0;
   for (const e of doc.entries) {
     if (!e.sourceUrl) continue;
-    if (!seen.has(e.sourceUrl)) seen.set(e.sourceUrl, await fetchText(e.sourceUrl).catch((err) => ({ error: err })));
+    if (!seen.has(e.sourceUrl))
+      seen.set(e.sourceUrl, await fetchText(e.sourceUrl).catch((err) => ({ error: err })));
     const got = seen.get(e.sourceUrl);
     if (got.error) {
       console.log(`?? ${e.id} — bron onbereikbaar: ${got.error.message}`);
@@ -190,15 +212,21 @@ async function verify(file) {
     const claimsRate = typeof e.pointsPerEuro === "number" && e.pointsPerEuro > 0;
     if (claimsRate && !hits.length) {
       drift++;
-      console.log(`!! ${e.id} — claimt ${e.pointsPerEuro} ${e.unit} per euro, maar de bron noemt nu geen koers`);
+      console.log(
+        `!! ${e.id} — claimt ${e.pointsPerEuro} ${e.unit} per euro, maar de bron noemt nu geen koers`,
+      );
     } else if (e.programmeStatus === "none" && hits.length) {
       drift++;
-      console.log(`!! ${e.id} — stond als "geen programma", maar de bron zegt nu: ${hits[0].sentence}`);
+      console.log(
+        `!! ${e.id} — stond als "geen programma", maar de bron zegt nu: ${hits[0].sentence}`,
+      );
     } else {
       console.log(`ok ${e.id}`);
     }
   }
-  console.log(drift ? `\n${drift} afwijking(en) — de catalogus loopt achter` : "\ngeen afwijkingen");
+  console.log(
+    drift ? `\n${drift} afwijking(en) — de catalogus loopt achter` : "\ngeen afwijkingen",
+  );
   return drift === 0;
 }
 

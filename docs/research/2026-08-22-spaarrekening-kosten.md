@@ -1,7 +1,7 @@
 # Kosten van spaarrekeningen — zijn ze vindbaar? Ja.
 
-Zijn vraag, 22 augustus: *"Interest — and here I can't get more. Are you sure it's not
-possible?"*
+Zijn vraag, 22 augustus: _"Interest — and here I can't get more. Are you sure it's not
+possible?"_
 
 **Nee, daar zat ik naast.** Mijn uitspraak was dat geen van de 34 spaarproducten zichzelf
 prijst, en dat klopte — maar dat ging over wat er **in de catalogus staat**, niet over wat
@@ -13,16 +13,16 @@ Gemeten op 22 augustus: van de 34 spaarproducten noemt de bron van **14** een vo
 
 ## Wat een uitgesproken nul is (9)
 
-| product | wat de bron zegt |
-|---|---|
-| Bigbank Flexibel Sparen | "Bigbank brengt u geen kosten in rekening" |
-| Santander Spaarrekening | "✓ Geen kosten" |
-| Ayvens Flexibel Sparen | "opent u een gratis Online Spaarrekening" |
-| Argenta Internetspaarrekening | "openen en beheren, helemaal gratis" |
-| NIBC Spaarrekening | "Geen minimum inleg. Geen kosten" |
-| NIBC Kwartaalspaarrekening | "Geen minimum inleg en geen kosten" |
-| Lloyds Bank Spaarrekening | "Geen minimuminleg en geen kosten" |
-| Triodos Internet Sparen | "een gratis spaarrekening bij Triodos Bank openen" |
+| product                       | wat de bron zegt                                             |
+| ----------------------------- | ------------------------------------------------------------ |
+| Bigbank Flexibel Sparen       | "Bigbank brengt u geen kosten in rekening"                   |
+| Santander Spaarrekening       | "✓ Geen kosten"                                              |
+| Ayvens Flexibel Sparen        | "opent u een gratis Online Spaarrekening"                    |
+| Argenta Internetspaarrekening | "openen en beheren, helemaal gratis"                         |
+| NIBC Spaarrekening            | "Geen minimum inleg. Geen kosten"                            |
+| NIBC Kwartaalspaarrekening    | "Geen minimum inleg en geen kosten"                          |
+| Lloyds Bank Spaarrekening     | "Geen minimuminleg en geen kosten"                           |
+| Triodos Internet Sparen       | "een gratis spaarrekening bij Triodos Bank openen"           |
 | Openbank Welkom Spaarrekening | "Gratis spaarrekening met 2,80% rente*" — let op de asterisk |
 
 ## Wat GEEN uitgesproken nul is, en waarom (5)

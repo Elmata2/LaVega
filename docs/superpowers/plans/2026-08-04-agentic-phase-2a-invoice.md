@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Let the owner record incoming (AR) and outgoing (AP) invoices — by hand and by importing UBL/CSV — so the 13-week forecast sees them as *expected* cash flows on their due dates, and auto-reconciles them against bank transactions once paid (no double-count).
+**Goal:** Let the owner record incoming (AR) and outgoing (AP) invoices — by hand and by importing UBL/CSV — so the 13-week forecast sees them as _expected_ cash flows on their due dates, and auto-reconciles them against bank transactions once paid (no double-count).
 
 **Architecture:** A new pure `Invoice` entity in `@lavega/core`. Expected invoices project into the existing `ScheduledFlow` primitive (Phase 0) via `scheduledInvoiceFlows()`, so the forecast/alerts wiring already works — App just merges invoice-derived flows with the VAT flows. `reconcileInvoices()` flips an invoice to `paid` when a matching bank Tx appears (so it stops being an expected flow). Deterministic parsers (generic invoice CSV + UBL/EN-16931 XML) follow the existing `bankCsv.ts` per-source pattern. NO LLM, NO connectors, NO network — those are Phase 2b/2c.
 
@@ -46,10 +46,19 @@ import { expect, test } from "vitest";
 import { makeInvoice, scheduledInvoiceFlows } from "./invoices.js";
 import type { Invoice } from "./model.js";
 
-const inv = (o: Partial<Invoice>): Invoice => makeInvoice({
-  entity: "BV1", direction: "out", counterparty: "Leverancier", issueDate: "2026-08-01",
-  dueDate: "2026-09-01", amount: 1210, currency: "EUR", status: "expected", sourceType: "manual", ...o,
-});
+const inv = (o: Partial<Invoice>): Invoice =>
+  makeInvoice({
+    entity: "BV1",
+    direction: "out",
+    counterparty: "Leverancier",
+    issueDate: "2026-08-01",
+    dueDate: "2026-09-01",
+    amount: 1210,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "manual",
+    ...o,
+  });
 
 test("makeInvoice gives a stable content-hashed id", () => {
   expect(inv({}).id).toBe(inv({}).id);
@@ -62,12 +71,24 @@ test("scheduledInvoiceFlows: AP invoice -> outflow, AR -> inflow, on the due dat
     inv({ direction: "in", counterparty: "Klant", amount: 2500, dueDate: "2026-08-20" }),
   ]);
   expect(flows).toHaveLength(2);
-  expect(flows[0]).toMatchObject({ sign: -1, amountCents: 121000, dueDate: "2026-09-01", source: "invoice" });
-  expect(flows[1]).toMatchObject({ sign: 1, amountCents: 250000, dueDate: "2026-08-20", source: "invoice" });
+  expect(flows[0]).toMatchObject({
+    sign: -1,
+    amountCents: 121000,
+    dueDate: "2026-09-01",
+    source: "invoice",
+  });
+  expect(flows[1]).toMatchObject({
+    sign: 1,
+    amountCents: 250000,
+    dueDate: "2026-08-20",
+    source: "invoice",
+  });
 });
 
 test("scheduledInvoiceFlows: paid/cancelled invoices produce no flow (no double-count)", () => {
-  expect(scheduledInvoiceFlows([inv({ status: "paid" }), inv({ status: "cancelled" })])).toEqual([]);
+  expect(scheduledInvoiceFlows([inv({ status: "paid" }), inv({ status: "cancelled" })])).toEqual(
+    [],
+  );
 });
 ```
 
@@ -87,8 +108,8 @@ export type Invoice = {
   counterparty: string;
   invoiceNumber?: string;
   issueDate: string; // ISO
-  dueDate: string;   // ISO
-  amount: number;    // decimal euros (gross)
+  dueDate: string; // ISO
+  amount: number; // decimal euros (gross)
   vatAmount?: number;
   currency: string;
   status: "expected" | "paid" | "cancelled";
@@ -106,7 +127,17 @@ import { makeScheduledFlow } from "./scheduledFlows.js";
 
 /** Content-hashed id (stable across recompute, so re-import doesn't duplicate). */
 export function makeInvoice(i: Omit<Invoice, "id">): Invoice {
-  const id = hash([i.entity, i.direction, i.counterparty, i.invoiceNumber ?? "", i.issueDate, i.dueDate, i.amount].join("|"));
+  const id = hash(
+    [
+      i.entity,
+      i.direction,
+      i.counterparty,
+      i.invoiceNumber ?? "",
+      i.issueDate,
+      i.dueDate,
+      i.amount,
+    ].join("|"),
+  );
   return { ...i, id };
 }
 
@@ -147,22 +178,43 @@ export {}; // reconcileInvoices added in Task 2
 ```ts
 import { reconcileInvoices } from "./invoices.js";
 import type { Tx } from "./model.js";
-const tx = (id: string, date: string, amount: number, cp: string): Tx => ({ id, accountKey: "A", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false });
+const tx = (id: string, date: string, amount: number, cp: string): Tx => ({
+  id,
+  accountKey: "A",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category: "",
+  manual: false,
+});
 
 test("reconcileInvoices: an AP invoice with a matching outflow near the due date flips to paid", () => {
-  const invoices = [inv({ direction: "out", counterparty: "Coolblue", amount: 1210, dueDate: "2026-09-01" })];
+  const invoices = [
+    inv({ direction: "out", counterparty: "Coolblue", amount: 1210, dueDate: "2026-09-01" }),
+  ];
   const out = reconcileInvoices(invoices, [tx("t1", "2026-08-28", -1210, "Coolblue B.V.")]);
   expect(out[0]).toMatchObject({ status: "paid", matchedTxId: "t1" });
 });
 
 test("reconcileInvoices: no counterparty overlap or wrong sign -> stays expected", () => {
-  const invoices = [inv({ direction: "out", counterparty: "Coolblue", amount: 1210, dueDate: "2026-09-01" })];
-  expect(reconcileInvoices(invoices, [tx("t1", "2026-08-28", 1210, "Coolblue")])[0].status).toBe("expected"); // wrong sign
-  expect(reconcileInvoices(invoices, [tx("t2", "2026-08-28", -1210, "Bol.com")])[0].status).toBe("expected"); // no overlap
+  const invoices = [
+    inv({ direction: "out", counterparty: "Coolblue", amount: 1210, dueDate: "2026-09-01" }),
+  ];
+  expect(reconcileInvoices(invoices, [tx("t1", "2026-08-28", 1210, "Coolblue")])[0].status).toBe(
+    "expected",
+  ); // wrong sign
+  expect(reconcileInvoices(invoices, [tx("t2", "2026-08-28", -1210, "Bol.com")])[0].status).toBe(
+    "expected",
+  ); // no overlap
 });
 
 test("reconcileInvoices: one tx cannot settle two invoices", () => {
-  const invoices = [inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" }), inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" })];
+  const invoices = [
+    inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" }),
+    inv({ counterparty: "X", amount: 100, dueDate: "2026-09-01" }),
+  ];
   const out = reconcileInvoices(invoices, [tx("t1", "2026-08-30", -100, "X")]);
   expect(out.filter((i) => i.status === "paid")).toHaveLength(1);
 });
@@ -179,7 +231,8 @@ function dayDiff(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 function cpOverlap(a: string, b: string): boolean {
-  const x = norm(a), y = norm(b);
+  const x = norm(a),
+    y = norm(b);
   return x.length > 0 && y.length > 0 && (x.includes(y) || y.includes(x));
 }
 
@@ -223,7 +276,18 @@ test("invoices round-trip; legacy vault defaults to []", async () => {
   const s = createEncryptedStorage("lavega-vault-test-inv");
   await s.setup("pw");
   expect(await s.getInvoices()).toEqual([]);
-  const invoice = { id: "i1", entity: "BV1", direction: "out" as const, counterparty: "X", issueDate: "2026-08-01", dueDate: "2026-09-01", amount: 100, currency: "EUR", status: "expected" as const, sourceType: "manual" as const };
+  const invoice = {
+    id: "i1",
+    entity: "BV1",
+    direction: "out" as const,
+    counterparty: "X",
+    issueDate: "2026-08-01",
+    dueDate: "2026-09-01",
+    amount: 100,
+    currency: "EUR",
+    status: "expected" as const,
+    sourceType: "manual" as const,
+  };
   await s.putInvoices([invoice]);
   expect(await s.getInvoices()).toEqual([invoice]);
 });
@@ -249,9 +313,29 @@ import { makeInvoice, scheduledInvoiceFlows, reconcileInvoices } from "@lavega/c
 import type { Tx } from "@lavega/core";
 
 test("manual invoice -> expected flow; paid after a matching tx", () => {
-  const invoice = makeInvoice({ entity: "BV1", direction: "out", counterparty: "Coolblue", issueDate: "2026-08-01", dueDate: "2026-09-01", amount: 1210, currency: "EUR", status: "expected", sourceType: "manual" });
+  const invoice = makeInvoice({
+    entity: "BV1",
+    direction: "out",
+    counterparty: "Coolblue",
+    issueDate: "2026-08-01",
+    dueDate: "2026-09-01",
+    amount: 1210,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "manual",
+  });
   expect(scheduledInvoiceFlows([invoice])).toHaveLength(1);
-  const tx: Tx = { id: "t1", accountKey: "A", date: "2026-08-29", amount: -1210, currency: "EUR", counterparty: "Coolblue BV", description: "", category: "", manual: false };
+  const tx: Tx = {
+    id: "t1",
+    accountKey: "A",
+    date: "2026-08-29",
+    amount: -1210,
+    currency: "EUR",
+    counterparty: "Coolblue BV",
+    description: "",
+    category: "",
+    manual: false,
+  };
   const reconciled = reconcileInvoices([invoice], [tx]);
   expect(reconciled[0].status).toBe("paid");
   expect(scheduledInvoiceFlows(reconciled)).toHaveLength(0); // no longer an expected flow
@@ -287,10 +371,19 @@ test("manual invoice -> expected flow; paid after a matching tx", () => {
     (use the freshly-reloaded txs already in scope as `freshTxs`).
   - Route:
     ```tsx
-    {view === "facturen" && (
-      <Facturen entities={entityOptions} invoices={invoices} txs={txs} asOf={asOf} busy={busy}
-        defaultEntity={entity} onSaveInvoices={saveInvoices} />
-    )}
+    {
+      view === "facturen" && (
+        <Facturen
+          entities={entityOptions}
+          invoices={invoices}
+          txs={txs}
+          asOf={asOf}
+          busy={busy}
+          defaultEntity={entity}
+          onSaveInvoices={saveInvoices}
+        />
+      );
+    }
     ```
 
 - [ ] **Step 5: `Facturen.tsx`.** A card with: a manual-entry form (direction select in/out, counterparty, invoiceNumber, issueDate, dueDate, amount, currency default EUR) that calls `makeInvoice` + appends via `onSaveInvoices([...invoices, inv])`; a table of invoices (counterparty, direction badge, amount, dueDate, status — with a "verwacht/betaald/geannuleerd" badge and a "markeer betaald"/"annuleer" action that updates status); and a live summary of `scheduledInvoiceFlows(invoices)` count + net per-month impact. Reuse `.card/.table/.btn/.badge/.eyebrow` + `formatEuro`. Props:
@@ -333,6 +426,7 @@ type FacturenProps = {
 > If time-boxed, Task 6 may be deferred — Tasks 1-5 already deliver a working local invoice slice (manual + CSV + reconciliation + forecast). Note the deferral in the ledger if so.
 
 ## Self-Review notes
+
 - Reuses Phase 0 `ScheduledFlow`/forecast wiring — invoices need no new forecast code, only the merge in App (Task 4).
 - Double-count avoided: `paid`/`cancelled` invoices produce no flow (Task 1) + `reconcileInvoices` flips paid on a matching Tx (Task 2), so a settled invoice drops out of the projection exactly when its bank Tx appears.
 - Deterministic + local throughout; LLM/connectors are Phase 2b/2c.

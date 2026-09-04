@@ -49,7 +49,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // it can reach the SDK, so transactions/balances never leave the browser.
   app.post("/api/agent/extract-invoice", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
+    if (!configured || !apiKey)
+      return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
     if (!limit("extract")) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
@@ -75,7 +76,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // reaches `chat` — that's the boundary that keeps raw data off Claude.
   app.post("/api/agent/chat", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
+    if (!configured || !apiKey)
+      return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
     if (!limit("chat")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let tab = "";
     let messages;
@@ -111,7 +113,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // amounts/accounts/balances never leave the browser.
   app.post("/api/agent/categorize", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
+    if (!configured || !apiKey)
+      return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
     if (!limit("categorize")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
@@ -138,7 +141,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // balances is done locally in core. Same ladder: 503 -> 429 -> 400 -> 502.
   app.post("/api/agent/travel-facts", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
+    if (!configured || !apiKey)
+      return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
     if (!limit("travel")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: import("./agent/travel.js").TravelInput;
     try {
@@ -169,7 +173,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, token } = loadIngestConfig();
     if (!configured || !token) return c.json({ error: "Ingest is niet geconfigureerd." }, 503);
     const given = c.req.header("x-ingest-token") ?? "";
-    if (given.length !== token.length || given !== token) return c.json({ error: "Ongeldige token." }, 401);
+    if (given.length !== token.length || given !== token)
+      return c.json({ error: "Ongeldige token." }, 401);
 
     let body: { homeCountry?: unknown; currency?: unknown; terms?: unknown };
     try {

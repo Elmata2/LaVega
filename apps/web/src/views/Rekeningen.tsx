@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup } from "@lavega/core";
 import { accountSummaries, isCardAccount, accountType, ACCOUNT_TYPES } from "@lavega/core";
 import { formatEuro } from "../format";
@@ -144,7 +144,10 @@ export function bankTone(bank: string): string {
  *  a short single word whole ("ING"), otherwise its first two letters
  *  ("Rabobank" → "RA"). "—" when the bank is unknown. */
 export function bankInitials(bank: string): string {
-  const words = bank.trim().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const words = bank
+    .trim()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
   if (words.length === 0) return "—";
   if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
   const w = words[0];
@@ -155,17 +158,33 @@ export function bankInitials(bank: string): string {
  *  may not. Only used to wire a tab to its panel. */
 const slug = (s: string): string => s.replace(/[^a-z0-9]+/gi, "-") || "geen";
 
-const tabId = (groupId: string, accountKey: string): string => `bank-tab-${slug(groupId)}-${slug(accountKey)}`;
+const tabId = (groupId: string, accountKey: string): string =>
+  `bank-tab-${slug(groupId)}-${slug(accountKey)}`;
 
 /* ------------------------------------------------------------------------- */
 
 /** A destructive action is never one click: the button swaps into a
  *  "Weet je het zeker? Ja / Nee" prompt in place, and only "Ja" fires it. */
-function ConfirmAction({ label, question, busy, onConfirm }: { label: string; question: string; busy: boolean; onConfirm: () => void }) {
+function ConfirmAction({
+  label,
+  question,
+  busy,
+  onConfirm,
+}: {
+  label: string;
+  question: string;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
-      <button type="button" className="card-link card-link-danger" onClick={() => setAsking(true)} disabled={busy}>
+      <button
+        type="button"
+        className="card-link card-link-danger"
+        onClick={() => setAsking(true)}
+        disabled={busy}
+      >
         {label}
       </button>
     );
@@ -204,7 +223,13 @@ function accountLabel(a: Account): string {
  *
  *  `onEditingChange` reports the open/closed edit to the view, which freezes
  *  this account's group membership while the bank name is half-typed. */
-function NameCell({ account, busy, onFieldChange, onCommit, onEditingChange }: {
+function NameCell({
+  account,
+  busy,
+  onFieldChange,
+  onCommit,
+  onEditingChange,
+}: {
   account: Account;
   busy: boolean;
   onFieldChange: (key: string, patch: Partial<Account>) => void;
@@ -264,16 +289,29 @@ function NameCell({ account, busy, onFieldChange, onCommit, onEditingChange }: {
  *  overridden. Holds a free-form draft string while typing (so "-", "1," etc.
  *  don't fight a controlled number input) and commits on blur — the parse +
  *  persist happens in App. Blank commits back to "onbekend" (null). */
-function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolean; onCommit: (key: string, value: string) => void }) {
+function SaldoCell({
+  account,
+  busy,
+  onCommit,
+}: {
+  account: Account;
+  busy: boolean;
+  onCommit: (key: string, value: string) => void;
+}) {
   // A credit card stores a NEGATIVE balance (debt) but the user types/reads the
   // amount OWED as a positive — show the absolute value in the field for cards.
   const card = isCardAccount(account);
   const shown = (b: number) => (card ? Math.abs(b) : b);
-  const [draft, setDraft] = useState(account.balance === null ? "" : String(shown(account.balance)));
+  const [draft, setDraft] = useState(
+    account.balance === null ? "" : String(shown(account.balance)),
+  );
   // Resync when the balance changes elsewhere (re-import, reset) and we're not editing it.
-  useEffect(() => {
-    setDraft(account.balance === null ? "" : String(card ? Math.abs(account.balance) : account.balance));
-  }, [account.balance, card]);
+  const balanceKey = account.balance;
+  const [prevBalance, setPrevBalance] = useState(balanceKey);
+  if (balanceKey !== prevBalance) {
+    setPrevBalance(balanceKey);
+    setDraft(balanceKey === null ? "" : String(card ? Math.abs(balanceKey) : balanceKey));
+  }
   const cls = account.balance === null ? "" : account.balance >= 0 ? " text-pos" : " text-neg";
   return (
     <>
@@ -298,7 +336,15 @@ function SaldoCell({ account, busy, onCommit }: { account: Account; busy: boolea
 
 /** Type of an account as an editable select — the same control in the table and
  *  in the per-bank panel. */
-function TypeSelect({ account, busy, onTypeCommit }: { account: Account; busy: boolean; onTypeCommit: (key: string, type: string) => void }) {
+function TypeSelect({
+  account,
+  busy,
+  onTypeCommit,
+}: {
+  account: Account;
+  busy: boolean;
+  onTypeCommit: (key: string, type: string) => void;
+}) {
   const type = accountType(account);
   return (
     <select
@@ -307,7 +353,9 @@ function TypeSelect({ account, busy, onTypeCommit }: { account: Account; busy: b
       onChange={(e) => onTypeCommit(account.key, e.target.value)}
       disabled={busy}
     >
-      {!ACCOUNT_TYPES.includes(type as (typeof ACCOUNT_TYPES)[number]) && <option value={type}>{type}</option>}
+      {!ACCOUNT_TYPES.includes(type as (typeof ACCOUNT_TYPES)[number]) && (
+        <option value={type}>{type}</option>
+      )}
       {ACCOUNT_TYPES.map((t) => (
         <option key={t} value={t}>
           {t}
@@ -327,8 +375,18 @@ function deleteQuestion(account: Account, txCount: number): string {
 /** Everything you can do to one account, laid out as fields instead of a table
  *  row. Same controls, same handlers — the grouping is presentation only. */
 function AccountPanel({
-  row, busy, labelledBy, latestTx, onEntityChange, onAccountCommit, onAccountFieldChange, onSaldoCommit, onTypeCommit,
-  onSelectAccount, onDeleteAccount, onRenameOpen,
+  row,
+  busy,
+  labelledBy,
+  latestTx,
+  onEntityChange,
+  onAccountCommit,
+  onAccountFieldChange,
+  onSaldoCommit,
+  onTypeCommit,
+  onSelectAccount,
+  onDeleteAccount,
+  onRenameOpen,
 }: {
   row: AccountSummary;
   busy: boolean;
@@ -336,7 +394,16 @@ function AccountPanel({
   /** Nieuwste transactiedatum van deze rekening, of null. Zie SaldoAgeNote. */
   latestTx: string | null;
   onRenameOpen: (account: Account, editing: boolean) => void;
-} & Pick<RekeningenProps, "onEntityChange" | "onAccountCommit" | "onAccountFieldChange" | "onSaldoCommit" | "onTypeCommit" | "onSelectAccount" | "onDeleteAccount">) {
+} & Pick<
+  RekeningenProps,
+  | "onEntityChange"
+  | "onAccountCommit"
+  | "onAccountFieldChange"
+  | "onSaldoCommit"
+  | "onTypeCommit"
+  | "onSelectAccount"
+  | "onDeleteAccount"
+>) {
   const { account, txCount } = row;
   const age = saldoAge(account, latestTx);
   const linked = linkedMoment(account);
@@ -459,7 +526,20 @@ function AccountPanel({
  * tekst wel noemen.
  * ------------------------------------------------------------------------- */
 
-const DAYS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const DAYS_NL = [
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
+];
 
 /** "2026-07-31" -> "31 juli 2026"; een onleesbare waarde komt ongewijzigd terug.
  *
@@ -689,7 +769,20 @@ function GroupSaldo({ group }: { group: BankGroup }) {
   );
 }
 
-export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAccountCommit, onAccountFieldChange, onSaldoCommit, onTypeCommit, onSelectAccount, onDeleteAccount, duplicateGroups, onMergeDuplicates }: RekeningenProps) {
+export default function Rekeningen({
+  accounts,
+  txs,
+  busy,
+  onEntityChange,
+  onAccountCommit,
+  onAccountFieldChange,
+  onSaldoCommit,
+  onTypeCommit,
+  onSelectAccount,
+  onDeleteAccount,
+  duplicateGroups,
+  onMergeDuplicates,
+}: RekeningenProps) {
   // Only flag duplicates you can actually see here — a group whose accounts all
   // sit outside the active entity scope would be a banner about nothing.
   const visibleKeys = new Set(accounts.map((a) => a.key));
@@ -704,7 +797,9 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
   const [rename, setRename] = useState<{ key: string; bank: string } | null>(null);
 
   const rows = accountSummaries(accounts, txs);
-  const groups = groupAccountsByBank(rows, (a) => (rename && rename.key === a.key ? rename.bank : a.bank));
+  const groups = groupAccountsByBank(rows, (a) =>
+    rename && rename.key === a.key ? rename.bank : a.bank,
+  );
   // Eén doorloop over de transacties voor de hele pagina; per rekening opnieuw
   // filteren maakte hier O(rekeningen x transacties) van iets dat O(n) is.
   const latest = latestTxDates(txs);
@@ -741,11 +836,12 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
           <div className="dup-banner" key={group.canonicalId}>
             <div>
               <p className="dup-banner-title">
-                Deze rekeningen lijken dezelfde rekening: {group.accounts.map(accountLabel).join(", ")}.
+                Deze rekeningen lijken dezelfde rekening:{" "}
+                {group.accounts.map(accountLabel).join(", ")}.
               </p>
               <p className="dup-banner-sub">
-                LaVega houdt <strong>{accountLabel(group.survivor)}</strong> aan en verplaatst de transacties
-                daarheen. Overlappende periodes worden samengevoegd, niet dubbel geteld.
+                LaVega houdt <strong>{accountLabel(group.survivor)}</strong> aan en verplaatst de
+                transacties daarheen. Overlappende periodes worden samengevoegd, niet dubbel geteld.
               </p>
             </div>
             <div className="dup-banner-actions">
@@ -781,19 +877,26 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                   aria-expanded={open}
                   onClick={() => setOpenBank(open ? null : g.id)}
                 >
-                  <span className={`bank-mark bank-mark-${bankTone(g.named ? g.label : "")}`} aria-hidden="true">
+                  <span
+                    className={`bank-mark bank-mark-${bankTone(g.named ? g.label : "")}`}
+                    aria-hidden="true"
+                  >
                     {bankInitials(g.named ? g.label : "")}
                   </span>
                   <span className="bank-group-id">
                     <span className="bank-group-name">{g.label}</span>
                     <span className="bank-group-meta">
-                      {g.rows.length} {g.rows.length === 1 ? "rekening" : "rekeningen"} · {g.txCount}{" "}
-                      {g.txCount === 1 ? "transactie" : "transacties"}
+                      {g.rows.length} {g.rows.length === 1 ? "rekening" : "rekeningen"} ·{" "}
+                      {g.txCount} {g.txCount === 1 ? "transactie" : "transacties"}
                     </span>
                   </span>
                   <GroupSaldo group={g} />
                   <span className="bank-group-toggle">
-                    {open ? "Verbergen" : g.rows.length === 1 ? "Rekening tonen" : "Rekeningen tonen"}
+                    {open
+                      ? "Verbergen"
+                      : g.rows.length === 1
+                        ? "Rekening tonen"
+                        : "Rekeningen tonen"}
                     <span className="bank-chevron" aria-hidden="true">
                       ▾
                     </span>
@@ -803,7 +906,11 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                 {open && (
                   <div className="bank-group-body">
                     {g.rows.length > 1 && (
-                      <div className="bank-tabs" role="tablist" aria-label={`Rekeningen bij ${g.label}`}>
+                      <div
+                        className="bank-tabs"
+                        role="tablist"
+                        aria-label={`Rekeningen bij ${g.label}`}
+                      >
                         {g.rows.map((r) => {
                           const isActive = r.account.key === activeKey;
                           return (
@@ -832,7 +939,9 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                       row={activeRow}
                       busy={busy}
                       latestTx={latest.get(activeRow.account.key) ?? null}
-                      labelledBy={g.rows.length > 1 ? tabId(g.id, activeRow.account.key) : undefined}
+                      labelledBy={
+                        g.rows.length > 1 ? tabId(g.id, activeRow.account.key) : undefined
+                      }
                       onEntityChange={onEntityChange}
                       onAccountCommit={onAccountCommit}
                       onAccountFieldChange={onAccountFieldChange}
@@ -893,7 +1002,9 @@ export default function Rekeningen({ accounts, txs, busy, onEntityChange, onAcco
                         het woord "onbekend"), de uitleg staat per rekening in
                         "Per bank". Een datum verzinnen om de kolom te vullen is
                         het probleem dat deze regel juist oplost. */}
-                    <div className="cell-sub">{saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null))}</div>
+                    <div className="cell-sub">
+                      {saldoAgeShort(saldoAge(account, latest.get(account.key) ?? null))}
+                    </div>
                   </td>
                   <td className="num" data-label="Transacties">
                     <button

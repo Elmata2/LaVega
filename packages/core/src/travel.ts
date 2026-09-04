@@ -10,8 +10,13 @@ import { issuerToBank, type CatalogueEntryLike } from "./catalogRates.js";
 import { splitProductName, bankNameMatches } from "./bankNl.js";
 import { productFeesById } from "./accountCosts.js";
 import {
-  MIN_HORIZON_MONTHS, describeNetBenefit, holdingCostOfProduct, marginalHoldingCost, netBenefit,
-  type HoldingCost, type NetBenefit,
+  MIN_HORIZON_MONTHS,
+  describeNetBenefit,
+  holdingCostOfProduct,
+  marginalHoldingCost,
+  netBenefit,
+  type HoldingCost,
+  type NetBenefit,
 } from "./netBenefit.js";
 
 /** Travel's slot in the agent namespace (see `agentFacts.ts` for what it may
@@ -58,16 +63,56 @@ function surchargeCents(netCostPct: number): number {
  *  rather than guessing a currency. Euro countries return EUR, which is what
  *  makes "no conversion needed" a real answer. */
 const COUNTRY_CURRENCY: Record<string, string> = {
-  US: "USD", GB: "GBP", CH: "CHF", JP: "JPY", SE: "SEK", NO: "NOK", DK: "DKK",
-  PL: "PLN", CZ: "CZK", HU: "HUF", TR: "TRY", CA: "CAD", AU: "AUD", NZ: "NZD",
-  TH: "THB", ID: "IDR", SG: "SGD", AE: "AED", MA: "MAD", ZA: "ZAR", BR: "BRL",
-  MX: "MXN", IN: "INR", CN: "CNY", KR: "KRW",
-  NL: "EUR", BE: "EUR", DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", PT: "EUR",
-  AT: "EUR", IE: "EUR", FI: "EUR", GR: "EUR", LU: "EUR", HR: "EUR", SK: "EUR", SI: "EUR",
+  US: "USD",
+  GB: "GBP",
+  CH: "CHF",
+  JP: "JPY",
+  SE: "SEK",
+  NO: "NOK",
+  DK: "DKK",
+  PL: "PLN",
+  CZ: "CZK",
+  HU: "HUF",
+  TR: "TRY",
+  CA: "CAD",
+  AU: "AUD",
+  NZ: "NZD",
+  TH: "THB",
+  ID: "IDR",
+  SG: "SGD",
+  AE: "AED",
+  MA: "MAD",
+  ZA: "ZAR",
+  BR: "BRL",
+  MX: "MXN",
+  IN: "INR",
+  CN: "CNY",
+  KR: "KRW",
+  NL: "EUR",
+  BE: "EUR",
+  DE: "EUR",
+  FR: "EUR",
+  ES: "EUR",
+  IT: "EUR",
+  PT: "EUR",
+  AT: "EUR",
+  IE: "EUR",
+  FI: "EUR",
+  GR: "EUR",
+  LU: "EUR",
+  HR: "EUR",
+  SK: "EUR",
+  SI: "EUR",
 };
 
 export function countryCurrency(code: string): string | null {
-  return COUNTRY_CURRENCY[String(code ?? "").trim().toUpperCase()] ?? null;
+  return (
+    COUNTRY_CURRENCY[
+      String(code ?? "")
+        .trim()
+        .toUpperCase()
+    ] ?? null
+  );
 }
 
 /** One PRODUCT ranked for spending abroad — a provider, not an account: terms
@@ -320,7 +365,11 @@ export function payHeadline(
  *  betaalpas: dat kost je niets op € 1.000. Die heb je nog niet." Over een kaart
  *  van € 16,90 per maand. Dat "niets" gaat over de OPSLAG, en zonder de prijs
  *  ernaast is het precies de misleiding die dit bestand moet voorkomen. */
-function holdingCostClause(product: string, b: NetBenefit | null, cost: HoldingCost | null = null): string {
+function holdingCostClause(
+  product: string,
+  b: NetBenefit | null,
+  cost: HoldingCost | null = null,
+): string {
   if (!b) return bareHoldingCostClause(product, cost);
   if (b.kind === "gross-cost-unknown") {
     const why =
@@ -431,7 +480,10 @@ function spendableAccounts(accounts: Account[]): Account[] {
 /** Rank what to pay with. Known terms sort by net cost (cheapest first); cards
  *  with unknown terms always sort last — an unknown fee is a risk, not a zero,
  *  and silently ranking it first is exactly how you get burned abroad. */
-export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFact[]): SpendOption[] {
+export function rankSpendOptions(
+  accounts: Account[],
+  facts: readonly LearnedFact[],
+): SpendOption[] {
   // Collapse to one entry per provider: the terms are the product's, so several
   // accounts at one bank must not become several identical rows (correcting one
   // of them would silently move the others anyway).
@@ -456,7 +508,13 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
     // same fake precision the "indicatief" tables were dropped for.
     const netCostPct = known ? fxFeePct - (cashbackPct ?? 0) : null;
     return {
-      provider, accounts: group, fxFeePct, cashbackPct, pointsPerEuro, netCostPct, known,
+      provider,
+      accounts: group,
+      fxFeePct,
+      cashbackPct,
+      pointsPerEuro,
+      netCostPct,
+      known,
       why: known
         ? `${fxFeePct}% wisselkosten${cashbackPct ? ` − ${cashbackPct}% cashback` : ""}${pointsPerEuro ? ` + ${pointsPerEuro} punt${pointsPerEuro === 1 ? "" : "en"} per euro` : ""}`
         : "voorwaarden nog onbekend",
@@ -477,21 +535,42 @@ export function rankSpendOptions(accounts: Account[], facts: readonly LearnedFac
  *  cheaply abroad. Deliberately conservative: it only ever proposes accounts he
  *  already has, and LaVega never moves anything itself (no PIS) — this is a
  *  step for him to take. */
-function planConversion(accounts: Account[], best: SpendOption | null, facts: readonly LearnedFact[]): ConvertStep {
+function planConversion(
+  accounts: Account[],
+  best: SpendOption | null,
+  facts: readonly LearnedFact[],
+): ConvertStep {
   if (!best || !best.known) {
-    return { fromProvider: null, toProvider: null, method: null, note: "Nog geen kaart met bekende voorwaarden — ververs eerst de voorwaarden." };
+    return {
+      fromProvider: null,
+      toProvider: null,
+      method: null,
+      note: "Nog geen kaart met bekende voorwaarden — ververs eerst de voorwaarden.",
+    };
   }
   // Fund the winning product from the payment account holding the most money —
   // at a DIFFERENT bank, else the advice is "move it to where it already is".
   // Compared on BANK, not product: moving from your ING betaalpas to your ING
   // creditcard is not a conversion route.
   const winningBank = best.accounts[0] ? providerOf(best.accounts[0]) : "";
-  const funding = accounts
-    .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== winningBank)
-    .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0] ?? null;
-  const method = factNumber(facts, TRAVEL_AGENT, best.provider, "transferFreeViaIdeal") === 1 ? "iDEAL" : null;
+  const funding =
+    accounts
+      .filter(
+        (a) =>
+          accountType(a) === "Betaalrekening" &&
+          providerOf(a) !== "" &&
+          providerOf(a) !== winningBank,
+      )
+      .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0] ?? null;
+  const method =
+    factNumber(facts, TRAVEL_AGENT, best.provider, "transferFreeViaIdeal") === 1 ? "iDEAL" : null;
   if (!funding) {
-    return { fromProvider: null, toProvider: best.provider, method, note: `Je betaalt het voordeligst vanaf ${best.provider}.` };
+    return {
+      fromProvider: null,
+      toProvider: best.provider,
+      method,
+      note: `Je betaalt het voordeligst vanaf ${best.provider}.`,
+    };
   }
   return {
     fromProvider: providerOf(funding),
@@ -582,7 +661,10 @@ export function rankJourneys(
     // a conversion route, it is the same money standing still.
     const bank = s.accounts[0] ? providerOf(s.accounts[0]) : "";
     const funding = accounts
-      .filter((a) => accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== bank)
+      .filter(
+        (a) =>
+          accountType(a) === "Betaalrekening" && providerOf(a) !== "" && providerOf(a) !== bank,
+      )
       .sort((x, y) => (y.balance ?? 0) - (x.balance ?? 0))[0];
     if (!funding) continue;
 
@@ -616,7 +698,8 @@ export function rankJourneys(
   }
 
   return journeys.sort((a, b) => {
-    if (a.totalCostPct === null && b.totalCostPct === null) return a.provider.localeCompare(b.provider);
+    if (a.totalCostPct === null && b.totalCostPct === null)
+      return a.provider.localeCompare(b.provider);
     if (a.totalCostPct === null) return 1;
     if (b.totalCostPct === null) return -1;
     return a.totalCostPct - b.totalCostPct || a.provider.localeCompare(b.provider);
@@ -631,7 +714,9 @@ export function journeyHeadline(journeys: readonly Journey[], currency: string |
   const best = journeys.find((j) => j.known);
   if (!best) return "Nog geen route met bekende voorwaarden — ververs eerst de voorwaarden.";
 
-  const runnerUp = journeys.find((j) => j.known && j !== best && j.totalCostPct !== best.totalCostPct);
+  const runnerUp = journeys.find(
+    (j) => j.known && j !== best && j.totalCostPct !== best.totalCostPct,
+  );
   const saving =
     runnerUp && runnerUp.costOnReference !== null && best.costOnReference !== null
       ? runnerUp.costOnReference - best.costOnReference
@@ -700,12 +785,21 @@ export function planTravel(input: {
   // none and a pricier one does, name the difference and let him decide.
   const pointsCard = spend.find((s) => s.known && (s.pointsPerEuro ?? 0) > 0);
   const spendNote =
-    bestSpend && pointsCard && pointsCard.provider !== bestSpend.provider && bestSpend.netCostPct !== null && pointsCard.netCostPct !== null
+    bestSpend &&
+    pointsCard &&
+    pointsCard.provider !== bestSpend.provider &&
+    bestSpend.netCostPct !== null &&
+    pointsCard.netCostPct !== null
       ? `${pointsCard.provider} kost ${(pointsCard.netCostPct - bestSpend.netCostPct).toFixed(2)}% meer, maar levert ${pointsCard.pointsPerEuro} punt${pointsCard.pointsPerEuro === 1 ? "" : "en"} per euro. Of dat loont hangt af van wat jij met die punten doet.`
       : null;
   const convert: ConvertStep =
     currency === "EUR"
-      ? { fromProvider: null, toProvider: null, method: null, note: "Daar betaal je in euro's — omwisselen is niet nodig." }
+      ? {
+          fromProvider: null,
+          toProvider: null,
+          method: null,
+          note: "Daar betaal je in euro's — omwisselen is niet nodig.",
+        }
       : planConversion(accounts, bestSpend, facts);
 
   // Payment accounts with no bank: countable, but never rankable or lookupable.
@@ -744,7 +838,14 @@ export function planTravel(input: {
     spend,
     spendNote,
     tripMonths,
-    unknownProviders: [...new Set(spend.filter((s) => !s.known).map((s) => s.provider).filter(Boolean))],
+    unknownProviders: [
+      ...new Set(
+        spend
+          .filter((s) => !s.known)
+          .map((s) => s.provider)
+          .filter(Boolean),
+      ),
+    ],
     unidentifiedCount,
     withdraw,
     withdrawHeadline: withdrawalHeadline(withdraw, currency, cashOffers),
@@ -802,8 +903,13 @@ export type WithdrawalFee = {
   caveat: string | null;
 };
 
-const NOT_KNOWN = (why: string, quoted: string | null): WithdrawalFee =>
-  ({ components: [], known: false, quoted, why, caveat: null });
+const NOT_KNOWN = (why: string, quoted: string | null): WithdrawalFee => ({
+  components: [],
+  known: false,
+  quoted,
+  why,
+  caveat: null,
+});
 
 /** Sentences that price CASH rather than a card payment. Deliberately literal:
  *  these are the phrasings the Dutch tariff documents actually use, and the
@@ -824,7 +930,8 @@ const WITHDRAWAL_CONDITIONAL =
  *  have it, and saying so is the only honest answer. */
 /** A withdrawal priced at nothing, said in words. Dutch and English, because the
  *  catalogue holds both. */
-const WITHDRAWAL_FREE = /\b(?:gratis|kosteloos|geen kosten|zonder kosten|free of charge|free|no fee|fee-free)\b/i;
+const WITHDRAWAL_FREE =
+  /\b(?:gratis|kosteloos|geen kosten|zonder kosten|free of charge|free|no fee|fee-free)\b/i;
 
 /** ...and the allowance that makes "free" conditional. Five withdrawals a month,
  *  EUR 200 a month, the first EUR 100 — every one of these means the price
@@ -843,8 +950,7 @@ const EUR_RE = /€\s*(\d+(?:[.,]\d+)?)/g;
  *  is the kind of wrong that discredits the whole screen. So a period is a
  *  thousands separator only where it is followed by exactly three digits; a
  *  comma is always the decimal. */
-const num = (s: string): number =>
-  Number(s.replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+const num = (s: string): number => Number(s.replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
 
 /** Split conditions into the sentences a human would read them as. Sentence
  *  ends and semicolons both separate rows in these documents; "artikel 12.3"
@@ -876,14 +982,20 @@ export function parseWithdrawalFee(conditions: string | null | undefined): Withd
     const hasFigure = /\d/.test(row) && (row.includes("%") || row.includes("€"));
     if (!hasFigure) continue;
     if (WITHDRAWAL_CROSSREF.test(row)) {
-      return NOT_KNOWN("De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.", row);
+      return NOT_KNOWN(
+        "De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.",
+        row,
+      );
     }
     // "Cash withdrawal in a foreign currency is NOT free on this plan" states a
     // price; the bare word would have refused it. Only the negation is removed
     // — everything else the sentence says still has to pass.
     const claim = row.replace(/\b(?:not|niet)\s+(?:free|gratis)\b/gi, "");
     if (WITHDRAWAL_CONDITIONAL.test(claim)) {
-      return NOT_KNOWN("Het opnametarief hangt aan een vrijstelling, staffel of voorwaarde die de bron niet in één bedrag uitdrukt.", row);
+      return NOT_KNOWN(
+        "Het opnametarief hangt aan een vrijstelling, staffel of voorwaarde die de bron niet in één bedrag uitdrukt.",
+        row,
+      );
     }
     const components = componentsOf(row);
     if (components.length === 0) continue;
@@ -895,7 +1007,9 @@ export function parseWithdrawalFee(conditions: string | null | undefined): Withd
     // fee up to EUR 400 per calendar month, 2.0% thereafter" — never says "ATM"
     // again, so a cash-only scan misses the one limit a traveller is guaranteed
     // to hit.
-    const others = all.filter((r) => r !== row && /\d/.test(r) && (r.includes("%") || r.includes("€")));
+    const others = all.filter(
+      (r) => r !== row && /\d/.test(r) && (r.includes("%") || r.includes("€")),
+    );
     const conflicting = others.some((r) => WITHDRAWAL_CONDITIONAL.test(r));
     return {
       components,
@@ -928,7 +1042,10 @@ export function parseWithdrawalFee(conditions: string | null | undefined): Withd
   // Cash IS mentioned, but never with a price on it.
   const named = rows.find((r) => WITHDRAWAL_CROSSREF.test(r));
   return named
-    ? NOT_KNOWN("De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.", named)
+    ? NOT_KNOWN(
+        "De bron verwijst voor opnemen naar een aparte regel of artikel en noemt het tarief daar niet.",
+        named,
+      )
     : NOT_KNOWN("De bron noemt opnemen wel, maar zonder tarief.", rows[0]);
 }
 
@@ -948,7 +1065,11 @@ function componentsOf(row: string): WithdrawalComponent[] {
   for (let m = EUR_RE.exec(row); m; m = EUR_RE.exec(row)) {
     const before = row.slice(Math.max(0, m.index - 24), m.index);
     const isFloor = /minimum|minimaal|ten minste|\bmin\.\s*$/i.test(before);
-    hits.push({ at: m.index, comp: { kind: "fixed", eur: num(m[1]) }, ...(isFloor ? { minimumFor: true as const } : {}) });
+    hits.push({
+      at: m.index,
+      comp: { kind: "fixed", eur: num(m[1]) },
+      ...(isFloor ? { minimumFor: true as const } : {}),
+    });
   }
   hits.sort((a, b) => a.at - b.at);
 
@@ -1043,7 +1164,10 @@ function entryIsFromBank(e: CatalogueEntryLike, bank: string): boolean {
 /** Catalogue products that could be the card he holds: same kind of card, same
  *  bank. `bankNameMatches` does the work because `account.bank` is free text he
  *  types himself — "ABN" and "ABN AMRO Bank N.V." are the same bank. */
-export function catalogueCandidates(entries: readonly CatalogueEntryLike[], product: string): CatalogueEntryLike[] {
+export function catalogueCandidates(
+  entries: readonly CatalogueEntryLike[],
+  product: string,
+): CatalogueEntryLike[] {
   const want = splitProductName(product);
   if (!want) return [];
   return entries.filter((e) => e.kind === want.card && entryIsFromBank(e, want.bank));
@@ -1077,7 +1201,8 @@ export function catalogueProductFor(
  *  the catalogue; printing all thirteen inside a sentence is a wall, not an
  *  answer, and the sentence is asking him a question. */
 function nameSome(names: readonly string[], limit = 3): string {
-  if (names.length > limit) return `${names.slice(0, limit).join(", ")} en ${names.length - limit} andere`;
+  if (names.length > limit)
+    return `${names.slice(0, limit).join(", ")} en ${names.length - limit} andere`;
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} en ${names[names.length - 1]}`;
 }
@@ -1119,7 +1244,10 @@ export function rankWithdrawOptions(
             null,
           )
         : entry === null
-          ? NOT_KNOWN("Dit product staat nog niet in de catalogus, dus we weten niet wat opnemen kost.", null)
+          ? NOT_KNOWN(
+              "Dit product staat nog niet in de catalogus, dus we weten niet wat opnemen kost.",
+              null,
+            )
           : parseWithdrawalFee(value?.conditions ?? null);
     return {
       provider: s.provider,
@@ -1128,14 +1256,16 @@ export function rankWithdrawOptions(
       effectivePct: withdrawalEffectivePct(fee, TRAVEL_REFERENCE_WITHDRAWAL),
       costOnSmall: withdrawalCost(fee, TRAVEL_SMALL_WITHDRAWAL),
       smallEffectivePct: withdrawalEffectivePct(fee, TRAVEL_SMALL_WITHDRAWAL),
-      penalisesSmall: fee.known && fee.components.some((c) => c.kind === "fixed" || c.minEur !== null),
+      penalisesSmall:
+        fee.known && fee.components.some((c) => c.kind === "fixed" || c.minEur !== null),
       catalogueProduct: entry?.product ?? null,
       sourceUrl: value?.sourceUrl ?? null,
       asOf: value?.checkedAt ?? null,
     };
   });
   return options.sort((a, b) => {
-    if (a.costOnReference === null && b.costOnReference === null) return a.provider.localeCompare(b.provider);
+    if (a.costOnReference === null && b.costOnReference === null)
+      return a.provider.localeCompare(b.provider);
     if (a.costOnReference === null) return 1;
     if (b.costOnReference === null) return -1;
     return a.costOnReference - b.costOnReference || a.provider.localeCompare(b.provider);
@@ -1241,13 +1371,21 @@ export function cashbackCaveat(conditions: string | null | undefined): string | 
   const c = String(conditions ?? "");
   if (!c) return null;
   const parts: string[] = [];
-  if (/paid in cro|paid in gno|paid in crypto|in CRO\b|in GNO\b|Cryptoback|not euro|niet in euro/i.test(c)) {
+  if (
+    /paid in cro|paid in gno|paid in crypto|in CRO\b|in GNO\b|Cryptoback|not euro|niet in euro/i.test(
+      c,
+    )
+  ) {
     parts.push("wordt in crypto uitbetaald, niet in euro's");
   }
   if (/staking|stake|WXT locked|GNO in|tier gate|subscription|abonnement/i.test(c)) {
     parts.push("vereist een abonnement of vastgezette tokens");
   }
-  if (/\bcap\b|cap:|cap of|spending cap|weekly spend|per month|per calendar month|maandlimiet/i.test(c)) {
+  if (
+    /\bcap\b|cap:|cap of|spending cap|weekly spend|per month|per calendar month|maandlimiet/i.test(
+      c,
+    )
+  ) {
     parts.push("geldt tot een maand- of weeklimiet");
   }
   if (/active until|until \d|temporary|tijdelijk|promo/i.test(c)) {
@@ -1380,7 +1518,9 @@ const FX_CONDITIONAL =
 export function fxCaveat(conditions: string | null | undefined): string | null {
   const c = String(conditions ?? "");
   if (!c || !FX_CONDITIONAL.test(c)) return null;
-  const cap = c.match(/tot\s*€\s*[\d.,]+[^.;]*|above the monthly[^.;]*|buiten de maandelijkse[^.;]*/i);
+  const cap = c.match(
+    /tot\s*€\s*[\d.,]+[^.;]*|above the monthly[^.;]*|buiten de maandelijkse[^.;]*/i,
+  );
   return cap
     ? `Dit tarief geldt maar tot een grens: ${cap[0].trim()}.`
     : "Dit tarief geldt maar binnen een limiet of pakket — lees de voorwaarden voordat je overstapt.";
@@ -1477,7 +1617,11 @@ export function marketWithdrawOptions(
     if (!fee.known || costOnReference === null) continue;
     const isHeld = held.has(e.id);
     const holdingCost = marginalHoldingCost(holdingCostOfProduct(fees.get(e.id)), isHeld);
-    const over = netBenefit({ benefit: { kind: "one-off", cents: 0 }, cost: holdingCost, horizonMonths: tripMonths });
+    const over = netBenefit({
+      benefit: { kind: "one-off", cents: 0 },
+      cost: holdingCost,
+      horizonMonths: tripMonths,
+    });
     out.push({
       productId: e.id,
       product: e.product,
@@ -1491,7 +1635,9 @@ export function marketWithdrawOptions(
       holdingCost,
       // Zie de opmerking bij `marketCardOffers`: onbekende kosten tellen hier als
       // niets omdat er niets is om op te tellen, en `tripCostKnown` zegt dat.
-      tripCostCents: Math.round(costOnReference * 100) + (over.kind === "gross-cost-unknown" ? 0 : over.costCents),
+      tripCostCents:
+        Math.round(costOnReference * 100) +
+        (over.kind === "gross-cost-unknown" ? 0 : over.costCents),
       tripCostKnown: holdingCost.kind === "known",
       tripMonths,
     });
@@ -1576,7 +1722,11 @@ export function bestWithdrawAdvice(
   const saving = savingCents !== null && savingCents > 0 ? savingCents / 100 : null;
   const benefit =
     savingCents !== null && savingCents > 0
-      ? netBenefit({ benefit: { kind: "one-off", cents: savingCents }, cost: best.holdingCost, horizonMonths: best.tripMonths })
+      ? netBenefit({
+          benefit: { kind: "one-off", cents: savingCents },
+          cost: best.holdingCost,
+          horizonMonths: best.tripMonths,
+        })
       : null;
   return {
     product: best.product,
@@ -1614,7 +1764,8 @@ export function withdrawalHeadline(
   if (currency === "EUR") {
     return "Daar pin je in euro's, dus de opslagen voor vreemde valuta gelden niet. Wat je eigen bank in euroland voor een opname rekent, staat niet in onze bronnen.";
   }
-  if (options.length === 0 && market.length === 0) return "Nog geen kaart of betaalrekening om mee te pinnen.";
+  if (options.length === 0 && market.length === 0)
+    return "Nog geen kaart of betaalrekening om mee te pinnen.";
 
   const advice = bestWithdrawAdvice(options, market);
   if (!advice) {
@@ -1643,9 +1794,9 @@ export function withdrawalHeadline(
   const own =
     advice.ownProduct === null
       ? " Van je eigen kaarten kennen we geen opnametarief."
-      // The "X duurder" clause only earns its place when it is a DIFFERENT number
-      // from the one just quoted; against a proven zero it repeats itself.
-      : ` Van jouw kaarten is ${advice.ownProduct} de goedkoopste die we kunnen aantonen: ${euro(advice.ownCostOnReference!)}${advice.savingOnReference === null || advice.costOnReference === 0 ? "" : `, dus ${euro(advice.savingOnReference)} duurder`}.`;
+      : // The "X duurder" clause only earns its place when it is a DIFFERENT number
+        // from the one just quoted; against a proven zero it repeats itself.
+        ` Van jouw kaarten is ${advice.ownProduct} de goedkoopste die we kunnen aantonen: ${euro(advice.ownCostOnReference!)}${advice.savingOnReference === null || advice.costOnReference === 0 ? "" : `, dus ${euro(advice.savingOnReference)} duurder`}.`;
   return `Het voordeligst pin je met ${advice.product}: ${price}. Die heb je nog niet.${own}${holdingCostClause(advice.product, advice.benefit, advice.holdingCost)}${small}${missingCashNote(options)}`;
 }
 

@@ -44,7 +44,10 @@ export type CurrentPosition = {
 
 const EPSILON = 1e-9;
 
-function emptyReturn(status: PositionReturnStatus, firstBuyDate: string | null = null): PositionReturn {
+function emptyReturn(
+  status: PositionReturnStatus,
+  firstBuyDate: string | null = null,
+): PositionReturn {
   return {
     status,
     remainingCostBasis: null,
@@ -83,8 +86,19 @@ export function calculatePositionReturn(
    * fill through pies or autoinvest report the holding and its average price
    * but leave those fills out of order history, so the average is the only
    * cost this position will ever have. */
-  const fallback = () => brokerAverageReturn(marketValue, dividends, presentationCurrency, fxRates, firstBuyDate, options.brokerCost);
-  if (orderedTrades.length === 0 || orderedTrades.some((trade) => trade.side === "other" || trade.commission === null)) {
+  const fallback = () =>
+    brokerAverageReturn(
+      marketValue,
+      dividends,
+      presentationCurrency,
+      fxRates,
+      firstBuyDate,
+      options.brokerCost,
+    );
+  if (
+    orderedTrades.length === 0 ||
+    orderedTrades.some((trade) => trade.side === "other" || trade.commission === null)
+  ) {
     return fallback();
   }
 
@@ -97,8 +111,20 @@ export function calculatePositionReturn(
     for (const trade of orderedTrades) {
       const gross = tradeValue(trade);
       if (gross === null || trade.quantity <= 0) return fallback();
-      const grossEur = convertCurrency(gross, trade.currency, presentationCurrency, trade.date, fxRates);
-      const feeEur = convertCurrency(Math.abs(trade.commission!), trade.currency, presentationCurrency, trade.date, fxRates);
+      const grossEur = convertCurrency(
+        gross,
+        trade.currency,
+        presentationCurrency,
+        trade.date,
+        fxRates,
+      );
+      const feeEur = convertCurrency(
+        Math.abs(trade.commission!),
+        trade.currency,
+        presentationCurrency,
+        trade.date,
+        fxRates,
+      );
       if (trade.side === "buy") {
         heldQuantity += trade.quantity;
         remainingCostBasis += grossEur + feeEur;
@@ -106,7 +132,7 @@ export function calculatePositionReturn(
         continue;
       }
       if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return fallback();
-      const removed = remainingCostBasis / heldQuantity * trade.quantity;
+      const removed = (remainingCostBasis / heldQuantity) * trade.quantity;
       heldQuantity -= trade.quantity;
       remainingCostBasis -= removed;
       realizedCostBasisRemoved += removed;
@@ -117,36 +143,48 @@ export function calculatePositionReturn(
     if (Math.abs(heldQuantity - quantity) > EPSILON) return fallback();
     let dividendsReceived = 0;
     for (const dividend of dividends) {
-      const converted = convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+      const converted = convertCurrency(
+        dividend.amount,
+        dividend.currency,
+        presentationCurrency,
+        dividend.date,
+        fxRates,
+      );
       dividendsReceived += converted;
       datedFlows.push({ date: dividend.date, amount: converted });
     }
-    if (marketValue === null) return {
-      status: "unpriced",
-      remainingCostBasis,
-      realizedCostBasisRemoved,
-      unrealizedGain: null,
-      realizedGain,
-      dividendsReceived,
-      totalReturn: null,
-      totalReturnPercentage: null,
-      sinceFirstBuyPercentage: null,
-      firstBuyDate,
-    };
+    if (marketValue === null)
+      return {
+        status: "unpriced",
+        remainingCostBasis,
+        realizedCostBasisRemoved,
+        unrealizedGain: null,
+        realizedGain,
+        dividendsReceived,
+        totalReturn: null,
+        totalReturnPercentage: null,
+        sinceFirstBuyPercentage: null,
+        firstBuyDate,
+      };
     const unrealizedGain = marketValue - remainingCostBasis;
     const totalReturn = unrealizedGain + realizedGain + dividendsReceived;
     const denominator = remainingCostBasis + realizedCostBasisRemoved;
-    const valuationDate = options.valuationDate
-      ?? [...orderedTrades.map((trade) => trade.date), ...dividends.map((dividend) => dividend.date)].sort().at(-1)
-      ?? firstBuyDate;
-    if (marketValue > EPSILON && valuationDate) datedFlows.push({ date: valuationDate, amount: marketValue });
+    const valuationDate =
+      options.valuationDate ??
+      [...orderedTrades.map((trade) => trade.date), ...dividends.map((dividend) => dividend.date)]
+        .sort()
+        .at(-1) ??
+      firstBuyDate;
+    if (marketValue > EPSILON && valuationDate)
+      datedFlows.push({ date: valuationDate, amount: marketValue });
     const annualized = solveXirr(datedFlows);
-    const elapsedYears = firstBuyDate && valuationDate
-      ? (Date.parse(`${valuationDate}T00:00:00Z`) - Date.parse(`${firstBuyDate}T00:00:00Z`)) / 31_536_000_000
-      : 0;
-    const sinceFirstBuyPercentage = annualized !== null && elapsedYears > 0
-      ? Math.pow(1 + annualized, elapsedYears) - 1
-      : null;
+    const elapsedYears =
+      firstBuyDate && valuationDate
+        ? (Date.parse(`${valuationDate}T00:00:00Z`) - Date.parse(`${firstBuyDate}T00:00:00Z`)) /
+          31_536_000_000
+        : 0;
+    const sinceFirstBuyPercentage =
+      annualized !== null && elapsedYears > 0 ? Math.pow(1 + annualized, elapsedYears) - 1 : null;
     return {
       status: "available",
       remainingCostBasis,
@@ -168,9 +206,17 @@ export function calculatePositionReturn(
  *  pie and a direct holding in the same instrument add up instead of one
  *  overwriting the other. */
 export function brokerCostLegs(positions: readonly Position[]): BrokerCostLeg[] {
-  return positions.flatMap((position) => position.averagePrice === null || Math.abs(position.quantity) <= EPSILON
-    ? []
-    : [{ amount: position.averagePrice * position.quantity, currency: position.currency, date: position.asOf }]);
+  return positions.flatMap((position) =>
+    position.averagePrice === null || Math.abs(position.quantity) <= EPSILON
+      ? []
+      : [
+          {
+            amount: position.averagePrice * position.quantity,
+            currency: position.currency,
+            date: position.asOf,
+          },
+        ],
+  );
 }
 
 function brokerAverageReturn(
@@ -184,9 +230,23 @@ function brokerAverageReturn(
   if (!brokerCost || brokerCost.length === 0) return emptyReturn("missing-cost", firstBuyDate);
   try {
     let remainingCostBasis = 0;
-    for (const leg of brokerCost) remainingCostBasis += convertCurrency(leg.amount, leg.currency, presentationCurrency, leg.date, fxRates);
+    for (const leg of brokerCost)
+      remainingCostBasis += convertCurrency(
+        leg.amount,
+        leg.currency,
+        presentationCurrency,
+        leg.date,
+        fxRates,
+      );
     let dividendsReceived = 0;
-    for (const dividend of dividends) dividendsReceived += convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+    for (const dividend of dividends)
+      dividendsReceived += convertCurrency(
+        dividend.amount,
+        dividend.currency,
+        presentationCurrency,
+        dividend.date,
+        fxRates,
+      );
     const unrealizedGain = marketValue === null ? null : marketValue - remainingCostBasis;
     const totalReturn = unrealizedGain === null ? null : unrealizedGain + dividendsReceived;
     return {
@@ -197,7 +257,10 @@ function brokerAverageReturn(
       realizedGain: null,
       dividendsReceived,
       totalReturn,
-      totalReturnPercentage: totalReturn === null || Math.abs(remainingCostBasis) <= EPSILON ? null : totalReturn / remainingCostBasis,
+      totalReturnPercentage:
+        totalReturn === null || Math.abs(remainingCostBasis) <= EPSILON
+          ? null
+          : totalReturn / remainingCostBasis,
       sinceFirstBuyPercentage: null,
       firstBuyDate,
     };
@@ -237,7 +300,8 @@ export function buildCurrentPositions(input: {
     if (list) list.push(bar);
     else barsBySymbol.set(listKey, [bar]);
   }
-  for (const list of barsBySymbol.values()) list.sort((left, right) => left.date.localeCompare(right.date));
+  for (const list of barsBySymbol.values())
+    list.sort((left, right) => left.date.localeCompare(right.date));
 
   const current = [...groups.entries()].map(([groupKey, positions]) => {
     const sample = positions[0]!;
@@ -248,7 +312,13 @@ export function buildCurrentPositions(input: {
     let priceStatus: PositionPriceStatus = "unpriced";
     if (latest && businessDaysAfter(latest.date, input.today) <= 5) {
       try {
-        marketValue = convertCurrency(quantity * latest.close, latest.currency, input.presentationCurrency, input.today, input.fxRates);
+        marketValue = convertCurrency(
+          quantity * latest.close,
+          latest.currency,
+          input.presentationCurrency,
+          input.today,
+          input.fxRates,
+        );
         priceStatus = latest.date === input.today ? "priced" : "forward-filled";
       } catch {
         priceStatus = "missing-fx";
@@ -263,9 +333,10 @@ export function buildCurrentPositions(input: {
       input.fxRates,
       { valuationDate: latest?.date, brokerCost: brokerCostLegs(positions) },
     );
-    const returns = priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
-      ? { ...calculatedReturns, status: "missing-fx" as const }
-      : calculatedReturns;
+    const returns =
+      priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
+        ? { ...calculatedReturns, status: "missing-fx" as const }
+        : calculatedReturns;
     return {
       symbol: sample.symbol,
       entity: sample.entity,
@@ -273,7 +344,10 @@ export function buildCurrentPositions(input: {
       ...(sample.description ? { description: sample.description } : {}),
       quantity,
       currency: sample.currency,
-      asOf: positions.map((position) => position.asOf).sort().at(-1)!,
+      asOf: positions
+        .map((position) => position.asOf)
+        .sort()
+        .at(-1)!,
       marketValue,
       portfolioWeight: null,
       priceStatus,
@@ -284,6 +358,9 @@ export function buildCurrentPositions(input: {
   const pricedTotal = current.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);
   return current.map((position) => ({
     ...position,
-    portfolioWeight: position.marketValue === null || pricedTotal <= EPSILON ? null : position.marketValue / pricedTotal,
+    portfolioWeight:
+      position.marketValue === null || pricedTotal <= EPSILON
+        ? null
+        : position.marketValue / pricedTotal,
   }));
 }

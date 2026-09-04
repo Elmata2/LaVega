@@ -76,10 +76,21 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
     // there is no like-for-like figure to print, and an approximate one would
     // be read as an exact one.
     return (
-      <Module title="Top uitgaven" height="tall" footer={<>{month} t.o.v. {prev}</>}>
+      <Module
+        title="Top uitgaven"
+        height="tall"
+        footer={
+          <>
+            {month} t.o.v. {prev}
+          </>
+        }
+      >
         <p className="cat-nocompare">
-          {month} en {prev} zijn niet vergelijkbaar: geen enkele rekening heeft gegevens in beide maanden.
-          {excludedOut > 0 && <> Er staat wel {formatEuro(excludedOut)} aan uitgaven in deze twee maanden.</>}
+          {month} en {prev} zijn niet vergelijkbaar: geen enkele rekening heeft gegevens in beide
+          maanden.
+          {excludedOut > 0 && (
+            <> Er staat wel {formatEuro(excludedOut)} aan uitgaven in deze twee maanden.</>
+          )}
         </p>
         <p className="block-empty">
           Importeer beide maanden van dezelfde rekeningen, dan verschijnt de vergelijking hier.
@@ -116,8 +127,8 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
               {current.partial && excluded > 0 && " "}
               {excluded > 0 && (
                 <>
-                  {excluded} rekening{excluded === 1 ? "" : "en"} blijft buiten de vergelijking — die heeft geen
-                  gegevens in beide maanden ({formatEuro(excludedOut)} aan uitgaven).
+                  {excluded} rekening{excluded === 1 ? "" : "en"} blijft buiten de vergelijking —
+                  die heeft geen gegevens in beide maanden ({formatEuro(excludedOut)} aan uitgaven).
                 </>
               )}
             </p>
@@ -141,7 +152,10 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
                   </span>
                 </div>
                 <div className="cat-bar">
-                  <div className="cat-bar-fill" style={{ width: `${Math.min(100, r.sharePct)}%` }} />
+                  <div
+                    className="cat-bar-fill"
+                    style={{ width: `${Math.min(100, r.sharePct)}%` }}
+                  />
                 </div>
               </div>
             ))}
@@ -159,7 +173,12 @@ type TopUitgavenBlockProps = {
   onSelectCategory: (category: string) => void;
 };
 
-export default function TopUitgavenBlock({ txs, rules, own, onSelectCategory }: TopUitgavenBlockProps) {
+export default function TopUitgavenBlock({
+  txs,
+  rules,
+  own,
+  onSelectCategory,
+}: TopUitgavenBlockProps) {
   const comparison = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
   return <TopUitgavenView comparison={comparison} onSelectCategory={onSelectCategory} />;
 }

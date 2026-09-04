@@ -52,7 +52,10 @@ function attributes(text: string): Attributes {
   return result;
 }
 
-function rows(xml: string, tag: "OpenPosition" | "Trade" | "CashReportCurrency" | "StatementOfFundsLine"): Attributes[] {
+function rows(
+  xml: string,
+  tag: "OpenPosition" | "Trade" | "CashReportCurrency" | "StatementOfFundsLine",
+): Attributes[] {
   const result: Attributes[] = [];
   const pattern = new RegExp(`<${tag}\\b([^>]*?)(?:/\\s*>|>[^<]*</${tag}\\s*>)`, "gi");
   for (const match of xml.matchAll(pattern)) {
@@ -76,19 +79,27 @@ function identity(prefix: string, attrs: Attributes, values: unknown[]): string 
   return hash([prefix, first(attrs, "accountId", "accountID"), ...values.map(norm)].join("|"));
 }
 
-function parseCashBalances(xml: string, entity: string): { cashBalances: CashBalance[]; problems: string[] } {
+function parseCashBalances(
+  xml: string,
+  entity: string,
+): { cashBalances: CashBalance[]; problems: string[] } {
   const uniqueRows = new Map<string, { currency: string; amount: number; asOf: string }>();
   const problems: string[] = [];
   for (const attrs of rows(xml, "CashReportCurrency")) {
     try {
       const currency = first(attrs, "currency")?.trim() ?? "";
       if (!currency || /base\s+summary/i.test(currency)) continue;
-      const amount = requiredNumber(first(attrs, "endingCash", "endingSettledCash"), "cash ending balance");
+      const amount = requiredNumber(
+        first(attrs, "endingCash", "endingSettledCash"),
+        "cash ending balance",
+      );
       const asOf = date(first(attrs, "toDate", "reportDate", "date"), "cash balance date");
       const rowIdentity = identity("ibkr-cash-balance", attrs, [currency, amount, asOf]);
       uniqueRows.set(rowIdentity, { currency, amount, asOf });
     } catch (error) {
-      problems.push(error instanceof Error ? error.message : "IBKR Flex Cash Report row is invalid");
+      problems.push(
+        error instanceof Error ? error.message : "IBKR Flex Cash Report row is invalid",
+      );
     }
   }
 
@@ -111,9 +122,11 @@ function activityKind(attrs: Attributes): CashFlowKind | "dividend" {
   const code = first(attrs, "activityCode", "code")?.toUpperCase() ?? "";
   const description = first(attrs, "activityDescription", "description") ?? "";
   const activity = `${code} ${description}`;
-  if (/(^|\W)(DIV|DIVIDEND)(\W|$)/i.test(activity) && !/(WITHHOLD|TAX)/i.test(activity)) return "dividend";
+  if (/(^|\W)(DIV|DIVIDEND)(\W|$)/i.test(activity) && !/(WITHHOLD|TAX)/i.test(activity))
+    return "dividend";
   if (/(^|\W)(DEP|DEPOSIT|CASH RECEIPT|WIRE RECEIVED)(\W|$)/i.test(activity)) return "deposit";
-  if (/(^|\W)(WTH|WITHDRAWAL|CASH DISBURSEMENT|WIRE SENT)(\W|$)/i.test(activity)) return "withdrawal";
+  if (/(^|\W)(WTH|WITHDRAWAL|CASH DISBURSEMENT|WIRE SENT)(\W|$)/i.test(activity))
+    return "withdrawal";
   if (/INTEREST|(^|\W)BINT(\W|$)/i.test(activity)) return "interest";
   if (/FEE|COMMISSION|WITHHOLD|TAX/i.test(activity)) return "fee";
   return "other";
@@ -125,7 +138,10 @@ function normalizedAmount(amount: number, kind: CashFlowKind): number {
   return amount;
 }
 
-function parseStatementFunds(xml: string, entity: string): { dividends: Dividend[]; cashFlows: CashFlow[]; problems: string[] } {
+function parseStatementFunds(
+  xml: string,
+  entity: string,
+): { dividends: Dividend[]; cashFlows: CashFlow[]; problems: string[] } {
   const dividends = new Map<string, Dividend>();
   const cashFlows = new Map<string, CashFlow>();
   const problems: string[] = [];
@@ -133,7 +149,8 @@ function parseStatementFunds(xml: string, entity: string): { dividends: Dividend
     try {
       const flowDate = cashDate(attrs, "Statement of Funds date");
       const currency = first(attrs, "currency")?.trim() ?? "";
-      if (!currency || /base\s+summary/i.test(currency)) throw new Error("IBKR Flex Statement of Funds currency is missing or invalid");
+      if (!currency || /base\s+summary/i.test(currency))
+        throw new Error("IBKR Flex Statement of Funds currency is missing or invalid");
       const rawAmount = requiredNumber(first(attrs, "amount"), "Statement of Funds amount");
       const description = first(attrs, "activityDescription", "description");
       const providerId = brokerIdentity(attrs);
@@ -142,7 +159,13 @@ function parseStatementFunds(xml: string, entity: string): { dividends: Dividend
       if (kind === "dividend") {
         const symbol = first(attrs, "symbol", "underlyingSymbol");
         if (!symbol) throw new Error("IBKR Flex dividend symbol is missing");
-        const id = identity("ibkr-dividend", attrs, [flowDate, currency, rawAmount, symbol, description]);
+        const id = identity("ibkr-dividend", attrs, [
+          flowDate,
+          currency,
+          rawAmount,
+          symbol,
+          description,
+        ]);
         const dedupeKey = providerId ?? id;
         dividends.set(dedupeKey, {
           id,
@@ -174,7 +197,9 @@ function parseStatementFunds(xml: string, entity: string): { dividends: Dividend
         ...(providerId ? { brokerFlowId: providerId } : {}),
       });
     } catch (error) {
-      problems.push(error instanceof Error ? error.message : "IBKR Flex Statement of Funds row is invalid");
+      problems.push(
+        error instanceof Error ? error.message : "IBKR Flex Statement of Funds row is invalid",
+      );
     }
   }
   return { dividends: [...dividends.values()], cashFlows: [...cashFlows.values()], problems };
@@ -242,11 +267,27 @@ function parseTrade(attrs: Attributes, entity: string): TradeWithoutId {
 
 export function parseFlexStatement(xml: string, entity: string): FlexStatementResult {
   if (!xml.includes("<FlexStatements") && !xml.includes("<FlexQueryResponse")) {
-    return { positions: [], trades: [], dividends: [], cashBalances: [], cashFlows: [], problems: ["IBKR Flex response is not a statement"] };
+    return {
+      positions: [],
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+      problems: ["IBKR Flex response is not a statement"],
+    };
   }
-  if ((xml.includes("<FlexStatements") && !xml.includes("</FlexStatements>"))
-    || (xml.includes("<FlexQueryResponse") && !xml.includes("</FlexQueryResponse>"))) {
-    return { positions: [], trades: [], dividends: [], cashBalances: [], cashFlows: [], problems: ["IBKR Flex response is malformed"] };
+  if (
+    (xml.includes("<FlexStatements") && !xml.includes("</FlexStatements>")) ||
+    (xml.includes("<FlexQueryResponse") && !xml.includes("</FlexQueryResponse>"))
+  ) {
+    return {
+      positions: [],
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+      problems: ["IBKR Flex response is malformed"],
+    };
   }
 
   const positions: Position[] = [];
@@ -256,7 +297,9 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
     try {
       positions.push(parsePosition(attrs, entity));
     } catch (error) {
-      problems.push(error instanceof Error ? error.message : "IBKR Flex OpenPosition row is invalid");
+      problems.push(
+        error instanceof Error ? error.message : "IBKR Flex OpenPosition row is invalid",
+      );
     }
   }
   for (const attrs of rows(xml, "Trade")) {
@@ -268,5 +311,12 @@ export function parseFlexStatement(xml: string, entity: string): FlexStatementRe
   }
   const cash = parseCashBalances(xml, entity);
   const funds = parseStatementFunds(xml, entity);
-  return { positions, trades, dividends: funds.dividends, cashBalances: cash.cashBalances, cashFlows: funds.cashFlows, problems: [...problems, ...cash.problems, ...funds.problems] };
+  return {
+    positions,
+    trades,
+    dividends: funds.dividends,
+    cashBalances: cash.cashBalances,
+    cashFlows: funds.cashFlows,
+    problems: [...problems, ...cash.problems, ...funds.problems],
+  };
 }

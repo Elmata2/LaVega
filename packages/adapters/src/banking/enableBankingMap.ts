@@ -51,7 +51,9 @@ export type EbAccount = {
  * counterparty/description should keep their original casing, matching the
  * reference's dedicated `ebNorm`. */
 function ebNorm(s: unknown): string {
-  return String(s ?? "").replace(/\s+/g, " ").trim();
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** EB transaction -> Omit<Tx,"id">. Amount sign: DBIT -> negative, else positive. */
@@ -62,7 +64,10 @@ export function mapEbTransaction(
 ): Omit<Tx, "id"> {
   const amt = Number(ebTx?.transaction_amount?.amount ?? 0);
   const dbit = String(ebTx?.credit_debit_indicator || "").toUpperCase() === "DBIT";
-  const remit = ([] as unknown[]).concat(ebTx?.remittance_information ?? []).filter(Boolean).join(" ");
+  const remit = ([] as unknown[])
+    .concat(ebTx?.remittance_information ?? [])
+    .filter(Boolean)
+    .join(" ");
   const cpName = dbit
     ? ebTx?.creditor?.name || ebTx?.creditor_account?.iban || ""
     : ebTx?.debtor?.name || ebTx?.debtor_account?.iban || "";
@@ -103,7 +108,9 @@ export function ebAccountKey(ebAccount: EbAccount): string {
  * counting. Two lookups, one row. */
 function pickEbBalanceEntry(balances: EbBalance[] | null | undefined): EbBalance | null {
   const list = balances || [];
-  return list.find((x) => /CLBD|closingBooked/i.test(x.balance_type || x.name || "")) ?? list[0] ?? null;
+  return (
+    list.find((x) => /CLBD|closingBooked/i.test(x.balance_type || x.name || "")) ?? list[0] ?? null
+  );
 }
 
 /** Picks a balance from GET /accounts/{uid}/balances: prefers a CLBD/closingBooked
@@ -154,7 +161,11 @@ export function pickEbBalanceDate(balances: EbBalance[] | null | undefined): str
  *  nothing, and mergeImportedAccounts would drop it on the next import anyway
  *  (it only takes the imported date when the imported balance is real) — so
  *  writing it would be a field that cannot survive its own round trip. */
-export function mapEbAccount(ebAccount: EbAccount, balance: number | null, balanceDate?: string): Account {
+export function mapEbAccount(
+  ebAccount: EbAccount,
+  balance: number | null,
+  balanceDate?: string,
+): Account {
   const key = ebAccountKey(ebAccount);
   const iban = ebAccount?.account_id?.iban ?? "";
   const name = ebAccount?.name || ebAccount?.product || key;

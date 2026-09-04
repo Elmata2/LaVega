@@ -37,16 +37,23 @@ function mount(): HTMLDivElement {
 
 /** React listens for the native input/change event and reads the value off the
  *  element, so the value has to be set through the prototype's own setter. */
-function setValue(el: HTMLInputElement | HTMLSelectElement, value: string, event: "input" | "change") {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+function setValue(
+  el: HTMLInputElement | HTMLSelectElement,
+  value: string,
+  event: "input" | "change",
+) {
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   act(() => {
     el.dispatchEvent(new Event(event, { bubbles: true }));
   });
 }
 
-const periodSelect = (el: HTMLElement) => el.querySelector("select.module-period") as HTMLSelectElement;
-const dateFields = (el: HTMLElement) => [...el.querySelectorAll('input[type="date"]')] as HTMLInputElement[];
+const periodSelect = (el: HTMLElement) =>
+  el.querySelector("select.module-period") as HTMLSelectElement;
+const dateFields = (el: HTMLElement) =>
+  [...el.querySelectorAll('input[type="date"]')] as HTMLInputElement[];
 
 test("choosing Aangepast opens two date fields, seeded with the window that was showing", () => {
   const el = mount();

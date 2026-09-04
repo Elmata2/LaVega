@@ -148,8 +148,8 @@ export const AMEX_BRON: Bron = {
   eigenHosts: ["americanexpress.com", "aexp-static.com", "amex.com"],
   prijsSoort: "korting",
   uitleg:
-    "Amex zet aanbiedingen klaar die alleen voor jouw kaart gelden — \"30% korting bij deze winkel\", " +
-    "\"€ 20 terug bij besteding van € 100\". Die staan achter je login en zijn van buitenaf niet te zien: " +
+    'Amex zet aanbiedingen klaar die alleen voor jouw kaart gelden — "30% korting bij deze winkel", ' +
+    '"€ 20 terug bij besteding van € 100". Die staan achter je login en zijn van buitenaf niet te zien: ' +
     "op 24 augustus 2026 gemeten geeft de aanbiedingenpagina zonder login 676.541 bytes terug met alleen " +
     "de schil van de app erin, zonder één aanbieding. In jouw browser ben jíj ingelogd, en daar kan LaVega " +
     "die pagina wél lezen. Er gaat nog steeds niets naar een server.",
@@ -275,7 +275,7 @@ export function collectAanbod(doc?: Document | null): RuweLezing {
    * de tekst gaat mee zoals hij er staat en `leesEinddatum` beslist of hij
    * eenduidig is. */
   const DATUM = [
-    /(?:t\/m|tot en met|geldig tot(?: en met)?|verloopt op|loopt tot|tot|expires?(?: on)?|valid (?:through|until|to)|until|ends(?: on)?)\s*:?\s*(?:\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{2,4}|\d{1,2}\s+[a-z]{3,9}\.?\s+\d{4}|[a-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
+    /(?:t\/m|tot en met|geldig tot(?: en met)?|verloopt op|loopt tot|tot|expires?(?: on)?|valid (?:through|until|to)|until|ends(?: on)?)\s*:?\s*(?:\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}|\d{1,2}\s+[a-z]{3,9}\.?\s+\d{4}|[a-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
     /(?:verloopt over|nog|expires? in|ends in)\s+\d{1,3}\s*(?:dagen|dag|days|day)/i,
   ];
 
@@ -345,7 +345,9 @@ export function collectAanbod(doc?: Document | null): RuweLezing {
      * eerste link. Nooit "de eerste regel van de kaart" — dat is paginatekst en
      * die hoort er niet uit te komen. */
     let winkel = "";
-    const merk = knoop.querySelector("[data-test*='merchant' i], [data-testid*='merchant' i], [class*='merchant' i]");
+    const merk = knoop.querySelector(
+      "[data-test*='merchant' i], [data-testid*='merchant' i], [class*='merchant' i]",
+    );
     if (merk) winkel = plat(merk.textContent ?? "");
     if (winkel === "") {
       const kop = knoop.querySelector("h1, h2, h3, h4, h5, h6");

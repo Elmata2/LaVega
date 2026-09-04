@@ -121,10 +121,10 @@ test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
  * terechtkomt — hoe diep het verloop is, en dat de hover een TOESTAND is en
  * geen overgang. */
 
-const cardCss = readFileSync(fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)), "utf8").replace(
-  /\s+/g,
-  " ",
-);
+const cardCss = readFileSync(
+  fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)),
+  "utf8",
+).replace(/\s+/g, " ");
 
 /** Eén CSS-regel uit blocks.css, opgezocht op zijn selector.
  *

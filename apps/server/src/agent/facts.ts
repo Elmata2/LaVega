@@ -32,7 +32,8 @@ export function sanitizeKnownFacts(raw: unknown, agent: string): LearnedFact[] {
     const subject = o.subject;
     const key = o.key;
     const value = o.value;
-    if (typeof subject !== "string" || typeof key !== "string" || typeof value !== "string") continue;
+    if (typeof subject !== "string" || typeof key !== "string" || typeof value !== "string")
+      continue;
     built.push(
       makeFact({
         agent,

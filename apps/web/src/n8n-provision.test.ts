@@ -23,7 +23,12 @@ import {
 const BASE = "https://n8n.example";
 const ORIGIN = "https://lavega.dev";
 
-type Recorded = { url: string; method: string; apiKey: string; body: Record<string, unknown> | undefined };
+type Recorded = {
+  url: string;
+  method: string;
+  apiKey: string;
+  body: Record<string, unknown> | undefined;
+};
 
 type StubOptions = {
   /** Workflows the stub's n8n already has, as the list endpoint returns them. */
@@ -57,29 +62,38 @@ function stubN8n(options: StubOptions = {}) {
     const ok = (b: unknown) => ({ ok: true, status: 200, json: async () => b });
 
     if (path.startsWith("/workflows?")) return ok({ data: [...store.values()] });
-    if (path === "/credentials" && method === "POST") return ok({ id: "cred-77", name: body?.name, type: body?.type });
+    if (path === "/credentials" && method === "POST")
+      return ok({ id: "cred-77", name: body?.name, type: body?.type });
     if (path === "/workflows" && method === "POST") {
-      const wf = { id: "wf-1", ...(body ?? {}), active: false };
+      const wf = { id: "wf-1", ...body, active: false };
       store.set("wf-1", wf);
       return ok(wf);
     }
     const activate = path.match(/^\/workflows\/([^/]+)\/activate$/);
     if (activate && method === "POST") {
       if (options.failActivateStatus) {
-        return { ok: false, status: options.failActivateStatus, json: async () => ({ message: "Gmail node has issues" }) };
+        return {
+          ok: false,
+          status: options.failActivateStatus,
+          json: async () => ({ message: "Gmail node has issues" }),
+        };
       }
-      const wf = { ...(store.get(activate[1]) ?? {}), active: true };
+      const wf = { ...store.get(activate[1]), active: true };
       store.set(activate[1], wf);
       return ok(wf);
     }
     const one = path.match(/^\/workflows\/([^/]+)$/);
     if (one && method === "PUT") {
-      const wf = { ...(store.get(one[1]) ?? {}), ...(body ?? {}), id: one[1] };
+      const wf = { ...store.get(one[1]), ...body, id: one[1] };
       store.set(one[1], wf);
       return ok(wf);
     }
     if (one && method === "GET") return ok(store.get(one[1]) ?? {});
-    return { ok: false, status: 404, json: async () => ({ message: `stub has no route for ${method} ${path}` }) };
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({ message: `stub has no route for ${method} ${path}` }),
+    };
   }) as unknown as typeof fetch;
 
   return { calls, fetchImpl, store };
@@ -96,7 +110,9 @@ function queueWebhookOf(nodes: Array<Record<string, unknown>>): Record<string, u
   const hit = nodes.find(
     (n) =>
       n.type === "n8n-nodes-base.webhook" &&
-      String(((n.parameters ?? {}) as Record<string, unknown>).httpMethod ?? "GET").toUpperCase() === "GET",
+      String(
+        ((n.parameters ?? {}) as Record<string, unknown>).httpMethod ?? "GET",
+      ).toUpperCase() === "GET",
   );
   if (!hit) throw new Error("no GET webhook node");
   return hit;
@@ -165,7 +181,13 @@ describe("provisionN8n — de gelukkige weg", () => {
 
   test("EVERY webhook node gets the credential — an unbound one blocks activation", async () => {
     const { calls, fetchImpl } = stubN8n();
-    await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: ORIGIN, fetchImpl, makeToken: () => "t" });
+    await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: ORIGIN,
+      fetchImpl,
+      makeToken: () => "t",
+    });
     const webhooks = nodesOf(calls[2].body).filter((n) => n.type === "n8n-nodes-base.webhook");
     // The bundled workflow has two: the GET queue reader and the POST the
     // Cloudflare Email Worker delivers to. The POST one declares headerAuth, and
@@ -179,7 +201,13 @@ describe("provisionN8n — de gelukkige weg", () => {
 
   test("an unusual origin is ADDED to allowedOrigins, keeping the ones already there", async () => {
     const { calls, fetchImpl } = stubN8n();
-    await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: "http://localhost:5174", fetchImpl, makeToken: () => "t" });
+    await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: "http://localhost:5174",
+      fetchImpl,
+      makeToken: () => "t",
+    });
     const list = allowedOriginsOf(queueWebhookOf(nodesOf(calls[2].body)));
     expect(list).toContain("http://localhost:5174");
     expect(list).toContain("https://lavega.dev"); // uit de gebundelde JSON
@@ -196,13 +224,23 @@ describe("provisionN8n — de gelukkige weg", () => {
           parameters: {},
           credentials: { gmailOAuth2: { id: "his-gmail", name: "Gmail account" } },
         },
-        { name: "LaVega vraagt de rij op", type: "n8n-nodes-base.webhook", parameters: { path: "lavega-facturen", options: {} } },
+        {
+          name: "LaVega vraagt de rij op",
+          type: "n8n-nodes-base.webhook",
+          parameters: { path: "lavega-facturen", options: {} },
+        },
       ],
       connections: { a: 1 },
       settings: { executionOrder: "v1" },
     };
     const { calls, fetchImpl } = stubN8n({ existing: [existing] });
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: ORIGIN, fetchImpl, makeToken: () => "t2" });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: ORIGIN,
+      fetchImpl,
+      makeToken: () => "t2",
+    });
 
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
@@ -211,7 +249,9 @@ describe("provisionN8n — de gelukkige weg", () => {
 
     // No POST /workflows: a second workflow with the same name is exactly the
     // duplicate this find-or-create exists to prevent.
-    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/api/v1/workflows"))).toBe(false);
+    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/api/v1/workflows"))).toBe(
+      false,
+    );
     const put = calls.find((c) => c.method === "PUT")!;
     const nodes = nodesOf(put.body);
     // THE point of this test: the Gmail credential he attached by hand is still
@@ -228,7 +268,12 @@ describe("provisionN8n — de gelukkige weg", () => {
 describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
   test("a CORS block names BOTH environment variables, and does not claim a network is down", async () => {
     const { fetchImpl, calls } = stubN8n({ throwOn: "first" });
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: "http://localhost:5174", fetchImpl });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: "http://localhost:5174",
+      fetchImpl,
+    });
 
     expect(outcome.kind).toBe("cors");
     const message = describeProvision(outcome);
@@ -244,7 +289,12 @@ describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
 
   test("the CORS message adds the origin this page actually runs on", async () => {
     const { fetchImpl } = stubN8n({ throwOn: "first" });
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: "http://localhost:5173", fetchImpl });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: "http://localhost:5173",
+      fetchImpl,
+    });
     // 5173 staat NIET in de aanbevolen waarde. Advies dat niet kan werken in de
     // toestand waarin het verschijnt is precies wat hier niet mag, dus het
     // echte adres wordt erbij genoemd.
@@ -253,7 +303,12 @@ describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
 
   test("a refused API key blames the key, not the network", async () => {
     const { fetchImpl } = stubN8n({ failStatus: 401 });
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "wrong", origin: ORIGIN, fetchImpl });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "wrong",
+      origin: ORIGIN,
+      fetchImpl,
+    });
     expect(outcome.kind).toBe("unauthorized");
     const message = describeProvision(outcome);
     expect(message).toContain("API-sleutel");
@@ -270,7 +325,13 @@ describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
 
   test("a failed activation is NOT reported as a working connection", async () => {
     const { fetchImpl } = stubN8n({ failActivateStatus: 400 });
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: ORIGIN, fetchImpl, makeToken: () => "t" });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: ORIGIN,
+      fetchImpl,
+      makeToken: () => "t",
+    });
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     expect(outcome.active).toBe(false);
@@ -289,7 +350,12 @@ describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
 
   test("a host without a scheme is refused instead of being resolved against lavega.dev", async () => {
     const { fetchImpl, calls } = stubN8n();
-    const outcome = await provisionN8n({ baseUrl: "n8n.example", apiKey: "k", origin: ORIGIN, fetchImpl });
+    const outcome = await provisionN8n({
+      baseUrl: "n8n.example",
+      apiKey: "k",
+      origin: ORIGIN,
+      fetchImpl,
+    });
     expect(outcome.kind).toBe("bad-url");
     expect(calls).toHaveLength(0);
     expect(describeProvision(outcome)).toContain("http://");
@@ -297,7 +363,13 @@ describe("provisionN8n — elke fout noemt zijn eigen oorzaak", () => {
 
   test("every success message names the one step that stays manual, and the node", async () => {
     const { fetchImpl } = stubN8n();
-    const outcome = await provisionN8n({ baseUrl: BASE, apiKey: "k", origin: ORIGIN, fetchImpl, makeToken: () => "t" });
+    const outcome = await provisionN8n({
+      baseUrl: BASE,
+      apiKey: "k",
+      origin: ORIGIN,
+      fetchImpl,
+      makeToken: () => "t",
+    });
     const message = describeProvision(outcome);
     expect(message).toContain(GMAIL_NODE_NAME);
     expect(message).toContain("Gmail-credential");
@@ -315,13 +387,28 @@ describe("kleine onderdelen", () => {
   });
 
   test("productionWebhookUrl falls back to the webhookId when the path is empty", () => {
-    expect(productionWebhookUrl("https://n8n.example", { name: "w", type: "n8n-nodes-base.webhook", parameters: { path: "lavega-facturen" } })).toBe(
-      "https://n8n.example/webhook/lavega-facturen",
-    );
-    expect(productionWebhookUrl("https://n8n.example", { name: "w", type: "n8n-nodes-base.webhook", parameters: {}, webhookId: "abc" })).toBe(
-      "https://n8n.example/webhook/abc",
-    );
-    expect(productionWebhookUrl("https://n8n.example", { name: "w", type: "n8n-nodes-base.webhook", parameters: {} })).toBe("");
+    expect(
+      productionWebhookUrl("https://n8n.example", {
+        name: "w",
+        type: "n8n-nodes-base.webhook",
+        parameters: { path: "lavega-facturen" },
+      }),
+    ).toBe("https://n8n.example/webhook/lavega-facturen");
+    expect(
+      productionWebhookUrl("https://n8n.example", {
+        name: "w",
+        type: "n8n-nodes-base.webhook",
+        parameters: {},
+        webhookId: "abc",
+      }),
+    ).toBe("https://n8n.example/webhook/abc");
+    expect(
+      productionWebhookUrl("https://n8n.example", {
+        name: "w",
+        type: "n8n-nodes-base.webhook",
+        parameters: {},
+      }),
+    ).toBe("");
   });
 
   test("randomToken is hex, the requested length, and different every time", () => {

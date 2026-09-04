@@ -19,7 +19,9 @@ const MAX_FIELD = 60;
 /** A two-letter country code, or "" — never free text (it ends up in a search
  *  query, and a country code cannot carry personal information). */
 function countryCode(raw: unknown): string {
-  const s = String(raw ?? "").trim().toUpperCase();
+  const s = String(raw ?? "")
+    .trim()
+    .toUpperCase();
   return /^[A-Z]{2}$/.test(s) ? s : "";
 }
 
@@ -65,7 +67,9 @@ export function sanitizeTravelInput(raw: unknown): TravelInput {
 
   const rawProviders = Array.isArray(o.providers) ? o.providers : [];
   if (rawProviders.length > MAX_PROVIDERS) throw new Error("te veel aanbieders");
-  const providers = [...new Set(rawProviders.map(shortField).filter((p) => p && !looksLikeAccountNumber(p)))];
+  const providers = [
+    ...new Set(rawProviders.map(shortField).filter((p) => p && !looksLikeAccountNumber(p))),
+  ];
   if (providers.length === 0) throw new Error("geen aanbieders");
 
   const rawFacts = Array.isArray(o.knownFacts) ? o.knownFacts : [];
@@ -90,7 +94,8 @@ export function sanitizeTravelInput(raw: unknown): TravelInput {
 
 const TERMS_TOOL = {
   name: "report_provider_terms",
-  description: "Rapporteer de actuele voorwaarden per aanbieder. Laat een veld weg als je het niet kunt verifiëren.",
+  description:
+    "Rapporteer de actuele voorwaarden per aanbieder. Laat een veld weg als je het niet kunt verifiëren.",
   input_schema: {
     type: "object",
     properties: {
@@ -156,9 +161,11 @@ function attribute(reported: string, asked: string[], alreadyTaken: number): str
   if (asked.length === 1) return alreadyTaken === 0 ? asked[0] : null;
   const r = lower(reported);
   if (!r) return null;
-  return asked.find((a) => lower(a) === r)
-    ?? asked.find((a) => r.includes(lower(a)) || lower(a).includes(r))
-    ?? null;
+  return (
+    asked.find((a) => lower(a) === r) ??
+    asked.find((a) => r.includes(lower(a)) || lower(a).includes(r)) ??
+    null
+  );
 }
 
 /** Look up current product terms via Sonnet 5 + web search (fees change, so a
@@ -178,28 +185,31 @@ export async function lookupProviderTerms(
   const instructions =
     loadAgentPrompt("travel") + factsBlock(input.knownFacts.map(asTravelFact), AGENTS.travel);
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 2048,
-    system: instructions,
-    tools: [WEB_SEARCH as never, TERMS_TOOL as never],
-    // NOT a forced tool_choice. Forcing this tool makes the model report on its
-    // FIRST turn, before it can run a single web search — and since the prompt
-    // (rightly) forbids guessing, it then reports provider names with no fields
-    // at all. Measured: forced => zero searches and empty terms; auto => ~10
-    // searches and correctly hedged answers. The prompt still says to answer
-    // only through this tool, and a reply without it yields no terms.
-    tool_choice: { type: "auto" },
-    messages: [
-      {
-        role: "user",
-        content:
-          `Thuisland: ${input.homeCountry}. Bestemming: ${input.destination}` +
-          (input.currency ? ` (${input.currency})` : "") +
-          `.\nAanbieders: ${input.providers.join(", ")}.`,
-      },
-    ],
-  }, { timeout: LOOKUP_TIMEOUT_MS, maxRetries: 0 });
+  const message = await client.messages.create(
+    {
+      model: "claude-sonnet-5",
+      max_tokens: 2048,
+      system: instructions,
+      tools: [WEB_SEARCH as never, TERMS_TOOL as never],
+      // NOT a forced tool_choice. Forcing this tool makes the model report on its
+      // FIRST turn, before it can run a single web search — and since the prompt
+      // (rightly) forbids guessing, it then reports provider names with no fields
+      // at all. Measured: forced => zero searches and empty terms; auto => ~10
+      // searches and correctly hedged answers. The prompt still says to answer
+      // only through this tool, and a reply without it yields no terms.
+      tool_choice: { type: "auto" },
+      messages: [
+        {
+          role: "user",
+          content:
+            `Thuisland: ${input.homeCountry}. Bestemming: ${input.destination}` +
+            (input.currency ? ` (${input.currency})` : "") +
+            `.\nAanbieders: ${input.providers.join(", ")}.`,
+        },
+      ],
+    },
+    { timeout: LOOKUP_TIMEOUT_MS, maxRetries: 0 },
+  );
 
   const block = message.content.find((b) => b.type === "tool_use" && b.name === TERMS_TOOL.name);
   if (!block || block.type !== "tool_use") return [];
@@ -218,7 +228,8 @@ export async function lookupProviderTerms(
       convertFeePct: numeric(o.convertFeePct),
       cashbackPct: numeric(o.cashbackPct),
       pointsPerEuro: numeric(o.pointsPerEuro),
-      transferFreeViaIdeal: o.transferFreeViaIdeal === 1 ? 1 : o.transferFreeViaIdeal === 0 ? 0 : undefined,
+      transferFreeViaIdeal:
+        o.transferFreeViaIdeal === 1 ? 1 : o.transferFreeViaIdeal === 0 ? 0 : undefined,
       // Roomy enough for the caveats that actually matter (weekend surcharge,
       // free-withdrawal limit, "credit card differs from debit"). 400 chopped
       // real sentences mid-word in the UI.

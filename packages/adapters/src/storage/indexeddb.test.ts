@@ -6,12 +6,27 @@ import type { Account, Tx } from "@lavega/core";
 import { entityScope } from "@lavega/core";
 import { createIndexedDbStorage } from "./indexeddb.js";
 
-const tx = (id: string, accountKey = "A"): Tx =>
-  ({ id, accountKey, date: "2026-01-02", amount: -5, currency: "EUR",
-     counterparty: "x", description: "", category: "", manual: false });
+const tx = (id: string, accountKey = "A"): Tx => ({
+  id,
+  accountKey,
+  date: "2026-01-02",
+  amount: -5,
+  currency: "EUR",
+  counterparty: "x",
+  description: "",
+  category: "",
+  manual: false,
+});
 
-const acc = (key: string): Account =>
-  ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance: null });
+const acc = (key: string): Account => ({
+  key,
+  iban: key,
+  name: key,
+  bank: "",
+  entity: "BV1",
+  currency: "EUR",
+  balance: null,
+});
 
 test("round-trips txs", async () => {
   const s = createIndexedDbStorage();
@@ -54,14 +69,20 @@ test("entityProfiles round-trip; a database with none returns [] (every entity i
   globalThis.indexedDB = new IDBFactory();
   const s = createIndexedDbStorage();
   expect(await s.getEntityProfiles()).toEqual([]);
-  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }, { entity: "Privé", scope: "personal" }]);
+  await s.putEntityProfiles([
+    { entity: "BV1", scope: "business" },
+    { entity: "Privé", scope: "personal" },
+  ]);
   expect((await s.getEntityProfiles()).map((p) => p.entity).sort()).toEqual(["BV1", "Privé"]);
 });
 
 test("putEntityProfiles is replace-all: dropping a row returns that entity to the default", async () => {
   globalThis.indexedDB = new IDBFactory();
   const s = createIndexedDbStorage();
-  await s.putEntityProfiles([{ entity: "BV1", scope: "business" }, { entity: "BV2", scope: "business" }]);
+  await s.putEntityProfiles([
+    { entity: "BV1", scope: "business" },
+    { entity: "BV2", scope: "business" },
+  ]);
   await s.putEntityProfiles([{ entity: "BV1", scope: "business" }]);
   expect(await s.getEntityProfiles()).toEqual([{ entity: "BV1", scope: "business" }]);
   expect(entityScope("BV2", await s.getEntityProfiles())).toBe("personal");

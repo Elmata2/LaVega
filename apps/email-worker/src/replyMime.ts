@@ -68,7 +68,8 @@ export function buildReplyMime(fields: ReplyFields): string | null {
     "To: " + fields.to,
     "In-Reply-To: " + inReplyTo,
     "References: " + inReplyTo,
-    "Subject: " + encodeHeaderValue(subject.toLowerCase().startsWith("re:") ? subject : "Re: " + subject),
+    "Subject: " +
+      encodeHeaderValue(subject.toLowerCase().startsWith("re:") ? subject : "Re: " + subject),
     'Content-Type: text/plain; charset="utf-8"',
     "Content-Transfer-Encoding: base64",
     "MIME-Version: 1.0",

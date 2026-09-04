@@ -11,24 +11,49 @@ import { registerEbRoutes } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
-import { forwardInvesting, investingTenantId, runInvestingCron, shouldMountInvesting } from "./investing-mount.js";
+import {
+  forwardInvesting,
+  investingTenantId,
+  runInvestingCron,
+  shouldMountInvesting,
+} from "./investing-mount.js";
 import { getAuth } from "./auth.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
 // so it resolves the same whether the process runs from the repo root or the
 // package dir (pnpm --filter runs scripts in the package dir). Overridable via env.
-const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+const WEB_DIST =
+  process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
 /* Extensions that mean "a file", so a miss must 404 instead of falling back to
  * index.html. An allowlist, deliberately — the tempting rule ("the path has a
  * dot in it") breaks real deep links: the investing SPA routes /positions/:symbol
  * and a ticker like BRK.B would be read as a file request and refused. */
 const STATIC_ASSET_EXTENSIONS = new Set([
-  ".js", ".mjs", ".cjs", ".css", ".map", ".json", ".wasm",
-  ".woff", ".woff2", ".ttf", ".otf", ".eot",
-  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
-  ".webmanifest", ".xml", ".txt",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".css",
+  ".map",
+  ".json",
+  ".wasm",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".avif",
+  ".ico",
+  ".webmanifest",
+  ".xml",
+  ".txt",
 ]);
 
 /** Is `pathname` a request for a file rather than for an SPA view? Everything
@@ -155,7 +180,8 @@ if (shouldMountInvesting()) {
    * to the local one — that fallback would hand one user another user's data. */
   const toInvesting = async (c: { req: { raw: Request } }) => {
     const tenantId = await investingTenantId(c.req.raw);
-    if (!tenantId) return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
+    if (!tenantId)
+      return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
     return forwardInvesting(c.req.raw, tenantId);
   };
   const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);

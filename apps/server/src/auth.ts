@@ -1,7 +1,7 @@
 import { betterAuth, type Auth } from "better-auth";
 import { createDatabase, type Database } from "@lavega/database";
 
-const origin = (host: string | undefined) => host?.trim() ? `https://${host.trim()}` : null;
+const origin = (host: string | undefined) => (host?.trim() ? `https://${host.trim()}` : null);
 
 /**
  * The hostnames this deployment answers on, most durable first.
@@ -12,7 +12,9 @@ const origin = (host: string | undefined) => host?.trim() ? `https://${host.trim
  * or whichever one the browser used has its /api/auth calls refused.
  */
 function deploymentOrigins(): string[] {
-  return [origin(process.env.VERCEL_BRANCH_URL), origin(process.env.VERCEL_URL)].filter((value): value is string => value !== null);
+  return [origin(process.env.VERCEL_BRANCH_URL), origin(process.env.VERCEL_URL)].filter(
+    (value): value is string => value !== null,
+  );
 }
 
 /**
@@ -29,7 +31,9 @@ export function authBaseUrl(): string {
 /** Configured origins plus this deployment's own — without itself, its own /api/auth calls are refused. */
 export function authTrustedOrigins(): string[] {
   const configured = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? process.env.BETTER_AUTH_URL ?? "")
-    .split(",").map((origin) => origin.trim()).filter(Boolean);
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const origins = [...new Set([...configured, ...deploymentOrigins()])];
   return origins.length ? origins : ["http://localhost:8787"];
 }

@@ -88,7 +88,8 @@ function addToQueue(store, batch, now) {
   store.queue = queue.length > MAX_QUEUE ? queue.slice(-MAX_QUEUE) : queue;
   store.notices = notices.length > MAX_NOTICES ? notices.slice(-MAX_NOTICES) : notices;
   const rememberedList = Array.from(remembered);
-  store.seenIds = rememberedList.length > MAX_SEEN ? rememberedList.slice(-MAX_SEEN) : rememberedList;
+  store.seenIds =
+    rememberedList.length > MAX_SEEN ? rememberedList.slice(-MAX_SEEN) : rememberedList;
 
   return {
     addedInvoices: addedInvoices,

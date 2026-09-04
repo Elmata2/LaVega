@@ -23,7 +23,12 @@ test("crossRate throws on an unknown currency", () => {
 });
 
 test("parseFxRatePayload accepts a Frankfurter-shaped payload and rejects junk", () => {
-  const ok = parseFxRatePayload({ amount: 1, base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } });
+  const ok = parseFxRatePayload({
+    amount: 1,
+    base: "EUR",
+    date: "2026-08-04",
+    rates: { USD: 1.15 },
+  });
   expect(ok).toEqual({ base: "EUR", date: "2026-08-04", rates: { USD: 1.15 } });
   expect(parseFxRatePayload({ base: "EUR" })).toBeNull();
   expect(parseFxRatePayload(null)).toBeNull();

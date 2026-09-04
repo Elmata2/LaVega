@@ -27,32 +27,38 @@
 ### Task 1: The catalogue entry, and what "covered" means
 
 **Files:**
+
 - Create: `packages/core/src/catalog.ts`
 - Create: `packages/core/src/catalog.test.ts`
 - Modify: `packages/core/src/index.ts` (add `export * from "./catalog.js";` after the `./bankNl.js` line)
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces:
+
   ```ts
   export type CatalogRoute = "provider-page" | "provider-pdf" | "wayback" | "comparison" | "agent";
   export type CatalogValue = {
     value: number;
     route: CatalogRoute;
     sourceUrl: string;
-    checkedAt: string;            // ISO date the SOURCE stated, or the sweep date
-    conditions: string | null;    // null means "unconditional", NOT "unknown"
-    conditionsKnown: boolean;     // false means we did not establish them
+    checkedAt: string; // ISO date the SOURCE stated, or the sweep date
+    conditions: string | null; // null means "unconditional", NOT "unknown"
+    conditionsKnown: boolean; // false means we did not establish them
   };
   export type CatalogEntry = {
-    id: string;                   // "ing-betaalpas", matching docs/catalog/state.json
-    product: string;              // "ING betaalpas", matching productOf()
+    id: string; // "ing-betaalpas", matching docs/catalog/state.json
+    product: string; // "ING betaalpas", matching productOf()
     fields: Partial<Record<CatalogField, CatalogValue>>;
   };
-  export type CatalogField = "fxFeePct" | "convertFeePct" | "cashbackPct" | "pointsPerEuro" | "interestPct";
+  export type CatalogField =
+    "fxFeePct" | "convertFeePct" | "cashbackPct" | "pointsPerEuro" | "interestPct";
   export function isCovered(v: CatalogValue | undefined): boolean;
-  export function coverage(entries: readonly CatalogEntry[], field: CatalogField):
-    { covered: number; total: number; byRoute: Record<CatalogRoute, number> };
+  export function coverage(
+    entries: readonly CatalogEntry[],
+    field: CatalogField,
+  ): { covered: number; total: number; byRoute: Record<CatalogRoute, number> };
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -117,7 +123,8 @@ Expected: FAIL — `Failed to load url ./catalog.js`.
  *  99% primary, and one number would hide that. */
 export type CatalogRoute = "provider-page" | "provider-pdf" | "wayback" | "comparison" | "agent";
 
-export type CatalogField = "fxFeePct" | "convertFeePct" | "cashbackPct" | "pointsPerEuro" | "interestPct";
+export type CatalogField =
+  "fxFeePct" | "convertFeePct" | "cashbackPct" | "pointsPerEuro" | "interestPct";
 
 export type CatalogValue = {
   value: number;
@@ -199,15 +206,23 @@ model-derived is a different product from 99% primary."
 The route that dissolved both ceilings. It runs in the SWEEP, never in the server, so no PDF dependency enters the running app.
 
 **Files:**
+
 - Create: `packages/core/src/pdfText.ts`
 - Create: `packages/core/src/pdfText.test.ts`
 - Create: `packages/core/src/__fixtures__/ingKostenoverzicht.txt` (the extracted text, committed — see Step 1)
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces:
+
   ```ts
-  export type PdfFigure = { field: "fxFeePct"; value: number; line: string; conditions: string | null };
+  export type PdfFigure = {
+    field: "fxFeePct";
+    value: number;
+    line: string;
+    conditions: string | null;
+  };
   export function readIngTariffs(text: string): PdfFigure[];
   ```
 
@@ -233,7 +248,10 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { readIngTariffs } from "./pdfText.js";
 
-const TEXT = readFileSync(new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url), "utf8");
+const TEXT = readFileSync(
+  new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url),
+  "utf8",
+);
 
 test("the ING tariff sheet yields the debit-card koersopslag", () => {
   const figures = readIngTariffs(TEXT);
@@ -276,7 +294,12 @@ Expected: FAIL — `Failed to load url ./pdfText.js`.
  *  These documents are legally required, stable across editions, and carry the
  *  CONDITIONS as well as the rates, which is the half that is otherwise hardest
  *  to get. */
-export type PdfFigure = { field: "fxFeePct"; value: number; line: string; conditions: string | null };
+export type PdfFigure = {
+  field: "fxFeePct";
+  value: number;
+  line: string;
+  conditions: string | null;
+};
 
 /** "1,40 %" and "2,00%" both appear in the same document. */
 const PCT = /(\d{1,2})[,.](\d{1,2})\s*%/;
@@ -325,15 +348,22 @@ never touches the network."
 ### Task 3: The route ladder
 
 **Files:**
+
 - Create: `packages/core/src/catalogRoutes.ts`
 - Create: `packages/core/src/catalogRoutes.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CatalogRoute`, `CatalogValue` from Task 1
 - Produces:
+
   ```ts
   export type RouteAttempt = { route: CatalogRoute; run: () => Promise<CatalogValue | null> };
-  export type LadderResult = { value: CatalogValue | null; tried: CatalogRoute[]; reason: string | null };
+  export type LadderResult = {
+    value: CatalogValue | null;
+    tried: CatalogRoute[];
+    reason: string | null;
+  };
   export function ladderOrder(): CatalogRoute[];
   export async function runLadder(attempts: readonly RouteAttempt[]): Promise<LadderResult>;
   ```
@@ -347,12 +377,22 @@ import { ladderOrder, runLadder, type RouteAttempt } from "./catalogRoutes.js";
 import type { CatalogValue } from "./catalog.js";
 
 const value = (route: CatalogValue["route"]): CatalogValue => ({
-  value: 1.4, route, sourceUrl: "https://x", checkedAt: "2026-08-18",
-  conditions: null, conditionsKnown: true,
+  value: 1.4,
+  route,
+  sourceUrl: "https://x",
+  checkedAt: "2026-08-18",
+  conditions: null,
+  conditionsKnown: true,
 });
 
 test("the ladder prefers the provider's own document over anything derived", () => {
-  expect(ladderOrder()).toEqual(["provider-page", "provider-pdf", "wayback", "comparison", "agent"]);
+  expect(ladderOrder()).toEqual([
+    "provider-page",
+    "provider-pdf",
+    "wayback",
+    "comparison",
+    "agent",
+  ]);
 });
 
 test("the first route that answers wins, and later ones are not run", async () => {
@@ -360,7 +400,13 @@ test("the first route that answers wins, and later ones are not run", async () =
   const attempts: RouteAttempt[] = [
     { route: "provider-page", run: async () => null },
     { route: "provider-pdf", run: async () => value("provider-pdf") },
-    { route: "agent", run: async () => { agentRan = true; return value("agent"); } },
+    {
+      route: "agent",
+      run: async () => {
+        agentRan = true;
+        return value("agent");
+      },
+    },
   ];
   const out = await runLadder(attempts);
 
@@ -371,7 +417,12 @@ test("the first route that answers wins, and later ones are not run", async () =
 
 test("a route that throws does not end the sweep — the next one is still tried", async () => {
   const attempts: RouteAttempt[] = [
-    { route: "provider-page", run: async () => { throw new Error("connection killed"); } },
+    {
+      route: "provider-page",
+      run: async () => {
+        throw new Error("connection killed");
+      },
+    },
     { route: "comparison", run: async () => value("comparison") },
   ];
   const out = await runLadder(attempts);
@@ -382,7 +433,12 @@ test("a route that throws does not end the sweep — the next one is still tried
 
 test("when every route fails the reason is recorded, never a zero", async () => {
   const out = await runLadder([
-    { route: "provider-page", run: async () => { throw new Error("403 Cloudflare"); } },
+    {
+      route: "provider-page",
+      run: async () => {
+        throw new Error("403 Cloudflare");
+      },
+    },
     { route: "wayback", run: async () => null },
   ]);
 
@@ -404,7 +460,11 @@ Expected: FAIL — `Failed to load url ./catalogRoutes.js`.
 import type { CatalogRoute, CatalogValue } from "./catalog.js";
 
 export type RouteAttempt = { route: CatalogRoute; run: () => Promise<CatalogValue | null> };
-export type LadderResult = { value: CatalogValue | null; tried: CatalogRoute[]; reason: string | null };
+export type LadderResult = {
+  value: CatalogValue | null;
+  tried: CatalogRoute[];
+  reason: string | null;
+};
 
 /** Best first. The provider's own page and its own PDF outrank anything derived,
  *  and the agent is last because it costs money — not because it is inaccurate.
@@ -464,12 +524,14 @@ answer and a silent zero is a wrong one."
 ### Task 4: The sweep script
 
 **Files:**
+
 - Create: `scripts/catalog-sweep.ts`
 - Modify: `package.json` (add `"catalog:sweep": "tsx scripts/catalog-sweep.ts"` beside `sync:n8n`)
 - Modify: `package.json` devDependencies — add `"tsx": "^4"` at the root if it is not already resolvable there (it is a dependency of `apps/server`, not of the root)
 - Create: `docs/catalog/catalog.json` (written by the first run)
 
 **Interfaces:**
+
 - Consumes: `runLadder`, `readIngTariffs`, `isCovered`, `coverage` from Tasks 1–3, and `docs/catalog/state.json` written by the discovery sweep
 - Produces: `docs/catalog/catalog.json` and an updated `docs/catalog/state.json`
 
@@ -623,8 +685,8 @@ whole review mechanism. Create `.github/workflows/catalog-sweep.yml`:
 name: catalog sweep
 on:
   schedule:
-    - cron: "0 5 * * 1"        # Monday 05:00 UTC — terms move yearly, not daily
-  workflow_dispatch:            # and on demand, because the first runs need watching
+    - cron: "0 5 * * 1" # Monday 05:00 UTC — terms move yearly, not daily
+  workflow_dispatch: # and on demand, because the first runs need watching
 permissions:
   contents: write
 jobs:
@@ -635,7 +697,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
-      - run: sudo apt-get update && sudo apt-get install -y poppler-utils   # pdftotext
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils # pdftotext
       - run: pnpm install --frozen-lockfile
       - run: pnpm catalog:sweep
       - name: Commit whatever changed
@@ -675,10 +737,12 @@ agent-only on the strength of a block that was only ever on the HTML host."
 ### Task 5: The server reads the catalogue
 
 **Files:**
+
 - Modify: `apps/server/src/cardTerms.ts`
 - Modify: `apps/server/src/cardTerms.test.ts`
 
 **Interfaces:**
+
 - Consumes: `docs/catalog/catalog.json` from Task 4, `CatalogEntry`/`isCovered` from Task 1
 - Produces: catalogue figures entering the existing card-terms cache at the right rung
 
@@ -691,17 +755,26 @@ test("a catalogue figure enters at its own route's precedence, and carries its c
   // The catalogue is a FILE, so it is instant and free — it should fill the cache
   // before anything is looked up, and it must not be outranked by an agent guess
   // when it came from the provider's own PDF.
-  ingestCatalogue([{
-    id: "ing-betaalpas",
-    product: "ING betaalpas",
-    fields: {
-      fxFeePct: {
-        value: 1.4, route: "provider-pdf",
-        sourceUrl: "https://assets.ing.com/…/kostenoverzicht.pdf",
-        checkedAt: "2026-06-15", conditions: null, conditionsKnown: true,
+  ingestCatalogue(
+    [
+      {
+        id: "ing-betaalpas",
+        product: "ING betaalpas",
+        fields: {
+          fxFeePct: {
+            value: 1.4,
+            route: "provider-pdf",
+            sourceUrl: "https://assets.ing.com/…/kostenoverzicht.pdf",
+            checkedAt: "2026-06-15",
+            conditions: null,
+            conditionsKnown: true,
+          },
+        },
       },
-    },
-  }], "NL", "USD");
+    ],
+    "NL",
+    "USD",
+  );
 
   const held = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never });
   expect(held.terms[0].fxFeePct).toBe(1.4);
@@ -711,16 +784,26 @@ test("a catalogue figure enters at its own route's precedence, and carries its c
 test("a catalogue figure whose conditions were never established does not enter", () => {
   // Revolut's 0% was true inside a EUR 1.000 monthly cap. A figure we never
   // checked for a cap is not an answer, and letting it in is how it shipped.
-  const res = ingestCatalogue([{
-    id: "revolut-betaalpas",
-    product: "Revolut betaalpas",
-    fields: {
-      fxFeePct: {
-        value: 0, route: "provider-page", sourceUrl: "https://revolut.com/x",
-        checkedAt: "2026-08-18", conditions: null, conditionsKnown: false,
+  const res = ingestCatalogue(
+    [
+      {
+        id: "revolut-betaalpas",
+        product: "Revolut betaalpas",
+        fields: {
+          fxFeePct: {
+            value: 0,
+            route: "provider-page",
+            sourceUrl: "https://revolut.com/x",
+            checkedAt: "2026-08-18",
+            conditions: null,
+            conditionsKnown: false,
+          },
+        },
       },
-    },
-  }], "NL", "USD");
+    ],
+    "NL",
+    "USD",
+  );
 
   expect(res.accepted).toBe(0);
   expect(res.rejected).toContain("Revolut betaalpas");
@@ -813,7 +896,7 @@ outrank the owner's own correction."
 
 - **The sweep is not the app.** If you find yourself adding a PDF parser or an HTTP fetch to `apps/server` at runtime, stop — that is the thing this design exists to avoid.
 - **Do not loosen a parser to make a product go green.** A product that reads `·` with a recorded reason is a correct outcome. 101 of 124 already read by plain fetch; the tail is meant to be hard.
-- **`conditionsKnown: false` is not a bug to be worked around.** It is the field that would have caught Revolut. Tasks 4 and 5 both deliberately refuse such figures, and a future task raises coverage by *establishing* conditions, never by assuming them.
+- **`conditionsKnown: false` is not a bug to be worked around.** It is the field that would have caught Revolut. Tasks 4 and 5 both deliberately refuse such figures, and a future task raises coverage by _establishing_ conditions, never by assuming them.
 - **Two ladder rungs have no attempt built yet, deliberately.** `wayback` and `agent` are in the type
   and the ordering, but Task 4 only wires `provider-page` and `provider-pdf`. That is the honest
   first slice: it covers the 101 already readable plus the two products the PDF route rescued.

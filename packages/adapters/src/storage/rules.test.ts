@@ -17,7 +17,10 @@ test("rules store: put then get round-trips; putRules replaces the whole set", a
   await storage.putRules(rules);
   const back = await storage.getRules();
   expect(back).toHaveLength(2);
-  expect(back.find((r) => r.id === "r1")).toMatchObject({ match: "albert heijn", category: "Boodschappen" });
+  expect(back.find((r) => r.id === "r1")).toMatchObject({
+    match: "albert heijn",
+    category: "Boodschappen",
+  });
 
   // replace-all: saving a shorter list drops the removed rule
   await storage.putRules([{ id: "r2", match: "salaris", category: "Loon" }]);
@@ -28,7 +31,17 @@ test("rules store: put then get round-trips; putRules replaces the whole set", a
 
 test("existing accounts/txs stores still work after the v2 upgrade adds the rules store", async () => {
   const storage = createIndexedDbStorage();
-  await storage.putAccounts([{ key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null }]);
+  await storage.putAccounts([
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
+  ]);
   expect(await storage.getAccounts()).toHaveLength(1);
 });
 
@@ -44,8 +57,26 @@ test("REAL v1->v2 upgrade: a pre-existing v1 DB's accounts/txs survive the schem
       db.createObjectStore("txs", { keyPath: "id" });
     },
   });
-  await v1.put("accounts", { key: "155430750", iban: "", name: "155430750", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 1.98 });
-  await v1.put("txs", { id: "old1", accountKey: "155430750", date: "2026-06-22", amount: 30, currency: "EUR", counterparty: "HR A STEUNENBERG", description: "NOTPROVIDED", category: "", manual: false });
+  await v1.put("accounts", {
+    key: "155430750",
+    iban: "",
+    name: "155430750",
+    bank: "ABN AMRO",
+    entity: "BV1",
+    currency: "EUR",
+    balance: 1.98,
+  });
+  await v1.put("txs", {
+    id: "old1",
+    accountKey: "155430750",
+    date: "2026-06-22",
+    amount: 30,
+    currency: "EUR",
+    counterparty: "HR A STEUNENBERG",
+    description: "NOTPROVIDED",
+    category: "",
+    manual: false,
+  });
   v1.close();
 
   // Reopen through the app's storage, which opens at v2 and runs the upgrade.

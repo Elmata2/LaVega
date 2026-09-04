@@ -29,7 +29,11 @@ function sweep<T extends { ts: number }>(store: Map<string, T>, ttl: number): vo
 }
 
 function clientConfig(cfg: EbConfig): EbClientConfig {
-  return { applicationId: cfg.applicationId, privateKey: cfg.privateKey, privateKeyFile: cfg.privateKeyFile };
+  return {
+    applicationId: cfg.applicationId,
+    privateKey: cfg.privateKey,
+    privateKeyFile: cfg.privateKeyFile,
+  };
 }
 
 /** RFC3339 timestamp `days` from now — for the consent's `valid_until`. */
@@ -48,13 +52,22 @@ export function registerEbRoutes(app: Hono): void {
   // Bank list for the picker (defaults to NL). Public-ish metadata only.
   app.get("/api/eb/aspsps", async (c) => {
     const cfg = loadConfig();
-    if (!cfg.configured) return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
+    if (!cfg.configured)
+      return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     const country = (c.req.query("country") || "NL").toUpperCase();
     try {
-      const data = (await eb(clientConfig(cfg), "GET", `/aspsps?country=${country}&psu_type=${cfg.psuType}`)) as {
+      const data = (await eb(
+        clientConfig(cfg),
+        "GET",
+        `/aspsps?country=${country}&psu_type=${cfg.psuType}`,
+      )) as {
         aspsps?: Array<{ name?: string; country?: string; logo?: string }>;
       };
-      const aspsps = (data.aspsps ?? []).map((a) => ({ name: a.name, country: a.country, logo: a.logo }));
+      const aspsps = (data.aspsps ?? []).map((a) => ({
+        name: a.name,
+        country: a.country,
+        logo: a.logo,
+      }));
       return c.json({ aspsps });
     } catch (e) {
       return c.json({ error: errMsg(e) }, 502);
@@ -65,7 +78,8 @@ export function registerEbRoutes(app: Hono): void {
   // redirect the browser to.
   app.post("/api/eb/auth", async (c) => {
     const cfg = loadConfig();
-    if (!cfg.configured) return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
+    if (!cfg.configured)
+      return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     sweep(pending, PENDING_TTL_MS);
     const body = (await c.req.json().catch(() => ({}))) as { name?: string; country?: string };
     const name = body.name;
@@ -80,7 +94,8 @@ export function registerEbRoutes(app: Hono): void {
         redirect_url: cfg.redirectUrl,
         psu_type: cfg.psuType,
       })) as { url?: string };
-      if (!data.url) return c.json({ error: "Geen autorisatie-URL ontvangen van Enable Banking." }, 502);
+      if (!data.url)
+        return c.json({ error: "Geen autorisatie-URL ontvangen van Enable Banking." }, 502);
       pending.set(state, { name, country, ts: Date.now() });
       return c.json({ url: data.url });
     } catch (e) {
@@ -93,10 +108,14 @@ export function registerEbRoutes(app: Hono): void {
   app.get("/api/eb/callback", async (c) => {
     const cfg = loadConfig();
     const error = c.req.query("error");
-    if (error) return c.redirect(`/?eb_error=${encodeURIComponent(c.req.query("error_description") || error)}`);
+    if (error)
+      return c.redirect(
+        `/?eb_error=${encodeURIComponent(c.req.query("error_description") || error)}`,
+      );
     const code = c.req.query("code");
     const state = c.req.query("state");
-    if (!code) return c.redirect(`/?eb_error=${encodeURIComponent("Geen autorisatiecode ontvangen.")}`);
+    if (!code)
+      return c.redirect(`/?eb_error=${encodeURIComponent("Geen autorisatiecode ontvangen.")}`);
     if (state) pending.delete(state); // one-shot
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/sessions", { code })) as {
@@ -104,9 +123,14 @@ export function registerEbRoutes(app: Hono): void {
         accounts?: Array<Record<string, unknown>>;
         aspsp?: { name?: string };
       };
-      if (!data.session_id) return c.redirect(`/?eb_error=${encodeURIComponent("Geen sessie ontvangen.")}`);
+      if (!data.session_id)
+        return c.redirect(`/?eb_error=${encodeURIComponent("Geen sessie ontvangen.")}`);
       sweep(sessions, SESSION_TTL_MS);
-      sessions.set(data.session_id, { accounts: data.accounts ?? [], aspsp: data.aspsp?.name ?? "", ts: Date.now() });
+      sessions.set(data.session_id, {
+        accounts: data.accounts ?? [],
+        aspsp: data.aspsp?.name ?? "",
+        ts: Date.now(),
+      });
       return c.redirect(`/?eb=${encodeURIComponent(data.session_id)}`);
     } catch (e) {
       return c.redirect(`/?eb_error=${encodeURIComponent(errMsg(e))}`);
@@ -117,10 +141,12 @@ export function registerEbRoutes(app: Hono): void {
   // bank JSON to the client (which maps + stores it locally).
   app.get("/api/eb/accounts", async (c) => {
     const cfg = loadConfig();
-    if (!cfg.configured) return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
+    if (!cfg.configured)
+      return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     const sessionId = c.req.query("session_id") || "";
     const session = sessions.get(sessionId);
-    if (!session) return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
+    if (!session)
+      return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
     const dateFrom = isoDaysAgo(365);
     const cc = clientConfig(cfg);
     try {
@@ -128,12 +154,15 @@ export function registerEbRoutes(app: Hono): void {
       for (const account of session.accounts) {
         const uid = String((account as { uid?: string }).uid || "");
         if (!uid) continue;
-        const balancesRes = (await eb(cc, "GET", `/accounts/${uid}/balances`)) as { balances?: unknown[] };
+        const balancesRes = (await eb(cc, "GET", `/accounts/${uid}/balances`)) as {
+          balances?: unknown[];
+        };
         // Transactions are paginated via continuation_key; follow it (capped).
         const transactions: unknown[] = [];
         let cont: string | undefined;
         for (let page = 0; page < 20; page++) {
-          const q = `date_from=${dateFrom}` + (cont ? `&continuation_key=${encodeURIComponent(cont)}` : "");
+          const q =
+            `date_from=${dateFrom}` + (cont ? `&continuation_key=${encodeURIComponent(cont)}` : "");
           const txRes = (await eb(cc, "GET", `/accounts/${uid}/transactions?${q}`)) as {
             transactions?: unknown[];
             continuation_key?: string;

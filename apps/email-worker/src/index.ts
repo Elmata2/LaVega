@@ -32,7 +32,12 @@ export default {
         // geen onderwerp, geen bedrag: alleen de telling.
         console.log("[lavega-email-in] " + verdict.detail);
       } else {
-        console.log("[lavega-email-in] " + verdict.kind + ": " + ("reason" in verdict ? verdict.reason : verdict.body.split("\n")[0]));
+        console.log(
+          "[lavega-email-in] " +
+            verdict.kind +
+            ": " +
+            ("reason" in verdict ? verdict.reason : verdict.body.split("\n")[0]),
+        );
       }
     } catch (error) {
       // Hier komen we alleen als handler.ts of applyVerdict zelf omvalt. De mail
@@ -40,7 +45,10 @@ export default {
       const detail = error instanceof Error ? error.message : String(error);
       console.error("[lavega-email-in] onverwachte fout: " + detail);
       message.setReject(
-        ("LaVega kon deze mail niet verwerken door een onverwachte fout in de e-mailworker: " + detail).slice(0, 400),
+        (
+          "LaVega kon deze mail niet verwerken door een onverwachte fout in de e-mailworker: " +
+          detail
+        ).slice(0, 400),
       );
     }
   },

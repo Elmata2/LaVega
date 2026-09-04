@@ -22,7 +22,12 @@ test("file credential store encrypts, persists, and unlocks broker credentials",
     const first = createFileCredentialStore(filePath);
     expect(await first.status()).toBe("empty");
     await first.setup("vault-passphrase");
-    await first.putCredentials({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+    await first.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
 
     const onDisk = await readFile(filePath, "utf8");
     expect(onDisk).not.toContain("api-key");
@@ -30,10 +35,17 @@ test("file credential store encrypts, persists, and unlocks broker credentials",
 
     const second = createFileCredentialStore(filePath);
     expect(await second.status()).toBe("locked");
-    await expect(second.getCredentials("local", "trading212")).rejects.toThrow("credential vault is locked");
+    await expect(second.getCredentials("local", "trading212")).rejects.toThrow(
+      "credential vault is locked",
+    );
     expect(await second.unlock("wrong-passphrase")).toBe(false);
     expect(await second.unlock("vault-passphrase")).toBe(true);
-    expect(await second.getCredentials("local", "trading212")).toEqual({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+    expect(await second.getCredentials("local", "trading212")).toEqual({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -44,11 +56,56 @@ test("encrypted vault restores broker data after process restart", async () => {
   const filePath = join(directory, "credentials.json");
   const brokerData = {
     ibkr: {
-      positions: [{ tenantId: "local", entity: "BV", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: 12, marketValue: 24, currency: "EUR", asOf: "2026-08-19" }],
+      positions: [
+        {
+          tenantId: "local",
+          entity: "BV",
+          symbol: "AAPL",
+          quantity: 2,
+          averagePrice: 10,
+          marketPrice: 12,
+          marketValue: 24,
+          currency: "EUR",
+          asOf: "2026-08-19",
+        },
+      ],
       trades: [],
-      dividends: [{ id: "dividend", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", symbol: "AAPL", amount: 2, currency: "EUR", brokerDividendId: "U1:dividend" }],
-      cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
-      cashFlows: [{ id: "deposit", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" as const, brokerFlowId: "U1:deposit" }],
+      dividends: [
+        {
+          id: "dividend",
+          tenantId: "local",
+          entity: "BV",
+          broker: "ibkr",
+          date: "2026-08-18",
+          symbol: "AAPL",
+          amount: 2,
+          currency: "EUR",
+          brokerDividendId: "U1:dividend",
+        },
+      ],
+      cashBalances: [
+        {
+          tenantId: "local",
+          entity: "BV",
+          broker: "ibkr",
+          currency: "EUR",
+          amount: 250,
+          asOf: "2026-08-19",
+        },
+      ],
+      cashFlows: [
+        {
+          id: "deposit",
+          tenantId: "local",
+          entity: "BV",
+          broker: "ibkr",
+          date: "2026-08-18",
+          currency: "EUR",
+          amount: 250,
+          kind: "deposit" as const,
+          brokerFlowId: "U1:deposit",
+        },
+      ],
     },
   };
   try {

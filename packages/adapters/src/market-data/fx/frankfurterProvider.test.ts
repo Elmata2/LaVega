@@ -12,5 +12,8 @@ test("unsupported pair surfaces as null so the lane can 503 instead of serving r
 test("supported pair returns the cross rate with no problems", async () => {
   const provider = createFrankfurterFxProvider({ client: { fetchJson: async () => ecbPayload } });
 
-  await expect(provider.get({ from: "USD", to: "EUR" })).resolves.toEqual({ rate: 1 / 1.1515, problems: [] });
+  await expect(provider.get({ from: "USD", to: "EUR" })).resolves.toEqual({
+    rate: 1 / 1.1515,
+    problems: [],
+  });
 });

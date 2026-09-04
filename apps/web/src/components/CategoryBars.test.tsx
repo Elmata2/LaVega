@@ -54,7 +54,12 @@ function mount(ui: ReactElement): HTMLDivElement {
 
 test("CategoryBars draws one bar per series per group, legend and labels included", () => {
   const html = renderToStaticMarkup(
-    <CategoryBars groups={groups} series={series} format={format} ariaLabel="Uitgaven per categorie" />,
+    <CategoryBars
+      groups={groups}
+      series={series}
+      format={format}
+      ariaLabel="Uitgaven per categorie"
+    />,
   );
   expect(html.match(/class="lv-bar"/g)?.length).toBe(4);
   expect(html).toContain('aria-label="Uitgaven per categorie"');
@@ -157,7 +162,9 @@ test("a tap opens the reading and a second tap closes it — a phone has no hove
 });
 
 test("CategoryBars shows the value axis only when asked", () => {
-  const off = renderToStaticMarkup(<CategoryBars groups={groups} series={series} format={format} ariaLabel="A" />);
+  const off = renderToStaticMarkup(
+    <CategoryBars groups={groups} series={series} format={format} ariaLabel="A" />,
+  );
   expect(off).not.toContain("lv-chart-tick");
   expect(off).not.toContain("lv-chart-withaxis");
 
@@ -169,11 +176,22 @@ test("CategoryBars shows the value axis only when asked", () => {
 });
 
 test("CategoryBars renders nothing rather than an empty plot with no groups", () => {
-  expect(renderToStaticMarkup(<CategoryBars groups={[]} series={series} format={format} ariaLabel="A" />)).toBe("");
+  expect(
+    renderToStaticMarkup(
+      <CategoryBars groups={[]} series={series} format={format} ariaLabel="A" />,
+    ),
+  ).toBe("");
 });
 
 test("every class CategoryBars emits has a rule in charts.css", () => {
-  for (const cls of ["lv-bars", "lv-bars-plot", "lv-bars-groups", "lv-bars-group", "lv-bar", "lv-bars-xaxis"]) {
+  for (const cls of [
+    "lv-bars",
+    "lv-bars-plot",
+    "lv-bars-groups",
+    "lv-bars-group",
+    "lv-bar",
+    "lv-bars-xaxis",
+  ]) {
     expect(css, `.${cls} missing from charts.css`).toContain(`.${cls}`);
   }
   // A zero-height bar would disappear entirely; the hairline says "measured".

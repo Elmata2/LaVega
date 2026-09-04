@@ -89,7 +89,10 @@ export type MovedCategory = {
 export const MOVED_CATEGORIES: readonly MovedCategory[] = [
   { category: "Eigen overboeking", why: "een overboeking tussen je eigen rekeningen" },
   { category: "Sparen & beleggen", why: "geld naar je eigen spaar- of beleggingsrekening" },
-  { category: "Creditcard afbetaald", why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening" },
+  {
+    category: "Creditcard afbetaald",
+    why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening",
+  },
   /* GELDOPNAME STAAT HIER BEWUST NIET IN, op zijn beslissing van 20 augustus.
    *
    * Strikt genomen is contant opnemen ook "dezelfde euro op een andere plek": het
@@ -323,7 +326,8 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
   }
 
   const months: string[] = [];
-  for (let m = monthOf(covered.start); m <= monthOf(covered.end); m = shiftMonth(m, -1)) months.push(m);
+  for (let m = monthOf(covered.start); m <= monthOf(covered.end); m = shiftMonth(m, -1))
+    months.push(m);
   return months.map((m) => {
     const full = { start: monthFirstDay(m), end: monthLastDay(m) };
     const { start, end } = clip(full.start, full.end);
@@ -343,7 +347,11 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
 
 /** Which bucket a date falls in. The buckets are contiguous and ordered, so
  *  this is arithmetic rather than a search. */
-function bucketIndexOf(date: string, buckets: Omit<StatBucket, "hasData">[], unit: StatBucketUnit): number {
+function bucketIndexOf(
+  date: string,
+  buckets: Omit<StatBucket, "hasData">[],
+  unit: StatBucketUnit,
+): number {
   if (buckets.length === 0) return -1;
   if (unit === "dag") return daysBetween(buckets[0].start, date);
   if (unit === "week") return Math.floor(daysBetween(buckets[0].key, date) / 7);
@@ -562,7 +570,10 @@ export type PeriodAverages =
  *  Een week begint hier op maandag (`mondayOf`), net als in `buildBuckets` en in
  *  het weekdagblok — één weekbegrip per app, anders staat er straks een
  *  weekgemiddelde onder een grafiek die de week ergens anders knipt. */
-function wholeUnits(covered: StatWindow, unit: StatBucketUnit): { units: number; span: StatWindow } | null {
+function wholeUnits(
+  covered: StatWindow,
+  unit: StatBucketUnit,
+): { units: number; span: StatWindow } | null {
   if (unit === "dag") {
     // Elke dag in het venster is een hele dag; er valt niets af te knippen.
     const units = daysBetween(covered.start, covered.end) + 1;
@@ -590,7 +601,9 @@ function wholeUnits(covered: StatWindow, unit: StatBucketUnit): { units: number;
     units++;
     month = shiftMonth(month, -1);
   }
-  return units < 1 ? null : { units, span: { start: monthFirstDay(first), end: monthLastDay(last) } };
+  return units < 1
+    ? null
+    : { units, span: { start: monthFirstDay(first), end: monthLastDay(last) } };
 }
 
 /** Gemiddelde inkomsten en gemiddelde uitgaven per eenheid van `window`.
@@ -609,7 +622,8 @@ export function periodAverages(
     txs.filter((t) => t.date).map((t) => t.date),
     window,
   );
-  if (covered === null) return { kind: "geen", reason: "geen-gegevens", askedUnit, covered: null, coveredDays: 0 };
+  if (covered === null)
+    return { kind: "geen", reason: "geen-gegevens", askedUnit, covered: null, coveredDays: 0 };
 
   const coveredDays = daysBetween(covered.start, covered.end) + 1;
 
@@ -693,14 +707,14 @@ export function weekdaySpend(
 
   const spanDays = daysBetween(covered.start, covered.end) + 1;
 
-  const totals = new Array(7).fill(0);
+  const totals = Array.from({ length: 7 }, () => 0);
   for (const r of all) {
     if (r.date < covered.start || r.date > covered.end) continue;
     totals[weekdayIndex(r.date)] += r.spend;
   }
 
   // Count every calendar occurrence in the window, transaction or not.
-  const occurrences = new Array(7).fill(0);
+  const occurrences = Array.from({ length: 7 }, () => 0);
   const startWd = weekdayIndex(covered.start);
   for (let i = 0; i < spanDays; i++) occurrences[(startWd + i) % 7]++;
 
@@ -799,9 +813,14 @@ export function categoryGrowth(
   own: OwnAccounts | undefined,
   window: StatWindow,
 ): { rows: CategoryDelta[]; before: StatWindow } {
-  const days = Math.max(1, Math.round((Date.parse(window.end) - Date.parse(window.start)) / 86_400_000) + 1);
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(window.end) - Date.parse(window.start)) / 86_400_000) + 1,
+  );
   const beforeEnd = new Date(Date.parse(window.start) - 86_400_000).toISOString().slice(0, 10);
-  const beforeStart = new Date(Date.parse(beforeEnd) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const beforeStart = new Date(Date.parse(beforeEnd) - (days - 1) * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const before: StatWindow = { start: beforeStart, end: beforeEnd };
 
   const spendIn = (w: StatWindow) => {

@@ -51,9 +51,9 @@ export default function Regels({
     <section className="card" aria-label="Regels">
       <h2>Regels</h2>
       <p className="cell-sub">
-        LaVega categoriseert transacties automatisch met een ingebouwde Nederlandse
-        lijst (Albert Heijn → Boodschappen, NS → Transport, Netflix → Entertainment,
-        enz.). Je eigen regels hieronder gaan vóór die automatische categorieën.
+        LaVega categoriseert transacties automatisch met een ingebouwde Nederlandse lijst (Albert
+        Heijn → Boodschappen, NS → Transport, Netflix → Entertainment, enz.). Je eigen regels
+        hieronder gaan vóór die automatische categorieën.
       </p>
       <p className="cell-sub">
         Een regel matcht als de <em>match</em>-tekst ergens in de tegenpartij of de omschrijving
@@ -63,9 +63,12 @@ export default function Regels({
       </p>
       <label>
         Match{" "}
-        <input value={ruleMatch} onChange={(e) => onRuleMatchChange(e.target.value)} disabled={busy} />
-      </label>
-      {" "}
+        <input
+          value={ruleMatch}
+          onChange={(e) => onRuleMatchChange(e.target.value)}
+          disabled={busy}
+        />
+      </label>{" "}
       <label>
         Categorie{" "}
         {/* A list-backed input, not a plain text field: typing a category by hand
@@ -87,8 +90,7 @@ export default function Regels({
             <option key={c} value={c} />
           ))}
         </datalist>
-      </label>
-      {" "}
+      </label>{" "}
       <button
         type="button"
         className="btn btn-primary"
@@ -104,14 +106,12 @@ export default function Regels({
       >
         Toevoegen
       </button>
-
       {isNewCategory && (
         <p className="cell-sub" role="status">
           "{ruleCategory.trim()}" staat niet in de lijst. Dat mag, maar het wordt dan een aparte
           categorie in élk overzicht — ook als je een bestaande bedoelde met een andere spelling.
         </p>
       )}
-
       {rules.length === 0 ? (
         <p>Nog geen regels.</p>
       ) : (
@@ -145,8 +145,8 @@ export default function Regels({
           </table>
           {rules.length > 1 && (
             <p className="cell-sub" style={{ marginTop: ".5rem" }}>
-              Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint de
-              regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.
+              Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint
+              de regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.
             </p>
           )}
         </div>

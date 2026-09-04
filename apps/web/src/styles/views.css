@@ -636,11 +636,21 @@
   color: var(--on-ink);
   background: var(--ink);
 }
-.bank-mark-a { background: var(--accent); }
-.bank-mark-b { background: var(--ink); }
-.bank-mark-c { background: var(--chart-blue); }
-.bank-mark-d { background: var(--chart-purple); }
-.bank-mark-e { background: var(--chart-teal); }
+.bank-mark-a {
+  background: var(--accent);
+}
+.bank-mark-b {
+  background: var(--ink);
+}
+.bank-mark-c {
+  background: var(--chart-blue);
+}
+.bank-mark-d {
+  background: var(--chart-purple);
+}
+.bank-mark-e {
+  background: var(--chart-teal);
+}
 /* No bank name to draw a mark from: an empty outline, not a made-up colour. */
 .bank-mark-x {
   background: var(--surface-2);

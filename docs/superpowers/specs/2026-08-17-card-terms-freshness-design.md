@@ -11,7 +11,7 @@ occasionally coming back empty.
 ## What was wrong, in order of how much damage it did
 
 1. **The precedence ladder ignored age.** `comparison(2)` outranked `agent(1)`, so bank.nl's table —
-   stamped *laatst gecontroleerd 2026-01-15* — would overwrite a lookup done this morning. Fixed in
+   stamped _laatst gecontroleerd 2026-01-15_ — would overwrite a lookup done this morning. Fixed in
    `79ab906`: much-older figures are refused whatever their source, much-newer ones are accepted
    whatever their source, and precision only decides between figures of similar age.
 2. **The n8n workflow fetched fixed URLs**, which is the approach that failed every way it could:
@@ -55,11 +55,11 @@ to push a corrected figure in from outside.
 
 ## What each source is for, after this
 
-| Source | Covers | Freshness | Role |
-|---|---|---|---|
-| The owner's own correction | anything he fixes | permanent | wins over everything, always |
-| Agent + web search | every provider, incl. the bot-blocked ones | today | **primary** |
-| bank.nl comparison | 7 Dutch banks, debit and credit apart | stamped, months old | **instant floor**, so the block is never empty |
+| Source                     | Covers                                     | Freshness           | Role                                           |
+| -------------------------- | ------------------------------------------ | ------------------- | ---------------------------------------------- |
+| The owner's own correction | anything he fixes                          | permanent           | wins over everything, always                   |
+| Agent + web search         | every provider, incl. the bot-blocked ones | today               | **primary**                                    |
+| bank.nl comparison         | 7 Dutch banks, debit and credit apart      | stamped, months old | **instant floor**, so the block is never empty |
 
 bank.nl stops being the ceiling and becomes the floor: it fills a gap in one fetch, is visibly
 dated, and is superseded the moment a fresher lookup lands.

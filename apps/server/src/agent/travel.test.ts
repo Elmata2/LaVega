@@ -1,11 +1,23 @@
 import { expect, test } from "vitest";
 import { sanitizeTravelInput, lookupProviderTerms } from "./travel.js";
 
-const valid = { homeCountry: "NL", destination: "US", currency: "USD", providers: ["ING", "Trading 212"], knownFacts: [] };
+const valid = {
+  homeCountry: "NL",
+  destination: "US",
+  currency: "USD",
+  providers: ["ING", "Trading 212"],
+  knownFacts: [],
+};
 
 test("sanitize keeps only the allowlisted fields", () => {
   const out = sanitizeTravelInput(valid);
-  expect(out).toEqual({ homeCountry: "NL", destination: "US", currency: "USD", providers: ["ING", "Trading 212"], knownFacts: [] });
+  expect(out).toEqual({
+    homeCountry: "NL",
+    destination: "US",
+    currency: "USD",
+    providers: ["ING", "Trading 212"],
+    knownFacts: [],
+  });
 });
 
 test("nothing about the user's money can pass the boundary", () => {
@@ -22,11 +34,19 @@ test("nothing about the user's money can pass the boundary", () => {
   expect(serialized).not.toContain("INGB");
   expect(serialized).not.toContain("Albert Heijn");
   expect(serialized).not.toContain("BV1");
-  expect(Object.keys(out).sort()).toEqual(["currency", "destination", "homeCountry", "knownFacts", "providers"]);
+  expect(Object.keys(out).sort()).toEqual([
+    "currency",
+    "destination",
+    "homeCountry",
+    "knownFacts",
+    "providers",
+  ]);
 });
 
 test("destination and home country must be country codes, never free text", () => {
-  expect(() => sanitizeTravelInput({ ...valid, destination: "Amerika (met Jan en Marie)" })).toThrow();
+  expect(() =>
+    sanitizeTravelInput({ ...valid, destination: "Amerika (met Jan en Marie)" }),
+  ).toThrow();
   expect(sanitizeTravelInput({ ...valid, homeCountry: "vanuit Rotterdam" }).homeCountry).toBe("NL"); // safe default
   expect(sanitizeTravelInput({ ...valid, currency: "dollars please" }).currency).toBe("");
 });
@@ -37,13 +57,23 @@ test("provider names are de-duped and length-capped; empty or oversize input is 
   expect(out.providers[2].length).toBe(60);
   expect(() => sanitizeTravelInput({ ...valid, providers: [] })).toThrow();
   expect(() => sanitizeTravelInput({ ...valid, providers: Array(20).fill("bank") })).toThrow();
-  expect(() => sanitizeTravelInput({ ...valid, knownFacts: Array(99).fill({ subject: "a", key: "b", value: "c" }) })).toThrow();
+  expect(() =>
+    sanitizeTravelInput({
+      ...valid,
+      knownFacts: Array(99).fill({ subject: "a", key: "b", value: "c" }),
+    }),
+  ).toThrow();
 });
 
 test("known facts survive, malformed ones are dropped", () => {
   const out = sanitizeTravelInput({
     ...valid,
-    knownFacts: [{ subject: "Trading 212", key: "fxFeePct", value: "0.5" }, { subject: "x" }, "nope", null],
+    knownFacts: [
+      { subject: "Trading 212", key: "fxFeePct", value: "0.5" },
+      { subject: "x" },
+      "nope",
+      null,
+    ],
   });
   expect(out.knownFacts).toEqual([{ subject: "Trading 212", key: "fxFeePct", value: "0.5" }]);
 });
@@ -72,11 +102,16 @@ test("the travel prompt is composed from _base.md + travel.md, with the owner's 
     messages: {
       create: async (arg: Record<string, unknown>) => {
         sent = arg;
-        return { content: [{ type: "tool_use", name: "report_provider_terms", input: { providers: [] } }] };
+        return {
+          content: [{ type: "tool_use", name: "report_provider_terms", input: { providers: [] } }],
+        };
       },
     },
   } as never;
-  const input = sanitizeTravelInput({ ...valid, knownFacts: [{ subject: "ING", key: "fxFeePct", value: "1.4" }] });
+  const input = sanitizeTravelInput({
+    ...valid,
+    knownFacts: [{ subject: "ING", key: "fxFeePct", value: "1.4" }],
+  });
   await lookupProviderTerms(input, "k", { client });
   const system = String(sent.system);
   expect(system).toContain("LaVega — basis voor elke agent");
@@ -89,7 +124,9 @@ test("the travel prompt is composed from _base.md + travel.md, with the owner's 
 function stubClient(providers: unknown) {
   return {
     messages: {
-      create: async () => ({ content: [{ type: "tool_use", name: "report_provider_terms", input: { providers } }] }),
+      create: async () => ({
+        content: [{ type: "tool_use", name: "report_provider_terms", input: { providers } }],
+      }),
     },
   } as never;
 }
@@ -116,12 +153,17 @@ test("a product the user does not hold is dropped, and unverifiable fields stay 
 });
 
 test("a model reply with no tool call yields no terms rather than throwing", async () => {
-  const client = { messages: { create: async () => ({ content: [{ type: "text", text: "sorry" }] }) } } as never;
+  const client = {
+    messages: { create: async () => ({ content: [{ type: "text", text: "sorry" }] }) },
+  } as never;
   expect(await lookupProviderTerms(sanitizeTravelInput(valid), "k", { client })).toEqual([]);
 });
 
 test("a provider that looks like an account number is refused at the boundary", () => {
-  const out = sanitizeTravelInput({ ...valid, providers: ["ING", "A 286-41213", "NL12INGB0123456789", "D 128-83091"] });
+  const out = sanitizeTravelInput({
+    ...valid,
+    providers: ["ING", "A 286-41213", "NL12INGB0123456789", "D 128-83091"],
+  });
   expect(out.providers).toEqual(["ING"]); // identifiers dropped, brand kept
   // Nothing digit-shaped survives into what we would send.
   expect(out.providers.some((p) => /\d{4}/.test(p))).toBe(false);
@@ -130,7 +172,10 @@ test("a provider that looks like an account number is refused at the boundary", 
 });
 
 test("real brand names with digits still pass", () => {
-  const out = sanitizeTravelInput({ ...valid, providers: ["Trading 212", "N26", "bunq", "American Express"] });
+  const out = sanitizeTravelInput({
+    ...valid,
+    providers: ["Trading 212", "N26", "bunq", "American Express"],
+  });
   expect(out.providers).toEqual(["Trading 212", "N26", "bunq", "American Express"]);
 });
 
@@ -149,8 +194,15 @@ test("with ONE provider asked, an answer under any name is attributed to it", as
 });
 
 test("with one asked, a model volunteering extra products still can't inject them", async () => {
-  const client = stubClient([{ provider: "Amex", fxFeePct: 2 }, { provider: "Wise", fxFeePct: 0.4 }]);
-  const out = await lookupProviderTerms(sanitizeTravelInput({ ...valid, providers: ["American Express"] }), "k", { client });
+  const client = stubClient([
+    { provider: "Amex", fxFeePct: 2 },
+    { provider: "Wise", fxFeePct: 0.4 },
+  ]);
+  const out = await lookupProviderTerms(
+    sanitizeTravelInput({ ...valid, providers: ["American Express"] }),
+    "k",
+    { client },
+  );
   expect(out).toHaveLength(1);
   expect(out[0]).toMatchObject({ provider: "American Express", fxFeePct: 2 });
 });

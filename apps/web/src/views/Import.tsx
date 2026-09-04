@@ -17,11 +17,7 @@ export default function Import({ entity, onEntityChange, busy, problems, onImpor
       <div className="import-controls">
         <label>
           Entiteit{" "}
-          <input
-            value={entity}
-            onChange={(e) => onEntityChange(e.target.value)}
-            disabled={busy}
-          />
+          <input value={entity} onChange={(e) => onEntityChange(e.target.value)} disabled={busy} />
         </label>
         {/* No `accept` filter: format is detected from the file's *contents*
             (parseBankFile sniffs MT940 vs CSV), so restricting extensions only

@@ -21,7 +21,10 @@ function defaultEnvironment(name: string): string | undefined {
 /** Host time left for one Trading 212 invocation. Unset locally so a Docker
  *  sync can wait out every provider window. On Vercel the function dies if
  *  that wait runs past maxDuration, so we stop early and resume. */
-export function trading212DeadlineMs(environment: (name: string) => string | undefined, now = Date.now()): number | undefined {
+export function trading212DeadlineMs(
+  environment: (name: string) => string | undefined,
+  now = Date.now(),
+): number | undefined {
   const budget = Number(environment("INVESTING_SYNC_BUDGET_MS"));
   if (Number.isFinite(budget) && budget > 0) return now + budget;
   if (environment("VERCEL")) return now + 45_000;
@@ -33,7 +36,9 @@ export function trading212DeadlineMs(environment: (name: string) => string | und
  *  wiring. The "not configured" fallbacks mirror the wording the server used
  *  to fabricate; syncScheduledBrokers normally refuses to call sync without
  *  credentials, so these are the wording of record for direct callers. */
-export function createCredentialsAwareBrokerAdapters(options: CredentialsAwareBrokerAdaptersOptions): { broker: ScheduledBrokerName; adapter: BrokerAccessAdapter }[] {
+export function createCredentialsAwareBrokerAdapters(
+  options: CredentialsAwareBrokerAdaptersOptions,
+): { broker: ScheduledBrokerName; adapter: BrokerAccessAdapter }[] {
   const tenantId = options.tenantId ?? LOCAL_TENANT_ID;
   const environment = options.environment ?? defaultEnvironment;
   return [
@@ -42,8 +47,18 @@ export function createCredentialsAwareBrokerAdapters(options: CredentialsAwareBr
       adapter: {
         async sync(input) {
           const stored = await options.credentials.getCredentials(tenantId, "ibkr");
-          if (!stored) return { positions: [], trades: [], source: "ibkr-flex", problems: ["IBKR: credentials are not configured"] };
-          return createIbkrFlexAdapter({ token: stored.token, queryId: stored.queryId, endpoint: environment("IBKR_FLEX_ENDPOINT") }).sync(input);
+          if (!stored)
+            return {
+              positions: [],
+              trades: [],
+              source: "ibkr-flex",
+              problems: ["IBKR: credentials are not configured"],
+            };
+          return createIbkrFlexAdapter({
+            token: stored.token,
+            queryId: stored.queryId,
+            endpoint: environment("IBKR_FLEX_ENDPOINT"),
+          }).sync(input);
         },
       },
     },
@@ -52,7 +67,13 @@ export function createCredentialsAwareBrokerAdapters(options: CredentialsAwareBr
       adapter: {
         async sync(input) {
           const stored = await options.credentials.getCredentials(tenantId, "trading212");
-          if (!stored) return { positions: [], trades: [], source: "trading-212", problems: ["Trading 212: credentials are not configured"] };
+          if (!stored)
+            return {
+              positions: [],
+              trades: [],
+              source: "trading-212",
+              problems: ["Trading 212: credentials are not configured"],
+            };
           return createTrading212Adapter({
             token: stored.token,
             secret: stored.secret,

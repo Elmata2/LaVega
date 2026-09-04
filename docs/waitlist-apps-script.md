@@ -46,7 +46,7 @@ function doPost(e) {
    (If you edit the code later, re-publish via Deploy → **Manage deployments** →
    edit → Version **New version**; the `/exec` URL stays the same.)
 7. Verify: open the `/exec` URL in a browser — it should show `LaVega waitlist ok`.
-7. Send Claude that URL → it sets `WAITLIST_ENDPOINT` in `Landing.tsx` and redeploys.
+8. Send Claude that URL → it sets `WAITLIST_ENDPOINT` in `Landing.tsx` and redeploys.
    Until then the form shows a "Binnenkort" state (no sign-ups are silently dropped).
 
 ## Notes

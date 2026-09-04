@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { cashbackPctOf, describeHeldCashback, heldCashbackOf, type HeldCashback } from "./assumedCashback.js";
+import {
+  cashbackPctOf,
+  describeHeldCashback,
+  heldCashbackOf,
+  type HeldCashback,
+} from "./assumedCashback.js";
 
 /* DE EIGEN KAARTEN, en hoe hard we hun cashback kennen (app review 4, punt 22).
  *
@@ -38,7 +43,12 @@ describe("heldCashbackOf", () => {
   });
 
   test("een gewone ING-pas zonder feit is AANGENOMEN nul, met het woord erbij", () => {
-    const k = heldCashbackOf({ ...ing, fact: null, assumptionOn: true, lastCheckedAt: "2026-06-15" });
+    const k = heldCashbackOf({
+      ...ing,
+      fact: null,
+      assumptionOn: true,
+      lastCheckedAt: "2026-06-15",
+    });
     expect(k.tier).toBe("aangenomen");
     expect(cashbackPctOf(k)).toBe(0);
     expect(describeHeldCashback(k)).toContain("aangenomen: geen cashback");
@@ -84,7 +94,10 @@ describe("cashbackPctOf", () => {
   test("alleen gemeten en aangenomen leveren een getal", () => {
     const cases: [HeldCashback, number | null][] = [
       [{ tier: "gemeten", pct: 2, source: "agent", updatedAt: "2026-01-01" }, 2],
-      [{ tier: "aangenomen", pct: 0, issuerFamily: "ING", kind: "betaalpas", lastCheckedAt: null }, 0],
+      [
+        { tier: "aangenomen", pct: 0, issuerFamily: "ING", kind: "betaalpas", lastCheckedAt: null },
+        0,
+      ],
       [{ tier: "onbekend", reason: "soort-onbekend" }, null],
       [{ tier: "uitgezet" }, null],
     ];

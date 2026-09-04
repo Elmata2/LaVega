@@ -2,7 +2,7 @@
 
 **The user experience Alexander asked for**: accept the terms, link it, invoices appear in LaVega.
 **Without** the thing that makes the obvious route expensive: `gmail.readonly` is a Google
-*restricted* scope, so a public app needs OAuth verification plus a **CASA Tier 2 assessment,
+_restricted_ scope, so a public app needs OAuth verification plus a **CASA Tier 2 assessment,
 redone every 12 months**, from about $3,000 upward. That is a bill before the first customer, and
 it buys access to the user's entire mailbox — far more than we need and more than a careful user
 wants to give.

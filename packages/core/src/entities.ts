@@ -47,11 +47,35 @@ export type EntityProfile = { entity: string; scope: EntityScope };
  *  does not. Deliberately short: a false "business" suggestion is worse than no
  *  suggestion, because the picker is prefilled from it. */
 const BUSINESS_TOKENS = new Set([
-  "bv", "nv", "vof", "holding", "beheer", "eenmanszaak", "zzp", "bedrijf", "zakelijk",
-  "gmbh", "ug", "gbr", "ohg", "kgaa", "sarl", "ltd", "llc", "inc", "business", "company",
+  "bv",
+  "nv",
+  "vof",
+  "holding",
+  "beheer",
+  "eenmanszaak",
+  "zzp",
+  "bedrijf",
+  "zakelijk",
+  "gmbh",
+  "ug",
+  "gbr",
+  "ohg",
+  "kgaa",
+  "sarl",
+  "ltd",
+  "llc",
+  "inc",
+  "business",
+  "company",
 ]);
 const PERSONAL_TOKENS = new Set([
-  "prive", "persoonlijk", "personal", "huishouden", "gezin", "thuis", "prive-rekening",
+  "prive",
+  "persoonlijk",
+  "personal",
+  "huishouden",
+  "gezin",
+  "thuis",
+  "prive-rekening",
 ]);
 
 /** Lowercase, de-accented, dot-free tokens of an entity name. "Privé" → ["prive"],
@@ -91,7 +115,10 @@ export function entityScope(entity: string, profiles: readonly EntityProfile[] =
 }
 
 /** The classification of one account, inherited from its entity. */
-export function accountScope(account: Account, profiles: readonly EntityProfile[] = []): EntityScope {
+export function accountScope(
+  account: Account,
+  profiles: readonly EntityProfile[] = [],
+): EntityScope {
   return entityScope(account.entity, profiles);
 }
 
@@ -114,7 +141,10 @@ export function setEntityScope(
 }
 
 /** Drop an entity's classification (back to the personal default). Immutable. */
-export function clearEntityScope(profiles: readonly EntityProfile[], entity: string): EntityProfile[] {
+export function clearEntityScope(
+  profiles: readonly EntityProfile[],
+  entity: string,
+): EntityProfile[] {
   const key = norm(entity);
   return profiles.filter((p) => norm(p.entity) !== key);
 }
@@ -143,8 +173,8 @@ export function entitySummaries(
     if (list) list.push(a.key);
     else byEntity.set(a.entity, [a.key]);
   }
-  const explicitKeys = new Set([...profileIndex(profiles).keys()]);
-  return [...byEntity.entries()]
+  const explicitKeys = new Set(profileIndex(profiles).keys());
+  return [...byEntity]
     .map(([entity, accountKeys]) => ({
       entity,
       scope: entityScope(entity, profiles),
@@ -174,7 +204,8 @@ export function renameEntity(
   const moved = index.get(norm(from));
   const rest = profiles.filter((p) => norm(p.entity) !== norm(from) && norm(p.entity) !== norm(to));
   if (target) return { accounts: nextAccounts, profiles: [...rest, target] };
-  if (moved) return { accounts: nextAccounts, profiles: [...rest, { entity: to, scope: moved.scope }] };
+  if (moved)
+    return { accounts: nextAccounts, profiles: [...rest, { entity: to, scope: moved.scope }] };
   return { accounts: nextAccounts, profiles: [...profiles] };
 }
 
@@ -198,7 +229,10 @@ export function consolidateByScope(
   accounts: readonly Account[],
   txs: readonly Tx[],
   profiles: readonly EntityProfile[] = [],
-): { byScope: Record<string, { in: number; out: number; balance: number | null }>; totalBalance: number | null } {
+): {
+  byScope: Record<string, { in: number; out: number; balance: number | null }>;
+  totalBalance: number | null;
+} {
   const relabelled = accounts.map((a) => ({ ...a, entity: accountScope(a, profiles) as string }));
   const { byEntity, totalBalance } = consolidate(relabelled, [...txs]);
   return { byScope: byEntity, totalBalance };
@@ -216,7 +250,11 @@ export function consolidateByScope(
  *  Een tx op een rekening die niet in `accounts` staat hoort bij geen enkele
  *  onderneming en valt buiten elke uitkomst — hem bij de gevraagde entiteit
  *  optellen zou een bedrag ophogen met geld waarvan niemand weet van wie het is. */
-export function txsForEntity(txs: readonly Tx[], accounts: readonly Account[], entity: string): Tx[] {
+export function txsForEntity(
+  txs: readonly Tx[],
+  accounts: readonly Account[],
+  entity: string,
+): Tx[] {
   const keyToEntity = new Map<string, string>();
   for (const a of accounts) keyToEntity.set(a.key, a.entity);
   return txs.filter((t) => keyToEntity.get(t.accountKey) === entity);

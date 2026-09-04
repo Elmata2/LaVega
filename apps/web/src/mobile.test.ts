@@ -34,7 +34,10 @@ test("every table that becomes cards on a phone labels its cells", () => {
     expect(tables, `${path} should opt its tables into the card layout`).toBeGreaterThan(0);
     // One data-label per body cell, so at least as many labels as tables.
     const labels = src.match(/data-label=/g)?.length ?? 0;
-    expect(labels, `${path} has ${tables} card tables but ${labels} labelled cells`).toBeGreaterThanOrEqual(tables);
+    expect(
+      labels,
+      `${path} has ${tables} card tables but ${labels} labelled cells`,
+    ).toBeGreaterThanOrEqual(tables);
   }
 });
 
@@ -42,7 +45,9 @@ test("the card-table treatment is scoped to phone width, not applied everywhere"
   // Desktop keeps its columns; only below 620px does a row become a card.
   const block = base.slice(base.indexOf("@media (max-width: 620px)"));
   expect(block).toContain(".table-cards td");
-  expect(base.indexOf(".table-cards td")).toBeGreaterThan(base.indexOf("@media (max-width: 620px)"));
+  expect(base.indexOf(".table-cards td")).toBeGreaterThan(
+    base.indexOf("@media (max-width: 620px)"),
+  );
 });
 
 test("grid tracks that hold money use minmax(0,...) so a long amount cannot widen the page", () => {

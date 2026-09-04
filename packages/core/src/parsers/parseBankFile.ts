@@ -48,7 +48,12 @@ function finalize(accounts: Account[], txs: Array<Omit<Tx, "id">>, source: strin
 export function parseBankFile(filename: string, text: string): ParsedBankFile {
   // CAMT.053 XML — deferred (Plan 2 Task 4). Detect and report clearly; don't throw.
   if (/^\s*<\?xml|<Document/i.test(text.slice(0, 400))) {
-    return { accounts: [], txs: [], source: "CAMT.053", problems: ["CAMT.053 nog niet ondersteund"] };
+    return {
+      accounts: [],
+      txs: [],
+      source: "CAMT.053",
+      problems: ["CAMT.053 nog niet ondersteund"],
+    };
   }
   // MT940 / .STA — content-detected SWIFT tag block.
   if (/:20:/.test(text.slice(0, 4000)) && /:61:/.test(text)) {

@@ -38,7 +38,10 @@ test("builds a forced-tool request with the document block and parses tool_use",
   });
 
   // A caller-supplied mediaType must NOT be trusted for the document block.
-  const res = await extractInvoiceFields({ pdfBase64: "AAAA", mediaType: "image/png" }, "sk-ant-test");
+  const res = await extractInvoiceFields(
+    { pdfBase64: "AAAA", mediaType: "image/png" },
+    "sk-ant-test",
+  );
 
   expect(res).toEqual({
     fields: {
@@ -96,7 +99,13 @@ test("coerces missing/mistyped fields: direction defaults to out, dueDate falls 
 
 test("the extractor is told the owner's field preferences, and never a counterparty", async () => {
   createMock.mockResolvedValue({
-    content: [{ type: "tool_use", name: "record_invoice", input: { counterparty: "X", amount: 1, issueDate: "2026-01-01" } }],
+    content: [
+      {
+        type: "tool_use",
+        name: "record_invoice",
+        input: { counterparty: "X", amount: 1, issueDate: "2026-01-01" },
+      },
+    ],
   });
   const facts = sanitizeKnownFacts(
     [

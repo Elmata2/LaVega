@@ -18,10 +18,10 @@
 import { parseAmountToCents, reasonTextHandmatig } from "./read.js";
 import { aanbodLijst } from "./panel.js";
 import { aanbodGrensRegel, puntenLeegRegel, puntenDatumRegel } from "./lines.js";
-import { euro, dateNL, getal } from "./money.js";
+import { euro, getal } from "./money.js";
 import { BRONNEN } from "./bronnen.js";
 import { getPointsBalances, getBronAan, getBronAanbiedingen, getBronLezing } from "./store.js";
-import { pointsCoverage, type PuntenRij } from "./points.js";
+import { pointsCoverage } from "./points.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
 
 const WAARDEKOP = "Wat je punten waard zijn";

@@ -39,24 +39,24 @@ hem lezen — net als bij de andere agents, en met dezelfde afweging.
 
 ## Stap 1 — Gmail koppelen (Google Cloud)
 
-Je hebt de **callback-URL van n8n** nodig. Die staat in n8n zelf: *Credentials →
-New → Gmail OAuth2 API*, bovenaan. Hij ziet eruit als
+Je hebt de **callback-URL van n8n** nodig. Die staat in n8n zelf: _Credentials →
+New → Gmail OAuth2 API_, bovenaan. Hij ziet eruit als
 `https://<jouw-n8n>/rest/oauth2-credential/callback`. Kopieer hem eerst.
 
 1. **console.cloud.google.com** → nieuw project, bijvoorbeeld `lavega-n8n`.
-2. *APIs & Services* → *Library* → zoek **Gmail API** → **Enable**.
-3. *OAuth consent screen* → **External** → vul naam en e-mailadres in.
-4. *Scopes* → **Add or remove scopes** → voeg toe:
+2. _APIs & Services_ → _Library_ → zoek **Gmail API** → **Enable**.
+3. _OAuth consent screen_ → **External** → vul naam en e-mailadres in.
+4. _Scopes_ → **Add or remove scopes** → voeg toe:
    `https://www.googleapis.com/auth/gmail.readonly`. Meer niet. Alleen lezen.
-5. *Test users* → voeg je eigen adres toe.
-6. *Credentials* → **Create credentials** → *OAuth client ID* → **Web
-   application** → bij *Authorized redirect URIs* de n8n-callback-URL plakken.
-7. Client ID en Client Secret in n8n bij *Gmail OAuth2 API*, dan **Connect my
+5. _Test users_ → voeg je eigen adres toe.
+6. _Credentials_ → **Create credentials** → _OAuth client ID_ → **Web
+   application** → bij _Authorized redirect URIs_ de n8n-callback-URL plakken.
+7. Client ID en Client Secret in n8n bij _Gmail OAuth2 API_, dan **Connect my
    account**.
 
 > **Val hier niet in.** Blijft de consent screen op **Testing** staan, dan laat
 > Google je refresh-token na **7 dagen** verlopen en stopt de workflow er
-> wekelijks mee. Zet hem op **In production** (*Publish app*). Voor alleen je
+> wekelijks mee. Zet hem op **In production** (_Publish app_). Voor alleen je
 > eigen account is verificatie niet nodig; je klikt één keer langs een
 > "unverified app"-scherm.
 
@@ -68,16 +68,16 @@ toevoegen.
 
 ## Stap 3 — De webhook waarmee LaVega ophaalt
 
-1. Open de node **LaVega vraagt de rij op**. Zet *Authentication* op **Header
+1. Open de node **LaVega vraagt de rij op**. Zet _Authentication_ op **Header
    Auth** en maak daar een credential voor:
    - Header Name: `x-lavega-token`
    - Value: `openssl rand -hex 24`
 2. **Activeer de workflow** (schakelaar rechtsboven). Een webhook werkt alleen
    in een actieve workflow — in de test-modus luistert hij maar één keer.
 3. Kopieer de **Production URL** van de webhook.
-4. Zet die URL en dat token in LaVega onder *Koppelingen* — dat scherm bestaat
+4. Zet die URL en dat token in LaVega onder _Koppelingen_ — dat scherm bestaat
    nu. LaVega bewaart beide lokaal, net als je andere instellingen. Daarna haal
-   je de rij op met **Ophalen uit n8n** in *Facturen*, en bevestig je hem regel
+   je de rij op met **Ophalen uit n8n** in _Facturen_, en bevestig je hem regel
    voor regel.
 
 De node staat ingesteld op `allowedOrigins: https://lavega.dev,
@@ -88,12 +88,12 @@ anders blokkeert de browser het antwoord.
 
 Twee instellingen waar dit zonder mankeren op stukloopt:
 
-| Instelling | Waarde | Waarom |
-|---|---|---|
-| **Read Status** | `both` | n8n staat standaard op **alleen ongelezen**. Een factuur die je al gelezen had zou dan nooit meekomen, en de workflow zou "werken" en stil niets opleveren. |
-| **Download Attachments** | aan, **in Options** | Alleen daar leest n8n hem. In de broncode staat letterlijk `getNodeParameter('options.downloadAttachments', 0, false)`. Zet je hem ernaast, als buur van *Simplify*, dan bestaat de vlag niet en komt er nooit een PDF mee — zie het kopje hieronder. |
-| **Simplify** | uit | Aan levert alleen headers, dus geen bijlagen en geen tekst. |
-| **Search** | zie hieronder | Te breed kost tokens, te smal mist facturen. |
+| Instelling               | Waarde              | Waarom                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Read Status**          | `both`              | n8n staat standaard op **alleen ongelezen**. Een factuur die je al gelezen had zou dan nooit meekomen, en de workflow zou "werken" en stil niets opleveren.                                                                                           |
+| **Download Attachments** | aan, **in Options** | Alleen daar leest n8n hem. In de broncode staat letterlijk `getNodeParameter('options.downloadAttachments', 0, false)`. Zet je hem ernaast, als buur van _Simplify_, dan bestaat de vlag niet en komt er nooit een PDF mee — zie het kopje hieronder. |
+| **Simplify**             | uit                 | Aan levert alleen headers, dus geen bijlagen en geen tekst.                                                                                                                                                                                           |
+| **Search**               | zie hieronder       | Te breed kost tokens, te smal mist facturen.                                                                                                                                                                                                          |
 
 De zoekopdracht is nu:
 
@@ -109,7 +109,7 @@ en Amex-bevestiging binnen, en een betaalbewijs wordt toch nooit geboekt. Kale
 `rekening` is vervangen door `"uw rekening"`, want in het Nederlands is een
 rekening net zo vaak een bankrekening. En er is een net bijgekomen dat geen
 woorden nodig heeft: `has:attachment filename:pdf` vangt ook de Duitse
-*Rechnung* en de mail waarvan de hele inhoud `2026-08.pdf` heet.
+_Rechnung_ en de mail waarvan de hele inhoud `2026-08.pdf` heet.
 
 > **Maak het label eerst aan.** `label:lavega` verwijst naar een Gmail-label dat
 > je zelf onderhoudt: zie je een gemiste factuur, dan plak je dat label erop en
@@ -126,12 +126,12 @@ invoer-tokens: geen PDF, en van sommige mails geen tekst. Drie fouten stapelden
 op elkaar:
 
 1. **Download Attachments stond op de verkeerde plek.** Hij stond náást
-   *Simplify* in plaats van in *Options*. n8n leest alleen
+   _Simplify_ in plaats van in _Options_. n8n leest alleen
    `options.downloadAttachments`, dus de vlag was dood en `item.binary` bleef
    leeg. Er is dus nooit één PDF meegegaan, bij geen enkele run. De regel in de
    tabel hierboven beweerde precies het omgekeerde; die is rechtgezet.
-2. **De tekst werd op de verkeerde plek gezocht.** *Normaliseer bericht* las
-   `text` en anders `snippet`. Maar onder *Simplify uit* bestaat `snippet`
+2. **De tekst werd op de verkeerde plek gezocht.** _Normaliseer bericht_ las
+   `text` en anders `snippet`. Maar onder _Simplify uit_ bestaat `snippet`
    helemaal niet, en `text` blijft leeg zodra een mail alleen een HTML-deel
    heeft — de gewoonste vorm van een factuurmail. Zulke mails vielen stil weg
    vóór het model, en een gemiste factuur zag er dus uit als geen factuur.
@@ -143,13 +143,13 @@ op elkaar:
    herhaalde onze eigen bewering. Die regel staat er nu alleen nog als er ook
    echt een bijlage meegaat.
 
-Wat je na *Import from File* moet nalopen:
+Wat je na _Import from File_ moet nalopen:
 
 - **Gmail-credential opnieuw koppelen.** Een geïmporteerde workflow heeft geen
-  credential; kies je bestaande *Gmail OAuth2 API* opnieuw in de node.
-- Open **Gmail: recente mail** → *Options* en controleer dat **Download
+  credential; kies je bestaande _Gmail OAuth2 API_ opnieuw in de node.
+- Open **Gmail: recente mail** → _Options_ en controleer dat **Download
   Attachments** aan staat en **Simplify** uit.
-- Draai *Handmatig starten* en kijk in **Normaliseer bericht**: elk bericht hoort
+- Draai _Handmatig starten_ en kijk in **Normaliseer bericht**: elk bericht hoort
   nu `textSource` te tonen (`text`, `html` of `textAsHtml`), een `textChars` die
   niet 0 is, en bij een factuurmail een gevulde `pdfs`. Staat er iets in
   `skipped`, dan is er een bijlage bewust niet meegegaan, mét reden.
@@ -163,28 +163,28 @@ Wat je na *Import from File* moet nalopen:
   `helpers.getBinaryDataBuffer`. Lukt dat niet, dan zie je dat terug in
   `skipped` — niet als een stilzwijgend ontbrekende bijlage. **Ik heb dit niet
   op jouw instantie kunnen controleren.**
-- Kijk wat *Zet in de wachtrij* teruggeeft: `{addedInvoices, addedNotices,
-  inQueue, noticesInQueue, remembered}`.
+- Kijk wat _Zet in de wachtrij_ teruggeeft: `{addedInvoices, addedNotices,
+inQueue, noticesInQueue, remembered}`.
 
 ## Meldingen: wat er wel binnenkwam maar geen factuur was
 
 Een mail die zegt "uw factuur staat klaar, log in" is geen factuur. Hem stil als
 "geen factuur" wegzetten is liegen door weglating: er wacht wel degelijk iets op
 je. Zulke mail komt nu terug als **melding** in een tweede lijst, en LaVega toont
-die onder *Facturen → Zelf ophalen*.
+die onder _Facturen → Zelf ophalen_.
 
 Vier soorten worden een melding:
 
-| Soort | Wat het is |
-|---|---|
-| `notification` | de factuur staat bij de leverancier klaar; jij moet inloggen |
-| `reminder` | herinnering of aanmaning voor een factuur die je al hoorde te hebben |
-| `no-amount` | het model zag een factuur maar las er geen bedrag in |
-| `unreadable` | er viel niets uit de mail te lezen, of het model gaf geen antwoord |
+| Soort          | Wat het is                                                           |
+| -------------- | -------------------------------------------------------------------- |
+| `notification` | de factuur staat bij de leverancier klaar; jij moet inloggen         |
+| `reminder`     | herinnering of aanmaning voor een factuur die je al hoorde te hebben |
+| `no-amount`    | het model zag een factuur maar las er geen bedrag in                 |
+| `unreadable`   | er viel niets uit de mail te lezen, of het model gaf geen antwoord   |
 
 Een melding heeft **geen bedragveld** — niet leeg, niet nul: het veld bestaat
 niet. Er is dus geen weg waarlangs een melding een boeking wordt, en daar is geen
-extra controle voor nodig. De knop is *Gedaan*, niet *Bevestigen*.
+extra controle voor nodig. De knop is _Gedaan_, niet _Bevestigen_.
 
 De link gaat naar **jouw eigen Gmail**, niet naar de link uit de mail. Die link
 komt van buiten, is vaak eenmalig, en een nepfactuur ziet er precies hetzelfde
@@ -218,7 +218,7 @@ een node die uit de pas loopt laat de testsuite vallen.
   (plus een `notices`-lijst), en een **tweede** aanroep hoort leeg te zijn — dat
   is de rij die zichzelf opruimt.
 - **PDF-ondersteuning.** De bijlage gaat als `document`-blok naar Claude. Geeft
-  *Lees de factuur* een 400 over het documenttype, voeg dan de header
+  _Lees de factuur_ een 400 over het documenttype, voeg dan de header
   `anthropic-beta: pdfs-2024-09-25` toe aan die node.
 - **`Invalid base64 data` (opgelost 2026-08-17).** Staat
   `N8N_DEFAULT_BINARY_DATA_MODE` niet op `default`, dan bewaart n8n de bytes
@@ -278,13 +278,13 @@ Niet nodig nu. Als het zover is:
 
 1. In n8n een **Microsoft Outlook OAuth2 API**-credential maken en de
    callback-URL kopiëren.
-2. **entra.microsoft.com** → *App registrations* → **New registration**:
-   - *Supported account types*: werkaccount → **Single tenant**; een gewoon
+2. **entra.microsoft.com** → _App registrations_ → **New registration**:
+   - _Supported account types_: werkaccount → **Single tenant**; een gewoon
      outlook.com-adres → **any organizational directory + personal accounts**.
-   - *Redirect URI*: type **Web**, de n8n-callback-URL.
-   - *Certificates & secrets* → **New client secret** → kopieer de **Value**,
+   - _Redirect URI_: type **Web**, de n8n-callback-URL.
+   - _Certificates & secrets_ → **New client secret** → kopieer de **Value**,
      niet de Secret ID. Die is daarna niet meer te zien.
-   - *API permissions* → Graph → **Delegated** → `Mail.Read`, `offline_access`,
+   - _API permissions_ → Graph → **Delegated** → `Mail.Read`, `offline_access`,
      `User.Read`. In een bedrijfstenant: **Grant admin consent**.
    - Bij **Single tenant** moet de tenant-ID in de auth-URL's in plaats van
      `common`.

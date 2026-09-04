@@ -8,10 +8,10 @@
 
   <h2>Welke kaarten heb je?</h2>
   <p class="hint">
-    Dit is de hele koppeling met LaVega in deze versie: één lijstje dat in je browser blijft.
-    Er is geen verbinding met je kluis, geen account en geen server. Kaarten die je hier
-    aanvinkt worden behandeld als kaarten die je al betaalt — hun maandprijs of jaarprijs wordt
-    dan niet van de opbrengst afgetrokken, want die kosten lopen toch door.
+    Dit is de hele koppeling met LaVega in deze versie: één lijstje dat in je browser blijft. Er is
+    geen verbinding met je kluis, geen account en geen server. Kaarten die je hier aanvinkt worden
+    behandeld als kaarten die je al betaalt — hun maandprijs of jaarprijs wordt dan niet van de
+    opbrengst afgetrokken, want die kosten lopen toch door.
   </p>
   <label for="zoek">Zoeken</label>
   <input id="zoek" type="text" placeholder="naam of bank" autocomplete="off" />
@@ -38,19 +38,25 @@
     <label for="punten-naam">Naam van het programma</label>
     <input id="punten-naam" type="text" placeholder="Marriott Bonvoy" autocomplete="off" />
     <label for="punten-aantal">Aantal punten</label>
-    <input id="punten-aantal" type="text" inputmode="numeric" placeholder="12000" autocomplete="off" />
+    <input
+      id="punten-aantal"
+      type="text"
+      inputmode="numeric"
+      placeholder="12000"
+      autocomplete="off"
+    />
     <button type="submit">Toevoegen</button>
   </form>
 
   <h2>Mag het paneel op winkelpagina's verschijnen?</h2>
   <p class="hint">
-    Standaard staat dit uit. Zet je het aan, dan vraagt Chrome toestemming om alle websites te
-    lezen — niet per winkel, en dat kun je in <code>chrome://extensions</code> altijd weer
-    intrekken. LaVega leest daarbij alleen de machineleesbare productgegevens die een winkel zelf
-    op de pagina zet (dezelfde gegevens die zoekmachines gebruiken) — nooit de rest van de pagina.
-    Het vergelijkt dat niet met wat er verder op de pagina staat: een winkel die dat verkeerd zet
-    (gemeten dat dit gebeurt), kan LaVega niet opvangen. Zwijgen bij twijfel blijft gelden; een
-    geldig maar verkeerd bedrag is de uitzondering die dit vinkje accepteert.
+    Standaard staat dit uit. Zet je het aan, dan vraagt Chrome toestemming om alle websites te lezen
+    — niet per winkel, en dat kun je in <code>chrome://extensions</code> altijd weer intrekken.
+    LaVega leest daarbij alleen de machineleesbare productgegevens die een winkel zelf op de pagina
+    zet (dezelfde gegevens die zoekmachines gebruiken) — nooit de rest van de pagina. Het vergelijkt
+    dat niet met wat er verder op de pagina staat: een winkel die dat verkeerd zet (gemeten dat dit
+    gebeurt), kan LaVega niet opvangen. Zwijgen bij twijfel blijft gelden; een geldig maar verkeerd
+    bedrag is de uitzondering die dit vinkje accepteert.
   </p>
   <div class="vinkrij">
     <input type="checkbox" id="kassa-overal" />
@@ -62,15 +68,16 @@
 
   <h2>Mag LaVega je eigen aanbiedingen lezen?</h2>
   <p class="hint">
-    Hieronder staat per bron een <strong>aparte vraag</strong>, met een aparte schakelaar. Wie ja zegt
-    tegen "lees de prijs op ikea.nl" heeft daarmee geen ja gezegd tegen "lees mijn Amex-account", en wie
-    ja zei tegen zijn Amex-account heeft geen ja gezegd tegen zijn ING-account. Ze staan alle drie
-    standaard uit en de een zet de ander niet aan.
+    Hieronder staat per bron een <strong>aparte vraag</strong>, met een aparte schakelaar. Wie ja
+    zegt tegen "lees de prijs op ikea.nl" heeft daarmee geen ja gezegd tegen "lees mijn
+    Amex-account", en wie ja zei tegen zijn Amex-account heeft geen ja gezegd tegen zijn
+    ING-account. Ze staan alle drie standaard uit en de een zet de ander niet aan.
   </p>
   <p class="hint">
-    Zet je een schakelaar uit, dan wordt die leestoestemming ingetrokken en gaat alles wat er van díe
-    bron gelezen is meteen weg — niet pas bij het volgende bezoek, en zonder dat er iets van de andere
-    bron verdwijnt. Hetzelfde gebeurt als je de toestemming in <code>chrome://extensions</code> intrekt.
+    Zet je een schakelaar uit, dan wordt die leestoestemming ingetrokken en gaat alles wat er van
+    díe bron gelezen is meteen weg — niet pas bij het volgende bezoek, en zonder dat er iets van de
+    andere bron verdwijnt. Hetzelfde gebeurt als je de toestemming in
+    <code>chrome://extensions</code> intrekt.
   </p>
   <div id="bronnen"></div>
 

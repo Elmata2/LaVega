@@ -37,7 +37,9 @@ if (changed.length === 0) {
 }
 
 if (check) {
-  console.error(`n8n-code loopt achter op de bron: ${changed.join(", ")}. Draai \`pnpm run sync:n8n\`.`);
+  console.error(
+    `n8n-code loopt achter op de bron: ${changed.join(", ")}. Draai \`pnpm run sync:n8n\`.`,
+  );
   process.exit(1);
 }
 

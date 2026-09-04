@@ -1,7 +1,10 @@
 import type { Position, Trade } from "@lavega/core";
 import type { PriceSyncInput, PriceSyncResult } from "@lavega/adapters";
 
-export type PriceSyncTarget = PriceSyncInput & { kind: "current" | "closed" | "benchmark"; isin?: string };
+export type PriceSyncTarget = PriceSyncInput & {
+  kind: "current" | "closed" | "benchmark";
+  isin?: string;
+};
 
 export type PriceSyncProgress = {
   /** `paused` means the host budget ran out with symbols left: the run is
@@ -29,7 +32,11 @@ export type PriceSyncProgress = {
 export type PriceSyncProgressStore = {
   get(tenantId: string): Promise<PriceSyncProgress | null>;
   put(tenantId: string, progress: PriceSyncProgress, leaseId?: string): Promise<boolean | void>;
-  claim?(tenantId: string, progress: PriceSyncProgress, staleBefore: string): Promise<PriceSyncProgress | null>;
+  claim?(
+    tenantId: string,
+    progress: PriceSyncProgress,
+    staleBefore: string,
+  ): Promise<PriceSyncProgress | null>;
 };
 
 export function createInMemoryPriceSyncProgressStore(): PriceSyncProgressStore {
@@ -71,12 +78,16 @@ class PriceSyncLeaseLost extends Error {
   }
 }
 
-const newLeaseId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const newLeaseId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /** When one invocation has to stop so the host does not kill it mid-symbol.
  *  Local and Docker runs have no host limit and get none, exactly like the
  *  broker sync budget they share a name with. */
-export function priceSyncDeadlineMs(environment: (name: string) => string | undefined, now = Date.now()): number | undefined {
+export function priceSyncDeadlineMs(
+  environment: (name: string) => string | undefined,
+  now = Date.now(),
+): number | undefined {
   for (const name of ["INVESTING_PRICE_SYNC_BUDGET_MS", "INVESTING_SYNC_BUDGET_MS"]) {
     const budget = Number(environment(name));
     if (Number.isFinite(budget) && budget > 0) return now + budget;
@@ -85,7 +96,11 @@ export function priceSyncDeadlineMs(environment: (name: string) => string | unde
   return undefined;
 }
 
-function instrument(target: Position | Trade, kind: PriceSyncTarget["kind"], backfillFrom: string): PriceSyncTarget {
+function instrument(
+  target: Position | Trade,
+  kind: PriceSyncTarget["kind"],
+  backfillFrom: string,
+): PriceSyncTarget {
   return {
     kind,
     symbol: target.symbol,
@@ -104,7 +119,9 @@ export function discoverPriceSyncTargets(input: {
   benchmarkSymbols?: readonly string[];
 }): PriceSyncTarget[] {
   const earliestTrade = new Map<string, Trade>();
-  for (const trade of [...input.trades].sort((left, right) => left.date.localeCompare(right.date))) {
+  for (const trade of [...input.trades].sort((left, right) =>
+    left.date.localeCompare(right.date),
+  )) {
     const key = trade.symbol.toUpperCase();
     if (!earliestTrade.has(key)) earliestTrade.set(key, trade);
   }
@@ -133,7 +150,14 @@ export function discoverPriceSyncTargets(input: {
       const key = normalized.toUpperCase();
       if (!normalized || seen.has(key)) continue;
       seen.add(key);
-      targets.push({ kind: "benchmark", symbol: normalized, ticker: normalized, exchange: "UNKNOWN", currency: "EUR", backfillFrom: portfolioStart });
+      targets.push({
+        kind: "benchmark",
+        symbol: normalized,
+        ticker: normalized,
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        backfillFrom: portfolioStart,
+      });
     }
   }
   return targets;
@@ -172,11 +196,18 @@ export function createPriceOrchestrator(input: {
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
   const persistEveryMs = 2_000;
   const now = input.now ?? (() => new Date());
-  const wait = input.wait ?? ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-  const terminal = (status: PriceSyncProgress["status"]) => status !== "running" && status !== "waiting";
+  const wait =
+    input.wait ??
+    ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const terminal = (status: PriceSyncProgress["status"]) =>
+    status !== "running" && status !== "waiting";
 
   const lastPersistedAt = new Map<string, number>();
-  const update = async (tenantId: string, next: Omit<PriceSyncProgress, "updatedAt">, leaseId?: string): Promise<PriceSyncProgress> => {
+  const update = async (
+    tenantId: string,
+    next: Omit<PriceSyncProgress, "updatedAt">,
+    leaseId?: string,
+  ): Promise<PriceSyncProgress> => {
     const value = { ...next, updatedAt: now().toISOString() };
     local.set(tenantId, value);
     /* Every symbol would mean a row write per Yahoo call. The poll only needs
@@ -200,14 +231,28 @@ export function createPriceOrchestrator(input: {
       /* Another instance is already working this tenant. Starting a second run
        * would double the provider traffic and let two writers fight over one
        * progress row; a stale row means that instance died, so we take over. */
-      if (stored?.status === "running" && stored.updatedAt && now().getTime() - Date.parse(stored.updatedAt) < takeoverAfterMs) return stored;
+      if (
+        stored?.status === "running" &&
+        stored.updatedAt &&
+        now().getTime() - Date.parse(stored.updatedAt) < takeoverAfterMs
+      )
+        return stored;
 
       let targets: PriceSyncTarget[];
       try {
         targets = await input.discover(tenantId);
       } catch (error) {
         const problem = error instanceof Error ? error.message : "Price target discovery failed";
-        return update(tenantId, { status: "problem", total: 0, completed: 0, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: "Price synchronization could not start", problems: [problem] });
+        return update(tenantId, {
+          status: "problem",
+          total: 0,
+          completed: 0,
+          remainingSymbols: [],
+          currentSymbol: null,
+          waitUntil: null,
+          message: "Price synchronization could not start",
+          problems: [problem],
+        });
       }
 
       /* A paused run names the symbols it never reached. Resuming from that
@@ -221,33 +266,134 @@ export function createPriceOrchestrator(input: {
       const done = total - queue.length;
       const problems: string[] = resumed.length > 0 ? [...paused!.problems] : [];
 
-      if (queue.length === 0) return update(tenantId, { status: "completed", total, completed: total, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: total ? "Price synchronization completed" : "No price symbols to synchronize", problems });
+      if (queue.length === 0)
+        return update(tenantId, {
+          status: "completed",
+          total,
+          completed: total,
+          remainingSymbols: [],
+          currentSymbol: null,
+          waitUntil: null,
+          message: total ? "Price synchronization completed" : "No price symbols to synchronize",
+          problems,
+        });
       const remainingFrom = (index: number) => queue.slice(index).map((target) => target.symbol);
-      const pause = (index: number) => update(tenantId, { status: "paused", total, completed: done + index, remainingSymbols: remainingFrom(index), currentSymbol: null, waitUntil: null, message: "Price synchronization paused for the host time budget", problems: [...problems] }, leaseId);
+      const pause = (index: number) =>
+        update(
+          tenantId,
+          {
+            status: "paused",
+            total,
+            completed: done + index,
+            remainingSymbols: remainingFrom(index),
+            currentSymbol: null,
+            waitUntil: null,
+            message: "Price synchronization paused for the host time budget",
+            problems: [...problems],
+          },
+          leaseId,
+        );
 
-      const started = { status: "running" as const, total, completed: done, remainingSymbols: remainingFrom(0), currentSymbol: null, waitUntil: null, updatedAt: now().toISOString(), message: "Price synchronization started", problems: [...problems], leaseId };
+      const started = {
+        status: "running" as const,
+        total,
+        completed: done,
+        remainingSymbols: remainingFrom(0),
+        currentSymbol: null,
+        waitUntil: null,
+        updatedAt: now().toISOString(),
+        message: "Price synchronization started",
+        problems: [...problems],
+        leaseId,
+      };
       local.set(tenantId, started);
-      const busy = await store.claim?.(tenantId, started, new Date(now().getTime() - takeoverAfterMs).toISOString());
+      const busy = await store.claim?.(
+        tenantId,
+        started,
+        new Date(now().getTime() - takeoverAfterMs).toISOString(),
+      );
       if (busy) return busy;
-      if (!store.claim) await update(tenantId, { status: "running", total, completed: done, remainingSymbols: remainingFrom(0), currentSymbol: null, waitUntil: null, message: "Price synchronization started", problems: [...problems], leaseId }, leaseId);
+      if (!store.claim)
+        await update(
+          tenantId,
+          {
+            status: "running",
+            total,
+            completed: done,
+            remainingSymbols: remainingFrom(0),
+            currentSymbol: null,
+            waitUntil: null,
+            message: "Price synchronization started",
+            problems: [...problems],
+            leaseId,
+          },
+          leaseId,
+        );
       for (let index = 0; index < queue.length; index += 1) {
-        if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline) return pause(index);
+        if (deadline !== undefined && now().getTime() + pauseMarginMs >= deadline)
+          return pause(index);
         const target = queue[index]!;
-        await update(tenantId, { status: "running", total, completed: done + index, remainingSymbols: remainingFrom(index), currentSymbol: target.symbol, waitUntil: null, message: `Synchronizing ${target.symbol}`, problems: [...problems], leaseId }, leaseId);
+        await update(
+          tenantId,
+          {
+            status: "running",
+            total,
+            completed: done + index,
+            remainingSymbols: remainingFrom(index),
+            currentSymbol: target.symbol,
+            waitUntil: null,
+            message: `Synchronizing ${target.symbol}`,
+            problems: [...problems],
+            leaseId,
+          },
+          leaseId,
+        );
         try {
           const result = await input.sync(target, tenantId);
           problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
         } catch (error) {
-          problems.push(`${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`);
+          problems.push(
+            `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+          );
         }
         if (index < queue.length - 1) {
-          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline) return pause(index + 1);
+          if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
+            return pause(index + 1);
           const waitUntil = new Date(now().getTime() + paceMs).toISOString();
-          await update(tenantId, { status: "waiting", total, completed: done + index + 1, remainingSymbols: remainingFrom(index + 1), currentSymbol: null, waitUntil, message: "Waiting before next price request", problems: [...problems], leaseId }, leaseId);
+          await update(
+            tenantId,
+            {
+              status: "waiting",
+              total,
+              completed: done + index + 1,
+              remainingSymbols: remainingFrom(index + 1),
+              currentSymbol: null,
+              waitUntil,
+              message: "Waiting before next price request",
+              problems: [...problems],
+              leaseId,
+            },
+            leaseId,
+          );
           await wait(paceMs);
         }
       }
-      return update(tenantId, { status: problems.length ? "problem" : "completed", total, completed: total, remainingSymbols: [], currentSymbol: null, waitUntil: null, message: problems.length ? "Price synchronization completed with problems" : "Price synchronization completed", problems }, leaseId);
+      return update(
+        tenantId,
+        {
+          status: problems.length ? "problem" : "completed",
+          total,
+          completed: total,
+          remainingSymbols: [],
+          currentSymbol: null,
+          waitUntil: null,
+          message: problems.length
+            ? "Price synchronization completed with problems"
+            : "Price synchronization completed",
+          problems,
+        },
+        leaseId,
+      );
     };
     /* Cleared here rather than from a `.finally` on a derived promise: that one
      * runs a microtask later than the caller it hands the result to, so the
@@ -256,7 +402,8 @@ export function createPriceOrchestrator(input: {
       try {
         return await execute();
       } catch (error) {
-        if (error instanceof PriceSyncLeaseLost) return (await store.get(tenantId).catch(() => null)) ?? idleProgress();
+        if (error instanceof PriceSyncLeaseLost)
+          return (await store.get(tenantId).catch(() => null)) ?? idleProgress();
         throw error;
       } finally {
         inFlight.delete(tenantId);

@@ -41,7 +41,7 @@ dus er wordt niets verdrongen en Email Routing is gratis.
 
 > **Kijk eerst of je al SPF hebt.** Verstuur je al mail vanaf `lavega.dev` (een
 > nieuwsbrief, een SMTP-relay), dan mag Cloudflare's `v=spf1
-> include:_spf.mx.cloudflare.net ~all` het bestaande record niet **vervangen** —
+include:_spf.mx.cloudflare.net ~all` het bestaande record niet **vervangen** —
 > de twee moeten samengevoegd worden tot één TXT-record met beide `include`'s.
 > Twee losse SPF-records maken je domein ongeldig voor SPF, en dan zakt élke mail
 > die je verstuurt. Op 17 augustus 2026 stond er geen mailverkeer op dit domein,
@@ -52,7 +52,7 @@ dus er wordt niets verdrongen en Email Routing is gratis.
 - Het ontwerp gebruikt de subdomein-vorm: `<slug>-<code>@invoices.lavega.dev`.
   Voordeel: de apex (`@lavega.dev`) blijft vrij voor gewone post.
 - **Ik heb niet kunnen nagaan of jouw Cloudflare-account subdomein-routing
-  aanbiedt.** Zie je onder *Email Routing* geen mogelijkheid om
+  aanbiedt.** Zie je onder _Email Routing_ geen mogelijkheid om
   `invoices.lavega.dev` toe te voegen, gebruik dan de apex en zet het onderscheid
   in het lokale deel: `factuur-alexander-7f3a@lavega.dev`. De Worker en n8n
   werken in beide gevallen hetzelfde — de wachtrijsleutel is het lokale deel vóór
@@ -67,18 +67,18 @@ dus er wordt niets verdrongen en Email Routing is gratis.
    ```bash
    openssl rand -hex 24
    ```
-2. **In n8n:** importeer `docs/n8n/lavega-invoices.json` (Workflows → *Import from
-   File*) als je dat nog niet gedaan hebt. Open de node **E-mail binnen**:
-   - *Authentication* staat al op **Header Auth**. Maak daar een credential voor:
+2. **In n8n:** importeer `docs/n8n/lavega-invoices.json` (Workflows → _Import from
+   File_) als je dat nog niet gedaan hebt. Open de node **E-mail binnen**:
+   - _Authentication_ staat al op **Header Auth**. Maak daar een credential voor:
      - **Name:** `x-lavega-token` — dezelfde naam als de credential die LaVega
-       zelf aanmaakt bij *Verbind met n8n*. n8n weigert een workflow te
+       zelf aanmaakt bij _Verbind met n8n_. n8n weigert een workflow te
        activeren zolang één van zijn webhook-nodes een credential mist die hij
        zegt nodig te hebben, dus dezelfde credential hangt aan **beide**
        webhooks. Eén credential, één headernaam.
      - **Value:** het geheim uit stap 1
-   - *HTTP Method* is **POST**, *Path* is `lavega-mail-in`, *Respond* is
+   - _HTTP Method_ is **POST**, _Path_ is `lavega-mail-in`, _Respond_ is
      **When Last Node Finishes**. Laat die drie staan — zie "Waarom Respond op
-     *When Last Node Finishes* staat" hieronder.
+     _When Last Node Finishes_ staat" hieronder.
 3. **Activeer de workflow** (de schakelaar rechtsboven). Een webhook werkt alleen
    in een actieve workflow; in de test-modus luistert hij precies één keer, en
    daarna geeft hij `404`.
@@ -104,7 +104,7 @@ haalt wrangler per keer op.
 
 Cloudflare-dashboard → **Email Routing** → **Routes**:
 
-1. **Catch-all address** → **Edit** → *Action*: **Send to a Worker** → kies
+1. **Catch-all address** → **Edit** → _Action_: **Send to a Worker** → kies
    `lavega-email-in` → **Save** en zet hem **aan**.
 2. Catch-all betekent: een nieuw adres kost geen configuratie. Het lokale deel
    bepaalt bij welke wachtrij het hoort.
@@ -113,8 +113,8 @@ Cloudflare-dashboard → **Email Routing** → **Routes**:
 > gedeployd is. Zie je hem niet, dan is stap 3 niet gelukt — kijk naar de uitvoer
 > van `wrangler deploy`, niet naar deze pagina.
 
-Een **Gmail-filter** doet daarna het werk: *Instellingen → Filters → Nieuw
-filter* op je factuur-zoekopdracht, actie **Doorsturen naar** het nieuwe adres.
+Een **Gmail-filter** doet daarna het werk: _Instellingen → Filters → Nieuw
+filter_ op je factuur-zoekopdracht, actie **Doorsturen naar** het nieuwe adres.
 Gmail wil dat adres eerst als doorstuuradres bevestigd hebben: het stuurt er een
 verificatiecode naartoe, en die code komt bij deze opzet in **n8n** terecht (als
 melding of als een run zonder factuur), niet in je inbox. Zoek hem op in n8n →
@@ -124,12 +124,12 @@ Executions → de body van "E-mail binnen".
 
 ## Waarom het zo in elkaar zit
 
-### Waarom Respond op *When Last Node Finishes* staat
+### Waarom Respond op _When Last Node Finishes_ staat
 
-De standaardinstelling van een n8n-webhook (*Immediately*) geeft `200` zodra het
+De standaardinstelling van een n8n-webhook (_Immediately_) geeft `200` zodra het
 verzoek binnen is. De Worker zou dan een succes zien vóórdat er iets gebeurd is,
 en een mail die daarna alsnog omvalt zou verdwijnen terwijl jij denkt dat hij
-aankwam. Met *When Last Node Finishes* krijgt de Worker het antwoord van **"Zet
+aankwam. Met _When Last Node Finishes_ krijgt de Worker het antwoord van **"Zet
 in de wachtrij"** — `{addedInvoices, addedNotices, inQueue, noticesInQueue,
 remembered}` — en daar leest hij aan af of er echt iets in de rij staat.
 
@@ -168,14 +168,14 @@ antwoordt je dat er niets is toegevoegd.
 
 ### Grenzen, en waar ze gecontroleerd worden
 
-| Grens | Waar | Wat er gebeurt bij overschrijding |
-|---|---|---|
-| 17.0 MB per bericht | Worker, **vóór het parsen** (op `rawSize`) | bounce: "deze mail is X MB en LaVega neemt maximaal 17.0 MB aan" |
-| 4 MB per PDF | Worker, na het parsen | bounce **met de bestandsnaam** erin |
-| 3 PDF's per bericht | Worker, na het parsen | bounce: "deze mail heeft N PDF-bijlagen; de grens is 3" |
-| 4 MB / 3 PDF's | `packages/core`, tweede lijn | de bijlage valt af met een reden in `skipped` |
-| 6000 tekens tekst | `packages/core` | de tekst wordt afgekapt en het verzoek zegt dat |
-| 200 regels in de rij | `packages/core` | de oudste vallen eruit |
+| Grens                | Waar                                       | Wat er gebeurt bij overschrijding                                |
+| -------------------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| 17.0 MB per bericht  | Worker, **vóór het parsen** (op `rawSize`) | bounce: "deze mail is X MB en LaVega neemt maximaal 17.0 MB aan" |
+| 4 MB per PDF         | Worker, na het parsen                      | bounce **met de bestandsnaam** erin                              |
+| 3 PDF's per bericht  | Worker, na het parsen                      | bounce: "deze mail heeft N PDF-bijlagen; de grens is 3"          |
+| 4 MB / 3 PDF's       | `packages/core`, tweede lijn               | de bijlage valt af met een reden in `skipped`                    |
+| 6000 tekens tekst    | `packages/core`                            | de tekst wordt afgekapt en het verzoek zegt dat                  |
+| 200 regels in de rij | `packages/core`                            | de oudste vallen eruit                                           |
 
 Waarom die eerste drie in de **Worker** zitten en niet alleen in core: alleen
 daar kunnen we jou nog iets vertellen. In n8n zou de bijlage met een reden in
@@ -192,12 +192,12 @@ bijlage-limieten voldoet.
 
 Elke regel die via dit pad binnenkomt draagt vier extra velden:
 
-| Veld | Wat het is |
-|---|---|
-| `deliveredTo` | het volledige adres waarop de mail binnenkwam |
-| `queueKey` | het lokale deel daarvan |
-| `from` | wie hem stuurde — **niet geverifieerd** |
-| `senderCheck` | `passed`, `failed` of `unknown` |
+| Veld           | Wat het is                                    |
+| -------------- | --------------------------------------------- |
+| `deliveredTo`  | het volledige adres waarop de mail binnenkwam |
+| `queueKey`     | het lokale deel daarvan                       |
+| `from`         | wie hem stuurde — **niet geverifieerd**       |
+| `senderCheck`  | `passed`, `failed` of `unknown`               |
 | `senderChecks` | de letterlijke uitslag van SPF, DKIM en DMARC |
 
 Een regel uit Gmail heeft die velden **niet**, en dat is opzet: er wás geen
@@ -214,7 +214,7 @@ SPF-record verdwijnt zonder dat iemand het merkt.
 **Let op wat `from` betekent bij doorsturen.** Stuur je een mail door uit je
 Gmail, dan ben jij de afzender — niet de leverancier. De leverancier komt uit de
 factuur zelf en staat als `counterparty` in de regel. Dat is ook waarom
-`senderCheck` bij een doorgestuurde mail over *jouw* domein gaat.
+`senderCheck` bij een doorgestuurde mail over _jouw_ domein gaat.
 
 > **Nog niet in beeld.** De velden komen tot in de wachtrij en de webhook geeft
 > ze terug, maar `parseQueue` in `apps/web/src/n8n.ts` bouwt zijn rij op uit een
@@ -242,19 +242,21 @@ terecht.
 Stuur één echte factuurmail met een PDF door en loop dit af.
 
 1. **De Worker heeft hem gezien.**
+
    ```bash
    cd apps/email-worker && pnpm dlx wrangler@4 tail
    ```
+
    Je hoort één regel te zien: `[lavega-email-in] 1 factuur/facturen en 0
-   melding(en) toegevoegd voor wachtrij <sleutel>`. Er staat geen adres, geen
+melding(en) toegevoegd voor wachtrij <sleutel>`. Er staat geen adres, geen
    onderwerp en geen bedrag in die logregel — met opzet.
 
    **Zie je niets?** Dan is de mail niet bij de Worker gekomen: dat is Email
-   Routing (stap 1 en 4), niet de Worker. Kijk bij *Email → Email Routing →
-   Overview* of er verkeer binnenkomt.
+   Routing (stap 1 en 4), niet de Worker. Kijk bij _Email → Email Routing →
+   Overview_ of er verkeer binnenkomt.
 
 2. **n8n heeft hem verwerkt.** n8n → **Executions** → de nieuwste run van
-   *LaVega — facturen*. Klik op **Normaliseer binnengekomen mail** en kijk naar:
+   _LaVega — facturen_. Klik op **Normaliseer binnengekomen mail** en kijk naar:
    - `textSource` — `text` of `html`, en `textChars` niet 0;
    - `pdfs` — één regel, met een `bytes` die op de PDF lijkt;
    - `skipped` — leeg. Staat er iets in, dan is een bijlage bewust niet
@@ -269,19 +271,19 @@ Stuur één echte factuurmail met een PDF door en loop dit af.
 
 4. **De rij is gegroeid.** De laatste node geeft
    `{addedInvoices, addedNotices, inQueue, …}`. Haal daarna de rij op in LaVega
-   (*Facturen → Ophalen uit n8n*) en bevestig de regel.
+   (_Facturen → Ophalen uit n8n_) en bevestig de regel.
 
 5. **Kwam er een bounce?** Lees hem. Elke bounce van dit pad noemt de oorzaak bij
    naam — een variabele, een status, een bestandsnaam. De vijf die je in het begin
    kunt verwachten:
 
-   | In de bounce | Wat er echt aan de hand is |
-   |---|---|
-   | `N8N_WEBHOOK_URL is niet gezet` | stap 3.1 overgeslagen: `wrangler.toml` heeft nog een lege URL |
-   | `N8N_SHARED_SECRET is niet gezet` | `wrangler secret put` niet gedaan, of na de deploy pas |
-   | `weigerde de Worker (401)` | het geheim in de Worker ≠ de Value van de Header Auth-credential |
-   | `gaf 404` | de workflow staat niet op **Actief**, of dit is de test-URL |
-   | `zonder de telling {addedInvoices, addedNotices}` | *Respond* van "E-mail binnen" staat niet op **When Last Node Finishes** |
+   | In de bounce                                      | Wat er echt aan de hand is                                              |
+   | ------------------------------------------------- | ----------------------------------------------------------------------- |
+   | `N8N_WEBHOOK_URL is niet gezet`                   | stap 3.1 overgeslagen: `wrangler.toml` heeft nog een lege URL           |
+   | `N8N_SHARED_SECRET is niet gezet`                 | `wrangler secret put` niet gedaan, of na de deploy pas                  |
+   | `weigerde de Worker (401)`                        | het geheim in de Worker ≠ de Value van de Header Auth-credential        |
+   | `gaf 404`                                         | de workflow staat niet op **Actief**, of dit is de test-URL             |
+   | `zonder de telling {addedInvoices, addedNotices}` | _Respond_ van "E-mail binnen" staat niet op **When Last Node Finishes** |
 
 6. **Kwam er een antwoord in plaats van een bounce?** Dan is de mail volledig
    verwerkt en is er niets aan de rij toegevoegd. Het antwoord noemt de drie

@@ -37,15 +37,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import {
-  ING_BRON,
-  ING_MATCH,
-  collectIngWinkel,
-  ingUrlIsWinkel,
-  leesIngAanbod,
-} from "./ing.js";
+import { ING_BRON, ING_MATCH, collectIngWinkel, ingUrlIsWinkel, leesIngAanbod } from "./ing.js";
 import { AMEX_BRON } from "./amex.js";
-import { aanbodVoorWinkel, leesPuntenprijs, MOGELIJKE_MATCH_MAX, type Aanbieding } from "./aanbod-kern.js";
+import {
+  aanbodVoorWinkel,
+  leesPuntenprijs,
+  MOGELIJKE_MATCH_MAX,
+  type Aanbieding,
+} from "./aanbod-kern.js";
 import { aanbodBlok, aanbodLijst } from "./panel.js";
 import { aanbodRegel, aanbodStrook, aanbodToestandRegel } from "./lines.js";
 import { _schoonAanbod, _schoonLezing } from "./store.js";
@@ -412,7 +411,11 @@ describe("als er niets te lezen valt, staat er de echte oorzaak", () => {
       "kunstmatig-ing-veranderd.html",
     ]) {
       const { lezing, aanbiedingen } = lees(naam);
-      const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), ING_BRON);
+      const strook = aanbodStrook(
+        lezing,
+        aanbiedingen.map((a) => a.winkel),
+        ING_BRON,
+      );
       expect(strook.noot).toContain("je puntensaldo");
       expect(strook.noot).toContain("niets naar een server");
     }
@@ -472,7 +475,13 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
 
   it("legt uit dat dat te verwachten is en geen tekortkoming", () => {
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.hema.nl", NU, ING_BRON, null);
+    const uit = aanbodVoorWinkel(
+      { aan: true, lezing: null, aanbiedingen },
+      "www.hema.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     const regel = aanbodToestandRegel(uit, ING_BRON);
     expect(regel).toContain("koop je bij ING");
     expect(regel).toContain("LaVega-venster");
@@ -486,7 +495,13 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
     const tune = aanbiedingen.find((a) => a.winkel.startsWith("JBL Tune"))!;
     expect(tune.domein).toBe("jbl.nl");
 
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen }, "www.jbl.nl", NU, ING_BRON, null);
+    const uit = aanbodVoorWinkel(
+      { aan: true, lezing: null, aanbiedingen },
+      "www.jbl.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     expect(uit.soort).toBe("gevonden");
 
     const blok = aanbodBlok(uit, NU, ING_BRON);
@@ -505,11 +520,23 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
      * mag dat niet — het label is daar "jbl-outlet-nep", geen los woord "jbl"
      * in de titel, dus geen match. En "nike" komt nergens in de titel voor. */
     const zonderAdres = [artikel({ winkel: "JBL Flip 6 bluetoothspeaker", domein: null })];
-    const echt = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: zonderAdres }, "www.jbl.nl", NU, ING_BRON, null);
+    const echt = aanbodVoorWinkel(
+      { aan: true, lezing: null, aanbiedingen: zonderAdres },
+      "www.jbl.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     expect(echt.soort).toBe("mogelijke-merknaam-match");
 
     for (const host of ["jbl-outlet-nep.nl", "www.nike.com"]) {
-      const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: zonderAdres }, host, NU, ING_BRON, null);
+      const uit = aanbodVoorWinkel(
+        { aan: true, lezing: null, aanbiedingen: zonderAdres },
+        host,
+        NU,
+        ING_BRON,
+        null,
+      );
       expect(uit.soort).toBe("geen-voor-deze-winkel");
     }
   });
@@ -559,9 +586,19 @@ describe("een artikel uit de ING Winkel is geen aanbieding bij de winkel", () =>
     /* Vier titels die allemaal "jbl" als los woord dragen. De zin en de
      * uitkomst mogen het bestaan van de vierde niet verzwijgen. */
     const veel = [1, 2, 3, 4].map((n) =>
-      artikel({ winkel: `JBL Product ${n} kortingsvoucher`, domein: null, prijsTekst: `${n}00 punten` }),
+      artikel({
+        winkel: `JBL Product ${n} kortingsvoucher`,
+        domein: null,
+        prijsTekst: `${n}00 punten`,
+      }),
     );
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: veel }, "www.jbl.nl", NU, ING_BRON, null);
+    const uit = aanbodVoorWinkel(
+      { aan: true, lezing: null, aanbiedingen: veel },
+      "www.jbl.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     expect(uit.soort).toBe("mogelijke-merknaam-match");
     if (uit.soort !== "mogelijke-merknaam-match") return;
     expect(uit.matches).toHaveLength(MOGELIJKE_MATCH_MAX);
@@ -598,7 +635,13 @@ describe("de ING-schakelaar staat los van die van Amex", () => {
     /* Uit is uit — ook geen uitnodiging om hem aan te zetten. Dat is reclame op
      * het slechtste moment: hij staat af te rekenen. */
     const { aanbiedingen } = lees("kunstmatig-ing-winkel.html");
-    const uit = aanbodVoorWinkel({ aan: false, lezing: null, aanbiedingen }, "www.jbl.nl", NU, ING_BRON, null);
+    const uit = aanbodVoorWinkel(
+      { aan: false, lezing: null, aanbiedingen },
+      "www.jbl.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     expect(uit).toEqual({ soort: "uit" });
     expect(aanbodBlok(uit, NU, ING_BRON)).toEqual({
       kop: "",
@@ -619,7 +662,13 @@ describe("de ING-schakelaar staat los van die van Amex", () => {
     /* De opdracht eist letterlijk dezelfde periode. Er is dus geen veld per bron
      * waarmee een bron zijn eigen ruimere grens kan meebrengen. */
     const oud = [artikel({ winkel: "JBL Tune 770NC", domein: "jbl.nl", gelezenOp: "2026-06-01" })];
-    const uit = aanbodVoorWinkel({ aan: true, lezing: null, aanbiedingen: oud }, "www.jbl.nl", NU, ING_BRON, null);
+    const uit = aanbodVoorWinkel(
+      { aan: true, lezing: null, aanbiedingen: oud },
+      "www.jbl.nl",
+      NU,
+      ING_BRON,
+      null,
+    );
     expect(uit.soort).toBe("te-oud");
     expect(aanbodToestandRegel(uit, ING_BRON)).toContain("60 dagen");
   });
@@ -659,7 +708,14 @@ describe("de zeef op de opslag is bij een puntenbron strenger", () => {
 
   it("maakt van een ontbrekend bijbetaalbedrag null en niet een lege string", () => {
     const uit = _schoonAanbod(
-      [{ winkel: "Bon", prijsTekst: "2.500 punten", gelezenOp: NU, prijs: { punten: 2500, bij: "" } }],
+      [
+        {
+          winkel: "Bon",
+          prijsTekst: "2.500 punten",
+          gelezenOp: NU,
+          prijs: { punten: 2500, bij: "" },
+        },
+      ],
       "punten",
     );
     expect(uit[0]!.prijs).toEqual({ punten: 2500, bij: null });
@@ -771,9 +827,9 @@ describe("de vier vormen waarin zijn pagina de kaarten kan wegstoppen", () => {
     const { doc, app } = schil();
     const buiten = metWortel(doc, "punten-overzicht", "<div id='binnenin'></div>");
     app.appendChild(buiten);
-    buiten.shadowRoot!.getElementById("binnenin")!.appendChild(
-      metWortel(doc, "product-card", echteKaart()),
-    );
+    buiten
+      .shadowRoot!.getElementById("binnenin")!
+      .appendChild(metWortel(doc, "product-card", echteKaart()));
     const ruw = collectIngWinkel(doc);
     expect(ruw.kandidaten).toHaveLength(1);
     expect(ruw.kandidaten[0]!.winkel).toBe("JBL Boombox 4 25% kortingsvoucher");
@@ -1057,9 +1113,7 @@ describe("de rest van de pagina wordt in dezelfde wortels gelezen", () => {
      * kaarten heen kijken, niet door het inlogscherm — en dan meldt hij "geen
      * blok gevonden" op een pagina waar staat dat je moet inloggen. */
     const { doc, app } = schil();
-    app.appendChild(
-      metWortel(doc, "ing-login", "<form><input type='password' name='w'></form>"),
-    );
+    app.appendChild(metWortel(doc, "ing-login", "<form><input type='password' name='w'></form>"));
     const ruw = collectIngWinkel(doc);
     expect(ruw.inlogformulier).toBe(true);
     expect(leesIngAanbod(ruw, NU).lezing.uitkomst).toBe("niet-ingelogd");

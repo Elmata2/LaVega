@@ -26,7 +26,9 @@ const MAX_ROUNDS = 40;
 const MAX_INTERRUPTIONS = 3;
 
 /** Vraagt net zo lang om prijssynchronisatie tot de server klaar is. */
-export async function runPriceSyncUntilComplete(current: () => boolean = () => true): Promise<string[]> {
+export async function runPriceSyncUntilComplete(
+  current: () => boolean = () => true,
+): Promise<string[]> {
   const failed = ["Prijsgeschiedenis kon niet worden bijgewerkt."];
   let interruptions = 0;
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
@@ -34,9 +36,12 @@ export async function runPriceSyncUntilComplete(current: () => boolean = () => t
     // Zonder Yahoo-toestemming is niets ophalen het juiste antwoord, geen fout.
     if (response?.status === 428) return [];
     if (response && response.status >= 400 && response.status < 500) return failed;
-    const progress = response ? await response.json().catch(() => null) as PriceSyncProgress | null : null;
+    const progress = response
+      ? ((await response.json().catch(() => null)) as PriceSyncProgress | null)
+      : null;
     if (!current()) return [];
-    if (progress && typeof window !== "undefined") window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+    if (progress && typeof window !== "undefined")
+      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     if (!response?.ok && response?.status !== 202) {
       interruptions += 1;
       if (interruptions >= MAX_INTERRUPTIONS) return failed;
@@ -46,7 +51,9 @@ export async function runPriceSyncUntilComplete(current: () => boolean = () => t
     /* Alles behalve "paused" is een eindantwoord voor deze aanroeper: klaar,
        of een run die elders al loopt en die deze pagina niet moet verdubbelen.
        Alleen een afgeronde run heeft problemen om te melden. */
-    return progress?.status === "completed" || progress?.status === "problem" ? progress.problems : [];
+    return progress?.status === "completed" || progress?.status === "problem"
+      ? progress.problems
+      : [];
   }
   return [];
 }

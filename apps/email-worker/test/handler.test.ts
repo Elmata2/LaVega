@@ -13,7 +13,10 @@ import { parseMail } from "../src/parseMail.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
 import { RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
 
-const ENV = { N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in", N8N_SHARED_SECRET: "geheim-123" };
+const ENV = {
+  N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",
+  N8N_SHARED_SECRET: "geheim-123",
+};
 const QUEUED = { addedInvoices: 1, addedNotices: 0, inQueue: 1, noticesInQueue: 0, remembered: 1 };
 
 /* ── De goede weg ─────────────────────────────────────────────────────────── */
@@ -70,7 +73,11 @@ test("een afzender die SPF/DKIM niet haalt gaat er WEL door, gemarkeerd", async 
 test("N8N_WEBHOOK_URL niet gezet: de bounce noemt die variabele bij naam", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const http = fakeFetch({ body: QUEUED });
-  const verdict = await handleInboundEmail(message, { N8N_SHARED_SECRET: "x" }, { fetch: http.fetch });
+  const verdict = await handleInboundEmail(
+    message,
+    { N8N_SHARED_SECRET: "x" },
+    { fetch: http.fetch },
+  );
 
   expect(verdict.kind).toBe("reject");
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_WEBHOOK_URL");
@@ -80,16 +87,22 @@ test("N8N_WEBHOOK_URL niet gezet: de bounce noemt die variabele bij naam", async
 
 test("N8N_SHARED_SECRET niet gezet: idem, met het commando dat het oplost", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, { N8N_WEBHOOK_URL: ENV.N8N_WEBHOOK_URL }, {
-    fetch: fakeFetch({ body: QUEUED }).fetch,
-  });
+  const verdict = await handleInboundEmail(
+    message,
+    { N8N_WEBHOOK_URL: ENV.N8N_WEBHOOK_URL },
+    {
+      fetch: fakeFetch({ body: QUEUED }).fetch,
+    },
+  );
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_SHARED_SECRET");
   expect(verdict.kind === "reject" && verdict.reason).toContain("wrangler secret put");
 });
 
 test("een adres zonder lokaal deel wordt geweigerd, niet op een verzonnen sleutel gezet", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT, to: "invoices.lavega.dev" });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ body: QUEUED }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ body: QUEUED }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("geen lokaal deel");
 });
 
@@ -114,14 +127,18 @@ test("n8n onbereikbaar: bounce die zegt dat de mail NIET verwerkt is", async () 
 
 test("401 van n8n: de bounce noemt het geheim en de header, niet 'er ging iets mis'", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ status: 401 }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ status: 401 }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_SHARED_SECRET");
   expect(verdict.kind === "reject" && verdict.reason).toContain(SECRET_HEADER);
 });
 
 test("404 van n8n: de bounce noemt de twee echte oorzaken", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ status: 404 }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ status: 404 }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("niet op Actief");
   expect(verdict.kind === "reject" && verdict.reason).toContain("production-URL");
 });
@@ -129,7 +146,8 @@ test("404 van n8n: de bounce noemt de twee echte oorzaken", async () => {
 test("500 van n8n: status én het begin van het antwoord staan in de bounce", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const verdict = await handleInboundEmail(message, ENV, {
-    fetch: fakeFetch({ status: 500, text: "Alle modelaanroepen mislukten: invalid x-api-key" }).fetch,
+    fetch: fakeFetch({ status: 500, text: "Alle modelaanroepen mislukten: invalid x-api-key" })
+      .fetch,
   });
   expect(verdict.kind === "reject" && verdict.reason).toContain("500");
   expect(verdict.kind === "reject" && verdict.reason).toContain("invalid x-api-key");
@@ -158,7 +176,8 @@ test("een 200 zonder de telling wordt GEEN nul: onbekend is onbekend", async () 
 test("verwerkt maar niets toegevoegd: een ANTWOORD, geen stilte en geen bounce", async () => {
   const message = fakeMessage({ raw: RAW_IMAGE_ONLY });
   const verdict = await handleInboundEmail(message, ENV, {
-    fetch: fakeFetch({ body: { addedInvoices: 0, addedNotices: 0, inQueue: 0, noticesInQueue: 0 } }).fetch,
+    fetch: fakeFetch({ body: { addedInvoices: 0, addedNotices: 0, inQueue: 0, noticesInQueue: 0 } })
+      .fetch,
   });
 
   expect(verdict.kind).toBe("reply");
@@ -215,9 +234,13 @@ test("applyVerdict: een antwoord dat Cloudflare weigert wordt een bounce, met be
 
 test("applyVerdict: een bounce wordt afgekapt op 400 tekens, want dat gaat een SMTP-regel in", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  await applyVerdict(message, { kind: "reject", reason: "x".repeat(900) }, {
-    fetch: fakeFetch({ body: QUEUED }).fetch,
-  });
+  await applyVerdict(
+    message,
+    { kind: "reject", reason: "x".repeat(900) },
+    {
+      fetch: fakeFetch({ body: QUEUED }).fetch,
+    },
+  );
   expect(message.rejected[0].length).toBeLessThanOrEqual(401);
 });
 
@@ -226,7 +249,12 @@ test("applyVerdict: een bounce wordt afgekapt op 400 tekens, want dat gaat een S
 test("checkAttachmentCaps: een PDF boven 4 MB wordt geweigerd MET zijn bestandsnaam", () => {
   const mail = parseMail(RAW_PLAIN_TEXT);
   mail.attachments = [
-    { fileName: "jaarrekening 2025.pdf", mimeType: "application/pdf", data: "", bytes: MAX_PDF_BYTES + 1 },
+    {
+      fileName: "jaarrekening 2025.pdf",
+      mimeType: "application/pdf",
+      data: "",
+      bytes: MAX_PDF_BYTES + 1,
+    },
   ];
   const problem = checkAttachmentCaps(mail);
   expect(problem).toContain("jaarrekening 2025.pdf");
@@ -289,6 +317,11 @@ test("buildPayload gebruikt de From:-header en valt terug op de envelop-afzender
     "Hosting Noord <facturen@hostingnoord.nl>",
   );
 
-  const zonderHeader = fakeMessage({ raw: "Subject: x\r\n\r\ntekst", from: "envelop@voorbeeld.nl" });
-  expect(buildPayload(zonderHeader, parseMail("Subject: x\r\n\r\ntekst")).from).toBe("envelop@voorbeeld.nl");
+  const zonderHeader = fakeMessage({
+    raw: "Subject: x\r\n\r\ntekst",
+    from: "envelop@voorbeeld.nl",
+  });
+  expect(buildPayload(zonderHeader, parseMail("Subject: x\r\n\r\ntekst")).from).toBe(
+    "envelop@voorbeeld.nl",
+  );
 });

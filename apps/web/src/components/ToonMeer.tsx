@@ -140,14 +140,18 @@ export default function ToonMeer({
         title={info ? summary : undefined}
       >
         {/* Alleen bij het ⓘ. Bij een volle regel onder een blok hoort de kop
-          * erboven te staan, niet in de klikregel — een `heading` die daar per
-          * ongeluk meekomt valt weg in plaats van de regel te verbouwen. */}
+         * erboven te staan, niet in de klikregel — een `heading` die daar per
+         * ongeluk meekomt valt weg in plaats van de regel te verbouwen. */}
         {info && heading}
         {/* De ⓘ draagt zijn teken in de JSX omdat het niet van de stand afhangt;
-          * de +/− van de volle regel komt uit CSS, want alleen het stylesheet
-          * weet of de <details> openstaat — React weet dat niet en dat is juist
-          * de winst. Beide zijn aria-hidden: de <summary> vertelt de staat al. */}
-        {info ? <span className={mark} aria-hidden="true">i</span> : null}
+         * de +/− van de volle regel komt uit CSS, want alleen het stylesheet
+         * weet of de <details> openstaat — React weet dat niet en dat is juist
+         * de winst. Beide zijn aria-hidden: de <summary> vertelt de staat al. */}
+        {info ? (
+          <span className={mark} aria-hidden="true">
+            i
+          </span>
+        ) : null}
         <span className={label}>{summary}</span>
         {info ? null : <span className={mark} aria-hidden="true" />}
       </summary>

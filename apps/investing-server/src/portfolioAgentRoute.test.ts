@@ -17,11 +17,16 @@ function memoryAgentRunStore() {
 
 async function appWith(runAgent: (options: { prompt: string }) => Promise<string>) {
   const agentRunStore = memoryAgentRunStore();
-  const runtimeApp: RuntimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore(), agentRunStore, runAgent });
+  const runtimeApp: RuntimeApp = await createRuntimeApp({
+    priceStore: createInMemoryPriceStore(),
+    agentRunStore,
+    runAgent,
+  });
   return { runtimeApp, agentRunStore };
 }
 
-const post = async (runtimeApp: RuntimeApp) => runtimeApp.request("http://localhost/api/agents/portfolio/run", { method: "POST" });
+const post = async (runtimeApp: RuntimeApp) =>
+  runtimeApp.request("http://localhost/api/agents/portfolio/run", { method: "POST" });
 
 test("the portfolio agent route returns the model summary, insight payload and persists a done run", async () => {
   const runAgent = vi.fn(async () => "Portfolio is healthy.");
@@ -31,16 +36,27 @@ test("the portfolio agent route returns the model summary, insight payload and p
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
     summary: "Portfolio is healthy.",
-    result: { agentId: "warren_buffett", displayName: "Warren Buffett", summary: "Portfolio is healthy." },
+    result: {
+      agentId: "warren_buffett",
+      displayName: "Warren Buffett",
+      summary: "Portfolio is healthy.",
+    },
   });
   expect(runAgent).toHaveBeenCalledOnce();
-  expect(await agentRunStore.get()).toMatchObject({ agentId: "warren_buffett", status: "done", summary: "Portfolio is healthy.", error: null });
+  expect(await agentRunStore.get()).toMatchObject({
+    agentId: "warren_buffett",
+    status: "done",
+    summary: "Portfolio is healthy.",
+    error: null,
+  });
 });
 
 test("a failed agent run returns 502 and persists the error", async () => {
-  const { runtimeApp, agentRunStore } = await appWith(vi.fn(async () => {
-    throw new Error("model unavailable");
-  }));
+  const { runtimeApp, agentRunStore } = await appWith(
+    vi.fn(async () => {
+      throw new Error("model unavailable");
+    }),
+  );
 
   const response = await post(runtimeApp);
   expect(response.status).toBe(502);
@@ -76,8 +92,13 @@ test("the portfolio agent route accepts a selected investor persona", async () =
   });
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ result: { agentId: "bill_ackman", displayName: "Bill Ackman" } });
-  expect(await agentRunStore.get()).toMatchObject({ agentId: "bill_ackman", summary: "Ackman view." });
+  expect(await response.json()).toMatchObject({
+    result: { agentId: "bill_ackman", displayName: "Bill Ackman" },
+  });
+  expect(await agentRunStore.get()).toMatchObject({
+    agentId: "bill_ackman",
+    summary: "Ackman view.",
+  });
 });
 
 test("the portfolio agent route accepts a model override", async () => {
@@ -90,7 +111,9 @@ test("the portfolio agent route accepts a model override", async () => {
   });
 
   expect(response.status).toBe(200);
-  expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ agentId: "charlie_munger", model: "openai/gpt-5-mini" }));
+  expect(runAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ agentId: "charlie_munger", model: "openai/gpt-5-mini" }),
+  );
 });
 
 test("the portfolio agent registry exposes investor personas", async () => {

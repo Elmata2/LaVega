@@ -20,8 +20,9 @@ const TRANSFER = 1000;
  *  over het bedrag. `rankFxRoutes` vraagt het bedrag met opzet verplicht en met
  *  opzet in euro's — een percentage en een maandprijs kunnen alleen op één bedrag
  *  in één valuta bij elkaar komen. */
-const ranked = (input: Omit<Parameters<typeof rankFxRoutes>[0], "amountEur"> & { amountEur?: number }) =>
-  rankFxRoutes({ amountEur: TRANSFER, ...input });
+const ranked = (
+  input: Omit<Parameters<typeof rankFxRoutes>[0], "amountEur"> & { amountEur?: number },
+) => rankFxRoutes({ amountEur: TRANSFER, ...input });
 
 /** A covered catalogue card with an fx surcharge. */
 function card(
@@ -29,7 +30,12 @@ function card(
   product: string,
   issuer: string,
   pct: number,
-  extra: { conditions?: string | null; conditionsKnown?: boolean; checkedAt?: string; route?: string } = {},
+  extra: {
+    conditions?: string | null;
+    conditionsKnown?: boolean;
+    checkedAt?: string;
+    route?: string;
+  } = {},
 ): CatalogueEntryLike {
   return {
     id,
@@ -49,31 +55,40 @@ function card(
   };
 }
 
-const acc = (key: string, name: string, bank: string, type?: string): Account => ({
-  key,
-  iban: key,
-  name,
-  bank,
-  entity: "Prive",
-  currency: "EUR",
-  balance: 1000,
-  ...(type ? { type } : {}),
-} as Account);
+const acc = (key: string, name: string, bank: string, type?: string): Account =>
+  ({
+    key,
+    iban: key,
+    name,
+    bank,
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    ...(type ? { type } : {}),
+  }) as Account;
 
 describe("fxBrandOf — the bank a card belongs to, as the owner would name it", () => {
   test("strips the card type and its tier, so one bank is one name", () => {
     expect(fxBrandOf("ING betaalpas", "ING Bank N.V.")).toBe("ING");
     expect(fxBrandOf("ING creditcard", "International Card Services (ICS)")).toBe("ING");
     expect(fxBrandOf("ING Platinumcard", "International Card Services (ICS)")).toBe("ING");
-    expect(fxBrandOf("ICS Visa World Card Gold", "International Card Services B.V. (ICS)")).toBe("ICS");
+    expect(fxBrandOf("ICS Visa World Card Gold", "International Card Services B.V. (ICS)")).toBe(
+      "ICS",
+    );
     expect(fxBrandOf("bunq Core Business betaalpas", "bunq B.V.; Mastercard")).toBe("bunq");
-    expect(fxBrandOf("Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com (EEA entity)")).toBe("Crypto.com");
-    expect(fxBrandOf("Openbank betaalpas (R42 Betaalpas)", "Open Bank S.A. (Spain)")).toBe("Openbank");
+    expect(
+      fxBrandOf("Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com (EEA entity)"),
+    ).toBe("Crypto.com");
+    expect(fxBrandOf("Openbank betaalpas (R42 Betaalpas)", "Open Bank S.A. (Spain)")).toBe(
+      "Openbank",
+    );
   });
 
   test("keeps a name that only LOOKS like a tier word", () => {
     // "Blue" here is half the brand, not the tier of an Amex card.
-    expect(fxBrandOf("Flying Blue - American Express Gold Card", "American Express")).toBe("Flying Blue");
+    expect(fxBrandOf("Flying Blue - American Express Gold Card", "American Express")).toBe(
+      "Flying Blue",
+    );
     expect(fxBrandOf("American Express Blue Card", "American Express")).toBe("American Express");
   });
 
@@ -83,7 +98,9 @@ describe("fxBrandOf — the bank a card belongs to, as the owner would name it",
 
   test("a brand the product name hides is named the way he says it", () => {
     // He calls this Trading 212 (review item 8); "212" alone is not a bank.
-    expect(fxBrandOf("212 Card", "Paynetics (card issuer); NL customers under Trading 212")).toBe("Trading 212");
+    expect(fxBrandOf("212 Card", "Paynetics (card issuer); NL customers under Trading 212")).toBe(
+      "Trading 212",
+    );
   });
 
   test("fxBankKey folds the spellings of one bank onto one key", () => {
@@ -131,7 +148,11 @@ describe("rankFxRoutes — one row per bank, cheapest first, over the whole cata
     const rows = ranked({
       accounts,
       facts: [],
-      entries: [card("a", "Rabobank betaalpas", "Rabobank U.A.", 0.5), card("b", "Zeal Card", "Monavate", 0.5), card("c", "Plutus Card", "Plutus", 2.5)],
+      entries: [
+        card("a", "Rabobank betaalpas", "Rabobank U.A.", 0.5),
+        card("b", "Zeal Card", "Monavate", 0.5),
+        card("c", "Plutus Card", "Plutus", 2.5),
+      ],
     });
     expect(rows.map((r) => r.bank)).toEqual(["Rabobank", "Zeal", "Plutus"]);
     expect(rows[0].held).toBe(true);
@@ -175,7 +196,14 @@ describe("rankFxRoutes — one row per bank, cheapest first, over the whole cata
   test("what he entered himself outranks the catalogue for his own product", () => {
     const accounts = [acc("NL01ING", "Betaalrekening", "ING")];
     const facts = [
-      makeFact({ agent: TRAVEL_AGENT, subject: productOf(accounts[0]), key: "fxFeePct", value: "1,1", source: "user", updatedAt: "2026-08-19" }),
+      makeFact({
+        agent: TRAVEL_AGENT,
+        subject: productOf(accounts[0]),
+        key: "fxFeePct",
+        value: "1,1",
+        source: "user",
+        updatedAt: "2026-08-19",
+      }),
     ];
     const ing = ranked({ accounts, facts, entries: CATALOGUE }).find((r) => r.bank === "ING")!;
     expect(ing.pct).toBe(1.1);
@@ -185,7 +213,14 @@ describe("rankFxRoutes — one row per bank, cheapest first, over the whole cata
   test("a bank only the vault knows about is ranked too", () => {
     const accounts = [acc("W1", "Wise", "Wise")];
     const facts = [
-      makeFact({ agent: TRAVEL_AGENT, subject: productOf(accounts[0]), key: "fxFeePct", value: "0,4", source: "agent", updatedAt: "2026-08-19" }),
+      makeFact({
+        agent: TRAVEL_AGENT,
+        subject: productOf(accounts[0]),
+        key: "fxFeePct",
+        value: "0,4",
+        source: "agent",
+        updatedAt: "2026-08-19",
+      }),
     ];
     const rows = ranked({ accounts, facts, entries: CATALOGUE });
     const wise = rows.find((r) => r.bank === "Wise")!;
@@ -206,8 +241,12 @@ describe("rankFxRoutes — one row per bank, cheapest first, over the whole cata
 
 describe("a bank whose products all agree needs no 'which one is yours' caveat", () => {
   const AMEX = [
-    card("amex-green", "American Express Green Card", "American Express", 2.5, { checkedAt: "2022-03-01" }),
-    card("amex-gold", "American Express Gold Card", "American Express", 2.5, { checkedAt: "2026-08-19" }),
+    card("amex-green", "American Express Green Card", "American Express", 2.5, {
+      checkedAt: "2022-03-01",
+    }),
+    card("amex-gold", "American Express Gold Card", "American Express", 2.5, {
+      checkedAt: "2026-08-19",
+    }),
   ];
   const BUNQ = [
     card("bunq-free", "bunq Free betaalpas", "bunq B.V.", 3),
@@ -215,7 +254,11 @@ describe("a bank whose products all agree needs no 'which one is yours' caveat",
   ];
 
   test("all products the same: the row says so instead of naming one of them", () => {
-    const rows = ranked({ accounts: [acc("A1", "Amex", "American Express", "Creditcard")], facts: [], entries: AMEX });
+    const rows = ranked({
+      accounts: [acc("A1", "Amex", "American Express", "Creditcard")],
+      facts: [],
+      entries: AMEX,
+    });
     expect(rows[0].uniformAcrossBank).toBe(true);
     expect(rows[0].why).toContain("hetzelfde bij alle 2 American Express-producten");
     expect(rows[0].why).not.toContain("weet LaVega niet");
@@ -225,7 +268,9 @@ describe("a bank whose products all agree needs no 'which one is yours' caveat",
     const rows = ranked({ accounts: [acc("B1", "bunq", "bunq")], facts: [], entries: BUNQ });
     expect(rows[0].uniformAcrossBank).toBe(false);
     expect(rows[0].why).toContain("bunq Core betaalpas");
-    expect(rows[0].why).toContain("of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet");
+    expect(rows[0].why).toContain(
+      "of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet",
+    );
   });
 
   test("the transfer is never priced on a package he may not be on", () => {
@@ -244,7 +289,10 @@ describe("a bank whose products all agree needs no 'which one is yours' caveat",
   });
 
   test("when no figure is provably his, a bank that charges one rate for everything comes first", () => {
-    const accounts = [acc("B1", "bunq", "bunq"), acc("A1", "Amex", "American Express", "Creditcard")];
+    const accounts = [
+      acc("B1", "bunq", "bunq"),
+      acc("A1", "Amex", "American Express", "Creditcard"),
+    ];
     const chosen = fxRouteDefault(ranked({ accounts, facts: [], entries: [...BUNQ, ...AMEX] }))!;
     expect(chosen.bank).toBe("American Express");
     expect(chosen.uniformAcrossBank).toBe(true);
@@ -256,7 +304,10 @@ test("the row admits what kind of product the figure belongs to", () => {
     accounts: [],
     facts: [],
     entries: [
-      { ...card("cdc", "Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com", 0), kind: "prepaid" },
+      {
+        ...card("cdc", "Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com", 0),
+        kind: "prepaid",
+      },
       { ...card("ing", "ING betaalpas", "ING Bank N.V.", 1.4), kind: "betaalpas" },
     ],
   });
@@ -274,7 +325,11 @@ describe("the default route, and what an alternative costs against it", () => {
   ];
 
   test("the default is the cheapest route he can actually use today", () => {
-    const rows = ranked({ accounts: [acc("NL01ING", "Betaalrekening", "ING")], facts: [], entries: CATALOGUE });
+    const rows = ranked({
+      accounts: [acc("NL01ING", "Betaalrekening", "ING")],
+      facts: [],
+      entries: CATALOGUE,
+    });
     // Trading 212 is cheaper and it is listed — but he does not hold it, so the
     // amount is not computed with a transfer he cannot make.
     expect(rows[0].bank).toBe("Trading 212");
@@ -285,24 +340,44 @@ describe("the default route, and what an alternative costs against it", () => {
 
   test("with nothing held and nothing known there is no default at all", () => {
     expect(fxRouteDefault([])).toBeNull();
-    const unknownOnly = ranked({ accounts: [acc("A1", "Amex", "American Express", "Creditcard")], facts: [], entries: [] });
+    const unknownOnly = ranked({
+      accounts: [acc("A1", "Amex", "American Express", "Creditcard")],
+      facts: [],
+      entries: [],
+    });
     expect(fxRouteDefault(unknownOnly)).toBeNull();
   });
 
   test("the fee difference is money, in the currency he is sending", () => {
-    const rows = ranked({ accounts: [acc("NL01ING", "Betaalrekening", "ING")], facts: [], entries: CATALOGUE });
+    const rows = ranked({
+      accounts: [acc("NL01ING", "Betaalrekening", "ING")],
+      facts: [],
+      entries: CATALOGUE,
+    });
     const ing = rows.find((r) => r.bank === "ING")!;
     const t212 = rows.find((r) => r.bank === "Trading 212")!;
     // €1.000 at 1,4% versus 0%: switching saves €14. Trading 212 carries no
     // price in this catalogue, so the difference is the SURCHARGE difference and
     // says so — no "net" is claimed over a figure that is only half there.
-    expect(fxRouteDelta(t212, ing)).toEqual({ kind: "gross-cost-unknown", cents: -1400, reason: "no-source" });
-    expect(fxRouteDelta(ing, t212)).toEqual({ kind: "gross-cost-unknown", cents: 1400, reason: "no-source" });
+    expect(fxRouteDelta(t212, ing)).toEqual({
+      kind: "gross-cost-unknown",
+      cents: -1400,
+      reason: "no-source",
+    });
+    expect(fxRouteDelta(ing, t212)).toEqual({
+      kind: "gross-cost-unknown",
+      cents: 1400,
+      reason: "no-source",
+    });
     expect(fxRouteDelta(ing, ing)).toEqual({ kind: "net", cents: 0 });
   });
 
   test("an unknown fee has no difference to state — never a zero one", () => {
-    const rows = ranked({ accounts: [acc("A1", "Amex", "American Express", "Creditcard")], facts: [], entries: CATALOGUE });
+    const rows = ranked({
+      accounts: [acc("A1", "Amex", "American Express", "Creditcard")],
+      facts: [],
+      entries: CATALOGUE,
+    });
     const amex = rows.find((r) => r.bank === "American Express")!;
     const ing = rows.find((r) => r.bank === "ING")!;
     expect(fxRouteDelta(amex, ing)).toEqual({ kind: "unknown" });
@@ -357,7 +432,10 @@ describe("de horizonregel: een goedkopere bank die door zijn maandprijs duurder 
   // goedkoper; op één conversie is hij € 2,90 duurder.
   const ENTRIES = [
     card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
-    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, { value: 16.9, period: "maand" }),
+    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, {
+      value: 16.9,
+      period: "maand",
+    }),
   ];
   const ACCOUNTS = [acc("NL01ING", "Betaalrekening", "ING")];
 
@@ -373,7 +451,9 @@ describe("de horizonregel: een goedkopere bank die door zijn maandprijs duurder 
   });
 
   test("de periode staat in het antwoord, met de ondergrens van één hele periode", () => {
-    const n26 = ranked({ accounts: ACCOUNTS, facts: [], entries: ENTRIES }).find((r) => r.bank === "N26")!;
+    const n26 = ranked({ accounts: ACCOUNTS, facts: [], entries: ENTRIES }).find(
+      (r) => r.bank === "N26",
+    )!;
     // Een conversie duurt geen maand — maar je kunt geen rekening voor een dag
     // openen, dus er wordt er één gerekend en het antwoord zegt dat.
     expect(n26.holdingBasis).toEqual({
@@ -404,7 +484,11 @@ describe("de horizonregel: een goedkopere bank die door zijn maandprijs duurder 
     if (gain.net.kind === "no-recommendation") {
       expect(gain.net.netCents).toBe(-290);
       expect(gain.net.costCents).toBe(1690);
-      expect(gain.net.basis).toMatchObject({ kind: "one-off", periodsCharged: 1, costPeriod: "maand" });
+      expect(gain.net.basis).toMatchObject({
+        kind: "one-off",
+        periodsCharged: 1,
+        costPeriod: "maand",
+      });
     }
   });
 
@@ -415,12 +499,19 @@ describe("de horizonregel: een goedkopere bank die door zijn maandprijs duurder 
       facts: [],
       entries: [
         ENTRIES[0],
-        pricedCard("ics-gold", "ICS Gold creditcard", "International Card Services", 0, { value: 60, period: "jaar" }),
+        pricedCard("ics-gold", "ICS Gold creditcard", "International Card Services", 0, {
+          value: 60,
+          period: "jaar",
+        }),
       ],
     });
     const ics = rows.find((r) => r.bank === "ICS")!;
     expect(ics.totalCostCents).toBe(6000);
-    expect(ics.holdingBasis).toMatchObject({ periodsCharged: 1, costPeriod: "jaar", flooredToMinimum: true });
+    expect(ics.holdingBasis).toMatchObject({
+      periodsCharged: 1,
+      costPeriod: "jaar",
+      flooredToMinimum: true,
+    });
   });
 });
 
@@ -428,7 +519,10 @@ describe("de horizonregel: een bank die hij al heeft", () => {
   // Dezelfde N26 Metal van € 16,90 per maand — maar nu heeft hij hem al.
   const ENTRIES = [
     card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
-    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, { value: 16.9, period: "maand" }),
+    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, {
+      value: 16.9,
+      period: "maand",
+    }),
   ];
 
   test("die prijs loopt toch al door, dus hij telt niet mee — en de nul is BEKEND", () => {
@@ -455,7 +549,10 @@ describe("de horizonregel: een bank die hij al heeft", () => {
       accounts: [acc("N26", "N26", "N26")],
       facts: [],
       entries: [
-        pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0.5, { value: 16.9, period: "maand" }),
+        pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0.5, {
+          value: 16.9,
+          period: "maand",
+        }),
         card("zeal", "Zeal Card", "Monavate", 0.5),
       ],
     });
@@ -501,7 +598,10 @@ describe("de horizonregel: een bank met onbekende kosten", () => {
   });
 
   test("een prijs die bovenop een ander product geldt is een ANDERE reden", () => {
-    const conditional = pricedCard("zeal-max", "Zeal Card", "Monavate", 0, { value: 0, period: "maand" });
+    const conditional = pricedCard("zeal-max", "Zeal Card", "Monavate", 0, {
+      value: 0,
+      period: "maand",
+    });
     (conditional.fields!.accountFee as Record<string, unknown>).conditions =
       "Alleen binnen het Zeal Max-pakket (€ 44,99 per maand)";
     const rows = ranked({ accounts: ACCOUNTS, facts: [], entries: [ENTRIES[0], conditional] });
@@ -516,7 +616,10 @@ describe("de horizonregel: een bank met onbekende kosten", () => {
 describe("het bedrag waarop gerangschikt wordt", () => {
   const ENTRIES = [
     card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
-    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, { value: 16.9, period: "maand" }),
+    pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, {
+      value: 16.9,
+      period: "maand",
+    }),
   ];
   const ACCOUNTS = [acc("NL01ING", "Betaalrekening", "ING")];
 

@@ -9,5 +9,8 @@ test("sector profile store persists per-symbol lookups and survives invalid rows
   const store = createFileSectorProfileStore(filePath);
   await store.set("acme", { sector: "Technology", industry: "Software" });
   expect(await store.get("ACME")).toEqual({ sector: "Technology", industry: "Software" });
-  expect(await createFileSectorProfileStore(filePath).get("ACME")).toEqual({ sector: "Technology", industry: "Software" });
+  expect(await createFileSectorProfileStore(filePath).get("ACME")).toEqual({
+    sector: "Technology",
+    industry: "Software",
+  });
 });

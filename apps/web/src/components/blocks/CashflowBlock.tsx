@@ -22,7 +22,11 @@ type CashflowBlockProps = {
 };
 
 /** Whole euros: cents on a forecast are false precision. */
-const wholeEuro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const wholeEuro = new Intl.NumberFormat("nl-NL", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
 
 export default function CashflowBlock({ forecast, bufferCents, onNavigate }: CashflowBlockProps) {
   const shortfallWeek =
@@ -48,8 +52,14 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
     : [];
   const band = hasChart
     ? {
-        lower: [opening / 100, ...forecast.points.map((p) => (p.lowerCents ?? p.projectedClosingCents ?? opening) / 100)],
-        upper: [opening / 100, ...forecast.points.map((p) => (p.upperCents ?? p.projectedClosingCents ?? opening) / 100)],
+        lower: [
+          opening / 100,
+          ...forecast.points.map((p) => (p.lowerCents ?? p.projectedClosingCents ?? opening) / 100),
+        ],
+        upper: [
+          opening / 100,
+          ...forecast.points.map((p) => (p.upperCents ?? p.projectedClosingCents ?? opening) / 100),
+        ],
       }
     : undefined;
   const color = forecast.shortfall ? "var(--neg)" : "var(--pos)";

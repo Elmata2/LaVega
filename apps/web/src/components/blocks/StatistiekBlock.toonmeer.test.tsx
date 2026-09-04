@@ -61,7 +61,9 @@ function tab(el: HTMLElement, label: string) {
  *  module. Zonder deze filtering zou `closest("details")` altijd null geven,
  *  omdat de bovenste treffer het blok zelf is. */
 function node(el: HTMLElement, needle: string): HTMLElement {
-  const hits = [...el.querySelectorAll<HTMLElement>("*")].filter((n) => n.textContent?.includes(needle));
+  const hits = [...el.querySelectorAll<HTMLElement>("*")].filter((n) =>
+    n.textContent?.includes(needle),
+  );
   const leaves = hits.filter((n) => !hits.some((o) => o !== n && n.contains(o)));
   if (leaves.length === 0) throw new Error(`niet op het scherm: "${needle}"`);
   return leaves[0];
@@ -89,7 +91,10 @@ function opvouwbaar(el: HTMLElement, needle: string): string {
 
 /** Staat deze zin op de voorgrond — dus in geen enkele <details>? */
 function staatVooraan(el: HTMLElement, needle: string) {
-  expect(node(el, needle).closest("details"), `"${needle}" is opgevouwen en dat mag niet`).toBeNull();
+  expect(
+    node(el, needle).closest("details"),
+    `"${needle}" is opgevouwen en dat mag niet`,
+  ).toBeNull();
 }
 
 /* Acht maanden boodschappen en energie, oplopend, zodat de percentiellijst een
@@ -99,9 +104,39 @@ const langeGeschiedenis: Tx[] = [];
 for (let m = 1; m <= 8; m++) {
   const mm = String(m).padStart(2, "0");
   langeGeschiedenis.push(
-    { id: `ah${m}`, accountKey: "A1", date: `2026-${mm}-05`, amount: -(80 + m * 12), currency: "EUR", counterparty: "Albert Heijn", description: "", category: "", manual: false },
-    { id: `en${m}`, accountKey: "A1", date: `2026-${mm}-02`, amount: -160, currency: "EUR", counterparty: "Vattenfall", description: "", category: "", manual: false },
-    { id: `in${m}`, accountKey: "A1", date: `2026-${mm}-01`, amount: 4_000, currency: "EUR", counterparty: "Klant BV", description: "", category: "", manual: false },
+    {
+      id: `ah${m}`,
+      accountKey: "A1",
+      date: `2026-${mm}-05`,
+      amount: -(80 + m * 12),
+      currency: "EUR",
+      counterparty: "Albert Heijn",
+      description: "",
+      category: "",
+      manual: false,
+    },
+    {
+      id: `en${m}`,
+      accountKey: "A1",
+      date: `2026-${mm}-02`,
+      amount: -160,
+      currency: "EUR",
+      counterparty: "Vattenfall",
+      description: "",
+      category: "",
+      manual: false,
+    },
+    {
+      id: `in${m}`,
+      accountKey: "A1",
+      date: `2026-${mm}-01`,
+      amount: 4_000,
+      currency: "EUR",
+      counterparty: "Klant BV",
+      description: "",
+      category: "",
+      manual: false,
+    },
   );
 }
 
@@ -110,18 +145,79 @@ for (let m = 1; m <= 8; m++) {
  * is de reden dat de regel "buiten deze cijfers gehouden" bestaat, dus het is
  * ook de rij waarop getest wordt of dat bedrag zichtbaar blijft. */
 const metVerplaatstGeld: Tx[] = [
-  { id: "w1", accountKey: "A1", date: "2026-08-01", amount: 6_000, currency: "EUR", counterparty: "Klant BV", description: "Managementfee", category: "", manual: false },
-  { id: "w2", accountKey: "A1", date: "2026-08-03", amount: -85.4, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
-  { id: "w3", accountKey: "A1", date: "2026-08-06", amount: -15_000, currency: "EUR", counterparty: "Trading 212", description: "Storting", category: "", manual: false },
-  { id: "w4", accountKey: "A1", date: "2026-08-07", amount: -5_000, currency: "EUR", counterparty: "Spaarrekening", description: "Naar spaarrekening", category: "", manual: false },
+  {
+    id: "w1",
+    accountKey: "A1",
+    date: "2026-08-01",
+    amount: 6_000,
+    currency: "EUR",
+    counterparty: "Klant BV",
+    description: "Managementfee",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "w2",
+    accountKey: "A1",
+    date: "2026-08-03",
+    amount: -85.4,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "w3",
+    accountKey: "A1",
+    date: "2026-08-06",
+    amount: -15_000,
+    currency: "EUR",
+    counterparty: "Trading 212",
+    description: "Storting",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "w4",
+    accountKey: "A1",
+    date: "2026-08-07",
+    amount: -5_000,
+    currency: "EUR",
+    counterparty: "Spaarrekening",
+    description: "Naar spaarrekening",
+    category: "",
+    manual: false,
+  },
 ];
 
 /** De fixture plus drie kleine uitgaven, zodat er iets is om weg te laten. */
 const metKleintjes: Tx[] = [
   ...txs,
-  { ...txs[1], id: "m1", date: "2026-08-04", amount: -40, counterparty: "NS", description: "Trein" },
-  { ...txs[1], id: "m2", date: "2026-08-05", amount: -30, counterparty: "Apotheek", description: "Zorg" },
-  { ...txs[1], id: "m3", date: "2026-08-06", amount: -20, counterparty: "Bioscoop", description: "Film" },
+  {
+    ...txs[1],
+    id: "m1",
+    date: "2026-08-04",
+    amount: -40,
+    counterparty: "NS",
+    description: "Trein",
+  },
+  {
+    ...txs[1],
+    id: "m2",
+    date: "2026-08-05",
+    amount: -30,
+    counterparty: "Apotheek",
+    description: "Zorg",
+  },
+  {
+    ...txs[1],
+    id: "m3",
+    date: "2026-08-06",
+    amount: -20,
+    counterparty: "Bioscoop",
+    description: "Film",
+  },
 ];
 
 test("de uitleg onder de categoriegrafiek is opgevouwen én nog te openen", () => {
@@ -150,7 +246,9 @@ test("de percentiellijst blijft staan; alleen waaróp hij rust vouwt op", () => 
   const rijen = [...el.querySelectorAll<HTMLElement>(".lv-percentiel-rij")];
   expect(rijen.length).toBeGreaterThan(0);
   for (const rij of rijen) expect(rij.closest("details")).toBeNull();
-  expect(el.textContent).toMatch(/hoger dan \d+ van je laatste \d+ maanden|even hoog als|lager dan/);
+  expect(el.textContent).toMatch(
+    /hoger dan \d+ van je laatste \d+ maanden|even hoog als|lager dan/,
+  );
 
   // Wélke maand met welke maanden vergeleken wordt, staat ook vooraan: zonder
   // die noemer is "hoger dan 6 van je laatste 7 maanden" een zwevende bewering.
@@ -183,7 +281,10 @@ test("een weigering wordt nooit opgevouwen — ook niet als het scherm er leeg v
      daggemiddelde (twee waarnemingen), dus het scherm weigert het ene en toont
      het andere. Wat de test moet vasthouden is dat de weigering zelf niet in een
      paneel zit — niet dat er nergens een paneel is. */
-  expect(node(kaal, "minstens 14 dagen").closest("details"), "een weigering hoort niet in een paneel").toBeNull();
+  expect(
+    node(kaal, "minstens 14 dagen").closest("details"),
+    "een weigering hoort niet in een paneel",
+  ).toBeNull();
   // Het enige paneel dat er mág staan is de onderbouwing van het gemiddelde, en
   // dat is er een die zijn telling in het LABEL draagt.
   const panelen = [...kaal.querySelectorAll("details")];
@@ -248,7 +349,9 @@ test("alles staat standaard dicht — in elke weergave", () => {
     tab(el, weergave);
     const alles = [...el.querySelectorAll<HTMLDetailsElement>("details")];
     for (const d of alles) {
-      expect(d.open, `${weergave}: "${d.querySelector("summary")?.textContent}" staat open`).toBe(false);
+      expect(d.open, `${weergave}: "${d.querySelector("summary")?.textContent}" staat open`).toBe(
+        false,
+      );
     }
     act(() => root?.unmount());
     host?.remove();
@@ -281,7 +384,10 @@ test("elke uitleg-alinea zit in een paneel — behalve een weigering, in elke we
         // De andere kant van de regel, en die is even hard: een weigering hoort
         // júist niet in een paneel. Wegstoppen laat het scherm leeg lijken
         // terwijl er iets te zeggen valt.
-        expect(p.closest("details"), `${weergave}: een weigering is opgevouwen — "${tekst.slice(0, 60)}"`).toBeNull();
+        expect(
+          p.closest("details"),
+          `${weergave}: een weigering is opgevouwen — "${tekst.slice(0, 60)}"`,
+        ).toBeNull();
         continue;
       }
       expect(
@@ -299,7 +405,9 @@ test("elke uitleg-alinea zit in een paneel — behalve een weigering, in elke we
 
 test("weggelatenLabelNL telt, verbuigt, en zwijgt als er niets weg is", () => {
   expect(weggelatenLabelNL({ maanden: 0, klein: 0, gecapt: 0 })).toBeNull();
-  expect(weggelatenLabelNL({ maanden: 1, klein: 0, gecapt: 0 })).toBe("Wat hier niet in staat: 1 maand zonder afschrift");
+  expect(weggelatenLabelNL({ maanden: 1, klein: 0, gecapt: 0 })).toBe(
+    "Wat hier niet in staat: 1 maand zonder afschrift",
+  );
   expect(weggelatenLabelNL({ maanden: 2, klein: 1, gecapt: 0 })).toBe(
     "Wat hier niet in staat: 2 maanden zonder afschrift · 1 kleinere categorie",
   );

@@ -22,7 +22,10 @@ type BrokerSnapshot = NonNullable<RuntimeBrokerDataSnapshot[CredentialBroker]>;
  * The route keeps requiring it so the client contract is unchanged; the
  * screens that call it need their own change before they can claim otherwise.
  */
-export function createNeonCredentialStore(repository: EncryptedBrokerRepository, tenantId: string): CredentialStore & {
+export function createNeonCredentialStore(
+  repository: EncryptedBrokerRepository,
+  tenantId: string,
+): CredentialStore & {
   status(): Promise<ServerVaultStatus>;
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;

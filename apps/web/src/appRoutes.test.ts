@@ -38,10 +38,14 @@ test("normalizeAppLocation rewrites legacy #app and /?eb= into /app", () => {
   expect(writes).toEqual(["/app"]);
 
   writes.length = 0;
-  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "" }, (url) => writes.push(url));
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "" }, (url) =>
+    writes.push(url),
+  );
   expect(writes).toEqual(["/app?eb=sess-1"]);
 
   writes.length = 0;
-  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1", hash: "" }, (url) => writes.push(url));
+  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1", hash: "" }, (url) =>
+    writes.push(url),
+  );
   expect(writes).toEqual([]);
 });

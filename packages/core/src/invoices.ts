@@ -4,7 +4,17 @@ import { makeScheduledFlow } from "./scheduledFlows.js";
 
 /** Content-hashed id (stable across recompute, so re-import doesn't duplicate). */
 export function makeInvoice(i: Omit<Invoice, "id">): Invoice {
-  const id = hash([i.entity, i.direction, i.counterparty, i.invoiceNumber ?? "", i.issueDate, i.dueDate, i.amount].join("|"));
+  const id = hash(
+    [
+      i.entity,
+      i.direction,
+      i.counterparty,
+      i.invoiceNumber ?? "",
+      i.issueDate,
+      i.dueDate,
+      i.amount,
+    ].join("|"),
+  );
   return { ...i, id };
 }
 
@@ -31,7 +41,8 @@ function dayDiff(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 function cpOverlap(a: string, b: string): boolean {
-  const x = norm(a), y = norm(b);
+  const x = norm(a),
+    y = norm(b);
   return x.length > 0 && y.length > 0 && (x.includes(y) || y.includes(x));
 }
 
@@ -68,7 +79,9 @@ export function reconcileInvoices(invoices: Invoice[], txs: Tx[]): Invoice[] {
       if (Math.abs(Math.abs(t.amount) - inv.amount) > tol) return false;
       const d = dayDiff(inv.dueDate, t.date); // t.date - dueDate
       if (d < -60 || d > 30) return false;
-      return cpOverlap(t.counterparty, inv.counterparty) || carriesInvoiceNumber(t, inv.invoiceNumber);
+      return (
+        cpOverlap(t.counterparty, inv.counterparty) || carriesInvoiceNumber(t, inv.invoiceNumber)
+      );
     });
     if (matches.length !== 1) return inv; // ambiguous or none -> leave for manual review
     used.add(matches[0].id);
@@ -154,7 +167,11 @@ export function invoiceVatInWindow(
       // De dichtstbijzijnde erbuiten: die verklaart het scherm het snelst.
       if (nearest === null) nearest = i.issueDate;
       else {
-        const afstand = (d: string) => Math.min(Math.abs(Date.parse(d) - Date.parse(from)), Math.abs(Date.parse(d) - Date.parse(to)));
+        const afstand = (d: string) =>
+          Math.min(
+            Math.abs(Date.parse(d) - Date.parse(from)),
+            Math.abs(Date.parse(d) - Date.parse(to)),
+          );
         if (afstand(i.issueDate) < afstand(nearest)) nearest = i.issueDate;
       }
       continue;
@@ -166,5 +183,9 @@ export function invoiceVatInWindow(
     if (i.direction === "in") charged = (charged ?? 0) + cents;
     else paid = (paid ?? 0) + cents;
   }
-  return { chargedCents: charged, paidCents: paid, coverage: { withVat, total, outside, nearestOutside: nearest } };
+  return {
+    chargedCents: charged,
+    paidCents: paid,
+    coverage: { withVat, total, outside, nearestOutside: nearest },
+  };
 }

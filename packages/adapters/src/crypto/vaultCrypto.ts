@@ -28,13 +28,23 @@ export function newSalt(): Uint8Array {
   return globalThis.crypto.getRandomValues(new Uint8Array(16));
 }
 
-export async function deriveKey(passphrase: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
+export async function deriveKey(
+  passphrase: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<CryptoKey> {
   // Floor the work factor: an attacker who tampered a stored blob's `iterations`
   // down to a tiny number could otherwise force a cheap-to-bruteforce derivation.
   if (iterations < PBKDF2_ITERATIONS) {
     throw new Error(`PBKDF2 iterations te laag (${iterations} < ${PBKDF2_ITERATIONS})`);
   }
-  const material = await globalThis.crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+  const material = await globalThis.crypto.subtle.importKey(
+    "raw",
+    enc.encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
   return globalThis.crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: salt as BufferSource, iterations, hash: "SHA-256" },
     material,
@@ -44,15 +54,35 @@ export async function deriveKey(passphrase: string, salt: Uint8Array, iterations
   );
 }
 
-export async function encryptJSON(key: CryptoKey, salt: Uint8Array, iterations: number, data: unknown): Promise<CipherBlob> {
+export async function encryptJSON(
+  key: CryptoKey,
+  salt: Uint8Array,
+  iterations: number,
+  data: unknown,
+): Promise<CipherBlob> {
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-  const ct = await globalThis.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(JSON.stringify(data)));
-  return { v: 1, kdf: "PBKDF2-SHA256", iterations, salt: toB64(salt), iv: toB64(iv), ct: toB64(new Uint8Array(ct)) };
+  const ct = await globalThis.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    enc.encode(JSON.stringify(data)),
+  );
+  return {
+    v: 1,
+    kdf: "PBKDF2-SHA256",
+    iterations,
+    salt: toB64(salt),
+    iv: toB64(iv),
+    ct: toB64(new Uint8Array(ct)),
+  };
 }
 
 export async function decryptJSON<T>(key: CryptoKey, blob: CipherBlob): Promise<T> {
   const iv = fromB64(blob.iv);
   const ct = fromB64(blob.ct);
-  const pt = await globalThis.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, ct as BufferSource); // throws on auth failure
+  const pt = await globalThis.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv as BufferSource },
+    key,
+    ct as BufferSource,
+  ); // throws on auth failure
   return JSON.parse(dec.decode(pt)) as T;
 }

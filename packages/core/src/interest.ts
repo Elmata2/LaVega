@@ -2,7 +2,12 @@ import type { Account, Tx } from "./model.js";
 import { norm } from "./hash.js";
 import { accountType } from "./balance.js";
 import { accountNamesProduct, type ProductFee } from "./accountCosts.js";
-import { holdingCostOfProduct, marginalHoldingCost, netBenefit, type NetBenefit } from "./netBenefit.js";
+import {
+  holdingCostOfProduct,
+  marginalHoldingCost,
+  netBenefit,
+  type NetBenefit,
+} from "./netBenefit.js";
 
 /* Interest optimisation for the Optimisatie tab. Pure + deterministic. Own
  * account rates are derived locally (from "rente" bijschrijvingen) or set by the
@@ -155,13 +160,62 @@ export const RATES_AS_OF = "2026-08-03";
  * new customers. Robinhood is excluded on purpose: its cash sweep (~3.35%) is
  * USD/US-only and not NL-DGS-protected. */
 export const NL_SAVINGS_RATES: readonly RateBenchmark[] = [
-  { bank: "Bigbank", product: "Flexibel Sparen", ratePct: 3.1, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
-  { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 1.5, promoNote: "Actierente t/m 01-01-2027, daarna 1,50%", freeWithdrawal: true },
-  { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
-  { bank: "Garanti BBVA International", product: "Spaarrekening", ratePct: 3.0, standardRatePct: 1.55, promoNote: "Actierente 6 mnd, daarna 1,55%", freeWithdrawal: true },
-  { bank: "DHB Bank", product: "Combispaarrekening", ratePct: 3.0, standardRatePct: 1.85, promoNote: "Actierente 6 mnd, daarna 1,85%", freeWithdrawal: true },
-  { bank: "Anadolubank", product: "Spaarrekening", ratePct: 3.0, standardRatePct: 1.9, promoNote: "Actierente 6 mnd, daarna 1,90%", freeWithdrawal: true },
-  { bank: "Trade Republic", product: "Cash", ratePct: 3.0, standardRatePct: 2.25, promoNote: "Introrente, daarna 2,25%", freeWithdrawal: true },
+  {
+    bank: "Bigbank",
+    product: "Flexibel Sparen",
+    ratePct: 3.1,
+    standardRatePct: 2.1,
+    promoNote: "Actierente 6 mnd, daarna 2,10%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "bunq",
+    product: "Spaarrekening",
+    ratePct: 3.01,
+    standardRatePct: 1.5,
+    promoNote: "Actierente t/m 01-01-2027, daarna 1,50%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "Santander Consumer Bank",
+    product: "Spaarrekening",
+    ratePct: 3.01,
+    standardRatePct: 2.1,
+    promoNote: "Actierente 6 mnd, daarna 2,10%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "Garanti BBVA International",
+    product: "Spaarrekening",
+    ratePct: 3.0,
+    standardRatePct: 1.55,
+    promoNote: "Actierente 6 mnd, daarna 1,55%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "DHB Bank",
+    product: "Combispaarrekening",
+    ratePct: 3.0,
+    standardRatePct: 1.85,
+    promoNote: "Actierente 6 mnd, daarna 1,85%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "Anadolubank",
+    product: "Spaarrekening",
+    ratePct: 3.0,
+    standardRatePct: 1.9,
+    promoNote: "Actierente 6 mnd, daarna 1,90%",
+    freeWithdrawal: true,
+  },
+  {
+    bank: "Trade Republic",
+    product: "Cash",
+    ratePct: 3.0,
+    standardRatePct: 2.25,
+    promoNote: "Introrente, daarna 2,25%",
+    freeWithdrawal: true,
+  },
   { bank: "Scalable Capital", product: "Cash", ratePct: 2.5, freeWithdrawal: true },
   { bank: "Klarna", product: "Spaarrekening", ratePct: 1.95, freeWithdrawal: true },
   { bank: "Openbank", product: "Spaarrekening", ratePct: 1.8, freeWithdrawal: true },
@@ -203,8 +257,9 @@ export function bestRate(rates: readonly RateBenchmark[], freeOnly = true): Rate
   // capitalAtRisk is filtered ALWAYS, not only when freeOnly: a caller asking for
   // the best rate is asking where to move cash, and a fund that can lose it is not
   // an answer to that question however high its number.
-  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates)
-    .filter((r) => keptRate(r) !== null && !r.capitalAtRisk);
+  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates).filter(
+    (r) => keptRate(r) !== null && !r.capitalAtRisk,
+  );
   if (pool.length === 0) return null;
   return pool.reduce((best, r) => (keptRate(r)! > keptRate(best)! ? r : best));
 }
@@ -222,10 +277,15 @@ export function bestRate(rates: readonly RateBenchmark[], freeOnly = true): Rate
  *  Null when no headline beats the best kept rate: then there is nothing extra to
  *  be had today and a promo line would be noise. Ties keep the earlier row, so
  *  the same list always names the same bank. */
-export function bestPromoRate(rates: readonly RateBenchmark[], freeOnly = true): RateBenchmark | null {
+export function bestPromoRate(
+  rates: readonly RateBenchmark[],
+  freeOnly = true,
+): RateBenchmark | null {
   // Same exclusion as bestRate: a promo on a capital-at-risk fund is still a
   // recommendation to move cash somewhere it can be lost.
-  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates).filter((r) => !r.capitalAtRisk);
+  const pool = (freeOnly ? rates.filter((r) => r.freeWithdrawal) : rates).filter(
+    (r) => !r.capitalAtRisk,
+  );
   const keep = bestRate(rates, freeOnly);
   const floor = keep === null ? -Infinity : keptRate(keep)!;
   let top: RateBenchmark | null = null;
@@ -348,18 +408,35 @@ export function matchBankBenchmark(
   const candidates = rates.filter((r) => keptRate(r) !== null && sameBank(bank, r.bank));
   if (candidates.length === 0) return null;
   const named = norm(accountName);
-  return candidates.find((r) => r.product.length >= 4 && named.includes(norm(r.product))) ?? candidates[0];
+  return (
+    candidates.find((r) => r.product.length >= 4 && named.includes(norm(r.product))) ??
+    candidates[0]
+  );
 }
 
 /** Estimate a bank's current rate for an EXISTING customer: the STANDARD
  *  (post-promo) rate of that bank's own product, never the new-customer action
  *  rate. Null when no bank matches. */
-function matchBankRate(bank: string, rates: readonly RateBenchmark[], accountName = ""): number | null {
+function matchBankRate(
+  bank: string,
+  rates: readonly RateBenchmark[],
+  accountName = "",
+): number | null {
   const match = matchBankBenchmark(bank, rates, accountName);
   return match === null ? null : keptRate(match);
 }
-export type AccountRate = { account: Account; ratePct: number | null; source: RateSource; balanceCents: number };
-export type InterestSuggestion = { account: Account; ratePct: number; balanceCents: number; extraPerYearCents: number };
+export type AccountRate = {
+  account: Account;
+  ratePct: number | null;
+  source: RateSource;
+  balanceCents: number;
+};
+export type InterestSuggestion = {
+  account: Account;
+  ratePct: number;
+  balanceCents: number;
+  extraPerYearCents: number;
+};
 export type InterestAnalysis = {
   best: RateBenchmark | null;
   /** The best headline available RIGHT NOW, when it beats `best`'s kept rate.
@@ -404,7 +481,8 @@ export function resolveAccountRate(
   asOf: string,
   rates: readonly RateBenchmark[] = [],
 ): { ratePct: number | null; source: RateSource } {
-  if (typeof account.interestRate === "number") return { ratePct: account.interestRate, source: "manual" };
+  if (typeof account.interestRate === "number")
+    return { ratePct: account.interestRate, source: "manual" };
   const detected = detectInterestRate(account, txs, asOf);
   if (detected !== null) return { ratePct: detected, source: "detected" };
   const t = accountType(account);
@@ -443,7 +521,12 @@ export function analyzeInterest(
   const bestPromo = bestPromoRate(rates);
   const accountRates: AccountRate[] = accounts.map((a) => {
     const { ratePct, source } = resolveAccountRate(a, txs, asOf, rates);
-    return { account: a, ratePct, source, balanceCents: a.balance === null ? 0 : Math.round(a.balance * 100) };
+    return {
+      account: a,
+      ratePct,
+      source,
+      balanceCents: a.balance === null ? 0 : Math.round(a.balance * 100),
+    };
   });
 
   const suggestions: InterestSuggestion[] = [];
@@ -473,7 +556,8 @@ export function analyzeInterest(
   if (best && bestPromo) {
     const lift = bestPromo.ratePct - keptRate(best)!;
     if (lift > 0) {
-      for (const s of suggestions) promoExtraPerMonthCents += Math.round((s.balanceCents * lift) / 100 / 12);
+      for (const s of suggestions)
+        promoExtraPerMonthCents += Math.round((s.balanceCents * lift) / 100 / 12);
     }
   }
 

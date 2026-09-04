@@ -118,7 +118,12 @@ export type CashbackKnowledge = MeasuredCashback | AssumedNoCashback | UnknownCa
  *  onder het pakket hangt (SNS noemt zijn Basis een pakket, ASN noemt hetzelfde
  *  ding een bankrekening) — dezelfde reden waarom `FeeGroup` in accountCosts.ts
  *  die twee samenneemt. */
-export const ASSUMABLE_KINDS = ["betaalpas", "betaalrekening", "betaalpakket", "creditcard"] as const;
+export const ASSUMABLE_KINDS = [
+  "betaalpas",
+  "betaalrekening",
+  "betaalpakket",
+  "creditcard",
+] as const;
 export type AssumableKind = (typeof ASSUMABLE_KINDS)[number];
 
 /** Welke catalogussoorten bij dit soort EIGEN rekening horen — de brug tussen
@@ -208,7 +213,8 @@ export function mayAssumeNoCashback(
   const k = norm(kind);
   const blocked = BLOCKING_KINDS[k];
   if (blocked) return { ok: false, reason: blocked };
-  if (!(ASSUMABLE_KINDS as readonly string[]).includes(k)) return { ok: false, reason: "soort-onbekend" };
+  if (!(ASSUMABLE_KINDS as readonly string[]).includes(k))
+    return { ok: false, reason: "soort-onbekend" };
 
   const hay = `${issuer} ${productName}`;
   // De uitsluiting eerst. Zie REWARD_ISSUERS: anders wint de eerste regel op de
@@ -267,8 +273,9 @@ export function assumptionDueForReview(lastCheckedAt: string | null, asOf: strin
   // tijd.
   const [ly, lm] = lastCheckedAt.split("-").map(Number);
   const [ay, am] = asOf.split("-").map(Number);
-  if (!Number.isFinite(ly) || !Number.isFinite(lm) || !Number.isFinite(ay) || !Number.isFinite(am)) return true;
-  return (ay * 12 + am) - (ly * 12 + lm) >= ASSUMPTION_REVIEW_MONTHS;
+  if (!Number.isFinite(ly) || !Number.isFinite(lm) || !Number.isFinite(ay) || !Number.isFinite(am))
+    return true;
+  return ay * 12 + am - (ly * 12 + lm) >= ASSUMPTION_REVIEW_MONTHS;
 }
 
 /* ─────────────────────────────────────────────────────────────── de woorden */

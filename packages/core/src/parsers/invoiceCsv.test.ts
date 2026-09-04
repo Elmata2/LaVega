@@ -64,7 +64,7 @@ Coolblue B.V.;1210,00;01-08-2026;01-09-2026;Inkoop`;
   expect(rows[0].invoiceNumber).toBeUndefined();
 });
 
-test("parseInvoiceCsv: defaults direction to \"out\" when no richting/type/soort column is present", () => {
+test('parseInvoiceCsv: defaults direction to "out" when no richting/type/soort column is present', () => {
   const csv = `Relatie;Bedrag;Factuurdatum;Vervaldatum
 Geen Richting BV;100,00;01-08-2026;01-09-2026`;
   const rows = parseInvoiceCsv(csv);

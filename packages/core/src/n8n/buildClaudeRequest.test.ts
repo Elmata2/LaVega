@@ -1,7 +1,11 @@
 import { expect, test } from "vitest";
 import { buildClaudeRequest, requestSize, INVOICE_SYSTEM } from "./buildClaudeRequest.js";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
-import { encodeBase64Url, simulateGmailNode, type GmailNodeItem } from "./__fixtures__/gmailNode.js";
+import {
+  encodeBase64Url,
+  simulateGmailNode,
+  type GmailNodeItem,
+} from "./__fixtures__/gmailNode.js";
 import { RAW_LINK_ONLY, RAW_PDF_INVOICE } from "./__fixtures__/rawMail.js";
 import { legacyNormalise, legacyUserText } from "./__fixtures__/legacyNode.js";
 
@@ -65,7 +69,12 @@ test("zonder bijlage staat er GEEN regel 'Bijlagen:' — dat was de bewering die
 test("dezelfde mail vóór de fix: nul documenten en een lege bijlagenlijst", () => {
   // De oude node's eigen uitkomst, op de mail zoals de oude nodeconfiguratie
   // hem leverde: zonder bijlagen, en met alleen het text/plain-deel.
-  const starved = legacyNormalise(simulateGmailNode(encodeBase64Url(RAW_PDF_INVOICE), { id: "m-pdf", downloadAttachments: false }));
+  const starved = legacyNormalise(
+    simulateGmailNode(encodeBase64Url(RAW_PDF_INVOICE), {
+      id: "m-pdf",
+      downloadAttachments: false,
+    }),
+  );
   const legacyText = legacyUserText(starved);
 
   const fixed = buildClaudeRequest(message(RAW_PDF_INVOICE, "m-pdf", true));

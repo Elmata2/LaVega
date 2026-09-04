@@ -85,7 +85,12 @@ export type HoldingCost = KnownHoldingCost | UnknownHoldingCost;
  *  de kortste periode die we kennen: nul keer wat dan ook blijft nul, maar de
  *  eenheid moet ergens staan omdat `FeeAmount` er zonder niet bestaat — en dat is
  *  bewust zo (zie accountCosts.ts). */
-const NOTHING_PER_MONTH: FeeAmount = { cents: 0, period: "maand", perYearCents: 0, perYearDerived: false };
+const NOTHING_PER_MONTH: FeeAmount = {
+  cents: 0,
+  period: "maand",
+  perYearCents: 0,
+  perYearDerived: false,
+};
 
 /** DE VALSTRIK, en dit is het verschil tussen goed en fout advies.
  *
@@ -107,7 +112,13 @@ const NOTHING_PER_MONTH: FeeAmount = { cents: 0, period: "maand", perYearCents: 
  *  dus niet, en dat is geen toeval maar het gevolg van deze functie. */
 export function marginalHoldingCost(cost: HoldingCost, held: boolean): HoldingCost {
   if (!held) return cost;
-  return { kind: "known", amount: NOTHING_PER_MONTH, why: "already-held", sourceUrl: null, asOf: null };
+  return {
+    kind: "known",
+    amount: NOTHING_PER_MONTH,
+    why: "already-held",
+    sourceUrl: null,
+    asOf: null,
+  };
 }
 
 /** De kosten van één catalogusproduct, uit de rij die `accountFees` ervan maakte.
@@ -119,7 +130,13 @@ export function marginalHoldingCost(cost: HoldingCost, held: boolean): HoldingCo
 export function holdingCostOfProduct(fee: ProductFee | null | undefined): HoldingCost {
   if (!fee) return { kind: "unknown", reason: "no-source" };
   if (!fee.pricedOnItsOwn) return { kind: "unknown", reason: "needs-another-product" };
-  return { kind: "known", amount: fee.amount, why: "stated", sourceUrl: fee.sourceUrl, asOf: fee.asOf };
+  return {
+    kind: "known",
+    amount: fee.amount,
+    why: "stated",
+    sourceUrl: fee.sourceUrl,
+    asOf: fee.asOf,
+  };
 }
 
 /* ─────────────────────────────────────────────────── wat een product oplevert */
@@ -256,7 +273,9 @@ export function netBenefit(input: {
   // `flooredToOnePeriod` als false terug voor een reis van een week — de rekensom
   // was goed, maar het scherm kon niet meer zeggen dat er een hele maand gerekend
   // was, en dat is precies het stuk dat de gebruiker nodig heeft.
-  const asked = Number.isFinite(input.horizonMonths) ? (input.horizonMonths as number) : MIN_HORIZON_MONTHS;
+  const asked = Number.isFinite(input.horizonMonths)
+    ? (input.horizonMonths as number)
+    : MIN_HORIZON_MONTHS;
   const months = Math.max(MIN_HORIZON_MONTHS, asked);
   const over = feeCostOverMonths(cost.amount, asked);
   return decide({
@@ -279,7 +298,9 @@ export function netBenefit(input: {
  *  is een stap zonder uitkomst. */
 function decide(p: Priced): NetBenefit {
   const netCents = p.grossCents - p.costCents;
-  return netCents > 0 ? { kind: "net", netCents, ...p } : { kind: "no-recommendation", netCents, ...p };
+  return netCents > 0
+    ? { kind: "net", netCents, ...p }
+    : { kind: "no-recommendation", netCents, ...p };
 }
 
 /** Mag dit als aanbeveling op het scherm? Netto positief mag; netto nul of
@@ -380,7 +401,10 @@ export function describeNetBenefit(b: NetBenefit): string {
       b.cost.reason === "needs-another-product"
         ? "de prijs die de bron noemt geldt bovenop een ander product, dus wat dit los kost weten we niet"
         : "wat dit product kost, staat niet in onze bronnen";
-    const gross = b.benefit.kind === "recurring" ? `${euro(b.grossCents)} ${periodWord(b.benefit.period)}` : euro(b.grossCents);
+    const gross =
+      b.benefit.kind === "recurring"
+        ? `${euro(b.grossCents)} ${periodWord(b.benefit.period)}`
+        : euro(b.grossCents);
     return `${gross} voordeel. Maar ${why} — dat is geen nul, en het gaat hiervan af.`;
   }
 

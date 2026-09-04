@@ -28,7 +28,14 @@ const HOUSING_CATEGORY = "Wonen & energie";
  *  opposed to the energy/water bills that share the category. Matched on the
  *  normalized counterparty + description, so "Woningstichting Rochdale" and
  *  "Hypotheek 1234.56.789" both land. */
-const RENT_HINTS = ["huur", "verhuur", "woningstichting", "woningcorporatie", "woonstichting", "vastgoed"];
+const RENT_HINTS = [
+  "huur",
+  "verhuur",
+  "woningstichting",
+  "woningcorporatie",
+  "woonstichting",
+  "vastgoed",
+];
 // "hypothe" and not "hypotheek": the plural is "hypotheken" (one e), so "ING
 // Hypotheken" — a real counterparty — misses the singular. The built-in
 // category rule in categories.ts has the same blind spot; this module does not
@@ -79,7 +86,11 @@ const KIND_RANK: Record<HousingKind, number> = { huur: 0, hypotheek: 0, wonen: 1
  *  "Wonen & energie" or explicitly named as rent/mortgage. `rules` and `own` are
  *  the caller's normal categorisation inputs, so a user rule that labels his
  *  landlord counts here too. */
-export function proposeHousingCost(txs: Tx[], rules: Rule[], own?: OwnAccounts): HousingProposal | null {
+export function proposeHousingCost(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): HousingProposal | null {
   // Categorised housing spend keeps the stream detection focused; the hint match
   // catches a landlord the category rules do not know by name.
   const byKey = new Map<string, Tx[]>();

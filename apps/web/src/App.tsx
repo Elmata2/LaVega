@@ -1,23 +1,98 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, parseOwnName, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import type {
+  Account,
+  Rule,
+  Tx,
+  ScheduledFlow,
+  VatSettings,
+  Invoice,
+  RewardsBalance,
+  LearnedFact,
+  EntityProfile,
+  EntityScope,
+} from "@lavega/core";
+import {
+  ingest,
+  reassignEntity,
+  withCurrentBalances,
+  isCardAccount,
+  mergeImportedAccounts,
+  withLinkedAt,
+  ownAccounts,
+  parseOwnName,
+  assignTxIds,
+  scheduledFlowsForScope,
+  scheduledInvoiceFlows,
+  reconcileInvoices,
+  applyCategorizations,
+  findDuplicateAccounts,
+  mergeAccounts,
+  upsertFacts,
+  renameFactSubject,
+  productOf,
+  makeFact,
+  planTravel,
+  countryCurrency,
+  accountsInScope,
+  entitySummaries,
+  setEntityScope as classifyEntity,
+  DEFAULT_ENTITY_SCOPE,
+  TRAVEL_AGENT,
+  NL_SAVINGS_RATES,
+  RATES_AS_OF,
+} from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
-import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
+import {
+  createFileImport,
+  createEncryptedStorage,
+  mapEbAccount,
+  pickEbBalance,
+  pickEbBalanceDate,
+  mapEbTransaction,
+  ebAccountKey,
+  createRatesProvider,
+  type RatesResult,
+} from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { pathForView, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, ownerDisplayName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
+import {
+  getBufferCents,
+  setBufferCents,
+  getHomeCountry,
+  setHomeCountry,
+  getHomeRegion,
+  setHomeRegion,
+  getOwnerName,
+  setOwnerName,
+  ownerDisplayName,
+  getEnabledModules,
+  setEnabledModules,
+  type OwnerName,
+} from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
-import { txsForAccounts, flowsForScope, entityOptionsFor, screenOnSwitch, SCOPE_LABELS, type ParkedScreens, type ScopeScreen } from "./scope.js";
+import {
+  txsForAccounts,
+  flowsForScope,
+  entityOptionsFor,
+  screenOnSwitch,
+  SCOPE_LABELS,
+  type ParkedScreens,
+  type ScopeScreen,
+} from "./scope.js";
 import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
 import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
-import { enabledModules as resolveModules, navModules, type ModuleId } from "./components/moduleRegistry";
+import {
+  enabledModules as resolveModules,
+  navModules,
+  type ModuleId,
+} from "./components/moduleRegistry";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
 import Rekeningen from "./views/Rekeningen";
@@ -42,7 +117,8 @@ const storage = createEncryptedStorage();
 
 // Public savings-rate benchmark (same source Optimalisatie uses).
 const RATES_URL: string | undefined =
-  import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
+  import.meta.env.VITE_RATES_URL ??
+  (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
 /* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
@@ -97,7 +173,11 @@ export default function App() {
   // Public savings benchmark for the travel block's "where to keep it" step.
   // Same provider Optimalisatie uses (localStorage-cached), so no double fetch
   // cost; falls back to the bundled snapshot when the rates server is down.
-  const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
+  const [rates, setRates] = useState<RatesResult>({
+    rates: [...NL_SAVINGS_RATES],
+    asOf: RATES_AS_OF,
+    source: "bundled",
+  });
   // The country that drives the tax rules and the market whose card terms the
   // travel agent looks up. A local preference, edited in the profile — held in
   // state so changing it re-renders everything that reads it.
@@ -143,13 +223,6 @@ export default function App() {
   /** The lookups ran their course without finishing. Said out loud rather than
    *  leaving a spinner turning forever, which is its own kind of lie. */
   const [termsGaveUp, setTermsGaveUp] = useState(false);
-  const [askText, setAskText] = useState<string | null>(null);
-  const [askNonce, setAskNonce] = useState(0);
-  function askAssistant(text: string) {
-    setAskText(text);
-    setAskNonce((n) => n + 1);
-  }
-
   // The owner's own module selection: which modules sit in the top nav. A local
   // preference (settings.ts); the registry resolves an unset/stale stored list
   // and guarantees Overzicht is in it.
@@ -167,7 +240,9 @@ export default function App() {
     setAddWidget((n) => n + 1);
   }
 
-  const [view, setViewState] = useState<View>(() => viewFromPathname(window.location.pathname) ?? "overview");
+  const [view, setViewState] = useState<View>(
+    () => viewFromPathname(window.location.pathname) ?? "overview",
+  );
   const setView = useCallback((next: View) => {
     setViewState(next);
     const nextPath = pathForView(next);
@@ -277,7 +352,17 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards, loadedFacts, loadedProfiles] = await Promise.all([
+      const [
+        loadedAccounts,
+        loadedTxs,
+        loadedRules,
+        loadedFlows,
+        loadedVat,
+        loadedInvoices,
+        loadedRewards,
+        loadedFacts,
+        loadedProfiles,
+      ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
@@ -332,7 +417,9 @@ export default function App() {
     (async () => {
       setBusy(true);
       try {
-        const res = await fetch(`${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`);
+        const res = await fetch(
+          `${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`,
+        );
         const data = await res.json();
         if (!res.ok || data.error) {
           setProblems([`Bankkoppeling mislukt: ${data.error ?? res.status}`]);
@@ -357,7 +444,8 @@ export default function App() {
           acc.entity = entity;
           newAccounts.push(acc);
           const key = ebAccountKey(item.account);
-          for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
+          for (const t of item.transactions ?? [])
+            rawTxs.push(mapEbTransaction(t, key, acc.currency));
         }
         const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
         /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
@@ -366,7 +454,11 @@ export default function App() {
          * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
          * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
          * was) — zie `withLinkedAt`. */
-        const mergedAccounts = withLinkedAt(curAccounts, mergeImportedAccounts(curAccounts, newAccounts), asOf);
+        const mergedAccounts = withLinkedAt(
+          curAccounts,
+          mergeImportedAccounts(curAccounts, newAccounts),
+          asOf,
+        );
         const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
         await storage.putAccounts(mergedAccounts);
         await storage.putTxs(mergedTxs);
@@ -376,8 +468,11 @@ export default function App() {
         // Reconcile invoices against the freshly linked bank txs (same as file import).
         const curInvoices = await storage.getInvoices();
         const reconciled = reconcileInvoices(curInvoices, ft);
-        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
-        setProblems([`Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`]);
+        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+          await saveInvoices(reconciled);
+        setProblems([
+          `Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`,
+        ]);
       } catch (e) {
         setProblems([`Bankkoppeling mislukt: ${e instanceof Error ? e.message : String(e)}`]);
       } finally {
@@ -456,7 +551,16 @@ export default function App() {
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices, freshRewards, freshProfiles] = await Promise.all([
+    const [
+      freshAccounts,
+      freshTxs,
+      freshRules,
+      freshFlows,
+      freshVat,
+      freshInvoices,
+      freshRewards,
+      freshProfiles,
+    ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
@@ -495,7 +599,10 @@ export default function App() {
   // "Persoonlijk of zakelijk" list edits. Built from ALL accounts, never the
   // scoped subset: an entity must stay editable after you move it to the half
   // you are not currently looking at.
-  const entitySummaryRows = useMemo(() => entitySummaries(accounts, entityProfiles), [accounts, entityProfiles]);
+  const entitySummaryRows = useMemo(
+    () => entitySummaries(accounts, entityProfiles),
+    [accounts, entityProfiles],
+  );
 
   // The companies inside the active half — what the per-company controls that
   // survive (Transacties' filter, Belasting's per-BV modules) are built from.
@@ -580,7 +687,8 @@ export default function App() {
   // money. A flow carries its own entity (it can exist before that entity has
   // an account), so it is classified directly rather than through `accounts`.
   const scopedScheduledFlows = useMemo(
-    () => scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
+    () =>
+      scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
     [allScheduledFlows, scope, entityProfiles, entityScope],
   );
 
@@ -618,7 +726,11 @@ export default function App() {
       // is de stand van vlak daarvoor — dus precies wat `withLinkedAt` nodig heeft
       // om "nieuw" van "stond er al" te onderscheiden. Een her-import van hetzelfde
       // afschrift verschuift het moment niet: dat is de tweede tak daar.
-      const mergedAccounts = withLinkedAt(accounts, mergeImportedAccounts(accounts, result.accounts), asOf);
+      const mergedAccounts = withLinkedAt(
+        accounts,
+        mergeImportedAccounts(accounts, result.accounts),
+        asOf,
+      );
       await storage.putAccounts(mergedAccounts);
       await storage.putTxs(mergedTxs);
 
@@ -634,7 +746,8 @@ export default function App() {
       // thus drops out of the forecast, no double-count). Persist only on change.
       const curInvoices = await storage.getInvoices();
       const reconciled = reconcileInvoices(curInvoices, freshTxs);
-      if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
+      if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+        await saveInvoices(reconciled);
     } catch (err) {
       setProblems([`Importeren mislukt: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
@@ -682,7 +795,8 @@ export default function App() {
     if ("bank" in patch || "type" in patch || "name" in patch) {
       const current = accounts.find((a) => a.key === key);
       const product = current ? productOf(current) : "";
-      if (product && !productBeforeEdit.current.has(key)) productBeforeEdit.current.set(key, product);
+      if (product && !productBeforeEdit.current.has(key))
+        productBeforeEdit.current.set(key, product);
     }
     setAccounts(accounts.map((a) => (a.key === key ? { ...a, ...patch } : a)));
   }
@@ -827,10 +941,21 @@ export default function App() {
       const today = new Date().toISOString().slice(0, 10);
       const learned: LearnedFact[] = [];
       for (const t of reply.terms) {
-        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+        const asOfFigure =
+          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
         const put = (key: string, value: number | undefined) => {
           if (value === undefined) return;
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
+          learned.push(
+            makeFact({
+              agent: TRAVEL_AGENT,
+              subject: t.provider,
+              key,
+              value: String(value),
+              source: "agent",
+              updatedAt: asOfFigure,
+              note: t.note,
+            }),
+          );
         };
         put("fxFeePct", t.fxFeePct);
         put("convertFeePct", t.convertFeePct);
@@ -884,10 +1009,21 @@ export default function App() {
         // koersopslag was found this morning — the same lie the precedence
         // ladder was just fixed to stop believing. No stated date means an agent
         // lookup, which is as of now.
-        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+        const asOfFigure =
+          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
         const put = (key: string, value: number | undefined) => {
           if (value === undefined) return; // unverified stays unknown, never 0
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
+          learned.push(
+            makeFact({
+              agent: TRAVEL_AGENT,
+              subject: t.provider,
+              key,
+              value: String(value),
+              source: "agent",
+              updatedAt: asOfFigure,
+              note: t.note,
+            }),
+          );
         };
         put("fxFeePct", t.fxFeePct);
         put("convertFeePct", t.convertFeePct);
@@ -916,7 +1052,9 @@ export default function App() {
       // to the thing being looked up.
       if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
     } catch (err) {
-      setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
+      setProblems([
+        `Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`,
+      ]);
     } finally {
       setBusy(false);
     }
@@ -940,10 +1078,20 @@ export default function App() {
 
   return (
     <div className="shell">
-      <NavBar view={view} modules={navModules(modules)} onNavigate={setView} onOpenProfile={() => setView("profiel")} />
+      <NavBar
+        view={view}
+        modules={navModules(modules)}
+        onNavigate={setView}
+        onOpenProfile={() => setView("profiel")}
+      />
 
       <div className="shell-body">
-        <TopBar view={view} scope={scope} onScopeChange={handleScopeChange} onAddWidget={handleAddWidget} />
+        <TopBar
+          view={view}
+          scope={scope}
+          onScopeChange={handleScopeChange}
+          onAddWidget={handleAddWidget}
+        />
 
         <main className="content">
           {/* Import moved into the profile, so import/bank-link messages would
@@ -963,8 +1111,8 @@ export default function App() {
               one — say which it is, and where to fix it. */}
           {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
             <p className="text-muted shell-problems">
-              Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is dit
-              scherm leeg. Zet dat per rekening bij{" "}
+              Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is
+              dit scherm leeg. Zet dat per rekening bij{" "}
               <button type="button" className="card-link" onClick={() => setView("accounts")}>
                 Rekeningen
               </button>
@@ -1076,7 +1224,14 @@ export default function App() {
           )}
 
           {view === "forecast" && (
-            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} scheduledFlows={scopedScheduledFlows} />
+            <Forecast
+              txs={scopedTxs}
+              accounts={currentScopedAccounts}
+              entityScope={entityScope}
+              asOf={asOf}
+              bufferCents={bufferCents}
+              scheduledFlows={scopedScheduledFlows}
+            />
           )}
 
           {view === "optimalisatie" && (
@@ -1141,11 +1296,15 @@ export default function App() {
             />
           )}
 
-          {view === "punten" && <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />}
+          {view === "punten" && (
+            <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
+          )}
 
           {view === "koppelingen" && <Koppelingen />}
 
-          {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
+          {view === "backup" && (
+            <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
+          )}
 
           {view === "profiel" && (
             <Profiel

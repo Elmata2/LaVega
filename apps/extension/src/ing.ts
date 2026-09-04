@@ -197,7 +197,7 @@ export const ING_BRON: Bron = {
   uitleg:
     "In de ING Winkel geef je je ING Punten uit. Let op: dat is iets anders dan een korting bij een " +
     "winkel — je koopt er producten en vouchers BIJ ING, en betaalt volgens de voorwaarden van ING " +
-    "\"de meeste producten met Punten, plus een bij te betalen bedrag\". LaVega leest dus wat er in die " +
+    '"de meeste producten met Punten, plus een bij te betalen bedrag". LaVega leest dus wat er in die ' +
     "winkel staat en voor hoeveel punten, en niet wat je ergens anders korting krijgt. De winkel staat " +
     "binnen Mijn ING, dus LaVega leest daar mee — maar alleen op /punten. Je rekeningoverzicht, je " +
     "transacties en je saldo staan op andere paden van Mijn ING en vallen buiten de toestemming die je " +
@@ -669,7 +669,7 @@ export function collectIngWinkel(doc?: Document | null): RuweLezing {
    * de kaarten waar het toevallig op staat. Het hoort dus in de zin (lines.ts)
    * en niet in wat we van de pagina knippen. */
   const DATUM = [
-    /(?:geldig tot(?: en met)?|t\/m|tot en met|te bestellen tot|actie loopt tot|loopt tot|verloopt op|tot)\s*:?\s*(?:\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{2,4}|\d{1,2}\s+[a-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
+    /(?:geldig tot(?: en met)?|t\/m|tot en met|te bestellen tot|actie loopt tot|loopt tot|verloopt op|tot)\s*:?\s*(?:\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}|\d{1,2}\s+[a-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
     /(?:verloopt over|nog|te bestellen tot over)\s+\d{1,3}\s*(?:dagen|dag)/i,
   ];
 
@@ -1164,7 +1164,10 @@ export function collectIngWinkel(doc?: Document | null): RuweLezing {
 
     kandidaten.push({
       winkel: naam.slice(0, 60),
-      prijsTekst: treffers.map((t) => t.tekst).join(" · ").slice(0, 120),
+      prijsTekst: treffers
+        .map((t) => t.tekst)
+        .join(" · ")
+        .slice(0, 120),
       totRuw: totRuw.slice(0, 40),
       hosts,
     });

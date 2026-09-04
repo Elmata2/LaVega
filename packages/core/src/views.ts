@@ -1,9 +1,16 @@
 import type { Account, Tx, Rule } from "./model.js";
 import { norm } from "./hash.js";
 import {
-  NL_CATEGORY_RULES_NORMALIZED, matchNorm, foreignCodeIn,
-  isPersonName, isMerchantRow, isOwnName, directDebit,
-  PERSON_CATEGORY, DIRECT_DEBIT_CATEGORY, type OwnName,
+  NL_CATEGORY_RULES_NORMALIZED,
+  matchNorm,
+  foreignCodeIn,
+  isPersonName,
+  isMerchantRow,
+  isOwnName,
+  directDebit,
+  PERSON_CATEGORY,
+  DIRECT_DEBIT_CATEGORY,
+  type OwnName,
 } from "./categories.js";
 
 /* Pure derivations behind the Transacties and Rekeningen views. No I/O — these
@@ -19,11 +26,22 @@ export function enrichTxs(txs: Tx[], accounts: Account[]): EnrichedTx[] {
   const byKey = new Map(accounts.map((a) => [a.key, a]));
   return txs.map((t) => {
     const a = byKey.get(t.accountKey);
-    return { ...t, entity: a?.entity ?? "onbekend", bank: a?.bank ?? "", accountName: a?.name ?? t.accountKey };
+    return {
+      ...t,
+      entity: a?.entity ?? "onbekend",
+      bank: a?.bank ?? "",
+      accountName: a?.name ?? t.accountKey,
+    };
   });
 }
 
-export type TxFilter = { entity?: string; accountKey?: string; search?: string; from?: string; to?: string };
+export type TxFilter = {
+  entity?: string;
+  accountKey?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+};
 
 /** Apply the (combinable) Transacties filters. Search is case/space-insensitive
  *  over counterparty + description (via norm). from/to bound the date range
@@ -65,7 +83,8 @@ export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
   for (const t of txs) {
     const m = t.date.slice(0, 7);
     const b = byMonth.get(m) ?? { in: 0, out: 0 };
-    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += t.amount;
     byMonth.set(m, b);
   }
   return [...byMonth.entries()]
@@ -166,7 +185,8 @@ export function categorize(tx: Tx, rules: Rule[], own?: OwnAccounts): string {
   if (own && own.all.length) {
     // Compare against a space-stripped haystack so an IBAN printed with spaces
     // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
-    if (ownAccountIn(hay.replace(/\s+/g, ""), tx.accountKey, own) !== null) return "Eigen overboeking";
+    if (ownAccountIn(hay.replace(/\s+/g, ""), tx.accountKey, own) !== null)
+      return "Eigen overboeking";
   }
   // HIS OWN NAME on the other side of the row is the same fact as his own IBAN
   // on it: his own money moving. It sits here, above the rules, for that reason
@@ -267,12 +287,17 @@ export function foreignTerminalCategory(tx: Tx): string | null {
 
 /** In/out totals grouped by derived category (via categorize). Pass `own` to
  *  split out "Eigen overboeking" (transfers between the user's own accounts). */
-export function categoryTotals(txs: Tx[], rules: Rule[], own?: OwnAccounts): Record<string, { in: number; out: number }> {
+export function categoryTotals(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): Record<string, { in: number; out: number }> {
   const out: Record<string, { in: number; out: number }> = {};
   for (const t of txs) {
     const c = categorize(t, rules, own);
     const b = (out[c] ??= { in: 0, out: 0 });
-    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += t.amount;
   }
   return out;
 }
@@ -367,14 +392,23 @@ const emptyCoverage = (month: string): MonthCoverage => ({
  *  Comparing eleven days of August against a full July is the same lie in a
  *  different shape, so `current`/`previous` carry each month's observed span and
  *  a `partial` flag; the caller decides how loudly to say it. */
-export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts): CategoryComparison {
+export function categoryComparison(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): CategoryComparison {
   const dated = txs.filter((t) => t.date);
   if (dated.length === 0) {
     return {
       month: "",
       prevMonth: "",
       rows: [],
-      coverage: { comparedAccountKeys: [], excludedAccountKeys: [], excludedOut: { current: 0, previous: 0 }, comparable: false },
+      coverage: {
+        comparedAccountKeys: [],
+        excludedAccountKeys: [],
+        excludedOut: { current: 0, previous: 0 },
+        comparable: false,
+      },
       current: emptyCoverage(""),
       previous: emptyCoverage(""),
     };
@@ -427,7 +461,14 @@ export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts):
     if (lastDate === "") return emptyCoverage(m);
     const total = daysInMonth(m);
     const daysObserved = Number(lastDate.slice(8, 10));
-    return { month: m, firstDate, lastDate, daysObserved, daysInMonth: total, partial: daysObserved < total };
+    return {
+      month: m,
+      firstDate,
+      lastDate,
+      daysObserved,
+      daysInMonth: total,
+      partial: daysObserved < total,
+    };
   };
 
   const cur: Record<string, number> = {};
@@ -455,7 +496,13 @@ export function categoryComparison(txs: Tx[], rules: Rule[], own?: OwnAccounts):
     excludedOut,
     comparable: comparedAccountKeys.length > 0,
   };
-  const base = { month, prevMonth, coverage, current: coverageOf(month), previous: coverageOf(prevMonth) };
+  const base = {
+    month,
+    prevMonth,
+    coverage,
+    current: coverageOf(month),
+    previous: coverageOf(prevMonth),
+  };
   if (!coverage.comparable) return { ...base, rows: [] };
 
   const totalCur = Object.values(cur).reduce((s, v) => s + v, 0);

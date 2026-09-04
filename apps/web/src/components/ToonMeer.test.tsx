@@ -128,7 +128,9 @@ test("de kinderen blijven in de DOM als hij dicht is — test op .open, niet op 
   // schrijft een test die faalt terwijl het onderdeel precies goed werkt.
   const { details } = render({ children: <p>Bron: geld.nl, 12 augustus.</p> });
   expect(details.open).toBe(false);
-  expect(details.querySelector(`.${TOONMEER_CLASS.panel}`)!.textContent).toContain("Bron: geld.nl, 12 augustus.");
+  expect(details.querySelector(`.${TOONMEER_CLASS.panel}`)!.textContent).toContain(
+    "Bron: geld.nl, 12 augustus.",
+  );
 });
 
 /* ── toetsenbord en schermlezer ────────────────────────────────────────── */
@@ -198,7 +200,9 @@ test("een eigen klasse komt erachteraan, zonder de vorm te verdringen", () => {
 test("elke klasse uit TOONMEER_CLASS en beide varianten hebben een regel in modules.css", () => {
   const classes = [...Object.values(TOONMEER_CLASS), "toonmeer-regel", "toonmeer-info"];
   for (const cls of classes) {
-    expect(rules, `.${cls} heeft geen regel in modules.css`).toMatch(new RegExp(`\\.${cls}[\\s,{:\\[]`));
+    expect(rules, `.${cls} heeft geen regel in modules.css`).toMatch(
+      new RegExp(`\\.${cls}[\\s,{:\\[]`),
+    );
   }
 });
 

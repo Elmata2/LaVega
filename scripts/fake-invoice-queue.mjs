@@ -149,7 +149,9 @@ let servingLabel = "de vier voorbeeldrijen";
 if (rowsFlag !== -1) {
   const path = process.argv[rowsFlag + 1];
   if (!path) {
-    console.error("--rows heeft een pad nodig: node scripts/fake-invoice-queue.mjs --rows mijn-factuur.json");
+    console.error(
+      "--rows heeft een pad nodig: node scripts/fake-invoice-queue.mjs --rows mijn-factuur.json",
+    );
     process.exit(1);
   }
   let parsed;
@@ -157,12 +159,16 @@ if (rowsFlag !== -1) {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (err) {
     console.error(`Kan ${path} niet lezen als JSON: ${err.message}`);
-    console.error("Er wordt niets geserveerd — anders zou je de voorbeeldrijen testen en denken dat het je eigen factuur was.");
+    console.error(
+      "Er wordt niets geserveerd — anders zou je de voorbeeldrijen testen en denken dat het je eigen factuur was.",
+    );
     process.exit(1);
   }
   const list = Array.isArray(parsed) ? parsed : parsed?.invoices;
   if (!Array.isArray(list) || list.length === 0) {
-    console.error(`${path} bevat geen facturen. Verwacht een array, of {"invoices": [...]} zoals n8n teruggeeft.`);
+    console.error(
+      `${path} bevat geen facturen. Verwacht een array, of {"invoices": [...]} zoals n8n teruggeeft.`,
+    );
     process.exit(1);
   }
   serving = list;
@@ -193,8 +199,12 @@ createServer((req, res) => {
    * zei eerder altijd "rij 1 boekt zichzelf", ook bij je eigen factuur, en dan
    * lees je een uitkomst voor die je niet aan het testen bent. */
   if (serving === rows) {
-    console.log("1 boekt zichzelf · 2 gemarkeerd (gespoofte afzender) · 3 wacht (incompleet) · 4 wacht (boven € 10.000)");
+    console.log(
+      "1 boekt zichzelf · 2 gemarkeerd (gespoofte afzender) · 3 wacht (incompleet) · 4 wacht (boven € 10.000)",
+    );
   } else {
-    console.log("je eigen rijen — ontbrekende velden zijn ONBEKEND, niet nul; de app zegt dan wat er mist");
+    console.log(
+      "je eigen rijen — ontbrekende velden zijn ONBEKEND, niet nul; de app zegt dan wat er mist",
+    );
   }
 });

@@ -1,13 +1,28 @@
 <!-- KUNSTMATIG. Twee Offers met verschillende bedragen en geen ordertotaal dat
      zegt welke erbij hoort. Dit MOET weigeren: kiezen zou raden zijn, en het
      verkeerde bedrag levert stil een verkeerde aanbeveling. -->
-<!doctype html><html lang="nl"><head><title>Twee artikelen</title>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Product","name":"A",
- "offers":{"@type":"Offer","price":"49.00","priceCurrency":"EUR"}}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Product","name":"B",
- "offers":{"@type":"Offer","price":"98.00","priceCurrency":"EUR"}}
-</script>
-</head><body><h1>Winkelwagen</h1></body></html>
+<!doctype html>
+<html lang="nl">
+  <head>
+    <title>Twee artikelen</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "A",
+        "offers": { "@type": "Offer", "price": "49.00", "priceCurrency": "EUR" }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "B",
+        "offers": { "@type": "Offer", "price": "98.00", "priceCurrency": "EUR" }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Winkelwagen</h1>
+  </body>
+</html>

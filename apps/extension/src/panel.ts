@@ -110,7 +110,9 @@ export function panelRows(r: Ranking, caps: Caps): PaneelRegel[] {
    * goed; de kop erboven sprak hem tegen, en de kop is wat er het eerst gelezen
    * wordt. */
   for (const row of r.openUnknownCost.slice(0, caps.onbekendeKosten)) {
-    uit.push(regel(row, row.basis === "voorwaardelijk" ? "geen-euro-uitkomst" : "onbekende-kosten"));
+    uit.push(
+      regel(row, row.basis === "voorwaardelijk" ? "geen-euro-uitkomst" : "onbekende-kosten"),
+    );
   }
   for (const u of r.unknowns) {
     uit.push({ titel: u.card.product, regel: unknownLine(u), bron: "", groep: "onbekend" });
@@ -158,7 +160,11 @@ export function footer(cards: readonly CheckoutCard[]): string {
  *
  *  Dit is de enige plek waar de puntenrijen zinnen worden, zodat de twee
  *  schermen niet uit elkaar kunnen lopen in wat ze BEWEREN. */
-export function puntenBlok(rijen: readonly PuntenRij[], amountCents: number | null, currency: string): PaneelPunten {
+export function puntenBlok(
+  rijen: readonly PuntenRij[],
+  amountCents: number | null,
+  currency: string,
+): PaneelPunten {
   return {
     regels: rijen.map((rij) => ({
       /* ZIJN EIGEN NAAM ALS TITEL, en niet de naam uit onze koerslijst. Wie
@@ -192,7 +198,8 @@ export function puntenBlok(rijen: readonly PuntenRij[], amountCents: number | nu
  *  "voor deze winkel staat er geen aanbieding in wat we op 12 augustus lazen" is
  *  een antwoord, en een leeg blok is dat niet. */
 export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string, bron: Bron): PaneelAanbod {
-  if (uitkomst.soort === "uit") return { kop: "", antwoord: "", link: null, regels: [], toestand: "" };
+  if (uitkomst.soort === "uit")
+    return { kop: "", antwoord: "", link: null, regels: [], toestand: "" };
 
   const rijenVan = (aanbiedingen: readonly Aanbieding[]) =>
     aanbiedingen.map((a) => ({
@@ -224,7 +231,10 @@ export function aanbodBlok(uitkomst: AanbodUitkomst, asOf: string, bron: Bron): 
    * verzilveren is; content.ts zet die onder de rijen in de vouw. Zo staat het
    * antwoord vooraan en het voorbehoud er nog steeds bij — wat het niet meer
    * doet, is het antwoord onleesbaar maken. */
-  if (uitkomst.soort === "mogelijke-merknaam-match" || uitkomst.soort === "mogelijke-product-match") {
+  if (
+    uitkomst.soort === "mogelijke-merknaam-match" ||
+    uitkomst.soort === "mogelijke-product-match"
+  ) {
     return {
       kop: aanbodKopWinkel(bron),
       antwoord: aanbodAntwoord(uitkomst.matches, bron),

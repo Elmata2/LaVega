@@ -21,7 +21,13 @@ type ChatWidgetProps = {
  *  forwards only the active tab's pre-computed context (via buildTabContext) plus
  *  the conversation to our own server (POST /api/agent/chat) — never Anthropic
  *  directly. Default OFF; the consent gate below explains what is sent. */
-export default function ChatWidget({ view, context, configured, prompt, promptNonce }: ChatWidgetProps) {
+export default function ChatWidget({
+  view,
+  context,
+  configured,
+  prompt,
+  promptNonce,
+}: ChatWidgetProps) {
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState<boolean>(() => getChatEnabled());
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -137,7 +143,10 @@ export default function ChatWidget({ view, context, configured, prompt, promptNo
           {!configured ? (
             <div className="chat-body">
               <div className="chat-notice">
-                <p>AI-assistent is nog niet geconfigureerd (ANTHROPIC_API_KEY ontbreekt op de server).</p>
+                <p>
+                  AI-assistent is nog niet geconfigureerd (ANTHROPIC_API_KEY ontbreekt op de
+                  server).
+                </p>
               </div>
             </div>
           ) : !enabled ? (

@@ -1,29 +1,65 @@
 import { describe, expect, it, test } from "vitest";
 import type { Tx } from "./model.js";
-import { merchantTallies, detectSubscriptions, subscriptionPriceIncreases, subscriptionOverlaps, subscriptionFunction, subscriptionCoverage, minHistoryDaysFor, merchantKey, CADENCE_LABEL_NL, detectScheduleStreams, fitMerchantStreams } from "./subscriptions.js";
+import {
+  merchantTallies,
+  detectSubscriptions,
+  subscriptionPriceIncreases,
+  subscriptionOverlaps,
+  subscriptionFunction,
+  subscriptionCoverage,
+  minHistoryDaysFor,
+  merchantKey,
+  CADENCE_LABEL_NL,
+  detectScheduleStreams,
+  fitMerchantStreams,
+} from "./subscriptions.js";
 
 let n = 0;
-const tx = (cp: string, date: string, amount: number): Tx =>
-  ({ id: String(n++), accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false });
+const tx = (cp: string, date: string, amount: number): Tx => ({
+  id: String(n++),
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category: "",
+  manual: false,
+});
 
 // Netflix monthly, price rose 13,99 -> 15,99
 const netflix = [
-  tx("Netflix", "2026-01-15", -13.99), tx("Netflix", "2026-02-15", -13.99), tx("Netflix", "2026-03-15", -13.99),
-  tx("Netflix", "2026-04-15", -15.99), tx("Netflix", "2026-05-15", -15.99),
+  tx("Netflix", "2026-01-15", -13.99),
+  tx("Netflix", "2026-02-15", -13.99),
+  tx("Netflix", "2026-03-15", -13.99),
+  tx("Netflix", "2026-04-15", -15.99),
+  tx("Netflix", "2026-05-15", -15.99),
 ];
-const hbo = ["2026-01-10", "2026-02-10", "2026-03-10", "2026-04-10", "2026-05-10"].map((d) => tx("HBO Max", d, -8.99));
-const spotify = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05"].map((d) => tx("Spotify AB", d, -10.99));
+const hbo = ["2026-01-10", "2026-02-10", "2026-03-10", "2026-04-10", "2026-05-10"].map((d) =>
+  tx("HBO Max", d, -8.99),
+);
+const spotify = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05"].map((d) =>
+  tx("Spotify AB", d, -10.99),
+);
 const adobe = [tx("Adobe Systems", "2025-03-01", -120), tx("Adobe Systems", "2026-03-01", -120)]; // yearly
 const oneoff = [tx("Random Store", "2026-01-01", -50), tx("Andere Winkel", "2026-02-02", -20)];
 
 test("detectSubscriptions finds monthly + yearly, normalizes to monthly, tags function", () => {
   const subs = detectSubscriptions([...netflix, ...hbo, ...spotify, ...adobe, ...oneoff]);
   const byName = Object.fromEntries(subs.map((s) => [s.name, s]));
-  expect(byName["Netflix"]).toMatchObject({ cadenceDays: 30, monthlyCents: 1599, function: "Videostreaming" });
+  expect(byName["Netflix"]).toMatchObject({
+    cadenceDays: 30,
+    monthlyCents: 1599,
+    function: "Videostreaming",
+  });
   expect(byName["Netflix"].changePct).toBeCloseTo(0.143, 2);
   expect(byName["HBO Max"]).toMatchObject({ function: "Videostreaming", monthlyCents: 899 });
   expect(byName["Spotify AB"].function).toBe("Muziekstreaming");
-  expect(byName["Adobe Systems"]).toMatchObject({ cadenceDays: 365, function: "Software", monthlyCents: 986 });
+  expect(byName["Adobe Systems"]).toMatchObject({
+    cadenceDays: 365,
+    function: "Software",
+    monthlyCents: 986,
+  });
   expect(subs.find((s) => s.name === "Random Store")).toBeUndefined(); // not recurring
 });
 
@@ -48,8 +84,12 @@ test("subscriptionFunction maps known merchants; unknown -> Overig", () => {
 });
 
 test("excludes peer transfers and unstable 2-occurrence streams", () => {
-  const transfer = ["2026-01-15", "2026-02-15", "2026-03-15"].map((d) => tx("Overschrijving naar Jan Jansen", d, -100));
-  const ibanCp = ["2026-01-15", "2026-02-15", "2026-03-15"].map((d) => tx("NL17INGB0539576085", d, -50));
+  const transfer = ["2026-01-15", "2026-02-15", "2026-03-15"].map((d) =>
+    tx("Overschrijving naar Jan Jansen", d, -100),
+  );
+  const ibanCp = ["2026-01-15", "2026-02-15", "2026-03-15"].map((d) =>
+    tx("NL17INGB0539576085", d, -50),
+  );
   const unstable = [tx("Iets Vaags", "2025-03-01", -100), tx("Iets Vaags", "2026-03-01", -40)]; // -60% over a year
   const subs = detectSubscriptions([...transfer, ...ibanCp, ...unstable]);
   expect(subs).toHaveLength(0);
@@ -78,7 +118,9 @@ test("quarterly billing that drifts a few days off 91 still lands in the band", 
 
 test("half-yearly and two-monthly charges are now visible at all", () => {
   const halfYearly = ["2026-01-05", "2026-07-06"].map((d) => tx("Verzekeraar Halfjaar", d, -149.7));
-  const twoMonthly = ["2026-03-05", "2026-05-05", "2026-07-05"].map((d) => tx("Tweemaandelijks BV", d, -49.9));
+  const twoMonthly = ["2026-03-05", "2026-05-05", "2026-07-05"].map((d) =>
+    tx("Tweemaandelijks BV", d, -49.9),
+  );
   const subs = detectSubscriptions([...halfYearly, ...twoMonthly]);
   const byName = Object.fromEntries(subs.map((s) => [s.name, s]));
   expect(byName["Verzekeraar Halfjaar"]).toMatchObject({ cadenceDays: 182, occurrences: 2 });
@@ -126,7 +168,12 @@ test("subscriptionCoverage says which cadences the history can and cannot show",
 
 test("subscriptionCoverage ignores inflows and reports zero history when there are no outflows", () => {
   const inflowsOnly = [tx("Salaris", "2026-01-01", 3000), tx("Salaris", "2026-07-01", 3000)];
-  expect(subscriptionCoverage(inflowsOnly)).toMatchObject({ firstDate: "", lastDate: "", historyDays: 0, visibleCadences: [] });
+  expect(subscriptionCoverage(inflowsOnly)).toMatchObject({
+    firstDate: "",
+    lastDate: "",
+    historyDays: 0,
+    visibleCadences: [],
+  });
 });
 
 test("CADENCE_LABEL_NL names every cadence the detector can return", () => {
@@ -186,9 +233,7 @@ test("a blank counterparty is never a subscription — and unrelated blanks neve
   // MT940 rows and ABN fallbacks can leave counterparty empty. All of them used
   // to share the key ""|out, so three unrelated payments became one phantom
   // subscription with an empty name.
-  const blanks = [
-    tx("", "2026-01-05", -20), tx("", "2026-02-06", -25), tx("", "2026-03-05", -22),
-  ];
+  const blanks = [tx("", "2026-01-05", -20), tx("", "2026-02-06", -25), tx("", "2026-03-05", -22)];
   expect(detectSubscriptions(blanks)).toHaveLength(0);
 });
 
@@ -196,7 +241,9 @@ test("a subscription that stopped months ago is not a current subscription", () 
   // Cancelled in March; the statements run to August. Nothing is being paid, so
   // nothing belongs in a list of what he pays. `asOf` defaults to the last date
   // in the data (core stays pure — no clock).
-  const cancelled = ["2026-01-08", "2026-02-09", "2026-03-09"].map((d) => tx("Vodafone Libertel", d, -17.5));
+  const cancelled = ["2026-01-08", "2026-02-09", "2026-03-09"].map((d) =>
+    tx("Vodafone Libertel", d, -17.5),
+  );
   const live = ["2026-06-05", "2026-07-05", "2026-08-05"].map((d) => tx("Netflix", d, -15.99));
   const subs = detectSubscriptions([...cancelled, ...live]);
   expect(subs.map((s) => s.function)).toEqual(["Videostreaming"]);
@@ -218,14 +265,22 @@ test("three ordinary purchases at one shop, a month apart, are not a subscriptio
 });
 
 test("the roof is not an abonnement: VvE, rent and mortgage belong to Woonlasten", () => {
-  const vve = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-03"].map((d) => tx("VvE Lusterhof", d, -142.5));
-  const rent = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) => tx("Woningstichting Rochdale huur", d, -1450));
-  const mortgage = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) => tx("ING Hypotheken", d, -980));
+  const vve = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-03"].map((d) =>
+    tx("VvE Lusterhof", d, -142.5),
+  );
+  const rent = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) =>
+    tx("Woningstichting Rochdale huur", d, -1450),
+  );
+  const mortgage = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) =>
+    tx("ING Hypotheken", d, -980),
+  );
   expect(detectSubscriptions([...vve, ...rent, ...mortgage])).toHaveLength(0);
 });
 
 test("a fixed monthly payment to a person is a transfer, not a subscription", () => {
-  const person = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("J.C. de Vries", d, -250));
+  const person = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("J.C. de Vries", d, -250),
+  );
   expect(detectSubscriptions(person)).toHaveLength(0);
 });
 
@@ -243,17 +298,26 @@ test("a subscription on an older statement is still current, judged per account"
   // subscription would look cancelled — so each stream is judged against the end
   // of its own statement.
   const ingTx = (d: string, cp: string, a: number): Tx => ({ ...tx(cp, d, a), accountKey: "ING" });
-  const amexTx = (d: string, cp: string, a: number): Tx => ({ ...tx(cp, d, a), accountKey: "AMEX" });
-  const onIng = ["2026-03-02", "2026-04-02", "2026-05-04"].map((d) => ingTx(d, "SIMYO B.V.", -11.89));
+  const amexTx = (d: string, cp: string, a: number): Tx => ({
+    ...tx(cp, d, a),
+    accountKey: "AMEX",
+  });
+  const onIng = ["2026-03-02", "2026-04-02", "2026-05-04"].map((d) =>
+    ingTx(d, "SIMYO B.V.", -11.89),
+  );
   const ingEnd = [ingTx("2026-06-01", "Albert Heijn", -32.15)];
-  const onAmex = ["2026-06-08", "2026-07-08", "2026-08-08"].map((d) => amexTx(d, "Netflix", -15.99));
+  const onAmex = ["2026-06-08", "2026-07-08", "2026-08-08"].map((d) =>
+    amexTx(d, "Netflix", -15.99),
+  );
   const subs = detectSubscriptions([...onIng, ...ingEnd, ...onAmex]);
   expect(subs.map((s) => s.function).sort()).toEqual(["Mobiel abonnement", "Videostreaming"]);
 });
 
 test("a known subscription merchant is never re-read as a person or a housing cost", () => {
   // "T.Mobile" has the shape of initials + surname; the dictionary knows better.
-  const tmobile = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("T-Mobile", d, -24.5));
+  const tmobile = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("T-Mobile", d, -24.5),
+  );
   expect(detectSubscriptions(tmobile)).toHaveLength(1);
 });
 
@@ -274,14 +338,20 @@ test("a one-off charge from the same merchant is not the monthly price, and not 
 });
 
 test("a company written with initials is not a person — an insurance premium survives", () => {
-  const asr = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) => tx("A.S.R. Verzekeringen", d, -62.4));
+  const asr = ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01"].map((d) =>
+    tx("A.S.R. Verzekeringen", d, -62.4),
+  );
   expect(detectSubscriptions(asr)).toHaveLength(1);
-  const person = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("M. van der Meer", d, -300));
+  const person = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("M. van der Meer", d, -300),
+  );
   expect(detectSubscriptions(person)).toHaveLength(0);
 });
 
 test("a monthly payment to the Belastingdienst is not an abonnement", () => {
-  const tax = ["2026-05-27", "2026-06-27", "2026-07-27", "2026-08-27"].map((d) => tx("Belastingdienst Apeldoorn", d, -350));
+  const tax = ["2026-05-27", "2026-06-27", "2026-07-27", "2026-08-27"].map((d) =>
+    tx("Belastingdienst Apeldoorn", d, -350),
+  );
   expect(detectSubscriptions(tax)).toHaveLength(0);
 });
 
@@ -294,12 +364,26 @@ test("a monthly payment to the Belastingdienst is not an abonnement", () => {
  * ------------------------------------------------------------------------- */
 
 let m = 0;
-const flow = (cp: string, date: string, amount: number, description = ""): Tx =>
-  ({ id: `f${m++}`, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description, category: "", manual: false });
+const flow = (cp: string, date: string, amount: number, description = ""): Tx => ({
+  id: `f${m++}`,
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description,
+  category: "",
+  manual: false,
+});
 
 test("de betaalagenda ziet Simyo, ook als de tenaamstelling schuift en juni mist", () => {
   const simyo = [
-    flow("SIMYO B.V.", "2026-03-04", -11.89, "SEPA Incasso algemeen doorlopend Machtiging: M0012938"),
+    flow(
+      "SIMYO B.V.",
+      "2026-03-04",
+      -11.89,
+      "SEPA Incasso algemeen doorlopend Machtiging: M0012938",
+    ),
     flow("Simyo B.V. 4839201", "2026-04-04", -11.89, "SEPA Incasso algemeen doorlopend"),
     flow("SIMYO", "2026-05-04", -11.89, "Incasso 100238471"),
     // juni: incasso mislukt — één cyclus overgeslagen, geen ander abonnement.
@@ -309,7 +393,12 @@ test("de betaalagenda ziet Simyo, ook als de tenaamstelling schuift en juni mist
   const streams = detectScheduleStreams(simyo, { asOf: "2026-08-16" });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    sign: -1, cadenceDays: 30, amountCents: 1189, occurrences: 5, lastDate: "2026-08-04", skippedCycles: 1,
+    sign: -1,
+    cadenceDays: 30,
+    amountCents: 1189,
+    occurrences: 5,
+    lastDate: "2026-08-04",
+    skippedCycles: 1,
   });
 });
 
@@ -322,7 +411,12 @@ test("gemeentebelasting: de omschrijving maakt de gemeente-afschrijving één st
   ];
   const streams = detectScheduleStreams(gemeente, { asOf: "2026-08-16" });
   expect(streams).toHaveLength(1);
-  expect(streams[0]).toMatchObject({ label: "Gemeentebelasting", cadenceDays: 30, amountCents: 4725, sign: -1 });
+  expect(streams[0]).toMatchObject({
+    label: "Gemeentebelasting",
+    cadenceDays: 30,
+    amountCents: 4725,
+    sign: -1,
+  });
 });
 
 test("DUO is een INKOMENDE maandstroom en hoort net zo goed in het betaalschema", () => {
@@ -336,7 +430,13 @@ test("DUO is een INKOMENDE maandstroom en hoort net zo goed in het betaalschema"
   const streams = detectScheduleStreams(duo, { asOf: "2026-08-26" });
   expect(streams).toHaveLength(1);
   // Het bedrag is de figuur die de stroom NU herhaalt, niet het oude bedrag.
-  expect(streams[0]).toMatchObject({ label: "DUO", sign: 1, cadenceDays: 30, amountCents: 51210, occurrences: 5 });
+  expect(streams[0]).toMatchObject({
+    label: "DUO",
+    sign: 1,
+    cadenceDays: 30,
+    amountCents: 51210,
+    occurrences: 5,
+  });
 });
 
 test("een gestopte stroom staat niet meer in het schema", () => {
@@ -396,7 +496,11 @@ test("een gemiste incasso kostte hem het abonnement: cv 0,433 tegen een grens va
   const simyo = dates.map((d) => tx("SIMYO B.V.", d, -11.89));
   const [sub] = detectSubscriptions(simyo, { asOf: "2026-09-10" });
   expect(sub).toMatchObject({
-    cadenceDays: 30, monthlyCents: 1189, occurrences: 4, skippedCycles: 1, function: "Mobiel abonnement",
+    cadenceDays: 30,
+    monthlyCents: 1189,
+    occurrences: 4,
+    skippedCycles: 1,
+    function: "Mobiel abonnement",
   });
 });
 
@@ -429,12 +533,20 @@ test("twee gemiste incasso's mag nog, drie op een rij is een gestopte stroom", (
   // de oude poort staan erbij — die weigerde alle drie.
   const tweeGemist = ["2026-05-04", "2026-06-04", "2026-09-03", "2026-10-03"]; // gaten [31, 91, 30]
   expect(oudeGate(tweeGemist).cv).toBeCloseTo(0.689, 3);
-  const [sub] = detectSubscriptions(tweeGemist.map((d) => tx("SIMYO B.V.", d, -11.89)), { asOf: "2026-10-10" });
+  const [sub] = detectSubscriptions(
+    tweeGemist.map((d) => tx("SIMYO B.V.", d, -11.89)),
+    { asOf: "2026-10-10" },
+  );
   expect(sub).toMatchObject({ cadenceDays: 30, monthlyCents: 1189, skippedCycles: 2 });
 
   const drieGemist = ["2026-05-04", "2026-06-04", "2026-10-03", "2026-11-02"]; // gaten [31, 121, 30]
   expect(oudeGate(drieGemist).cv).toBeCloseTo(0.861, 3);
-  expect(detectSubscriptions(drieGemist.map((d) => tx("SIMYO B.V.", d, -11.89)), { asOf: "2026-11-10" })).toEqual([]);
+  expect(
+    detectSubscriptions(
+      drieGemist.map((d) => tx("SIMYO B.V.", d, -11.89)),
+      { asOf: "2026-11-10" },
+    ),
+  ).toEqual([]);
 });
 
 test("een eenmalige bundel vlak na de incasso sloopte het abonnement, en nu niet meer", () => {
@@ -442,14 +554,21 @@ test("een eenmalige bundel vlak na de incasso sloopte het abonnement, en nu niet
    * zette de bundel 11 dagen na de laatste incasso en stond daarmee 0,014 van
    * de rand: op 9 dagen kwam de cv op 0,433 en verdween het abonnement. Die
    * ene dag mocht niet beslissen of hij zijn telefoonabonnement ziet. */
-  const incasso = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89));
+  const incasso = ["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("SIMYO B.V.", d, -11.89),
+  );
   const negenDagen = [...incasso, tx("Simyo extra bundel", "2026-08-12", -10)];
   expect(oudeGate(negenDagen.map((t) => t.date)).cv).toBeCloseTo(0.433, 3); // VOOR: geweigerd
 
   const [sub] = detectSubscriptions(negenDagen, { asOf: "2026-08-16" });
   // De bundel hoort niet bij de stroom: hij telt niet mee in de prijs en ook
   // niet in het aantal afschrijvingen.
-  expect(sub).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 4, skippedCycles: 0 });
+  expect(sub).toMatchObject({
+    monthlyCents: 1189,
+    lastAmountCents: 1189,
+    occurrences: 4,
+    skippedCycles: 0,
+  });
 });
 
 test("een tweede losse bundel is één zwerver te veel — geweigerd, net als voorheen", () => {
@@ -459,7 +578,9 @@ test("een tweede losse bundel is één zwerver te veel — geweigerd, net als vo
    * ten opzichte van vroeger — de oude poort weigerde deze reeks ook (cv
    * 0,567) — maar nu weigert hij om een reden die uit te leggen is. */
   const rijen = [
-    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89)),
+    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+      tx("SIMYO B.V.", d, -11.89),
+    ),
     tx("Simyo extra bundel", "2026-08-14", -10),
     tx("Simyo extra bundel", "2026-08-20", -10),
   ];
@@ -480,7 +601,9 @@ test("uit een drukke winkel wordt geen abonnement gesneden", () => {
     const d = new Date(Date.UTC(2026, 4, 2 + i * 7)).toISOString().slice(0, 10);
     wekelijks.push(tx("Albert Heijn 1234", d, -(30 + (i % 5))));
   }
-  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) => tx("Albert Heijn 1234", d, -42.5));
+  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) =>
+    tx("Albert Heijn 1234", d, -42.5),
+  );
   expect(detectSubscriptions([...wekelijks, ...maandelijks], { asOf: "2026-07-25" })).toEqual([]);
   expect(detectSubscriptions(maandelijks, { asOf: "2026-07-25" })).toHaveLength(1);
 });
@@ -506,18 +629,32 @@ test("een toestelaankoop vlak VOOR de incasso pakt niet anders uit dan vlak erna
   // op de bedragspreiding is 0,35.
   expect(cvVan([1189, 1189, 8000, 1189, 1189])).toBeCloseTo(1.194, 3);
 
-  const incasso = ["2026-04-02", "2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"]
-    .map((d) => tx("SIMYO B.V.", d, -11.89));
-  const ervoor = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-05-29", -80)], { asOf: "2026-08-16" });
-  const erna = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-06-05", -80)], { asOf: "2026-08-16" });
+  const incasso = ["2026-04-02", "2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("SIMYO B.V.", d, -11.89),
+  );
+  const ervoor = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-05-29", -80)], {
+    asOf: "2026-08-16",
+  });
+  const erna = detectSubscriptions([...incasso, tx("Simyo toestel", "2026-06-05", -80)], {
+    asOf: "2026-08-16",
+  });
 
   // Beide kanten geven nu hetzelfde antwoord, en het is het juiste: de vijf
   // incasso's zijn de stroom, de aankoop is een zwerver ernaast.
   expect(ervoor).toHaveLength(1); // was: []
-  expect(ervoor[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
-  expect(erna[0]).toMatchObject({ monthlyCents: 1189, lastAmountCents: 1189, occurrences: 5, skippedCycles: 0 });
+  expect(ervoor[0]).toMatchObject({
+    monthlyCents: 1189,
+    lastAmountCents: 1189,
+    occurrences: 5,
+    skippedCycles: 0,
+  });
+  expect(erna[0]).toMatchObject({
+    monthlyCents: 1189,
+    lastAmountCents: 1189,
+    occurrences: 5,
+    skippedCycles: 0,
+  });
 });
-
 
 /* ------------------------------------------------------------------------- *
  * REEKS H — TWEE MAANDSTROMEN BIJ ÉÉN WINKEL (review 21 aug, 22 aug gebouwd)
@@ -548,7 +685,10 @@ function mediaanGaten(dates: string[]): { gaps: number[]; mediaan: number } {
  *  de detector het zelf doet. */
 function stromenVan(rijen: Tx[]) {
   const s = [...rijen].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  const r = fitMerchantStreams(s.map((t) => t.date), s.map((t) => Math.round(Math.abs(t.amount) * 100)));
+  const r = fitMerchantStreams(
+    s.map((t) => t.date),
+    s.map((t) => Math.round(Math.abs(t.amount) * 100)),
+  );
   return {
     ...r,
     perStroom: r.streams.map((f) => ({
@@ -561,8 +701,12 @@ function stromenVan(rijen: Tx[]) {
 }
 
 const reeksH = [
-  ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -11.89)),
-  ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Simyo B.V. toestelkrediet", d, -25)),
+  ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+    tx("SIMYO B.V.", d, -11.89),
+  ),
+  ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) =>
+    tx("Simyo B.V. toestelkrediet", d, -25),
+  ),
 ];
 
 test("reeks H: op de hoop is de mediaan 15 dagen, per bedrag 31 — en dát is het verschil", () => {
@@ -574,7 +718,7 @@ test("reeks H: op de hoop is de mediaan 15 dagen, per bedrag 31 — en dát is h
   const toestel = mediaanGaten(reeksH.filter((t) => t.amount === -25).map((t) => t.date));
   expect(abo.gaps).toEqual([31, 30, 32]);
   expect(toestel.gaps).toEqual([32, 31, 31]);
-  expect(abo.mediaan).toBe(31);     // NA: twee maandritmes, allebei zuiver
+  expect(abo.mediaan).toBe(31); // NA: twee maandritmes, allebei zuiver
   expect(toestel.mediaan).toBe(31);
 });
 
@@ -624,8 +768,12 @@ test("twee stromen bij één winkel zijn geen twee diensten — de dubbelmelding
   // Met een tweede PROVIDER erbij is het wél een dubbeling — en de winkel wordt
   // vertegenwoordigd door zijn KLEINSTE stroom, want dit blok belooft een
   // besparing en niemand weet welke van de twee opzegbaar is.
-  const odido = ["2026-05-10", "2026-06-10", "2026-07-10", "2026-08-10"].map((d) => tx("Odido Netherlands", d, -19.5));
-  const [ov] = subscriptionOverlaps(detectSubscriptions([...reeksH, ...odido], { asOf: "2026-08-25" }));
+  const odido = ["2026-05-10", "2026-06-10", "2026-07-10", "2026-08-10"].map((d) =>
+    tx("Odido Netherlands", d, -19.5),
+  );
+  const [ov] = subscriptionOverlaps(
+    detectSubscriptions([...reeksH, ...odido], { asOf: "2026-08-25" }),
+  );
   expect(ov.subs.map((x) => x.monthlyCents).sort((a, b) => a - b)).toEqual([1189, 1950]);
   expect(ov.monthlyCents).toBe(1189 + 1950); // niet 2500 + 1950
 });
@@ -639,7 +787,12 @@ test("een prijsverhoging wordt niet in tweeën gehakt", () => {
   ];
   const subs = detectSubscriptions(duurder, { asOf: "2026-08-16" });
   expect(subs).toHaveLength(1);
-  expect(subs[0]).toMatchObject({ cadenceDays: 30, occurrences: 6, firstAmountCents: 1189, lastAmountCents: 1249 });
+  expect(subs[0]).toMatchObject({
+    cadenceDays: 30,
+    occurrences: 6,
+    firstAmountCents: 1189,
+    lastAmountCents: 1249,
+  });
   expect(subs[0].changePct).toBeCloseTo(0.05, 3);
   expect(subscriptionPriceIncreases(subs)).toHaveLength(1);
 
@@ -654,12 +807,22 @@ test("een bedrag dat om en om wisselt blijft één maandstroom", () => {
    * prijs kunnen uitkomen — precies de fout die de wisselende schrijfwijzen ooit
    * maakten. De hele winkel krijgt daarom het eerste woord: de splitsing wordt
    * alleen gebruikt als ze STRIKT meer afschrijvingen verklaart. */
-  const wisselend = ["2026-03-02", "2026-04-02", "2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"]
-    .map((d, i) => tx("Kruidvat Winkel", d, i % 2 === 0 ? -2.5 : -2.55));
+  const wisselend = [
+    "2026-03-02",
+    "2026-04-02",
+    "2026-05-02",
+    "2026-06-02",
+    "2026-07-02",
+    "2026-08-03",
+  ].map((d, i) => tx("Kruidvat Winkel", d, i % 2 === 0 ? -2.5 : -2.55));
   const gesplitst = stromenVan(wisselend);
   expect(gesplitst.splitByAmount).toBe(false);
-  expect(gesplitst.perStroom).toEqual([{ cadence: 30, gaps: [31, 30, 31, 30, 32], occ: 6, bedragCents: 250 }]);
-  expect(detectSubscriptions(wisselend, { asOf: "2026-08-16" })).toMatchObject([{ cadenceDays: 30, occurrences: 6 }]);
+  expect(gesplitst.perStroom).toEqual([
+    { cadence: 30, gaps: [31, 30, 31, 30, 32], occ: 6, bedragCents: 250 },
+  ]);
+  expect(detectSubscriptions(wisselend, { asOf: "2026-08-16" })).toMatchObject([
+    { cadenceDays: 30, occurrences: 6 },
+  ]);
 });
 
 test("de drukke winkel blijft geweigerd, en dit zijn de aantallen", () => {
@@ -674,15 +837,17 @@ test("de drukke winkel blijft geweigerd, en dit zijn de aantallen", () => {
     const d = new Date(Date.UTC(2026, 4, 2 + i * 7)).toISOString().slice(0, 10);
     wekelijks.push(tx("Albert Heijn 1234", d, -(30 + (i % 5))));
   }
-  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) => tx("Albert Heijn 1234", d, -42.5));
+  const maandelijks = ["2026-05-06", "2026-06-05", "2026-07-05"].map((d) =>
+    tx("Albert Heijn 1234", d, -42.5),
+  );
   const alles = [...wekelijks, ...maandelijks];
 
   const gesplitst = stromenVan(alles);
   expect(gesplitst.splitByAmount).toBe(true);
-  expect(gesplitst.strays).toBe(6);          // 15 rijen, 9 geclaimd
+  expect(gesplitst.strays).toBe(6); // 15 rijen, 9 geclaimd
   expect(alles.length - gesplitst.strays).toBe(9);
-  expect(Math.floor(9 / 3)).toBe(3);         // budget 3, en 6 > 3
-  expect(gesplitst.streams).toEqual([]);     // dus de hele winkel valt af
+  expect(Math.floor(9 / 3)).toBe(3); // budget 3, en 6 > 3
+  expect(gesplitst.streams).toEqual([]); // dus de hele winkel valt af
   expect(detectSubscriptions(alles, { asOf: "2026-07-25" })).toEqual([]);
 
   // Dezelfde drie rijen alleen zijn wél een abonnement — dat verschil is het punt.
@@ -697,8 +862,12 @@ test("twee stromen met HETZELFDE bedrag blijven onzichtbaar — een misser, geen
    * dan pelt twintig wekelijkse koffie van € 5,00 uiteen in vier
    * "maandabonnementen". Een misser kost een inzicht; dat zou de tab kosten. */
   const passen = [
-    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) => tx("Basic-Fit", d, -24.99)),
-    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Basic-Fit", d, -24.99)),
+    ...["2026-05-02", "2026-06-02", "2026-07-02", "2026-08-03"].map((d) =>
+      tx("Basic-Fit", d, -24.99),
+    ),
+    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) =>
+      tx("Basic-Fit", d, -24.99),
+    ),
   ];
   const gesplitst = stromenVan(passen);
   expect(gesplitst.splitByAmount).toBe(false); // één bedrag = één groep = de hele hoop
@@ -713,14 +882,24 @@ test("een prijsverhoging binnen reeks H blijft één stroom die duurder werd", (
   const rijen = [
     ...["2026-05-02", "2026-06-02"].map((d) => tx("SIMYO B.V.", d, -11.89)),
     ...["2026-07-02", "2026-08-03"].map((d) => tx("SIMYO B.V.", d, -12.49)),
-    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) => tx("Simyo B.V. toestelkrediet", d, -25)),
+    ...["2026-05-16", "2026-06-17", "2026-07-18", "2026-08-18"].map((d) =>
+      tx("Simyo B.V. toestelkrediet", d, -25),
+    ),
   ];
   const subs = detectSubscriptions(rijen, { asOf: "2026-08-25" });
   expect(subs).toHaveLength(2);
   const abo = subs.find((x) => x.lastAmountCents === 1249)!;
-  expect(abo).toMatchObject({ firstAmountCents: 1189, lastAmountCents: 1249, occurrences: 4, cadenceDays: 30 });
+  expect(abo).toMatchObject({
+    firstAmountCents: 1189,
+    lastAmountCents: 1249,
+    occurrences: 4,
+    cadenceDays: 30,
+  });
   expect(abo.changePct).toBeCloseTo(0.05, 3);
-  expect(subs.find((x) => x.lastAmountCents === 2500)).toMatchObject({ occurrences: 4, changePct: 0 });
+  expect(subs.find((x) => x.lastAmountCents === 2500)).toMatchObject({
+    occurrences: 4,
+    changePct: 0,
+  });
 });
 
 test("losse aankopen bij één winkel ketenen niet aan elkaar tot een stroom", () => {
@@ -733,9 +912,15 @@ test("losse aankopen bij één winkel ketenen niet aan elkaar tot een stroom", (
    * geclaimd geteld — en het zwerversbudget rekent met dat getal. Een groep van
    * één mag daarom alleen worden aangevuld met iets binnen 0,1. */
   const echt = [
-    ...["2026-05-03", "2026-06-03", "2026-07-03", "2026-08-03"].map((d) => tx("APPLE.COM/BILL", d, -0.99)),
-    ...["2026-05-11", "2026-06-11", "2026-07-11", "2026-08-11"].map((d) => tx("APPLE.COM/BILL", d, -10.99)),
-    ...["2026-05-20", "2026-06-20", "2026-07-20", "2026-08-20"].map((d) => tx("APPLE.COM/BILL", d, -9.99)),
+    ...["2026-05-03", "2026-06-03", "2026-07-03", "2026-08-03"].map((d) =>
+      tx("APPLE.COM/BILL", d, -0.99),
+    ),
+    ...["2026-05-11", "2026-06-11", "2026-07-11", "2026-08-11"].map((d) =>
+      tx("APPLE.COM/BILL", d, -10.99),
+    ),
+    ...["2026-05-20", "2026-06-20", "2026-07-20", "2026-08-20"].map((d) =>
+      tx("APPLE.COM/BILL", d, -9.99),
+    ),
   ];
   // Drie abonnementen onder één tegenpartij — dat is de winst van op bedrag
   // groeperen buiten Simyo om; op de hoop gaven deze twaalf rijen niets.
@@ -743,12 +928,13 @@ test("losse aankopen bij één winkel ketenen niet aan elkaar tot een stroom", (
   expect(alleenAbos.map((x) => x.monthlyCents)).toEqual([1099, 999, 99]);
   expect(stromenVan(echt).strays).toBe(0);
 
-  const losse = ["2026-05-05", "2026-05-25", "2026-06-14", "2026-07-08", "2026-08-01"]
-    .map((d, i) => tx("APPLE.COM/BILL", d, -(1.5 + i)));
+  const losse = ["2026-05-05", "2026-05-25", "2026-06-14", "2026-07-08", "2026-08-01"].map((d, i) =>
+    tx("APPLE.COM/BILL", d, -(1.5 + i)),
+  );
   const gemengd = stromenVan([...echt, ...losse]);
-  expect(gemengd.strays).toBe(5);            // 17 rijen, 12 geclaimd
-  expect(Math.floor(12 / 3)).toBe(4);        // budget 4, en 5 > 4
-  expect(gemengd.streams).toEqual([]);       // de winkel valt in zijn geheel af
+  expect(gemengd.strays).toBe(5); // 17 rijen, 12 geclaimd
+  expect(Math.floor(12 / 3)).toBe(4); // budget 4, en 5 > 4
+  expect(gemengd.streams).toEqual([]); // de winkel valt in zijn geheel af
   expect(detectSubscriptions([...echt, ...losse], { asOf: "2026-08-25" })).toEqual([]);
 });
 
@@ -777,8 +963,15 @@ test("de uitkomst hangt niet van de volgorde van de rijen af", () => {
  * groeperingen, dus dat getal beschreef een andere vraag. */
 describe("merchantTallies — wat de detector zag, op zijn eigen grondslag", () => {
   const tx = (cp: string, date: string, amount: number): Tx => ({
-    id: `${cp}-${date}`, accountKey: "A", date, amount, currency: "EUR",
-    counterparty: cp, description: "", category: "", manual: false,
+    id: `${cp}-${date}`,
+    accountKey: "A",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty: cp,
+    description: "",
+    category: "",
+    manual: false,
   });
 
   it("groepeert zoals de detector, dus twee schrijfwijzen zijn één ontvanger", () => {
@@ -852,8 +1045,15 @@ describe("merchantTallies — wat de detector zag, op zijn eigen grondslag", () 
  * twee dingen in die geen van beide klopten. */
 describe("wat zijn eigen afschrift blootlegde", () => {
   const tx = (cp: string, date: string, amount: number): Tx => ({
-    id: `${cp}-${date}`, accountKey: "A", date, amount, currency: "EUR",
-    counterparty: cp, description: "", category: "", manual: false,
+    id: `${cp}-${date}`,
+    accountKey: "A",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty: cp,
+    description: "",
+    category: "",
+    manual: false,
   });
 
   it("Simyo: twaalf keer, ritme 29 dagen, spreiding 0,36 — en tóch gevonden", () => {
@@ -866,7 +1066,9 @@ describe("wat zijn eigen afschrift blootlegde", () => {
      * tegen 12. Dus won de hele winkel — die vervolgens zelf op de bedragspreiding
      * sneuvelde. De lezing die het wél haalde verloor van een lezing die daarna
      * werd afgekeurd. */
-    const bedragen = [11.89, 11.89, 27.85, 11.89, 11.89, 11.89, 27.85, 11.89, 11.89, 27.86, 11.89, 11.89];
+    const bedragen = [
+      11.89, 11.89, 27.85, 11.89, 11.89, 11.89, 27.85, 11.89, 11.89, 27.86, 11.89, 11.89,
+    ];
     const rows = bedragen.map((b, i) => {
       const d = new Date(Date.UTC(2025, 8, 14 + Math.round(i * 29.5)));
       return tx("SIMYO", d.toISOString().slice(0, 10), -b);

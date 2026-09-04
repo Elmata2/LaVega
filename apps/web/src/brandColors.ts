@@ -52,10 +52,12 @@ function decode(logo: BankLogo): Promise<CardRamp | null> {
 /** Alle kaartvlakken, één keer per sessie. */
 export function loadBrandRamps(logos: BankLogo[] = BANK_LOGOS): Promise<BrandRamps> {
   if (cached) return cached;
-  cached = Promise.all(logos.map((l) => decode(l).then((r) => [l.slug, r] as const))).then((pairs) => {
-    const out: BrandRamps = {};
-    for (const [slug, ramp] of pairs) if (ramp) out[slug] = ramp;
-    return out;
-  });
+  cached = Promise.all(logos.map((l) => decode(l).then((r) => [l.slug, r] as const))).then(
+    (pairs) => {
+      const out: BrandRamps = {};
+      for (const [slug, ramp] of pairs) if (ramp) out[slug] = ramp;
+      return out;
+    },
+  );
   return cached;
 }

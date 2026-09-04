@@ -50,7 +50,12 @@ test("niceDomain gives a flat series a band to sit in instead of a zero range", 
 test("smoothPath degrades honestly with too few points", () => {
   expect(smoothPath([])).toBe("");
   expect(smoothPath([{ x: 10, y: 20 }])).toBe("M 10 20");
-  expect(smoothPath([{ x: 0, y: 0 }, { x: 100, y: 50 }])).toContain("C");
+  expect(
+    smoothPath([
+      { x: 0, y: 0 },
+      { x: 100, y: 50 },
+    ]),
+  ).toContain("C");
 });
 
 test("smoothPath never overshoots a dip — a smoothed cash line may not invent a shortfall", () => {
@@ -69,15 +74,27 @@ test("smoothPath never overshoots a dip — a smoothed cash line may not invent 
 });
 
 test("areaPath closes the line down to the baseline", () => {
-  const d = areaPath([{ x: 0, y: 20 }, { x: 100, y: 40 }], 100);
+  const d = areaPath(
+    [
+      { x: 0, y: 20 },
+      { x: 100, y: 40 },
+    ],
+    100,
+  );
   expect(d.startsWith("M 0 20")).toBe(true);
   expect(d.endsWith("L 0 100 Z")).toBe(true);
 });
 
 test("bandPath joins the two edges into one closed shape", () => {
   const d = bandPath(
-    [{ x: 0, y: 10 }, { x: 100, y: 20 }],
-    [{ x: 0, y: 40 }, { x: 100, y: 50 }],
+    [
+      { x: 0, y: 10 },
+      { x: 100, y: 20 },
+    ],
+    [
+      { x: 0, y: 40 },
+      { x: 100, y: 50 },
+    ],
   );
   // One move, one join to the return leg, one close — never two subpaths.
   expect(d.match(/M /g)?.length).toBe(1);

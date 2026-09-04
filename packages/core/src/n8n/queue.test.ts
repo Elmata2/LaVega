@@ -12,7 +12,11 @@ function notice(messageId: string) {
 
 test("facturen en meldingen komen in twee aparte rijen", () => {
   const store: Record<string, unknown> = {};
-  const result = addToQueue(store, { invoices: [invoice("a")], notices: [notice("b")], processedIds: ["a", "b"] }, NOW);
+  const result = addToQueue(
+    store,
+    { invoices: [invoice("a")], notices: [notice("b")], processedIds: ["a", "b"] },
+    NOW,
+  );
   expect(result).toEqual({
     addedInvoices: 1,
     addedNotices: 1,
@@ -26,14 +30,22 @@ test("facturen en meldingen komen in twee aparte rijen", () => {
 test("dezelfde mail komt er niet twee keer in", () => {
   const store: Record<string, unknown> = {};
   addToQueue(store, { invoices: [invoice("a")], notices: [], processedIds: ["a"] }, NOW);
-  const second = addToQueue(store, { invoices: [invoice("a")], notices: [], processedIds: ["a"] }, NOW);
+  const second = addToQueue(
+    store,
+    { invoices: [invoice("a")], notices: [], processedIds: ["a"] },
+    NOW,
+  );
   expect(second.addedInvoices).toBe(0);
   expect(second.inQueue).toBe(1);
 });
 
 test("een regel zonder messageId komt er niet in: daar is niet op te ontdubbelen", () => {
   const store: Record<string, unknown> = {};
-  const result = addToQueue(store, { invoices: [{ messageId: "" }], notices: [{}], processedIds: [] }, NOW);
+  const result = addToQueue(
+    store,
+    { invoices: [{ messageId: "" }], notices: [{}], processedIds: [] },
+    NOW,
+  );
   expect(result.addedInvoices).toBe(0);
   expect(result.addedNotices).toBe(0);
 });
@@ -54,7 +66,9 @@ test("de rij loopt niet vol: de oudste vallen eruit", () => {
 });
 
 test("het geheugen van beoordeelde berichten loopt ook niet vol", () => {
-  const store: Record<string, unknown> = { seenIds: Array.from({ length: MAX_SEEN }, (_, i) => "old" + i) };
+  const store: Record<string, unknown> = {
+    seenIds: Array.from({ length: MAX_SEEN }, (_, i) => "old" + i),
+  };
   const result = addToQueue(store, { invoices: [], notices: [], processedIds: ["nieuw"] }, NOW);
   expect(result.remembered).toBe(MAX_SEEN);
   expect((store.seenIds as string[]).at(-1)).toBe("nieuw");

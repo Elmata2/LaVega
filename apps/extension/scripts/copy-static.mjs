@@ -35,7 +35,15 @@
  * Draaien gebeurt via `pnpm build`; los kan met `node scripts/copy-static.mjs`,
  * maar dan moet tsc er al overheen zijn geweest. */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  statSync,
+} from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
 import { maakIcoon, ICOON_MATEN } from "./icon-png.mjs";
@@ -83,7 +91,10 @@ gedaan.push(`${ICOON_MATEN.length} iconen gemaakt (${iconBytes} bytes samen)`);
 /* ── 3. verwijst het manifest naar bestanden die bestaan? ──────────────────── */
 
 const manifestPad = join(DIST, "manifest.json");
-eis(existsSync(manifestPad), "dist/manifest.json ontbreekt — public/manifest.json is niet gekopieerd.");
+eis(
+  existsSync(manifestPad),
+  "dist/manifest.json ontbreekt — public/manifest.json is niet gekopieerd.",
+);
 
 let manifest = null;
 if (existsSync(manifestPad)) {
@@ -124,7 +135,8 @@ if (manifest) {
   /* Alleen "ok" melden als het ook ok wás. Een regel die met "ok —" begint terwijl
    * er twee regels lager een FOUT staat over hetzelfde, is hoe iemand een build
    * gaat geloven die hij niet moet geloven. */
-  if (fouten.length === voorVerwijzingen) gedaan.push(`${verwijzingen.length} manifestverwijzingen nagelopen`);
+  if (fouten.length === voorVerwijzingen)
+    gedaan.push(`${verwijzingen.length} manifestverwijzingen nagelopen`);
 
   eis(manifest.manifest_version === 3, "manifest_version moet 3 zijn.");
 
@@ -158,7 +170,10 @@ if (manifest) {
         `        niets op, dus daar hoort 'none' te staan; alles anders is een deur die niemand gebruikt.`,
     );
   }
-  eis(!/unsafe-eval|remote|https?:/i.test(csp), "content_security_policy laat een schema of unsafe-eval toe.");
+  eis(
+    !/unsafe-eval|remote|https?:/i.test(csp),
+    "content_security_policy laat een schema of unsafe-eval toe.",
+  );
 
   /* STYLE-SRC MOET 'self' ZIJN EN GEEN 'unsafe-inline'. Dat stond er wel, voor
    * precies één style-attribuut in popup.html — een marge van zestien pixels.
@@ -210,16 +225,11 @@ eis(
  * geen https-patroon en heeft geen pad om op te controleren, dus die staat hier
  * terecht buiten de lus. */
 for (const patroon of bronnen.BRON_MATCHES) {
-  eis(
-    bronnen.padIsSpecifiek(patroon),
-    `${patroon} wijst een heel domein aan, geen pad.`,
-  );
+  eis(bronnen.padIsSpecifiek(patroon), `${patroon} wijst een heel domein aan, geen pad.`);
 }
 
 if (fouten.length === voorSitelijst) {
-  gedaan.push(
-    `hostrechten gelijk aan het manifest (${uitCode.length}: ${uitCode.join(", ")})`,
-  );
+  gedaan.push(`hostrechten gelijk aan het manifest (${uitCode.length}: ${uitCode.join(", ")})`);
 }
 
 /* ── 5. is content.js nog een klassiek script? ─────────────────────────────── */
@@ -319,7 +329,8 @@ const ELK_ADRES = [
 function alleStrings(waarde, uit = []) {
   if (typeof waarde === "string") uit.push(waarde);
   else if (Array.isArray(waarde)) for (const v of waarde) alleStrings(v, uit);
-  else if (waarde && typeof waarde === "object") for (const v of Object.values(waarde)) alleStrings(v, uit);
+  else if (waarde && typeof waarde === "object")
+    for (const v of Object.values(waarde)) alleStrings(v, uit);
   return uit;
 }
 
@@ -367,7 +378,10 @@ function keurBron(relPad, bron) {
     } catch {
       return bezwaren; /* onleesbare JSON is al een fout in controle 3 hierboven */
     }
-    const toegestaan = new Set([...(json.host_permissions ?? []), ...(json.optional_host_permissions ?? [])]);
+    const toegestaan = new Set([
+      ...(json.host_permissions ?? []),
+      ...(json.optional_host_permissions ?? []),
+    ]);
     for (const tekst of alleStrings(json)) {
       if (!/https?:\/\//i.test(tekst)) continue;
       if (toegestaan.has(tekst)) continue;
@@ -414,7 +428,11 @@ const ZELFTEST_VUIL = [
     "stijl.css",
     ".merk { background: url(//tracker.example.com/x.png); }",
   ],
-  ["een fetch in een inline script", "options.html", '<script>fetch("https://x.example/pixel")</script>'],
+  [
+    "een fetch in een inline script",
+    "options.html",
+    '<script>fetch("https://x.example/pixel")</script>',
+  ],
   [
     "een remote url() in een stylesheet die JavaScript in de pagina zet",
     "content.js",
@@ -433,7 +451,11 @@ const ZELFTEST_SCHOON = [
     "popup.html",
     '<link rel="stylesheet" href="stijl.css" />\n<code>chrome://extensions</code>\n<script type="module" src="popup.js"></script>',
   ],
-  ["de echte stylesheet", "stijl.css", "/* geen animatie */\n:root { --vlak: #faf8f3; }\nbody { background: var(--vlak); }"],
+  [
+    "de echte stylesheet",
+    "stijl.css",
+    "/* geen animatie */\n:root { --vlak: #faf8f3; }\nbody { background: var(--vlak); }",
+  ],
   [
     "het echte manifest, met het IKEA-matchpatroon erin",
     "manifest.json",
@@ -457,7 +479,11 @@ const ZELFTEST_SCHOON = [
  * pixel die er de vorige keer doorheen kwam, kwam door een extensie die niemand
  * had bedacht. */
 const ZELFTEST_ONBEKENDE_EXTENSIE = [
-  ["een adres in een bestand met een onbekende extensie", "iets.dat", "GET https://tracker.example.com/p.gif"],
+  [
+    "een adres in een bestand met een onbekende extensie",
+    "iets.dat",
+    "GET https://tracker.example.com/p.gif",
+  ],
 ];
 
 const zelftestFouten = [];
@@ -468,7 +494,9 @@ for (const [naam, pad, bron] of [...ZELFTEST_VUIL, ...ZELFTEST_ONBEKENDE_EXTENSI
 for (const [naam, pad, bron] of ZELFTEST_SCHOON) {
   const bezwaren = keurBron(pad, bron);
   if (bezwaren.length > 0) {
-    zelftestFouten.push(`de poort gaat af op ${naam} (${pad}): ${bezwaren.map((b) => b.uitleg).join("; ")}`);
+    zelftestFouten.push(
+      `de poort gaat af op ${naam} (${pad}): ${bezwaren.map((b) => b.uitleg).join("; ")}`,
+    );
   }
 }
 if (zelftestFouten.length > 0) {
@@ -502,7 +530,8 @@ function loopDoor(map) {
     const bezwaren = keurBron(relPad, readFileSync(pad, "latin1"));
     gescand++;
     for (const { uitleg, regels } of bezwaren) {
-      const waar = regels.length > 0 ? regels.map((r) => `dist/${relPad}:${r}`).join(", ") : `dist/${relPad}`;
+      const waar =
+        regels.length > 0 ? regels.map((r) => `dist/${relPad}:${r}`).join(", ") : `dist/${relPad}`;
       eis(
         false,
         `${waar} bevat ${uitleg}. Deze extensie stuurt niets naar buiten;\n` +
@@ -516,7 +545,9 @@ loopDoor(DIST);
  * vorige versie op struikelde: "ok — geen netwerkaanroepen in de bundel" stond
  * er ook toen de pixel er gewoon in zat. */
 if (fouten.length === voorScan) {
-  gedaan.push(`geen netwerkverkeer in de bundel (${gescand} bestanden gescand, alles wat in dist/ ligt)`);
+  gedaan.push(
+    `geen netwerkverkeer in de bundel (${gescand} bestanden gescand, alles wat in dist/ ligt)`,
+  );
 } else {
   gedaan.push(`${gescand} bestanden gescand — zie de fouten hieronder`);
 }

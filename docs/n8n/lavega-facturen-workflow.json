@@ -14,10 +14,7 @@
       "name": "E-mail binnen",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -860,
-        -140
-      ],
+      "position": [-860, -140],
       "webhookId": "b1000000-0000-4000-8000-000000000012",
       "notes": "Hier komt de Cloudflare-worker binnen (N8N_WEBHOOK_URL). Respond staat op 'When Last Node Finishes' zodat de worker het antwoord van 'Zet in de wachtrij' krijgt: {addedInvoices, addedNotices}. Geen Respond-node in dit pad — dat pad deelt hij met de Gmail-tak, en die heeft geen webhook om op te antwoorden.",
       "notesInFlow": true
@@ -30,10 +27,7 @@
       "name": "Normaliseer binnengekomen mail",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -160,
-        -140
-      ]
+      "position": [-160, -140]
     },
     {
       "parameters": {},
@@ -41,10 +35,7 @@
       "name": "Handmatig starten",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        -860,
-        60
-      ]
+      "position": [-860, 60]
     },
     {
       "parameters": {
@@ -61,10 +52,7 @@
       "name": "Elk uur",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        -860,
-        240
-      ]
+      "position": [-860, 240]
     },
     {
       "parameters": {
@@ -87,10 +75,7 @@
       "name": "Gmail: recente mail",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [
-        -620,
-        150
-      ],
+      "position": [-620, 150],
       "onError": "continueRegularOutput",
       "notes": "Simplify UIT en Download Attachments IN Options — n8n leest alleen options.downloadAttachments. Ernaast gezet komt er nooit een PDF mee."
     },
@@ -102,10 +87,7 @@
       "name": "Normaliseer bericht",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -160,
-        150
-      ],
+      "position": [-160, 150],
       "notes": "Slaat mail over die 'Zet in de wachtrij' al als seenIds kent. Zonder deze rem stuurt het uurlijkse schema dezelfde PDF 168 keer naar het model."
     },
     {
@@ -135,10 +117,7 @@
       "name": "Iets te lezen?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        60,
-        150
-      ]
+      "position": [60, 150]
     },
     {
       "parameters": {
@@ -148,10 +127,7 @@
       "name": "Bouw Claude-verzoek",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        280,
-        150
-      ]
+      "position": [280, 150]
     },
     {
       "parameters": {
@@ -161,10 +137,7 @@
       "name": "Melding: zelf ophalen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        280,
-        340
-      ]
+      "position": [280, 340]
     },
     {
       "parameters": {
@@ -198,10 +171,7 @@
       "name": "Lees de factuur",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        500,
-        150
-      ],
+      "position": [500, 150],
       "onError": "continueRegularOutput"
     },
     {
@@ -212,10 +182,7 @@
       "name": "Naar LaVega-vorm",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        720,
-        150
-      ]
+      "position": [720, 150]
     },
     {
       "parameters": {
@@ -225,10 +192,7 @@
       "name": "Zet in de wachtrij",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        940,
-        150
-      ],
+      "position": [940, 150],
       "notes": "Schrijft $getWorkflowStaticData('global').queue/.notices/.seenIds en ontdubbelt op messageId. Geeft {addedInvoices, addedNotices, inQueue, noticesInQueue, remembered} terug — precies wat de worker leest.",
       "notesInFlow": true
     },
@@ -246,10 +210,7 @@
       "name": "LaVega vraagt de rij op",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -860,
-        460
-      ],
+      "position": [-860, 460],
       "webhookId": "b1000000-0000-4000-8000-00000000000d",
       "notes": "GET, want apps/web/src/n8n.ts doet fetch(url, { method: 'GET' }). Een POST op dit pad hoort hier NIET thuis: 'Geef de rij en leeg hem' LEEGT de wachtrij. Header Auth = x-lavega-token.",
       "notesInFlow": true
@@ -262,10 +223,7 @@
       "name": "Geef de rij en leeg hem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -620,
-        460
-      ]
+      "position": [-620, 460]
     },
     {
       "parameters": {
@@ -277,10 +235,7 @@
       "name": "Antwoord aan LaVega",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        -380,
-        460
-      ]
+      "position": [-380, 460]
     }
   ],
   "connections": {

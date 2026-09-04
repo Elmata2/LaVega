@@ -15,7 +15,9 @@ test("falls forward to the nearest known rate for older dates instead of throwin
 });
 
 test("throws when the FX provider failed and passed undefined", () => {
-  expect(() => convertCurrency(117, "USD", "EUR", "2026-08-21", undefined)).toThrow("No FX rate available");
+  expect(() => convertCurrency(117, "USD", "EUR", "2026-08-21", undefined)).toThrow(
+    "No FX rate available",
+  );
 });
 
 test("skips conversion when currencies already match, even with no FX rate at all", () => {

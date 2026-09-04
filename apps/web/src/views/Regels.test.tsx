@@ -49,7 +49,9 @@ function render(rules: Rule[], onSaveRules: (next: Rule[]) => void = () => {}) {
 
 /** The first cell of every body row, i.e. the match column as displayed. */
 function shownMatches(): string[] {
-  return [...container!.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("td")!.textContent ?? "");
+  return [...container!.querySelectorAll("tbody tr")].map(
+    (tr) => tr.querySelector("td")!.textContent ?? "",
+  );
 }
 
 test("de lijst staat op alfabet, ongeacht in welke orde hij is opgeslagen", () => {
@@ -86,7 +88,9 @@ test("het alfabet is WEERGAVE — verwijderen laat de opgeslagen orde intact", (
   expect(shownMatches()[0]).toBe("Albert Heijn");
   // …en als je die verwijdert, gaan de andere twee terug in hun EIGEN orde: de
   // specifieke "zalando pay" staat nog vóór de algemene "zalando".
-  const row = [...container!.querySelectorAll("tbody tr")].find((tr) => (tr.textContent ?? "").includes("Albert Heijn"))!;
+  const row = [...container!.querySelectorAll("tbody tr")].find((tr) =>
+    (tr.textContent ?? "").includes("Albert Heijn"),
+  )!;
   act(() => row.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(onSaveRules).toHaveBeenCalledWith([
     { id: "1", match: "zalando pay", category: "Kleding" },
@@ -106,7 +110,9 @@ test("en dat is niet cosmetisch: de opgeslagen orde bepaalt welke regel wint", (
   expect(categorize(tx, stored)).toBe("Kleding");
   // …en wat het met de alfabetische orde zou doen. Zou het scherm de array zelf
   // sorteren, dan viel de specifieke regel stil van de kaart.
-  const alphabetical = [...stored].sort((a, b) => a.match.localeCompare(b.match, "nl", { sensitivity: "base", numeric: true }));
+  const alphabetical = [...stored].sort((a, b) =>
+    a.match.localeCompare(b.match, "nl", { sensitivity: "base", numeric: true }),
+  );
   expect(categorize(tx, alphabetical)).toBe("Onbekend");
 });
 

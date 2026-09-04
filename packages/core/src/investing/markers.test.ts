@@ -7,16 +7,66 @@ const bars: PriceBar[] = [
   { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
   { symbol: "AAPL", date: "2026-01-07", close: 105, currency: "USD" },
 ];
-const trade = (date: string, side: "buy" | "sell" | "other"): Trade => ({ id: date, entity: "personal", date, symbol: "AAPL", side, quantity: 2, price: 100, amount: 200, currency: "USD", commission: 0 });
-const dividend = (date: string, amount: number): Dividend => ({ id: date, entity: "personal", broker: "ibkr", date, symbol: "AAPL", amount, currency: "USD" });
+const trade = (date: string, side: "buy" | "sell" | "other"): Trade => ({
+  id: date,
+  entity: "personal",
+  date,
+  symbol: "AAPL",
+  side,
+  quantity: 2,
+  price: 100,
+  amount: 200,
+  currency: "USD",
+  commission: 0,
+});
+const dividend = (date: string, amount: number): Dividend => ({
+  id: date,
+  entity: "personal",
+  broker: "ibkr",
+  date,
+  symbol: "AAPL",
+  amount,
+  currency: "USD",
+});
 
 describe("placePositionMarkers", () => {
   test("places trades and dividends on exact or next available price day", () => {
-    const result = placePositionMarkers(bars, [trade("2026-01-05", "buy"), trade("2026-01-06", "sell")], [dividend("2026-01-06", 1.25)]);
-    expect(result[0]?.markers).toEqual([{ kind: "buy", eventDate: "2026-01-05", label: "Koop 2", quantity: 2, executionPrice: 100, amount: 200, commission: 0, currency: "USD" }]);
+    const result = placePositionMarkers(
+      bars,
+      [trade("2026-01-05", "buy"), trade("2026-01-06", "sell")],
+      [dividend("2026-01-06", 1.25)],
+    );
+    expect(result[0]?.markers).toEqual([
+      {
+        kind: "buy",
+        eventDate: "2026-01-05",
+        label: "Koop 2",
+        quantity: 2,
+        executionPrice: 100,
+        amount: 200,
+        commission: 0,
+        currency: "USD",
+      },
+    ]);
     expect(result[1]?.markers).toEqual([
-      { kind: "sell", eventDate: "2026-01-06", label: "Verkoop 2", quantity: 2, executionPrice: 100, amount: 200, commission: 0, currency: "USD" },
-      { kind: "dividend", eventDate: "2026-01-06", label: "Dividend 1.25 USD", amount: 1.25, dividendAmount: 1.25, currency: "USD" },
+      {
+        kind: "sell",
+        eventDate: "2026-01-06",
+        label: "Verkoop 2",
+        quantity: 2,
+        executionPrice: 100,
+        amount: 200,
+        commission: 0,
+        currency: "USD",
+      },
+      {
+        kind: "dividend",
+        eventDate: "2026-01-06",
+        label: "Dividend 1.25 USD",
+        amount: 1.25,
+        dividendAmount: 1.25,
+        currency: "USD",
+      },
     ]);
   });
 

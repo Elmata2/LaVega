@@ -10,7 +10,10 @@ import { moduleClass, MODULE_COLUMNS, MODULE_GRID_CLASS } from "./module-grid.js
  * without failing anything else (this repo has no render/DOM test lib). */
 
 // Comments stripped up front so a rule's selector never carries the comment above it.
-const css = readFileSync(fileURLToPath(new URL("./styles/modules.css", import.meta.url)), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const css = readFileSync(
+  fileURLToPath(new URL("./styles/modules.css", import.meta.url)),
+  "utf8",
+).replace(/\/\*[\s\S]*?\*\//g, "");
 
 /** The stylesheet split into the default scope and each max-width media block. */
 function scopes(source: string): { base: string; media: Map<number, string> } {
@@ -60,11 +63,15 @@ test("moduleClass maps span + height onto the grid's classes", () => {
 });
 
 test("moduleClass keeps a caller's own class last", () => {
-  expect(moduleClass({ span: 2, className: "overzicht-positie" })).toBe("module module-span-2 module-short overzicht-positie");
+  expect(moduleClass({ span: 2, className: "overzicht-positie" })).toBe(
+    "module module-span-2 module-short overzicht-positie",
+  );
 });
 
 test("the grid shows MODULE_COLUMNS columns on desktop", () => {
-  expect(declaration(base, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe(`repeat(${MODULE_COLUMNS}, minmax(0, 1fr))`);
+  expect(declaration(base, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe(
+    `repeat(${MODULE_COLUMNS}, minmax(0, 1fr))`,
+  );
 });
 
 test("every class moduleClass can emit is styled", () => {
@@ -88,14 +95,18 @@ test("on desktop a span occupies exactly that many columns", () => {
 
 test("at 1200px the grid is 2 columns and wide spans clamp to the full row", () => {
   const scope = media.get(1200)!;
-  expect(declaration(scope, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe("repeat(2, minmax(0, 1fr))");
+  expect(declaration(scope, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe(
+    "repeat(2, minmax(0, 1fr))",
+  );
   expect(declaration(scope, ".module-span-2", "grid-column")).toBe("1 / -1");
   expect(declaration(scope, ".module-span-3", "grid-column")).toBe("1 / -1");
 });
 
 test("at 900px the shell is one column: every span is the full row", () => {
   const scope = media.get(900)!;
-  expect(declaration(scope, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe("minmax(0, 1fr)");
+  expect(declaration(scope, `.${MODULE_GRID_CLASS}`, "grid-template-columns")).toBe(
+    "minmax(0, 1fr)",
+  );
   expect(declaration(scope, ".module-span-1", "grid-column")).toBe("1 / -1");
   expect(declaration(scope, ".module-span-2", "grid-column")).toBe("1 / -1");
   expect(declaration(scope, ".module-span-3", "grid-column")).toBe("1 / -1");

@@ -36,7 +36,12 @@ function Harness({
   pending: seed,
   entities = ["BV1"],
   defaultEntity = "BV1",
-}: { invoices: Invoice[]; pending: PendingInvoice[]; entities?: string[]; defaultEntity?: string }) {
+}: {
+  invoices: Invoice[];
+  pending: PendingInvoice[];
+  entities?: string[];
+  defaultEntity?: string;
+}) {
   const [pending, setPending] = useState<PendingInvoice[]>(seed);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
@@ -53,7 +58,13 @@ function Harness({
       notices={notices}
       onNoticesChange={setNotices}
       onNavigate={() => {}}
-      fetchImpl={(async () => ({ ok: true, status: 200, json: async () => ({ invoices: [] }) })) as unknown as typeof fetch}
+      fetchImpl={
+        (async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ invoices: [] }),
+        })) as unknown as typeof fetch
+      }
     />
   );
 }
@@ -69,7 +80,12 @@ function render(
   root = createRoot(container);
   act(() => {
     root!.render(
-      <Harness invoices={invoices} pending={pending} entities={entities} defaultEntity={defaultEntity} />,
+      <Harness
+        invoices={invoices}
+        pending={pending}
+        entities={entities}
+        defaultEntity={defaultEntity}
+      />,
     );
   });
   return container;
@@ -80,7 +96,8 @@ function click(el: Element) {
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -91,7 +108,9 @@ function field(label: string): HTMLInputElement {
 }
 
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -107,7 +126,11 @@ function drop(zone: Element, file: File) {
 }
 
 /** Fill a valid manual invoice, minus whatever the test wants to leave broken. */
-function fillManual(overrides: Partial<Record<"Relatie" | "Factuurdatum" | "Vervaldatum" | "Bedrag" | "Valuta", string>> = {}) {
+function fillManual(
+  overrides: Partial<
+    Record<"Relatie" | "Factuurdatum" | "Vervaldatum" | "Bedrag" | "Valuta", string>
+  > = {},
+) {
   const values = {
     Relatie: "ACME BV",
     Factuurdatum: "2026-08-01",
@@ -124,11 +147,7 @@ function fillManual(overrides: Partial<Record<"Relatie" | "Factuurdatum" | "Verv
 test("the surface is exactly three ways in, and nothing else", () => {
   const c = render();
   const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
-  expect(titles).toEqual([
-    "1 · Automatisch",
-    "2 · Slepen",
-    "3 · Handmatig",
-  ]);
+  expect(titles).toEqual(["1 · Automatisch", "2 · Slepen", "3 · Handmatig"]);
 
   // Exactly one file control, inside the dropzone — the separate "CSV of
   // UBL/XML importeren" and "PDF-factuur lezen met AI" pickers are gone.
@@ -169,7 +188,8 @@ test("a blank currency blocks the invoice instead of silently becoming EUR", () 
 
 test("dropping a CSV imports its invoices through the same parser", async () => {
   const c = render();
-  const csv = "Relatie,Bedrag,Factuurdatum,Vervaldatum,Richting\nACME BV,121.00,2026-08-01,2026-08-31,uitgaand\n";
+  const csv =
+    "Relatie,Bedrag,Factuurdatum,Vervaldatum,Richting\nACME BV,121.00,2026-08-01,2026-08-31,uitgaand\n";
   const file = new File([csv], "facturen.csv", { type: "text/csv" });
 
   drop(c.querySelector(".dropzone")!, file);
@@ -288,10 +308,9 @@ test("met meerdere ondernemingen zegt de tabel bij welke een factuur hoort", () 
   );
   const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
   expect(headers).toContain("Onderneming");
-  expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual([
-    "Holding BV",
-    "Werk BV",
-  ]);
+  expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual(
+    ["Holding BV", "Werk BV"],
+  );
   // En daar is de keuze wél een echte vraag, dus staat de keuzelijst er.
   expect(c.querySelector('[aria-label="Entiteit"]')).not.toBeNull();
 });

@@ -192,7 +192,13 @@ type Lonlat = [number, number];
  *  omringende land en klikt Lesotho op Zuid-Afrika. */
 type Polygon = Lonlat[][];
 type GeoCountry = { code: string; name: string; polygons: Polygon[] };
-type Geometry = { countries: GeoCountry[]; source: string; license: string; note: string; noIso: string[] };
+type Geometry = {
+  countries: GeoCountry[];
+  source: string;
+  license: string;
+  note: string;
+  noIso: string[];
+};
 
 const NE_LICENSE = "publiek domein (Natural Earth — geen bronvermelding vereist, wel gegeven)";
 
@@ -203,7 +209,10 @@ const NE_LICENSE = "publiek domein (Natural Earth — geen bronvermelding vereis
  *  GEODATA.md, want stil weglaten is het probleem dat dit bestand vermijdt. */
 function fromNaturalEarth(raw: string, url: string): Geometry {
   const fc = JSON.parse(raw) as {
-    features: { properties: Record<string, unknown>; geometry: { type: string; coordinates: unknown } | null }[];
+    features: {
+      properties: Record<string, unknown>;
+      geometry: { type: string; coordinates: unknown } | null;
+    }[];
   };
   const byCode = new Map<string, GeoCountry>();
   const noIso: string[] = [];
@@ -244,7 +253,10 @@ function fromTopoJson(raw: string, url: string, numericToAlpha2: Map<string, str
   const topo = JSON.parse(raw) as {
     transform?: { scale: [number, number]; translate: [number, number] };
     arcs: [number, number][][];
-    objects: Record<string, { geometries: { type: string; id?: string; arcs: unknown; properties?: { name?: string } }[] }>;
+    objects: Record<
+      string,
+      { geometries: { type: string; id?: string; arcs: unknown; properties?: { name?: string } }[] }
+    >;
   };
   const t = topo.transform;
   const arcs: Lonlat[][] = topo.arcs.map((arc) => {
@@ -253,7 +265,9 @@ function fromTopoJson(raw: string, url: string, numericToAlpha2: Map<string, str
     return arc.map(([dx, dy]) => {
       x += dx;
       y += dy;
-      return (t ? [x * t.scale[0] + t.translate[0], y * t.scale[1] + t.translate[1]] : [x, y]) as Lonlat;
+      return (
+        t ? [x * t.scale[0] + t.translate[0], y * t.scale[1] + t.translate[1]] : [x, y]
+      ) as Lonlat;
     });
   });
   /** Een negatieve index betekent: die arc, achterstevoren. Het eerste punt van
@@ -315,17 +329,28 @@ function fromTopoJson(raw: string, url: string, numericToAlpha2: Map<string, str
  *  Alleen Point-geometrie wordt gelezen. De laag bevat ook landen die we wél
  *  tekenen (Malta, Singapore); die worden niet gebruikt, want een punt uit een
  *  labellaag staat waar een NAAM moet passen en niet waar het land ligt. */
-async function fetchLabelPoints(): Promise<{ byCountry: Map<string, Lonlat>; url: string; note: string } | null> {
+async function fetchLabelPoints(): Promise<{
+  byCountry: Map<string, Lonlat>;
+  url: string;
+  note: string;
+} | null> {
   const url =
     "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_tiny_countries.geojson";
   const got = await get(url);
   if (!got) {
-    attempts.push({ url, ok: false, note: "niet bereikbaar — landen zonder eigen vlak houden pin: null" });
+    attempts.push({
+      url,
+      ok: false,
+      note: "niet bereikbaar — landen zonder eigen vlak houden pin: null",
+    });
     return null;
   }
   try {
     const fc = JSON.parse(got.text) as {
-      features: { properties: Record<string, unknown>; geometry: { type: string; coordinates: unknown } | null }[];
+      features: {
+        properties: Record<string, unknown>;
+        geometry: { type: string; coordinates: unknown } | null;
+      }[];
     };
     const byCountry = new Map<string, Lonlat>();
     for (const f of fc.features) {
@@ -386,7 +411,9 @@ type Currencies = {
  *  dat is onbekend. */
 function fromCldr(raw: string, url: string, asOf: string): Currencies {
   const doc = JSON.parse(raw) as {
-    supplemental: { currencyData: { region: Record<string, Record<string, Record<string, string>>[]> } };
+    supplemental: {
+      currencyData: { region: Record<string, Record<string, Record<string, string>>[]> };
+    };
   };
   const region = doc.supplemental.currencyData.region;
   const byCountry = new Map<string, string[]>();
@@ -476,18 +503,29 @@ function fromRestCountries(raw: string, url: string): Currencies {
  *  landen genummerd zijn. Uit CLDR, dezelfde stal als de valutatabel, dus geen
  *  vierde partij erbij. */
 async function numericToAlpha2(): Promise<Map<string, string>> {
-  const url = "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/codeMappings.json";
+  const url =
+    "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/codeMappings.json";
   const got = await get(url);
   if (!got) {
-    attempts.push({ url, ok: false, note: "niet bereikbaar — zonder deze tabel is de TopoJSON onbruikbaar" });
+    attempts.push({
+      url,
+      ok: false,
+      note: "niet bereikbaar — zonder deze tabel is de TopoJSON onbruikbaar",
+    });
     return new Map();
   }
-  const doc = JSON.parse(got.text) as { supplemental: { codeMappings: Record<string, { _numeric?: string }> } };
+  const doc = JSON.parse(got.text) as {
+    supplemental: { codeMappings: Record<string, { _numeric?: string }> };
+  };
   const out = new Map<string, string>();
   for (const [alpha2, m] of Object.entries(doc.supplemental.codeMappings)) {
     if (m._numeric && /^[A-Z]{2}$/.test(alpha2)) out.set(m._numeric.padStart(3, "0"), alpha2);
   }
-  attempts.push({ url, ok: true, note: `${out.size} nummers naar landcodes (voor de TopoJSON-terugval)` });
+  attempts.push({
+    url,
+    ok: true,
+    note: `${out.size} nummers naar landcodes (voor de TopoJSON-terugval)`,
+  });
   return out;
 }
 
@@ -534,7 +572,7 @@ function area(ring: Lonlat[]): number {
  *  tienduizenden punten en die legden de stack om in een eerdere versie. */
 function simplify(pts: Lonlat[], epsilon: number): Lonlat[] {
   if (epsilon <= 0 || pts.length < 3) return pts;
-  const keep = new Array<boolean>(pts.length).fill(false);
+  const keep = Array.from({ length: pts.length }, () => false);
   keep[0] = true;
   keep[pts.length - 1] = true;
   const stack: [number, number][] = [[0, pts.length - 1]];
@@ -550,7 +588,8 @@ function simplify(pts: Lonlat[], epsilon: number): Lonlat[] {
     let bi = -1;
     for (let i = s + 1; i < e; i++) {
       const [x, y] = pts[i];
-      const d = den > 0 ? Math.abs(dx * (y1 - y) - (x1 - x) * dy) / den : Math.hypot(x - x1, y - y1);
+      const d =
+        den > 0 ? Math.abs(dx * (y1 - y) - (x1 - x) * dy) / den : Math.hypot(x - x1, y - y1);
       if (d > best) {
         best = d;
         bi = i;
@@ -615,7 +654,11 @@ function span([lon1, lat1]: Lonlat, [lon2, lat2]: Lonlat): number {
  *  De bijgezette punten worden op hetzelfde raster afgerond als de rest; valt er
  *  één op zijn voorganger, dan gaat hij er weer af. Anders zou een fijn
  *  opgedeeld kort stuk dubbele punten opleveren. */
-function densify(ring: Lonlat[], maxSeg: number, decimals: number): { ring: Lonlat[]; added: number } {
+function densify(
+  ring: Lonlat[],
+  maxSeg: number,
+  decimals: number,
+): { ring: Lonlat[]; added: number } {
   const f = 10 ** decimals;
   const r = (n: number): number => Math.round(n * f) / f;
   const out: Lonlat[] = [];
@@ -918,7 +961,9 @@ function tsFile(
 ): string {
   const body = rows
     .map((r) => {
-      const cur = r.currencies.map((c) => `{ code: ${JSON.stringify(c.code)}, priceable: ${c.priceable} }`).join(", ");
+      const cur = r.currencies
+        .map((c) => `{ code: ${JSON.stringify(c.code)}, priceable: ${c.priceable} }`)
+        .join(", ");
       /* Alleen uitschrijven waar hij AAN staat. Dat is geen bytes sparen (het zijn
        * er 249 × 19) maar leesbaarheid van de diff: staat er ergens
        * `noTender: true` bij, dan is dat één regel die opvalt in plaats van één
@@ -1116,7 +1161,10 @@ function noticeFile(
   },
 ): string {
   const table = attempts
-    .map((a) => `| ${a.ok === null ? "niet geprobeerd" : a.ok ? "gelukt" : "mislukt"} | ${a.url} | ${a.note} |`)
+    .map(
+      (a) =>
+        `| ${a.ok === null ? "niet geprobeerd" : a.ok ? "gelukt" : "mislukt"} | ${a.url} | ${a.note} |`,
+    )
     .join("\n");
   const finerByDecimals = new Map<number, string[]>();
   for (const r of stats.finer) {
@@ -1128,7 +1176,8 @@ function noticeFile(
     .map(([d, ids]) => `${ids.length} op ${d} decimalen (${ids.join(", ")})`)
     .join("; ");
   const multi = rows.filter((r) => r.currencies.length > 1);
-  const list = (rs: Row[]): string => (rs.length ? rs.map((r) => `${r.name} (${r.id})`).join(", ") : "geen");
+  const list = (rs: Row[]): string =>
+    rs.length ? rs.map((r) => `${r.name} (${r.id})`).join(", ") : "geen";
   /* Nederlandse komma. Anders staat er "0.15° (was 0,144°)" in één tabelregel en
    * dat leest als een typefout in plaats van als hetzelfde getal. */
   const nl = (n: number): string => String(n).replace(".", ",");
@@ -1321,10 +1370,10 @@ is met opzet niet één van de twee antwoorden die erop lijken:
   er geen munt is. Het gat zit niet bij ons.
 
 ${
-    stats.antarctica
-      ? `Wat het gekost heeft, nagemeten en niet geschat: ${stats.antarctica.points} punten in ${stats.antarctica.rings} ringen, ${nl(Math.round((stats.antarctica.bytes / 1024) * 10) / 10)} kB van de ${Math.round(stats.bytes / 1024)} kB in dit bestand. De onderkant van de omhullende is daarmee ${deg(bounds[1])} in plaats van −55,6° (Kaap Hoorn): de bol houdt onderaan niet meer op.`
-      : `**Deze sweep heeft geen vlak voor Antarctica gevonden.** De onderkant van de omhullende is ${deg(bounds[1])}. Dat is geen keuze van dit script maar een leemte in de bron van vandaag, en de bol heeft dus weer een gat op de zuidpool.`
-  }
+  stats.antarctica
+    ? `Wat het gekost heeft, nagemeten en niet geschat: ${stats.antarctica.points} punten in ${stats.antarctica.rings} ringen, ${nl(Math.round((stats.antarctica.bytes / 1024) * 10) / 10)} kB van de ${Math.round(stats.bytes / 1024)} kB in dit bestand. De onderkant van de omhullende is daarmee ${deg(bounds[1])} in plaats van −55,6° (Kaap Hoorn): de bol houdt onderaan niet meer op.`
+    : `**Deze sweep heeft geen vlak voor Antarctica gevonden.** De onderkant van de omhullende is ${deg(bounds[1])}. Dat is geen keuze van dit script maar een leemte in de bron van vandaag, en de bol heeft dus weer een gat op de zuidpool.`
+}
 
 Wat er niet mee is opgelost: **bovenaan** houdt de tabel nog steeds op, op
 ${deg(bounds[3])} — de noordpunt van Groenland. Daarboven ligt alleen zee, maar dat is een
@@ -1352,15 +1401,15 @@ minder precies.
 ## Landen met meer dan één valuta
 
 ${
-    multi.length
-      ? multi
-          .map(
-            (r) =>
-              `- **${r.name}** (${r.id}) — ${r.currencies.map((c) => `${c.code}${c.priceable ? "" : " (geen koers bij ons)"}`).join(" en ")}`,
-          )
-          .join("\n")
-      : "_(geen)_"
-  }
+  multi.length
+    ? multi
+        .map(
+          (r) =>
+            `- **${r.name}** (${r.id}) — ${r.currencies.map((c) => `${c.code}${c.priceable ? "" : " (geen koers bij ons)"}`).join(" en ")}`,
+        )
+        .join("\n")
+    : "_(geen)_"
+}
 
 Deze landen krijgen géén stilzwijgend gekozen valuta. De datalaag geeft ze
 allebei terug en de UI hoort het te vragen; in Panama is USD wél te prijzen en
@@ -1425,7 +1474,11 @@ async function firstThatWorks<T>(
       return parsed;
     } catch (e) {
       const head = got.text.slice(0, 160).replace(/\s+/g, " ");
-      attempts.push({ url: c.url, ok: false, note: `onleesbaar: ${(e as Error).message} — begint met: ${head}` });
+      attempts.push({
+        url: c.url,
+        ok: false,
+        note: `onleesbaar: ${(e as Error).message} — begint met: ${head}`,
+      });
     }
   }
   return null;
@@ -1449,7 +1502,10 @@ async function main() {
         parse: async (raw, url) => fromTopoJson(raw, url, await numericToAlpha2()),
       },
     ],
-    (g) => (g.countries.length >= 100 ? null : `maar ${g.countries.length} landen — dat is geen wereldkaart`),
+    (g) =>
+      g.countries.length >= 100
+        ? null
+        : `maar ${g.countries.length} landen — dat is geen wereldkaart`,
     (g) => g.note,
   );
 
@@ -1460,12 +1516,18 @@ async function main() {
        * hoofd: v3.1 is uitgezet (200 met een foutmelding in de body, niet eens
        * een 404) en v5 vraagt een bearer token. Wij zetten geen sleutel in een
        * sweep die iedereen moet kunnen draaien, dus valt hij door naar CLDR. */
-      { url: "https://restcountries.com/v3.1/all?fields=cca2,currencies,name", parse: fromRestCountries },
+      {
+        url: "https://restcountries.com/v3.1/all?fields=cca2,currencies,name",
+        parse: fromRestCountries,
+      },
       {
         url: "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json",
         parse: (raw, url) => fromCldr(raw, url, today),
       },
-      { url: "https://raw.githubusercontent.com/mledoze/countries/master/countries.json", parse: fromMledoze },
+      {
+        url: "https://raw.githubusercontent.com/mledoze/countries/master/countries.json",
+        parse: fromMledoze,
+      },
     ],
     (c) => (c.byCountry.size >= 100 ? null : `maar ${c.byCountry.size} landen met een valuta`),
     (c) => c.note,
@@ -1487,7 +1549,9 @@ async function main() {
   console.log(`grenzen:  ${geo.source}\n          ${geo.note}`);
   console.log(`valuta:   ${cur.source}\n          ${cur.note}`);
   console.log(`prijsbaar: ${price.codes.length} valuta's uit de ECB-lijst`);
-  console.log(`labels:   ${labels ? labels.note : "geen puntenlaag — landen zonder vlak houden pin: null"}`);
+  console.log(
+    `labels:   ${labels ? labels.note : "geen puntenlaag — landen zonder vlak houden pin: null"}`,
+  );
 
   const priceable = new Set(price.codes);
   const shapes = new Map(geo.countries.map((c) => [c.code, c]));
@@ -1503,7 +1567,10 @@ async function main() {
     const shape = g ? toShape(g.polygons, eps) : null;
     droppedIslands += shape?.dropped ?? 0;
     collapsedIslands += shape?.collapsed ?? 0;
-    const currencies = (cur.byCountry.get(id) ?? []).map((code) => ({ code, priceable: priceable.has(code) }));
+    const currencies = (cur.byCountry.get(id) ?? []).map((code) => ({
+      code,
+      priceable: priceable.has(code),
+    }));
     rows.push({
       id,
       /* countryName() geeft de code terug als het platform geen naam heeft; dan
@@ -1587,12 +1654,22 @@ async function main() {
       `${anyPriceable} met minstens één prijsbare valuta, ${rows.length - anyPriceable} zonder. ` +
       `${multi.length} met meer dan één valuta (${multi.map((m) => m.id).join(", ")}).`,
   );
-  console.log(`${points} punten in ${allRings.length} ringen, waarvan ${addedPoints} bijgezet om stukken onder ${MAX_SEG}° te houden.`);
+  console.log(
+    `${points} punten in ${allRings.length} ringen, waarvan ${addedPoints} bijgezet om stukken onder ${MAX_SEG}° te houden.`,
+  );
   console.log(`Omhullende: ${bounds.join(", ")} (lonMin, latMin, lonMax, latMax).`);
-  if (noTender.length) console.log(`Geen wettig betaalmiddel volgens de bron: ${noTender.map((r) => r.id).join(", ")}`);
-  if (noStatement.length) console.log(`De bron zegt niets over de valuta (dus onbekend): ${noStatement.map((r) => r.id).join(", ")}`);
-  if (finer.length) console.log(`Fijner afgerond om niet te verdwijnen: ${finer.map((r) => r.id).join(", ")}`);
-  if (pinOutside.length) console.log(`Speld niet binnen het vlak te krijgen: ${pinOutside.map((r) => r.id).join(", ")}`);
+  if (noTender.length)
+    console.log(
+      `Geen wettig betaalmiddel volgens de bron: ${noTender.map((r) => r.id).join(", ")}`,
+    );
+  if (noStatement.length)
+    console.log(
+      `De bron zegt niets over de valuta (dus onbekend): ${noStatement.map((r) => r.id).join(", ")}`,
+    );
+  if (finer.length)
+    console.log(`Fijner afgerond om niet te verdwijnen: ${finer.map((r) => r.id).join(", ")}`);
+  if (pinOutside.length)
+    console.log(`Speld niet binnen het vlak te krijgen: ${pinOutside.map((r) => r.id).join(", ")}`);
   console.log(
     `${droppedIslands} losse vlakken weggelaten omdat ze onder ${MIN_AREA}°² lagen, ` +
       `${collapsedIslands} omdat ze op dit raster geen vlak meer waren. eps=${eps}.`,

@@ -20,7 +20,8 @@ export function createFileSectorProfileStore(filePath: string): SectorProfileSto
     empty: {},
     validate: (contents) => {
       const parsed: unknown = JSON.parse(contents);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`Invalid sector cache file: ${filePath}`);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error(`Invalid sector cache file: ${filePath}`);
       const entries = Object.entries(parsed).filter(([, value]) => isSectorProfile(value));
       return Object.fromEntries(entries) as Record<string, SectorProfile>;
     },

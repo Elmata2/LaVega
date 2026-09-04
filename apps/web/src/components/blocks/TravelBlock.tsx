@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import type {
-  Account, Tx, LearnedFact, RateBenchmark, TravelPlan, Journey, CatalogueEntryLike,
-  WithdrawOption, CardOffer, WithdrawAdvice, FeeAmount, HoldingCost, NetBasis, NetBenefit,
+  Account,
+  Tx,
+  LearnedFact,
+  RateBenchmark,
+  TravelPlan,
+  Journey,
+  CatalogueEntryLike,
+  WithdrawOption,
+  CardOffer,
+  WithdrawAdvice,
+  FeeAmount,
+  HoldingCost,
+  NetBasis,
+  NetBenefit,
 } from "@lavega/core";
 import {
-  planTravel, makeFact, costOnReferenceSpend, netBenefit, payHeadline, TRAVEL_AGENT, TRAVEL_REFERENCE_SPEND,
-  describeWithdrawalFee, TRAVEL_REFERENCE_WITHDRAWAL, TRAVEL_SMALL_WITHDRAWAL,
+  planTravel,
+  makeFact,
+  costOnReferenceSpend,
+  netBenefit,
+  payHeadline,
+  TRAVEL_AGENT,
+  TRAVEL_REFERENCE_SPEND,
+  describeWithdrawalFee,
+  TRAVEL_REFERENCE_WITHDRAWAL,
+  TRAVEL_SMALL_WITHDRAWAL,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
 import { formatEuro } from "../../format.js";
@@ -57,7 +77,7 @@ import ToonMeer from "../ToonMeer.js";
  * because a request tells the server on the other end who is asking. The
  * figures are as fresh as the last deploy, and every one carries the date its
  * own document states, so the screen can show how old a number is. */
-const BUNDLED_CATALOGUE = ((catalogueFile as { entries?: CatalogueEntryLike[] }).entries ?? []);
+const BUNDLED_CATALOGUE = (catalogueFile as { entries?: CatalogueEntryLike[] }).entries ?? [];
 
 export type TravelBlockProps = {
   accounts: Account[];
@@ -111,7 +131,14 @@ const COUNTRIES: { code: string; name: string }[] = [
  *  writes a `user` fact, which no later agent run may overwrite. The same
  *  component serves every learnable number — fxFeePct, convertFeePct — so a new
  *  leg is correctable the day it is priced, not a release later. */
-function FactCorrection({ provider, factKey, label, value, busy, onCorrect }: {
+function FactCorrection({
+  provider,
+  factKey,
+  label,
+  value,
+  busy,
+  onCorrect,
+}: {
   provider: string;
   factKey: string;
   label: string;
@@ -146,10 +173,16 @@ function FactCorrection({ provider, factKey, label, value, busy, onCorrect }: {
         onClick={() => {
           const trimmed = draft.trim().replace(",", ".").replace("%", "");
           if (trimmed !== "" && Number.isFinite(Number(trimmed))) {
-            onCorrect(makeFact({
-              agent: TRAVEL_AGENT, subject: provider, key: factKey,
-              value: trimmed, source: "user", updatedAt: new Date().toISOString().slice(0, 10),
-            }));
+            onCorrect(
+              makeFact({
+                agent: TRAVEL_AGENT,
+                subject: provider,
+                key: factKey,
+                value: trimmed,
+                source: "user",
+                updatedAt: new Date().toISOString().slice(0, 10),
+              }),
+            );
           }
           setEditing(false);
         }}
@@ -237,7 +270,9 @@ function surchargeCents(pctValue: number): number {
 function spanWords(basis: NetBasis): string {
   if (basis.kind !== "one-off") return `per ${basis.period}`;
   const n = basis.periodsCharged;
-  return basis.costPeriod === "jaar" ? `over ${n} jaar` : `over ${n} ${n === 1 ? "maand" : "maanden"}`;
+  return basis.costPeriod === "jaar"
+    ? `over ${n} jaar`
+    : `over ${n} ${n === 1 ? "maand" : "maanden"}`;
 }
 
 /** DE ONDERGRENS, HARDOP, en als eigen zin in plaats van een bijzin. Een reis van
@@ -271,7 +306,12 @@ export function hasVisibleHoldingCost(cost: HoldingCost | null): cost is Holding
   return !(cost.kind === "known" && cost.why === "already-held");
 }
 
-export function Kaartkosten({ product, cost, benefit, testId }: {
+export function Kaartkosten({
+  product,
+  cost,
+  benefit,
+  testId,
+}: {
   product: string;
   /** Null bij zijn eigen kaart: die kosten zijn geen gevolg van deze keuze. */
   cost: HoldingCost | null;
@@ -295,7 +335,8 @@ export function Kaartkosten({ product, cost, benefit, testId }: {
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
         <strong>Kaartkosten: onbekend</strong> — {why}. Dat is geen nul.
-        {benefit !== null && " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af."}
+        {benefit !== null &&
+          " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af."}
       </p>
     );
   }
@@ -309,7 +350,8 @@ export function Kaartkosten({ product, cost, benefit, testId }: {
   if (cost.amount.cents === 0) {
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
-        <strong>Kaartkosten: {price}</strong> — de bron zegt dat {product} niets kost om aan te houden.
+        <strong>Kaartkosten: {price}</strong> — de bron zegt dat {product} niets kost om aan te
+        houden.
       </p>
     );
   }
@@ -341,8 +383,10 @@ export function Kaartkosten({ product, cost, benefit, testId }: {
       </p>
       {benefit.kind === "net" ? (
         <p className="cell-sub travel-note" data-testid={`${testId}-netto`}>
-          <strong>Netto:</strong> <span className="text-pos">{formatEuro(benefit.netCents / 100)}</span> —{" "}
-          {formatEuro(benefit.grossCents / 100)} voordeel min {formatEuro(benefit.costCents / 100)} kaartkosten.
+          <strong>Netto:</strong>{" "}
+          <span className="text-pos">{formatEuro(benefit.netCents / 100)}</span> —{" "}
+          {formatEuro(benefit.grossCents / 100)} voordeel min {formatEuro(benefit.costCents / 100)}{" "}
+          kaartkosten.
         </p>
       ) : (
         /* GEEN AANBEVELING, en het bedrag staat er zodat hij het niet zelf hoeft
@@ -489,7 +533,12 @@ export type TermsState =
    *  its conversion fee was never learned. Two different gaps: core's
    *  `unknownProviders` only reports the first, and calling the second "bekend"
    *  would claim a route is priced when the block prints "onbekend" next to it. */
-  | { kind: "known"; unknown: string[]; unpriced: { provider: string; why: string }[]; lastUpdated: string | null }
+  | {
+      kind: "known";
+      unknown: string[];
+      unpriced: { provider: string; why: string }[];
+      lastUpdated: string | null;
+    }
   | { kind: "no-key"; unknown: string[] }
   | { kind: "never-searched"; unknown: string[] }
   /** The server accepted the ask and is looking in the background. This is NOT
@@ -501,7 +550,12 @@ export type TermsState =
   | { kind: "searching"; pending: string[] }
   | { kind: "searched-empty"; unknown: string[] };
 
-export function termsState(plan: TravelPlan, aiAvailable: boolean, searched: boolean, pending: readonly string[] = []): TermsState {
+export function termsState(
+  plan: TravelPlan,
+  aiAvailable: boolean,
+  searched: boolean,
+  pending: readonly string[] = [],
+): TermsState {
   if (plan.currency === "EUR") return { kind: "euro" };
   if (plan.spend.length === 0) return { kind: "no-products" };
   const unknown = plan.unknownProviders;
@@ -575,7 +629,13 @@ export const ROUTES_HEADING = "Alle routes";
  *  so a tab that opened first keeps saying "no key" after one is set. Without a
  *  control there, the only cure was knowing to reload — so it gets one. */
 export function TermsNotice({
-  state, busy, aiAvailable, termsAsked, termsGaveUp, onSearch, onRecheckAi,
+  state,
+  busy,
+  aiAvailable,
+  termsAsked,
+  termsGaveUp,
+  onSearch,
+  onRecheckAi,
 }: {
   state: TermsState;
   busy: boolean;
@@ -623,9 +683,9 @@ export function TermsNotice({
   const noKeyLine = (
     <>
       <p className="cell-sub">
-        Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken kan hier niet —
-        verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de percentages zelf in{" "}
-        {zelfInvullen}. Wat jij invult wordt nooit door een agent overschreven.
+        Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken
+        kan hier niet — verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de
+        percentages zelf in {zelfInvullen}. Wat jij invult wordt nooit door een agent overschreven.
       </p>
       <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
         Sleutel net ingesteld? Opnieuw controleren
@@ -637,8 +697,8 @@ export function TermsNotice({
     return (
       <div className="travel-terms" role="status">
         <p className="cell-sub">
-          Vul bij Rekeningen de bank in bij je betaalrekeningen en creditcards. Zonder bank weten we niet welk
-          product het is, en dus ook niet welke voorwaarden erbij horen.
+          Vul bij Rekeningen de bank in bij je betaalrekeningen en creditcards. Zonder bank weten we
+          niet welk product het is, en dus ook niet welke voorwaarden erbij horen.
         </p>
       </div>
     );
@@ -650,15 +710,16 @@ export function TermsNotice({
       <div className="travel-terms" role="status">
         {state.unknown.length > 0 && (
           <p className="cell-sub">
-            Van {state.unknown.length} kaart{state.unknown.length === 1 ? "" : "en"} kennen we de wisselkosten nog niet
-            ({nameList(state.unknown)}). Die staan onderaan zonder bedrag — onbekend is niet gratis, dus ze doen niet
-            mee in de rangschikking.
+            Van {state.unknown.length} kaart{state.unknown.length === 1 ? "" : "en"} kennen we de
+            wisselkosten nog niet ({nameList(state.unknown)}). Die staan onderaan zonder bedrag —
+            onbekend is niet gratis, dus ze doen niet mee in de rangschikking.
           </p>
         )}
         {state.unpriced.length > 0 && (
           <p className="cell-sub">
             Nog niet elke route is te beprijzen:{" "}
-            {state.unpriced.map((u) => `${u.provider} — ${u.why}`).join("; ")}. Die routes staan zonder bedrag.
+            {state.unpriced.map((u) => `${u.provider} — ${u.why}`).join("; ")}. Die routes staan
+            zonder bedrag.
           </p>
         )}
         {gaps === 0 && <p className="cell-sub">Alle routes zijn beprijsd.</p>}
@@ -668,7 +729,9 @@ export function TermsNotice({
             a bank.nl figure was checked by bank.nl and merely fetched by us. A
             neutral verb is true of both sources. */}
         {state.lastUpdated && (
-          <p className="cell-sub">Cijfers laatst gecontroleerd op {dayLabelYearNL(state.lastUpdated)}.</p>
+          <p className="cell-sub">
+            Cijfers laatst gecontroleerd op {dayLabelYearNL(state.lastUpdated)}.
+          </p>
         )}
         {aiAvailable
           ? searchButton(false, gaps > 0 ? `Zoek voorwaarden (${gaps})` : "Ververs voorwaarden")
@@ -697,14 +760,19 @@ export function TermsNotice({
           <span className="spinner" aria-hidden="true" />
           <span>
             LaVega zoekt de voorwaarden op van {nameList(state.pending)}
-            {termsAsked > 0 && <> — {found} van {termsAsked} gevonden</>}. Dat duurt een minuut of twee; dit
-            scherm werkt zichzelf bij.
+            {termsAsked > 0 && (
+              <>
+                {" "}
+                — {found} van {termsAsked} gevonden
+              </>
+            )}
+            . Dat duurt een minuut of twee; dit scherm werkt zichzelf bij.
           </span>
         </p>
         {termsGaveUp && (
           <p className="cell-sub text-warn">
-            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in {zelfInvullen} —
-            wat jij invult wordt nooit overschreven.
+            Er kwam niets meer binnen. Probeer het opnieuw, of vul de percentages zelf in{" "}
+            {zelfInvullen} — wat jij invult wordt nooit overschreven.
           </p>
         )}
         {searchButton(false, "Nu opnieuw kijken")}
@@ -716,8 +784,8 @@ export function TermsNotice({
     return (
       <div className="travel-terms" role="status">
         <p className="cell-sub">
-          Deze zijn nog nooit opgezocht: {nameList(state.unknown)}. Eén klik en LaVega haalt de tarieven van de
-          aanbieders zelf op.
+          Deze zijn nog nooit opgezocht: {nameList(state.unknown)}. Eén klik en LaVega haalt de
+          tarieven van de aanbieders zelf op.
         </p>
         {searchButton(true, `Zoek voorwaarden (${state.unknown.length})`)}
       </div>
@@ -727,9 +795,9 @@ export function TermsNotice({
   return (
     <div className="travel-terms travel-terms-blocked" role="status">
       <p className="cell-sub">
-        We hebben gezocht, maar voor {nameList(state.unknown)} kwam er geen bruikbaar tarief terug. Vul de
-        wisselkosten zelf in {zelfInvullen} — jouw invoer blijft staan en wordt nooit overschreven. Zoeken kan
-        opnieuw; de server haalt sommige tarieven op de achtergrond op.
+        We hebben gezocht, maar voor {nameList(state.unknown)} kwam er geen bruikbaar tarief terug.
+        Vul de wisselkosten zelf in {zelfInvullen} — jouw invoer blijft staan en wordt nooit
+        overschreven. Zoeken kan opnieuw; de server haalt sommige tarieven op de achtergrond op.
       </p>
       {searchButton(false, "Opnieuw zoeken")}
     </div>
@@ -778,7 +846,11 @@ function cashCost(euros: number | null): string {
  *  printed with the row: "the document points at article 13.3" and "we do not
  *  know which ING creditcard you have" need different things from him, and one
  *  of them he can fix in a click. */
-export function CashSection({ options, asOf, advice = null }: {
+export function CashSection({
+  options,
+  asOf,
+  advice = null,
+}: {
   options: readonly WithdrawOption[];
   asOf: string;
   /** The cheapest PROVEN withdrawal across the catalogue, when it is not one of
@@ -790,8 +862,8 @@ export function CashSection({ options, asOf, advice = null }: {
     <div className="travel-step travel-cash">
       <h3 className="travel-step-title">Geld pinnen</h3>
       <p className="cell-sub">
-        Pinnen is een aparte prijs, en bijna altijd hoger dan betalen. Bedragen gelden op één opname van{" "}
-        {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}.
+        Pinnen is een aparte prijs, en bijna altijd hoger dan betalen. Bedragen gelden op één opname
+        van {formatEuro(TRAVEL_REFERENCE_WITHDRAWAL)}.
       </p>
       {advice && !advice.held && (
         <p className="cell-sub travel-note">
@@ -831,8 +903,9 @@ export function CashSection({ options, asOf, advice = null }: {
           <div key={`why-${o.provider}`}>
             {o.penalisesSmall && o.smallEffectivePct !== null && (
               <p className="cell-sub travel-note">
-                {o.provider}: er zit een vast bedrag per opname bij, dus {formatEuro(TRAVEL_SMALL_WITHDRAWAL)} pinnen
-                kost {pctNL(o.smallEffectivePct)} in plaats van {pctNL(o.effectivePct ?? 0)}. Neem in één keer meer op.
+                {o.provider}: er zit een vast bedrag per opname bij, dus{" "}
+                {formatEuro(TRAVEL_SMALL_WITHDRAWAL)} pinnen kost {pctNL(o.smallEffectivePct)} in
+                plaats van {pctNL(o.effectivePct ?? 0)}. Neem in één keer meer op.
               </p>
             )}
             {o.fee.caveat && (
@@ -859,7 +932,12 @@ export function CashSection({ options, asOf, advice = null }: {
  *  today is paid in a token behind a stake or a subscription, so pricing it in
  *  euros would be the same fake precision that keeps reward points out of the
  *  ranking. */
-export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
+export function OffersSection({
+  offers,
+  asOf,
+  shown = 6,
+  ownPct = null,
+}: {
   offers: readonly CardOffer[];
   asOf: string;
   shown?: number;
@@ -878,9 +956,9 @@ export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
     <div className="travel-step travel-offers">
       <h3 className="travel-step-title">Wat je zou kunnen openen</h3>
       <p className="cell-sub">
-        Kaarten uit de catalogus, geen kaarten van jou — voor zover wij kunnen zien heb je ze niet, en betalen doe je
-        vandaag met wat er onder “Betalen” staat. Eén kaart per aanbieder: de voordeligste waarvan we de bron en de
-        datum hebben.
+        Kaarten uit de catalogus, geen kaarten van jou — voor zover wij kunnen zien heb je ze niet,
+        en betalen doe je vandaag met wat er onder “Betalen” staat. Eén kaart per aanbieder: de
+        voordeligste waarvan we de bron en de datum hebben.
       </p>
       {/* WAAROM DE VOLGORDE IS WAT ZE IS. De lijst wordt gerangschikt op wat een
           kaart deze reis KOST — opslag plus kaartprijs — en toonde alleen de
@@ -889,9 +967,10 @@ export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
           die willekeurig leest omdat de helft van het criterium niet op het scherm
           stond. Nu staat die helft er, per rij. */}
       <p className="cell-sub">
-        De volgorde is wat een kaart je op deze reis kost: de opslag op {formatEuro(TRAVEL_REFERENCE_SPEND)} plus wat
-        de kaart zelf kost over {tripMonths} {tripMonths === 1 ? "maand" : "maanden"}. Staat er “kaartkosten
-        onbekend”, dan zit alleen de opslag in dat bedrag — dat is een ondergrens, geen bewijs dat de kaart gratis is.
+        De volgorde is wat een kaart je op deze reis kost: de opslag op{" "}
+        {formatEuro(TRAVEL_REFERENCE_SPEND)} plus wat de kaart zelf kost over {tripMonths}{" "}
+        {tripMonths === 1 ? "maand" : "maanden"}. Staat er “kaartkosten onbekend”, dan zit alleen de
+        opslag in dat bedrag — dat is een ondergrens, geen bewijs dat de kaart gratis is.
       </p>
       <ul className="travel-journeys">
         {top.map((o) => (
@@ -900,7 +979,8 @@ export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
               <span className="travel-journey-name">{o.product}</span>
               <NotYours />
               <span className="travel-journey-cost">
-                {formatEuro(costOnReferenceSpend(o.netCostPct) ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}
+                {formatEuro(costOnReferenceSpend(o.netCostPct) ?? 0)} op{" "}
+                {formatEuro(TRAVEL_REFERENCE_SPEND)}
               </span>
             </div>
             <p className="cell-sub travel-note">
@@ -917,7 +997,11 @@ export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
                 <strong>Let op:</strong> {o.capNote}
               </p>
             )}
-            {o.cashbackNote && <p className="cell-sub travel-note">{o.cashbackNote} Daarom rekenen we die niet mee.</p>}
+            {o.cashbackNote && (
+              <p className="cell-sub travel-note">
+                {o.cashbackNote} Daarom rekenen we die niet mee.
+              </p>
+            )}
             {/* De prijs van de kaart, en — als we zijn eigen opslag kennen — wat
                 overstappen er netto van overhoudt. Alleen bij een LAGERE opslag
                 wordt er een voordeel berekend: bij een hogere is er geen voordeel
@@ -937,7 +1021,8 @@ export function OffersSection({ offers, asOf, shown = 6, ownPct = null }: {
       </ul>
       {offers.length > top.length && (
         <p className="cell-sub">
-          Nog {offers.length - top.length} kaarten in de catalogus met een onderbouwd tarief, allemaal duurder dan deze.
+          Nog {offers.length - top.length} kaarten in de catalogus met een onderbouwd tarief,
+          allemaal duurder dan deze.
         </p>
       )}
     </div>
@@ -959,7 +1044,20 @@ export function figureAge(updatedAt: string, asOf: string): string {
 }
 
 export default function TravelBlock({
-  accounts, txs, rates, facts, asOf, homeCountry, busy, aiAvailable, pendingTerms = [], termsAsked = 0, termsGaveUp = false, onRefreshTerms, onRecheckAi, onCorrectFact,
+  accounts,
+  txs,
+  rates,
+  facts,
+  asOf,
+  homeCountry,
+  busy,
+  aiAvailable,
+  pendingTerms = [],
+  termsAsked = 0,
+  termsGaveUp = false,
+  onRefreshTerms,
+  onRecheckAi,
+  onCorrectFact,
   catalogue = BUNDLED_CATALOGUE,
 }: TravelBlockProps) {
   const [destination, setDestination] = useState("");
@@ -1007,8 +1105,11 @@ export default function TravelBlock({
      dit scherm: zonder die helft wordt er niets netto genoemd. */
   const ownRoute = plan?.journeys.find((j) => j.known && j.costOnReference !== null) ?? null;
   const ownPct = ownRoute?.totalCostPct ?? null;
-  const rejected = plan && plan.pay?.held && ownPct !== null ? rejectedByPrice(plan.offers, ownPct) : null;
-  const terms = plan ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms) : null;
+  const rejected =
+    plan && plan.pay?.held && ownPct !== null ? rejectedByPrice(plan.offers, ownPct) : null;
+  const terms = plan
+    ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms)
+    : null;
 
   /* HET BEDRAG STOND ER TWEE KEER, en hier valt de ene weg.
    *
@@ -1045,7 +1146,11 @@ export default function TravelBlock({
     plan === null
       ? ""
       : plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
-        ? payHeadline({ ...plan.pay, holdingCost: null, benefit: null }, plan.journeys, plan.currency)
+        ? payHeadline(
+            { ...plan.pay, holdingCost: null, benefit: null },
+            plan.journeys,
+            plan.currency,
+          )
         : plan.headline;
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
@@ -1085,10 +1190,16 @@ export default function TravelBlock({
       <div className="travel-controls">
         <label>
           <span className="eyebrow">Ik reis vanuit {homeCountry} naar</span>
-          <select value={destination} onChange={(e) => setDestination(e.target.value)} disabled={busy}>
+          <select
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            disabled={busy}
+          >
             <option value="">— kies een land —</option>
             {COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>{c.name}</option>
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
             ))}
           </select>
         </label>
@@ -1096,7 +1207,9 @@ export default function TravelBlock({
       </div>
 
       {!plan ? (
-        <p className="block-empty">Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.</p>
+        <p className="block-empty">
+          Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.
+        </p>
       ) : (
         <>
           {/* DE SAMENVATTING. Twee antwoorden — waarmee betaal je, waar kun je
@@ -1110,7 +1223,11 @@ export default function TravelBlock({
                   zijn (review 3, punt 2) en dan moet zichtbaar anders zijn dat je
                   hem morgenochtend niet kunt pinnen. Vóór de zin, zodat je het
                   advies niet kunt lezen zonder het merkteken. */}
-              {plan.pay && !plan.pay.held && <><NotYours /> </>}
+              {plan.pay && !plan.pay.held && (
+                <>
+                  <NotYours />{" "}
+                </>
+              )}
               {/* De zin in een eigen span, want de kop moet los te lezen zijn: een
                   test pint dat wat hier staat het BEGIN van core's eigen zin is,
                   en met het merkteken erin gemengd zou die vergelijking op de
@@ -1156,7 +1273,11 @@ export default function TravelBlock({
                 je, en waar kun je pinnen. */}
             <p className="cell-sub travel-winner-cash">
               <strong>Pinnen:</strong>{" "}
-              {plan.withdrawAdvice && !plan.withdrawAdvice.held && <><NotYours /> </>}
+              {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
+                <>
+                  <NotYours />{" "}
+                </>
+              )}
               {plan.withdrawHeadline}
             </p>
             {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
@@ -1206,8 +1327,9 @@ export default function TravelBlock({
                   ook letterlijk niet de aanbeveling maar het alternatief. */}
               {plan.pay && !plan.pay.held && plan.pay.ownProduct && (
                 <p className="cell-sub travel-winner-today">
-                  <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met {plan.pay.ownProduct} —{" "}
-                  {formatEuro(plan.pay.ownCostOnReference ?? 0)} op {formatEuro(TRAVEL_REFERENCE_SPEND)}.
+                  <strong>Vandaag:</strong> met wat je nu hebt betaal je het voordeligst met{" "}
+                  {plan.pay.ownProduct} — {formatEuro(plan.pay.ownCostOnReference ?? 0)} op{" "}
+                  {formatEuro(TRAVEL_REFERENCE_SPEND)}.
                 </p>
               )}
               {/* WAAROM DE GOEDKOPERE KAART HET NIET WERD. Zijn eigen route wint
@@ -1219,11 +1341,12 @@ export default function TravelBlock({
                   rechtzetten. */}
               {plan.pay?.held && rejected && ownPct !== null && (
                 <p className="cell-sub travel-note" data-testid="travel-pay-afgevallen">
-                  <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag (
-                  {pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
+                  <strong>Niet aangeraden:</strong> {rejected.offer.product} heeft een lagere opslag
+                  ({pctNL(rejected.offer.netCostPct)} tegen {pctNL(ownPct)}), maar kost{" "}
                   {feeLabel(rejected.net.cost.amount)} om aan te houden:{" "}
                   {formatEuro(rejected.net.grossCents / 100)} lagere opslag tegen{" "}
-                  {formatEuro(rejected.net.costCents / 100)} kaartkosten {spanWords(rejected.net.basis)}, dus{" "}
+                  {formatEuro(rejected.net.costCents / 100)} kaartkosten{" "}
+                  {spanWords(rejected.net.basis)}, dus{" "}
                   {rejected.net.netCents === 0
                     ? "even duur als"
                     : `${formatEuro(-rejected.net.netCents / 100)} duurder dan`}{" "}
@@ -1235,8 +1358,8 @@ export default function TravelBlock({
                   lijst, met de zin die zegt dat LaVega zelf niets verplaatst. */}
               {bestJourney && (
                 <div className="cell-sub">
-                  Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft. LaVega verplaatst
-                  zelf niets — dit is een stap die jij zet.
+                  Alle bedragen gelden op {formatEuro(TRAVEL_REFERENCE_SPEND)} die je daar uitgeeft.
+                  LaVega verplaatst zelf niets — dit is een stap die jij zet.
                 </div>
               )}
 
@@ -1244,7 +1367,17 @@ export default function TravelBlock({
                   — inclusief "Ververs voorwaarden", die van hem in dit uitgeklapte
                   deel hoort (punt 16). De zin die de oorzaak NOEMT staat vooraan;
                   wat je eraan kunt doen staat hier, bij de rest van de details. */}
-              {terms && <TermsNotice state={terms} busy={busy} aiAvailable={aiAvailable} termsAsked={termsAsked} termsGaveUp={termsGaveUp} onSearch={search} onRecheckAi={onRecheckAi} />}
+              {terms && (
+                <TermsNotice
+                  state={terms}
+                  busy={busy}
+                  aiAvailable={aiAvailable}
+                  termsAsked={termsAsked}
+                  termsGaveUp={termsGaveUp}
+                  onSearch={search}
+                  onRecheckAi={onRecheckAi}
+                />
+              )}
 
               <h3 className="travel-step-title">{ROUTES_HEADING}</h3>
               {plan.journeys.length === 0 ? (
@@ -1289,7 +1422,9 @@ export default function TravelBlock({
                           provider={j.provider}
                           factKey="fxFeePct"
                           label={`wisselkosten (${pct(plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null)})`}
-                          value={plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null}
+                          value={
+                            plan.spend.find((s) => s.provider === j.provider)?.fxFeePct ?? null
+                          }
                           busy={busy}
                           onCorrect={onCorrectFact}
                         />
@@ -1350,9 +1485,14 @@ export default function TravelBlock({
                               {(option.pointsPerEuro ?? 0) > 0 && (
                                 <span className="eyebrow"> · {option.pointsPerEuro} punt/€</span>
                               )}
-                              {option.feeSource === "user" && <span className="eyebrow"> · door jou ingesteld</span>}
+                              {option.feeSource === "user" && (
+                                <span className="eyebrow"> · door jou ingesteld</span>
+                              )}
                               {option.feeSource === "agent" && option.feeUpdatedAt && (
-                                <span className="eyebrow"> · {figureAge(option.feeUpdatedAt, asOf)}</span>
+                                <span className="eyebrow">
+                                  {" "}
+                                  · {figureAge(option.feeUpdatedAt, asOf)}
+                                </span>
                               )}
                             </span>
                             <span className="travel-leg-cost">
@@ -1375,8 +1515,9 @@ export default function TravelBlock({
 
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">
-                  {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder bank — die kunnen we
-                  niet opzoeken. Vul de bank in bij Rekeningen, of zet het type op Spaarrekening als het spaargeld is.
+                  {plan.unidentifiedCount} rekening{plan.unidentifiedCount === 1 ? "" : "en"} zonder
+                  bank — die kunnen we niet opzoeken. Vul de bank in bij Rekeningen, of zet het type
+                  op Spaarrekening als het spaargeld is.
                 </p>
               )}
             </div>

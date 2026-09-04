@@ -66,11 +66,11 @@ If a hosted credential row cannot be decrypted with the configured server key, t
 
 **Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
 
-| Broker | Persisted? | Why |
-|---|---|---|
-| DeGiro | N/A | No login. v1 is manual CSV import — the user exports their own portfolio/transaction file from DeGiro's web app and uploads it. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
-| Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)). |
-| Trading 212 | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)). |
+| Broker              | Persisted?   | Why                                                                                                                                                                                                                      |
+| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DeGiro              | N/A          | No login. v1 is manual CSV import — the user exports their own portfolio/transaction file from DeGiro's web app and uploads it. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
+| Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)).                                  |
+| Trading 212         | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)).                                                                                                              |
 
 ## Risk-disclosure gates
 
@@ -126,19 +126,19 @@ The obvious retail paths — Client Portal Web API and the TWS API — both requ
 
 Trading 212 does have an official public API (`https://docs.trading212.com/api`), self-service key generation from inside the app, no waitlist ([#9](https://github.com/Elmata2/LaVega/issues/9)). Scoped to Invest and Stocks ISA accounts; multi-currency accounts unsupported, values come back in the primary account currency.
 
-**This corrects a line in `docs/CONTEXT.md`:** "Trading 212 = cashflows only, not securities trades" is true of Trading 212's **CSV export**, but *not* of its API, which exposes real order history via `GET /api/v0/equity/history/orders` (cursor-paginated via `nextPagePath`, similar in shape to the Enable Banking `continuation_key` pattern already in this codebase).
+**This corrects a line in `docs/CONTEXT.md`:** "Trading 212 = cashflows only, not securities trades" is true of Trading 212's **CSV export**, but _not_ of its API, which exposes real order history via `GET /api/v0/equity/history/orders` (cursor-paginated via `nextPagePath`, similar in shape to the Enable Banking `continuation_key` pattern already in this codebase).
 
 **Auth:** HTTP Basic, `API_KEY:API_SECRET` base64-encoded. Optional IP restriction on the key. Confirmed against the published spec.
 
-**Rate limits: confirmed, per endpoint, and tight.** Taken from Trading 212's OpenAPI description ([`api.json`](https://docs.trading212.com/_spec/api.json)); limits apply per account *and* per IP.
+**Rate limits: confirmed, per endpoint, and tight.** Taken from Trading 212's OpenAPI description ([`api.json`](https://docs.trading212.com/_spec/api.json)); limits apply per account _and_ per IP.
 
-| Endpoint | Limit |
-|---|---|
-| `GET /api/v0/equity/history/orders` | 6 req / 1m |
-| `GET /api/v0/equity/history/dividends` | 6 req / 1m |
-| `GET /api/v0/equity/history/transactions` | 6 req / 1m |
-| `GET /api/v0/equity/positions` | 1 req / 1s |
-| `GET /api/v0/equity/account/summary` | 1 req / 5s |
+| Endpoint                                  | Limit       |
+| ----------------------------------------- | ----------- |
+| `GET /api/v0/equity/history/orders`       | 6 req / 1m  |
+| `GET /api/v0/equity/history/dividends`    | 6 req / 1m  |
+| `GET /api/v0/equity/history/transactions` | 6 req / 1m  |
+| `GET /api/v0/equity/positions`            | 1 req / 1s  |
+| `GET /api/v0/equity/account/summary`      | 1 req / 5s  |
 | `GET /api/v0/equity/metadata/instruments` | 1 req / 50s |
 
 Every response carries `x-ratelimit-limit`, `-period`, `-remaining`, `-reset` (Unix seconds) and `-used`. **Trading 212 does not send `Retry-After`**, so `x-ratelimit-reset` is the only header that says when a window reopens — an adapter that backs off exponentially instead gives up seconds into a 60-second window. The adapter paces itself off `-remaining`/`-reset` and waits through every required window **unless** a host deadline (`INVESTING_SYNC_BUDGET_MS`) would be overrun; then it stops and resumes. Repeated real HTTP 429 responses still produce `retryAfter` so scheduler can stop rejected requests. Runtime exposes pages, orders read, positions read, and current provider wait through broker-sync status API for UI progress.
@@ -158,6 +158,7 @@ A first history is tens of pages. On Vercel the function `maxDuration` is 300s a
 **Relationship to file import: complement, not replace.** The Trading 212 CSV path stays available (cashflows-only, always offline, per `docs/CONTEXT.md`'s file-import conventions). The API adapter sits alongside it — strictly more capable, since it adds real trade history — but nothing forces migration off CSV. The user picks the source.
 
 **Open items carried into implementation.**
+
 - ~~per-endpoint numeric rate limits~~ — confirmed, see the table above.
 - ~~exact positions/holdings endpoint name~~ — confirmed as `GET /api/v0/equity/positions`, returning a bare `Position[]`.
 - ~~response field names and trade granularity~~ — mapped against the published schemas. `GET /api/v0/equity/history/orders` emits one LaVega trade per `HistoricalOrder.fill`, because fills are the executed units and carry execution price/time; `amount` is `fill.price * fill.quantity`, not `order.filledValue`, so partial fills are not double-counted. `GET /api/v0/equity/positions` maps `averagePricePaid` and `walletImpact.currentValue`; schema mismatches become `problems[]` entries.

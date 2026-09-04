@@ -2,7 +2,14 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
-import { decryptJSON, deriveKey, encryptJSON, newSalt, PBKDF2_ITERATIONS, type CipherBlob } from "@lavega/adapters";
+import {
+  decryptJSON,
+  deriveKey,
+  encryptJSON,
+  newSalt,
+  PBKDF2_ITERATIONS,
+  type CipherBlob,
+} from "@lavega/adapters";
 import { runtimeDataFile } from "./jsonFileStore.js";
 
 export type ServerVaultStatus = "empty" | "locked" | "unlocked";
@@ -49,15 +56,19 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
 
   const queue = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = writeQueue.then(operation, operation);
-    writeQueue = result.then(() => undefined, () => undefined);
+    writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
   let salt: Uint8Array | null = null;
-  const save = () => queue(async () => {
-    if (!key || !salt || !data) throw new Error("kluis vergrendeld");
-    await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
-  });
+  const save = () =>
+    queue(async () => {
+      if (!key || !salt || !data) throw new Error("kluis vergrendeld");
+      await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
+    });
 
   return {
     async status() {
@@ -91,14 +102,25 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
       data = null;
     },
     async getCredentials<T extends CredentialBroker>(tenantId: string, broker: T) {
-      if (data == null && await readBlob() != null) throw new Error("credential vault is locked");
-      const match = data?.credentials.find((item) => item.tenantId === tenantId && item.broker === broker);
+      if (data == null && (await readBlob()) != null) throw new Error("credential vault is locked");
+      const match = data?.credentials.find(
+        (item) => item.tenantId === tenantId && item.broker === broker,
+      );
       return (match ?? null) as Extract<BrokerCredentials, { broker: T }> | null;
     },
     putCredentials(credentials) {
       return queue(async () => {
         if (!key || !salt || !data) throw new Error("kluis vergrendeld");
-        data = { ...data, credentials: [...data.credentials.filter((item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker), credentials] };
+        data = {
+          ...data,
+          credentials: [
+            ...data.credentials.filter(
+              (item) =>
+                item.tenantId !== credentials.tenantId || item.broker !== credentials.broker,
+            ),
+            credentials,
+          ],
+        };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
       });
     },

@@ -172,7 +172,10 @@ const NOT_THE_PROVIDER = new Set(["web.archive.org", "assets-eu-01.kc-userconten
 /** eTLD+1, naïef maar genoeg: alles in de catalogus is .nl, .com, .eu, .app of
  *  .capital — geen enkele samengestelde TLD zoals .co.uk. */
 function registrable(host: string): string {
-  const parts = host.toLowerCase().replace(/^www\./, "").split(".");
+  const parts = host
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .split(".");
   return parts.length <= 2 ? parts.join(".") : parts.slice(-2).join(".");
 }
 
@@ -224,14 +227,20 @@ async function get(url: string): Promise<{ res: Response; body: Buffer } | null>
  *  geen logo, en die komt vaker voor dan je hoopt. */
 function sniff(body: Buffer): string | null {
   if (body.length < 8) return null;
-  if (body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+    return "image/png";
   if (body[0] === 0xff && body[1] === 0xd8) return "image/jpeg";
-  if (body.subarray(0, 4).toString("ascii") === "RIFF" && body.subarray(8, 12).toString("ascii") === "WEBP")
+  if (
+    body.subarray(0, 4).toString("ascii") === "RIFF" &&
+    body.subarray(8, 12).toString("ascii") === "WEBP"
+  )
     return "image/webp";
   if (body.subarray(0, 3).toString("ascii") === "GIF") return "image/gif";
-  if (body[0] === 0x00 && body[1] === 0x00 && body[2] === 0x01 && body[3] === 0x00) return "image/x-icon";
+  if (body[0] === 0x00 && body[1] === 0x00 && body[2] === 0x01 && body[3] === 0x00)
+    return "image/x-icon";
   const head = body.subarray(0, 2000).toString("utf8").trim().toLowerCase();
-  if (head.startsWith("<?xml") || head.startsWith("<svg")) return head.includes("<svg") ? "image/svg+xml" : null;
+  if (head.startsWith("<?xml") || head.startsWith("<svg"))
+    return head.includes("<svg") ? "image/svg+xml" : null;
   return null;
 }
 
@@ -422,9 +431,16 @@ ${ids}
 `;
 }
 
-function noticeFile(logos: Logo[], skipped: { label: string; reason: string }[], today: string): string {
+function noticeFile(
+  logos: Logo[],
+  skipped: { label: string; reason: string }[],
+  today: string,
+): string {
   const rows = logos
-    .map((l) => `| ${l.label} | \`${l.slug}\` | ${l.why} | ${l.bytes} | ${l.fetchedAt} | ${l.sourceUrl} |`)
+    .map(
+      (l) =>
+        `| ${l.label} | \`${l.slug}\` | ${l.why} | ${l.bytes} | ${l.fetchedAt} | ${l.sourceUrl} |`,
+    )
     .join("\n");
   return `# Merken en logo's
 
@@ -517,7 +533,10 @@ async function main() {
     const names = group.map((g) => g.label).join(", ");
     for (const g of group) {
       collided.add(g.slug);
-      skipped.push({ label: g.label, reason: `identiek plaatje als ${names} — identificeert het merk niet` });
+      skipped.push({
+        label: g.label,
+        reason: `identiek plaatje als ${names} — identificeert het merk niet`,
+      });
       console.log(`— ${g.slug}: GEEN logo, want byte-identiek aan ${names}`);
     }
   }

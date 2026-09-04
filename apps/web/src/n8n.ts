@@ -119,7 +119,9 @@ function senderCheckOf(v: unknown): SenderCheck {
 function senderChecksOf(v: unknown): SenderChecks | undefined {
   if (!v || typeof v !== "object") return undefined;
   const o = v as Record<string, unknown>;
-  const spf = str(o.spf), dkim = str(o.dkim), dmarc = str(o.dmarc);
+  const spf = str(o.spf),
+    dkim = str(o.dkim),
+    dmarc = str(o.dmarc);
   if (!spf && !dkim && !dmarc) return undefined;
   return { spf: spf ?? "unknown", dkim: dkim ?? "unknown", dmarc: dmarc ?? "unknown" };
 }
@@ -163,7 +165,9 @@ function parseNotices(body: unknown): N8nNotice[] {
   return notices;
 }
 
-export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number } | null {
+export function parseQueue(
+  body: unknown,
+): { rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number } | null {
   if (!body || typeof body !== "object") return null;
   const list = (body as { invoices?: unknown }).invoices;
   if (!Array.isArray(list)) return null;
@@ -289,18 +293,23 @@ export function toPending(row: N8nInvoiceRow, defaultEntity: string): PendingInv
  *  `sourceType: "llm"` because a model read this out of an e-mail — it must
  *  stay distinguishable from something he typed himself. No confidence is set:
  *  the workflow reports none, and a fabricated one would be a lie. */
-export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoice } | { ok: false; error: string } {
+export function pendingToInvoice(
+  p: PendingInvoice,
+): { ok: true; invoice: Invoice } | { ok: false; error: string } {
   const counterparty = p.counterparty.trim();
   if (!counterparty) return { ok: false, error: "Vul een relatie in." };
   if (!p.issueDate) return { ok: false, error: "Vul een factuurdatum in." };
   if (!p.dueDate) return { ok: false, error: "Vul een vervaldatum in — n8n vond er geen." };
   const amount = Number(p.amount.replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Vul een geldig bedrag in." };
+  if (!Number.isFinite(amount) || amount <= 0)
+    return { ok: false, error: "Vul een geldig bedrag in." };
   const currency = p.currency.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: "Vul de valuta in — n8n las er geen, en LaVega gokt geen euro's." };
+  if (!/^[A-Z]{3}$/.test(currency))
+    return { ok: false, error: "Vul de valuta in — n8n las er geen, en LaVega gokt geen euro's." };
   const vatRaw = p.vat.trim();
   const vat = vatRaw === "" ? undefined : Number(vatRaw.replace(",", "."));
-  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0)) return { ok: false, error: "Btw-bedrag klopt niet." };
+  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0))
+    return { ok: false, error: "Btw-bedrag klopt niet." };
   return {
     ok: true,
     invoice: makeInvoice({
@@ -406,10 +415,7 @@ export function forwardedNotSpoofed(c: N8nInvoiceRow["senderChecks"]): boolean {
   return spfZakt && c.dkim === "pass";
 }
 
-export function autoBookDecision(
-  row: N8nInvoiceRow,
-  ctx: EntityContext,
-): AutoBookDecision {
+export function autoBookDecision(row: N8nInvoiceRow, ctx: EntityContext): AutoBookDecision {
   if (row.senderCheck === "failed") {
     const c = row.senderChecks;
     const detail = c ? ` (SPF ${c.spf}, DKIM ${c.dkim}, DMARC ${c.dmarc})` : "";
@@ -441,17 +447,23 @@ export function autoBookDecision(
   if (row.senderCheck !== "passed") {
     return {
       book: false,
-      reason: "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
+      reason:
+        "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
     };
   }
   if (ctx.entityChoices.length > 1) {
     return {
       book: false,
-      reason: "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
+      reason:
+        "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
     };
   }
   const check = pendingToInvoice(toPending(row, bookingEntity(ctx)));
-  if (!check.ok) return { book: false, reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.` };
+  if (!check.ok)
+    return {
+      book: false,
+      reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.`,
+    };
   /* HET PLAFOND, LAATST GECONTROLEERD EN MET OPZET. Een bedrag boven de grens
    * wacht ook als de afzender geverifieerd is en de extractie compleet — het is de
    * enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een geverifieerde
@@ -494,7 +506,8 @@ export function getAutoBookedInvoices(): AutoBookedInvoice[] {
     return parsed.flatMap((e): AutoBookedInvoice[] => {
       if (!e || typeof e !== "object") return [];
       const o = e as Record<string, unknown>;
-      const invoiceId = str(o.invoiceId), messageId = str(o.messageId);
+      const invoiceId = str(o.invoiceId),
+        messageId = str(o.messageId);
       if (!invoiceId || !messageId) return [];
       return [{ invoiceId, messageId, subject: str(o.subject) ?? undefined }];
     });
@@ -516,7 +529,10 @@ export function rememberAutoBooked(entry: AutoBookedInvoice): void {
 
 export function forgetAutoBooked(invoiceId: string): void {
   try {
-    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify(getAutoBookedInvoices().filter((a) => a.invoiceId !== invoiceId)));
+    localStorage.setItem(
+      AUTO_BOOKED_KEY,
+      JSON.stringify(getAutoBookedInvoices().filter((a) => a.invoiceId !== invoiceId)),
+    );
   } catch {
     /* ignored, same reason */
   }

@@ -23,13 +23,24 @@ const SHEET = `Maand;Omzet excl. btw;Kosten;Btw over omzet;Voorbelasting;Opmerki
 
 test("readSheetCsv sniffs the delimiter and splits header from data", () => {
   const t = readSheetCsv(SHEET);
-  expect(t.header).toEqual(["Maand", "Omzet excl. btw", "Kosten", "Btw over omzet", "Voorbelasting", "Opmerking"]);
+  expect(t.header).toEqual([
+    "Maand",
+    "Omzet excl. btw",
+    "Kosten",
+    "Btw over omzet",
+    "Voorbelasting",
+    "Opmerking",
+  ]);
   expect(t.rows).toHaveLength(3);
   expect(t.rows[0][1]).toBe("12.100,00");
 });
 
 test("readSheetRows takes cells from anywhere (an XLSX worksheet, a pasted table)", () => {
-  const t = readSheetRows([["Periode", "Omzet"], ["", ""], ["2026-04", "100"]]);
+  const t = readSheetRows([
+    ["Periode", "Omzet"],
+    ["", ""],
+    ["2026-04", "100"],
+  ]);
   expect(t.header).toEqual(["Periode", "Omzet"]);
   expect(t.rows).toEqual([["2026-04", "100"]]);
 });
@@ -46,13 +57,29 @@ test("the first import is guessed from the header, in his language", () => {
 });
 
 test("German and English headers are guessed too — the sheet may be the accountant's", () => {
-  const de = suggestTaxSheetMapping(["Monat", "Umsatz", "Aufwand", "Gewinn", "Umsatzsteuer", "Vorsteuer"]);
+  const de = suggestTaxSheetMapping([
+    "Monat",
+    "Umsatz",
+    "Aufwand",
+    "Gewinn",
+    "Umsatzsteuer",
+    "Vorsteuer",
+  ]);
   expect(de).toEqual({
-    period: "Monat", revenue: "Umsatz", expenses: "Aufwand", profit: "Gewinn",
-    vatCharged: "Umsatzsteuer", vatPaid: "Vorsteuer",
+    period: "Monat",
+    revenue: "Umsatz",
+    expenses: "Aufwand",
+    profit: "Gewinn",
+    vatCharged: "Umsatzsteuer",
+    vatPaid: "Vorsteuer",
   });
   const en = suggestTaxSheetMapping(["Month", "Revenue", "Costs", "Profit"]);
-  expect(en).toMatchObject({ period: "Month", revenue: "Revenue", expenses: "Costs", profit: "Profit" });
+  expect(en).toMatchObject({
+    period: "Month",
+    revenue: "Revenue",
+    expenses: "Costs",
+    profit: "Profit",
+  });
 });
 
 test("readTaxSheet maps the columns onto cents and says what it could not find", () => {
@@ -102,7 +129,11 @@ test("sumTaxFigures totals one window and never turns 'unknown' into zero", () =
 });
 
 test("a row with no readable period is kept but never counted, and reported", () => {
-  const table = readSheetRows([["Periode", "Omzet"], ["totaal", "1000"], ["2026-04", "100"]]);
+  const table = readSheetRows([
+    ["Periode", "Omzet"],
+    ["totaal", "1000"],
+    ["2026-04", "100"],
+  ]);
   const { rows, problems } = readTaxSheet(table, { period: "Periode", revenue: "Omzet" });
   expect(rows).toHaveLength(2);
   expect(rows[0].date).toBeNull();
@@ -123,14 +154,21 @@ test("a confirmed mapping survives the fact guard and comes back next time", () 
   const corrected = { ...suggestTaxSheetMapping(header), revenue: "Omzet excl. btw" };
   const facts = upsertFacts([], taxSheetMappingFacts(corrected, "2026-08-16"));
   expect(facts).toHaveLength(3); // period, revenue, expenses — no profit/vat column in this sheet
-  expect(facts.every((f) => f.agent === AGENTS.belasting && f.key === "kolom" && f.source === "user")).toBe(true);
+  expect(
+    facts.every((f) => f.agent === AGENTS.belasting && f.key === "kolom" && f.source === "user"),
+  ).toBe(true);
 
   // next import of the same sheet: one click, and the correction stuck
   expect(suggestTaxSheetMapping(header, facts).revenue).toBe("Omzet excl. btw");
 
   // a re-guess can never overwrite what he said (the learning rule)
-  const reguessed = upsertFacts(facts, taxSheetMappingFacts(suggestTaxSheetMapping(header), "2026-09-01")
-    .map((f) => ({ ...f, source: "agent" as const })));
+  const reguessed = upsertFacts(
+    facts,
+    taxSheetMappingFacts(suggestTaxSheetMapping(header), "2026-09-01").map((f) => ({
+      ...f,
+      source: "agent" as const,
+    })),
+  );
   expect(suggestTaxSheetMapping(header, reguessed).revenue).toBe("Omzet excl. btw");
 });
 
@@ -154,6 +192,15 @@ test("makeFact ids are stable per field, so a re-confirmed mapping upserts in pl
   const a = taxSheetMappingFacts({ revenue: "Omzet" }, "2026-08-16");
   const b = taxSheetMappingFacts({ revenue: "Netto omzet" }, "2026-09-01");
   expect(a[0].id).toBe(b[0].id);
-  expect(a[0].id).toBe(makeFact({ agent: AGENTS.belasting, subject: "revenue", key: "kolom", value: "x", source: "user", updatedAt: "" }).id);
+  expect(a[0].id).toBe(
+    makeFact({
+      agent: AGENTS.belasting,
+      subject: "revenue",
+      key: "kolom",
+      value: "x",
+      source: "user",
+      updatedAt: "",
+    }).id,
+  );
   expect(upsertFacts(a, b)).toHaveLength(1);
 });

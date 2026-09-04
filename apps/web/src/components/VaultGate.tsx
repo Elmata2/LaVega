@@ -7,7 +7,8 @@ import { parseBackup } from "../backup.js";
 
 const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
 
-const DATA_LOSS_WARNING = 'Wachtwoord kwijt = data kwijt — geen herstel. Er is geen "wachtwoord vergeten"-optie.';
+const DATA_LOSS_WARNING =
+  'Wachtwoord kwijt = data kwijt — geen herstel. Er is geen "wachtwoord vergeten"-optie.';
 
 type VaultGateProps = {
   gate: GateState;
@@ -28,7 +29,8 @@ export default function VaultGate({ gate, storage, onReady, onBackup }: VaultGat
   }
   if (gate === "unlock") return <UnlockScreen storage={storage} onReady={onReady} />;
   if (gate === "setup") return <SetupScreen storage={storage} onReady={onReady} />;
-  if (gate === "migrate") return <MigrateScreen storage={storage} onReady={onReady} onBackup={onBackup} />;
+  if (gate === "migrate")
+    return <MigrateScreen storage={storage} onReady={onReady} onBackup={onBackup} />;
   return null; // "ready" — App renders the app itself in this state
 }
 
@@ -110,7 +112,13 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
   }
 
   if (mode === "restore") {
-    return <RestoreOnSetupScreen storage={storage} onReady={onReady} onCancel={() => setMode("create")} />;
+    return (
+      <RestoreOnSetupScreen
+        storage={storage}
+        onReady={onReady}
+        onCancel={() => setMode("create")}
+      />
+    );
   }
 
   return (

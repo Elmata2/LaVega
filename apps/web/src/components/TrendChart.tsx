@@ -4,7 +4,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { areaPath, bandPath, makeYScale, nearestIndex, niceDomain, smoothPath, type Pt } from "../chart.js";
+import {
+  areaPath,
+  bandPath,
+  makeYScale,
+  nearestIndex,
+  niceDomain,
+  smoothPath,
+  type Pt,
+} from "../chart.js";
 
 /* TrendChart — the clean, sleek trend line Alexander asked for (the register of
  * the Hercules weight-trend charts): one smooth curve, a soft fill under it, a
@@ -134,7 +142,12 @@ export default function TrendChart({
       <div className="lv-chart-plot" style={{ height }} role="group" aria-label={ariaLabel}>
         {showAxis &&
           domain.ticks.map((t) => (
-            <span key={`l${t}`} className="lv-chart-tick" style={{ top: `${y(t)}%` }} aria-hidden="true">
+            <span
+              key={`l${t}`}
+              className="lv-chart-tick"
+              style={{ top: `${y(t)}%` }}
+              aria-hidden="true"
+            >
               {format(t)}
             </span>
           ))}
@@ -144,7 +157,12 @@ export default function TrendChart({
             x% of the chart plus its axis gutter. */}
         <div className="lv-chart-area">
           {domain.ticks.map((t) => (
-            <span key={t} className="lv-chart-grid" style={{ top: `${y(t)}%` }} aria-hidden="true" />
+            <span
+              key={t}
+              className="lv-chart-grid"
+              style={{ top: `${y(t)}%` }}
+              aria-hidden="true"
+            />
           ))}
 
           <svg
@@ -186,7 +204,11 @@ export default function TrendChart({
           </svg>
 
           {reference && (
-            <span className="lv-chart-reflabel" style={{ top: `${y(reference.value)}%` }} aria-hidden="true">
+            <span
+              className="lv-chart-reflabel"
+              style={{ top: `${y(reference.value)}%` }}
+              aria-hidden="true"
+            >
               {reference.label}
             </span>
           )}
@@ -194,7 +216,11 @@ export default function TrendChart({
           {mark && mark.index >= 0 && mark.index < points.length && (
             <span
               className="lv-chart-mark"
-              style={{ left: `${x(mark.index)}%`, top: `${y(points[mark.index].value)}%`, background: mark.color }}
+              style={{
+                left: `${x(mark.index)}%`,
+                top: `${y(points[mark.index].value)}%`,
+                background: mark.color,
+              }}
               aria-hidden="true"
             />
           )}

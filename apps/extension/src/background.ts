@@ -123,7 +123,9 @@ async function syncRegistraties(): Promise<void> {
     gewensteIds.add(`${REG_PREFIX}${bron.id}`);
   }
 
-  const wegHalen = [...bestaandeIds].filter((id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id));
+  const wegHalen = [...bestaandeIds].filter(
+    (id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id),
+  );
   if (wegHalen.length > 0) {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
@@ -215,7 +217,10 @@ chrome.permissions.onRemoved.addListener(() => {
      * dan hoort het vinkje in het optiescherm dat ook te tonen — anders zoekt
      * hij naar een fout die er niet is (zie het commentaar bij
      * kassaMagDraaien). */
-    if ((await getKassaOveralAan()) && !(await chrome.permissions.contains({ origins: [KASSA_MATCH] }))) {
+    if (
+      (await getKassaOveralAan()) &&
+      !(await chrome.permissions.contains({ origins: [KASSA_MATCH] }))
+    ) {
       await setKassaOveralAan(false);
     }
 
@@ -479,7 +484,11 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
   const { lezing, aanbiedingen } = leesAanbod(ruw, asOf, bron);
   await setBronLezing(bron, lezing, aanbiedingen);
 
-  const strook = aanbodStrook(lezing, aanbiedingen.map((a) => a.winkel), bron);
+  const strook = aanbodStrook(
+    lezing,
+    aanbiedingen.map((a) => a.winkel),
+    bron,
+  );
   return {
     soort: "melding",
     gelukt: lezing.uitkomst === "gelezen",

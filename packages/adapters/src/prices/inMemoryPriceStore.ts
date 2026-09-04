@@ -5,16 +5,22 @@ import type { PriceStore } from "./PriceStore.js";
  *  character cannot collide with another tenant or symbol. */
 export function createInMemoryPriceStore(): PriceStore {
   const tenants = new Map<string, Map<string, Map<string, PriceBar>>>();
-  const rowsFor = (tenantId: string, symbol: string) => [...(tenants.get(tenantId)?.get(symbol)?.values() ?? [])];
+  const rowsFor = (tenantId: string, symbol: string) => [
+    ...(tenants.get(tenantId)?.get(symbol)?.values() ?? []),
+  ];
 
   return {
     async getRange(tenantId, symbol, from, to) {
       return rowsFor(tenantId, symbol)
-        .filter((row) => (from === undefined || row.date >= from) && (to === undefined || row.date <= to))
+        .filter(
+          (row) => (from === undefined || row.date >= from) && (to === undefined || row.date <= to),
+        )
         .sort((a, b) => a.date.localeCompare(b.date));
     },
     async lastDate(tenantId, symbol) {
-      const dates = rowsFor(tenantId, symbol).map((row) => row.date).sort();
+      const dates = rowsFor(tenantId, symbol)
+        .map((row) => row.date)
+        .sort();
       return dates.at(-1) ?? null;
     },
     async upsert(tenantId, bars) {

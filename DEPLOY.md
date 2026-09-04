@@ -6,6 +6,7 @@ Vercel serves the web application and Hono API. Neon project `lavega`
 storage. Better Auth integration remains pending.
 
 ## What's already wired
+
 - `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
 - `db/migrations/0001_lavega.sql` — applied to Neon. Creates six tables and six
   RLS policies.
@@ -19,23 +20,25 @@ storage. Better Auth integration remains pending.
 - With `DATABASE_URL` set, every user-scoped store is in Neon and survives the
   invocation:
 
-  | Store | Table |
-  | --- | --- |
-  | Broker credentials and snapshots | `investing.broker_vaults` (encrypted) |
-  | Daily price bars | `investing.price_bars` |
-  | Benchmarks and market-data consent | `investing.preferences` |
-  | Broker sync state | `investing.sync_state` (per broker) |
-  | Price sync progress | `investing.sync_state` (key `prices`) |
-  | Latest portfolio agent run | `investing.agent_runs` |
+  | Store                              | Table                                 |
+  | ---------------------------------- | ------------------------------------- |
+  | Broker credentials and snapshots   | `investing.broker_vaults` (encrypted) |
+  | Daily price bars                   | `investing.price_bars`                |
+  | Benchmarks and market-data consent | `investing.preferences`               |
+  | Broker sync state                  | `investing.sync_state` (per broker)   |
+  | Price sync progress                | `investing.sync_state` (key `prices`) |
+  | Latest portfolio agent run         | `investing.agent_runs`                |
 
   Without `DATABASE_URL` each of these falls back to its file store, which is
   what local and self-hosted runs want.
+
 - Sector profiles are the one exception, still `/tmp/lavega-sectors.json`. They
   are a cache of public Yahoo data keyed by symbol, not user data, so a cold
   start costs a re-fetch and nothing else. `INVESTING_SECTOR_STORE_FILE` in
   `vercel.json` is therefore the only `/tmp` path left.
 
 ## Deploy steps
+
 1. Vercel project `lavega` uses repository `Elmata2/LaVega`.
 2. Vercel reads `vercel.json` and runs the configured build command.
 3. Add `lavega.dev` under Vercel **Settings → Domains**.
@@ -44,7 +47,7 @@ storage. Better Auth integration remains pending.
    - Name: `@`
    - Target: the Vercel target shown in the Domains screen
    - Proxy status: **DNS only** (grey cloud) until Vercel has issued its TLS
-   certificate; Cloudflare may be enabled afterwards if desired.
+     certificate; Cloudflare may be enabled afterwards if desired.
 5. Add Neon connection variables only after runtime adapters and authentication
    are implemented. Never put connection strings in repository files.
 
@@ -54,6 +57,7 @@ storage. Better Auth integration remains pending.
 
    Vercel's generated hostname can remain enabled for troubleshooting, but do
    not use it in public integrations.
+
 6. Verify:
    - `https://lavega.dev/` → landing
    - `https://lavega.dev/app` → personal vault (Overzicht)
@@ -64,20 +68,20 @@ storage. Better Auth integration remains pending.
 
 Personal app paths (SPA; server already serves `index.html` for unknown paths):
 
-| Path | View |
-| --- | --- |
-| `/app` or `/app/overview` | Overzicht |
-| `/app/transactions` | Transacties |
-| `/app/accounts` | Rekeningen |
-| `/app/forecast` | Forecast |
-| `/app/optimalisatie` | Optimalisatie |
-| `/app/valuta` | Valuta |
-| `/app/punten` | Punten |
-| `/app/belasting` | Belasting |
-| `/app/facturen` | Facturen |
-| `/app/profiel` | Profiel |
-| `/app/koppelingen` | Koppelingen |
-| `/app/backup` | Back-up |
+| Path                      | View          |
+| ------------------------- | ------------- |
+| `/app` or `/app/overview` | Overzicht     |
+| `/app/transactions`       | Transacties   |
+| `/app/accounts`           | Rekeningen    |
+| `/app/forecast`           | Forecast      |
+| `/app/optimalisatie`      | Optimalisatie |
+| `/app/valuta`             | Valuta        |
+| `/app/punten`             | Punten        |
+| `/app/belasting`          | Belasting     |
+| `/app/facturen`           | Facturen      |
+| `/app/profiel`            | Profiel       |
+| `/app/koppelingen`        | Koppelingen   |
+| `/app/backup`             | Back-up       |
 
 Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
 
@@ -100,11 +104,11 @@ runs inside `withTenant` so row-level security applies.
 
 ## Environments
 
-| | Production | Preview | Local |
-| --- | --- | --- | --- |
-| Neon branch | `main` | `preview` | none |
-| Stores | Neon | Neon | files on disk |
-| Authentication | on | on | off |
+|                | Production | Preview   | Local         |
+| -------------- | ---------- | --------- | ------------- |
+| Neon branch    | `main`     | `preview` | none          |
+| Stores         | Neon       | Neon      | files on disk |
+| Authentication | on         | on        | off           |
 
 Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
 production's: a leaked preview key must not open production data. It shares one
@@ -123,6 +127,7 @@ locally, create your own Neon branch and put its connection string, a
 `BETTER_AUTH_SECRET` and a `LAVEGA_ENCRYPTION_KEY` in `apps/server/.env`.
 
 ## Environment variables (Vercel → Settings → Environment Variables)
+
 - `DATABASE_URL` — Neon connection string, server-only. Use the
   `lavega_runtime` role, never the owner.
 - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS` — session
@@ -136,6 +141,7 @@ locally, create your own Neon branch and put its connection string, a
   `config.json`, `*.pem`, `.env*` are git-ignored.
 
 ## Enable Banking (flow is built — needs credentials)
+
 The `/api/eb/*` flow (aspsps → auth → callback → accounts) and the frontend
 "Koppel bank" button are implemented. To switch it on, register the EB app and
 set these Vercel **Environment Variables**:
@@ -147,6 +153,7 @@ set these Vercel **Environment Variables**:
 - `EB_PSU_TYPE` — `business` (or `personal`)
 
 In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
+
 - Redirect URL: `https://lavega.dev/api/eb/callback`
 - Privacy: `https://lavega.dev/privacy`
 - Terms: `https://lavega.dev/terms`
@@ -155,8 +162,10 @@ Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
 
 ## Local production test
+
 ```
 pnpm build      # builds apps/web/dist
 pnpm start      # Hono serves web + API on http://localhost:8787
 ```
+
 (For day-to-day dev keep using `pnpm dev` + `pnpm dev:server`.)

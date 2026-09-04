@@ -218,9 +218,15 @@ describe("parseAmountToCents", () => {
     /* Hier stond drie keer "bedrag-onduidelijk", en de tekst bij die reden gaat
      * over één punt met drie cijfers erachter. Bij deze drie is dat de verkeerde
      * oorzaak, en de gebruiker leest de oorzaak — niet de code. */
-    expect(parseAmountToCents("vanaf 39,99")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+    expect(parseAmountToCents("vanaf 39,99")).toEqual({
+      ok: false,
+      reason: "bedrag-niet-leesbaar",
+    });
     expect(parseAmountToCents("")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
-    expect(parseAmountToCents("op aanvraag")).toEqual({ ok: false, reason: "bedrag-niet-leesbaar" });
+    expect(parseAmountToCents("op aanvraag")).toEqual({
+      ok: false,
+      reason: "bedrag-niet-leesbaar",
+    });
     expect(parseAmountToCents("39,")).toEqual({ ok: false, reason: "bedrag-afgekapt" });
     expect(parseAmountToCents("-5,00")).toEqual({ ok: false, reason: "bedrag-negatief" });
     expect(parseAmountToCents(-5)).toEqual({ ok: false, reason: "bedrag-negatief" });
@@ -243,9 +249,17 @@ describe("parseAmountToCents", () => {
      * dwingt tsc af met Record<ReadReason, string>; dat ze VERSCHILLEN is wat
      * hier wordt nagemeten. */
     const redenen = [
-      "geen-prijsmarkup", "geen-artikelprijs", "prijsbereik", "prijs-vanaf",
-      "prijs-zonder-valuta", "munt-spreekt-tegen", "meerdere-prijzen",
-      "bedrag-onduidelijk", "bedrag-afgekapt", "bedrag-niet-leesbaar", "bedrag-negatief",
+      "geen-prijsmarkup",
+      "geen-artikelprijs",
+      "prijsbereik",
+      "prijs-vanaf",
+      "prijs-zonder-valuta",
+      "munt-spreekt-tegen",
+      "meerdere-prijzen",
+      "bedrag-onduidelijk",
+      "bedrag-afgekapt",
+      "bedrag-niet-leesbaar",
+      "bedrag-negatief",
     ] as const;
     for (const r of redenen) {
       expect(reasonText(r).length).toBeGreaterThan(20);
@@ -332,9 +346,7 @@ describe("een prijsbereik is geen prijs", () => {
      * een reeks was. Dit is dus geen detail van de vorm maar de reden dat de
      * weigering hierboven mogelijk is. */
     const ev = bewijs("kunstmatig-aggregateoffer-reeks.html");
-    expect(ev.candidates.map((c) => c.via).sort()).toEqual(
-      [VIA_REEKS_HOOG, VIA_REEKS_LAAG].sort(),
-    );
+    expect(ev.candidates.map((c) => c.via).sort()).toEqual([VIA_REEKS_HOOG, VIA_REEKS_LAAG].sort());
     expect(ev.candidates.map((c) => c.raw).sort()).toEqual(["219.00", "549.00"]);
   });
 
@@ -637,7 +649,7 @@ describe("productNaam: waar hij vandaan komt, en waarvandaan niet", () => {
     expect(ev.productNaam).not.toBeNull();
   });
 
-  it("valt terug op itemprop=\"name\" binnen een Product-itemscope, en negeert de naam van de organisatie erbuiten", () => {
+  it('valt terug op itemprop="name" binnen een Product-itemscope, en negeert de naam van de organisatie erbuiten', () => {
     const ev = bewijs("kunstmatig-productnaam-itemprop.html");
     expect(ev.productNaam).toBe("Boombox 4 25W bluetooth speaker");
     expect(ev.productNaam).not.toContain("Voorbeeldwinkel");
@@ -656,7 +668,9 @@ describe("productNaam: waar hij vandaan komt, en waarvandaan niet", () => {
      * Zonder de og:title-voorrang zou "eerste Product wint" hier stilzwijgend
      * de witte variant hebben opgeleverd. */
     const ev = bewijs("bol-productgroup.html", "www.bol.com");
-    expect(ev.productNaam).toBe("JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol");
+    expect(ev.productNaam).toBe(
+      "JBL Sense Lite - Volledig Draadloze Open-Ear Oordopjes - Zwart | bol",
+    );
     expect(ev.productNaam).not.toContain("Wit");
   });
 

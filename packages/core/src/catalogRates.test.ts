@@ -1,11 +1,30 @@
 import { describe, expect, test } from "vitest";
-import { assumptionDueForReview, cashbackKnowledgeOfEntry, cashbackSwitchGain, cashbackTierCounts, describeCashback, fxSwitchGain, issuerConsensus, marketCashbackOptions, mayAssumeNoCashback, issuerToBank, marketFxOptions, marketSavingsOptions, productWithoutBank, savingsBenchmarks } from "./catalogRates.js";
+import {
+  assumptionDueForReview,
+  cashbackKnowledgeOfEntry,
+  cashbackSwitchGain,
+  cashbackTierCounts,
+  describeCashback,
+  fxSwitchGain,
+  issuerConsensus,
+  marketCashbackOptions,
+  mayAssumeNoCashback,
+  issuerToBank,
+  marketFxOptions,
+  marketSavingsOptions,
+  productWithoutBank,
+  savingsBenchmarks,
+} from "./catalogRates.js";
 import { bestRate, keptRate } from "./interest.js";
 
 const covered = (over: Record<string, unknown> = {}) => ({
-  value: 1.25, route: "agent" as const, sourceUrl: "https://abn/fid.pdf",
-  checkedAt: "2025-05-01", conditions: "1,25% op € 0 t/m € 500.000; 1,45% daarboven.",
-  conditionsKnown: true, ...over,
+  value: 1.25,
+  route: "agent" as const,
+  sourceUrl: "https://abn/fid.pdf",
+  checkedAt: "2025-05-01",
+  conditions: "1,25% op € 0 t/m € 500.000; 1,45% daarboven.",
+  conditionsKnown: true,
+  ...over,
 });
 
 describe("issuerToBank", () => {
@@ -34,9 +53,12 @@ describe("productWithoutBank", () => {
 
 describe("savingsBenchmarks", () => {
   const entry = (over: Record<string, unknown> = {}) => ({
-    id: "abn-amro-direct-sparen", product: "ABN AMRO Direct Sparen",
-    issuer: "ABN AMRO Bank N.V.", kind: "spaarrekening",
-    fields: { interestPct: covered() }, ...over,
+    id: "abn-amro-direct-sparen",
+    product: "ABN AMRO Direct Sparen",
+    issuer: "ABN AMRO Bank N.V.",
+    kind: "spaarrekening",
+    fields: { interestPct: covered() },
+    ...over,
   });
 
   test("carries the rate with ITS OWN source and date", () => {
@@ -61,7 +83,9 @@ describe("savingsBenchmarks", () => {
   test("REFUSES a figure whose conditions were never settled", () => {
     // An uncovered rate would rank a bank on a number nobody could qualify — the
     // exact failure the catalogue exists to prevent.
-    expect(savingsBenchmarks([entry({ fields: { interestPct: covered({ conditionsKnown: false }) } })])).toEqual([]);
+    expect(
+      savingsBenchmarks([entry({ fields: { interestPct: covered({ conditionsKnown: false }) } })]),
+    ).toEqual([]);
   });
 
   test("REFUSES an entry with no issuer, which could not be reconciled by bank", () => {
@@ -69,16 +93,28 @@ describe("savingsBenchmarks", () => {
   });
 
   test("unstated withdrawal terms are NOT free", () => {
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ conditions: "1,25% op het hele saldo. Opnamevoorwaarden niet vermeld." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            conditions: "1,25% op het hele saldo. Opnamevoorwaarden niet vermeld.",
+          }),
+        },
+      }),
+    ]);
     expect(b.freeWithdrawal).toBe(false);
   });
 
   test("a stated notice period is not free either", () => {
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ conditions: "1,25%. Niet vrij opneembaar; opzegtermijn 33 dagen." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            conditions: "1,25%. Niet vrij opneembaar; opzegtermijn 33 dagen.",
+          }),
+        },
+      }),
+    ]);
     expect(b.freeWithdrawal).toBe(false);
   });
 
@@ -97,9 +133,16 @@ describe("savingsBenchmarks", () => {
    * because it ranks `keptRate`, which is still 1,50%.
    */
   test("a promo the source states is SPLIT: headline now, standard kept", () => {
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 1.5, conditions: "Vrij opneembaar. Actierente 3,01% t/m 01-01-2027, daarna 1,50%." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 1.5,
+            conditions: "Vrij opneembaar. Actierente 3,01% t/m 01-01-2027, daarna 1,50%.",
+          }),
+        },
+      }),
+    ]);
     expect(b.ratePct).toBe(3.01); // what you could get now
     expect(b.standardRatePct).toBe(1.5); // what you keep
     expect(keptRate(b)).toBe(1.5); // …and therefore what the ranking rests on
@@ -111,9 +154,16 @@ describe("savingsBenchmarks", () => {
     // If the sentence's standing rate is not the value in the field, the two
     // disagree about the same product and nobody has resolved which is right.
     // Splitting on a guess would move the ranking; leaving it alone does not.
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 1.5, conditions: "Actierente 3,01% t/m 01-01-2027, daarna 2,20%." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 1.5,
+            conditions: "Actierente 3,01% t/m 01-01-2027, daarna 2,20%.",
+          }),
+        },
+      }),
+    ]);
     expect(b.ratePct).toBe(1.5);
     expect(b.standardRatePct).toBeUndefined();
     expect(b.promo).toBeUndefined();
@@ -122,9 +172,17 @@ describe("savingsBenchmarks", () => {
   test("an actierente sentence that says it belongs to ANOTHER product is not a promo here", () => {
     // Nexent's own words. The old note regex printed this sentence as this
     // product's promo, which is a promo the saver cannot have on this account.
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 1.25, conditions: "Saldoband 1 tot 1.000.000 EUR tegen 1,25 % p.j. De actierente van 2,75% p.j. gedurende 3 maanden geldt volgens de tabel voor de Welkom Spaarrekening, niet voor de Nexent Bank Spaarrekening." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 1.25,
+            conditions:
+              "Saldoband 1 tot 1.000.000 EUR tegen 1,25 % p.j. De actierente van 2,75% p.j. gedurende 3 maanden geldt volgens de tabel voor de Welkom Spaarrekening, niet voor de Nexent Bank Spaarrekening.",
+          }),
+        },
+      }),
+    ]);
     expect(b.ratePct).toBe(1.25);
     expect(b.promoNote).toBeUndefined();
   });
@@ -134,9 +192,17 @@ describe("savingsBenchmarks", () => {
     // PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare". Served bare
     // is exactly what happened: it ranked first of all 48 rows and priced the
     // yearly gain at 3%.
-    const [b] = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 3, conditions: "THIS IS A NEW-CUSTOMER PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare. Dagelijks opneembaar." }) },
-    })]);
+    const [b] = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 3,
+            conditions:
+              "THIS IS A NEW-CUSTOMER PROMOTIONAL RATE, NOT THE STANDING RATE — do not serve 3% bare. Dagelijks opneembaar.",
+          }),
+        },
+      }),
+    ]);
     expect(b.ratePct).toBe(3);
     expect(b.promo).toBe(true);
     expect(b.standardRatePct).toBeUndefined();
@@ -152,16 +218,32 @@ describe("savingsBenchmarks", () => {
     // it is its own kind of dishonesty. The original INTENT — that such a figure
     // must never be ranked as savings — is still asserted, now through bestRate
     // refusing it rather than through the row being absent.
-    const wise = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 2.02, conditions: "NOT A SAVINGS RATE — it is 7-day fund performance, net of fee, on a money-market fund." }) },
-    })]);
+    const wise = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 2.02,
+            conditions:
+              "NOT A SAVINGS RATE — it is 7-day fund performance, net of fee, on a money-market fund.",
+          }),
+        },
+      }),
+    ]);
     expect(wise).toHaveLength(1);
     expect(wise[0].capitalAtRisk).toBe(true);
     expect(bestRate(wise)).toBeNull();
 
-    const n26 = savingsBenchmarks([entry({
-      fields: { interestPct: covered({ value: 2.32, conditions: "NOT A SAVINGS RATE AND NOT A DEPOSIT — an investment that carries a risk of capital loss." }) },
-    })]);
+    const n26 = savingsBenchmarks([
+      entry({
+        fields: {
+          interestPct: covered({
+            value: 2.32,
+            conditions:
+              "NOT A SAVINGS RATE AND NOT A DEPOSIT — an investment that carries a risk of capital loss.",
+          }),
+        },
+      }),
+    ]);
     expect(n26).toHaveLength(1);
     expect(n26[0].capitalAtRisk).toBe(true);
     expect(bestRate(n26)).toBeNull();
@@ -173,7 +255,16 @@ describe("savingsBenchmarks", () => {
   });
 
   test("ignores card products entirely", () => {
-    expect(savingsBenchmarks([{ id: "x", product: "ING betaalpas", issuer: "ING Bank N.V.", fields: { fxFeePct: covered() } }])).toEqual([]);
+    expect(
+      savingsBenchmarks([
+        {
+          id: "x",
+          product: "ING betaalpas",
+          issuer: "ING Bank N.V.",
+          fields: { fxFeePct: covered() },
+        },
+      ]),
+    ).toEqual([]);
   });
 });
 
@@ -181,7 +272,9 @@ describe("names a saver would recognise", () => {
   test("the bank prefix must end on a word boundary", () => {
     // "Open Bank" once ate the "Open" out of "Openbank Welkom Spaarrekening" and
     // the row read "Open Bank — bank Welkom Spaarrekening".
-    expect(productWithoutBank("Openbank Welkom Spaarrekening", "Open Bank")).toBe("Openbank Welkom Spaarrekening");
+    expect(productWithoutBank("Openbank Welkom Spaarrekening", "Open Bank")).toBe(
+      "Openbank Welkom Spaarrekening",
+    );
   });
   test("strips a foreign legal form too", () => {
     expect(issuerToBank("Bigbank AS")).toBe("Bigbank");
@@ -193,12 +286,27 @@ describe("names a saver would recognise", () => {
 
 describe("what the whole market offers", () => {
   const card = (id: string, product: string, issuer: string, value: number, known = true) => ({
-    id, product, issuer, kind: "creditcard",
-    fields: { fxFeePct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: "2026-01-01", conditions: "x", conditionsKnown: known } },
+    id,
+    product,
+    issuer,
+    kind: "creditcard",
+    fields: {
+      fxFeePct: {
+        value,
+        route: "agent" as const,
+        sourceUrl: `https://${id}`,
+        checkedAt: "2026-01-01",
+        conditions: "x",
+        conditionsKnown: known,
+      },
+    },
   });
 
   test("ranks covered surcharges cheapest first", () => {
-    const out = marketFxOptions([card("a", "A", "Bank A N.V.", 2), card("b", "B", "Bank B N.V.", 0.2)]);
+    const out = marketFxOptions([
+      card("a", "A", "Bank A N.V.", 2),
+      card("b", "B", "Bank B N.V.", 0.2),
+    ]);
     expect(out.map((o) => o.product)).toEqual(["B", "A"]);
     expect(out[0].bank).toBe("Bank B");
   });
@@ -211,10 +319,25 @@ describe("what the whole market offers", () => {
 
   test("savings ranks the other way — highest rate first", () => {
     const sav = (id: string, v: number) => ({
-      id, product: id, issuer: "B N.V.", kind: "spaarrekening",
-      fields: { interestPct: { value: v, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-01-01", conditions: "x", conditionsKnown: true } },
+      id,
+      product: id,
+      issuer: "B N.V.",
+      kind: "spaarrekening",
+      fields: {
+        interestPct: {
+          value: v,
+          route: "agent" as const,
+          sourceUrl: "https://x",
+          checkedAt: "2026-01-01",
+          conditions: "x",
+          conditionsKnown: true,
+        },
+      },
     });
-    expect(marketSavingsOptions([sav("low", 1), sav("high", 3)]).map((o) => o.product)).toEqual(["high", "low"]);
+    expect(marketSavingsOptions([sav("low", 1), sav("high", 3)]).map((o) => o.product)).toEqual([
+      "high",
+      "low",
+    ]);
   });
 
   test("carries the source's own date, so an old figure can say so", () => {
@@ -223,7 +346,15 @@ describe("what the whole market offers", () => {
 });
 
 describe("fxSwitchGain", () => {
-  const best = { productId: "x", product: "X", bank: "X", value: 0, conditions: null, sourceUrl: "https://x", asOf: "2026-01-01" };
+  const best = {
+    productId: "x",
+    product: "X",
+    bank: "X",
+    value: 0,
+    conditions: null,
+    sourceUrl: "https://x",
+    asOf: "2026-01-01",
+  };
 
   test("quantifies what not switching costs on a given spend", () => {
     // € 1.000 abroad at 1,4% instead of 0% is € 14.
@@ -246,47 +377,95 @@ describe("fxSwitchGain", () => {
 
 describe("issuerConsensus", () => {
   const card = (id: string, issuer: string, value: number, date = "2026-01-01", known = true) => ({
-    id, product: id, issuer, kind: "creditcard",
-    fields: { fxFeePct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: date, conditions: "x", conditionsKnown: known } },
+    id,
+    product: id,
+    issuer,
+    kind: "creditcard",
+    fields: {
+      fxFeePct: {
+        value,
+        route: "agent" as const,
+        sourceUrl: `https://${id}`,
+        checkedAt: date,
+        conditions: "x",
+        conditionsKnown: known,
+      },
+    },
   });
 
   test("answers when every candidate agrees — the real Amex case", () => {
     // Thirteen Amex products, all 2,5%, from three different agreements. Asking
     // which card he holds cannot change the number, so asking is worse than
     // answering.
-    const got = issuerConsensus([card("a", "American Express", 2.5), card("b", "American Express", 2.5), card("c", "American Express", 2.5)], "american express", "fxFeePct");
+    const got = issuerConsensus(
+      [
+        card("a", "American Express", 2.5),
+        card("b", "American Express", 2.5),
+        card("c", "American Express", 2.5),
+      ],
+      "american express",
+      "fxFeePct",
+    );
     expect(got!.value).toBe(2.5);
     expect(got!.from).toBe(3);
   });
 
   test("REFUSES when they differ, because then the question is the right thing to ask", () => {
-    expect(issuerConsensus([card("a", "ICS", 2), card("b", "ICS", 2.5)], "ics", "fxFeePct")).toBeNull();
+    expect(
+      issuerConsensus([card("a", "ICS", 2), card("b", "ICS", 2.5)], "ics", "fxFeePct"),
+    ).toBeNull();
   });
 
   test("REFUSES a single product — one figure is not a consensus", () => {
-    expect(issuerConsensus([card("a", "American Express", 2.5)], "american express", "fxFeePct")).toBeNull();
+    expect(
+      issuerConsensus([card("a", "American Express", 2.5)], "american express", "fxFeePct"),
+    ).toBeNull();
   });
 
   test("ignores uncovered candidates rather than counting them as agreement", () => {
-    expect(issuerConsensus([card("a", "Amex", 2.5), card("b", "Amex", 2.5, "2026-01-01", false)], "amex", "fxFeePct")).toBeNull();
+    expect(
+      issuerConsensus(
+        [card("a", "Amex", 2.5), card("b", "Amex", 2.5, "2026-01-01", false)],
+        "amex",
+        "fxFeePct",
+      ),
+    ).toBeNull();
   });
 
   test("reports the OLDEST date among the agreeing figures", () => {
     // They agree on the number, not on how recently anyone looked. The weakest
     // link is what the reader needs.
-    const got = issuerConsensus([card("a", "Amex", 2.5, "2026-08-01"), card("b", "Amex", 2.5, "2023-03-15")], "amex", "fxFeePct");
+    const got = issuerConsensus(
+      [card("a", "Amex", 2.5, "2026-08-01"), card("b", "Amex", 2.5, "2023-03-15")],
+      "amex",
+      "fxFeePct",
+    );
     expect(got!.asOf).toBe("2023-03-15");
   });
 });
 
 describe("marketCashbackOptions", () => {
   const cb = (id: string, issuer: string, value: number, known = true) => ({
-    id, product: id, issuer, kind: "creditcard",
-    fields: { cashbackPct: { value, route: "agent" as const, sourceUrl: `https://${id}`, checkedAt: "2026-08-19", conditions: "1% tot € 100 per maand", conditionsKnown: known } },
+    id,
+    product: id,
+    issuer,
+    kind: "creditcard",
+    fields: {
+      cashbackPct: {
+        value,
+        route: "agent" as const,
+        sourceUrl: `https://${id}`,
+        checkedAt: "2026-08-19",
+        conditions: "1% tot € 100 per maand",
+        conditionsKnown: known,
+      },
+    },
   });
 
   test("ranks the payers, best first", () => {
-    expect(marketCashbackOptions([cb("a", "A Bank", 0.5), cb("b", "B Bank", 1.5)]).map((o) => o.product)).toEqual(["b", "a"]);
+    expect(
+      marketCashbackOptions([cb("a", "A Bank", 0.5), cb("b", "B Bank", 1.5)]).map((o) => o.product),
+    ).toEqual(["b", "a"]);
   });
 
   test("a card that pays NOTHING is not an offer, though the fact is kept elsewhere", () => {
@@ -304,7 +483,15 @@ describe("marketCashbackOptions", () => {
 });
 
 describe("cashbackSwitchGain", () => {
-  const best = { productId: "x", product: "X", bank: "X", cashbackPct: 1.5, conditions: null, sourceUrl: "https://x", asOf: "2026-08-19" };
+  const best = {
+    productId: "x",
+    product: "X",
+    bank: "X",
+    cashbackPct: 1.5,
+    conditions: null,
+    sourceUrl: "https://x",
+    asOf: "2026-08-19",
+  };
 
   test("quantifies a year of not switching", () => {
     // € 20.000 a year at 1,5% instead of 0% is € 300.
@@ -334,14 +521,29 @@ describe("cashbackSwitchGain", () => {
 
 describe("cashbackKnowledgeOfEntry", () => {
   const row = (over: Record<string, unknown> = {}) => ({
-    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas",
-    fields: {}, ...over,
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    issuer: "ING Bank N.V.",
+    kind: "betaalpas",
+    fields: {},
+    ...over,
   });
 
   test("een gedekt cijfer is GEMETEN, met bron en peildatum", () => {
-    const k = cashbackKnowledgeOfEntry(row({
-      fields: { cashbackPct: { value: 2, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-08-01", conditions: null, conditionsKnown: true } },
-    }));
+    const k = cashbackKnowledgeOfEntry(
+      row({
+        fields: {
+          cashbackPct: {
+            value: 2,
+            route: "agent" as const,
+            sourceUrl: "https://x",
+            checkedAt: "2026-08-01",
+            conditions: null,
+            conditionsKnown: true,
+          },
+        },
+      }),
+    );
     expect(k.tier).toBe("gemeten");
     if (k.tier !== "gemeten") throw new Error("onbereikbaar");
     expect(k.pct).toBe(2);
@@ -352,9 +554,20 @@ describe("cashbackKnowledgeOfEntry", () => {
     // "Een uitgesproken 'gratis' IS een bekende nul." Zegt het tarievenblad het
     // zelf, dan is dat een feit met een bron, en het mag niet op één hoop met een
     // nul die wij invullen: dan is het verschil na één sweep niet meer te zien.
-    const k = cashbackKnowledgeOfEntry(row({
-      fields: { cashbackPct: { value: 0, route: "provider-pdf" as const, sourceUrl: "https://ing/tarieven.pdf", checkedAt: "2026-06-15", conditions: "Geen cashback op de betaalpas.", conditionsKnown: true } },
-    }));
+    const k = cashbackKnowledgeOfEntry(
+      row({
+        fields: {
+          cashbackPct: {
+            value: 0,
+            route: "provider-pdf" as const,
+            sourceUrl: "https://ing/tarieven.pdf",
+            checkedAt: "2026-06-15",
+            conditions: "Geen cashback op de betaalpas.",
+            conditionsKnown: true,
+          },
+        },
+      }),
+    );
     expect(k.tier).toBe("gemeten");
     expect(describeCashback(k)).toContain("gemeten: geen cashback");
     expect(describeCashback(k)).toContain("2026-06-15");
@@ -367,26 +580,55 @@ describe("cashbackKnowledgeOfEntry", () => {
     expect(k.pct).toBe(0);
     expect(k.issuerFamily).toBe("ING");
     // En het staat er letterlijk zo op het scherm, met het woord erbij.
-    expect(describeCashback(k)).toBe("aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product");
+    expect(describeCashback(k)).toBe(
+      "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product",
+    );
   });
 
   test("een cijfer waarvan de voorwaarden niet vaststaan valt terug op de aanname, niet op het cijfer", () => {
     // Niet gedekt = geen gemeten cijfer. Dat het er staat maakt het niet bruikbaar,
     // en het mag hier zeker geen 2% worden zonder dat iemand de voorwaarden kent.
-    const k = cashbackKnowledgeOfEntry(row({
-      fields: { cashbackPct: { value: 2, route: "agent" as const, sourceUrl: "https://x", checkedAt: "2026-08-01", conditions: null, conditionsKnown: false } },
-    }));
+    const k = cashbackKnowledgeOfEntry(
+      row({
+        fields: {
+          cashbackPct: {
+            value: 2,
+            route: "agent" as const,
+            sourceUrl: "https://x",
+            checkedAt: "2026-08-01",
+            conditions: null,
+            conditionsKnown: false,
+          },
+        },
+      }),
+    );
     expect(k.tier).toBe("aangenomen");
     expect(k).not.toHaveProperty("sourceUrl");
   });
 
   test("de peildatum van de aanname is de LAATSTE keer dat iemand dit product las", () => {
-    const k = cashbackKnowledgeOfEntry(row({
-      fields: {
-        fxFeePct: { value: 1.4, route: "provider-pdf" as const, sourceUrl: "https://ing", checkedAt: "2025-01-10", conditions: "geen", conditionsKnown: true },
-        accountFee: { value: 0, route: "provider-pdf" as const, sourceUrl: "https://ing", checkedAt: "2026-06-15", conditions: "gratis", conditionsKnown: true },
-      },
-    }));
+    const k = cashbackKnowledgeOfEntry(
+      row({
+        fields: {
+          fxFeePct: {
+            value: 1.4,
+            route: "provider-pdf" as const,
+            sourceUrl: "https://ing",
+            checkedAt: "2025-01-10",
+            conditions: "geen",
+            conditionsKnown: true,
+          },
+          accountFee: {
+            value: 0,
+            route: "provider-pdf" as const,
+            sourceUrl: "https://ing",
+            checkedAt: "2026-06-15",
+            conditions: "gratis",
+            conditionsKnown: true,
+          },
+        },
+      }),
+    );
     if (k.tier !== "aangenomen") throw new Error("verwachtte een aanname");
     expect(k.lastCheckedAt).toBe("2026-06-15");
   });
@@ -404,17 +646,35 @@ describe("de afbakening van de aanname", () => {
      melding zijn eigen oorzaak kan noemen. */
 
   test("een cryptokaart nooit — daar is cashback het verkoopargument", () => {
-    const k = cashbackKnowledgeOfEntry({ id: "bleap-card", product: "Bleap Card", issuer: "Bleap SIA (Latvia)", kind: "crypto", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "bleap-card",
+      product: "Bleap Card",
+      issuer: "Bleap SIA (Latvia)",
+      kind: "crypto",
+      fields: {},
+    });
     expect(k).toEqual({ tier: "onbekend", reason: "verkoopargument" });
   });
 
   test("een prepaidkaart nooit — alle acht aantoonbare cijfers in de catalogus staan op zo'n kaart", () => {
-    const k = cashbackKnowledgeOfEntry({ id: "cdc", product: "Crypto.com Prepaid Card", issuer: "Crypto.com", kind: "prepaid", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "cdc",
+      product: "Crypto.com Prepaid Card",
+      issuer: "Crypto.com",
+      kind: "prepaid",
+      fields: {},
+    });
     expect(k).toEqual({ tier: "onbekend", reason: "verkoopargument" });
   });
 
   test("American Express nooit — die kaarten worden verkocht op wat je ermee verdient", () => {
-    const k = cashbackKnowledgeOfEntry({ id: "amex-gold", product: "American Express Gold Card", issuer: "American Express (self-issued in NL; NOT ICS)", kind: "creditcard", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "amex-gold",
+      product: "American Express Gold Card",
+      issuer: "American Express (self-issued in NL; NOT ICS)",
+      kind: "creditcard",
+      fields: {},
+    });
     expect(k).toEqual({ tier: "onbekend", reason: "beloningsuitgever" });
   });
 
@@ -423,8 +683,11 @@ describe("de afbakening van de aanname", () => {
     // uitgeversregel waar een naam van de lijst in voorkomt. De beloningskant
     // wint, altijd.
     const k = cashbackKnowledgeOfEntry({
-      id: "fb-entry", product: "Flying Blue - American Express Entry Card",
-      issuer: "International Card Services B.V. (ICS)", kind: "creditcard", fields: {},
+      id: "fb-entry",
+      product: "Flying Blue - American Express Entry Card",
+      issuer: "International Card Services B.V. (ICS)",
+      kind: "creditcard",
+      fields: {},
     });
     expect(k).toEqual({ tier: "onbekend", reason: "beloningsuitgever" });
   });
@@ -437,18 +700,35 @@ describe("de afbakening van de aanname", () => {
       ["Wise betaalpas", "Wise Europe SA (Belgium)"],
       ["212 Card", "Paynetics (card issuer); NL customers under Trading 212"],
     ]) {
-      const k = cashbackKnowledgeOfEntry({ id: product, product, issuer, kind: "betaalpas", fields: {} });
+      const k = cashbackKnowledgeOfEntry({
+        id: product,
+        product,
+        issuer,
+        kind: "betaalpas",
+        fields: {},
+      });
       expect(k, product).toEqual({ tier: "onbekend", reason: "uitgever-buiten-de-aanname" });
     }
   });
 
   test("een spaarrekening nooit — daar hoort geen kaart bij, dus ook geen vraag", () => {
-    const k = cashbackKnowledgeOfEntry({ id: "abn-sparen", product: "ABN AMRO Direct Sparen", issuer: "ABN AMRO Bank N.V.", kind: "spaarrekening", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "abn-sparen",
+      product: "ABN AMRO Direct Sparen",
+      issuer: "ABN AMRO Bank N.V.",
+      kind: "spaarrekening",
+      fields: {},
+    });
     expect(k).toEqual({ tier: "onbekend", reason: "geen-betaalproduct" });
   });
 
   test("zonder soort nooit — dan weten we niet of het een pas of een cryptokaart is", () => {
-    const k = cashbackKnowledgeOfEntry({ id: "x", product: "Iets", issuer: "ING Bank N.V.", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "x",
+      product: "Iets",
+      issuer: "ING Bank N.V.",
+      fields: {},
+    });
     expect(k).toEqual({ tier: "onbekend", reason: "soort-onbekend" });
   });
 
@@ -468,10 +748,21 @@ describe("de afbakening van de aanname", () => {
       // ICS' eigen kaart valt er ook onder. Dat hij hier als ABN AMRO uitkomt is
       // geen fout maar de uitgeversregel van de catalogus zelf, die ICS "an ABN
       // AMRO subsidiary" noemt — en het is de naam die de lezer herkent.
-      ["ICS Visa World Card", "International Card Services B.V. (ICS, an ABN AMRO subsidiary)", "ABN AMRO"],
+      [
+        "ICS Visa World Card",
+        "International Card Services B.V. (ICS, an ABN AMRO subsidiary)",
+        "ABN AMRO",
+      ],
     ];
     for (const [product, issuer, family] of rows) {
-      const k = cashbackKnowledgeOfEntry({ id: product, product, issuer, kind: product.includes("creditcard") || product.includes("Card") ? "creditcard" : "betaalpas", fields: {} });
+      const k = cashbackKnowledgeOfEntry({
+        id: product,
+        product,
+        issuer,
+        kind:
+          product.includes("creditcard") || product.includes("Card") ? "creditcard" : "betaalpas",
+        fields: {},
+      });
       expect(k.tier, product).toBe("aangenomen");
       if (k.tier !== "aangenomen") throw new Error("onbereikbaar");
       expect(k.issuerFamily, product).toBe(family);
@@ -481,7 +772,13 @@ describe("de afbakening van de aanname", () => {
   test("de RegioBank-pas heet RegioBank, ook al staat ASN in zijn uitgeversregel", () => {
     // "ASN Bank N.V. (formerly RegioBank N.V.)" — specifieker eerst, anders noemt
     // de melding de verkeerde bank en is hij niet na te kijken.
-    const k = cashbackKnowledgeOfEntry({ id: "regiobank-betaalpas", product: "RegioBank betaalpas", issuer: "ASN Bank N.V. (formerly RegioBank N.V.)", kind: "betaalpas", fields: {} });
+    const k = cashbackKnowledgeOfEntry({
+      id: "regiobank-betaalpas",
+      product: "RegioBank betaalpas",
+      issuer: "ASN Bank N.V. (formerly RegioBank N.V.)",
+      kind: "betaalpas",
+      fields: {},
+    });
     if (k.tier !== "aangenomen") throw new Error("verwachtte een aanname");
     expect(k.issuerFamily).toBe("RegioBank");
   });
@@ -497,8 +794,29 @@ describe("cashbackTierCounts", () => {
   test("telt de drie hardheden apart, zodat het scherm er een controleerbare zin van kan maken", () => {
     const counts = cashbackTierCounts([
       { id: "a", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas", fields: {} },
-      { id: "b", product: "ABN AMRO betaalpas", issuer: "ABN AMRO Bank N.V.", kind: "betaalpas", fields: {} },
-      { id: "c", product: "Bleap Card", issuer: "Bleap SIA", kind: "crypto", fields: { cashbackPct: { value: 1, route: "agent" as const, sourceUrl: "https://b", checkedAt: "2026-08-01", conditions: null, conditionsKnown: true } } },
+      {
+        id: "b",
+        product: "ABN AMRO betaalpas",
+        issuer: "ABN AMRO Bank N.V.",
+        kind: "betaalpas",
+        fields: {},
+      },
+      {
+        id: "c",
+        product: "Bleap Card",
+        issuer: "Bleap SIA",
+        kind: "crypto",
+        fields: {
+          cashbackPct: {
+            value: 1,
+            route: "agent" as const,
+            sourceUrl: "https://b",
+            checkedAt: "2026-08-01",
+            conditions: null,
+            conditionsKnown: true,
+          },
+        },
+      },
       { id: "d", product: "Wirex Card", issuer: "Wirex", kind: "crypto", fields: {} },
     ]);
     expect(counts).toEqual({ gemeten: 1, aangenomen: 2, onbekend: 1 });

@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import type { Account, Invoice, OwnAccounts, Rule, Tx, ScheduledFlow, VatSettings } from "@lavega/core";
+import type {
+  Account,
+  Invoice,
+  OwnAccounts,
+  Rule,
+  Tx,
+  ScheduledFlow,
+  VatSettings,
+} from "@lavega/core";
 import { forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
 import ModuleGrid from "../components/ModuleGrid";
@@ -159,15 +167,16 @@ export default function Overzicht({
         country={country}
         onNavigate={onNavigate}
       />
-      <FacturenWidget span={btwOn ? 1 : 3} invoices={invoices} entities={entities} asOf={asOf} onNavigate={onNavigate} />
+      <FacturenWidget
+        span={btwOn ? 1 : 3}
+        invoices={invoices}
+        entities={entities}
+        asOf={asOf}
+        onNavigate={onNavigate}
+      />
 
       <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
-      <TopUitgavenBlock
-        txs={txs}
-        rules={rules}
-        own={own}
-        onSelectCategory={onSelectCategory}
-      />
+      <TopUitgavenBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
 
       <KaartenBlock accounts={accounts} onNavigate={onNavigate} />
 

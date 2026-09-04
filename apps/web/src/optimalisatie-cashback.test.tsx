@@ -23,14 +23,28 @@ import Optimalisatie from "./views/Optimalisatie";
  * assertion would pass or fail for reasons that have nothing to do with cashback.
  */
 
-const acc = (over: Partial<Account>): Account =>
-  ({ key: "k", iban: "", name: "Rekening", bank: "ING", entity: "BV1",
-     currency: "EUR", balance: 1000, ...over });
+const acc = (over: Partial<Account>): Account => ({
+  key: "k",
+  iban: "",
+  name: "Rekening",
+  bank: "ING",
+  entity: "BV1",
+  currency: "EUR",
+  balance: 1000,
+  ...over,
+});
 
-const spend = (key: string, month: number): Tx =>
-  ({ id: key + month, accountKey: key, date: `2025-${String(month).padStart(2, "0")}-15`,
-     amount: -2500, currency: "EUR", counterparty: "Albert Heijn", description: "",
-     category: "", manual: false });
+const spend = (key: string, month: number): Tx => ({
+  id: key + month,
+  accountKey: key,
+  date: `2025-${String(month).padStart(2, "0")}-15`,
+  amount: -2500,
+  currency: "EUR",
+  counterparty: "Albert Heijn",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 const ACCOUNTS = [
   acc({ key: "ing", bank: "ING", balance: 20_000, interestRate: 1.5 }),
@@ -41,7 +55,9 @@ const ACCOUNTS = [
  *  file can show rather than on whatever the catalogue happened to hold today.
  *  The real catalogue is still the default, and one test below renders against
  *  it deliberately. */
-const offer = (over: Partial<CatalogueEntryLike> & { pct: number; kind?: string; conditions?: string }): CatalogueEntryLike => ({
+const offer = (
+  over: Partial<CatalogueEntryLike> & { pct: number; kind?: string; conditions?: string },
+): CatalogueEntryLike => ({
   id: over.id ?? "test-card",
   product: over.product ?? "Testkaart",
   issuer: over.issuer ?? "Testbank N.V.",
@@ -71,10 +87,22 @@ const render = (props: Partial<Parameters<typeof Optimalisatie>[0]> = {}) =>
       busy={false}
       entries={MARKET}
       facts={[
-        makeFact({ agent: TRAVEL_AGENT, subject: "Trading 212 betaalpas", key: "cashbackPct",
-                   value: "1.5", source: "agent", updatedAt: "2026-08-18" }),
-        makeFact({ agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "cashbackPct",
-                   value: "0", source: "agent", updatedAt: "2026-08-18" }),
+        makeFact({
+          agent: TRAVEL_AGENT,
+          subject: "Trading 212 betaalpas",
+          key: "cashbackPct",
+          value: "1.5",
+          source: "agent",
+          updatedAt: "2026-08-18",
+        }),
+        makeFact({
+          agent: TRAVEL_AGENT,
+          subject: "ING betaalpas",
+          key: "cashbackPct",
+          value: "0",
+          source: "agent",
+          updatedAt: "2026-08-18",
+        }),
       ]}
       onRateCommit={() => {}}
       {...props}
@@ -213,8 +241,16 @@ test("no proven cashback anywhere in the market is a stated absence, not an empt
 
 test("a prepaid or crypto card is labelled as one, and its condition is printed", () => {
   const html = render({
-    entries: [offer({ id: "cc", product: "Obsidian", issuer: "Crypto.com", kind: "prepaid", pct: 5,
-                      conditions: "TIER GATE: staking van CRO vereist." })],
+    entries: [
+      offer({
+        id: "cc",
+        product: "Obsidian",
+        issuer: "Crypto.com",
+        kind: "prepaid",
+        pct: 5,
+        conditions: "TIER GATE: staking van CRO vereist.",
+      }),
+    ],
   });
   expect(html).toContain("prepaidkaart");
   // The conditions are printed IN FULL behind a disclosure: truncating them cut
@@ -262,13 +298,22 @@ test("the 212 Card is absent from the cashback ranking — proven 0% FX, no prov
  *  factor twaalf. `CatalogValue` kent die periode niet — de kostenlane leest het
  *  veld als `unknown` en valideert de eenheid zelf (`readPeriod`), en het echte
  *  artefact draagt hem er net zo in. Vandaar de cast en niet een opgerekt type. */
-const withFee = (entry: CatalogueEntryLike, value: number, period: "maand" | "jaar"): CatalogueEntryLike => ({
+const withFee = (
+  entry: CatalogueEntryLike,
+  value: number,
+  period: "maand" | "jaar",
+): CatalogueEntryLike => ({
   ...entry,
   fields: {
     ...entry.fields,
     accountFee: {
-      value, period, route: "provider-pdf", sourceUrl: "https://example.test/kosten",
-      checkedAt: "2026-08-01", conditions: null, conditionsKnown: true,
+      value,
+      period,
+      route: "provider-pdf",
+      sourceUrl: "https://example.test/kosten",
+      checkedAt: "2026-08-01",
+      conditions: null,
+      conditionsKnown: true,
     } as unknown as CatalogValue,
   },
 });
@@ -353,7 +398,6 @@ test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () =>
   expect(row(html, "cashback-kosten")).not.toContain("weten we niet");
 });
 
-
 /* ═══ DE PRIJS STAAT VAAK OP EEN ANDERE CATALOGUSRIJ DAN DE KAART ════════════
  *
  * Hier zat het echte gat, en het was stil. De catalogus splitst een KAART (kind
@@ -378,8 +422,12 @@ const N26_METAL_CARD: CatalogueEntryLike = {
   kind: "betaalpas",
   fields: {
     cashbackPct: {
-      value: 2, route: "provider-pdf", sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
-      checkedAt: "2026-06-26", conditions: null, conditionsKnown: true,
+      value: 2,
+      route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
+      conditions: null,
+      conditionsKnown: true,
     },
   },
 };
@@ -391,9 +439,13 @@ const N26_METAL_PLAN: CatalogueEntryLike = {
   kind: "betaalrekening",
   fields: {
     accountFee: {
-      value: 16.9, period: "maand", route: "provider-pdf",
-      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf", checkedAt: "2026-06-26",
-      conditions: "Membership fee.", conditionsKnown: true,
+      value: 16.9,
+      period: "maand",
+      route: "provider-pdf",
+      sourceUrl: "https://docs.n26.com/legal/13account-pricelist-en.pdf",
+      checkedAt: "2026-06-26",
+      conditions: "Membership fee.",
+      conditionsKnown: true,
     } as unknown as CatalogValue,
   },
 };
@@ -419,8 +471,18 @@ test("de pakketmatcher blijft strikt: een pakketnaam die alleen de BANK noemt te
   // geen pakket. Zou dat matchen, dan kreeg de generieke ING-betaalpas de prijs
   // van één van de zeven pakketten waarin ING hem verkoopt. Onbekend is dan het
   // eerlijke antwoord, ook al voelt het als een gemiste kans.
-  const ingPas: CatalogueEntryLike = { ...N26_METAL_CARD, id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V." };
-  const ingPakket: CatalogueEntryLike = { ...N26_METAL_PLAN, id: "ing-betaalpakket", product: "ING BetaalPakket", issuer: "ING Bank N.V." };
+  const ingPas: CatalogueEntryLike = {
+    ...N26_METAL_CARD,
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    issuer: "ING Bank N.V.",
+  };
+  const ingPakket: CatalogueEntryLike = {
+    ...N26_METAL_PLAN,
+    id: "ing-betaalpakket",
+    product: "ING BetaalPakket",
+    issuer: "ING Bank N.V.",
+  };
   const html = render({ entries: [ingPas, ingPakket] });
   const kosten = row(html, "cashback-kosten");
   expect(kosten).toContain("weten we niet");

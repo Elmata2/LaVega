@@ -13,25 +13,40 @@ export type SessionState =
 export type AuthResult = { ok: true } | { ok: false; message: string };
 
 async function readMessage(response: Response, fallback: string): Promise<string> {
-  const body = await response.json().catch(() => null) as { message?: string } | null;
+  const body = (await response.json().catch(() => null)) as { message?: string } | null;
   return body?.message ?? fallback;
 }
 
 export async function getSession(): Promise<SessionState> {
-  const response = await fetch("/api/auth/get-session", { headers: { accept: "application/json" } });
+  const response = await fetch("/api/auth/get-session", {
+    headers: { accept: "application/json" },
+  });
   if (response.status === 503) return { status: "unconfigured" };
-  const body = await response.json().catch(() => null) as { user: AuthUser } | null;
+  const body = (await response.json().catch(() => null)) as { user: AuthUser } | null;
   return body?.user ? { status: "authenticated", user: body.user } : { status: "anonymous" };
 }
 
-export async function signUp(input: { name: string; email: string; password: string }): Promise<AuthResult> {
-  const response = await fetch("/api/auth/sign-up/email", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
-  if (!response.ok) return { ok: false, message: await readMessage(response, "Account aanmaken mislukt.") };
+export async function signUp(input: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<AuthResult> {
+  const response = await fetch("/api/auth/sign-up/email", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok)
+    return { ok: false, message: await readMessage(response, "Account aanmaken mislukt.") };
   return { ok: true };
 }
 
 export async function signIn(input: { email: string; password: string }): Promise<AuthResult> {
-  const response = await fetch("/api/auth/sign-in/email", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  const response = await fetch("/api/auth/sign-in/email", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
   if (!response.ok) return { ok: false, message: await readMessage(response, "Inloggen mislukt.") };
   return { ok: true };
 }

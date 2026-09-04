@@ -1,4 +1,15 @@
-export const CHAT_TABS = ["overview","rekeningen","regels","forecast","optimalisatie","valuta","belasting","facturen","punten","backup"] as const;
+export const CHAT_TABS = [
+  "overview",
+  "rekeningen",
+  "regels",
+  "forecast",
+  "optimalisatie",
+  "valuta",
+  "belasting",
+  "facturen",
+  "punten",
+  "backup",
+] as const;
 export type ChatTab = (typeof CHAT_TABS)[number];
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 

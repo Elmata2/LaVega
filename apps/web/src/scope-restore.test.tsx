@@ -93,8 +93,24 @@ function account(key: string, entity: string, balance: number): Account {
   return { key, iban: `NL00TEST${key}`, name: key, bank: "TEST", entity, currency: "EUR", balance };
 }
 
-function tx(id: string, accountKey: string, date: string, amount: number, counterparty: string): Tx {
-  return { id, accountKey, date, amount, currency: "EUR", counterparty, description: counterparty, category: "", manual: false };
+function tx(
+  id: string,
+  accountKey: string,
+  date: string,
+  amount: number,
+  counterparty: string,
+): Tx {
+  return {
+    id,
+    accountKey,
+    date,
+    amount,
+    currency: "EUR",
+    counterparty,
+    description: counterparty,
+    category: "",
+    manual: false,
+  };
 }
 
 const PERSONAL_TXS = [
@@ -113,7 +129,10 @@ beforeEach(() => {
   vault.accounts = [account("prive", "Privé", 1200), account("bv", "BV1 Holding", 8000)];
   vault.txs = [...PERSONAL_TXS, ...BUSINESS_TXS];
   vault.profiles = [{ entity: "BV1 Holding", scope: "business" }];
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: false, json: async () => ({}) })),
+  );
   container = document.createElement("div");
   document.body.appendChild(container);
 });
@@ -137,14 +156,18 @@ async function mount() {
 }
 
 function button(selector: string, text: string): HTMLElement {
-  const found = [...container!.querySelectorAll<HTMLElement>(selector)].find((b) => b.textContent === text);
+  const found = [...container!.querySelectorAll<HTMLElement>(selector)].find(
+    (b) => b.textContent === text,
+  );
   if (!found) throw new Error(`geen knop "${text}" (${selector})`);
   return found;
 }
 
 /** Same, but on a button whose label is a sentence rather than one word. */
 function buttonLike(selector: string, text: string): HTMLButtonElement {
-  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) => (b.textContent ?? "").includes(text));
+  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) =>
+    (b.textContent ?? "").includes(text),
+  );
   if (!found) throw new Error(`geen knop met "${text}" (${selector})`);
   return found;
 }

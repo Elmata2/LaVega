@@ -37,9 +37,9 @@ test("een uitslag die niet in RFC 7601 staat wordt unknown", () => {
 
 test("een domeinnaam die op een mechanisme lijkt wordt niet voor een uitslag aangezien", () => {
   // `header.d=dkim-only.nl` mag niet als `dkim=only` gelezen worden.
-  expect(parseAuthResults("mx; spf=pass header.d=dkim-only.nl smtp.mailfrom=dmarc-test.nl").dkim).toBe(
-    "unknown",
-  );
+  expect(
+    parseAuthResults("mx; spf=pass header.d=dkim-only.nl smtp.mailfrom=dmarc-test.nl").dkim,
+  ).toBe("unknown");
 });
 
 test("localPartOf: het lokale deel, in kleine letters", () => {

@@ -604,22 +604,99 @@ export const NL_CATEGORY_RULES: readonly CategoryRule[] = [
  *      "CAPITAL". */
 export const FOREIGN_COUNTRY_CODES: ReadonlySet<string> = new Set([
   // Europe
-  "ESP", "PRT", "FRA", "DEU", "BEL", "LUX", "GBR", "IRL", "AUT", "ITA", "GRC",
-  "DNK", "SWE", "NOR", "FIN", "POL", "CZE", "SVK", "HUN", "ROU", "BGR", "HRV",
-  "SVN", "SRB", "MNE", "MKD", "BIH", "EST", "LVA", "LTU", "CYP", "MLT", "UKR",
-  "TUR", "GEO", "MCO", "SMR", "LIE", "GIB", "FRO", "GRL",
+  "ESP",
+  "PRT",
+  "FRA",
+  "DEU",
+  "BEL",
+  "LUX",
+  "GBR",
+  "IRL",
+  "AUT",
+  "ITA",
+  "GRC",
+  "DNK",
+  "SWE",
+  "NOR",
+  "FIN",
+  "POL",
+  "CZE",
+  "SVK",
+  "HUN",
+  "ROU",
+  "BGR",
+  "HRV",
+  "SVN",
+  "SRB",
+  "MNE",
+  "MKD",
+  "BIH",
+  "EST",
+  "LVA",
+  "LTU",
+  "CYP",
+  "MLT",
+  "UKR",
+  "TUR",
+  "GEO",
+  "MCO",
+  "SMR",
+  "LIE",
+  "GIB",
+  "FRO",
+  "GRL",
   // Africa & Middle East. Morocco (MAR) and Switzerland (CHE) are deliberately
   // unreachable here: both codes are ordinary words, and a false "buitenland" on
   // a domestic row is worse than no label at all. A card row from either country
   // simply reads "geen regel" instead — still honest, just less specific.
-  "TUN", "DZA", "EGY", "ZAF", "KEN", "TZA", "GHA", "NGA", "ISR", "JOR",
-  "LBN", "SAU", "QAT", "OMN", "KWT", "BHR",
+  "TUN",
+  "DZA",
+  "EGY",
+  "ZAF",
+  "KEN",
+  "TZA",
+  "GHA",
+  "NGA",
+  "ISR",
+  "JOR",
+  "LBN",
+  "SAU",
+  "QAT",
+  "OMN",
+  "KWT",
+  "BHR",
   // Americas
-  "USA", "MEX", "BRA", "ARG", "CHL", "URY", "PAN", "CRI", "DOM", "CUB", "JAM",
-  "PRI", "BRB", "BHS",
+  "USA",
+  "MEX",
+  "BRA",
+  "ARG",
+  "CHL",
+  "URY",
+  "PAN",
+  "CRI",
+  "DOM",
+  "CUB",
+  "JAM",
+  "PRI",
+  "BRB",
+  "BHS",
   // Asia & Oceania
-  "JPN", "KOR", "CHN", "TWN", "HKG", "SGP", "THA", "IDN", "VNM", "PHL", "MYS",
-  "LKA", "NPL", "AUS", "NZL", "FJI",
+  "JPN",
+  "KOR",
+  "CHN",
+  "TWN",
+  "HKG",
+  "SGP",
+  "THA",
+  "IDN",
+  "VNM",
+  "PHL",
+  "MYS",
+  "LKA",
+  "NPL",
+  "AUS",
+  "NZL",
+  "FJI",
 ]);
 
 /** The ISO-3166 alpha-3 country code a card export printed on this row, or null.
@@ -641,13 +718,17 @@ export function foreignCodeIn(text: string): string | null {
 /* Pre-normalized once at module load so categorize() does a plain substring test
  * per entry (no per-transaction matchNorm of the match strings). `sign` is
  * carried through so categorize() can skip a direction-specific entry. */
-export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: string; sign?: "in" | "out"; weak?: true }> =
-  NL_CATEGORY_RULES.map((r) => ({
-    m: matchNorm(r.match),
-    category: r.category,
-    ...(r.sign ? { sign: r.sign } : {}),
-    ...(r.weak ? { weak: r.weak } : {}),
-  }));
+export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{
+  m: string;
+  category: string;
+  sign?: "in" | "out";
+  weak?: true;
+}> = NL_CATEGORY_RULES.map((r) => ({
+  m: matchNorm(r.match),
+  category: r.category,
+  ...(r.sign ? { sign: r.sign } : {}),
+  ...(r.weak ? { weak: r.weak } : {}),
+}));
 
 /* ══════════════════════════════════════════════════════════════════════════
  * WHO THE COUNTERPARTY IS — a person, a collection, or the owner himself.
@@ -671,7 +752,6 @@ export const NL_CATEGORY_RULES_NORMALIZED: ReadonlyArray<{ m: string; category: 
  *  "Overboekingen" is where a bank's own product wording ends up. */
 export const PERSON_CATEGORY = "Tussen personen";
 
-
 /** A SEPA direct debit whose merchant no rule knows. Not "the kind of spending"
  *  — the mechanism, which is the only thing the row proves. */
 export const DIRECT_DEBIT_CATEGORY = "Automatische incasso";
@@ -686,9 +766,30 @@ const deaccent = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u03
  * dropped before the shape is read, and their PRESENCE is itself evidence — a
  * row that says "Hr" is about a person. */
 const HONORIFICS: ReadonlySet<string> = new Set([
-  "hr", "dhr", "mr", "mw", "mevr", "mev", "mej", "fam", "familie",
-  "mme", "mlle", "mle", "miss", "mrs", "ms", "sr", "sra", "srta",
-  "dr", "prof", "ir", "ing", "drs", "mgr",
+  "hr",
+  "dhr",
+  "mr",
+  "mw",
+  "mevr",
+  "mev",
+  "mej",
+  "fam",
+  "familie",
+  "mme",
+  "mlle",
+  "mle",
+  "miss",
+  "mrs",
+  "ms",
+  "sr",
+  "sra",
+  "srta",
+  "dr",
+  "prof",
+  "ir",
+  "ing",
+  "drs",
+  "mgr",
 ]);
 
 /* Tussenvoegsels — the unstressed particles inside a Dutch/European surname,
@@ -697,10 +798,48 @@ const HONORIFICS: ReadonlySet<string> = new Set([
  * outright ("De Smitse", "Le Chocolat" are businesses, and a surname-first
  * export beginning with a particle is rare enough to give up rather than risk). */
 const TUSSENVOEGSELS: ReadonlySet<string> = new Set([
-  "van", "von", "de", "den", "der", "des", "del", "della", "di", "da", "das",
-  "dos", "do", "du", "la", "le", "les", "el", "al", "ten", "ter", "te", "tot",
-  "op", "in", "uit", "bin", "ibn", "bint", "abu", "'t", "’t", "t", "v", "d",
-  "vd", "vander", "y", "e", "af", "av", "zu",
+  "van",
+  "von",
+  "de",
+  "den",
+  "der",
+  "des",
+  "del",
+  "della",
+  "di",
+  "da",
+  "das",
+  "dos",
+  "do",
+  "du",
+  "la",
+  "le",
+  "les",
+  "el",
+  "al",
+  "ten",
+  "ter",
+  "te",
+  "tot",
+  "op",
+  "in",
+  "uit",
+  "bin",
+  "ibn",
+  "bint",
+  "abu",
+  "'t",
+  "’t",
+  "t",
+  "v",
+  "d",
+  "vd",
+  "vander",
+  "y",
+  "e",
+  "af",
+  "av",
+  "zu",
 ]);
 
 /* Words that appear in the name of a business, an institution or a bank's own
@@ -714,43 +853,214 @@ const TUSSENVOEGSELS: ReadonlySet<string> = new Set([
  * person, and those forms are rare in a Dutch export. */
 const COMPANY_WORDS: ReadonlySet<string> = new Set([
   // legal forms
-  "bv", "nv", "vof", "gmbh", "ug", "ltd", "limited", "llp", "llc", "inc", "plc",
-  "srl", "sarl", "sprl", "sl", "spa", "oyj", "kft", "zoo", "ev",
+  "bv",
+  "nv",
+  "vof",
+  "gmbh",
+  "ug",
+  "ltd",
+  "limited",
+  "llp",
+  "llc",
+  "inc",
+  "plc",
+  "srl",
+  "sarl",
+  "sprl",
+  "sl",
+  "spa",
+  "oyj",
+  "kft",
+  "zoo",
+  "ev",
   // organisation shapes
-  "stichting", "stg", "foundation", "fonds", "fund", "charity", "vereniging",
-  "cooperatie", "cooperatief", "maatschap", "holding", "groep", "group",
-  "partners", "associates", "ventures", "capital", "invest", "investments",
-  "beheer", "vastgoed", "makelaardij", "makelaars", "notariaat", "notaris",
-  "advocaten", "advocatenkantoor", "adviseurs", "advies", "accountants",
-  "administratie", "consultancy", "consulting", "agency", "bureau", "kantoor",
-  "dienst", "diensten", "services", "service", "solutions", "systems",
-  "technology", "technologies", "software", "digital", "media", "labs", "studio",
-  "works", "verhuur", "transport", "logistiek", "techniek", "installatie",
-  "schoonmaak", "catering", "horeca", "bakkerij", "slagerij", "apotheek",
-  "kliniek", "praktijk", "fysio", "tandarts", "huisarts", "verzekeringen",
-  "verzekering", "belastingdienst", "gemeente", "provincie", "waterschap",
-  "ministerie", "politie", "rechtbank", "cjib", "school", "college", "academie",
-  "universiteit", "university", "hogeschool", "students", "student",
-  "education", "development", "entrepreneurship", "international", "nederland",
-  "netherlands", "europe", "europa", "holland", "abroad",
-  "centre", "center", "institute", "instituut", "association", "society",
-  "union", "council", "trust", "network", "platform", "community",
-  "collective", "committee", "federation", "academy", "campus", "faculty",
+  "stichting",
+  "stg",
+  "foundation",
+  "fonds",
+  "fund",
+  "charity",
+  "vereniging",
+  "cooperatie",
+  "cooperatief",
+  "maatschap",
+  "holding",
+  "groep",
+  "group",
+  "partners",
+  "associates",
+  "ventures",
+  "capital",
+  "invest",
+  "investments",
+  "beheer",
+  "vastgoed",
+  "makelaardij",
+  "makelaars",
+  "notariaat",
+  "notaris",
+  "advocaten",
+  "advocatenkantoor",
+  "adviseurs",
+  "advies",
+  "accountants",
+  "administratie",
+  "consultancy",
+  "consulting",
+  "agency",
+  "bureau",
+  "kantoor",
+  "dienst",
+  "diensten",
+  "services",
+  "service",
+  "solutions",
+  "systems",
+  "technology",
+  "technologies",
+  "software",
+  "digital",
+  "media",
+  "labs",
+  "studio",
+  "works",
+  "verhuur",
+  "transport",
+  "logistiek",
+  "techniek",
+  "installatie",
+  "schoonmaak",
+  "catering",
+  "horeca",
+  "bakkerij",
+  "slagerij",
+  "apotheek",
+  "kliniek",
+  "praktijk",
+  "fysio",
+  "tandarts",
+  "huisarts",
+  "verzekeringen",
+  "verzekering",
+  "belastingdienst",
+  "gemeente",
+  "provincie",
+  "waterschap",
+  "ministerie",
+  "politie",
+  "rechtbank",
+  "cjib",
+  "school",
+  "college",
+  "academie",
+  "universiteit",
+  "university",
+  "hogeschool",
+  "students",
+  "student",
+  "education",
+  "development",
+  "entrepreneurship",
+  "international",
+  "nederland",
+  "netherlands",
+  "europe",
+  "europa",
+  "holland",
+  "abroad",
+  "centre",
+  "center",
+  "institute",
+  "instituut",
+  "association",
+  "society",
+  "union",
+  "council",
+  "trust",
+  "network",
+  "platform",
+  "community",
+  "collective",
+  "committee",
+  "federation",
+  "academy",
+  "campus",
+  "faculty",
   // places money is spent, where a two-word Titlecase name is common
-  "museum", "theater", "bioscoop", "hotel", "hostel", "camping", "restaurant",
-  "cafe", "bar", "lounge", "brasserie", "eetcafe", "pizzeria", "snackbar",
-  "supermarkt", "markt", "winkel", "shop", "store", "boutique", "salon",
-  "kapper", "sport", "sports", "fitness", "gym", "club", "team", "business",
-  "life", "air", "airlines", "airways", "aviation", "travel", "tours",
-  "resort", "rental", "express", "tankstation", "garage",
+  "museum",
+  "theater",
+  "bioscoop",
+  "hotel",
+  "hostel",
+  "camping",
+  "restaurant",
+  "cafe",
+  "bar",
+  "lounge",
+  "brasserie",
+  "eetcafe",
+  "pizzeria",
+  "snackbar",
+  "supermarkt",
+  "markt",
+  "winkel",
+  "shop",
+  "store",
+  "boutique",
+  "salon",
+  "kapper",
+  "sport",
+  "sports",
+  "fitness",
+  "gym",
+  "club",
+  "team",
+  "business",
+  "life",
+  "air",
+  "airlines",
+  "airways",
+  "aviation",
+  "travel",
+  "tours",
+  "resort",
+  "rental",
+  "express",
+  "tankstation",
+  "garage",
   // a bank's own wording for its products and its bookkeeping
-  "rekening", "spaarrekening", "betaalrekening", "creditcard", "incasso",
-  "machtiging", "aflossing", "rente", "kaartbijdrage", "betaling",
-  "betalingsverkeer", "betaalverzoek", "tikkie", "kosten", "zakelijk",
-  "verzamelbetaling", "opname",
-  "transactie", "reference", "factuur", "abonnement", "contributie",
-  "payments", "payment", "checkout", "invoice",
-  "toeslag", "uitkering", "salaris", "bank", "bankgiro", "giro",
+  "rekening",
+  "spaarrekening",
+  "betaalrekening",
+  "creditcard",
+  "incasso",
+  "machtiging",
+  "aflossing",
+  "rente",
+  "kaartbijdrage",
+  "betaling",
+  "betalingsverkeer",
+  "betaalverzoek",
+  "tikkie",
+  "kosten",
+  "zakelijk",
+  "verzamelbetaling",
+  "opname",
+  "transactie",
+  "reference",
+  "factuur",
+  "abonnement",
+  "contributie",
+  "payments",
+  "payment",
+  "checkout",
+  "invoice",
+  "toeslag",
+  "uitkering",
+  "salaris",
+  "bank",
+  "bankgiro",
+  "giro",
 ]);
 
 /* Endings that make a compound a business or a product even when the compound
@@ -758,9 +1068,24 @@ const COMPANY_WORDS: ReadonlySet<string> = new Set([
  * "Incassobureau", "Bankkosten", "Belastingadviseurs". Required to be a strict
  * suffix (longer than the ending) so the whole-word list keeps doing that job. */
 const COMPANY_SUFFIXES: readonly string[] = [
-  "rekening", "administratie", "kantoor", "bureau", "dienst", "diensten",
-  "kosten", "adviseurs", "advocaten", "accountants", "verzekeringen",
-  "bedrijf", "winkel", "markt", "bank", "groep", "verhuur", "beheer",
+  "rekening",
+  "administratie",
+  "kantoor",
+  "bureau",
+  "dienst",
+  "diensten",
+  "kosten",
+  "adviseurs",
+  "advocaten",
+  "accountants",
+  "verzekeringen",
+  "bedrijf",
+  "winkel",
+  "markt",
+  "bank",
+  "groep",
+  "verhuur",
+  "beheer",
 ];
 
 /* What a bank writes IN FRONT of a name, in either language: Revolut's "To A
@@ -769,10 +1094,29 @@ const COMPANY_SUFFIXES: readonly string[] = [
  * "from"), because "van" at the start of what is left would otherwise be read
  * as a tussenvoegsel and refuse the whole name. */
 const LEAD_PREFIXES: ReadonlySet<string> = new Set([
-  "to", "from", "payment", "transfer", "sent", "received",
-  "naar", "aan", "voor", "betaling", "overboeking", "overschrijving", "storting",
+  "to",
+  "from",
+  "payment",
+  "transfer",
+  "sent",
+  "received",
+  "naar",
+  "aan",
+  "voor",
+  "betaling",
+  "overboeking",
+  "overschrijving",
+  "storting",
 ]);
-const LEAD_CONNECTORS: ReadonlySet<string> = new Set(["van", "naar", "to", "from", "aan", "door", "by"]);
+const LEAD_CONNECTORS: ReadonlySet<string> = new Set([
+  "van",
+  "naar",
+  "to",
+  "from",
+  "aan",
+  "door",
+  "by",
+]);
 
 const isCompanyWord = (token: string): boolean => {
   const w = deaccent(token).toLowerCase().replace(/[.,]/g, "");
@@ -818,7 +1162,8 @@ function kindOf(token: string): TokenKind {
   if (HONORIFICS.has(bare)) return "honorific";
   // A single letter is a tussenvoegsel abbreviation only in lower case ("v d"),
   // otherwise it is an initial ("V Ciumac").
-  if (TUSSENVOEGSELS.has(bare) && (bare.length > 1 || t === t.toLowerCase())) return "tussenvoegsel";
+  if (TUSSENVOEGSELS.has(bare) && (bare.length > 1 || t === t.toLowerCase()))
+    return "tussenvoegsel";
   if (/^(?:[A-Za-z]\.)+$/.test(t) || /^[A-Za-z]$/.test(t)) return "initials";
   if (/^[A-Z]{2,4}$/.test(t) && !/[AEIOUY]/.test(t)) return "initials";
   if (/^[A-Z][A-Za-z'’-]*$/.test(t) && t.length >= 2) return "word";
@@ -829,7 +1174,8 @@ function kindOf(token: string): TokenKind {
  * with the mechanism glued on ("X via Rabo Betaalverzoek"). Each part is judged
  * on its own and ONE person is enough — the vetoes are applied per part, which
  * is what lets "via Rabo Betaalverzoek" be refused while the name is accepted. */
-const splitNameParts = (raw: string): string[] => raw.split(/,|&|\s+en\/of\s+|\s+e\/o\s+|\s+und\s+|\s+via\s+/i);
+const splitNameParts = (raw: string): string[] =>
+  raw.split(/,|&|\s+en\/of\s+|\s+e\/o\s+|\s+und\s+|\s+via\s+/i);
 
 function partIsPerson(part: string): boolean {
   const tokens = tokensOf(part);
@@ -840,9 +1186,21 @@ function partIsPerson(part: string): boolean {
   let hadHonorific = false;
   while (i < tokens.length) {
     const bare = deaccent(tokens[i]).replace(/[.,]/g, "").toLowerCase();
-    if (HONORIFICS.has(bare)) { i++; stripped = true; hadHonorific = true; continue; }
-    if (LEAD_PREFIXES.has(bare)) { i++; stripped = true; continue; }
-    if (stripped && LEAD_CONNECTORS.has(bare) && i + 1 < tokens.length) { i++; continue; }
+    if (HONORIFICS.has(bare)) {
+      i++;
+      stripped = true;
+      hadHonorific = true;
+      continue;
+    }
+    if (LEAD_PREFIXES.has(bare)) {
+      i++;
+      stripped = true;
+      continue;
+    }
+    if (stripped && LEAD_CONNECTORS.has(bare) && i + 1 < tokens.length) {
+      i++;
+      continue;
+    }
     break;
   }
   const rest = tokens.slice(i);
@@ -891,7 +1249,9 @@ export function isPersonName(counterparty: string): boolean {
 /** True when the row was paid at a physical terminal or cash machine. Reads the
  *  whole row, not just the name. */
 export function isCardPayment(text: string): boolean {
-  return /kaartnr|kaartnummer|pasvolgnr|\bterm\b|\bterm:|betaalautomaat|geldautomaat|\bbea\b|\bgea\b|apple\s*pay|google\s*pay|contactloos/i.test(text);
+  return /kaartnr|kaartnummer|pasvolgnr|\bterm\b|\bterm:|betaalautomaat|geldautomaat|\bbea\b|\bgea\b|apple\s*pay|google\s*pay|contactloos/i.test(
+    text,
+  );
 }
 
 /** True when the ROW carries the marks of a card payment at a MERCHANT: a card
@@ -925,7 +1285,8 @@ export type DirectDebit = {
  * a credit-card settlement. A code, or the SEPA phrase — nothing looser. */
 const MACHTIGING_RE = /machtiging(?:s?kenmerk)?(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
 const INCASSANT_RE = /incassant(?:\s*id)?\s*[:#]\s*([^\s;]+)/i;
-const SEPA_INCASSO_RE = /\b(?:doorlopend|doorlopende|eenmalig|eenmalige)\s+(?:sepa\s+)?incasso\b|\bsepa\s+incasso\b|\bsepa\s+direct\s*debit\b/i;
+const SEPA_INCASSO_RE =
+  /\b(?:doorlopend|doorlopende|eenmalig|eenmalige)\s+(?:sepa\s+)?incasso\b|\bsepa\s+incasso\b|\bsepa\s+direct\s*debit\b/i;
 
 /** The mandate and creditor identifiers of a SEPA direct debit, or null when
  *  this row is not one. Evidence, not a guess: every branch is a code or a
@@ -963,7 +1324,10 @@ export function parseOwnName(fullName: string): OwnName | null {
   // it ("jan van der meer" -> "van der meer"); otherwise it is the last token.
   let start = tokens.length - 1;
   for (let i = 0; i < tokens.length - 1; i++) {
-    if (TUSSENVOEGSELS.has(tokens[i])) { start = i; break; }
+    if (TUSSENVOEGSELS.has(tokens[i])) {
+      start = i;
+      break;
+    }
   }
   const surnameParts = tokens.slice(start);
   const last = surnameParts[surnameParts.length - 1];
@@ -995,11 +1359,10 @@ export function isOwnName(counterparty: string, names?: readonly OwnName[]): boo
       const surname = name.surname.split(" ");
       const at = indexOfSequence(lower, surname);
       if (at < 0) continue;
-      const rest = [...plain.slice(0, at), ...plain.slice(at + surname.length)]
-        .filter((t) => {
-          const b = t.toLowerCase();
-          return !HONORIFICS.has(b) && !LEAD_PREFIXES.has(b) && !LEAD_CONNECTORS.has(b);
-        });
+      const rest = [...plain.slice(0, at), ...plain.slice(at + surname.length)].filter((t) => {
+        const b = t.toLowerCase();
+        return !HONORIFICS.has(b) && !LEAD_PREFIXES.has(b) && !LEAD_CONNECTORS.has(b);
+      });
       if (rest.length === 0) return true; // the bare surname, which he named himself
       if (restMatchesGiven(rest, name.given)) return true;
     }
@@ -1010,7 +1373,11 @@ export function isOwnName(counterparty: string, names?: readonly OwnName[]): boo
 const indexOfSequence = (hay: string[], needle: string[]): number => {
   for (let i = 0; i + needle.length <= hay.length; i++) {
     let ok = true;
-    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) { ok = false; break; }
+    for (let j = 0; j < needle.length; j++)
+      if (hay[i + j] !== needle[j]) {
+        ok = false;
+        break;
+      }
     if (ok) return i;
   }
   return -1;

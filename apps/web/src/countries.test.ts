@@ -9,7 +9,8 @@ test("the list is ISO 3166-1 alpha-2, complete and without duplicates", () => {
   expect(COUNTRY_CODES.length).toBe(249);
   expect(new Set(COUNTRY_CODES).size).toBe(249);
   expect(COUNTRY_CODES.every((c) => /^[A-Z]{2}$/.test(c))).toBe(true);
-  for (const c of ["NL", "BE", "DE", "US", "CA", "GB", "JP", "ZW"]) expect(COUNTRY_CODES).toContain(c);
+  for (const c of ["NL", "BE", "DE", "US", "CA", "GB", "JP", "ZW"])
+    expect(COUNTRY_CODES).toContain(c);
 });
 
 test("names are Dutch, and every code resolves to one", () => {

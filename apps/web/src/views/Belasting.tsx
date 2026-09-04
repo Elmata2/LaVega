@@ -1,7 +1,19 @@
 import { useMemo, useState } from "react";
 import type {
-  Account, CountryCode, CrossScopeAnswer, EntityProfile, Invoice, OwnName, ScheduledFlow,
-  TaxFigures, TaxSheetRow, Tx, VatBasis, VatNote, VatPosition, VatSettings,
+  Account,
+  CountryCode,
+  CrossScopeAnswer,
+  EntityProfile,
+  Invoice,
+  OwnName,
+  ScheduledFlow,
+  TaxFigures,
+  TaxSheetRow,
+  Tx,
+  VatBasis,
+  VatNote,
+  VatPosition,
+  VatSettings,
 } from "@lavega/core";
 import {
   COUNTRY_OPTIONS,
@@ -187,7 +199,9 @@ export default function Belasting({
   // His bookkeeping, per entity, for as long as this tab is open. It is NOT
   // written to storage: the vault is encrypted and plain localStorage is not the
   // vault, so real turnover figures do not go there. The screen says so.
-  const [sheets, setSheets] = useState<Record<string, { rows: TaxSheetRow[]; problems: string[]; name: string }>>({});
+  const [sheets, setSheets] = useState<
+    Record<string, { rows: TaxSheetRow[]; problems: string[]; name: string }>
+  >({});
 
   const country = homeCountryCode();
   const pack = useMemo(() => taxPack(country), [country]);
@@ -211,7 +225,11 @@ export default function Belasting({
    *  twee schermen op dezelfde dag een ander kwartaal. Wat hier blijft staan is
    *  het enige wat écht van dit scherm is: de nog niet bewaarde bewerking. */
   function resolve(entity: string): VatSettings {
-    return resolveVatSettings({ entity, saved: drafts[entity] ?? savedByEntity.get(entity), country });
+    return resolveVatSettings({
+      entity,
+      saved: drafts[entity] ?? savedByEntity.get(entity),
+      country,
+    });
   }
 
   function patch(entity: string, partial: Partial<VatSettings>) {
@@ -255,7 +273,15 @@ export default function Belasting({
     const freshFlows: ScheduledFlow[] = [];
     for (const e of entities) {
       const s = resolve(e);
-      freshFlows.push(...computeTaxReservations({ txs: entityTxs(e), settings: s, asOf, figures: figuresFor(e, s), invoices }));
+      freshFlows.push(
+        ...computeTaxReservations({
+          txs: entityTxs(e),
+          settings: s,
+          asOf,
+          figures: figuresFor(e, s),
+          invoices,
+        }),
+      );
     }
     onSaveScheduledFlows(rebuildVatFlows(scheduledFlows, entities, freshFlows));
     setSavedNote(
@@ -318,7 +344,10 @@ export default function Belasting({
       return { ...s, crossScopeAnswers: answerCrossScope(s.crossScopeAnswers ?? [], incoming) };
     });
     for (const [entity, incoming] of byEntity) {
-      next.push({ ...resolveVatSettings({ entity, saved: undefined, country }), crossScopeAnswers: answerCrossScope([], incoming) });
+      next.push({
+        ...resolveVatSettings({ entity, saved: undefined, country }),
+        crossScopeAnswers: answerCrossScope([], incoming),
+      });
     }
     onSaveVatSettings(next);
 
@@ -330,7 +359,10 @@ export default function Belasting({
         const target = Object.keys(out).find((e) => key(e) === key(r.entity));
         const draft = target === undefined ? undefined : out[target];
         if (!draft || target === undefined) continue;
-        out[target] = { ...draft, crossScopeAnswers: answerCrossScope(draft.crossScopeAnswers ?? [], [r.answer]) };
+        out[target] = {
+          ...draft,
+          crossScopeAnswers: answerCrossScope(draft.crossScopeAnswers ?? [], [r.answer]),
+        };
         touched = true;
       }
       return touched ? out : prev;
@@ -390,23 +422,32 @@ export default function Belasting({
           height="tall"
           footer={
             <span>
-              Tarieven in {pack.label}: {pack.vat.rates.map((r) => `${r}%`).join(" / ")}. Elk bedrag komt uit één bron —
-              je eigen bedrag, je boekhouding, je facturen of een marge-benadering (netto ≈ marge × tarief ⁄
-              (100 + tarief)) — en die bronnen worden nooit bij elkaar opgeteld. Geen van de vier is een aangifte.
+              Tarieven in {pack.label}: {pack.vat.rates.map((r) => `${r}%`).join(" / ")}. Elk bedrag
+              komt uit één bron — je eigen bedrag, je boekhouding, je facturen of een
+              marge-benadering (netto ≈ marge × tarief ⁄ (100 + tarief)) — en die bronnen worden
+              nooit bij elkaar opgeteld. Geen van de vier is een aangifte.
             </span>
           }
         >
           {entities.map((entity) => {
             const s = resolve(entity);
             const sheet = sheets[entity];
-            const p = vatPosition({ txs: entityTxs(entity), settings: s, asOf, figures: figuresFor(entity, s), invoices });
+            const p = vatPosition({
+              txs: entityTxs(entity),
+              settings: s,
+              asOf,
+              figures: figuresFor(entity, s),
+              invoices,
+            });
             const { period, stage, basis, netCents, direction, coverage, note } = p;
             const known = netCents !== null;
             return (
               <div className="tax-entity" key={entity}>
                 <div className="tax-entity-head">
                   <span className="tax-entity-name">{entity}</span>
-                  <span className={`tax-entity-figure ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}>
+                  <span
+                    className={`tax-entity-figure ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+                  >
                     {known ? formatEuro(Math.abs(netCents) / 100) : "geen bedrag"}
                   </span>
                 </div>
@@ -420,8 +461,8 @@ export default function Belasting({
                     ONDERBOUWT — waar het vandaan komt, de dekking, de
                     kanttekeningen — staat erna, opgevouwen. */}
                 <p className="cell-sub">
-                  {period.periodLabel} · {DIRECTION_LABEL[direction]} · uiterlijk {period.deadline} ·{" "}
-                  {stage === "loopt" ? `stand tot ${asOf}` : "afgesloten"}
+                  {period.periodLabel} · {DIRECTION_LABEL[direction]} · uiterlijk {period.deadline}{" "}
+                  · {stage === "loopt" ? `stand tot ${asOf}` : "afgesloten"}
                 </p>
 
                 <ToonMeer summary="Waar dit cijfer vandaan komt">
@@ -445,7 +486,8 @@ export default function Belasting({
 
                   {coverage.total > 0 && (
                     <p className="cell-sub">
-                      Btw-bedrag bekend op {coverage.withVat} van de {coverage.total} facturen in deze periode.
+                      Btw-bedrag bekend op {coverage.withVat} van de {coverage.total} facturen in
+                      deze periode.
                     </p>
                   )}
 
@@ -461,8 +503,11 @@ export default function Belasting({
                       {coverage.outside === 1
                         ? "Er staat 1 factuur van deze onderneming buiten dit tijdvak"
                         : `Er staan ${coverage.outside} facturen van deze onderneming buiten dit tijdvak`}
-                      {coverage.nearestOutside ? `, de dichtstbijzijnde van ${coverage.nearestOutside}` : ""}
-                      . {coverage.total === 0
+                      {coverage.nearestOutside
+                        ? `, de dichtstbijzijnde van ${coverage.nearestOutside}`
+                        : ""}
+                      .{" "}
+                      {coverage.total === 0
                         ? "In dit tijdvak staat er geen enkele, dus hier valt niets uit je facturen af te leiden."
                         : "Die telt hier dus niet mee."}
                     </p>
@@ -471,15 +516,15 @@ export default function Belasting({
 
                   {direction === "terugvragen" && (
                     <p className="cell-sub">
-                      Dit bedrag staat niet als inkomende betaling in je forecast: LaVega weet niet wanneer de
-                      Belastingdienst uitbetaalt.
+                      Dit bedrag staat niet als inkomende betaling in je forecast: LaVega weet niet
+                      wanneer de Belastingdienst uitbetaalt.
                     </p>
                   )}
 
                   {known && netCents > 0 && (
                     <p className="cell-sub">
-                      Met “Bereken &amp; bewaar” staat dit bedrag op {period.deadline} in je forecast en gaat het van je
-                      beschikbare saldo af.
+                      Met “Bereken &amp; bewaar” staat dit bedrag op {period.deadline} in je
+                      forecast en gaat het van je beschikbare saldo af.
                     </p>
                   )}
                 </ToonMeer>
@@ -491,10 +536,14 @@ export default function Belasting({
                       value={s.frequency}
                       disabled={busy}
                       aria-label={`${pack.vat.label}-frequentie ${entity}`}
-                      onChange={(e) => patch(entity, { frequency: e.target.value as VatSettings["frequency"] })}
+                      onChange={(e) =>
+                        patch(entity, { frequency: e.target.value as VatSettings["frequency"] })
+                      }
                     >
                       {pack.vat.frequencies.map((f) => (
-                        <option key={f} value={f}>{FREQ_LABELS[f]}</option>
+                        <option key={f} value={f}>
+                          {FREQ_LABELS[f]}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -506,7 +555,10 @@ export default function Belasting({
                       aria-label={`Stelsel ${entity}`}
                       onChange={(e) =>
                         patch(entity, {
-                          vatBasis: e.target.value === "" ? undefined : (e.target.value as "factuurstelsel" | "kasstelsel"),
+                          vatBasis:
+                            e.target.value === ""
+                              ? undefined
+                              : (e.target.value as "factuurstelsel" | "kasstelsel"),
                         })
                       }
                     >
@@ -525,7 +577,11 @@ export default function Belasting({
                       value={s.defaultRatePct}
                       disabled={busy}
                       aria-label={`${pack.vat.label}-tarief ${entity}`}
-                      onChange={(e) => patch(entity, { defaultRatePct: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      onChange={(e) =>
+                        patch(entity, {
+                          defaultRatePct: e.target.value === "" ? 0 : Number(e.target.value),
+                        })
+                      }
                     />
                   </label>
                   <label>
@@ -541,7 +597,10 @@ export default function Belasting({
                       aria-label={`Handmatig ${pack.vat.label}-bedrag ${entity}`}
                       onChange={(e) =>
                         patch(entity, {
-                          manualCents: e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100),
+                          manualCents:
+                            e.target.value === ""
+                              ? undefined
+                              : Math.round(Number(e.target.value) * 100),
                         })
                       }
                     />
@@ -574,8 +633,9 @@ export default function Belasting({
                     {basis === "sheet"
                       ? ` — de btw van ${period.periodLabel} komt hieruit.`
                       : ` — nog niet de basis voor ${period.periodLabel}.`}
-                    {sheet.problems.length > 0 ? ` ${sheet.problems.join("; ")}.` : ""} Deze import blijft in dit
-                    tabblad; LaVega bewaart je boekhouding niet buiten de versleutelde vault.
+                    {sheet.problems.length > 0 ? ` ${sheet.problems.join("; ")}.` : ""} Deze import
+                    blijft in dit tabblad; LaVega bewaart je boekhouding niet buiten de versleutelde
+                    vault.
                   </p>
                 )}
               </div>
@@ -586,11 +646,7 @@ export default function Belasting({
         {/* ── Module 2: alleen in een land dat winstbelasting vooruit laat
              betalen. NL heeft die niet, dus NL ziet deze module niet. ─────── */}
         {profitTax && (
-          <Module
-            title={profitTax.label}
-            height="tall"
-            footer={<span>{profitTax.rateBasis}</span>}
-          >
+          <Module title={profitTax.label} height="tall" footer={<span>{profitTax.rateBasis}</span>}>
             <p className="view-lead">{profitTax.what}</p>
             {entities.map((entity) => {
               const s = resolve(entity);
@@ -606,9 +662,10 @@ export default function Belasting({
                   </div>
                   {flows.length === 0 ? (
                     <p className="cell-sub">
-                      Nog niets te reserveren: LaVega ziet dit jaar geen winst in de banktransacties van deze
-                      entiteit, en verzint er geen. Zodra het {pack.label === "Duitsland" ? "Finanzamt" : "de fiscus"} een
-                      bedrag oplegt, vul je dat hieronder in.
+                      Nog niets te reserveren: LaVega ziet dit jaar geen winst in de banktransacties
+                      van deze entiteit, en verzint er geen. Zodra het{" "}
+                      {pack.label === "Duitsland" ? "Finanzamt" : "de fiscus"} een bedrag oplegt,
+                      vul je dat hieronder in.
                     </p>
                   ) : (
                     <div className="tax-flows">
@@ -636,7 +693,10 @@ export default function Belasting({
                         disabled={busy}
                         aria-label={`Winstbelastingtarief ${entity}`}
                         onChange={(e) =>
-                          patch(entity, { profitTaxRatePct: e.target.value === "" ? undefined : Number(e.target.value) })
+                          patch(entity, {
+                            profitTaxRatePct:
+                              e.target.value === "" ? undefined : Number(e.target.value),
+                          })
                         }
                       />
                     </label>
@@ -654,7 +714,9 @@ export default function Belasting({
                         onChange={(e) =>
                           patch(entity, {
                             profitTaxManualCents:
-                              e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100),
+                              e.target.value === ""
+                                ? undefined
+                                : Math.round(Number(e.target.value) * 100),
                           })
                         }
                       />
@@ -688,7 +750,6 @@ export default function Belasting({
             onSaveAnswers={bewaarGrensAntwoorden}
           />
         )}
-
       </ModuleGrid>
 
       <div className="stack-form-actions">

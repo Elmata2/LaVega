@@ -164,15 +164,20 @@ function extendedParam(header: string, name: string): string {
  * Alleen op headers gebruiken, nooit op een body.
  */
 export function decodeEncodedWords(value: string): string {
-  return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset: string, kind: string, data: string) => {
-    try {
-      const bytes =
-        kind.toLowerCase() === "b" ? base64ToBytes(data) : decodeQuotedPrintable(data.replace(/_/g, " "));
-      return decodeText(bytes, charset);
-    } catch {
-      return whole;
-    }
-  });
+  return value.replace(
+    /=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g,
+    (whole, charset: string, kind: string, data: string) => {
+      try {
+        const bytes =
+          kind.toLowerCase() === "b"
+            ? base64ToBytes(data)
+            : decodeQuotedPrintable(data.replace(/_/g, " "));
+        return decodeText(bytes, charset);
+      } catch {
+        return whole;
+      }
+    },
+  );
 }
 
 /** Headers uitvouwen en op kleine letters indexeren. */
@@ -206,7 +211,10 @@ type Part = {
 function splitHeaderAndBody(message: string): { headerBlock: string; body: string } {
   const match = message.match(/\r?\n\r?\n/);
   if (!match || match.index === undefined) return { headerBlock: message, body: "" };
-  return { headerBlock: message.slice(0, match.index), body: message.slice(match.index + match[0].length) };
+  return {
+    headerBlock: message.slice(0, match.index),
+    body: message.slice(match.index + match[0].length),
+  };
 }
 
 function parsePart(message: string): Part {
@@ -281,7 +289,9 @@ export function parseMail(rawLatin1: string): ParsedMail {
         part.encoding === "base64"
           ? part.body.replace(/[^A-Za-z0-9+/=]/g, "")
           : bytesToBase64(
-              part.encoding === "quoted-printable" ? decodeQuotedPrintable(part.body) : latin1ToBytes(part.body),
+              part.encoding === "quoted-printable"
+                ? decodeQuotedPrintable(part.body)
+                : latin1ToBytes(part.body),
             );
       attachments.push({
         fileName: part.fileName,

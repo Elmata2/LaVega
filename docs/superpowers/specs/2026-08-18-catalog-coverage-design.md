@@ -14,11 +14,11 @@ a new agent, a new screen, or a new idea. It needs the table.
 
 **Done means all four parts, for all 124 products, not three parts for most of them:**
 
-| Part | Why it is not optional |
-|---|---|
-| **value** | Obviously |
-| **source** | A number without a source is a rumour and cannot be checked |
-| **date** | We shipped a figure from January under today's date. Twice |
+| Part           | Why it is not optional                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| **value**      | Obviously                                                                                                 |
+| **source**     | A number without a source is a rumour and cannot be checked                                               |
+| **date**       | We shipped a figure from January under today's date. Twice                                                |
 | **conditions** | 104 of 124 rates are conditional. Revolut's 0% ranked first on a rate that expires € 1.000 into the month |
 
 A product with a rate and no conditions is **not covered**. That is the definition that keeps 99%
@@ -60,15 +60,15 @@ is marked overdue; it is never silently dropped or silently trusted.
 
 Per product, tried in order, first success wins, the tier recorded with the value.
 
-| # | Route | Cost | Measured today |
-|---|---|---|---|
-| 1 | Provider's own page, plain fetch + browser UA | ~free | **101 of 124 products** across 82 URLs |
-| 1b | **The provider's own PDF** — tariff sheet, cardmember agreement, fee document | ~free | **The route nobody looked for, and it dissolves both ceilings.** See "Corrections" below |
-| 2 | Provider's own page via the **Wayback Machine** | ~free | **Proved on Rabobank**: the page that 403s us served 437 kB with a real table — `betaalpas 1,4% koersopslag`, `creditcard 2%`, and the withdrawal rows bank.nl folds away. Snapshots are dated by construction |
-| 3 | **Headless browser in CI** | free CI minutes | For pages whose numbers arrive by JavaScript. Unproven for our cases — see the open question |
-| 4 | Neutral comparison table (bank.nl) | ~free | 12 rows, 7 banks, debit and credit apart, self-dated |
-| 5 | **Agent + web search** | tokens | Measured accurate: Revolut 0%, ING 1,4%, ING creditcard 2%, ABN 1,2% and 2%, Trading 212 0%, and it corrected bank.nl on Knab |
-| 6 | Unknown, with the reason named | — | The honest floor |
+| #   | Route                                                                         | Cost            | Measured today                                                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Provider's own page, plain fetch + browser UA                                 | ~free           | **101 of 124 products** across 82 URLs                                                                                                                                                                         |
+| 1b  | **The provider's own PDF** — tariff sheet, cardmember agreement, fee document | ~free           | **The route nobody looked for, and it dissolves both ceilings.** See "Corrections" below                                                                                                                       |
+| 2   | Provider's own page via the **Wayback Machine**                               | ~free           | **Proved on Rabobank**: the page that 403s us served 437 kB with a real table — `betaalpas 1,4% koersopslag`, `creditcard 2%`, and the withdrawal rows bank.nl folds away. Snapshots are dated by construction |
+| 3   | **Headless browser in CI**                                                    | free CI minutes | For pages whose numbers arrive by JavaScript. Unproven for our cases — see the open question                                                                                                                   |
+| 4   | Neutral comparison table (bank.nl)                                            | ~free           | 12 rows, 7 banks, debit and credit apart, self-dated                                                                                                                                                           |
+| 5   | **Agent + web search**                                                        | tokens          | Measured accurate: Revolut 0%, ING 1,4%, ING creditcard 2%, ABN 1,2% and 2%, Trading 212 0%, and it corrected bank.nl on Knab                                                                                  |
+| 6   | Unknown, with the reason named                                                | —               | The honest floor                                                                                                                                                                                               |
 
 Route 3 belongs in **GitHub Actions on a schedule**, not in n8n or a Worker: the runner already has a
 browser, the minutes are free, and the output is a commit — so every changed figure arrives as a
@@ -83,14 +83,14 @@ tried: the provider's own PDF.
 
 ## The two ceilings, measured rather than assumed (SUPERSEDED)
 
-**ING has no primary route at any tier.** `ing.nl` refuses at the network layer on HTTP/2 *and*
+**ING has no primary route at any tier.** `ing.nl` refuses at the network layer on HTTP/2 _and_
 HTTP/1.1; a browser User-Agent does not help; there is no ICS backdoor (`icscards.nl/ing` is a
 measured 404); and the Wayback CDX index holds snapshots from **2010** with nothing for the current
 URLs. ING is route 5 or 6, permanently, unless they change their edge rules. Its figures today rest
 entirely on bank.nl, stamped seven months ago.
 
-**American Express publishes no FX markup in HTML anywhere.** Zero hits for *koersopslag*,
-*wisselkoers*, *valuta* or *buitenland* across all eight consumer pages; the two FX pages are
+**American Express publishes no FX markup in HTML anywhere.** Zero hits for _koersopslag_,
+_wisselkoers_, _valuta_ or _buitenland_ across all eight consumer pages; the two FX pages are
 byte-identical with a JS-loaded table that returned a literal placeholder. A headless browser may
 render it. That is the single most valuable thing route 3 could prove, and it is not yet proved.
 
@@ -101,10 +101,10 @@ good reason.
 ## The harder half nobody counts: conditions
 
 **104 of 124 products have a conditional headline rate** — staking, a paid tier, a package, a promo
-window, a monthly cap. Trading 212's 1,5% needs Cashback Reinvest *and* an active subscription.
+window, a monthly cap. Trading 212's 1,5% needs Cashback Reinvest _and_ an active subscription.
 Crypto cards want a token locked for months.
 
-Coverage of the *number* is much easier than coverage of the *condition*, and a catalogue at 99% on
+Coverage of the _number_ is much easier than coverage of the _condition_, and a catalogue at 99% on
 numbers and 60% on conditions would be **more** misleading than one at 80% on both — because the
 missing condition is invisible while the missing number is not.
 
@@ -135,7 +135,6 @@ run daily in full. Route 5 is the only one that costs real money, and it covers 
    marketing page, and it has not been searched for properly.
 3. **Raisin's 19 partner banks** were verified on one and assumed for the other 18. Either verify or
    drop the assumption from the watchlist.
-
 
 ---
 
@@ -185,11 +184,11 @@ a theoretical one.
 
 Measured on the same machine, same URLs:
 
-| | Cloudflare (Revolut) | ING html host |
-|---|---|---|
-| curl + browser UA | 403 | connection killed |
+|                                  | Cloudflare (Revolut)                             | ING html host            |
+| -------------------------------- | ------------------------------------------------ | ------------------------ |
+| curl + browser UA                | 403                                              | connection killed        |
 | **headless** Chrome / Playwright | **403 — parks on the challenge, never resolves** | ERR_HTTP2_PROTOCOL_ERROR |
-| **headed** real Chrome | **200, real page** | 200, renders |
+| **headed** real Chrome           | **200, real page**                               | 200, renders             |
 
 So "use a browser" is not one option, it is two, and only the visible one gets through — which is
 awkward to schedule and should not be assumed away. Since ING is now solved by its PDF, the only

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { readDocumentDate, readIngTariffs } from "./pdfText.js";
 
-const TEXT = readFileSync(new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url), "utf8");
+const TEXT = readFileSync(
+  new URL("./__fixtures__/ingKostenoverzicht.txt", import.meta.url),
+  "utf8",
+);
 
 test("the ING tariff sheet yields the debit-card koersopslag", () => {
   const figures = readIngTariffs(TEXT);
@@ -111,7 +114,9 @@ test("a figure the parser could not find a cap for is NOT reported as unconditio
   // shape is in THRESHOLD's vocabulary, so `conditions` is null. The figure is
   // then a 0% with a real source and a real date and nothing to say it expires
   // EUR 1.000 into the month: covered, ranked first, and wrong.
-  const [f] = readIngTariffs("• In vreemde valuta 0,00% koersopslag (maximaal € 1.000 per maand, daarna 2,00%)");
+  const [f] = readIngTariffs(
+    "• In vreemde valuta 0,00% koersopslag (maximaal € 1.000 per maand, daarna 2,00%)",
+  );
 
   expect(f.value).toBe(0);
   expect(f.conditions).toBeNull();
@@ -134,7 +139,9 @@ test("only a NAMED clause establishes conditions — absence of a match never do
 
   for (const f of figures) expect(f.conditionsKnown).toBe(f.conditions !== null);
   expect(figures.some((f) => f.conditions !== null && f.conditionsKnown)).toBe(true);
-  expect(figures.filter((f) => f.value === 0 && f.conditions === null)[0].conditionsKnown).toBe(false);
+  expect(figures.filter((f) => f.value === 0 && f.conditions === null)[0].conditionsKnown).toBe(
+    false,
+  );
 });
 
 test("the document's own validity date is read from it, not stamped by the fetch", () => {
@@ -158,30 +165,48 @@ test("the document's own validity date is read from it, not stamped by the fetch
  */
 describe("readDocumentDate: month-year editions", () => {
   test("a running header that repeats is the document's own date", () => {
-    const text = ["OVEREENKOMST — PER MAART 2022", "body", "OVEREENKOMST — PER MAART 2022", "body", "OVEREENKOMST — PER MAART 2022"].join("\n");
+    const text = [
+      "OVEREENKOMST — PER MAART 2022",
+      "body",
+      "OVEREENKOMST — PER MAART 2022",
+      "body",
+      "OVEREENKOMST — PER MAART 2022",
+    ].join("\n");
     expect(readDocumentDate(text)).toBe("2022-03-01");
   });
 
   test("a cover label on its own short line counts", () => {
-    expect(readDocumentDate("TARIEVENOVERZICHT\nPER JANUARI 2026\n\n" + "body ".repeat(400))).toBe("2026-01-01");
+    expect(readDocumentDate("TARIEVENOVERZICHT\nPER JANUARI 2026\n\n" + "body ".repeat(400))).toBe(
+      "2026-01-01",
+    );
   });
 
   test("a sentence about a future change is NOT the document's date", () => {
     // This is the guard that matters: a rate change announced in prose says
     // nothing about when this document was issued.
-    expect(readDocumentDate("Wij verhogen per januari 2025 de tarieven. Zie de website.")).toBeNull();
+    expect(
+      readDocumentDate("Wij verhogen per januari 2025 de tarieven. Zie de website."),
+    ).toBeNull();
   });
 
   test("a month-year buried in body prose is refused rather than guessed", () => {
-    expect(readDocumentDate("x".repeat(500) + "\nDe rente wijzigt per maart 2024, aldus de bank.\n" + "y".repeat(500))).toBeNull();
+    expect(
+      readDocumentDate(
+        "x".repeat(500) + "\nDe rente wijzigt per maart 2024, aldus de bank.\n" + "y".repeat(500),
+      ),
+    ).toBeNull();
   });
 
   test("the day-bearing form still wins where a document states one", () => {
-    expect(readDocumentDate("Deze brochure is geldig vanaf 15 juni 2026. Versie maart 2020.")).toBe("2026-06-15");
+    expect(readDocumentDate("Deze brochure is geldig vanaf 15 juni 2026. Versie maart 2020.")).toBe(
+      "2026-06-15",
+    );
   });
 
   test("the 1st is chosen, which makes a figure look older rather than fresher", () => {
-    expect(readDocumentDate("VOORWAARDEN\nPER DECEMBER 2023\n" + "b".repeat(200))).toBe("2023-12-01");
+    expect(readDocumentDate("VOORWAARDEN\nPER DECEMBER 2023\n" + "b".repeat(200))).toBe(
+      "2023-12-01",
+    );
   });
 });
 
@@ -195,12 +220,16 @@ describe("readDocumentDate: month-year editions", () => {
  */
 describe("readDocumentDate: the Fee Information Document label", () => {
   test("reads ABN AMRO's FID header", () => {
-    expect(readDocumentDate([
-      "Informatiedocument betreffende de vergoedingen",
-      "Naam van de rekeningaanbieder: ABN AMRO Bank N.V.",
-      "Naam van de rekening: BasisPakket Betalen",
-      "Datum: 1 januari 2026",
-    ].join("\n"))).toBe("2026-01-01");
+    expect(
+      readDocumentDate(
+        [
+          "Informatiedocument betreffende de vergoedingen",
+          "Naam van de rekeningaanbieder: ABN AMRO Bank N.V.",
+          "Naam van de rekening: BasisPakket Betalen",
+          "Datum: 1 januari 2026",
+        ].join("\n"),
+      ),
+    ).toBe("2026-01-01");
   });
 
   test("a bare Datum label is enough", () => {
@@ -214,12 +243,15 @@ describe("readDocumentDate: the Fee Information Document label", () => {
   test("the FID label wins over a month-year edition elsewhere in the file", () => {
     // The document's own effective date beats a running header, which may name the
     // template's vintage rather than this edition's.
-    expect(readDocumentDate("PER MAART 2022\nPER MAART 2022\nPER MAART 2022\nDatum: 1 januari 2026"))
-      .toBe("2026-01-01");
+    expect(
+      readDocumentDate("PER MAART 2022\nPER MAART 2022\nPER MAART 2022\nDatum: 1 januari 2026"),
+    ).toBe("2026-01-01");
   });
 
   test("a date-shaped sentence that is not a label is still refused", () => {
-    expect(readDocumentDate("Wij hebben u op 4 mei 2024 geïnformeerd over de wijziging.")).toBeNull();
+    expect(
+      readDocumentDate("Wij hebben u op 4 mei 2024 geïnformeerd over de wijziging."),
+    ).toBeNull();
   });
 });
 
@@ -232,17 +264,25 @@ describe("readDocumentDate: the Fee Information Document label", () => {
  */
 describe("readDocumentDate: a bare 'per <day> <month> <year>' heading", () => {
   test("reads the SNS tarievenwijzer heading", () => {
-    expect(readDocumentDate("        Tarievenwijzer\n        Betalen & Sparen            per 1 februari 2026\n"))
-      .toBe("2026-02-01");
+    expect(
+      readDocumentDate(
+        "        Tarievenwijzer\n        Betalen & Sparen            per 1 februari 2026\n",
+      ),
+    ).toBe("2026-02-01");
   });
 
   test("reads ASN's, which puts it on the title line itself", () => {
-    expect(readDocumentDate("          Tarievenwijzer                    per 1 juli 2026\n\nIn deze Tarievenwijzer vind je de kosten."))
-      .toBe("2026-07-01");
+    expect(
+      readDocumentDate(
+        "          Tarievenwijzer                    per 1 juli 2026\n\nIn deze Tarievenwijzer vind je de kosten.",
+      ),
+    ).toBe("2026-07-01");
   });
 
   test("a rate change announced in body prose is NOT the document's date", () => {
-    expect(readDocumentDate("Wij verhogen per 1 januari 2025 de tarieven voor betalen.")).toBeNull();
+    expect(
+      readDocumentDate("Wij verhogen per 1 januari 2025 de tarieven voor betalen."),
+    ).toBeNull();
   });
 
   test("only looks near the top, where a document heads itself", () => {
@@ -250,7 +290,9 @@ describe("readDocumentDate: a bare 'per <day> <month> <year>' heading", () => {
   });
 
   test("an explicit Datum label still wins over the heading form", () => {
-    expect(readDocumentDate("Tarievenwijzer per 1 juli 2026\nDatum: 1 januari 2026")).toBe("2026-01-01");
+    expect(readDocumentDate("Tarievenwijzer per 1 juli 2026\nDatum: 1 januari 2026")).toBe(
+      "2026-01-01",
+    );
   });
 });
 
@@ -262,8 +304,11 @@ describe("readDocumentDate: a bare 'per <day> <month> <year>' heading", () => {
  */
 describe("readDocumentDate: 'gelden/geldt vanaf'", () => {
   test("reads ABN's rate-page footer", () => {
-    expect(readDocumentDate("De rentes gelden vanaf 1 mei 2025. Alle genoemde rentes zijn op jaarbasis."))
-      .toBe("2025-05-01");
+    expect(
+      readDocumentDate(
+        "De rentes gelden vanaf 1 mei 2025. Alle genoemde rentes zijn op jaarbasis.",
+      ),
+    ).toBe("2025-05-01");
   });
 
   test("singular works too", () => {

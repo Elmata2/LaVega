@@ -51,7 +51,7 @@ characters of JSON. A single tab's static snapshot (account balances, category r
 comfortably; a broker's full trade history, dividend history, and daily price series for a
 multi-year, multi-position portfolio will not, and re-sending it on every turn is wasteful even
 when it fits. Answering "did I beat the index" or "why is my portfolio down this month" requires
-the agent to *decide what to fetch* (which date range, which tickers, which benchmark) rather than
+the agent to _decide what to fetch_ (which date range, which tickers, which benchmark) rather than
 being handed everything up front — i.e. it needs real client-side tools (`get_positions()`,
 `get_trades(range)`, `get_price_history(ticker, range)`) that Claude calls on demand. **None of
 that tool-calling scaffolding exists in the repo today** — `chat.ts` has zero client-tool
@@ -83,12 +83,12 @@ Official docs: [Tool use overview](https://docs.claude.com/en/docs/agents-and-to
   ([Tool Runner (SDK)](https://docs.claude.com/en/docs/agents-and-tools/tool-use/tool-runner))
 - **Claude Agent SDK and Managed Agents are the wrong row in Anthropic's own comparison table**,
   not upgrades on the plain Client SDK. Anthropic's own docs table (below "Compare the Agent SDK to
-  other Claude tools") lines up four options: *Agent SDK* = "Claude Code as a library" for building
-  agents that plan and edit files/run commands; *CLI* = terminal interactive use; **Client SDK** =
+  other Claude tools") lines up four options: _Agent SDK_ = "Claude Code as a library" for building
+  agents that plan and edit files/run commands; _CLI_ = terminal interactive use; **Client SDK** =
   "Calling the API directly and implementing the tool loop yourself" — this is what LaVega already
-  uses; *Managed Agents* = a separate hosted REST product where Anthropic runs the agent **and the
+  uses; _Managed Agents_ = a separate hosted REST product where Anthropic runs the agent **and the
   sandbox**. Managed Agents in particular doesn't solve LaVega's local-first requirement — it moves
-  key custody *and* execution to Anthropic's infrastructure, which is a worse fit for a self-hosted
+  key custody _and_ execution to Anthropic's infrastructure, which is a worse fit for a self-hosted
   app than the status quo, not a better one.
   ([Agent SDK overview](https://docs.claude.com/en/api/agent-sdk/overview))
 - **Where it runs / edge.** `@anthropic-ai/sdk` is a plain HTTP client; it runs anywhere Node (or
@@ -157,7 +157,7 @@ Official docs: [Introduction](https://ai-sdk.dev/docs/introduction),
 `github.com/vercel/eve`; latest version `0.31.0`, published 2026-08-06 — the day before this
 research was done, confirming it is new and actively shipping, not a stable/mature product).
 
-**What it actually is:** a batteries-included, filesystem-first *agent application framework* —
+**What it actually is:** a batteries-included, filesystem-first _agent application framework_ —
 Vercel's own framing is "Like Next.js for agents." An `agent/` directory holds an `instructions.md`
 (a complete agent needs nothing else) plus optional `agent.ts` (model/runtime config, uses the AI
 SDK under the hood for model calls), `skills/`, `tools/` (one TypeScript file per tool, filename =
@@ -235,17 +235,17 @@ no relevance to a portfolio Q&A feature and should not be considered further for
 
 ## 7. Comparison table
 
-| | Where it runs / edge | Key custody | Tool-calling plumbing | Streaming → React | Lock-in | Cost model |
-|---|---|---|---|---|---|---|
-| **Direct Anthropic SDK** (current, + Tool Runner) | Node/edge — no change from today | Server env var (`config.ts`, already built) | Write client tools + schema; Tool Runner (beta) removes the loop boilerplate | Server SSE stream exists (`chat.ts`); React side is hand-rolled (`api.ts`) | High — tied to Anthropic's wire format | Per-token, Anthropic's published rates, no markup |
-| **Claude Agent SDK / Managed Agents** | Agent SDK: your process. Managed Agents: Anthropic's hosted sandbox | Managed Agents moves custody *and* execution off-box — worse fit, not better | Built for coding-agent-style tasks (file/shell tools), wrong shape for Q&A-over-data | N/A for this use case | High | Managed Agents adds hosted-infra pricing on top of tokens |
-| **Vercel AI SDK** (Core + UI) | npm lib, runs anywhere Node/edge does | Same as direct SDK — server env var | Same shape, `ToolLoopAgent` runs the loop; provider-agnostic | `useChat`/UI hooks are a real upgrade over the hand-rolled parser | Low — swap a model string | Pay the provider directly; SDK adds no cost |
-| **Vercel AI SDK + AI Gateway** | Same as above, plus one more network hop through Vercel | Same, or BYOK through the Gateway (zero markup) | Same as AI SDK | Same as AI SDK | Low, plus a second vendor in the path | Zero markup on tokens; Gateway ≠ automatic subsidy — LaVega would still meter/margin itself |
-| **Eve (Vercel)** | Self-hostable; needs Postgres (durable workflow) + Docker (sandbox) | Server-side, same shape, but inside a much bigger runtime | Tools = one TS file each; built-in loop | Native `useEveAgent()` React hook | Low (AI SDK underneath) | Pay the provider; framework itself is free/OSS but pre-1.0 |
-| **"Pi" harness** | Local coding-agent CLI process | N/A — not applicable | N/A — it's a code-editing CLI, not a data agent | N/A | N/A | N/A |
-| **Mastra** | Node process + its own server/storage layer | Server env var, same shape | `createTool()` + `Agent`; closest named "data analysis agent" use case | Own Studio UI; would need custom wiring into LaVega's React app | Low (model-router string) | Pay the provider directly |
-| **LangGraph** | Node process; intended to pair with hosted LangSmith | Server env var, same shape | Explicit state graph — most control, most code | Not turnkey; built for backend orchestration, not chat UI | Low on model, but adds LangSmith as a vendor if used as intended | Pay the provider + optional LangSmith |
-| **OpenAI Agents SDK (JS)** | Node/edge | Server env var, same shape | Same shape as AI SDK (`Agent`/`Runner`) | Needs custom wiring | Medium — OpenAI-model-first | Pay the provider directly |
+|                                                   | Where it runs / edge                                                | Key custody                                                                  | Tool-calling plumbing                                                                | Streaming → React                                                          | Lock-in                                                          | Cost model                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Direct Anthropic SDK** (current, + Tool Runner) | Node/edge — no change from today                                    | Server env var (`config.ts`, already built)                                  | Write client tools + schema; Tool Runner (beta) removes the loop boilerplate         | Server SSE stream exists (`chat.ts`); React side is hand-rolled (`api.ts`) | High — tied to Anthropic's wire format                           | Per-token, Anthropic's published rates, no markup                                           |
+| **Claude Agent SDK / Managed Agents**             | Agent SDK: your process. Managed Agents: Anthropic's hosted sandbox | Managed Agents moves custody _and_ execution off-box — worse fit, not better | Built for coding-agent-style tasks (file/shell tools), wrong shape for Q&A-over-data | N/A for this use case                                                      | High                                                             | Managed Agents adds hosted-infra pricing on top of tokens                                   |
+| **Vercel AI SDK** (Core + UI)                     | npm lib, runs anywhere Node/edge does                               | Same as direct SDK — server env var                                          | Same shape, `ToolLoopAgent` runs the loop; provider-agnostic                         | `useChat`/UI hooks are a real upgrade over the hand-rolled parser          | Low — swap a model string                                        | Pay the provider directly; SDK adds no cost                                                 |
+| **Vercel AI SDK + AI Gateway**                    | Same as above, plus one more network hop through Vercel             | Same, or BYOK through the Gateway (zero markup)                              | Same as AI SDK                                                                       | Same as AI SDK                                                             | Low, plus a second vendor in the path                            | Zero markup on tokens; Gateway ≠ automatic subsidy — LaVega would still meter/margin itself |
+| **Eve (Vercel)**                                  | Self-hostable; needs Postgres (durable workflow) + Docker (sandbox) | Server-side, same shape, but inside a much bigger runtime                    | Tools = one TS file each; built-in loop                                              | Native `useEveAgent()` React hook                                          | Low (AI SDK underneath)                                          | Pay the provider; framework itself is free/OSS but pre-1.0                                  |
+| **"Pi" harness**                                  | Local coding-agent CLI process                                      | N/A — not applicable                                                         | N/A — it's a code-editing CLI, not a data agent                                      | N/A                                                                        | N/A                                                              | N/A                                                                                         |
+| **Mastra**                                        | Node process + its own server/storage layer                         | Server env var, same shape                                                   | `createTool()` + `Agent`; closest named "data analysis agent" use case               | Own Studio UI; would need custom wiring into LaVega's React app            | Low (model-router string)                                        | Pay the provider directly                                                                   |
+| **LangGraph**                                     | Node process; intended to pair with hosted LangSmith                | Server env var, same shape                                                   | Explicit state graph — most control, most code                                       | Not turnkey; built for backend orchestration, not chat UI                  | Low on model, but adds LangSmith as a vendor if used as intended | Pay the provider + optional LangSmith                                                       |
+| **OpenAI Agents SDK (JS)**                        | Node/edge                                                           | Server env var, same shape                                                   | Same shape as AI SDK (`Agent`/`Runner`)                                              | Needs custom wiring                                                        | Medium — OpenAI-model-first                                      | Pay the provider directly                                                                   |
 
 ---
 
@@ -271,7 +271,7 @@ recommended practice anywhere:
    memory, readable by anyone with devtools access or any XSS in the page, and Anthropic's Messages
    API is not designed to be called cross-origin from a browser the way a backend calls it. **Not
    recommended.**
-2b. **BYOK held in a native app's OS keychain**, with model calls made from the local desktop
+   2b. **BYOK held in a native app's OS keychain**, with model calls made from the local desktop
    process itself (no third-party server in the loop at all). This is real and well-documented:
    Zed's docs state plainly that "Keys saved through Zed are stored in the system keychain, not in
    `settings.json`" ([Zed — Use API Access](https://zed.dev/docs/ai/use-api-access.html)). It's a
@@ -286,7 +286,7 @@ recommended practice anywhere:
 
 **Recommendation on custody:** keep pattern 1/3 — LaVega's existing server-side env-var model. It
 already satisfies the "self-hoster has no server of ours to hold a key" concern in the ticket,
-because the self-hoster's *own* `apps/server` process is that server; nothing changes here for a
+because the self-hoster's _own_ `apps/server` process is that server; nothing changes here for a
 future hosted tier either, since it's the same env var read from the operator's environment either
 way. Do not build a browser-BYOK path; it has no clean precedent and works against the "secrets
 never leave the user's control boundary" spirit of `docs/CONTEXT.md`'s hard constraints.

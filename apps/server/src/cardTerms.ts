@@ -64,8 +64,13 @@ function fresh(e: Entry | undefined): boolean {
 /** Does this reply contain anything we can actually rank with? A note alone is
  *  not an answer — the ranking needs a number. */
 function usable(t: ProviderTerms): boolean {
-  return t.fxFeePct !== undefined || t.convertFeePct !== undefined || t.cashbackPct !== undefined
-    || t.pointsPerEuro !== undefined || t.transferFreeViaIdeal !== undefined;
+  return (
+    t.fxFeePct !== undefined ||
+    t.convertFeePct !== undefined ||
+    t.cashbackPct !== undefined ||
+    t.pointsPerEuro !== undefined ||
+    t.transferFreeViaIdeal !== undefined
+  );
 }
 
 /** Drop keys whose value is `undefined` — the lookup builds every field and
@@ -102,9 +107,10 @@ function figureDate(e: Entry): number {
 
 function write(key: string, terms: ProviderTerms, source: TermsSource): boolean {
   const prev = cache.get(key);
-  const incomingDate = terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
-    ? Date.parse(terms.checkedAt)
-    : Date.now();
+  const incomingDate =
+    terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
+      ? Date.parse(terms.checkedAt)
+      : Date.now();
   // Age beats precision once the gap is wide enough. Without this the ladder
   // says a tidy source wins forever, and a stale figure freezes in place -
   // which is exactly how bank.nl's January table would have overwritten a
@@ -162,14 +168,22 @@ function incomplete(e: Entry): boolean {
   return e.terms.cashbackPct === undefined || e.terms.convertFeePct === undefined;
 }
 
-function startLookup(provider: string, base: Omit<TravelInput, "providers">, apiKey: string, deps: Deps): void {
+function startLookup(
+  provider: string,
+  base: Omit<TravelInput, "providers">,
+  apiKey: string,
+  deps: Deps,
+): void {
   const key = keyOf(provider, base.homeCountry, base.currency);
   const held = cache.get(key);
   if (inFlight.has(key) || (fresh(held) && !incomplete(held as Entry))) return;
   inFlight.add(key);
   void (async () => {
     try {
-      const found = await (deps.lookup ?? lookupProviderTerms)({ ...base, providers: [provider] }, apiKey);
+      const found = await (deps.lookup ?? lookupProviderTerms)(
+        { ...base, providers: [provider] },
+        apiKey,
+      );
       // Only cache an answer that actually carries a NUMBER. A reply with just
       // a note ("couldn't verify — the search tool hit its limit") is a failed
       // lookup wearing an answer's clothes; caching it for a week would lock in
@@ -199,7 +213,11 @@ function startLookup(provider: string, base: Omit<TravelInput, "providers">, api
  *  koersopslag to compare. Only the gaps are filled: an entry that is already
  *  fresh has already been answered, and if it later expires it becomes a gap
  *  and gets the comparison figure then. */
-function startComparisonFill(gaps: string[], base: Omit<TravelInput, "providers">, deps: Deps): void {
+function startComparisonFill(
+  gaps: string[],
+  base: Omit<TravelInput, "providers">,
+  deps: Deps,
+): void {
   const load = deps.comparison;
   if (!load || gaps.length === 0) return;
   if (base.homeCountry !== "NL" || base.currency === "EUR") return;
@@ -214,7 +232,8 @@ function startComparisonFill(gaps: string[], base: Omit<TravelInput, "providers"
         // A bank this page says nothing about, or a card kind it never priced,
         // returns null and stays UNKNOWN. Never a zero, never the other card's
         // figure — that is what makes the ranking trustworthy.
-        if (found) write(keyOf(found.provider, base.homeCountry, base.currency), found, "comparison");
+        if (found)
+          write(keyOf(found.provider, base.homeCountry, base.currency), found, "comparison");
       }
     } catch {
       /* the comparison stays unknown; the agent lookup still runs alongside */

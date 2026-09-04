@@ -26,8 +26,24 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 const ACCOUNTS: Account[] = [
-  { key: "NL01ING", iban: "NL01ING", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 5000 },
-  { key: "REV1", iban: "", name: "Revolut", bank: "Revolut", entity: "Prive", currency: "EUR", balance: 1200 },
+  {
+    key: "NL01ING",
+    iban: "NL01ING",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 5000,
+  },
+  {
+    key: "REV1",
+    iban: "",
+    name: "Revolut",
+    bank: "Revolut",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1200,
+  },
 ];
 
 /** A covered catalogue figure: value, source, date AND conditions. */
@@ -63,12 +79,23 @@ const ENTRIES: CatalogueEntryLike[] = [
 /** Card terms as the travel agent stores them, keyed on the PRODUCT. */
 function terms(pct: Record<string, number>, source: "agent" | "user" = "agent"): LearnedFact[] {
   return Object.entries(pct).map(([subject, value]) =>
-    makeFact({ agent: TRAVEL_AGENT, subject, key: "fxFeePct", value: String(value), source, updatedAt: "2026-08-16" }),
+    makeFact({
+      agent: TRAVEL_AGENT,
+      subject,
+      key: "fxFeePct",
+      value: String(value),
+      source,
+      updatedAt: "2026-08-16",
+    }),
   );
 }
 
 const money = (n: number, ccy: string) =>
-  new Intl.NumberFormat("nl-NL", { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(n);
+  new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: ccy,
+    maximumFractionDigits: 2,
+  }).format(n);
 const usd = (n: number) => money(n, "USD");
 const eur = (n: number) => money(n, "EUR");
 
@@ -89,7 +116,9 @@ afterEach(() => {
   container = null;
 });
 
-function render(opts: { facts?: LearnedFact[]; entries?: CatalogueEntryLike[]; accounts?: Account[] } = {}) {
+function render(
+  opts: { facts?: LearnedFact[]; entries?: CatalogueEntryLike[]; accounts?: Account[] } = {},
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -118,7 +147,9 @@ function rows(): HTMLElement[] {
   return [...container!.querySelectorAll(".travel-journeys .travel-journey")] as HTMLElement[];
 }
 function rowNamed(bank: string): HTMLElement {
-  const hit = rows().filter((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().startsWith(bank));
+  const hit = rows().filter((r) =>
+    (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().startsWith(bank),
+  );
   expect(hit).toHaveLength(1); // a bank appears ONCE — that is the point
   return hit[0];
 }
@@ -144,8 +175,10 @@ test("ING appears ONCE, though the catalogue holds three ING cards", () => {
 
 test("the whole market is ranked, cheapest first, and a bank he does not hold is marked", () => {
   render();
-  const order = rows().map((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0]);
-  expect(order[0]).toBe("Trading");            // 212 Card at 0%
+  const order = rows().map(
+    (r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0],
+  );
+  expect(order[0]).toBe("Trading"); // 212 Card at 0%
   expect(rowNamed("Trading 212").textContent).toContain("niet van jou");
   expect(rowNamed("ING").textContent).toContain("van jou");
   expect(rowNamed("Revolut").textContent).toContain("van jou");
@@ -161,7 +194,9 @@ test("the amount that arrives is priced on a route he can use AND a figure that 
   expect(arrives()).toBe(usd(mid * (1 - 0.014)));
   expect(c.querySelector('[data-testid="uitleg"]')!.textContent).toContain("Via ING");
   expect(c.querySelector('[data-testid="gekozen-route"]')!.textContent).toContain("ING betaalpas");
-  expect(rowNamed("Revolut").textContent).toContain("of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet");
+  expect(rowNamed("Revolut").textContent).toContain(
+    "of jouw pakket bij deze bank hetzelfde rekent, weet LaVega niet",
+  );
 });
 
 test("a cheaper bank he does not hold is named with the difference in euros, and not chosen", () => {
@@ -179,7 +214,9 @@ test("he can overrule the default, and the arriving amount follows his choice", 
   click(rowNamed("Trading 212"));
   expect(arrives()).toBe(usd(mid));
   expect(c.querySelector('[data-testid="uitleg"]')!.textContent).toContain("Via Trading 212");
-  expect(c.querySelector('[data-testid="gekozen-route"]')!.textContent).toContain("deze bank heb je nog niet");
+  expect(c.querySelector('[data-testid="gekozen-route"]')!.textContent).toContain(
+    "deze bank heb je nog niet",
+  );
   // The alternatives are now priced against Trading 212: ING costs €14 more.
   expect(rowNamed("ING").textContent).toContain(`${eur(14)} meer`);
 });
@@ -207,7 +244,17 @@ test("with no establishable figure for his own banks, what arrives is 'onbekend'
 
 test("an account without a bank cannot be looked up, and the screen says that instead", () => {
   const c = render({
-    accounts: [{ key: "A 286", iban: "", name: "A 286-41213", bank: "", entity: "Prive", currency: "EUR", balance: 900 }],
+    accounts: [
+      {
+        key: "A 286",
+        iban: "",
+        name: "A 286-41213",
+        bank: "",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 900,
+      },
+    ],
     entries: [],
   });
   expect(arrives()).toBe("onbekend");
@@ -216,7 +263,19 @@ test("an account without a bank cannot be looked up, and the screen says that in
 
 test("a bank he holds is never dropped and never shown as 0%", () => {
   const c = render({
-    accounts: [...ACCOUNTS, { key: "AMEX1", iban: "", name: "Amex", bank: "American Express", type: "Creditcard", entity: "Prive", currency: "EUR", balance: -200 } as Account],
+    accounts: [
+      ...ACCOUNTS,
+      {
+        key: "AMEX1",
+        iban: "",
+        name: "Amex",
+        bank: "American Express",
+        type: "Creditcard",
+        entity: "Prive",
+        currency: "EUR",
+        balance: -200,
+      } as Account,
+    ],
   });
   const amex = rowNamed("American Express");
   // The price cell says the cost is missing. It never prints a percentage there,
@@ -230,7 +289,10 @@ test("a bank he holds is never dropped and never shown as 0%", () => {
 test("a cheapest row that is not a bank account says what it is", () => {
   const c = render({
     entries: [
-      { ...card("cdc", "Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com", 0), kind: "prepaid" },
+      {
+        ...card("cdc", "Crypto.com Prepaid Card — Private (Obsidian)", "Crypto.com", 0),
+        kind: "prepaid",
+      },
       card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
     ],
   });
@@ -257,12 +319,16 @@ test("a cheapest row that is not a bank account says what it is", () => {
  *  aanknopingspunt: het opschrift van de bankenlijst bevat het aantal banken en
  *  is dus geen stabiele sleutel. */
 function toonmeer(klasse: string): HTMLDetailsElement {
-  const el = container!.querySelector<HTMLDetailsElement>(`details.${TOONMEER_CLASS.root}.${klasse}`);
+  const el = container!.querySelector<HTMLDetailsElement>(
+    `details.${TOONMEER_CLASS.root}.${klasse}`,
+  );
   if (!el) throw new Error(`geen toon meer met klasse ${klasse}`);
   return el;
 }
-const opschrift = (d: HTMLDetailsElement) => d.querySelector(`.${TOONMEER_CLASS.label}`)?.textContent ?? "";
-const paneel = (d: HTMLDetailsElement) => d.querySelector(`.${TOONMEER_CLASS.panel}`)?.textContent ?? "";
+const opschrift = (d: HTMLDetailsElement) =>
+  d.querySelector(`.${TOONMEER_CLASS.label}`)?.textContent ?? "";
+const paneel = (d: HTMLDetailsElement) =>
+  d.querySelector(`.${TOONMEER_CLASS.panel}`)?.textContent ?? "";
 
 test("twee kolommen: de rekenmachine links, de bol rechts", () => {
   const c = render();
@@ -388,7 +454,9 @@ test("er staat geen voettekst onder de bol die een richting aanwijst", () => {
    * een breed scherm naast de rekenmachine en op een smal scherm eronder, dus elke
    * richtingsaanwijzing is de helft van de tijd onwaar. */
   const c = render();
-  const bol = [...c.querySelectorAll<HTMLElement>(".module")].find((m) => m.getAttribute("aria-label") === "Bestemming")!;
+  const bol = [...c.querySelectorAll<HTMLElement>(".module")].find(
+    (m) => m.getAttribute("aria-label") === "Bestemming",
+  )!;
   const foot = bol.querySelector(".module-foot")?.textContent ?? "";
   expect(foot).not.toContain("hierboven");
   expect(foot).not.toContain("hiernaast");
@@ -438,7 +506,10 @@ function pricedCard(
  *  kaart € 16,90 — dus overstappen is € 2,90 achteruit. */
 const PRICED: CatalogueEntryLike[] = [
   card("ing-betaalpas", "ING betaalpas", "ING Bank N.V.", 1.4),
-  pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, { value: 16.9, period: "maand" }),
+  pricedCard("n26-metal", "N26 Metal betaalpas", "N26 Bank AG", 0, {
+    value: 16.9,
+    period: "maand",
+  }),
 ];
 const ONLY_ING: Account[] = [ACCOUNTS[0]];
 
@@ -454,7 +525,9 @@ function typeAmount(value: string) {
 }
 
 function text(testId: string): string {
-  return (container!.querySelector(`[data-testid="${testId}"]`) as HTMLElement | null)?.textContent ?? "";
+  return (
+    (container!.querySelector(`[data-testid="${testId}"]`) as HTMLElement | null)?.textContent ?? ""
+  );
 }
 
 test("een goedkopere bank die door zijn maandprijs duurder wordt, staat niet bovenaan", () => {
@@ -462,7 +535,9 @@ test("een goedkopere bank die door zijn maandprijs duurder wordt, staat niet bov
 
   // 0% opslag, en tóch tweede: € 16,90 per maand is meer dan de € 14 die de
   // lagere opslag oplevert. Op het percentage alleen stond deze kaart bovenaan.
-  const order = rows().map((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0]);
+  const order = rows().map(
+    (r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0],
+  );
   expect(order).toEqual(["ING", "N26"]);
   // En de rij zegt zelf waarom ze daar staat, in plaats van de lezer te laten
   // raden waarom 0% onder 1,4% hangt.
@@ -491,18 +566,30 @@ test("op een groter bedrag verdient diezelfde maandprijs zich terug, en dan pas 
   // € 5.000 tegen 1,4% is € 70 opslag; daar gaat € 16,90 vanaf en blijft € 53,10.
   typeAmount("5000");
 
-  const order = rows().map((r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0]);
+  const order = rows().map(
+    (r) => (r.querySelector(".travel-journey-name")?.textContent ?? "").trim().split(" ")[0],
+  );
   expect(order).toEqual(["N26", "ING"]);
   expect(text("goedkoper")).toContain("Goedkoper kan");
   expect(text("valuta-goedkoper-kosten-netto")).toContain(eur(53.1));
-  expect(text("valuta-goedkoper-kosten-netto")).toContain(`${eur(70)} voordeel min ${eur(16.9)} kaartkosten`);
+  expect(text("valuta-goedkoper-kosten-netto")).toContain(
+    `${eur(70)} voordeel min ${eur(16.9)} kaartkosten`,
+  );
   expect(container!.querySelector('[data-testid="valuta-goedkoper-kosten-geen"]')).toBeNull();
 });
 
 test("een bank die hij al heeft kost hem niets extra, en daar staat geen prijs bij", () => {
   const withN26: Account[] = [
     ...ONLY_ING,
-    { key: "N26A", iban: "", name: "N26", bank: "N26", entity: "Prive", currency: "EUR", balance: 300 },
+    {
+      key: "N26A",
+      iban: "",
+      name: "N26",
+      bank: "N26",
+      entity: "Prive",
+      currency: "EUR",
+      balance: 300,
+    },
   ];
   render({ accounts: withN26, entries: PRICED });
 
@@ -569,7 +656,13 @@ function layered(over: Record<string, unknown> = {}) {
     origins: { USD: "ecb", GBP: "ecb", MAD: "aggregator" },
     layers: {
       ecb: { status: "live", date: "2026-08-21", count: 2 },
-      aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "erapi", nextUpdate: "2026-08-23" },
+      aggregator: {
+        status: "live",
+        date: "2026-08-22",
+        count: 1,
+        provider: "erapi",
+        nextUpdate: "2026-08-23",
+      },
     },
     ...over,
   };
@@ -598,7 +691,7 @@ async function renderLive(payload: unknown, opts: { entries?: CatalogueEntryLike
 function ccyGroepen(c: HTMLElement, label: string): Map<string | null, string[]> {
   const sel = c.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
   const out = new Map<string | null, string[]>();
-  for (const opt of [...sel.querySelectorAll("option")]) {
+  for (const opt of sel.querySelectorAll("option")) {
     const groep = opt.parentElement instanceof HTMLOptGroupElement ? opt.parentElement.label : null;
     out.set(groep, [...(out.get(groep) ?? []), opt.value]);
   }
@@ -694,7 +787,13 @@ test("een aanbieder die dit scherm niet kent levert geen koersen, want de vermel
     layered({
       layers: {
         ecb: { status: "live", date: "2026-08-21", count: 2 },
-        aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "nooitvanGehoord", nextUpdate: null },
+        aggregator: {
+          status: "live",
+          date: "2026-08-22",
+          count: 1,
+          provider: "nooitvanGehoord",
+          nextUpdate: null,
+        },
       },
     }),
   );
@@ -741,7 +840,13 @@ test("een onbekende aanbieder levert een melding met de ECHTE oorzaak, niet 'bro
     layered({
       layers: {
         ecb: { status: "live", date: "2026-08-21", count: 2 },
-        aggregator: { status: "live", date: "2026-08-22", count: 1, provider: "nooitvanGehoord", nextUpdate: null },
+        aggregator: {
+          status: "live",
+          date: "2026-08-22",
+          count: 1,
+          provider: "nooitvanGehoord",
+          nextUpdate: null,
+        },
       },
     }),
   );

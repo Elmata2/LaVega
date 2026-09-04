@@ -9,12 +9,12 @@ Het gecorrigeerde bestand staat naast dit document:
 Ik heb jouw JSON niet als uitgangspunt genomen maar onze eigen code, want die is
 wat er aan beide kanten van de webhook draait:
 
-| Bestand | Wat het vastlegt |
-|---|---|
-| `apps/email-worker/src/handler.ts` | wat de Cloudflare-worker POST, met welke header, en welke node-namen zijn bounces noemen |
-| `apps/web/src/n8n.ts` | met welke **methode** en welke header LaVega ophaalt, en welke vorm `parseQueue` accepteert |
-| `scripts/fake-invoice-queue.mjs` | de nepwachtrij — het antwoord waarvan bewezen is dat de app het slikt |
-| `docs/n8n/lavega-invoices.json` | de werkende workflow; zijn Code-nodes worden getest door `packages/core/src/n8n/codeNodes.test.ts` |
+| Bestand                            | Wat het vastlegt                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `apps/email-worker/src/handler.ts` | wat de Cloudflare-worker POST, met welke header, en welke node-namen zijn bounces noemen           |
+| `apps/web/src/n8n.ts`              | met welke **methode** en welke header LaVega ophaalt, en welke vorm `parseQueue` accepteert        |
+| `scripts/fake-invoice-queue.mjs`   | de nepwachtrij — het antwoord waarvan bewezen is dat de app het slikt                              |
+| `docs/n8n/lavega-invoices.json`    | de werkende workflow; zijn Code-nodes worden getest door `packages/core/src/n8n/codeNodes.test.ts` |
 
 ---
 
@@ -53,7 +53,7 @@ telling" (`handler.ts` 335-342) — een bounce die de verkeerde oorzaak noemt,
 terwijl je facturen inmiddels nergens meer staan.
 
 **De reparatie.** Een aparte webhook `E-mail binnen`: **POST**, eigen pad
-`lavega-mail-in`, Header Auth, Respond = *When Last Node Finishes*. Daarachter
+`lavega-mail-in`, Header Auth, Respond = _When Last Node Finishes_. Daarachter
 `Normaliseer binnengekomen mail`, die uitkomt op dezelfde `Iets te lezen?` als
 Gmail. Dat is precies wat `handler.ts` bij naam noemt in twee van zijn
 foutmeldingen, en wat `docs/n8n/DOORSTUURADRES.md` stap 2 beschrijft.
@@ -69,7 +69,7 @@ foutmeldingen, en wat `docs/n8n/DOORSTUURADRES.md` stap 2 beschrijft.
 Je POST gaat naar een pad waar in jouw workflow wél een **POST**-node op staat.
 Een geregistreerde route die de methode accepteert geeft geen 404 — die geeft 200
 of 500. Een 404 betekent hier dus: **de route bestaat niet**, niet "de route
-weigert dit verzoek". En hij komt bij *elke* mail, dus het is niet iets
+weigert dit verzoek". En hij komt bij _elke_ mail, dus het is niet iets
 tijdelijks.
 
 Vier verklaringen, op volgorde van waarschijnlijkheid:
@@ -81,14 +81,14 @@ Opslaan is niet activeren. Dit is ook wat `handler.ts` zelf als eerste noemt
 het adres bestaat niet.
 
 **b. n8n weigert te activeren omdat een webhook-node zijn credential mist.** Zet
-je *Authentication* op **Header Auth** zonder een credential te kiezen, dan
+je _Authentication_ op **Header Auth** zonder een credential te kiezen, dan
 weigert n8n de workflow te activeren — de schakelaar springt terug en er
 verschijnt een rode melding. Wie die melding wegklikt houdt een workflow over die
 "aan lijkt te staan" en 404 geeft. Dit staat als reden in `handler.ts` regel 44-53
 en is precies de reden dat één credential aan **beide** webhooks hangt.
 
 **c. Het is de test-URL.** `/webhook-test/…` in plaats van `/webhook/…`. Die
-luistert één keer, nadat je op *Listen for test event* hebt gedrukt, en geeft
+luistert één keer, nadat je op _Listen for test event_ hebt gedrukt, en geeft
 daarna 404. Je bounce citeert de volledige URL — kijk erin welke van de twee er
 staat.
 
@@ -144,14 +144,14 @@ tweede 404, aan de andere kant van de keten.
 
 Er komt nog iets bij: `apps/web/src/n8n-provision.ts` zoekt de ophaal-webhook op
 door de webhook te pakken die op **GET** staat (`findQueueWebhookNode`). Staat
-geen van beide op GET, dan eindigt *Verbind met n8n* op "geen webhook-node
+geen van beide op GET, dan eindigt _Verbind met n8n_ op "geen webhook-node
 gevonden".
 
-**Wat je ziet.** In *Facturen* → *Ophalen uit n8n*: een foutmelding met status
+**Wat je ziet.** In _Facturen_ → _Ophalen uit n8n_: een foutmelding met status
 404 (`FetchOutcome` `http-error`).
 
 **De reparatie.** `LaVega vraagt de rij op` staat in het nieuwe bestand op **GET**,
-pad `lavega-facturen` — dus jouw bestaande URL in *Koppelingen* blijft geldig. De
+pad `lavega-facturen` — dus jouw bestaande URL in _Koppelingen_ blijft geldig. De
 POST-ingang verhuist naar het eigen pad `lavega-mail-in`.
 
 ---
@@ -160,7 +160,7 @@ POST-ingang verhuist naar het eigen pad `lavega-mail-in`.
 
 **Wat er misgaat.** Je webhook staat op `responseMode: "lastNode"` terwijl er een
 `Antwoord aan LaVega` (respondToWebhook) achter hangt. Die node werkt alleen als
-de webhook die hem voedt op *Using Respond to Webhook Node* staat; anders valt hij
+de webhook die hem voedt op _Using Respond to Webhook Node_ staat; anders valt hij
 om. Onze eigen documentatie zegt hetzelfde vanaf de andere kant:
 
 > "Er staat met opzet **geen `Respond to Webhook`-node** in het pad. Dat pad wordt
@@ -175,10 +175,10 @@ terwijl de drain-node de wachtrij al geleegd heeft.
 
 **Welke van de twee wij verwachten — allebei, elk op zijn eigen webhook:**
 
-| Webhook | Respond | Waarom |
-|---|---|---|
-| `E-mail binnen` (POST) | **When Last Node Finishes** | De worker leest het antwoord van `Zet in de wachtrij`: `{addedInvoices, addedNotices, …}`. Op *Immediately* zou hij een 200 zien vóórdat er iets gebeurd is en zou een mail kunnen verdwijnen terwijl jij denkt dat hij aankwam. `handler.ts` 317-342 noemt deze instelling twee keer bij naam. |
-| `LaVega vraagt de rij op` (GET) | **Using Respond to Webhook Node** | Hier hoort de `Antwoord aan LaVega`-node bij, die `{invoices, notices, servedAt}` teruggeeft — de vorm die `parseQueue` accepteert. |
+| Webhook                         | Respond                           | Waarom                                                                                                                                                                                                                                                                                          |
+| ------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `E-mail binnen` (POST)          | **When Last Node Finishes**       | De worker leest het antwoord van `Zet in de wachtrij`: `{addedInvoices, addedNotices, …}`. Op _Immediately_ zou hij een 200 zien vóórdat er iets gebeurd is en zou een mail kunnen verdwijnen terwijl jij denkt dat hij aankwam. `handler.ts` 317-342 noemt deze instelling twee keer bij naam. |
+| `LaVega vraagt de rij op` (GET) | **Using Respond to Webhook Node** | Hier hoort de `Antwoord aan LaVega`-node bij, die `{invoices, notices, servedAt}` teruggeeft — de vorm die `parseQueue` accepteert.                                                                                                                                                             |
 
 Die scheiding werkt omdat de Respond-node in de mailtak nooit meedraait: hij zit
 op de ophaaltak, en die tak start alleen bij een GET op `lavega-facturen`.
@@ -187,7 +187,7 @@ op de ophaaltak, en die tak start alleen bij een GET op `lavega-facturen`.
 
 ## 6. Geen tokencontrole op de ophaal-webhook
 
-**Wat er misgaat.** Jouw `LaVega vraagt de rij op` heeft geen *Authentication*.
+**Wat er misgaat.** Jouw `LaVega vraagt de rij op` heeft geen _Authentication_.
 Iedereen die het pad kent kan je factuurwachtrij ophalen — en omdat het ophalen
 hem ook **leegt**, kan iedereen die het pad kent je facturen weggooien.
 
@@ -298,17 +298,17 @@ LaVega vraagt de rij op (GET /lavega-facturen, Header Auth, Respond-node)
 
 Wat er ten opzichte van jouw versie veranderd is:
 
-| Verandering | Waarom |
-|---|---|
-| `E-mail binnen` toegevoegd — POST, pad `lavega-mail-in` | Bevinding 1. De naam is niet vrij: `handler.ts` noemt hem in twee bounces. |
-| `Normaliseer binnengekomen mail` toegevoegd | Vertaalt de JSON van de worker naar dezelfde vorm die Gmail levert, inclusief `deliveredTo`, `queueKey`, `senderCheck` en `senderChecks`. |
-| `Zet in de wachtrij` toegevoegd, `Naar LaVega-vorm` erop aangesloten | Bevinding 3. Ook deze naam noemt `handler.ts` letterlijk. |
-| `Melding: zelf ophalen` toegevoegd op de false-tak | Bevinding 7. |
-| `LaVega vraagt de rij op`: POST → **GET** | Bevinding 4 — `n8n.ts` doet GET. |
-| `LaVega vraagt de rij op`: Respond → **Using Respond to Webhook Node** | Bevinding 5. |
-| Header Auth op **beide** webhooks | Bevinding 6. Alleen de keuze staat in het bestand, niet de waarde. |
-| `allowedOrigins` gevuld | Zie hieronder. |
-| Gmail-tak behouden | Jouw tak, jouw nodes. Twee dingen aangezet die er anders stilletjes voor zorgen dat er nooit een PDF meekomt (zie hieronder), en je zoekwoord `receipt` staat in de zoekopdracht. |
+| Verandering                                                            | Waarom                                                                                                                                                                            |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `E-mail binnen` toegevoegd — POST, pad `lavega-mail-in`                | Bevinding 1. De naam is niet vrij: `handler.ts` noemt hem in twee bounces.                                                                                                        |
+| `Normaliseer binnengekomen mail` toegevoegd                            | Vertaalt de JSON van de worker naar dezelfde vorm die Gmail levert, inclusief `deliveredTo`, `queueKey`, `senderCheck` en `senderChecks`.                                         |
+| `Zet in de wachtrij` toegevoegd, `Naar LaVega-vorm` erop aangesloten   | Bevinding 3. Ook deze naam noemt `handler.ts` letterlijk.                                                                                                                         |
+| `Melding: zelf ophalen` toegevoegd op de false-tak                     | Bevinding 7.                                                                                                                                                                      |
+| `LaVega vraagt de rij op`: POST → **GET**                              | Bevinding 4 — `n8n.ts` doet GET.                                                                                                                                                  |
+| `LaVega vraagt de rij op`: Respond → **Using Respond to Webhook Node** | Bevinding 5.                                                                                                                                                                      |
+| Header Auth op **beide** webhooks                                      | Bevinding 6. Alleen de keuze staat in het bestand, niet de waarde.                                                                                                                |
+| `allowedOrigins` gevuld                                                | Zie hieronder.                                                                                                                                                                    |
+| Gmail-tak behouden                                                     | Jouw tak, jouw nodes. Twee dingen aangezet die er anders stilletjes voor zorgen dat er nooit een PDF meekomt (zie hieronder), en je zoekwoord `receipt` staat in de zoekopdracht. |
 
 **`allowedOrigins`** staat op:
 `https://lavega.dev, https://www.lavega.dev, https://lavegaweb-production.up.railway.app, http://localhost:5173`.
@@ -320,8 +320,8 @@ onderscheiden. Draai je op een andere poort of host, zet die er dan bij.
 Op `E-mail binnen` staat er met opzet niets: de worker is geen browser en stuurt
 geen preflight.
 
-**Twee Gmail-instellingen die er in staan en die je moet laten staan:** *Simplify*
-uit, en *Download Attachments* **binnen Options**. n8n leest alleen
+**Twee Gmail-instellingen die er in staan en die je moet laten staan:** _Simplify_
+uit, en _Download Attachments_ **binnen Options**. n8n leest alleen
 `options.downloadAttachments`; zet je hem ernaast, dan bestaat de vlag niet en
 komt er nooit een bijlage mee. Dat is in augustus gemeten: 768 invoer-tokens, geen
 PDF. Staat uitgeschreven in `packages/core/src/n8n/normalizeGmailMessage.js`.
@@ -341,34 +341,35 @@ Negen stappen. Bij elke stap staat wat je moet zien als het goed is.
 **1. Zet je huidige workflow uit.**
 n8n → Workflows → je bestaande factuurworkflow → schakelaar rechtsboven op
 **Inactief**. Hernoem hem naar `OUD — facturen (24 aug)` of verwijder hem.
-*Je moet zien:* de schakelaar staat op inactief.
-*Waarom:* twee actieve workflows kunnen niet hetzelfde pad claimen. Sla je deze
+_Je moet zien:_ de schakelaar staat op inactief.
+_Waarom:_ twee actieve workflows kunnen niet hetzelfde pad claimen. Sla je deze
 stap over, dan weigert de nieuwe te activeren en houd je precies de 404 die je nu
 hebt.
 
 **2. Importeer het nieuwe bestand.**
 Workflows → **Import from File** → `docs/n8n/lavega-facturen-workflow.json`.
-*Je moet zien:* 15 nodes, en linksboven twee losse ingangen (`E-mail binnen` en
+_Je moet zien:_ 15 nodes, en linksboven twee losse ingangen (`E-mail binnen` en
 `LaVega vraagt de rij op`) naast `Handmatig starten` en `Elk uur`.
 De naam is met opzet gelijk gebleven aan die van je oude workflow
-(`LaVega — facturen uit de mail`); *Verbind met n8n* in Koppelingen zoekt op die
+(`LaVega — facturen uit de mail`); _Verbind met n8n_ in Koppelingen zoekt op die
 naam.
 
 **3. Hang de credentials erin.** Drie stuks:
+
 - `Gmail: recente mail` → je Gmail-OAuth-credential.
-- `E-mail binnen` → *Credential for Header Auth* → maak of kies
+- `E-mail binnen` → _Credential for Header Auth_ → maak of kies
   `LaVega factuurtoken`, met **Name** `x-lavega-token` en als **Value** het geheim
   dat ook in `N8N_SHARED_SECRET` van de worker staat.
 - `LaVega vraagt de rij op` → **dezelfde** credential.
 
-*Je moet zien:* geen rood driehoekje meer op de drie nodes.
-*Waarom dit de kritieke stap is:* laat je er één leeg, dan weigert n8n in stap 4
+_Je moet zien:_ geen rood driehoekje meer op de drie nodes.
+_Waarom dit de kritieke stap is:_ laat je er één leeg, dan weigert n8n in stap 4
 te activeren, en dan krijg je dezelfde 404 terug — met de tweede verklaring uit
 bevinding 2 als oorzaak.
 
 **4. Activeer.**
 Schakelaar rechtsboven op **Actief** en **sla op**.
-*Je moet zien:* de schakelaar blijft op actief staan en er verschijnt geen rode
+_Je moet zien:_ de schakelaar blijft op actief staan en er verschijnt geen rode
 melding. Springt hij terug: lees die melding, want daar staat welke node zijn
 credential mist. Klik hem niet weg.
 
@@ -385,12 +386,12 @@ curl -i -X POST -H "content-type: application/json" -H "x-lavega-token: $TOKEN" 
   "$JOUW_N8N/webhook/lavega-mail-in"
 ```
 
-*Je moet zien:* twee keer `HTTP/… 200`.
-*Als je 404 krijgt:* de workflow is niet actief, of je gebruikt `/webhook-test/`
+_Je moet zien:_ twee keer `HTTP/… 200`.
+_Als je 404 krijgt:_ de workflow is niet actief, of je gebruikt `/webhook-test/`
 in plaats van `/webhook/`.
-*Als je 403 krijgt:* het token klopt niet met de credential-waarde.
-*Als de tweede 200 geeft maar geen `addedInvoices`:* `Respond` van `E-mail binnen`
-staat niet op *When Last Node Finishes*.
+_Als je 403 krijgt:_ het token klopt niet met de credential-waarde.
+_Als de tweede 200 geeft maar geen `addedInvoices`:_ `Respond` van `E-mail binnen`
+staat niet op _When Last Node Finishes_.
 
 **6. Zet de Worker om.**
 De URL is veranderd van `lavega-facturen` naar `lavega-mail-in`:
@@ -401,42 +402,42 @@ pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL     # …/webhook/lavega-mail-in
 pnpm dlx wrangler@4 deploy
 ```
 
-*Je moet zien:* `wrangler` bevestigt de deploy. Plak de **Production URL** uit de
+_Je moet zien:_ `wrangler` bevestigt de deploy. Plak de **Production URL** uit de
 node `E-mail binnen` — niet de test-URL.
 
 **7. Stuur één echte factuur door.**
-*Je moet zien:* **geen bounce**. In n8n → Executions staat een run op `E-mail binnen`
+_Je moet zien:_ **geen bounce**. In n8n → Executions staat een run op `E-mail binnen`
 die eindigt op `Zet in de wachtrij` met `addedInvoices: 1`.
-*Krijg je wel een antwoord* met "aangekomen en volledig verwerkt, maar er is niets
+_Krijg je wel een antwoord_ met "aangekomen en volledig verwerkt, maar er is niets
 aan de wachtrij toegevoegd": dat is geen storing maar een van de drie gevallen die
 in dat bericht staan (betaalbewijs, al eerder ingestuurd, of niets factuurachtigs).
 De run in Executions zegt welke van de drie.
 
 **8. Haal op in de app.**
-LaVega → *Facturen* → **Ophalen uit n8n**.
-*Je moet zien:* de regel verschijnt.
-*Zegt de app "geen antwoord van n8n":* open de browserconsole. Staat daar een
+LaVega → _Facturen_ → **Ophalen uit n8n**.
+_Je moet zien:_ de regel verschijnt.
+_Zegt de app "geen antwoord van n8n":_ open de browserconsole. Staat daar een
 CORS-fout, dan mist jouw origin in `allowedOrigins` van `LaVega vraagt de rij op`
 — zet hem erbij en sla op.
 
 **9. De uurlijkse tak.**
 Klik **Handmatig starten** en kijk in de run wat `Zet in de wachtrij` teruggeeft.
 Klik nog een keer.
-*Je moet zien:* de eerste keer `addedInvoices` groter dan 0, de tweede keer 0 met
+_Je moet zien:_ de eerste keer `addedInvoices` groter dan 0, de tweede keer 0 met
 hetzelfde getal bij `inQueue` — dat is de ontdubbeling uit bevinding 8.
 
 ### De bouncetekst als wegwijzer
 
 `handler.ts` noemt bij elke weigering de echte oorzaak. Wat welke bounce betekent:
 
-| In de bounce staat | Dat betekent |
-|---|---|
-| `gaf 404 op …` | de workflow staat niet op Actief, of dit is de test-URL |
-| `weigerde de Worker (401/403)` | `N8N_SHARED_SECRET` ≠ de Value van de Header Auth-credential |
-| `antwoordde met status … maar geen JSON` | `Respond` van `E-mail binnen` staat niet op *When Last Node Finishes* |
+| In de bounce staat                                           | Dat betekent                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `gaf 404 op …`                                               | de workflow staat niet op Actief, of dit is de test-URL                                |
+| `weigerde de Worker (401/403)`                               | `N8N_SHARED_SECRET` ≠ de Value van de Header Auth-credential                           |
+| `antwoordde met status … maar geen JSON`                     | `Respond` van `E-mail binnen` staat niet op _When Last Node Finishes_                  |
 | `antwoordde zonder de telling {addedInvoices, addedNotices}` | de laatste node van de run is niet `Zet in de wachtrij` — meestal hangt er een tak los |
-| `gaf status 500` | een node viel om; n8n → Executions laat zien welke |
-| `was niet bereikbaar op …` | de URL klopt niet of n8n ligt eruit |
+| `gaf status 500`                                             | een node viel om; n8n → Executions laat zien welke                                     |
+| `was niet bereikbaar op …`                                   | de URL klopt niet of n8n ligt eruit                                                    |
 
 ---
 

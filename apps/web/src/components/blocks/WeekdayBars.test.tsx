@@ -16,7 +16,12 @@ const week = [
 
 test("WeekdayBars draws a bar per day plus the trend line from the reference", () => {
   const html = renderToStaticMarkup(
-    <WeekdayBars days={week} format={euro} ariaLabel="Gemiddelde uitgaven per weekdag" peakIndex={4} />,
+    <WeekdayBars
+      days={week}
+      format={euro}
+      ariaLabel="Gemiddelde uitgaven per weekdag"
+      peakIndex={4}
+    />,
   );
   expect(html.match(/weekday-bar/g)?.length).toBeGreaterThanOrEqual(7);
   expect(html).toContain(">vr<");
@@ -41,7 +46,12 @@ test("WeekdayBars draws no bar for a day it has no measurement for", () => {
     { label: "zo", value: null },
   ];
   const html = renderToStaticMarkup(
-    <WeekdayBars days={partial} format={euro} ariaLabel="Gemiddelde uitgaven per weekdag" peakIndex={5} />,
+    <WeekdayBars
+      days={partial}
+      format={euro}
+      ariaLabel="Gemiddelde uitgaven per weekdag"
+      peakIndex={5}
+    />,
   );
   // Two measured days -> two bars. A zero-height bar for the other five would
   // say "that day is free"; they are simply not drawn.
@@ -68,7 +78,13 @@ test("WeekdayBars omits the trend line when a single day is all there is", () =>
 
 test("the average reference line is drawn at the measured value, once", () => {
   const html = renderToStaticMarkup(
-    <WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} averageValue={42.857} />,
+    <WeekdayBars
+      days={week}
+      format={euro}
+      ariaLabel="Uitgaven"
+      peakIndex={4}
+      averageValue={42.857}
+    />,
   );
   expect(html.match(/weekday-average"/g)?.length).toBe(1);
   expect(html).toContain("gemiddelde dag €43");

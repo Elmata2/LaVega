@@ -12,7 +12,8 @@ export function runtimeBrokerSyncStateFile(): string {
 function isState(value: unknown): value is BrokerSyncState {
   if (!value || typeof value !== "object") return false;
   const state = value as Partial<BrokerSyncState>;
-  const optionalString = (item: unknown) => item === undefined || item === null || typeof item === "string";
+  const optionalString = (item: unknown) =>
+    item === undefined || item === null || typeof item === "string";
   return optionalString(state.lastSyncedAt) && optionalString(state.retryAfter);
 }
 
@@ -21,7 +22,9 @@ function isState(value: unknown): value is BrokerSyncState {
  * `lastSyncedAt` and any rate-limit cooldown on every container restart, which
  * turns each restart into a fresh full sync against the broker.
  */
-export function createFileBrokerSyncStateStore(filePath = runtimeBrokerSyncStateFile()): BrokerSyncStateStore {
+export function createFileBrokerSyncStateStore(
+  filePath = runtimeBrokerSyncStateFile(),
+): BrokerSyncStateStore {
   // A corrupt state file must not block a sync; the worst case is one extra run.
   const store = createJsonFileStore<StoredStates>(filePath, {
     empty: {},
@@ -29,7 +32,9 @@ export function createFileBrokerSyncStateStore(filePath = runtimeBrokerSyncState
       try {
         const parsed: unknown = JSON.parse(contents);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-        return Object.fromEntries(Object.entries(parsed).filter(([, state]) => isState(state))) as StoredStates;
+        return Object.fromEntries(
+          Object.entries(parsed).filter(([, state]) => isState(state)),
+        ) as StoredStates;
       } catch {
         return {};
       }

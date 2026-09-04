@@ -4,12 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import {
-  BetaalschemaBlock,
-  agendaRows,
-  cadenceLabel,
-  nextOccurrence,
-} from "./BetaalschemaBlock";
+import { BetaalschemaBlock, agendaRows, cadenceLabel, nextOccurrence } from "./BetaalschemaBlock";
 import { ASOF, scheduledFlows } from "./fixtures";
 
 /** A monthly subscription core's detector will recognise: same counterparty,
@@ -104,8 +99,15 @@ const simyo: Tx[] = [
   ["2026-07-04", "SIMYO B.V.", "SEPA Incasso algemeen doorlopend"],
   ["2026-08-04", "Simyo B.V.", "SEPA Incasso algemeen doorlopend"],
 ].map(([date, counterparty, description], i) => ({
-  id: `sim${i}`, accountKey: "A1", date, amount: -11.89, currency: "EUR",
-  counterparty, description, category: "", manual: false,
+  id: `sim${i}`,
+  accountKey: "A1",
+  date,
+  amount: -11.89,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 }));
 
 const duo: Tx[] = [
@@ -114,12 +116,21 @@ const duo: Tx[] = [
   ["2026-07-24", "DUO"],
   ["2026-08-24", "DUO Groningen"],
 ].map(([date, counterparty], i) => ({
-  id: `duo${i}`, accountKey: "A1", date, amount: 512.1, currency: "EUR",
-  counterparty, description: "Studiefinanciering", category: "", manual: false,
+  id: `duo${i}`,
+  accountKey: "A1",
+  date,
+  amount: 512.1,
+  currency: "EUR",
+  counterparty,
+  description: "Studiefinanciering",
+  category: "",
+  manual: false,
 }));
 
 test("de agenda ziet Simyo, ook met een schuivende tenaamstelling en een gemiste maand", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={simyo} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={simyo} asOf={ASOF} />,
+  );
   expect(html).toContain("SIMYO B.V.");
   expect(html).toContain("maandelijks · 5× gezien");
   expect(html).toContain(formatEuro(-11.89));
@@ -127,7 +138,9 @@ test("de agenda ziet Simyo, ook met een schuivende tenaamstelling en een gemiste
 });
 
 test("een inkomende maandstroom (DUO) staat net zo goed in de agenda", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />,
+  );
   expect(html).toContain("DUO");
   expect(html).toContain(formatEuro(512.1));
   expect(html).toContain("text-pos");
@@ -136,7 +149,9 @@ test("een inkomende maandstroom (DUO) staat net zo goed in de agenda", () => {
 test("een gestopte stroom wordt niet meer vooruit geschoven", () => {
   // Laatste afschrijving maart, asOf half augustus: dit betaalt niemand meer.
   const gestopt: Tx[] = simyo.slice(0, 3);
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={gestopt} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={gestopt} asOf={ASOF} />,
+  );
   expect(html).toContain("Niets ingepland");
 });
 
@@ -173,7 +188,9 @@ const huur: Tx[] = ["2026-05-04", "2026-06-04", "2026-07-04", "2026-08-04"].map(
 }));
 
 test("de volledige naam staat er echt — er wordt niets in code afgekapt", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   // De hele naam, letterlijk. Geen initialen, geen eerste woord, geen ellips.
   expect(html).toContain(langeNaam);
   expect(html).not.toContain("…");
@@ -186,7 +203,9 @@ test("de volledige naam staat er echt — er wordt niets in code afgekapt", () =
 });
 
 test("de rij is een knop, zodat de naam ook met een tik of het toetsenbord opengaat", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   expect(html).toContain('<button type="button" class="pay-row"');
   expect(html).toContain('data-open="off"');
   expect(html).toContain('aria-expanded="false"');
@@ -198,7 +217,9 @@ test("de voorspeld-pil valt niet met de naam mee weg", () => {
    * voorspelde regel eruit als een bevestigde afspraak — een bewering die de
    * afwezigheid van de pil niet kan dragen. De pil staat nu naast de afkappende
    * span, niet erin. */
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   const naam = html.indexOf('class="pay-name"');
   const pil = html.indexOf('class="pay-tag"');
   expect(naam).toBeGreaterThan(-1);
@@ -212,7 +233,10 @@ test("blocks.css maakt de naam op alle drie de manieren leesbaar", () => {
    * hier eerst en dat klopt alleen zolang vitest vanuit apps/web draait; vanaf
    * de repo-wortel las dezelfde regel een bestand dat er niet is en viel de test
    * om met ENOENT — een fout die niets zegt over de opmaak die hij toetst. */
-  const css = readFileSync(fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)), "utf8");
+  const css = readFileSync(
+    fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)),
+    "utf8",
+  );
   const flat = css.replace(/\s+/g, " ");
   // Muis, toetsenbord, tik — dezelfde drie als bij de taartlegenda (review 3
   // punt 8), want dat is waar hij toen al om vroeg.

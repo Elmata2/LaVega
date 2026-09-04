@@ -129,7 +129,9 @@ test("the module picker is on the profile, with Overzicht locked on", async () =
   await render();
   const picker = section("Modules");
   expect(picker.querySelectorAll(".mp-item").length).toBeGreaterThan(1);
-  const home = picker.querySelector('[aria-label="Overzicht in de navigatie"]') as HTMLButtonElement;
+  const home = picker.querySelector(
+    '[aria-label="Overzicht in de navigatie"]',
+  ) as HTMLButtonElement;
   expect(home.disabled).toBe(true);
 });
 
@@ -180,7 +182,9 @@ test("a region sits under the country, and is only a LIST where we have one", as
 test("the region is typed by hand, and the app never infers where he is", async () => {
   const onHomeRegionChange = vi.fn();
   await render({ homeCountry: "US", onHomeRegionChange });
-  const input = section("Land en regio").querySelector('input[list="home-regions"]') as HTMLInputElement;
+  const input = section("Land en regio").querySelector(
+    'input[list="home-regions"]',
+  ) as HTMLInputElement;
   act(() => setNativeValue(input, "Texas"));
   expect(onHomeRegionChange).toHaveBeenCalledWith("Texas");
   expect(section("Land en regio").textContent).toContain("LaVega leidt nooit af waar je bent");
@@ -204,7 +208,9 @@ test("no name is 'no name', not a blank greeting", async () => {
 test("typing a name reports both halves back, unmangled", async () => {
   const onOwnerNameChange = vi.fn();
   await render({ ownerName: { first: "Alexander", last: "" }, onOwnerNameChange });
-  const last = section("Profiel").querySelector('input[aria-label="Achternaam"]') as HTMLInputElement;
+  const last = section("Profiel").querySelector(
+    'input[aria-label="Achternaam"]',
+  ) as HTMLInputElement;
   act(() => setNativeValue(last, "Steunenberg"));
   expect(onOwnerNameChange).toHaveBeenCalledWith({ first: "Alexander", last: "Steunenberg" });
 });
@@ -215,7 +221,9 @@ test("Koppelingen explains itself behind an eye, and the fields stay in the open
   expect(container!.querySelector('[aria-label="n8n webhook-URL"]')).not.toBeNull();
   expect(container!.textContent).not.toContain("Production URL — niet de Test URL");
 
-  const eye = container!.querySelector('[aria-label="Uitleg bij de webhook-URL"]') as HTMLButtonElement;
+  const eye = container!.querySelector(
+    '[aria-label="Uitleg bij de webhook-URL"]',
+  ) as HTMLButtonElement;
   expect(eye).not.toBeNull();
   expect(eye.getAttribute("aria-expanded")).toBe("false");
   act(() => eye.dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -243,18 +251,31 @@ test("the half each entity belongs to is set here, and says what is not classifi
 
 test("an entity already classified shows its half as the pressed option", async () => {
   await render({
-    entities: entitySummaries([{ key: "bv1", entity: "BV1" } as Account], [{ entity: "BV1", scope: "business" }]),
+    entities: entitySummaries(
+      [{ key: "bv1", entity: "BV1" } as Account],
+      [{ entity: "BV1", scope: "business" }],
+    ),
   });
   const list = section("Persoonlijk of zakelijk");
-  expect((list.querySelector('[aria-label="BV1 zakelijk"]') as HTMLButtonElement).getAttribute("aria-pressed")).toBe("true");
-  expect((list.querySelector('[aria-label="BV1 persoonlijk"]') as HTMLButtonElement).getAttribute("aria-pressed")).toBe("false");
+  expect(
+    (list.querySelector('[aria-label="BV1 zakelijk"]') as HTMLButtonElement).getAttribute(
+      "aria-pressed",
+    ),
+  ).toBe("true");
+  expect(
+    (list.querySelector('[aria-label="BV1 persoonlijk"]') as HTMLButtonElement).getAttribute(
+      "aria-pressed",
+    ),
+  ).toBe("false");
   expect(list.textContent).not.toContain("niet ingedeeld");
 });
 
 test("Vergrendelen moved here from the app bar and still locks", async () => {
   const onLock = vi.fn();
   await render({ onLock });
-  const button = [...section("Vergrendelen").querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Vergrendel"));
+  const button = [...section("Vergrendelen").querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Vergrendel"),
+  );
   expect(button).toBeTruthy();
   act(() => {
     button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -282,7 +303,9 @@ test("the overview widgets are switched here, and they start off", async () => {
   expect(widgets.textContent).toContain("Positie");
 
   for (const label of ["Aandacht", "Positie"]) {
-    const toggle = widgets.querySelector(`[aria-label="${label} op je overzicht"]`) as HTMLButtonElement;
+    const toggle = widgets.querySelector(
+      `[aria-label="${label} op je overzicht"]`,
+    ) as HTMLButtonElement;
     expect(toggle, `no switch for ${label}`).not.toBeNull();
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(toggle.disabled).toBe(false); // neither is locked on, unlike Overzicht in the nav
@@ -297,7 +320,9 @@ test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand",
    * kunt uitzetten, is geen widget maar een besluit. */
   await render();
   const widgets = section("Widgets");
-  const facturen = widgets.querySelector('[aria-label="Facturen op je overzicht"]') as HTMLButtonElement;
+  const facturen = widgets.querySelector(
+    '[aria-label="Facturen op je overzicht"]',
+  ) as HTMLButtonElement;
   const btw = widgets.querySelector('[aria-label="BTW op je overzicht"]') as HTMLButtonElement;
 
   expect(facturen, "geen schakelaar voor Facturen").not.toBeNull();
@@ -315,12 +340,16 @@ test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand",
 
   act(() => facturen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(facturen.getAttribute("aria-checked")).toBe("true");
-  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain("facturen-open");
+  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain(
+    "facturen-open",
+  );
 });
 
 test("switching a widget on is remembered, and does not touch the nav preference", async () => {
   await render();
-  const toggle = section("Widgets").querySelector('[aria-label="Aandacht op je overzicht"]') as HTMLButtonElement;
+  const toggle = section("Widgets").querySelector(
+    '[aria-label="Aandacht op je overzicht"]',
+  ) as HTMLButtonElement;
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(toggle.getAttribute("aria-checked")).toBe("true");
   /* DE VORM IS {on, seen} GEWORDEN, en dat is opzet. Een kale lijst kon niet
@@ -363,7 +392,9 @@ test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", asyn
 test("the manual rules keep their explanation of how a match is decided", async () => {
   await render();
   const regels = section("Regels");
-  expect(regels.textContent).toContain("Je eigen regels hieronder gaan vóór die automatische categorieën");
+  expect(regels.textContent).toContain(
+    "Je eigen regels hieronder gaan vóór die automatische categorieën",
+  );
   expect(regels.textContent).toContain("eerste");
   expect(regels.querySelector("input")).not.toBeNull(); // and you can still add one
 });
@@ -382,7 +413,16 @@ test("the manual rules keep their explanation of how a match is decided", async 
  */
 
 const ING: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" } as Account,
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  } as Account,
 ];
 
 /** Zoek de regel van één product op zijn testid. Faalt hard als hij er niet
@@ -402,7 +442,9 @@ function cashbackInput(product: string): HTMLInputElement {
  *  want "Opslaan" en "Wis mijn correctie" wisselen van plek zodra er een
  *  correctie staat. */
 function cashbackButton(product: string, label: string): HTMLButtonElement {
-  const btn = [...cashbackRow(product).querySelectorAll("button")].find((b) => b.textContent === label);
+  const btn = [...cashbackRow(product).querySelectorAll("button")].find(
+    (b) => b.textContent === label,
+  );
   if (!btn) throw new Error(`geen knop "${label}" bij ${product}`);
   return btn as HTMLButtonElement;
 }
@@ -424,7 +466,9 @@ test("wat hij invult wordt een gebruikersfeit in zijn eigen kluis", async () => 
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "1,5"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
 
   // Eén feit, in de bestaande namespace, met bron "user" — geen tweede tabel
@@ -453,10 +497,14 @@ test("een correctie is terug te draaien, en dan komt de aanname terug", async ()
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "1,5"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   await act(async () => {
-    cashbackButton("ING betaalpas", "Wis mijn correctie").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Wis mijn correctie").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   expect(stored.facts).toHaveLength(0);
   expect(cashbackRow("ING betaalpas").textContent).toContain("aangenomen: geen cashback");
@@ -467,7 +515,9 @@ test("een onmogelijk percentage wordt geweigerd MET de reden, niet stil ingeslik
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "honderdduizend euro"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   // De reden komt uit `checkFact` — dezelfde grens die elke agent moet passeren,
   // niet een tweede validatie die er net iets anders over denkt.
@@ -480,7 +530,9 @@ test("een onmogelijk percentage wordt geweigerd MET de reden, niet stil ingeslik
 test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   const { storage: s } = fakeStorage(ING);
   await render({ storage: s });
-  const toggle = container!.querySelector('[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]') as HTMLInputElement;
+  const toggle = container!.querySelector(
+    '[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]',
+  ) as HTMLInputElement;
   expect(toggle.checked).toBe(true); // hij vroeg erom, dus hij staat aan
 
   // Een echte klik, niet `checked = false` + een los change-event: React leest
@@ -498,7 +550,16 @@ test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async (
   // is nul niet voorzichtig maar onjuist. En de melding noemt de oorzaak, want
   // "onbekend" zonder reden stuurt hem naar de verkeerde knop.
   const amex: Account[] = [
-    { key: "C1", iban: "", name: "Green Card", bank: "American Express", entity: "Prive", currency: "EUR", balance: -100, type: "Creditcard" } as Account,
+    {
+      key: "C1",
+      iban: "",
+      name: "Green Card",
+      bank: "American Express",
+      entity: "Prive",
+      currency: "EUR",
+      balance: -100,
+      type: "Creditcard",
+    } as Account,
   ];
   const { storage: s } = fakeStorage(amex);
   await render({ storage: s });
@@ -511,10 +572,7 @@ test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async (
 test("twee rekeningen van hetzelfde product zijn één vraag, niet twee", async () => {
   // Feiten zijn gekeyd op de productnaam. Twee regels zouden suggereren dat je ze
   // los kunt zetten, en de tweede zou de eerste stil overschrijven.
-  const twee: Account[] = [
-    ING[0],
-    { ...ING[0], key: "B2", name: "Tweede rekening" } as Account,
-  ];
+  const twee: Account[] = [ING[0], { ...ING[0], key: "B2", name: "Tweede rekening" } as Account];
   const { storage: s } = fakeStorage(twee);
   await render({ storage: s });
   expect(container!.querySelectorAll('[data-testid^="cashback-fix-"]').length).toBe(1);
@@ -546,12 +604,16 @@ test("een 0 die HIJ invult is een bekende nul, geen aanname — en overleeft de 
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "0"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   expect(stored.facts[0]).toMatchObject({ value: "0", source: "user" });
   expect(cashbackRow("ING betaalpas").textContent).toContain("door jou ingesteld");
 
-  const toggle = container!.querySelector('[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]') as HTMLInputElement;
+  const toggle = container!.querySelector(
+    '[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]',
+  ) as HTMLInputElement;
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   const row = cashbackRow("ING betaalpas").textContent ?? "";
   expect(row).toContain("door jou ingesteld");

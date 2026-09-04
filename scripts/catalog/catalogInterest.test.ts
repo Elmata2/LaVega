@@ -19,16 +19,23 @@ const BUNQ = [
   "Je kunt altijd zonder opzegtermijn geld opnemen.",
 ].join("\n");
 
-const FLAT = "Internet Sparen: 1,15% rente op jaarbasis over je hele saldo, altijd vrij opneembaar.";
+const FLAT =
+  "Internet Sparen: 1,15% rente op jaarbasis over je hele saldo, altijd vrij opneembaar.";
 
 const req = (text: string, product = "ABN AMRO Direct Sparen") => ({
-  product, sourceUrl: "https://assets.abnamro.com/x.pdf", text,
+  product,
+  sourceUrl: "https://assets.abnamro.com/x.pdf",
+  text,
 });
 
 const reply = (over: Record<string, unknown>) => ({
-  standardPct: 1.25, promoPct: null, promoUntil: null,
-  conditions: "1,25% op € 0 t/m € 500.000; 1,45% op € 500.000 t/m € 1.000.000; 0,00% vanaf € 1.000.000.",
-  conditionsKnown: true, freeWithdrawal: true,
+  standardPct: 1.25,
+  promoPct: null,
+  promoUntil: null,
+  conditions:
+    "1,25% op € 0 t/m € 500.000; 1,45% op € 500.000 t/m € 1.000.000; 0,00% vanaf € 1.000.000.",
+  conditionsKnown: true,
+  freeWithdrawal: true,
   quote: "€ 0 t/m € 500.000                1,25%",
   documentScope: "ABN AMRO Direct Sparen",
   ...over,
@@ -38,8 +45,14 @@ describe("INTEREST_TOOL", () => {
   it("forces the split between the standard rate and the promo", () => {
     const schema = INTEREST_TOOL.input_schema as { required: string[] };
     expect(schema.required).toEqual([
-      "standardPct", "promoPct", "promoUntil", "conditions",
-      "conditionsKnown", "freeWithdrawal", "quote", "documentScope",
+      "standardPct",
+      "promoPct",
+      "promoUntil",
+      "conditions",
+      "conditionsKnown",
+      "freeWithdrawal",
+      "quote",
+      "documentScope",
     ]);
   });
 
@@ -72,13 +85,20 @@ describe("parseInterestReply", () => {
   });
 
   it("carries a promo without letting it become the standard rate", () => {
-    const got = parseInterestReply({
-      standardPct: 1.5, promoPct: 3.01, promoUntil: "t/m 01-01-2027",
-      conditions: "Actierente 3,01% tot en met 01-01-2027, daarna standaardrente 1,50%. Vrij opneembaar.",
-      conditionsKnown: true, freeWithdrawal: true,
-      quote: "Actierente 3,01% tot en met 01-01-2027, daarna geldt de standaardrente van 1,50%.",
-      documentScope: null,
-    }, req(BUNQ, "bunq Spaarrekening"));
+    const got = parseInterestReply(
+      {
+        standardPct: 1.5,
+        promoPct: 3.01,
+        promoUntil: "t/m 01-01-2027",
+        conditions:
+          "Actierente 3,01% tot en met 01-01-2027, daarna standaardrente 1,50%. Vrij opneembaar.",
+        conditionsKnown: true,
+        freeWithdrawal: true,
+        quote: "Actierente 3,01% tot en met 01-01-2027, daarna geldt de standaardrente van 1,50%.",
+        documentScope: null,
+      },
+      req(BUNQ, "bunq Spaarrekening"),
+    );
     expect(got).not.toBeNull();
     expect(got!.standardPct).toBe(1.5);
     expect(got!.promoPct).toBe(3.01);
@@ -86,12 +106,19 @@ describe("parseInterestReply", () => {
   });
 
   it("REFUSES a promo reported with no conditions text — the saver must be told it changes", () => {
-    const got = parseInterestReply({
-      standardPct: 1.5, promoPct: 3.01, promoUntil: null, conditions: null, conditionsKnown: true,
-      freeWithdrawal: true,
-      quote: "Actierente 3,01% tot en met 01-01-2027, daarna geldt de standaardrente van 1,50%.",
-      documentScope: null,
-    }, req(BUNQ, "bunq Spaarrekening"));
+    const got = parseInterestReply(
+      {
+        standardPct: 1.5,
+        promoPct: 3.01,
+        promoUntil: null,
+        conditions: null,
+        conditionsKnown: true,
+        freeWithdrawal: true,
+        quote: "Actierente 3,01% tot en met 01-01-2027, daarna geldt de standaardrente van 1,50%.",
+        documentScope: null,
+      },
+      req(BUNQ, "bunq Spaarrekening"),
+    );
     expect(got!.conditionsKnown).toBe(false);
   });
 
@@ -100,10 +127,19 @@ describe("parseInterestReply", () => {
   });
 
   it("ACCEPTS a genuinely flat rate from an unscoped document", () => {
-    const got = parseInterestReply({
-      standardPct: 1.15, promoPct: null, promoUntil: null, conditions: null, conditionsKnown: true,
-      freeWithdrawal: true, quote: FLAT, documentScope: null,
-    }, req(FLAT, "Triodos Internet Sparen"));
+    const got = parseInterestReply(
+      {
+        standardPct: 1.15,
+        promoPct: null,
+        promoUntil: null,
+        conditions: null,
+        conditionsKnown: true,
+        freeWithdrawal: true,
+        quote: FLAT,
+        documentScope: null,
+      },
+      req(FLAT, "Triodos Internet Sparen"),
+    );
     expect(got!.conditionsKnown).toBe(true);
     expect(got!.conditions).toBeNull();
   });
@@ -120,6 +156,8 @@ describe("parseInterestReply", () => {
   });
 
   it("never promotes conditionsKnown the reply itself reported false", () => {
-    expect(parseInterestReply(reply({ conditionsKnown: false }), req(ABN))!.conditionsKnown).toBe(false);
+    expect(parseInterestReply(reply({ conditionsKnown: false }), req(ABN))!.conditionsKnown).toBe(
+      false,
+    );
   });
 });

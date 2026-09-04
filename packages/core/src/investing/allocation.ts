@@ -26,11 +26,19 @@ function rateFor(rates: FxRate | FxRate[], date: string): FxRate {
   return rate;
 }
 
-function positionValue(position: Position, presentationCurrency: string, fxRates: FxRate | FxRate[]): number | null {
-  const value = position.marketValue ?? (position.marketPrice === null ? null : position.quantity * position.marketPrice);
+function positionValue(
+  position: Position,
+  presentationCurrency: string,
+  fxRates: FxRate | FxRate[],
+): number | null {
+  const value =
+    position.marketValue ??
+    (position.marketPrice === null ? null : position.quantity * position.marketPrice);
   if (value === null) return null;
   try {
-    return value * crossRate(position.currency, presentationCurrency, rateFor(fxRates, position.asOf));
+    return (
+      value * crossRate(position.currency, presentationCurrency, rateFor(fxRates, position.asOf))
+    );
   } catch {
     return null;
   }
@@ -48,7 +56,8 @@ export function bucketAllocation(
 
   for (const position of positions) {
     const key = group === "instrument" ? position.symbol : position.entity;
-    const label = group === "instrument" ? position.description || position.symbol : position.entity;
+    const label =
+      group === "instrument" ? position.description || position.symbol : position.entity;
     const value = positionValue(position, presentationCurrency, fxRates);
     const existing = buckets.get(key);
 
@@ -63,7 +72,10 @@ export function bucketAllocation(
     else existing.value = (existing.value ?? 0) + value;
   }
 
-  return { buckets: [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label)), unpriced: [...unpriced].sort() };
+  return {
+    buckets: [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label)),
+    unpriced: [...unpriced].sort(),
+  };
 }
 
 export function bucketAllocationByInstrument(
@@ -91,7 +103,8 @@ export function bucketPricedAllocation(
   const unpriced = new Set<string>();
   for (const position of positions) {
     const key = group === "instrument" ? position.symbol : position.entity;
-    const label = group === "instrument" ? position.description || position.symbol : position.entity;
+    const label =
+      group === "instrument" ? position.description || position.symbol : position.entity;
     const existing = buckets.get(key);
     if (position.marketValue === null) {
       unpriced.add(position.symbol);

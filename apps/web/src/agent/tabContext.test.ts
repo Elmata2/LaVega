@@ -8,9 +8,39 @@ test("overview context computes real aggregates from raw state, never raw txs", 
   const { tab, context } = buildTabContext("overview", {
     accounts: [{ key: "k1", entity: "BV1", balance: 50, bank: "ING", currency: "EUR" }],
     txs: [
-      { id: "t1", accountKey: "k1", date: "2026-05-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
-      { id: "t2", accountKey: "k1", date: "2026-06-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
-      { id: "t3", accountKey: "k1", date: "2026-07-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+      {
+        id: "t1",
+        accountKey: "k1",
+        date: "2026-05-01",
+        amount: -100,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
+      {
+        id: "t2",
+        accountKey: "k1",
+        date: "2026-06-01",
+        amount: -100,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
+      {
+        id: "t3",
+        accountKey: "k1",
+        date: "2026-07-01",
+        amount: -100,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
     ],
     rules: [],
     scheduledFlows: [],
@@ -39,7 +69,11 @@ test("unknown tab yields empty context", () => {
 test("facturen context carries capped invoices only, never raw txs", () => {
   const { tab, context } = buildTabContext("facturen", {
     invoices: Array.from({ length: 200 }, (_, i) => ({
-      counterparty: "X" + i, amount: 1, issueDate: "2026-01-01", dueDate: "2026-01-31", status: "expected",
+      counterparty: "X" + i,
+      amount: 1,
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      status: "expected",
     })),
     txs: [{ id: "t1", amount: 999 }],
   } as any);
@@ -71,7 +105,12 @@ test("valuta omits rate when App has no fxRate (agent web-searches it)", () => {
 test("punten context carries reward balances", () => {
   const { tab, context } = buildTabContext("punten", {
     rewards: [
-      { id: "amex", program: "American Express Membership Rewards", points: 50000, updatedAt: "2026-07-01" },
+      {
+        id: "amex",
+        program: "American Express Membership Rewards",
+        points: 50000,
+        updatedAt: "2026-07-01",
+      },
       { id: "fb", program: "Flying Blue (KLM/Air France)", points: 12000, updatedAt: "2026-06-15" },
     ],
   } as any);
@@ -83,12 +122,26 @@ test("punten context carries reward balances", () => {
 
 test("rekeningen (view 'accounts') maps to server tab and carries minimal accounts", () => {
   const { tab, context } = buildTabContext("accounts", {
-    accounts: [{ bank: "ING", type: "Betaalrekening", entity: "BV1", balance: 1234, iban: "NL00INGB0001", key: "k1" }],
+    accounts: [
+      {
+        bank: "ING",
+        type: "Betaalrekening",
+        entity: "BV1",
+        balance: 1234,
+        iban: "NL00INGB0001",
+        key: "k1",
+      },
+    ],
     txs: [{ id: "t1", amount: 5 }],
   } as any);
   expect(tab).toBe("rekeningen");
   expect(Array.isArray((context as any).accounts)).toBe(true);
-  expect((context as any).accounts[0]).toEqual({ bank: "ING", type: "Betaalrekening", entity: "BV1", balance: 1234 });
+  expect((context as any).accounts[0]).toEqual({
+    bank: "ING",
+    type: "Betaalrekening",
+    entity: "BV1",
+    balance: 1234,
+  });
   expect((context as any).accounts[0].iban).toBeUndefined();
   expect((context as any).txs).toBeUndefined();
 });
@@ -106,8 +159,28 @@ test("forecast context carries a compact summary, never raw txs", () => {
   const { tab, context } = buildTabContext("forecast", {
     accounts: [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }],
     txs: [
-      { id: "t1", accountKey: "k1", date: "2026-05-01", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
-      { id: "t2", accountKey: "k1", date: "2026-05-31", amount: -100, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+      {
+        id: "t1",
+        accountKey: "k1",
+        date: "2026-05-01",
+        amount: -100,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
+      {
+        id: "t2",
+        accountKey: "k1",
+        date: "2026-05-31",
+        amount: -100,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
     ],
     scheduledFlows: [],
     bufferCents: 0,
@@ -124,7 +197,17 @@ test("belasting context carries vat/deadlines/settings, never raw txs", () => {
   const { tab, context } = buildTabContext("belasting", {
     accounts: [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }],
     txs: [
-      { id: "t1", accountKey: "k1", date: "2026-07-10", amount: 12100, counterparty: "Klant", description: "", currency: "EUR", category: "", manual: false },
+      {
+        id: "t1",
+        accountKey: "k1",
+        date: "2026-07-10",
+        amount: 12100,
+        counterparty: "Klant",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
     ],
     vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false }],
     asOf: "2026-08-05",
@@ -141,9 +224,39 @@ test("optimalisatie context carries subscriptions + rates, omits live bestBenchm
   const { tab, context } = buildTabContext("optimalisatie", {
     accounts: [{ key: "k1", entity: "BV1", balance: 5000, bank: "ING", currency: "EUR" }],
     txs: [
-      { id: "t1", accountKey: "k1", date: "2026-05-01", amount: -1000, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
-      { id: "t2", accountKey: "k1", date: "2026-05-31", amount: -1000, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
-      { id: "t3", accountKey: "k1", date: "2026-06-30", amount: -1000, counterparty: "Netflix", description: "", currency: "EUR", category: "", manual: false },
+      {
+        id: "t1",
+        accountKey: "k1",
+        date: "2026-05-01",
+        amount: -1000,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
+      {
+        id: "t2",
+        accountKey: "k1",
+        date: "2026-05-31",
+        amount: -1000,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
+      {
+        id: "t3",
+        accountKey: "k1",
+        date: "2026-06-30",
+        amount: -1000,
+        counterparty: "Netflix",
+        description: "",
+        currency: "EUR",
+        category: "",
+        manual: false,
+      },
     ],
     asOf: "2026-08-05",
   } as any);

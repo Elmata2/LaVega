@@ -64,6 +64,11 @@ export function cashBalancesComplete(result: BrokerResult): boolean {
 /** True when some history still has pages left to read. */
 export function historyPending(resume: BrokerSyncResume | null | undefined): boolean {
   if (!resume) return false;
-  if (resume.ordersNextPagePath || resume.transactionsNextPagePath || resume.dividendsNextPagePath) return true;
-  return resume.ordersComplete !== true || resume.transactionsComplete !== true || resume.dividendsComplete !== true;
+  if (resume.ordersNextPagePath || resume.transactionsNextPagePath || resume.dividendsNextPagePath)
+    return true;
+  return (
+    resume.ordersComplete !== true ||
+    resume.transactionsComplete !== true ||
+    resume.dividendsComplete !== true
+  );
 }

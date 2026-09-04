@@ -53,7 +53,13 @@ const NOTE_MAX = 900;
 /* ---------- HTML → text ---------- */
 
 const NAMED: Record<string, string> = {
-  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", euro: "€",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  euro: "€",
 };
 
 function decode(s: string): string {
@@ -65,7 +71,9 @@ function decode(s: string): string {
 
 /** Visible text of an HTML fragment: tags out, entities in, whitespace collapsed. */
 function text(html: string): string {
-  return decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+  return decode(html.replace(/<[^>]*>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function firstSection(html: string, tag: "thead" | "tbody"): string {
@@ -102,7 +110,9 @@ function isForeignCurrency(label: string): boolean {
  *  which leaves the tariff UNKNOWN rather than free. "Gratis" in a
  *  foreign-currency cell would be a claim, and a claim needs a figure. */
 function feePct(cell: string): number | null {
-  const found = [...cell.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map((m) => Number(m[1].replace(",", ".")));
+  const found = [...cell.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map((m) =>
+    Number(m[1].replace(",", ".")),
+  );
   if (found.length === 0 || found.some((n) => !Number.isFinite(n))) return null;
   return Math.round(found.reduce((a, b) => a + b, 0) * 1000) / 1000;
 }
@@ -123,7 +133,9 @@ function clip(s: string): string {
 }
 
 function sourceNote(body: string, checkedAt: string | null): string {
-  const stamp = checkedAt ? `Bron: bank.nl-vergelijking, laatst gecontroleerd ${checkedAt}.` : "Bron: bank.nl-vergelijking.";
+  const stamp = checkedAt
+    ? `Bron: bank.nl-vergelijking, laatst gecontroleerd ${checkedAt}.`
+    : "Bron: bank.nl-vergelijking.";
   return clip(body ? `${body} ${stamp}` : stamp);
 }
 
@@ -148,7 +160,10 @@ const HEADING_RE = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi;
  *    is a subscription (Core / Pro / Elite). See `fromPlanRows` for why that
  *    collapses to one conservative row instead of three products. */
 export function parseBankNlPage(html: string): BankNlTable {
-  const headings = [...html.matchAll(HEADING_RE)].map((m) => ({ at: m.index ?? 0, name: text(m[1]) }));
+  const headings = [...html.matchAll(HEADING_RE)].map((m) => ({
+    at: m.index ?? 0,
+    name: text(m[1]),
+  }));
   const rows: BankNlRow[] = [];
 
   for (const fig of html.matchAll(FIGURE_RE)) {
@@ -159,7 +174,9 @@ export function parseBankNlPage(html: string): BankNlTable {
     const caption = text(block.match(/<figcaption[\s\S]*?<\/figcaption>/i)?.[0] ?? "");
     const checkedAt = checkedDate(caption);
     // The caption's italic tail is the footnote the asterisked cells refer to.
-    const footnote = text(block.match(/<figcaption[\s\S]*?<em[^>]*>([\s\S]*?)<\/em>/i)?.[1] ?? "").replace(/^\*+\s*/, "");
+    const footnote = text(
+      block.match(/<figcaption[\s\S]*?<em[^>]*>([\s\S]*?)<\/em>/i)?.[1] ?? "",
+    ).replace(/^\*+\s*/, "");
 
     const header = cellsOf(rowsOf(firstSection(block, "thead"))[0] ?? "");
     const body = rowsOf(firstSection(block, "tbody"));
@@ -194,7 +211,8 @@ function fromCardColumns(
     if (!card || !cell) continue;
     const fxFeePct = feePct(cell);
     if (fxFeePct === null) continue; // no figure stated -> stays unknown
-    const body_ = cell.includes("*") && footnote ? `${cell.replace(/\*/g, "").trim()} ${footnote}` : cell;
+    const body_ =
+      cell.includes("*") && footnote ? `${cell.replace(/\*/g, "").trim()} ${footnote}` : cell;
     out.push({ bank, card, fxFeePct, note: sourceNote(body_, checkedAt), checkedAt });
   }
   return out;
@@ -234,13 +252,15 @@ function fromPlanRows(
     plans.length === 1
       ? worst.cell
       : `Per abonnement — ${listed}. Hier is het duurste aangehouden (${dutchPct(worst.pct)}%); corrigeer dit als je een ander abonnement hebt.`;
-  return [{
-    bank,
-    card: "betaalpas",
-    fxFeePct: worst.pct,
-    note: sourceNote(footnote ? `${note} ${footnote}` : note, checkedAt),
-    checkedAt,
-  }];
+  return [
+    {
+      bank,
+      card: "betaalpas",
+      fxFeePct: worst.pct,
+      note: sourceNote(footnote ? `${note} ${footnote}` : note, checkedAt),
+      checkedAt,
+    },
+  ];
 }
 
 /* ---------- name mapping: a table row -> a LaVega product ---------- */
@@ -292,5 +312,10 @@ export function comparisonTermsFor(
   // The page stamps when it was last checked. Carry that as a FIELD, not only
   // buried in the note text: how old a fee is decides whether it may still
   // overwrite a fresher one, and a date nobody can read is a date nobody can use.
-  return { provider: String(product).trim(), fxFeePct: row.fxFeePct, note: row.note, checkedAt: row.checkedAt ?? undefined };
+  return {
+    provider: String(product).trim(),
+    fxFeePct: row.fxFeePct,
+    note: row.note,
+    checkedAt: row.checkedAt ?? undefined,
+  };
 }

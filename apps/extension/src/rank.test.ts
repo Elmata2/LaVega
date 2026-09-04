@@ -12,7 +12,13 @@ function sourced(value: number, checkedAt = "2026-06-15") {
   return { value, sourceUrl: "https://voorbeeld.nl/voorwaarden", checkedAt, conditions: null };
 }
 function fee(value: number, period: "maand" | "jaar"): CardFee {
-  return { value, period, sourceUrl: "https://voorbeeld.nl/tarieven", checkedAt: "2026-01-15", conditions: null };
+  return {
+    value,
+    period,
+    sourceUrl: "https://voorbeeld.nl/tarieven",
+    checkedAt: "2026-01-15",
+    conditions: null,
+  };
 }
 function card(p: Partial<CheckoutCard> & { id: string }): CheckoutCard {
   return {
@@ -29,8 +35,18 @@ function card(p: Partial<CheckoutCard> & { id: string }): CheckoutCard {
 
 /* Twee kaarten die hij heeft en twee die hij niet heeft, met opzet zo gekozen
  * dat de kosten de orde kunnen omdraaien. */
-const GRATIS_1PCT = card({ id: "gratis-1pct", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: fee(0, "maand") });
-const DUUR_3PCT = card({ id: "duur-3pct", cashbackPct: sourced(3), fxFeePct: sourced(0), fee: fee(270, "jaar") });
+const GRATIS_1PCT = card({
+  id: "gratis-1pct",
+  cashbackPct: sourced(1),
+  fxFeePct: sourced(0),
+  fee: fee(0, "maand"),
+});
+const DUUR_3PCT = card({
+  id: "duur-3pct",
+  cashbackPct: sourced(3),
+  fxFeePct: sourced(0),
+  fee: fee(270, "jaar"),
+});
 const MIJN_2PCT = card({ id: "mijn-2pct", cashbackPct: sourced(2), fxFeePct: sourced(0) });
 const MIJN_HALF = card({ id: "mijn-half", cashbackPct: sourced(0.5), fxFeePct: sourced(2.5) });
 const FX_ONBEKEND = card({ id: "fx-onbekend", cashbackPct: sourced(1) });
@@ -173,7 +189,11 @@ describe("een kaart die hij NIET heeft: openen kost geld", () => {
     expect(duur.basis).toBe("netto");
     expect(duur.grossCents).toBe(900);
     expect(duur.charge).toEqual({
-      cents: 27000, periods: 1, label: "1 jaar", spanMonths: 12, spanLabel: "1 jaar",
+      cents: 27000,
+      periods: 1,
+      label: "1 jaar",
+      spanMonths: 12,
+      spanLabel: "1 jaar",
     });
     expect(duur.resultCents).toBe(-26100);
   });
@@ -193,9 +213,27 @@ describe("een kaart die hij NIET heeft: openen kost geld", () => {
   });
 
   it("de horizon verlengen maakt de kosten groter, niet het percentage", () => {
-    const maandkaart = card({ id: "vijf-per-maand", cashbackPct: sourced(3), fxFeePct: sourced(0), fee: fee(5, "maand") });
-    const een = rankCheckout({ cards: [maandkaart], heldIds: [], currency: "EUR", amountCents: 300000, asOf: ASOF });
-    const twee = rankCheckout({ cards: [maandkaart], heldIds: [], currency: "EUR", amountCents: 300000, horizonMonths: 13, asOf: ASOF });
+    const maandkaart = card({
+      id: "vijf-per-maand",
+      cashbackPct: sourced(3),
+      fxFeePct: sourced(0),
+      fee: fee(5, "maand"),
+    });
+    const een = rankCheckout({
+      cards: [maandkaart],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 300000,
+      asOf: ASOF,
+    });
+    const twee = rankCheckout({
+      cards: [maandkaart],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 300000,
+      horizonMonths: 13,
+      asOf: ASOF,
+    });
     // € 3.000 × 3% = € 90; een jaar kaart kost 12 × € 5 = € 60.
     expect(een.openWorthIt[0]!.resultCents).toBe(9000 - 6000);
     expect(een.openWorthIt[0]!.charge!.spanLabel).toBe("1 jaar");
@@ -208,8 +246,19 @@ describe("een kaart die hij NIET heeft: openen kost geld", () => {
   it("vijf euro per maand kosten en drie opleveren is achteruit, en staat er zo", () => {
     /* Het geval uit de opdracht, letterlijk — nu over een heel jaar gerekend:
      * € 3,00 opbrengst tegen 12 × € 5 = € 60 aan kaartkosten. */
-    const kaart = card({ id: "vijf-kost-drie-levert", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: fee(5, "maand") });
-    const r = rankCheckout({ cards: [kaart], heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const kaart = card({
+      id: "vijf-kost-drie-levert",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+      fee: fee(5, "maand"),
+    });
+    const r = rankCheckout({
+      cards: [kaart],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     expect(r.openWorthIt).toEqual([]);
     expect(r.openBackwards[0]!.resultCents).toBe(300 - 6000);
   });
@@ -222,9 +271,27 @@ describe("een kaart die hij NIET heeft: openen kost geld", () => {
      * regel noemde keurig zijn eigen periode, dus de TEKST loog niet — maar de
      * positie in de lijst is de uitspraak "deze is beter", en die rustte op een
      * vergelijking van twee eenheden. */
-    const maand = card({ id: "negen-per-maand", product: "Maandkaart", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: fee(9, "maand") });
-    const jaar = card({ id: "zestig-per-jaar", product: "Jaarkaart", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: fee(60, "jaar") });
-    const r = rankCheckout({ cards: [maand, jaar], heldIds: [], currency: "EUR", amountCents: 1_000_000, asOf: ASOF });
+    const maand = card({
+      id: "negen-per-maand",
+      product: "Maandkaart",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+      fee: fee(9, "maand"),
+    });
+    const jaar = card({
+      id: "zestig-per-jaar",
+      product: "Jaarkaart",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+      fee: fee(60, "jaar"),
+    });
+    const r = rankCheckout({
+      cards: [maand, jaar],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 1_000_000,
+      asOf: ASOF,
+    });
 
     const spans = [...r.openWorthIt, ...r.openBackwards].map((x) => x.charge!.spanMonths);
     expect(new Set(spans).size).toBe(1);
@@ -261,7 +328,12 @@ describe("kosten onbekend: bruto, en nooit stilzwijgend gratis", () => {
      * bovenaan zetten, is een vergelijking waarvan één kant een onbekende
      * bevat. Daarom twee lijsten en niet één. */
     const brutoKaart = card({ id: "bruto-5pct", cashbackPct: sourced(5), fxFeePct: sourced(0) });
-    const nettoKaart = card({ id: "netto-4pct", cashbackPct: sourced(4), fxFeePct: sourced(0), fee: fee(1, "maand") });
+    const nettoKaart = card({
+      id: "netto-4pct",
+      cashbackPct: sourced(4),
+      fxFeePct: sourced(0),
+      fee: fee(1, "maand"),
+    });
     const r = rankCheckout({
       cards: [brutoKaart, nettoKaart],
       heldIds: [],
@@ -289,7 +361,13 @@ describe("zonder bedrag", () => {
   });
 
   it('wordt niets "achteruit" genoemd, want dat kan een leeg bedrag niet dragen', () => {
-    const r = rankCheckout({ cards: [DUUR_3PCT], heldIds: [], currency: "EUR", amountCents: null, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [DUUR_3PCT],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: null,
+      asOf: ASOF,
+    });
     expect(r.openBackwards).toEqual([]);
     expect(r.openWorthIt).toHaveLength(1);
     expect(r.openWorthIt[0]!.resultCents).toBeNull();
@@ -319,9 +397,19 @@ describe("punten worden getoond, nooit geprijsd", () => {
 
 describe("de lege toestand is een eersteklas uitkomst", () => {
   it("geen kaarten, geen catalogus: lege lijsten en geen kop die iets beweert", () => {
-    const r = rankCheckout({ cards: [], heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     expect(r).toMatchObject({
-      mine: [], openWorthIt: [], openBackwards: [], openUnknownCost: [], unknowns: [],
+      mine: [],
+      openWorthIt: [],
+      openBackwards: [],
+      openUnknownCost: [],
+      unknowns: [],
     });
   });
 
@@ -343,7 +431,13 @@ describe("de lege toestand is een eersteklas uitkomst", () => {
 
 describe("de peildatum komt van de aanroeper", () => {
   it("gaat er ongewijzigd weer uit; er staat geen Date.now() in dit bestand", () => {
-    const r = rankCheckout({ cards: [], heldIds: [], currency: "eur", amountCents: null, asOf: "2020-01-01" });
+    const r = rankCheckout({
+      cards: [],
+      heldIds: [],
+      currency: "eur",
+      amountCents: null,
+      asOf: "2020-01-01",
+    });
     expect(r.asOf).toBe("2020-01-01");
     expect(r.currency).toBe("EUR");
   });
@@ -368,7 +462,13 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
   it("een uitkering in een token levert GEEN euro-bedrag op", () => {
     /* Het gemeten geval uit de review: "Betaal met Crypto.com Plus. Dat levert
      * € 80,00 op" bij € 4.000, terwijl de uitkering in CRO is. */
-    const r = rankCheckout({ cards: [CRO], heldIds: ["cro"], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [CRO],
+      heldIds: ["cro"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     const row = r.mine[0]!;
     expect(row.claim).toEqual({ soort: "niet-in-euro", token: "CRO" });
     expect(row.euroCents).toBeNull();
@@ -378,7 +478,13 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
   });
 
   it("de voorwaarden staan in de rij, alle drie, en met hun soort erbij", () => {
-    const r = rankCheckout({ cards: [CRO], heldIds: ["cro"], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [CRO],
+      heldIds: ["cro"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(r.mine[0]!.caveats.map((c) => c.soort).sort()).toEqual([
       "drempel",
       "in-token",
@@ -389,21 +495,49 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
   it("een kaart die hij niet heeft en niet in euro's uitkeert, komt niet in de vergelijking", () => {
     /* "Beter dan jouw ING-pas" is een uitspraak, en die kunnen we over een
      * uitkering in CRO niet doen. Zwijgen is dan geen verzwijgen. */
-    const ing = card({ id: "ing", product: "ING betaalpas", cashbackPct: sourced(0), fxFeePct: sourced(0) });
-    const r = rankCheckout({ cards: [ing, CRO], heldIds: ["ing"], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const ing = card({
+      id: "ing",
+      product: "ING betaalpas",
+      cashbackPct: sourced(0),
+      fxFeePct: sourced(0),
+    });
+    const r = rankCheckout({
+      cards: [ing, CRO],
+      heldIds: ["ing"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(r.openWorthIt).toEqual([]);
     expect(r.openUnknownCost).toEqual([]);
     /* Heeft hij niets aangevinkt, dan wordt er niets vergeleken en mag de kaart
      * er mét zijn voorwaarde bij staan. */
-    const leeg = rankCheckout({ cards: [ing, CRO], heldIds: [], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const leeg = rankCheckout({
+      cards: [ing, CRO],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(leeg.openUnknownCost.map((x) => x.card.id)).toContain("cro");
   });
 
   it("een kaart die niet in euro's uitkeert staat ONDER een kaart die dat wel doet", () => {
     /* 5% in CRO boven 1% in euro's zetten is dezelfde eenhedenfout als een
      * maandbedrag met een jaarbedrag vergelijken, één laag hoger. */
-    const euroKaart = card({ id: "euro", product: "Eurokaart", cashbackPct: sourced(1), fxFeePct: sourced(0) });
-    const r = rankCheckout({ cards: [CRO, euroKaart], heldIds: ["cro", "euro"], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const euroKaart = card({
+      id: "euro",
+      product: "Eurokaart",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+    });
+    const r = rankCheckout({
+      cards: [CRO, euroKaart],
+      heldIds: ["cro", "euro"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(r.mine.map((x) => x.card.id)).toEqual(["euro", "cro"]);
   });
 
@@ -415,18 +549,35 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
         value: 1,
         sourceUrl: "https://voorbeeld.nl/bleap",
         checkedAt: "2026-05-01",
-        conditions: "Default ongoing rate, with a fair-usage cap of €500 per transaction and €3,000 per month.",
+        conditions:
+          "Default ongoing rate, with a fair-usage cap of €500 per transaction and €3,000 per month.",
       },
       fxFeePct: sourced(0),
     });
-    const groot = rankCheckout({ cards: [bleap], heldIds: ["bleap"], currency: "EUR", amountCents: 400000, asOf: ASOF });
-    expect(groot.mine[0]!.claim).toEqual({ soort: "hooguit", capCents: 50000, capBasis: "transactie" });
+    const groot = rankCheckout({
+      cards: [bleap],
+      heldIds: ["bleap"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
+    expect(groot.mine[0]!.claim).toEqual({
+      soort: "hooguit",
+      capCents: 50000,
+      capBasis: "transactie",
+    });
     expect(groot.mine[0]!.grossCents).toBe(4000);
     expect(groot.mine[0]!.euroCents).toBe(500); // 1% van € 500, niet van € 4.000
 
     /* Blijft de aankoop ONDER het plafond, dan mag het gewone bedrag er staan —
      * met het plafond erbij, want dat is de voorwaarde waaronder het geldt. */
-    const klein = rankCheckout({ cards: [bleap], heldIds: ["bleap"], currency: "EUR", amountCents: 10000, asOf: ASOF });
+    const klein = rankCheckout({
+      cards: [bleap],
+      heldIds: ["bleap"],
+      currency: "EUR",
+      amountCents: 10000,
+      asOf: ASOF,
+    });
     expect(klein.mine[0]!.euroCents).toBe(100);
     expect(klein.mine[0]!.caveats.some((c) => c.soort === "plafond")).toBe(true);
   });
@@ -443,7 +594,13 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
       },
       fxFeePct: sourced(0),
     });
-    const r = rankCheckout({ cards: [raar], heldIds: ["raar"], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [raar],
+      heldIds: ["raar"],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     expect(r.mine[0]!.claim).toEqual({ soort: "onbeoordeeld" });
     expect(r.mine[0]!.euroCents).toBeNull();
     expect(r.mine[0]!.caveats).toEqual([{ soort: "onbeoordeeld", veld: "cashback" }]);
@@ -461,16 +618,39 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
       },
       fxFeePct: sourced(0),
     });
-    const voor = rankCheckout({ cards: [afgelopen], heldIds: ["af"], currency: "EUR", amountCents: 30000, asOf: "2026-08-21" });
+    const voor = rankCheckout({
+      cards: [afgelopen],
+      heldIds: ["af"],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: "2026-08-21",
+    });
     expect(voor.mine[0]!.claim.soort).toBe("hooguit");
-    const na = rankCheckout({ cards: [afgelopen], heldIds: ["af"], currency: "EUR", amountCents: 30000, asOf: "2026-10-01" });
+    const na = rankCheckout({
+      cards: [afgelopen],
+      heldIds: ["af"],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: "2026-10-01",
+    });
     expect(na.mine[0]!.claim).toEqual({ soort: "vervallen", datum: "2026-09-30" });
     expect(na.mine[0]!.euroCents).toBeNull();
   });
 
   it("zonder voorwaarden verandert er niets: het bedrag staat er kaal", () => {
-    const schoon = card({ id: "schoon", product: "Schone Kaart", cashbackPct: sourced(2), fxFeePct: sourced(0) });
-    const r = rankCheckout({ cards: [schoon], heldIds: ["schoon"], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const schoon = card({
+      id: "schoon",
+      product: "Schone Kaart",
+      cashbackPct: sourced(2),
+      fxFeePct: sourced(0),
+    });
+    const r = rankCheckout({
+      cards: [schoon],
+      heldIds: ["schoon"],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     expect(r.mine[0]!.claim).toEqual({ soort: "vast" });
     expect(r.mine[0]!.euroCents).toBe(600);
     expect(r.mine[0]!.caveats).toEqual([]);
@@ -489,10 +669,17 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
         value: 0,
         sourceUrl: "https://voorbeeld.nl/x",
         checkedAt: "2026-01-01",
-        conditions: "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00%.",
+        conditions:
+          "0% koersopslag voor transacties tot € 1.000 per maandelijkse incassoperiode, daarna 2,00%.",
       },
     });
-    const inEuro = rankCheckout({ cards: [platinum], heldIds: ["platinum"], currency: "EUR", amountCents: 400000, asOf: ASOF });
+    const inEuro = rankCheckout({
+      cards: [platinum],
+      heldIds: ["platinum"],
+      currency: "EUR",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(inEuro.mine[0]!.caveats).toEqual([]);
     expect(inEuro.mine[0]!.claim).toEqual({ soort: "vast" });
 
@@ -508,7 +695,13 @@ describe("een voorwaarde bij een cijfer is geen groen licht", () => {
      * de koersopslag. En omdat een van de twee termen van de som onzeker is,
      * noemt het scherm HELEMAAL GEEN bedrag - strenger dan het oude gedrag, dat
      * hier een gecapt bedrag toonde alsof het de bovengrens was. */
-    const inDollars = rankCheckout({ cards: [platinum], heldIds: ["platinum"], currency: "USD", amountCents: 400000, asOf: ASOF });
+    const inDollars = rankCheckout({
+      cards: [platinum],
+      heldIds: ["platinum"],
+      currency: "USD",
+      amountCents: 400000,
+      asOf: ASOF,
+    });
     expect(inDollars.mine[0]!.caveats.map((c) => c.soort)).toContain("voorwaardelijke-nul");
     expect(inDollars.mine[0]!.claim.soort).toBe("vast");
     expect(inDollars.mine[0]!.fxClaim.soort).toBe("hooguit");
@@ -537,7 +730,13 @@ describe("een voorwaarde hoort bij het cijfer waar hij naast staat", () => {
         conditions: "Koersopslag met een cap of € 100 per transaction.",
       },
     });
-    const r = rankCheckout({ cards: [gemengd], heldIds: ["gemengd"], currency: "USD", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [gemengd],
+      heldIds: ["gemengd"],
+      currency: "USD",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     // De cashback zelf heeft geen enkele voorwaarde en blijft dus onbeperkt.
     expect(r.mine[0]!.claim).toEqual({ soort: "vast" });
     expect(r.mine[0]!.fxClaim.soort).toBe("hooguit");
@@ -555,7 +754,13 @@ describe("een voorwaarde hoort bij het cijfer waar hij naast staat", () => {
         conditions: "Actietarief geldig tot 1 januari 2026.",
       },
     });
-    const r = rankCheckout({ cards: [verlopen], heldIds: ["verlopen"], currency: "USD", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [verlopen],
+      heldIds: ["verlopen"],
+      currency: "USD",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     // De cashback van 1% is niet verlopen; alleen het opslagcijfer.
     expect(r.mine[0]!.claim.soort).not.toBe("vervallen");
     expect(r.mine[0]!.fxClaim.soort).toBe("vervallen");
@@ -576,14 +781,21 @@ describe("een voorwaarde hoort bij het cijfer waar hij naast staat", () => {
         period: "maand",
         sourceUrl: "https://voorbeeld.nl/x",
         checkedAt: "2026-01-01",
-        conditions: "Geen kosten bij minimaal € 1.000 aan bijschrijvingen per maand, anders € 4,50 per maand.",
+        conditions:
+          "Geen kosten bij minimaal € 1.000 aan bijschrijvingen per maand, anders € 4,50 per maand.",
       },
     });
     /* Let op WELKE lijst: bij een kaart die hij AL heeft loopt die maandprijs
      * toch al en zit hij per ontwerp niet in de som (basis "opbrengst"). De
      * aftrekking bestaat alleen bij een kaart die hij zou moeten OPENEN, dus
      * daar moet dit gemeten worden — heldIds leeg. */
-    const r = rankCheckout({ cards: [gratisMits], heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [gratisMits],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     const rij = [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost][0]!;
     expect(rij.basis).toBe("bruto");
     expect(rij.charge).toBeNull();
@@ -645,7 +857,13 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
      * hieronder: de tak is niet langer dood door een herkomstnotitie. */
     expect(metAllebei.map((c) => c.id)).toEqual(["bleap-card", "wirex-card-wirex-one"]);
 
-    const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: CHECKOUT_CARDS,
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     expect(r.openWorthIt).toEqual([]);
     expect(r.openBackwards).toEqual([]);
     expect(r.openUnknownCost).toHaveLength(8);
@@ -660,16 +878,22 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
   });
 
   it("de acht kaarten die een aanbeveling kunnen dragen, dragen allemaal een voorwaarde", () => {
-    const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: CHECKOUT_CARDS,
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     for (const row of r.openUnknownCost) {
       expect(row.caveats.length).toBeGreaterThan(0);
     }
     /* Zeven van de acht keren uit in een token; alleen Bleap doet dat niet. */
     const tokens = r.openUnknownCost.filter((row) => row.claim.soort === "niet-in-euro");
     expect(tokens).toHaveLength(7);
-    expect(r.openUnknownCost.filter((row) => row.claim.soort === "hooguit").map((row) => row.card.id)).toEqual([
-      "bleap-card",
-    ]);
+    expect(
+      r.openUnknownCost.filter((row) => row.claim.soort === "hooguit").map((row) => row.card.id),
+    ).toEqual(["bleap-card"]);
   });
 
   it("de Nederlandse doorsnee-gebruiker krijgt geen euro-bedrag te zien bij een kaart die in CRO uitkeert", () => {
@@ -686,14 +910,19 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
       amountCents: 4999,
       asOf: ASOF,
     });
-    expect(r.unknowns.map((u) => u.reason)).toEqual(["geen-cashback-bekend", "geen-cashback-bekend"]);
+    expect(r.unknowns.map((u) => u.reason)).toEqual([
+      "geen-cashback-bekend",
+      "geen-cashback-bekend",
+    ]);
     expect(r.openWorthIt).toEqual([]);
     expect(r.openBackwards).toEqual([]);
 
     /* De kaart die het paneel als eerste toont, is niet meer een tokenkaart:
      * die staan onderaan omdat we hun opbrengst niet in euro's kunnen zetten. */
     expect(r.openUnknownCost[0]!.card.id).toBe("bleap-card");
-    const obsidian = r.openUnknownCost.find((x) => x.card.id === "crypto-com-prepaid-card-private-obsidian")!;
+    const obsidian = r.openUnknownCost.find(
+      (x) => x.card.id === "crypto-com-prepaid-card-private-obsidian",
+    )!;
     expect(obsidian.euroCents).toBeNull();
     expect(obsidian.claim).toEqual({ soort: "niet-in-euro", token: "CRO" });
   });
@@ -708,7 +937,13 @@ describe("de gebundelde catalogus, zoals hij meegaat naar de browser", () => {
      * is precies de bedoelde uitkomst: het is Bleap en Wirex, waarvan de
      * prijstekst een echte beperking draagt die we niet in één woord kunnen
      * navertellen. Zie de test hierboven. */
-    const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 100000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: CHECKOUT_CARDS,
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 100000,
+      asOf: ASOF,
+    });
     const soorten = new Set(r.openUnknownCost.flatMap((row) => row.caveats.map((c) => c.soort)));
     expect([...soorten].sort()).toEqual([
       "drempel",
@@ -764,11 +999,19 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
    *  moeten openen bestaat de aftreksom (zie de kop van rank.ts). */
   function rijMetPrijs(f: CardFee) {
     const proef = card({ id: "proef", cashbackPct: sourced(1), fxFeePct: sourced(0), fee: f });
-    const r = rankCheckout({ cards: [proef], heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: [proef],
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     return [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost][0]!;
   }
 
-  function prijsvoorbehouden(rij: { caveats: readonly { soort: string; veld: string }[] }): string[] {
+  function prijsvoorbehouden(rij: {
+    caveats: readonly { soort: string; veld: string }[];
+  }): string[] {
     return rij.caveats.filter((c) => c.veld === "kaartkosten").map((c) => c.soort);
   }
 
@@ -779,7 +1022,9 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
      * niet-lege voorwaardentekst een voorbehoud op — ook een zin die alleen zegt
      * wat een EXTRA kaart kost — en dus kon `bepaalClaim` voor de kaartkosten
      * nooit "vast" teruggeven en was de netto-tak van buildRow onbereikbaar. */
-    const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.")));
+    const rij = rijMetPrijs(
+      feeMetVoorwaarde(4.45, "maand", verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.")),
+    );
     expect(prijsvoorbehouden(rij)).toEqual([]);
     expect(rij.basis).toBe("netto");
     expect(rij.charge).not.toBeNull();
@@ -825,10 +1070,22 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
     const kaarten = VIJF_NIEUWE.map((id) =>
       card({ id, cashbackPct: sourced(1), fxFeePct: sourced(0), fee: echteFee(id) }),
     );
-    const r = rankCheckout({ cards: kaarten, heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: kaarten,
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     expect(r.openWorthIt).toEqual([]);
     expect(r.openBackwards).toEqual([]);
-    expect(r.openUnknownCost.map((x) => x.basis)).toEqual(["bruto", "bruto", "bruto", "bruto", "bruto"]);
+    expect(r.openUnknownCost.map((x) => x.basis)).toEqual([
+      "bruto",
+      "bruto",
+      "bruto",
+      "bruto",
+      "bruto",
+    ]);
   });
 
   /* ── de twee valse voorbehouden, met naam ─────────────────────────────── */
@@ -858,17 +1115,26 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
   /* ── elke beperkingsvorm die de lezer kent, met een echte zin erbij ───── */
 
   const BEPERKINGEN: ReadonlyArray<readonly [string, string]> = [
-    ["geschiktheid", "Uitsluitend voor inwoners van geselecteerde Europese landen (EER en Verenigd Koninkrijk)."],
+    [
+      "geschiktheid",
+      "Uitsluitend voor inwoners van geselecteerde Europese landen (EER en Verenigd Koninkrijk).",
+    ],
     ["pakketkoppeling", "Bovenop de € 4,00 per maand van het ING OranjePakket."],
     ["ander-tarief", "Tarief bij Betaalrekening Plus Betalen."],
     /* Dezelfde vorm aan het BEGIN van een tekst, met een hoofdletter-B. Dat is
      * een aparte regel in de vormherkenning en dus een aparte zin hier. */
     ["ander-tarief", "Bij een SNS Studentenrekening € 27,50 per jaar."],
     ["drempel", "Bij een minimale besteding van € 3.000 per jaar."],
-    ["tijdelijk", "Het eerste jaar kosteloos zolang je een American Express consumentenkaart blijft gebruiken;"],
+    [
+      "tijdelijk",
+      "Het eerste jaar kosteloos zolang je een American Express consumentenkaart blijft gebruiken;",
+    ],
     ["aangekondigd", "Per 15 september 2026 gaat de jaarbijdrage naar € 59,50"],
     ["extra-kosten", "Eenmalige kosten voor de fysieke kaart komen er wel:"],
-    ["gesloten", "de tekst 'Dienst niet beschikbaar' met de voetnoot dat alle kosten aan ICS worden betaald"],
+    [
+      "gesloten",
+      "de tekst 'Dienst niet beschikbaar' met de voetnoot dat alle kosten aan ICS worden betaald",
+    ],
     ["onzeker-product", "Zie 'openstaandeVragen' in het verslag."],
     ["plafond-of-uitsluiting", "daglimiet € 400."],
   ];
@@ -908,7 +1174,8 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
       '"Overzicht Kaartlidmaatschapsbijdragen", rij "The Green Card € 6,50 per maand", inclusief 2 extra kaarten;',
     );
     expect(leesZin(heel).soort).toBe("herkomst");
-    const geknipt = '"Overzicht Kaartlidmaatschapsbijdragen", rij "The Green Card € 6,50 per maand".';
+    const geknipt =
+      '"Overzicht Kaartlidmaatschapsbijdragen", rij "The Green Card € 6,50 per maand".';
     expect(leesZin(geknipt).soort).toBe("onbekend");
   });
 
@@ -930,8 +1197,12 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
      * aankoop in een vreemde munt. Die verbreding verdient zijn eigen ronde. */
     const zin = verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.");
     expect(leesVoorwaarden(zin, "kaartkosten", 4.45, ASOF)).toEqual([]);
-    expect(leesVoorwaarden(zin, "koersopslag", 1.4, ASOF)).toEqual([{ soort: "onbeoordeeld", veld: "koersopslag" }]);
-    expect(leesVoorwaarden(zin, "cashback", 1, ASOF)).toEqual([{ soort: "onbeoordeeld", veld: "cashback" }]);
+    expect(leesVoorwaarden(zin, "koersopslag", 1.4, ASOF)).toEqual([
+      { soort: "onbeoordeeld", veld: "koersopslag" },
+    ]);
+    expect(leesVoorwaarden(zin, "cashback", 1, ASOF)).toEqual([
+      { soort: "onbeoordeeld", veld: "cashback" },
+    ]);
   });
 
   /* ── één herkomstwoord is niet genoeg: de HELE zin moet gelezen zijn ──── */
@@ -949,7 +1220,9 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
      * alleen BOVENOP Rabo Standaard bestaat. Dat de echte rij toch behoudend
      * uitkwam, hing er alleen aan dat de BUURZIN het woord "bovenop" gebruikt;
      * deze test knipt die buurzin er met opzet af. */
-    const zin = verbatim("dit document is het Informatiedocument van dat pakket en noemt de kaart bij naam.");
+    const zin = verbatim(
+      "dit document is het Informatiedocument van dat pakket en noemt de kaart bij naam.",
+    );
     expect(leesZin(zin).soort).toBe("onbekend");
     const rij = rijMetPrijs(feeMetVoorwaarde(2, "maand", zin));
     expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
@@ -985,20 +1258,25 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
     "De productpagina neemt de kaart niet langer op in het aanbod.",
   ];
 
-  it.each(NIET_GEKENDE_BEPERKINGEN)("een vindplaats naast een onbekende bewering geeft niets vrij: %s", (zin) => {
-    expect(leesZin(zin).soort).toBe("onbekend");
-    const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", zin));
-    expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
-    expect(rij.basis).toBe("bruto");
-    expect(rij.charge).toBeNull();
-  });
+  it.each(NIET_GEKENDE_BEPERKINGEN)(
+    "een vindplaats naast een onbekende bewering geeft niets vrij: %s",
+    (zin) => {
+      expect(leesZin(zin).soort).toBe("onbekend");
+      const rij = rijMetPrijs(feeMetVoorwaarde(4.45, "maand", zin));
+      expect(prijsvoorbehouden(rij)).toEqual(["onbeoordeeld"]);
+      expect(rij.basis).toBe("bruto");
+      expect(rij.charge).toBeNull();
+    },
+  );
 
   it("en één onbekend woord in een zin die verder louter herkomst is, is al genoeg", () => {
     /* De echte zin komt door; met één woord erbij dat niet in het gesloten
      * woordenboek staat, niet meer. Dat is de hele reparatie in één regel. */
     const echt = verbatim("Extra ABN AMRO Gold Card € 2,10 per maand.");
     expect(leesZin(echt).soort).toBe("herkomst");
-    expect(leesZin("Extra ABN AMRO Gold Card € 2,10 per maand voor studenten.").soort).toBe("onbekend");
+    expect(leesZin("Extra ABN AMRO Gold Card € 2,10 per maand voor studenten.").soort).toBe(
+      "onbekend",
+    );
   });
 
   /* ── een ONTKENDE uitgesproken nul is geen nul ──────────────────────────── */
@@ -1043,7 +1321,11 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
     /* Elke regel die aan de herkomstlijst wordt toegevoegd, verplaatst velden
      * van "geen uitspraak" naar "vaste uitspraak". Dit is de teller die dat
      * zichtbaar maakt, per veld, met de zeven bij naam. */
-    const zonderVoorbehoud: Record<Veld, string[]> = { cashback: [], koersopslag: [], kaartkosten: [] };
+    const zonderVoorbehoud: Record<Veld, string[]> = {
+      cashback: [],
+      koersopslag: [],
+      kaartkosten: [],
+    };
     for (const c of CHECKOUT_CARDS) {
       const bronnen: ReadonlyArray<readonly [Veld, Sourced | null]> = [
         ["cashback", c.cashbackPct],
@@ -1052,7 +1334,8 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
       ];
       for (const [veld, bron] of bronnen) {
         if (!bron) continue;
-        if (leesVoorwaarden(bron.conditions, veld, bron.value, ASOF).length === 0) zonderVoorbehoud[veld].push(c.id);
+        if (leesVoorwaarden(bron.conditions, veld, bron.value, ASOF).length === 0)
+          zonderVoorbehoud[veld].push(c.id);
       }
     }
     expect(zonderVoorbehoud.cashback).toEqual([]);
@@ -1076,7 +1359,13 @@ describe("een herkomstnotitie is geen voorwaarde, en een voorwaarde is geen herk
      * Wat deze verandering oplost is dat er geen ONWARE voorbehouden meer bij
      * staan en dat de tak niet langer bij ongeluk dood is; een netto-bedrag
      * vraagt DATA die er niet is: een kaart met cashback in euro's én een prijs. */
-    const r = rankCheckout({ cards: CHECKOUT_CARDS, heldIds: [], currency: "EUR", amountCents: 30000, asOf: ASOF });
+    const r = rankCheckout({
+      cards: CHECKOUT_CARDS,
+      heldIds: [],
+      currency: "EUR",
+      amountCents: 30000,
+      asOf: ASOF,
+    });
     const alle = [...r.mine, ...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost];
     expect(alle.filter((row) => row.basis === "netto")).toEqual([]);
   });

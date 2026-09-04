@@ -54,7 +54,9 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
   const applicationId = process.env.EB_APPLICATION_ID ?? raw?.applicationId ?? null;
   const configured =
-    typeof applicationId === "string" && applicationId.length > 0 && !applicationId.includes(PLACEHOLDER);
+    typeof applicationId === "string" &&
+    applicationId.length > 0 &&
+    !applicationId.includes(PLACEHOLDER);
   const envKey = process.env.EB_PRIVATE_KEY;
   const privateKey = envKey ? envKey.replace(/\\n/g, "\n") : (raw?.privateKey ?? null);
   return {

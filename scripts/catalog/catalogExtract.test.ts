@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractRequest } from "./catalogExtract.js";
+import {
+  buildExtractPrompt,
+  EXTRACT_TOOL,
+  parseExtractReply,
+  type ExtractRequest,
+} from "./catalogExtract.js";
 
 const SWEEP = "2026-08-18";
 
@@ -155,8 +160,17 @@ describe("EXTRACT_TOOL", () => {
     }
     // Closed sets, so "probably a tariff page" cannot arrive as a free string the
     // parser then has to interpret.
-    expect(schema.properties.documentKind.enum).toEqual(["tariff-schedule", "terms", "marketing", "other"]);
-    expect(schema.properties.unconditionalBasis.enum).toEqual(["stated", "exhaustive-document", null]);
+    expect(schema.properties.documentKind.enum).toEqual([
+      "tariff-schedule",
+      "terms",
+      "marketing",
+      "other",
+    ]);
+    expect(schema.properties.unconditionalBasis.enum).toEqual([
+      "stated",
+      "exhaustive-document",
+      null,
+    ]);
   });
 });
 
@@ -227,7 +241,8 @@ describe("parseExtractReply", () => {
         fxFeePct: 1.0,
         conditions: null,
         conditionsKnown: false,
-        quote: "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
+        quote:
+          "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
         section: "Betaalpas in het buitenland",
       },
       r,
@@ -243,7 +258,8 @@ describe("parseExtractReply", () => {
       {
         fxFeePct: 1.0,
         conditions: null,
-        quote: "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
+        quote:
+          "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
         section: "Betaalpas in het buitenland",
       },
       r,
@@ -311,7 +327,8 @@ describe("parseExtractReply", () => {
           conditions: null,
           conditionsKnown: true,
           // Really on the page — but 19 lines ABOVE the heading claimed for it.
-          quote: "Betalen en opname van contant geld buiten eurolanden — Mastercard wisselkoers + 1,4% koersopslag.",
+          quote:
+            "Betalen en opname van contant geld buiten eurolanden — Mastercard wisselkoers + 1,4% koersopslag.",
           section: "Knab Creditcard",
         },
         req("Knab creditcard", KNAB),
@@ -326,7 +343,8 @@ describe("parseExtractReply", () => {
           fxFeePct: 2,
           conditions: null,
           conditionsKnown: true,
-          quote: "Betalen en opname van contant geld buiten eurolanden — Mastercard wisselkoers + 1,4% koersopslag.",
+          quote:
+            "Betalen en opname van contant geld buiten eurolanden — Mastercard wisselkoers + 1,4% koersopslag.",
           section: "Betalen en overboeken",
         },
         req("Knab betaalpas", KNAB),
@@ -415,7 +433,7 @@ describe("parseExtractReply", () => {
         conditionsKnown: true,
         quote: DEBIT_ROW,
         documentScope: null,
-      documentKind: "tariff-schedule",
+        documentKind: "tariff-schedule",
         capsExpressedElsewhere: true,
         unconditionalBasis: "exhaustive-document",
       });
@@ -495,7 +513,11 @@ describe("parseExtractReply", () => {
       // The mirror of the case above: identical text, identical caps, and the rule
       // still turns on the kind. Nothing about the text can promote a selling page.
       for (const documentKind of ["marketing", "other"]) {
-        const got = parseExtractReply({ ...ING_REPLY, documentKind }, req("ING betaalpas", TARIFF_CAPPED), SWEEP);
+        const got = parseExtractReply(
+          { ...ING_REPLY, documentKind },
+          req("ING betaalpas", TARIFF_CAPPED),
+          SWEEP,
+        );
         expect(got?.conditionsKnown, documentKind).toBe(false);
       }
     });
@@ -512,7 +534,11 @@ describe("parseExtractReply", () => {
 
     it("REFUSES exhaustiveness when the kind is missing or unrecognised", () => {
       for (const documentKind of [undefined, "", "tariff", "TARIFF-SCHEDULE", 3, null]) {
-        const got = parseExtractReply({ ...ING_REPLY, documentKind }, req("ING betaalpas", TARIFF_CAPPED), SWEEP);
+        const got = parseExtractReply(
+          { ...ING_REPLY, documentKind },
+          req("ING betaalpas", TARIFF_CAPPED),
+          SWEEP,
+        );
         expect(got?.conditionsKnown, String(documentKind)).toBe(false);
         expect(got?.documentKind, String(documentKind)).toBeNull();
       }
@@ -602,7 +628,8 @@ describe("parseExtractReply", () => {
           fxFeePct: 1,
           conditions: null,
           conditionsKnown: true,
-          quote: "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
+          quote:
+            "Buiten de eurozone rekenen wij een koersopslag van 1,0% over het bedrag van de transactie.",
           section: "Betaalpas in het buitenland",
           documentKind: "other",
           capsExpressedElsewhere: false,
@@ -649,29 +676,41 @@ describe("scope is a condition, not an absence of one", () => {
   ].join("\n");
 
   it("a reply that WRITES THE SCOPE is covered, with no basis needed at all", () => {
-    const got = parseExtractReply({
-      fxFeePct: 2.5,
-      conditions: "Geldt voor transacties die niet in euro zijn uitgevoerd; als een derde partij al naar euro's heeft omgezet brengt Amex geen opslag in rekening.",
-      conditionsKnown: true,
-      quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
-      section: "2.7 Transactie in vreemde valuta",
-      documentKind: "terms",
-      capsExpressedElsewhere: false,
-      unconditionalBasis: null,
-    }, { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX }, "2026-08-19");
+    const got = parseExtractReply(
+      {
+        fxFeePct: 2.5,
+        conditions:
+          "Geldt voor transacties die niet in euro zijn uitgevoerd; als een derde partij al naar euro's heeft omgezet brengt Amex geen opslag in rekening.",
+        conditionsKnown: true,
+        quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+        section: "2.7 Transactie in vreemde valuta",
+        documentKind: "terms",
+        capsExpressedElsewhere: false,
+        unconditionalBasis: null,
+      },
+      { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX },
+      "2026-08-19",
+    );
     expect(got).not.toBeNull();
     expect(got!.conditionsKnown).toBe(true);
     expect(got!.conditions).toContain("niet in euro");
   });
 
   it("the same reply claiming null instead is REFUSED — this is the regression, pinned", () => {
-    const got = parseExtractReply({
-      fxFeePct: 2.5, conditions: null, conditionsKnown: true,
-      quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
-      section: "2.7 Transactie in vreemde valuta",
-      documentKind: "terms", capsExpressedElsewhere: false,
-      unconditionalBasis: "exhaustive-document",
-    }, { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX }, "2026-08-19");
+    const got = parseExtractReply(
+      {
+        fxFeePct: 2.5,
+        conditions: null,
+        conditionsKnown: true,
+        quote: "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+        section: "2.7 Transactie in vreemde valuta",
+        documentKind: "terms",
+        capsExpressedElsewhere: false,
+        unconditionalBasis: "exhaustive-document",
+      },
+      { product: "American Express Gold Card", sourceUrl: "https://x/y.pdf", text: AMEX },
+      "2026-08-19",
+    );
     // capsExpressedElsewhere is false, so exhaustiveness proves nothing here.
     expect(got === null || got.conditionsKnown === false).toBe(true);
   });
@@ -694,13 +733,18 @@ describe("documentScope", () => {
     "Betalen met een creditcard in vreemde valuta   Per keer   gratis + 2,00% valutakoersopslag",
     "Geldopname in vreemde valuta tot € 500 per maand 0,00%, daarboven 2,00%",
   ].join("\n");
-  const req = { product: "ABN AMRO betaalpas", sourceUrl: "https://assets.abnamro.com/f.pdf", text: FID };
+  const req = {
+    product: "ABN AMRO betaalpas",
+    sourceUrl: "https://assets.abnamro.com/f.pdf",
+    text: FID,
+  };
 
   const reply = (over: Record<string, unknown>) => ({
     fxFeePct: 1.2,
     conditions: null,
     conditionsKnown: true,
-    quote: "Betalen met een betaalpas in vreemde valuta   Per keer   € 0,15 en 1,2% valutakoersopslag",
+    quote:
+      "Betalen met een betaalpas in vreemde valuta   Per keer   € 0,15 en 1,2% valutakoersopslag",
     section: "Informatiedocument betreffende de vergoedingen",
     documentKind: "tariff-schedule",
     documentScope: "BasisPakket Betalen",
@@ -717,10 +761,15 @@ describe("documentScope", () => {
   });
 
   it("ACCEPTS the same figure when the scope is named in conditions instead", () => {
-    const got = parseExtractReply(reply({
-      conditions: "Geldt voor het BasisPakket Betalen; andere pakketten kennen afwijkende kosten.",
-      unconditionalBasis: null,
-    }), req, "2026-08-19");
+    const got = parseExtractReply(
+      reply({
+        conditions:
+          "Geldt voor het BasisPakket Betalen; andere pakketten kennen afwijkende kosten.",
+        unconditionalBasis: null,
+      }),
+      req,
+      "2026-08-19",
+    );
     expect(got).not.toBeNull();
     expect(got!.conditionsKnown).toBe(true);
     expect(got!.conditions).toContain("BasisPakket");
@@ -739,7 +788,11 @@ describe("documentScope", () => {
   });
 
   it("carries the scope back out, so a reviewer can see what it was read from", () => {
-    const got = parseExtractReply(reply({ conditions: "Geldt voor BasisPakket Betalen.", unconditionalBasis: null }), req, "2026-08-19");
+    const got = parseExtractReply(
+      reply({ conditions: "Geldt voor BasisPakket Betalen.", unconditionalBasis: null }),
+      req,
+      "2026-08-19",
+    );
     expect(got!.documentScope).toBe("BasisPakket Betalen");
   });
 });

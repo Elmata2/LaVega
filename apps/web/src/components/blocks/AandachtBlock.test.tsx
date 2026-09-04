@@ -33,7 +33,9 @@ test("AandachtBlock renders every alert from props, grouped under its severity",
  * no accounts, no forecast, no streams, nothing that could be missed. --- */
 
 test("AandachtBlock never reports an empty list as a clean bill of health", () => {
-  const html = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={500_00} onBufferChange={() => {}} />);
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={500_00} onBufferChange={() => {}} />,
+  );
   expect(html).not.toContain("alert-row");
 
   // No claim about the balance or about payments arriving.
@@ -50,11 +52,15 @@ test("AandachtBlock never reports an empty list as a clean bill of health", () =
 test("a buffer of zero says what that silently does to the shortfall alert", () => {
   // The forecast flags a week whose closing falls BELOW the buffer, so a buffer
   // of 0 quietly turns "waarschuw me op tijd" into "waarschuw me bij rood".
-  const zero = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={0} onBufferChange={() => {}} />);
+  const zero = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={0} onBufferChange={() => {}} />,
+  );
   expect(zero).toContain("Je buffer staat op € 0");
   expect(zero).toContain("onder nul zakt");
 
-  const set = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />);
+  const set = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
   expect(set).not.toContain("Je buffer staat op € 0");
 });
 
@@ -97,14 +103,22 @@ test("the info tier folds away behind a count when something real outranks it", 
     title: "Verwacht tekort",
     detail: "Rond 2026-09-14 zakt je saldo naar € 800,00 — onder je buffer van € 2.500,00.",
   };
-  const c = render(<AandachtBlock alerts={[critical, ...info(4)]} bufferCents={250_000} onBufferChange={() => {}} />);
+  const c = render(
+    <AandachtBlock
+      alerts={[critical, ...info(4)]}
+      bufferCents={250_000}
+      onBufferChange={() => {}}
+    />,
+  );
 
   // The critical alert is never folded.
   expect(c.textContent).toContain("Verwacht tekort");
   expect(c.textContent).not.toContain("Punten 0");
   expect(c.querySelectorAll(".alert-row")).toHaveLength(1);
 
-  const toggle = [...c.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Toon 4 ter info"))!;
+  const toggle = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Toon 4 ter info"),
+  )!;
   expect(toggle).toBeTruthy();
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
@@ -113,14 +127,22 @@ test("the info tier folds away behind a count when something real outranks it", 
 });
 
 test("info alerts stay open when they are the only thing there — folding them would hide the block", () => {
-  const c = render(<AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />);
+  const c = render(
+    <AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
   expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
   expect(c.textContent).not.toContain("Toon 3 ter info");
 });
 
 test("one or two info alerts are never folded — the toggle would cost the space it saves", () => {
   const critical: Alert = { id: "s", severity: "critical", title: "Verwacht tekort", detail: "…" };
-  const c = render(<AandachtBlock alerts={[critical, ...info(2)]} bufferCents={250_000} onBufferChange={() => {}} />);
+  const c = render(
+    <AandachtBlock
+      alerts={[critical, ...info(2)]}
+      bufferCents={250_000}
+      onBufferChange={() => {}}
+    />,
+  );
   expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
   expect(c.querySelector(".alert-tier button")).toBeNull(); // no fold toggle
 });

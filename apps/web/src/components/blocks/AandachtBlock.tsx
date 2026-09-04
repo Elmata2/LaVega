@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
@@ -66,21 +66,31 @@ const CHECKS = [
 const INFO_FOLD_MIN = 3;
 
 export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: AandachtBlockProps) {
-  // Draft while typing, commit on blur. Resyncs when the stored buffer changes
-  // elsewhere (e.g. a restored back-up).
   const [draft, setDraft] = useState(bufferCents ? String(bufferCents / 100) : "");
-  useEffect(() => setDraft(bufferCents ? String(bufferCents / 100) : ""), [bufferCents]);
+  const [prevBuffer, setPrevBuffer] = useState(bufferCents);
+  if (bufferCents !== prevBuffer) {
+    setPrevBuffer(bufferCents);
+    setDraft(bufferCents ? String(bufferCents / 100) : "");
+  }
 
   const [showInfo, setShowInfo] = useState(false);
 
   function commit() {
-    const t = draft.trim().replace(/[€\s]/g, "").replace(",", ".");
+    const t = draft
+      .trim()
+      .replace(/[€\s]/g, "")
+      .replace(",", ".");
     const n = t === "" ? 0 : Number(t);
     if (Number.isFinite(n) && n >= 0) onBufferChange(Math.round(n * 100));
   }
 
-  const byTier = TIERS.map((tier) => ({ tier, rows: alerts.filter((a) => a.severity === tier.severity) }));
-  const pressing = byTier.filter((g) => g.tier.severity !== "info").reduce((n, g) => n + g.rows.length, 0);
+  const byTier = TIERS.map((tier) => ({
+    tier,
+    rows: alerts.filter((a) => a.severity === tier.severity),
+  }));
+  const pressing = byTier
+    .filter((g) => g.tier.severity !== "info")
+    .reduce((n, g) => n + g.rows.length, 0);
   const infoCount = byTier.find((g) => g.tier.severity === "info")?.rows.length ?? 0;
   // Only fold the info tier, and only when something above it is competing for
   // the same glance. On its own it is the whole block, so it stays open.
@@ -117,8 +127,8 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
       footer={
         zeroBuffer ? (
           <span className="cell-sub">
-            Je buffer staat op € 0, dus je hoort pas iets als je verwachte saldo onder nul zakt. Zet er een bedrag in
-            om eerder gewaarschuwd te worden.
+            Je buffer staat op € 0, dus je hoort pas iets als je verwachte saldo onder nul zakt. Zet
+            er een bedrag in om eerder gewaarschuwd te worden.
           </span>
         ) : undefined
       }
@@ -129,8 +139,8 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
         <div className="alert-empty">
           <p className="block-empty text-pos">Niets gevonden om je op te wijzen.</p>
           <p className="cell-sub">
-            LaVega keek naar: {CHECKS.join(", ")}. Dat is alleen zo compleet als wat je hebt geïmporteerd — over een
-            rekening die er niet in zit kan LaVega niets zeggen.
+            LaVega keek naar: {CHECKS.join(", ")}. Dat is alleen zo compleet als wat je hebt
+            geïmporteerd — over een rekening die er niet in zit kan LaVega niets zeggen.
           </p>
         </div>
       ) : (
@@ -139,7 +149,11 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
             if (rows.length === 0) return null;
             const folded = tier.severity === "info" && foldInfo;
             return (
-              <section className="alert-tier" key={tier.severity} aria-label={`${tier.label} (${rows.length})`}>
+              <section
+                className="alert-tier"
+                key={tier.severity}
+                aria-label={`${tier.label} (${rows.length})`}
+              >
                 <h3 className={`alert-tier-head alert-tier-${tier.severity}`}>
                   <span aria-hidden="true">{tier.icon}</span>
                   {tier.label}

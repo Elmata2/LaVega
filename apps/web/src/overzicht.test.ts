@@ -8,15 +8,67 @@ import { consolidate } from "@lavega/core";
  * JSX. Mirrors exactly what apps/web/src/views/Overzicht.tsx computes. */
 
 const accounts: Account[] = [
-  { key: "A1", iban: "NL01INGB0001", name: "Zakelijk", bank: "ING", entity: "Holding BV", currency: "EUR", balance: 182_310 },
-  { key: "A2", iban: "NL02RABO0001", name: "Zakelijk", bank: "Rabobank", entity: "Café BV", currency: "EUR", balance: 21_900 },
-  { key: "A3", iban: "NL03INGB0002", name: "Onbekend saldo", bank: "ING", entity: "Webshop BV", currency: "EUR", balance: null },
-  { key: "A4", iban: "NL04AMEX0001", name: "Zonder entiteit", bank: "Amex", entity: "", currency: "EUR", balance: 100 },
+  {
+    key: "A1",
+    iban: "NL01INGB0001",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "Holding BV",
+    currency: "EUR",
+    balance: 182_310,
+  },
+  {
+    key: "A2",
+    iban: "NL02RABO0001",
+    name: "Zakelijk",
+    bank: "Rabobank",
+    entity: "Café BV",
+    currency: "EUR",
+    balance: 21_900,
+  },
+  {
+    key: "A3",
+    iban: "NL03INGB0002",
+    name: "Onbekend saldo",
+    bank: "ING",
+    entity: "Webshop BV",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "A4",
+    iban: "NL04AMEX0001",
+    name: "Zonder entiteit",
+    bank: "Amex",
+    entity: "",
+    currency: "EUR",
+    balance: 100,
+  },
 ];
 
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-07-01", amount: 12_000, currency: "EUR", counterparty: "Klant", description: "Managementfee", category: "", manual: false },
-  { id: "t2", accountKey: "A2", date: "2026-07-02", amount: -1_880, currency: "EUR", counterparty: "Brouwerij", description: "Leverancier", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-07-01",
+    amount: 12_000,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "Managementfee",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A2",
+    date: "2026-07-02",
+    amount: -1_880,
+    currency: "EUR",
+    counterparty: "Brouwerij",
+    description: "Leverancier",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("Overzicht KPI derivations: an unknown account balance makes Totaalpositie unknown", () => {

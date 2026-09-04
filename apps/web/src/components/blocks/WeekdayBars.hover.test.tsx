@@ -55,7 +55,12 @@ function mount(ui: ReactElement): HTMLDivElement {
 
 test("each weekday bar carries its own number, named with the day it belongs to", () => {
   const html = renderToStaticMarkup(
-    <WeekdayBars days={week} format={euro} ariaLabel="Gemiddelde uitgaven per weekdag" peakIndex={4} />,
+    <WeekdayBars
+      days={week}
+      format={euro}
+      ariaLabel="Gemiddelde uitgaven per weekdag"
+      peakIndex={4}
+    />,
   );
   // Seven measured days, seven buttons — not seven divs with a title only a
   // desktop mouse can reach.
@@ -75,7 +80,9 @@ test("a day that was never measured gets no bar and therefore no number", () => 
     { label: "di", value: 20 },
     { label: "wo", value: null },
   ];
-  const html = renderToStaticMarkup(<WeekdayBars days={partial} format={euro} ariaLabel="Uitgaven" />);
+  const html = renderToStaticMarkup(
+    <WeekdayBars days={partial} format={euro} ariaLabel="Uitgaven" />,
+  );
   // Unknown is not zero: the untouched days have no chip to hover, because
   // there is no number to show. Inventing "€0" would say "that day is free".
   expect(html.match(/<button /g)?.length).toBe(1);
@@ -153,7 +160,10 @@ test("the plot is a group, not an image — an image would hide every bar again"
  * charts.css die hem de volle hoogte geven — jsdom heeft geen opmaakmotor, dus
  * de pixels zelf zijn hier niet na te meten. */
 
-const chartsCss = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles/charts.css"), "utf8");
+const chartsCss = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../styles/charts.css"),
+  "utf8",
+);
 /** Zonder commentaar: er staat het woord "pointer-events" ook in een uitleg, en
  *  een test die op proza slaagt bewijst niets over de opmaak. */
 const chartsRules = chartsCss.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -161,12 +171,17 @@ const chartsRules = chartsCss.replace(/\/\*[\s\S]*?\*\//g, "");
 /** Het regelblok van één selector, of null. `{` en `}` zijn genoeg om te
  *  splitsen omdat charts.css geen geneste at-regels binnen deze selectors heeft. */
 function ruleBlock(selector: string): string | null {
-  const re = new RegExp(`(^|[},])\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`, "m");
+  const re = new RegExp(
+    `(^|[},])\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`,
+    "m",
+  );
   return re.exec(chartsRules)?.[2] ?? null;
 }
 
 test("de stippellijn ligt ná de staven in de DOM — daar komt het probleem vandaan", () => {
-  const html = renderToStaticMarkup(<WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />);
+  const html = renderToStaticMarkup(
+    <WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />,
+  );
   const groups = html.indexOf('class="lv-bars-groups"');
   const svg = html.indexOf('class="lv-chart-svg"');
   expect(groups).toBeGreaterThan(-1);
@@ -187,7 +202,9 @@ test("charts.css laat die stippellijn de aanwijzer doorgeven", () => {
 });
 
 test("de knop is de hele kolom en de staaf zit erin — niet andersom", () => {
-  const html = renderToStaticMarkup(<WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />);
+  const html = renderToStaticMarkup(
+    <WeekdayBars days={week} format={euro} ariaLabel="Uitgaven" peakIndex={4} />,
+  );
   // Zeven kolommen, zeven knoppen. De staaf is tekening geworden: geen <button>
   // draagt nog `lv-bar`, want dán is het tikdoel weer 42 bij 6 pixels.
   expect(html.match(/<button [^>]*class="weekday-column"/g)?.length).toBe(7);
@@ -211,7 +228,11 @@ test("muis, vinger en toetsenbord openen de chip via diezelfde ene knop", () => 
   // Eén selectorblok voor alle drie: dat is de hele winst van deze opzet. Toen
   // de muis via `.lv-bars-group:hover` liep en de tik via de knop, viel de
   // telefoon tussen de twee door zonder dat een test dat merkte.
-  for (const weg of [".weekday-column:hover", ".weekday-column:focus", '.weekday-column[data-tip="on"]']) {
+  for (const weg of [
+    ".weekday-column:hover",
+    ".weekday-column:focus",
+    '.weekday-column[data-tip="on"]',
+  ]) {
     expect(chartsRules, `charts.css mist ${weg} .lv-tip`).toContain(`${weg} .lv-tip`);
   }
   // De drie delen die selectorlijst staan in één blok; `[data-tip="on"]` is het

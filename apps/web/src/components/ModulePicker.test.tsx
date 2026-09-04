@@ -53,7 +53,12 @@ function Shell() {
   const [modules, setModules] = useState<ModuleId[]>(() => enabledModules(getEnabledModules()));
   return (
     <>
-      <NavBar view="overview" modules={navModules(modules)} onNavigate={() => {}} onOpenProfile={() => {}} />
+      <NavBar
+        view="overview"
+        modules={navModules(modules)}
+        onNavigate={() => {}}
+        onOpenProfile={() => {}}
+      />
       <ModulePicker
         enabled={modules}
         onChange={(next) => {
@@ -74,7 +79,9 @@ function render() {
 }
 
 function navLabels(): string[] {
-  return [...container!.querySelectorAll(".navrail .nav-item")].map((n) => (n.textContent ?? "").trim());
+  return [...container!.querySelectorAll(".navrail .nav-item")].map((n) =>
+    (n.textContent ?? "").trim(),
+  );
 }
 
 function toggle(label: string): HTMLButtonElement {
@@ -278,10 +285,9 @@ test("een lijst ids opschonen is iets anders dan een voorkeur lezen", () => {
   /* `normaliseWidgets` schoont een LIJST op; `enabledWidgets` leest een
    * VOORKEUR. Toen dat één functie was, kwam een uitgezette kaart terug: de
    * opgeschoonde lijst ging weer door de "nooit gevraagd"-deur. */
-  expect(normaliseWidgets(["positie", "aandacht", "positie", "een-widget-die-niet-bestaat"])).toEqual([
-    "aandacht",
-    "positie",
-  ]);
+  expect(
+    normaliseWidgets(["positie", "aandacht", "positie", "een-widget-die-niet-bestaat"]),
+  ).toEqual(["aandacht", "positie"]);
   expect(toggleWidget([], "positie", true)).toEqual(["positie"]);
   expect(toggleWidget(["aandacht", "positie"], "aandacht", false)).toEqual(["positie"]);
   // Geen enkele widget zit vast aan: anders dan Overzicht in de nav gaat de
@@ -300,9 +306,16 @@ const widgetAccounts = [
  *  niet kunnen zien of de schakelaar of de leegte de kaart weghoudt. */
 const widgetInvoices = [
   {
-    id: "inv1", entity: "BV1 Holding", direction: "in", counterparty: "Klant BV",
-    issueDate: "2026-07-10", dueDate: "2026-09-10", amount: 1_210, currency: "EUR",
-    status: "expected", sourceType: "manual",
+    id: "inv1",
+    entity: "BV1 Holding",
+    direction: "in",
+    counterparty: "Klant BV",
+    issueDate: "2026-07-10",
+    dueDate: "2026-09-10",
+    amount: 1_210,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "manual",
   },
 ] as unknown as Parameters<typeof FacturenWidget>[0]["invoices"];
 
@@ -467,7 +480,7 @@ test("every widget entry carries what the picker shows: label, one line, preview
     expect(container!.textContent).toContain(w.label);
     expect(container!.textContent).toContain(w.what);
   }
-  expect(container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length).toBeGreaterThanOrEqual(
-    WIDGETS.length,
-  );
+  expect(
+    container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length,
+  ).toBeGreaterThanOrEqual(WIDGETS.length);
 });

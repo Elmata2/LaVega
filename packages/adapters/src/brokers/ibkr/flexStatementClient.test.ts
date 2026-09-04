@@ -22,35 +22,44 @@ test("uses the configured HTTP transport for statement requests", async () => {
     );
   });
 
-  await expect(requestFlexStatement({
-    token: "secret-flex-token",
-    queryId: "12345",
-    endpoint: "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
-  })).resolves.toBe("987654");
+  await expect(
+    requestFlexStatement({
+      token: "secret-flex-token",
+      queryId: "12345",
+      endpoint:
+        "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
+    }),
+  ).resolves.toBe("987654");
 
   expect(requests).toHaveLength(1);
   expect(requests[0]?.url).toContain("q=12345");
-  expect((requests[0]?.init?.headers as Record<string, string> | undefined)?.["User-Agent"]).toBeTruthy();
+  expect(
+    (requests[0]?.init?.headers as Record<string, string> | undefined)?.["User-Agent"],
+  ).toBeTruthy();
 });
 
 test("adds request context to vague IBKR Flex errors without exposing the token", async () => {
-  globalThis.fetch = (async () => new Response(
-    "<FlexStatementResponse><ErrorCode>1001</ErrorCode><ErrorMessage>Load failed</ErrorMessage></FlexStatementResponse>",
-    { status: 200 },
-  )) as unknown as typeof fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      "<FlexStatementResponse><ErrorCode>1001</ErrorCode><ErrorMessage>Load failed</ErrorMessage></FlexStatementResponse>",
+      { status: 200 },
+    )) as unknown as typeof fetch;
 
   let message = "";
   try {
     await requestFlexStatement({
       token: "secret-flex-token",
       queryId: "12345",
-      endpoint: "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
+      endpoint:
+        "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest",
     });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
 
-  expect(message).toContain("IBKR Flex request failed while requesting the statement: IBKR error 1001: Load failed.");
+  expect(message).toContain(
+    "IBKR Flex request failed while requesting the statement: IBKR error 1001: Load failed.",
+  );
   expect(message).toContain("Endpoint SendRequest");
   expect(message).toContain("query ID 12345");
   expect(message).toContain("token configured");

@@ -18,7 +18,15 @@ import Forecast from "./Forecast";
  * hover or a disclosure later. Only the rendering is gone. */
 
 const ACCOUNTS: Account[] = [
-  { key: "ING1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 8_000 },
+  {
+    key: "ING1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 8_000,
+  },
 ];
 
 /** A year of a salary in and a rent out, so the engine has real streams and a
@@ -27,17 +35,42 @@ function history(): Tx[] {
   const txs: Tx[] = [];
   for (let m = 1; m <= 12; m++) {
     const mm = String(m).padStart(2, "0");
-    txs.push({ id: `in${m}`, accountKey: "ING1", date: `2026-${mm}-25`, amount: 3200, currency: "EUR",
-               counterparty: "Werkgever BV", description: "salaris", category: "", manual: false });
-    txs.push({ id: `out${m}`, accountKey: "ING1", date: `2026-${mm}-01`, amount: -1450, currency: "EUR",
-               counterparty: "Woningstichting Rochdale", description: "huur", category: "", manual: false });
+    txs.push({
+      id: `in${m}`,
+      accountKey: "ING1",
+      date: `2026-${mm}-25`,
+      amount: 3200,
+      currency: "EUR",
+      counterparty: "Werkgever BV",
+      description: "salaris",
+      category: "",
+      manual: false,
+    });
+    txs.push({
+      id: `out${m}`,
+      accountKey: "ING1",
+      date: `2026-${mm}-01`,
+      amount: -1450,
+      currency: "EUR",
+      counterparty: "Woningstichting Rochdale",
+      description: "huur",
+      category: "",
+      manual: false,
+    });
   }
   return txs;
 }
 
 const render = () =>
   renderToStaticMarkup(
-    <Forecast txs={history()} accounts={ACCOUNTS} entityScope="" asOf="2026-12-28" bufferCents={250_000} scheduledFlows={[]} />,
+    <Forecast
+      txs={history()}
+      accounts={ACCOUNTS}
+      entityScope=""
+      asOf="2026-12-28"
+      bufferCents={250_000}
+      scheduledFlows={[]}
+    />,
   );
 
 test("the deterministic-forecast explainer is gone", () => {

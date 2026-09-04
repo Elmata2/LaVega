@@ -21,8 +21,9 @@ import { ingestCatalogue } from "./cardTerms.js";
  *  for the same reason, as `WEB_DIST` in index.ts: `pnpm --filter` runs in the
  *  package dir while Railway runs from the repo root, and a cwd-relative path
  *  would silently find nothing in one of them. Overridable via env. */
-export const CATALOG_FILE = process.env.CATALOG_FILE
-  || resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/catalog/catalog.json");
+export const CATALOG_FILE =
+  process.env.CATALOG_FILE ||
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/catalog/catalog.json");
 
 /** The market the committed catalogue is loaded for.
  *
@@ -57,8 +58,12 @@ export type CatalogueLoad = {
 function isEntry(x: unknown): x is CatalogEntry {
   if (!x || typeof x !== "object") return false;
   const e = x as Record<string, unknown>;
-  return typeof e.product === "string" && e.product.trim() !== ""
-    && typeof e.fields === "object" && e.fields !== null;
+  return (
+    typeof e.product === "string" &&
+    e.product.trim() !== "" &&
+    typeof e.fields === "object" &&
+    e.fields !== null
+  );
 }
 
 /* eslint-disable-next-line no-console */
@@ -77,12 +82,14 @@ const defaultLog = (m: string) => console.log(m);
  * is indistinguishable from a broken loader unless the refusals are printed
  * next to it, which is a mistake this project has already made twice.
  */
-export function loadCatalogue(opts: {
-  file?: string;
-  homeCountry?: string;
-  currency?: string;
-  log?: (message: string) => void;
-} = {}): CatalogueLoad {
+export function loadCatalogue(
+  opts: {
+    file?: string;
+    homeCountry?: string;
+    currency?: string;
+    log?: (message: string) => void;
+  } = {},
+): CatalogueLoad {
   const path = opts.file ?? CATALOG_FILE;
   const homeCountry = opts.homeCountry ?? DEFAULT_HOME;
   const currency = opts.currency ?? DEFAULT_CURRENCY;
@@ -118,8 +125,8 @@ export function loadCatalogue(opts: {
     const { accepted, rejected } = ingestCatalogue(usable, homeCountry, currency);
     const refused = rejected.length + malformed;
     log(
-      `catalogue: ${accepted} accepted, ${refused} refused of ${entries.length} for ${market}`
-      + `${malformed > 0 ? ` (${malformed} malformed)` : ""} — ${path}`,
+      `catalogue: ${accepted} accepted, ${refused} refused of ${entries.length} for ${market}` +
+        `${malformed > 0 ? ` (${malformed} malformed)` : ""} — ${path}`,
     );
     return { loaded: true, accepted, refused, total: entries.length };
   } catch (e) {

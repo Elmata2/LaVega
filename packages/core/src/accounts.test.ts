@@ -33,7 +33,9 @@ function tx(over: Partial<Omit<Tx, "id">>): Omit<Tx, "id"> {
 // --- canonicalAccountId ----------------------------------------------------
 
 test("canonicalAccountId reduces IBAN and raw BBAN to the same domestic number", () => {
-  expect(canonicalAccountId(acc({ iban: "NL12ABNA0123456789", key: "NL12ABNA0123456789" }))).toBe("123456789");
+  expect(canonicalAccountId(acc({ iban: "NL12ABNA0123456789", key: "NL12ABNA0123456789" }))).toBe(
+    "123456789",
+  );
   expect(canonicalAccountId(acc({ iban: "", key: "0123456789" }))).toBe("123456789");
   // old-style ABN account number vs its padded IBAN form
   expect(canonicalAccountId(acc({ iban: "NL01ABNA0155430750" }))).toBe("155430750");
@@ -48,7 +50,12 @@ test("canonicalAccountId returns null when there's nothing safe to match", () =>
 // --- findDuplicateAccounts -------------------------------------------------
 
 test("findDuplicateAccounts groups an IBAN row with its BBAN twin (same bank) and keeps the IBAN survivor", () => {
-  const ibanRow = acc({ key: "NL12INGB0123456789", iban: "NL12INGB0123456789", bank: "ING", balance: 100 });
+  const ibanRow = acc({
+    key: "NL12INGB0123456789",
+    iban: "NL12INGB0123456789",
+    bank: "ING",
+    balance: 100,
+  });
   const bbanRow = acc({ key: "0123456789", iban: "", bank: "ING" });
   const groups = findDuplicateAccounts([ibanRow, bbanRow]);
   expect(groups).toHaveLength(1);
@@ -71,16 +78,28 @@ test("findDuplicateAccounts does NOT flag the same number across two different b
 // --- mergeAccounts ---------------------------------------------------------
 
 test("mergeAccounts re-keys the duplicate's txs, collapses the overlap, appends distinct dates", () => {
-  const survivor = acc({ key: "NL12INGB0123456789", iban: "NL12INGB0123456789", bank: "ING", balance: 50 });
+  const survivor = acc({
+    key: "NL12INGB0123456789",
+    iban: "NL12INGB0123456789",
+    bank: "ING",
+    balance: 50,
+  });
   const duplicate = acc({ key: "0123456789", iban: "", bank: "ING" });
   // Overlap: same movement on 08-01 in both accounts (should collapse to 1).
   // Distinct: the duplicate also has a 07-15 movement the survivor lacks.
-  const sTxs = assignTxIds([tx({ accountKey: survivor.key, date: "2026-08-01", amount: -10, description: "Albert Heijn" })]);
+  const sTxs = assignTxIds([
+    tx({ accountKey: survivor.key, date: "2026-08-01", amount: -10, description: "Albert Heijn" }),
+  ]);
   const dTxs = assignTxIds([
     tx({ accountKey: duplicate.key, date: "2026-08-01", amount: -10, description: "Albert Heijn" }),
     tx({ accountKey: duplicate.key, date: "2026-07-15", amount: -20, description: "Shell" }),
   ]);
-  const { accounts, txs } = mergeAccounts([survivor, duplicate], [...sTxs, ...dTxs], survivor.key, duplicate.key);
+  const { accounts, txs } = mergeAccounts(
+    [survivor, duplicate],
+    [...sTxs, ...dTxs],
+    survivor.key,
+    duplicate.key,
+  );
 
   // Duplicate account dropped; survivor kept.
   expect(accounts.map((a) => a.key)).toEqual([survivor.key]);
@@ -95,7 +114,12 @@ test("mergeAccounts re-keys the duplicate's txs, collapses the overlap, appends 
 
 test("mergeAccounts enriches an IBAN-less survivor with the duplicate's IBAN, keeps other fields", () => {
   const survivor = acc({ key: "0123456789", iban: "", bank: "ING", entity: "Zaak", balance: 99 });
-  const duplicate = acc({ key: "NL12INGB0123456789", iban: "NL12INGB0123456789", bank: "ING", entity: "Prive" });
+  const duplicate = acc({
+    key: "NL12INGB0123456789",
+    iban: "NL12INGB0123456789",
+    bank: "ING",
+    entity: "Prive",
+  });
   const { accounts } = mergeAccounts([survivor, duplicate], [], survivor.key, duplicate.key);
   const kept = accounts.find((a) => a.key === survivor.key)!;
   expect(kept.iban).toBe("NL12INGB0123456789"); // inherited
@@ -119,12 +143,25 @@ test("canonicalAccountId ignores a browser download suffix, so a suffixed IBAN s
   const dupe = acc({ key: "NL12INGB0123456789 (1)", iban: "" });
   expect(canonicalAccountId(dupe)).toBe(canonicalAccountId(plain));
   // A digits-bearing name must not be polluted by the "(1)" either.
-  expect(canonicalAccountId(acc({ key: "Rabo-2026 (1)" }))).toBe(canonicalAccountId(acc({ key: "Rabo-2026" })));
+  expect(canonicalAccountId(acc({ key: "Rabo-2026 (1)" }))).toBe(
+    canonicalAccountId(acc({ key: "Rabo-2026" })),
+  );
 });
 
 test("findDuplicateAccounts groups digit-less keys that differ only by a download suffix", () => {
-  const first = acc({ key: "activity", name: "activity", bank: "American Express", type: "Creditcard", balance: -2000 });
-  const second = acc({ key: "activity (1)", name: "activity (1)", bank: "American Express", type: "Creditcard" });
+  const first = acc({
+    key: "activity",
+    name: "activity",
+    bank: "American Express",
+    type: "Creditcard",
+    balance: -2000,
+  });
+  const second = acc({
+    key: "activity (1)",
+    name: "activity (1)",
+    bank: "American Express",
+    type: "Creditcard",
+  });
   const groups = findDuplicateAccounts([first, second]);
   expect(groups).toHaveLength(1);
   expect(groups[0].accounts.map((a) => a.key).sort()).toEqual(["activity", "activity (1)"]);
@@ -147,9 +184,36 @@ test("a merged filename-keyed pair keeps every distinct tx and double-counts non
   const duplicate = acc({ key: "activity (1)", bank: "American Express" });
   // The short export overlaps the long one on Uber; Airbnb is only in the long one.
   const txs = assignTxIds([
-    { accountKey: "activity", date: "2026-07-31", amount: -22.28, currency: "EUR", counterparty: "UBER TRIP", description: "", category: "", manual: false },
-    { accountKey: "activity (1)", date: "2026-07-31", amount: -22.28, currency: "EUR", counterparty: "UBER TRIP", description: "", category: "", manual: false },
-    { accountKey: "activity (1)", date: "2026-07-29", amount: -585.57, currency: "EUR", counterparty: "AIRBNB LONDEN", description: "", category: "", manual: false },
+    {
+      accountKey: "activity",
+      date: "2026-07-31",
+      amount: -22.28,
+      currency: "EUR",
+      counterparty: "UBER TRIP",
+      description: "",
+      category: "",
+      manual: false,
+    },
+    {
+      accountKey: "activity (1)",
+      date: "2026-07-31",
+      amount: -22.28,
+      currency: "EUR",
+      counterparty: "UBER TRIP",
+      description: "",
+      category: "",
+      manual: false,
+    },
+    {
+      accountKey: "activity (1)",
+      date: "2026-07-29",
+      amount: -585.57,
+      currency: "EUR",
+      counterparty: "AIRBNB LONDEN",
+      description: "",
+      category: "",
+      manual: false,
+    },
   ]);
   const merged = mergeAccounts([survivor, duplicate], txs, "activity", "activity (1)");
   expect(merged.accounts).toHaveLength(1);

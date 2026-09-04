@@ -76,7 +76,14 @@ export function positionSeries(
 
   const relevant = txs.filter((t) => keys.has(t.accountKey) && t.date <= asOf);
   if (relevant.length === 0) {
-    return { ...base, points: [], weekAgo: null, monthAgo: null, coverageDays: 0, limitedBy: known.map((a) => a.key) };
+    return {
+      ...base,
+      points: [],
+      weekAgo: null,
+      monthAgo: null,
+      coverageDays: 0,
+      limitedBy: known.map((a) => a.key),
+    };
   }
 
   // Coverage is the SHORTEST-covered account, never the union. If ABN reaches
@@ -95,16 +102,22 @@ export function positionSeries(
   const latestStart = [...startByKey.values()].reduce((a, b) => (a > b ? a : b));
   const earliest = relevant.reduce((a, t) => (t.date < a ? t.date : a), relevant[0].date);
   const coverageDays = noHistory.length > 0 ? 0 : Math.max(0, daysBetween(latestStart, asOf));
-  const limitedBy = noHistory.length > 0
-    ? noHistory.map((a) => a.key)
-    : known.filter((a) => startByKey.get(a.key) === latestStart).map((a) => a.key);
+  const limitedBy =
+    noHistory.length > 0
+      ? noHistory.map((a) => a.key)
+      : known.filter((a) => startByKey.get(a.key) === latestStart).map((a) => a.key);
 
   const net = new Map<string, number>();
   for (const t of relevant) net.set(t.date, (net.get(t.date) ?? 0) + Math.round(t.amount * 100));
 
   // Never earlier than the oldest transaction: before it the position is not
   // known, it is merely unrecorded.
-  const start = coverageDays >= windowDays ? shiftDate(asOf, -windowDays) : (coverageDays > 0 ? latestStart : earliest);
+  const start =
+    coverageDays >= windowDays
+      ? shiftDate(asOf, -windowDays)
+      : coverageDays > 0
+        ? latestStart
+        : earliest;
   const back: PositionPoint[] = [{ date: asOf, value: currentCents / 100 }];
   let cents = currentCents;
   for (let d = shiftDate(asOf, -1); d >= start; d = shiftDate(d, -1)) {
@@ -172,7 +185,12 @@ type SaldoBlockProps = {
   onNavigate: (view: View) => void;
 };
 
-export default function SaldoBlock({ accounts, txs, scheduledFlows, asOf, onNavigate,
+export default function SaldoBlock({
+  accounts,
+  txs,
+  scheduledFlows,
+  asOf,
+  onNavigate,
   span = 2,
 }: SaldoBlockProps) {
   const series = useMemo(() => positionSeries(accounts, txs, asOf), [accounts, txs, asOf]);

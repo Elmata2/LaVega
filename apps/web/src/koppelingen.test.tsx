@@ -55,7 +55,9 @@ function setNativeValue(el: HTMLInputElement, value: string) {
 }
 
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -89,8 +91,15 @@ function blur(el: HTMLInputElement) {
 
 test("the webhook URL and token are saved as LOCAL preferences", () => {
   const c = render();
-  act(() => setNativeValue(c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement, "https://n8n.example/webhook/lavega-facturen"));
-  act(() => setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"));
+  act(() =>
+    setNativeValue(
+      c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement,
+      "https://n8n.example/webhook/lavega-facturen",
+    ),
+  );
+  act(() =>
+    setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"),
+  );
   act(() => byText("button", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
   expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/lavega-facturen");
@@ -112,8 +121,15 @@ test("dit scherm belt met niemand — opslaan doet geen enkel verzoek", () => {
   }) as unknown as typeof fetch;
   try {
     const c = render();
-    act(() => setNativeValue(c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement, "https://n8n.example/webhook/x"));
-    act(() => setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"));
+    act(() =>
+      setNativeValue(
+        c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement,
+        "https://n8n.example/webhook/x",
+      ),
+    );
+    act(() =>
+      setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"),
+    );
     click(byText("button", "Opslaan"));
     expect(calls).toBe(0);
     expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/x");
@@ -173,18 +189,26 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", () 
   // De n8n-provisioning is en blijft weg.
   expect(c.querySelector('[aria-label="n8n basis-URL"]')).toBeNull();
   expect(c.querySelector('[aria-label="n8n API-sleutel"]')).toBeNull();
-  expect([...c.querySelectorAll("button")].some((b) => (b.textContent ?? "").includes("Verbind met n8n"))).toBe(false);
+  expect(
+    [...c.querySelectorAll("button")].some((b) =>
+      (b.textContent ?? "").includes("Verbind met n8n"),
+    ),
+  ).toBe(false);
   // Het adres is er nog niet, dus er staat een knop om er een te maken — en
   // het scherm maakt er nog steeds NIET zelf een aan door open te gaan.
   expect(getInvoiceForwardAddress()).toBe("");
-  const maak = [...c.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("laat LaVega er een maken"));
+  const maak = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("laat LaVega er een maken"),
+  );
   expect(maak).not.toBeUndefined();
   click(maak as HTMLButtonElement);
   const made = getInvoiceForwardAddress();
   expect(made).toMatch(/^lavega-[a-z0-9]{4,32}@invoices\.lavega\.dev$/);
   expect((c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement).value).toBe(made);
   // Nog steeds geen testknop: een test zou echte facturen opgebruiken.
-  expect([...c.querySelectorAll("button")].some((b) => /test/i.test(b.textContent ?? ""))).toBe(false);
+  expect([...c.querySelectorAll("button")].some((b) => /test/i.test(b.textContent ?? ""))).toBe(
+    false,
+  );
 });
 
 test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vindt", () => {

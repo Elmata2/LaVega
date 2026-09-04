@@ -9,12 +9,14 @@
 **Tech Stack:** TypeScript, pnpm monorepo, Vitest, Hono, React, `@anthropic-ai/sdk` (Claude `claude-haiku-4-5`, forced tool).
 
 ## Global Constraints
+
 - **Privacy (hard):** opt-in (default OFF); each request carries ONLY `{ items: [{id, text, sign}] }` — `text` = counterparty+description, `sign` = "in"/"out". NEVER amounts, balances, account keys, IBANs-as-fields, dates, or anything else. `sanitizeCategorizeInput` is the boundary (allowlist + size cap), tested. Confirm-first: nothing is written to the vault until the owner clicks apply. `@anthropic-ai/sdk` server-only. Dormant `503` until the key is set.
 - **Deterministic core stays pure** (no `Date.now`/`Math.random`; ids via `hash.ts`). Money is untouched — this only sets `category`/`manual` + adds `Rule`s.
 - **Model:** `claude-haiku-4-5`, forced tool, no streaming (bounded output). Categories constrained to `CATEGORY_OPTIONS`.
 - Dutch UI copy. Follow existing patterns (agent-routes.ts, anthropicExtract.ts, redaction.ts; App save* + view props). Commit messages end `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Verify per task: `pnpm test`, `pnpm typecheck`, and (Task 3) `pnpm --filter @lavega/web build` + grep the web bundle is SDK-clean.
 
 ## File Structure
+
 - `packages/core/src/categorize.ts` — NEW: `CATEGORY_OPTIONS`, `uncategorizedTxs`, `applyCategorizations`, `CategoryDecision`.
 - `packages/core/src/categorize.test.ts` — NEW.
 - `packages/core/src/index.ts` — export `./categorize.js` (modify).
@@ -34,21 +36,35 @@
 **Files:** Create `packages/core/src/categorize.ts`, `packages/core/src/categorize.test.ts`; modify `packages/core/src/index.ts`.
 
 **Interfaces produced:**
+
 ```ts
-export const CATEGORY_OPTIONS: readonly string[];         // the allowed categories (AI + review dropdown share this)
+export const CATEGORY_OPTIONS: readonly string[]; // the allowed categories (AI + review dropdown share this)
 export function uncategorizedTxs(txs: Tx[], rules: Rule[], own?: OwnAccounts): Tx[]; // categorize()==="onbekend"
 export type CategoryDecision = { id: string; category: string }; // category not in CATEGORY_OPTIONS => skipped
-export function applyCategorizations(txs: Tx[], rules: Rule[], decisions: CategoryDecision[]): { txs: Tx[]; rules: Rule[] };
+export function applyCategorizations(
+  txs: Tx[],
+  rules: Rule[],
+  decisions: CategoryDecision[],
+): { txs: Tx[]; rules: Rule[] };
 ```
 
 - [ ] **Step 1: Failing test** — `categorize.test.ts`:
+
 ```ts
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
 import { CATEGORY_OPTIONS, uncategorizedTxs, applyCategorizations } from "./categorize.js";
 
 const tx = (id: string, cp: string, amount: number, category = ""): Tx => ({
-  id, accountKey: "A1", date: "2026-08-01", amount, currency: "EUR", counterparty: cp, description: "", category, manual: false,
+  id,
+  accountKey: "A1",
+  date: "2026-08-01",
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category,
+  manual: false,
 });
 
 test("uncategorizedTxs returns only txs that resolve to 'onbekend'", () => {
@@ -60,7 +76,11 @@ test("uncategorizedTxs returns only txs that resolve to 'onbekend'", () => {
 });
 
 test("applyCategorizations sets manual category on decided txs + builds deduped rules", () => {
-  const txs = [tx("t1", "Jan Jansen priv", -10), tx("t2", "Jan Jansen priv", -12), tx("t3", "Mystery BV", -5)];
+  const txs = [
+    tx("t1", "Jan Jansen priv", -10),
+    tx("t2", "Jan Jansen priv", -12),
+    tx("t3", "Mystery BV", -5),
+  ];
   const rules: Rule[] = [];
   const out = applyCategorizations(txs, rules, [
     { id: "t1", category: "Overboekingen" },
@@ -86,7 +106,10 @@ test("applyCategorizations does not duplicate an existing rule and skips empty c
   ]);
   expect(out.rules.filter((r) => r.match.toLowerCase() === "albert heijn")).toHaveLength(1); // no dup
   expect(out.rules.some((r) => r.match === "")).toBe(false); // empty counterparty -> no rule
-  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({ category: "Overboekingen", manual: true });
+  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
+    category: "Overboekingen",
+    manual: true,
+  });
 });
 
 test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () => {
@@ -98,6 +121,7 @@ test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () =
 
 - [ ] **Step 2: Run → FAIL.**
 - [ ] **Step 3: Implement `categorize.ts`:**
+
 ```ts
 import type { Tx, Rule, OwnAccounts } from "./model.js";
 import { categorize } from "./views.js";
@@ -106,11 +130,28 @@ import { hash, norm } from "./hash.js";
 /** The categories the AI may assign + the review dropdown offers — LaVega's
  *  existing taxonomy so results stay consistent with the rules engine. */
 export const CATEGORY_OPTIONS: readonly string[] = [
-  "Boodschappen", "Eten & drinken", "Transport", "Reizen", "Wonen & energie", "Abonnementen",
-  "Verzekeringen", "Gezondheid", "Kleding & winkelen", "Online shopping", "Elektronica",
-  "Entertainment", "Huis & tuin", "Huisdieren", "Goede doelen", "Bankkosten",
-  "Belastingen & overheid", "Geldopname", "Sparen & beleggen", "Overboekingen",
-  "Eigen overboeking", "Inkomen",
+  "Boodschappen",
+  "Eten & drinken",
+  "Transport",
+  "Reizen",
+  "Wonen & energie",
+  "Abonnementen",
+  "Verzekeringen",
+  "Gezondheid",
+  "Kleding & winkelen",
+  "Online shopping",
+  "Elektronica",
+  "Entertainment",
+  "Huis & tuin",
+  "Huisdieren",
+  "Goede doelen",
+  "Bankkosten",
+  "Belastingen & overheid",
+  "Geldopname",
+  "Sparen & beleggen",
+  "Overboekingen",
+  "Eigen overboeking",
+  "Inkomen",
 ];
 const VALID = new Set(CATEGORY_OPTIONS);
 
@@ -128,7 +169,9 @@ export function applyCategorizations(
   const byId = new Map<string, string>();
   for (const d of decisions) if (VALID.has(d.category)) byId.set(d.id, d.category);
 
-  const nextTxs = txs.map((t) => (byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t));
+  const nextTxs = txs.map((t) =>
+    byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t,
+  );
 
   // One rule per (counterparty, category), deduped against existing + each other.
   const seen = new Set(rules.map((r) => `${norm(r.match)}|${r.category}`));
@@ -157,6 +200,7 @@ export function applyCategorizations(
 **Files:** Create `apps/server/src/agent/categorize.ts`, `apps/server/src/agent/categorize.test.ts`; modify `apps/server/src/agent-routes.ts`, `apps/server/src/agent-routes.test.ts`.
 
 **Interfaces produced:**
+
 - `type CategorizeItem = { id: string; text: string; sign: "in" | "out" }`.
 - `sanitizeCategorizeInput(raw): { items: CategorizeItem[] }` — allowlist + caps (≤200 items; `text` ≤200 chars; `id` string; `sign` normalized to "in"/"out"); throws on empty/oversize.
 - `categorizeTransactions(input, apiKey): Promise<{ id: string; category: string }[]>` — Haiku forced tool, categories constrained to `CATEGORY_OPTIONS` (imported from `@lavega/core`); drops any result whose category isn't valid.
@@ -187,6 +231,7 @@ export function applyCategorizations(
 - [ ] **Step 6: Verify** — `pnpm test`, `pnpm typecheck`, `pnpm --filter @lavega/web build`; grep `apps/web/dist` has no `@anthropic-ai`/`api.anthropic.com`. **Step 7: Commit:** `feat(web): Categoriseer-met-AI flow in Transacties (opt-in, confirm-first)`.
 
 ## Self-Review notes
+
 - Redaction boundary (`sanitizeCategorizeInput`, Task 2) is dedicated + tested; the route test proves disallowed item fields never reach the model. Only `{id,text,sign}` leaves; amounts shown in the review are client-only.
 - Opt-in (default OFF) + confirm-first (nothing saved until "Toepassen"); dormant 503 without the key; SDK server-only (bundle grep).
 - "Direct + rules": `applyCategorizations` sets `manual` category on the txs AND adds deduped `Rule`s so future imports auto-categorize (the levelsio "do it once, it sticks").

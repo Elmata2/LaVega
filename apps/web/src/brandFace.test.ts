@@ -1,6 +1,17 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { CARD_TEXT, SHEEN_PEAK_ALPHA, WHITE_MIN_CONTRAST, cardRamp, contrastOnCard, contrastWithWhite, dominantColor, luminance, toHex, withSheen } from "./brandFace.js";
+import {
+  CARD_TEXT,
+  SHEEN_PEAK_ALPHA,
+  WHITE_MIN_CONTRAST,
+  cardRamp,
+  contrastOnCard,
+  contrastWithWhite,
+  dominantColor,
+  luminance,
+  toHex,
+  withSheen,
+} from "./brandFace.js";
 
 /** Een blokje pixels in één kleur, plus optioneel een witte rand eromheen. */
 function pixels(color: [number, number, number], n: number, white = 0): number[] {
@@ -165,7 +176,9 @@ test("de glans in de CSS is niet sterker dan waar de ramp op rekent", () => {
    * en dan valt hier een test om in plaats van dat niemand het merkt. */
   const css = readFileSync(new URL("./styles/blocks.css", import.meta.url), "utf8");
   const sheen = css.slice(css.indexOf(".bank-card-sheen"));
-  const alphas = [...sheen.slice(0, 900).matchAll(/rgba?\([^)]*?([01]?\.\d+)\s*\)/g)].map((m) => Number(m[1]));
+  const alphas = [...sheen.slice(0, 900).matchAll(/rgba?\([^)]*?([01]?\.\d+)\s*\)/g)].map((m) =>
+    Number(m[1]),
+  );
   expect(alphas.length).toBeGreaterThan(0);
   expect(Math.max(...alphas)).toBeLessThanOrEqual(SHEEN_PEAK_ALPHA);
 });

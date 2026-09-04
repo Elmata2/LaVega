@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
-import { computePortfolioValueSeries, filterPortfolioValueRange, type PortfolioValuePoint } from "./portfolio.js";
+import {
+  computePortfolioValueSeries,
+  filterPortfolioValueRange,
+  type PortfolioValuePoint,
+} from "./portfolio.js";
 import { FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
 
 const point = (date: string, value: number, unpriced: string[] = []): PortfolioValuePoint => ({
@@ -14,33 +18,72 @@ const point = (date: string, value: number, unpriced: string[] = []): PortfolioV
 });
 
 test("values holdings by walking trades out from the broker position", () => {
-  const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
+  const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-02")).toEqual(point("2026-01-02", 2200));
-  expect(result.find(({ date }) => date === "2026-01-05")).toEqual(point("2026-01-05", 1952.3809523809523));
+  expect(result.find(({ date }) => date === "2026-01-05")).toEqual(
+    point("2026-01-05", 1952.3809523809523),
+  );
   expect(result.at(-1)).toEqual(point("2026-02-02", 2090.909090909091));
 });
 
 test("values the broker position when the trade history is short", () => {
   const trades = TRADES.filter((trade) => trade.id !== "a");
 
-  const result = computePortfolioValueSeries(POSITIONS, trades, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
+  const result = computePortfolioValueSeries(POSITIONS, trades, PRICE_BARS, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
 
   expect(result.at(-1)?.positionsValue).toBeCloseTo((10 * 120 + 5 * 220) / 1.1, 9);
 });
 
 test("values a pie holding that never reaches the trade history", () => {
   const positions: Position[] = [
-    { entity: "personal", symbol: "OTHER", quantity: 1, averagePrice: 100, marketPrice: 100, marketValue: 100, currency: "EUR", asOf: "2026-02-02" },
-    { entity: "personal", symbol: "PIE", quantity: 4, averagePrice: 50, marketPrice: 60, marketValue: 240, currency: "EUR", asOf: "2026-02-02" },
+    {
+      entity: "personal",
+      symbol: "OTHER",
+      quantity: 1,
+      averagePrice: 100,
+      marketPrice: 100,
+      marketValue: 100,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
+    {
+      entity: "personal",
+      symbol: "PIE",
+      quantity: 4,
+      averagePrice: 50,
+      marketPrice: 60,
+      marketValue: 240,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
   ];
-  const trades: Trade[] = [{ id: "other", entity: "personal", date: "2026-01-02", symbol: "OTHER", side: "buy", quantity: 1, price: 100, amount: 100, currency: "EUR", commission: 0 }];
+  const trades: Trade[] = [
+    {
+      id: "other",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "OTHER",
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      amount: 100,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
   const bars: PriceBar[] = ["OTHER", "PIE"].flatMap((symbol) => [
     { symbol, date: "2026-01-02", close: symbol === "PIE" ? 50 : 100, currency: "EUR" },
     { symbol, date: "2026-02-02", close: symbol === "PIE" ? 60 : 100, currency: "EUR" },
   ]);
 
-  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, { today: "2026-02-02" });
+  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
 
   expect(result[0]?.positionsValue).toBe(300);
   expect(result.at(-1)?.positionsValue).toBe(340);
@@ -48,12 +91,42 @@ test("values a pie holding that never reaches the trade history", () => {
 
 test("includes closed positions only while trade history says they were held", () => {
   const trades: Trade[] = [
-    { id: "buy", entity: "personal", date: "2026-01-02", symbol: "CLOSED", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 },
-    { id: "sell", entity: "personal", date: "2026-01-06", symbol: "CLOSED", side: "sell", quantity: 2, price: 12, amount: 24, currency: "EUR", commission: 0 },
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "CLOSED",
+      side: "buy",
+      quantity: 2,
+      price: 10,
+      amount: 20,
+      currency: "EUR",
+      commission: 0,
+    },
+    {
+      id: "sell",
+      entity: "personal",
+      date: "2026-01-06",
+      symbol: "CLOSED",
+      side: "sell",
+      quantity: 2,
+      price: 12,
+      amount: 24,
+      currency: "EUR",
+      commission: 0,
+    },
   ];
-  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({ tenantId: "local", symbol: "CLOSED", date, close: 10, currency: "EUR" }));
+  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+    tenantId: "local",
+    symbol: "CLOSED",
+    date,
+    close: 10,
+    currency: "EUR",
+  }));
 
-  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-06" });
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-06",
+  });
   expect(result.map(({ date, positionsValue }) => ({ date, positionsValue }))).toEqual([
     { date: "2026-01-02", positionsValue: 20 },
     { date: "2026-01-05", positionsValue: 20 },
@@ -64,29 +137,82 @@ test("includes closed positions only while trade history says they were held", (
 test("forward-fills five business days then marks held symbol unpriced", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL" && bar.date === "2026-01-05");
-  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-13" });
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-13",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-12")?.forwardFilled).toEqual(["AAPL"]);
-  expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({ positionsValue: null, value: null, unpriced: ["AAPL"], forwardFilled: [] });
+  expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({
+    positionsValue: null,
+    value: null,
+    unpriced: ["AAPL"],
+    forwardFilled: [],
+  });
 });
 
 test("with no FX rate at all, foreign holdings go unpriced but EUR cash still values", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL");
-  const cashBalances: CashBalance[] = [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-02" }];
-  const result = computePortfolioValueSeries([], trades, bars, "EUR", undefined, { cashBalances, today: "2026-01-02" });
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-02" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", undefined, {
+    cashBalances,
+    today: "2026-01-02",
+  });
 
-  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({ positionsValue: null, cashValue: 150, value: 150, unpriced: ["AAPL"] });
+  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({
+    positionsValue: null,
+    cashValue: 150,
+    value: 150,
+    unpriced: ["AAPL"],
+  });
 });
 
 test("walks cash anchors with deduplicated flows and dividends", () => {
-  const cashBalances: CashBalance[] = [{ entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
-  const cashFlows: CashFlow[] = [
-    { id: "deposit-1", brokerFlowId: "same", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
-    { id: "deposit-copy", brokerFlowId: "same", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" },
   ];
-  const dividends = [{ id: "dividend", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 50, currency: "EUR" }];
-  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, dividends, today: "2026-01-06" });
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit-1",
+      brokerFlowId: "same",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+    {
+      id: "deposit-copy",
+      brokerFlowId: "same",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+  ];
+  const dividends = [
+    {
+      id: "dividend",
+      tenantId: "local",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      amount: 50,
+      currency: "EUR",
+    },
+  ];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    dividends,
+    today: "2026-01-06",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-02")?.cashValue).toBe(100);
   expect(result.find(({ date }) => date === "2026-01-05")?.cashValue).toBe(150);
@@ -98,8 +224,22 @@ test("keeps unreachable and unconvertible cash legs unknown", () => {
     { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
     { entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
   ];
-  const cashFlows: CashFlow[] = [{ id: "late", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 100, kind: "deposit" }];
-  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, today: "2026-01-02" });
+  const cashFlows: CashFlow[] = [
+    {
+      id: "late",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+  ];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-02",
+  });
 
   expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });
 });
@@ -112,5 +252,7 @@ test.each([
   ["All", "0000-01-01"],
 ] as const)("filters %s from latest data date", (range, start) => {
   const points = [point("2025-01-01", 1), point("2026-01-01", 2), point("2026-02-02", 3)];
-  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(points.filter(({ date }) => date >= start).map(({ date }) => date));
+  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(
+    points.filter(({ date }) => date >= start).map(({ date }) => date),
+  );
 });

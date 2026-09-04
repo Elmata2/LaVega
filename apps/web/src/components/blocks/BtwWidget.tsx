@@ -105,7 +105,15 @@ export type BtwRowsInput = {
 
 /** De btw-positie van elke onderneming in beeld, meest urgent eerst. Puur:
  *  `asOf` komt binnen, er wordt niets geklokt. */
-export function btwRows({ entities, txs, accounts, asOf, vatSettings, invoices, country }: BtwRowsInput): BtwRow[] {
+export function btwRows({
+  entities,
+  txs,
+  accounts,
+  asOf,
+  vatSettings,
+  invoices,
+  country,
+}: BtwRowsInput): BtwRow[] {
   const saved = new Map(vatSettings.map((s) => [s.entity, s]));
   return entities
     .map((entity) => {
@@ -235,16 +243,18 @@ export function BtwBlock({
           {others > 0 && (
             <>
               {" "}
-              Nog {others} andere onderneming{others === 1 ? "" : "en"} — Belasting toont ze apart. LaVega telt ze hier
-              niet bij elkaar op: ze kunnen een ander stelsel en een andere aangifteperiode hebben, en dan hoort er bij
-              die som geen periode.
+              Nog {others} andere onderneming{others === 1 ? "" : "en"} — Belasting toont ze apart.
+              LaVega telt ze hier niet bij elkaar op: ze kunnen een ander stelsel en een andere
+              aangifteperiode hebben, en dan hoort er bij die som geen periode.
             </>
           )}
         </>
       }
     >
       <div className="module-figure">
-        <span className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}>
+        <span
+          className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+        >
           {row.amountShown ? formatEuro(Math.abs(p.netCents as number) / 100) : "geen bedrag"}
         </span>
         {row.amountShown && <span className="figure-vs">{DIRECTION_WORD[p.direction]}</span>}

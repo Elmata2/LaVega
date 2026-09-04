@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test } from "vitest";
-import type { Account, EntityProfile, Invoice, Tx, VatNote, VatPosition, VatSettings } from "@lavega/core";
+import type {
+  Account,
+  EntityProfile,
+  Invoice,
+  Tx,
+  VatNote,
+  VatPosition,
+  VatSettings,
+} from "@lavega/core";
 import { makeInvoice, sumTaxFigures, taxPack, vatPosition } from "@lavega/core";
 import Belasting, { noteText, readBookkeepingSheet } from "./views/Belasting";
 import { GRENS_COPY } from "./views/Grens";
@@ -14,11 +22,29 @@ import { setHomeCountry } from "./settings";
  * prepays profit tax. Nothing may appear that the engine cannot compute. */
 
 const ACCOUNTS: Account[] = [
-  { key: "A1", iban: "NL01", name: "Zakelijk", bank: "ING", entity: "BV1", currency: "EUR", balance: 10_000 },
+  {
+    key: "A1",
+    iban: "NL01",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: 10_000,
+  },
 ];
 
 function tx(id: string, date: string, amount: number): Tx {
-  return { id, accountKey: "A1", date, amount, currency: "EUR", counterparty: "Klant", description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey: "A1",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 
 /* ── De grens: een vault met ALLEBEI de kanten erin ────────────────────────
@@ -29,8 +55,24 @@ function tx(id: string, date: string, amount: number): Tx {
  * btw-tests hierboven) is er dus geen enkel eigen kenmerk, en dan kan een rij
  * met één been ook geen bewijs dragen. */
 const GRENS_ACCOUNTS: Account[] = [
-  { key: "A1", iban: "NL01INGB0001234567", name: "Zakelijk", bank: "ING", entity: "BV1", currency: "EUR", balance: 10_000 },
-  { key: "P1", iban: "NL02INGB0007654321", name: "Betaalrekening", bank: "ING", entity: "Privé", currency: "EUR", balance: 5_000 },
+  {
+    key: "A1",
+    iban: "NL01INGB0001234567",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: 10_000,
+  },
+  {
+    key: "P1",
+    iban: "NL02INGB0007654321",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Privé",
+    currency: "EUR",
+    balance: 5_000,
+  },
 ];
 /** Alleen BV1 is ingedeeld. "Privé" heeft geen rij en is dus privé via de harde
  *  standaard van entities.ts — precies zoals in een echte vault. */
@@ -42,12 +84,33 @@ function gtx(o: Partial<Tx> & Pick<Tx, "id" | "accountKey" | "date" | "amount">)
 
 const GRENS_TXS: Tx[] = [
   // GEKOPPELD: beide benen staan in de vault, één dag uit elkaar, op de cent gelijk.
-  gtx({ id: "x1", accountKey: "A1", date: "2026-03-14", amount: -4_300, counterparty: "Privé", description: "Naar NL02INGB0007654321" }),
-  gtx({ id: "x2", accountKey: "P1", date: "2026-03-15", amount: 4_300, counterparty: "BV1", description: "Van NL01INGB0001234567" }),
+  gtx({
+    id: "x1",
+    accountKey: "A1",
+    date: "2026-03-14",
+    amount: -4_300,
+    counterparty: "Privé",
+    description: "Naar NL02INGB0007654321",
+  }),
+  gtx({
+    id: "x2",
+    accountKey: "P1",
+    date: "2026-03-15",
+    amount: 4_300,
+    counterparty: "BV1",
+    description: "Van NL01INGB0001234567",
+  }),
   // ÉÉN BEEN: de BV boekt naar een rekening waarvan geen afschrift geïmporteerd
   // is. Er is dus geen tegenboeking; de rij telt mee omdat er een eigen
   // rekening op staat, aan de andere kant van de grens.
-  gtx({ id: "x3", accountKey: "A1", date: "2026-05-08", amount: -1_900, counterparty: "Privé", description: "NL02INGB0007654321 aanvulling" }),
+  gtx({
+    id: "x3",
+    accountKey: "A1",
+    date: "2026-05-08",
+    amount: -1_900,
+    counterparty: "Privé",
+    description: "NL02INGB0007654321 aanvulling",
+  }),
   // HET BIJPRODUCT: één tegenpartij aan allebei de kanten. Twee afschrijvingen,
   // dus ze kunnen elkaars tegenboeking niet zijn.
   gtx({ id: "x4", accountKey: "P1", date: "2026-02-01", amount: -640, counterparty: "Coolblue" }),
@@ -199,11 +262,20 @@ test("a closed period says it is closed instead", () => {
   expect(html).not.toContain("loopt nog");
 });
 
-const invoice = (o: Partial<Invoice> = {}): Invoice => makeInvoice({
-  entity: "BV1", direction: "in", counterparty: "Klant", issueDate: "2026-07-10",
-  dueDate: "2026-08-10", amount: 1210, vatAmount: 210, currency: "EUR",
-  status: "expected", sourceType: "csv", ...o,
-});
+const invoice = (o: Partial<Invoice> = {}): Invoice =>
+  makeInvoice({
+    entity: "BV1",
+    direction: "in",
+    counterparty: "Klant",
+    issueDate: "2026-07-10",
+    dueDate: "2026-08-10",
+    amount: 1210,
+    vatAmount: 210,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "csv",
+    ...o,
+  });
 
 test("(b) vatAmount reaches the screen: the invoice basis, with its coverage", () => {
   const invoices = [
@@ -211,7 +283,13 @@ test("(b) vatAmount reaches the screen: the invoice basis, with its coverage", (
     invoice({ direction: "out", counterparty: "Leverancier", amount: 484, vatAmount: 84 }),
   ];
   const vatSettings: VatSettings[] = [
-    { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false, vatBasis: "factuurstelsel" },
+    {
+      entity: "BV1",
+      frequency: "quarterly",
+      defaultRatePct: 21,
+      mixedRates: false,
+      vatBasis: "factuurstelsel",
+    },
   ];
   // No bank movement at all in Q3: the proxy would know nothing, the invoices do.
   const html = render([], ["BV1"], { invoices, vatSettings });
@@ -241,7 +319,8 @@ test("(a) the bookkeeping sheet reaches the BTW figure through the view's own re
   const figures = sumTaxFigures(sheet.rows, "2026-07-01", "2026-09-30");
   expect(figures.vatChargedCents).toBe(2_100_000);
   const p = vatPosition({
-    txs: [], asOf: "2026-08-16",
+    txs: [],
+    asOf: "2026-08-16",
     settings: { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false },
     figures,
   });
@@ -281,11 +360,24 @@ test("(a) the bookkeeping sheet reaches the BTW figure through the view's own re
  *     Nieuwe copy hoort daarom in een geëxporteerd object, niet los in de JSX.
  */
 const FORBIDDEN = [
-  "advies", "adviseer", "adviseren", "adviseert",
-  "wij raden aan", "we raden aan",
-  "je moet", "u moet", "moet je", "moet u",
-  "optimaal", "bespaar", "besparing", "besparen", "bespaart",
-  "fiscaal voordeel", "belastingvoordeel", "belastingvoordelen",
+  "advies",
+  "adviseer",
+  "adviseren",
+  "adviseert",
+  "wij raden aan",
+  "we raden aan",
+  "je moet",
+  "u moet",
+  "moet je",
+  "moet u",
+  "optimaal",
+  "bespaar",
+  "besparing",
+  "besparen",
+  "bespaart",
+  "fiscaal voordeel",
+  "belastingvoordeel",
+  "belastingvoordelen",
   // GEVONDEN OP 25 AUGUSTUS 2026, bij een adversariële audit van Richting B:
   // de eerste versie van deze lijst ving alleen de stam ("bespaar", "adviseer")
   // en niet de vervoeging. "besparen" en "adviseren" bevatten die stam NIET
@@ -300,7 +392,8 @@ const FORBIDDEN = [
   // test: "rekening-courant" is een boekhoudkundige conclusie over een
   // rechtsverhouding, geen meting, en mag het scherm niet halen. Beide
   // schrijfwijzen, want een streepje minder is geen ander woord.
-  "rekening-courant", "rekening courant",
+  "rekening-courant",
+  "rekening courant",
 ];
 
 /** Vindt het verboden woord en NOEMT het, plus waar het stond. De oude vorm
@@ -328,11 +421,27 @@ const GRENS_COPY_SAMPLES: Record<keyof typeof GRENS_COPY, () => string[]> = {
   ],
   geenPersoonlijkeEntiteit: () => GRENS_COPY.geenPersoonlijkeEntiteit({ business: ["BV1", "BV2"] }),
   geenTransacties: () =>
-    GRENS_COPY.geenTransacties({ business: ["BV1"], personal: ["Privé"], from: "2026-01-01", to: "2026-08-16" }),
+    GRENS_COPY.geenTransacties({
+      business: ["BV1"],
+      personal: ["Privé"],
+      from: "2026-01-01",
+      to: "2026-08-16",
+    }),
   nietsGekruist: () =>
-    GRENS_COPY.nietsGekruist({ from: "2026-01-01", to: "2026-08-16", obsFrom: "2026-02-01", obsTo: "2026-08-01" }),
+    GRENS_COPY.nietsGekruist({
+      from: "2026-01-01",
+      to: "2026-08-16",
+      obsFrom: "2026-02-01",
+      obsTo: "2026-08-01",
+    }),
   herkomst: () =>
-    GRENS_COPY.herkomst({ from: "2026-01-01", to: "2026-08-16", obsFrom: "2026-02-01", obsTo: "2026-08-01", pairWindowDays: 4 }),
+    GRENS_COPY.herkomst({
+      from: "2026-01-01",
+      to: "2026-08-16",
+      obsFrom: "2026-02-01",
+      obsTo: "2026-08-01",
+      pairWindowDays: 4,
+    }),
   // Alle vier de combinaties van de twee blinde vlekken, want dit is de alinea
   // die onder een NUL komt te staan en daar het meeste kan beloven.
   dekking: () => [
@@ -342,38 +451,164 @@ const GRENS_COPY_SAMPLES: Record<keyof typeof GRENS_COPY, () => string[]> = {
     ...GRENS_COPY.dekking({ unknownCounterAccount: 0, ownNameKnown: true }),
   ],
   stroomKop: () => [
-    ...GRENS_COPY.stroomKop({ fromLabel: "BV1", toLabel: "Privé", count: 7, totalCents: 1_240_000, matchedCents: 1_050_000, unmatchedCents: 190_000, knownCents: 430_000, unknownCents: 810_000 }),
-    ...GRENS_COPY.stroomKop({ fromLabel: "BV1", toLabel: "Privé", count: 1, totalCents: 100_000, matchedCents: 100_000, unmatchedCents: 0, knownCents: 100_000, unknownCents: 0 }),
-    ...GRENS_COPY.stroomKop({ fromLabel: "BV1", toLabel: "Privé", count: 2, totalCents: 100_000, matchedCents: 0, unmatchedCents: 100_000, knownCents: 0, unknownCents: 100_000 }),
+    ...GRENS_COPY.stroomKop({
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      count: 7,
+      totalCents: 1_240_000,
+      matchedCents: 1_050_000,
+      unmatchedCents: 190_000,
+      knownCents: 430_000,
+      unknownCents: 810_000,
+    }),
+    ...GRENS_COPY.stroomKop({
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      count: 1,
+      totalCents: 100_000,
+      matchedCents: 100_000,
+      unmatchedCents: 0,
+      knownCents: 100_000,
+      unknownCents: 0,
+    }),
+    ...GRENS_COPY.stroomKop({
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      count: 2,
+      totalCents: 100_000,
+      matchedCents: 0,
+      unmatchedCents: 100_000,
+      knownCents: 0,
+      unknownCents: 100_000,
+    }),
   ],
   stroomAntwoord: () => [
-    ...GRENS_COPY.stroomAntwoord({ kind: "dividend", source: "user", at: "2026-08-20", count: 6, firstDate: "2026-01-10", lastDate: "2026-07-02" }),
-    ...GRENS_COPY.stroomAntwoord({ kind: "salaris", source: "agent", at: null, count: 1, firstDate: "2026-01-10", lastDate: "2026-01-10" }),
-    ...GRENS_COPY.stroomAntwoord({ kind: "onbekend", source: "user", at: "2026-08-20", count: 3, firstDate: "2026-01-10", lastDate: "2026-07-02" }),
+    ...GRENS_COPY.stroomAntwoord({
+      kind: "dividend",
+      source: "user",
+      at: "2026-08-20",
+      count: 6,
+      firstDate: "2026-01-10",
+      lastDate: "2026-07-02",
+    }),
+    ...GRENS_COPY.stroomAntwoord({
+      kind: "salaris",
+      source: "agent",
+      at: null,
+      count: 1,
+      firstDate: "2026-01-10",
+      lastDate: "2026-01-10",
+    }),
+    ...GRENS_COPY.stroomAntwoord({
+      kind: "onbekend",
+      source: "user",
+      at: "2026-08-20",
+      count: 3,
+      firstDate: "2026-01-10",
+      lastDate: "2026-07-02",
+    }),
   ],
   stroomVraag: () => [
-    ...GRENS_COPY.stroomVraag({ fromLabel: "BV1", toLabel: "Privé", unknownCents: 810_000, unknownCount: 6, lastDate: "2026-07-02" }),
-    ...GRENS_COPY.stroomVraag({ fromLabel: "Privé", toLabel: "BV1", unknownCents: 5_000, unknownCount: 1, lastDate: "2026-07-02" }),
+    ...GRENS_COPY.stroomVraag({
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      unknownCents: 810_000,
+      unknownCount: 6,
+      lastDate: "2026-07-02",
+    }),
+    ...GRENS_COPY.stroomVraag({
+      fromLabel: "Privé",
+      toLabel: "BV1",
+      unknownCents: 5_000,
+      unknownCount: 1,
+      lastDate: "2026-07-02",
+    }),
   ],
   kruisingTweeBenen: () =>
-    GRENS_COPY.kruisingTweeBenen({ amountCents: 430_000, date: "2026-03-14", fromLabel: "BV1", toLabel: "Privé", uitLabel: "BV1", uitDate: "2026-03-14", uitCents: -430_000, inLabel: "Privé", inDate: "2026-03-15", inCents: 430_000 }),
+    GRENS_COPY.kruisingTweeBenen({
+      amountCents: 430_000,
+      date: "2026-03-14",
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      uitLabel: "BV1",
+      uitDate: "2026-03-14",
+      uitCents: -430_000,
+      inLabel: "Privé",
+      inDate: "2026-03-15",
+      inCents: 430_000,
+    }),
   kruisingEenBeen: () => [
-    ...GRENS_COPY.kruisingEenBeen({ amountCents: 190_000, date: "2026-05-08", fromLabel: "BV1", toLabel: "Privé", evidence: "eigen-rekening-genoemd", uitgaand: true }),
-    ...GRENS_COPY.kruisingEenBeen({ amountCents: 190_000, date: "2026-05-08", fromLabel: "Privé", toLabel: "BV1", evidence: "eigen-naam-genoemd", uitgaand: false }),
-    ...GRENS_COPY.kruisingEenBeen({ amountCents: 190_000, date: "2026-05-08", fromLabel: "BV1", toLabel: "Privé", evidence: "twee-benen", uitgaand: true }),
+    ...GRENS_COPY.kruisingEenBeen({
+      amountCents: 190_000,
+      date: "2026-05-08",
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      evidence: "eigen-rekening-genoemd",
+      uitgaand: true,
+    }),
+    ...GRENS_COPY.kruisingEenBeen({
+      amountCents: 190_000,
+      date: "2026-05-08",
+      fromLabel: "Privé",
+      toLabel: "BV1",
+      evidence: "eigen-naam-genoemd",
+      uitgaand: false,
+    }),
+    ...GRENS_COPY.kruisingEenBeen({
+      amountCents: 190_000,
+      date: "2026-05-08",
+      fromLabel: "BV1",
+      toLabel: "Privé",
+      evidence: "twee-benen",
+      uitgaand: true,
+    }),
   ],
   meerRijen: () => GRENS_COPY.meerRijen({ hidden: 4, shown: 8, count: 12 }),
   uitgesloten: () => [
-    ...GRENS_COPY.uitgesloten({ noAccount: 3, noEntity: 2, currencyMismatch: 1, mirrorSuppressed: 1 }),
-    ...GRENS_COPY.uitgesloten({ noAccount: 1, noEntity: 1, currencyMismatch: 2, mirrorSuppressed: 2 }),
-    ...GRENS_COPY.uitgesloten({ noAccount: 0, noEntity: 0, currencyMismatch: 0, mirrorSuppressed: 0 }),
+    ...GRENS_COPY.uitgesloten({
+      noAccount: 3,
+      noEntity: 2,
+      currencyMismatch: 1,
+      mirrorSuppressed: 1,
+    }),
+    ...GRENS_COPY.uitgesloten({
+      noAccount: 1,
+      noEntity: 1,
+      currencyMismatch: 2,
+      mirrorSuppressed: 2,
+    }),
+    ...GRENS_COPY.uitgesloten({
+      noAccount: 0,
+      noEntity: 0,
+      currencyMismatch: 0,
+      mirrorSuppressed: 0,
+    }),
   ],
   tussenZakelijk: () => GRENS_COPY.tussenZakelijk({ business: ["BV1", "BV2"] }),
-  bijproductKop: () => [...GRENS_COPY.bijproductKop({ rows: 5 }), ...GRENS_COPY.bijproductKop({ rows: 1 }), ...GRENS_COPY.bijproductKop({ rows: 0 })],
+  bijproductKop: () => [
+    ...GRENS_COPY.bijproductKop({ rows: 5 }),
+    ...GRENS_COPY.bijproductKop({ rows: 1 }),
+    ...GRENS_COPY.bijproductKop({ rows: 0 }),
+  ],
   bijproductRij: () =>
-    GRENS_COPY.bijproductRij({ label: "Coolblue", personalCount: 3, personalCents: 64_000, businessCount: 1, businessCents: 31_000, firstDate: "2026-02-01", lastDate: "2026-07-20" }),
-  antwoordUitleg: () => [...GRENS_COPY.antwoordUitleg({ streams: 2 }), ...GRENS_COPY.antwoordUitleg({ streams: 1 })],
-  antwoordNotitie: () => [...GRENS_COPY.antwoordNotitie({ saved: 2 }), ...GRENS_COPY.antwoordNotitie({ saved: 1 }), ...GRENS_COPY.antwoordNotitie({ saved: 0 })],
+    GRENS_COPY.bijproductRij({
+      label: "Coolblue",
+      personalCount: 3,
+      personalCents: 64_000,
+      businessCount: 1,
+      businessCents: 31_000,
+      firstDate: "2026-02-01",
+      lastDate: "2026-07-20",
+    }),
+  antwoordUitleg: () => [
+    ...GRENS_COPY.antwoordUitleg({ streams: 2 }),
+    ...GRENS_COPY.antwoordUitleg({ streams: 1 }),
+  ],
+  antwoordNotitie: () => [
+    ...GRENS_COPY.antwoordNotitie({ saved: 2 }),
+    ...GRENS_COPY.antwoordNotitie({ saved: 1 }),
+    ...GRENS_COPY.antwoordNotitie({ saved: 0 }),
+  ],
   voet: () => GRENS_COPY.voet(),
   // Fase "review" die renderToStaticMarkup nooit bereikt (zie het commentaar
   // bij GRENS_COPY.reviewChrome in Grens.tsx) — deze regel is de enige plek
@@ -384,8 +619,14 @@ const GRENS_COPY_SAMPLES: Record<keyof typeof GRENS_COPY, () => string[]> = {
 /** Alle acht `VatNote`-takken, met een positie die de tellingen in de zinnen
  *  invult. Twee ervan waren met een fixture nooit te bereiken. */
 const ALL_VAT_NOTES: VatNote[] = [
-  "gemengde-tarieven", "stelsel-onbekend", "kasstelsel", "btw-onbekend-op-facturen",
-  "omzetfacturen-onbekend", "voorbelasting-onbekend", "boekhouding-andere-periode", "geen-banktransacties",
+  "gemengde-tarieven",
+  "stelsel-onbekend",
+  "kasstelsel",
+  "btw-onbekend-op-facturen",
+  "omzetfacturen-onbekend",
+  "voorbelasting-onbekend",
+  "boekhouding-andere-periode",
+  "geen-banktransacties",
 ];
 
 test("the copy stays on the measuring side of the line", () => {
@@ -401,28 +642,59 @@ test("the copy stays on the measuring side of the line", () => {
     screens.push({ name, html: make() });
   };
 
-  screen("NL · btw met facturen, stelsel onbekend", "NL", () => render([tx("t1", "2026-07-10", 12_100)], ["BV1"], { invoices }));
-  screen("NL · kwartaal met alleen kosten (terug te vragen)", "NL", () => render([tx("t1", "2026-08-01", -5_000)]));
+  screen("NL · btw met facturen, stelsel onbekend", "NL", () =>
+    render([tx("t1", "2026-07-10", 12_100)], ["BV1"], { invoices }),
+  );
+  screen("NL · kwartaal met alleen kosten (terug te vragen)", "NL", () =>
+    render([tx("t1", "2026-08-01", -5_000)]),
+  );
   screen("NL · geen transacties in het tijdvak", "NL", () => render([]));
   screen("NL · gemengde tarieven", "NL", () =>
     render([tx("t1", "2026-07-10", 12_100)], ["BV1"], {
-      vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: true }],
-    }));
+      vatSettings: [
+        { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: true },
+      ],
+    }),
+  );
   screen("NL · kasstelsel", "NL", () =>
     render([tx("t1", "2026-07-10", 12_100)], ["BV1"], {
       invoices,
-      vatSettings: [{ entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false, vatBasis: "kasstelsel" }],
-    }));
+      vatSettings: [
+        {
+          entity: "BV1",
+          frequency: "quarterly",
+          defaultRatePct: 21,
+          mixedRates: false,
+          vatBasis: "kasstelsel",
+        },
+      ],
+    }),
+  );
   screen("NL · zonder entiteiten", "NL", () => render([], []));
 
   // De vier toestanden van de grensmodule.
-  screen("grens · niets als zakelijk gemarkeerd", "NL", () => render([tx("t1", "2026-03-14", -4_300)]));
+  screen("grens · niets als zakelijk gemarkeerd", "NL", () =>
+    render([tx("t1", "2026-03-14", -4_300)]),
+  );
   screen("grens · alles zakelijk, geen privékant", "NL", () =>
-    render([tx("t1", "2026-03-14", -4_300)], ["BV1"], { entityProfiles: [{ entity: "BV1", scope: "business" }] }));
+    render([tx("t1", "2026-03-14", -4_300)], ["BV1"], {
+      entityProfiles: [{ entity: "BV1", scope: "business" }],
+    }),
+  );
   screen("grens · ingedeeld, geen transacties", "NL", () =>
-    render([], ["BV1"], { allAccounts: GRENS_ACCOUNTS, allTxs: [], entityProfiles: GRENS_PROFILES }));
+    render([], ["BV1"], {
+      allAccounts: GRENS_ACCOUNTS,
+      allTxs: [],
+      entityProfiles: GRENS_PROFILES,
+    }),
+  );
   screen("grens · gemeten: gekoppeld, één been, bijproduct", "NL", () =>
-    render([], ["BV1"], { allAccounts: GRENS_ACCOUNTS, allTxs: GRENS_TXS, entityProfiles: GRENS_PROFILES }));
+    render([], ["BV1"], {
+      allAccounts: GRENS_ACCOUNTS,
+      allTxs: GRENS_TXS,
+      entityProfiles: GRENS_PROFILES,
+    }),
+  );
 
   screen("DE · vooruitbetalingen", "DE", () => render([tx("t1", "2026-02-01", 100_000)]));
 
@@ -430,16 +702,24 @@ test("the copy stays on the measuring side of the line", () => {
 
   // ── (b) de geëxporteerde copy, inclusief takken die geen fixture rendert.
   for (const [key, make] of Object.entries(GRENS_COPY_SAMPLES)) {
-    for (const zin of make()) assertGeenVerbodenWoord(zin, `GRENS_COPY.${key} (apps/web/src/views/Grens.tsx)`);
+    for (const zin of make())
+      assertGeenVerbodenWoord(zin, `GRENS_COPY.${key} (apps/web/src/views/Grens.tsx)`);
   }
 
   const positie: VatPosition = vatPosition({
-    txs: [], asOf: "2026-08-16",
+    txs: [],
+    asOf: "2026-08-16",
     settings: { entity: "BV1", frequency: "quarterly", defaultRatePct: 21, mixedRates: false },
   });
   for (const note of ALL_VAT_NOTES) {
-    assertGeenVerbodenWoord(noteText(note, { ...positie, coverage: { ...positie.coverage, total: 3, withVat: 1 } }), `noteText("${note}")`);
-    assertGeenVerbodenWoord(noteText(note, { ...positie, coverage: { ...positie.coverage, total: 1, withVat: 0 } }), `noteText("${note}", enkelvoud)`);
+    assertGeenVerbodenWoord(
+      noteText(note, { ...positie, coverage: { ...positie.coverage, total: 3, withVat: 1 } }),
+      `noteText("${note}")`,
+    );
+    assertGeenVerbodenWoord(
+      noteText(note, { ...positie, coverage: { ...positie.coverage, total: 1, withVat: 0 } }),
+      `noteText("${note}", enkelvoud)`,
+    );
   }
 
   // ── (c) de caveats zijn core-DATA die dit scherm rendert, dus ze horen bij

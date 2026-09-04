@@ -26,7 +26,13 @@ function rateFor(rates: FxRates, date: string): FxRate {
   return sorted.filter((candidate) => candidate.date <= date).at(-1) ?? sorted[0]!;
 }
 
-export function convertCurrency(value: number, from: string, to: string, date: string, fxRates: FxRates): number {
+export function convertCurrency(
+  value: number,
+  from: string,
+  to: string,
+  date: string,
+  fxRates: FxRates,
+): number {
   if (from === to) return value;
   return value * crossRate(from, to, rateFor(fxRates, date));
 }
@@ -36,7 +42,9 @@ function isoDate(date: Date): string {
 }
 
 function businessCalendar(from: string, to: string, priceBars: readonly PriceBar[]): string[] {
-  const dates = new Set(priceBars.filter((bar) => bar.date >= from && bar.date <= to).map((bar) => bar.date));
+  const dates = new Set(
+    priceBars.filter((bar) => bar.date >= from && bar.date <= to).map((bar) => bar.date),
+  );
   for (const date of businessDateRange(from, to)) dates.add(date);
   return [...dates].sort();
 }
@@ -68,7 +76,10 @@ function displayCashKey(value: { broker: string; currency: string }): string {
   return `${value.broker}:${value.currency}`;
 }
 
-function uniqueByIdentity<T extends { id: string }>(items: readonly T[], brokerId: (item: T) => string | undefined): T[] {
+function uniqueByIdentity<T extends { id: string }>(
+  items: readonly T[],
+  brokerId: (item: T) => string | undefined,
+): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     const identity = brokerId(item) ?? item.id;
@@ -82,13 +93,19 @@ type CashEvent = { date: string; amount: number };
 type Anchor = { asOf: string; amount: number };
 
 function sumBetween(events: readonly CashEvent[], after: string, through: string): number {
-  return events.filter((event) => event.date > after && event.date <= through).reduce((sum, event) => sum + event.amount, 0);
+  return events
+    .filter((event) => event.date > after && event.date <= through)
+    .reduce((sum, event) => sum + event.amount, 0);
 }
 
 /** Walk events out from the nearest broker anchor: forwards from the last anchor
  *  on or before the date, otherwise backwards from the first anchor after it.
  *  Null when no anchor reaches the date at all. */
-function anchoredAmountOnDate(date: string, anchors: readonly Anchor[], events: readonly CashEvent[]): number | null {
+function anchoredAmountOnDate(
+  date: string,
+  anchors: readonly Anchor[],
+  events: readonly CashEvent[],
+): number | null {
   const sortedAnchors = [...anchors].sort((a, b) => a.asOf.localeCompare(b.asOf));
   const before = sortedAnchors.filter((anchor) => anchor.asOf <= date).at(-1);
   if (before) return before.amount + sumBetween(events, before.asOf, date);
@@ -97,18 +114,27 @@ function anchoredAmountOnDate(date: string, anchors: readonly Anchor[], events: 
   return after.amount - sumBetween(events, date, after.asOf);
 }
 
-function cashAmountOnDate(date: string, anchors: readonly CashBalance[], events: readonly CashEvent[]): number | null {
+function cashAmountOnDate(
+  date: string,
+  anchors: readonly CashBalance[],
+  events: readonly CashEvent[],
+): number | null {
   // Before the first recorded flow an untracked earlier movement could sit
   // between us and the anchor, so report unknown rather than a wrong balance.
   const firstEvent = [...events].sort((a, b) => a.date.localeCompare(b.date))[0];
-  const covered = anchors.some((anchor) => anchor.asOf <= date) || (firstEvent !== undefined && date >= firstEvent.date);
+  const covered =
+    anchors.some((anchor) => anchor.asOf <= date) ||
+    (firstEvent !== undefined && date >= firstEvent.date);
   return covered ? anchoredAmountOnDate(date, anchors, events) : null;
 }
 
 /** One symbol held by one entity: broker quantity snapshots plus signed trades. */
 type Holding = { anchors: Map<string, number>; events: CashEvent[] };
 
-function holdingsBySymbol(positions: readonly Position[], trades: readonly Trade[]): Map<string, Holding[]> {
+function holdingsBySymbol(
+  positions: readonly Position[],
+  trades: readonly Trade[],
+): Map<string, Holding[]> {
   const byKey = new Map<string, Holding>();
   const bySymbol = new Map<string, Holding[]>();
   const holding = (symbol: string, entity: string): Holding => {
@@ -126,7 +152,11 @@ function holdingsBySymbol(positions: readonly Position[], trades: readonly Trade
     const anchors = holding(position.symbol, position.entity).anchors;
     anchors.set(position.asOf, (anchors.get(position.asOf) ?? 0) + position.quantity);
   }
-  for (const trade of trades) holding(trade.symbol, trade.entity).events.push({ date: trade.date, amount: signedQuantity(trade) });
+  for (const trade of trades)
+    holding(trade.symbol, trade.entity).events.push({
+      date: trade.date,
+      amount: signedQuantity(trade),
+    });
   return bySymbol;
 }
 
@@ -160,13 +190,33 @@ export function computePortfolioValueSeries(
   const today = options.today ?? isoDate(new Date());
   const dates = businessCalendar(firstTrade, today, priceBars);
   const weekdays = businessDates(firstTrade, today);
-  const symbols = [...new Set([...trades.map((trade) => trade.symbol), ...positions.map((position) => position.symbol)])].sort();
+  const symbols = [
+    ...new Set([
+      ...trades.map((trade) => trade.symbol),
+      ...positions.map((position) => position.symbol),
+    ]),
+  ].sort();
   const holdings = holdingsBySymbol(positions, trades);
-  const barsBySymbol = new Map(symbols.map((symbol) => [symbol, priceBars.filter((bar) => bar.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))]));
-  const cashFlows = uniqueByIdentity(options.cashFlows ?? [], (flow) => `${cashKey(flow)}\u0000${flow.brokerFlowId ?? flow.id}`);
-  const dividends = uniqueByIdentity(options.dividends ?? [], (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`);
+  const barsBySymbol = new Map(
+    symbols.map((symbol) => [
+      symbol,
+      priceBars.filter((bar) => bar.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date)),
+    ]),
+  );
+  const cashFlows = uniqueByIdentity(
+    options.cashFlows ?? [],
+    (flow) => `${cashKey(flow)}\u0000${flow.brokerFlowId ?? flow.id}`,
+  );
+  const dividends = uniqueByIdentity(
+    options.dividends ?? [],
+    (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`,
+  );
   const cashBalances = options.cashBalances ?? [];
-  const cashLegKeys = new Set([...cashBalances.map(cashKey), ...cashFlows.map(cashKey), ...dividends.map(cashKey)]);
+  const cashLegKeys = new Set([
+    ...cashBalances.map(cashKey),
+    ...cashFlows.map(cashKey),
+    ...dividends.map(cashKey),
+  ]);
 
   return dates.map((date) => {
     let positionsValue = 0;
@@ -192,7 +242,13 @@ export function computePortfolioValueSeries(
         continue;
       }
       try {
-        positionsValue += convertCurrency(quantity * latest.close, latest.currency, presentationCurrency, date, fxRates);
+        positionsValue += convertCurrency(
+          quantity * latest.close,
+          latest.currency,
+          presentationCurrency,
+          date,
+          fxRates,
+        );
         priced += 1;
         if (!exact) forwardFilled.add(symbol);
       } catch {
@@ -205,11 +261,18 @@ export function computePortfolioValueSeries(
     const cashUnknown = new Set<string>();
     for (const key of cashLegKeys) {
       const anchorGroup = cashBalances.filter((anchor) => cashKey(anchor) === key);
-      const sample = anchorGroup[0] ?? cashFlows.find((flow) => cashKey(flow) === key) ?? dividends.find((dividend) => cashKey(dividend) === key);
+      const sample =
+        anchorGroup[0] ??
+        cashFlows.find((flow) => cashKey(flow) === key) ??
+        dividends.find((dividend) => cashKey(dividend) === key);
       if (!sample) continue;
       const events: CashEvent[] = [
-        ...cashFlows.filter((flow) => cashKey(flow) === key).map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
-        ...dividends.filter((dividend) => cashKey(dividend) === key).map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
+        ...cashFlows
+          .filter((flow) => cashKey(flow) === key)
+          .map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
+        ...dividends
+          .filter((dividend) => cashKey(dividend) === key)
+          .map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
       ];
       const amount = cashAmountOnDate(date, anchorGroup, events);
       if (amount === null) {
@@ -226,12 +289,17 @@ export function computePortfolioValueSeries(
 
     const knownPositionsValue = held > 0 && priced === 0 ? null : positionsValue;
     const knownCashValue = cashLegKeys.size === 0 || reachableCashLegs === 0 ? null : cashValue;
-    const reachableValues = [knownPositionsValue, knownCashValue].filter((value): value is number => value !== null);
+    const reachableValues = [knownPositionsValue, knownCashValue].filter(
+      (value): value is number => value !== null,
+    );
     return {
       date,
       positionsValue: knownPositionsValue,
       cashValue: knownCashValue,
-      value: reachableValues.length === 0 ? null : reachableValues.reduce((sum, value) => sum + value, 0),
+      value:
+        reachableValues.length === 0
+          ? null
+          : reachableValues.reduce((sum, value) => sum + value, 0),
       unpriced: [...unpriced].sort(),
       forwardFilled: [...forwardFilled].sort(),
       cashUnknown: [...cashUnknown].sort(),
@@ -245,9 +313,15 @@ function subtractMonths(date: string, months: number): string {
   return value.toISOString().slice(0, 10);
 }
 
-export function filterPortfolioValueRange<T extends { date: string }>(points: T[], range: PortfolioRange): T[] {
+export function filterPortfolioValueRange<T extends { date: string }>(
+  points: T[],
+  range: PortfolioRange,
+): T[] {
   if (points.length === 0 || range === "All") return [...points];
   const latest = [...points].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date;
-  const start = range === "YTD" ? `${latest.slice(0, 4)}-01-01` : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
+  const start =
+    range === "YTD"
+      ? `${latest.slice(0, 4)}-01-01`
+      : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
   return points.filter((point) => point.date >= start);
 }

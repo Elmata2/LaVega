@@ -54,7 +54,13 @@ import Module from "../Module.js";
  * transition: een toestand mag, een overgang is motion en die gaat apart. */
 
 /** Cards first — that is what the block is called and what he wants to see. */
-const TYPE_ORDER = ["Creditcard", "Betaalrekening", "Spaarrekening", "Beleggingsrekening", "Overig"];
+const TYPE_ORDER = [
+  "Creditcard",
+  "Betaalrekening",
+  "Spaarrekening",
+  "Beleggingsrekening",
+  "Overig",
+];
 
 /** Four faces, cycled by position. Every stop is an existing token.
  *
@@ -75,8 +81,25 @@ const FACES = [
  * from a CSV profile, as "ING Bank N.V." from an Enable Banking ASPSP name and as
  * "Coöperatieve Rabobank U.A." from another — all three mean the same issuer. */
 const CORPORATE = new Set([
-  "bank", "banken", "nv", "bv", "ua", "ag", "sa", "sas", "uab", "gmbh", "as", "ab", "plc", "ltd",
-  "limited", "group", "cooperatieve", "cooperatief", "the",
+  "bank",
+  "banken",
+  "nv",
+  "bv",
+  "ua",
+  "ag",
+  "sa",
+  "sas",
+  "uab",
+  "gmbh",
+  "as",
+  "ab",
+  "plc",
+  "ltd",
+  "limited",
+  "group",
+  "cooperatieve",
+  "cooperatief",
+  "the",
 ]);
 
 /** The keys a bank name may be known by: the whole name, and the name without
@@ -119,7 +142,11 @@ export function ibanTail(iban: string): string | null {
  *  die rechtstreeks op het element wordt gezet: een CSS-variabele op de KAART
  *  zou de stijl van elk kind laten hertekenen bij elke muisbeweging, en een
  *  kaart heeft er een stuk of acht. */
-export function sheenTransform(rect: { left: number; top: number }, clientX: number, clientY: number): string {
+export function sheenTransform(
+  rect: { left: number; top: number },
+  clientX: number,
+  clientY: number,
+): string {
   const x = Math.round(clientX - rect.left);
   const y = Math.round(clientY - rect.top);
   return `translate3d(${x}px, ${y}px, 0)`;
@@ -156,7 +183,9 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
       }
     >
       {cards.length === 0 ? (
-        <p className="block-empty">Nog geen rekeningen gekoppeld — importeer een bestand of koppel een bank.</p>
+        <p className="block-empty">
+          Nog geen rekeningen gekoppeld — importeer een bestand of koppel een bank.
+        </p>
       ) : (
         <div className="card-strip">
           {cards.map(({ account, type }, i) => {

@@ -41,7 +41,11 @@ export function xPositions(count: number): number[] {
  *  numbers so the gridlines read as 0 / 5.000 / 10.000 rather than 1.847.
  *  Always includes 0 when the data straddles it, and never returns a zero-width
  *  domain (a flat series still gets a band to sit in). */
-export function niceDomain(min: number, max: number, tickCount = 4): { min: number; max: number; ticks: number[] } {
+export function niceDomain(
+  min: number,
+  max: number,
+  tickCount = 4,
+): { min: number; max: number; ticks: number[] } {
   if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1, ticks: [0, 1] };
   let lo = Math.min(min, max);
   let hi = Math.max(min, max);
@@ -103,7 +107,7 @@ function monotoneTangents(points: Pt[]): number[] {
     const dx = points[i + 1].x - points[i].x || 1e-6;
     secant.push((points[i + 1].y - points[i].y) / dx);
   }
-  const m: number[] = new Array(n);
+  const m: number[] = Array.from({ length: n });
   m[0] = secant[0];
   m[n - 1] = secant[n - 2];
   for (let i = 1; i < n - 1; i++) {

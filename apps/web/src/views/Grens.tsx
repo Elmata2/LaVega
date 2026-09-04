@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
 import type {
-  Account, CrossScopeAnswer, CrossScopeCrossing, CrossScopeEvidence, CrossScopeKind,
-  CrossScopeLeg, CrossScopeStream, EntityProfile, EntityScope, OwnName, PrivatelyPaidCostRow, Tx,
+  Account,
+  CrossScopeAnswer,
+  CrossScopeCrossing,
+  CrossScopeEvidence,
+  CrossScopeKind,
+  CrossScopeLeg,
+  CrossScopeStream,
+  EntityProfile,
+  EntityScope,
+  OwnName,
+  PrivatelyPaidCostRow,
+  Tx,
 } from "@lavega/core";
 import {
   CROSS_SCOPE_PAIR_WINDOW_DAYS,
@@ -110,7 +120,10 @@ export const GRENS_COPY = {
    *  zou hier de fout "je saldi staan al op de beste plek" op een nieuwe plek
    *  herhalen. De laatste zin is een OVERDRACHT naar de plek waar het besluit
    *  al woont (Profiel → "Persoonlijk of zakelijk"), geen opdracht. */
-  geenZakelijkeEntiteit(a: { unclassified: readonly string[]; personal: readonly string[] }): string[] {
+  geenZakelijkeEntiteit(a: {
+    unclassified: readonly string[];
+    personal: readonly string[];
+  }): string[] {
     const out = [
       "Je hebt nog geen onderneming als zakelijk gemarkeerd, dus er is geen grens om te meten. Dat is iets anders dan nul overboekingen: er valt hier nog niets te vergelijken.",
       "Onder Profiel → “Persoonlijk of zakelijk” bepaal je zelf welke onderneming een bedrijf is; wat je niet indeelt, telt als privé.",
@@ -120,7 +133,9 @@ export const GRENS_COPY = {
         `LaVega ziet nu ${a.unclassified.length} onderneming${a.unclassified.length === 1 ? "" : "en"} waarvan dat nog niet gezegd is: ${listNl(a.unclassified)}.`,
       );
     } else if (a.personal.length > 0) {
-      out.push(`LaVega ziet nu alleen ondernemingen die als privé zijn gemarkeerd: ${listNl(a.personal)}.`);
+      out.push(
+        `LaVega ziet nu alleen ondernemingen die als privé zijn gemarkeerd: ${listNl(a.personal)}.`,
+      );
     } else {
       out.push("Er staat nog geen onderneming in je vault; die komen er met je eerste import bij.");
     }
@@ -137,7 +152,12 @@ export const GRENS_COPY = {
 
   /** Ingedeeld, maar geen enkele transactie die LaVega op een onderneming kan
    *  plaatsen. Zie `CrossScopeUnseen` in core voor wat er dan buiten viel. */
-  geenTransacties(a: { business: readonly string[]; personal: readonly string[]; from: string; to: string }): string[] {
+  geenTransacties(a: {
+    business: readonly string[];
+    personal: readonly string[];
+    from: string;
+    to: string;
+  }): string[] {
     return [
       `${listNl(a.business)} ${a.business.length === 1 ? "is" : "zijn"} als zakelijk gemarkeerd en ${listNl(a.personal)} als privé, maar van ${a.from} t/m ${a.to} staat er geen transactie in je vault die LaVega op een van die ondernemingen kan plaatsen.`,
       "Dat is geen nul — er is niets om te meten.",
@@ -190,7 +210,13 @@ export const GRENS_COPY = {
    *  wat er in dat venster daadwerkelijk aan data stond (dat is iets anders), en
    *  de koppelregel zelf — inclusief het aantal dagen, dat uit core komt en niet
    *  hier hardcoded staat. */
-  herkomst(a: { from: string; to: string; obsFrom: string; obsTo: string; pairWindowDays: number }): string[] {
+  herkomst(a: {
+    from: string;
+    to: string;
+    obsFrom: string;
+    obsTo: string;
+    pairWindowDays: number;
+  }): string[] {
     return [
       `Gemeten in je transacties van ${a.from} t/m ${a.to}; de eerste rij die LaVega daarin zag is van ${a.obsFrom}, de laatste van ${a.obsTo}.`,
       `Een overboeking is aan twee kanten gemeten als beide rekeningen in je vault staan, de bedragen op de cent gelijk zijn en de bijschrijving 0 tot ${a.pairWindowDays} dagen na de afschrijving valt. Wat maar één kant heeft, staat er apart bij, met de reden waarom die rij op de lijst staat.`,
@@ -203,20 +229,36 @@ export const GRENS_COPY = {
    *  belooft. Elk deel heeft een eigen tak voor "helemaal" en "helemaal niet",
    *  zodat er nergens "€ 0,00" op het scherm komt. */
   stroomKop(a: {
-    fromLabel: string; toLabel: string; count: number;
-    totalCents: number; matchedCents: number; unmatchedCents: number;
-    knownCents: number; unknownCents: number;
+    fromLabel: string;
+    toLabel: string;
+    count: number;
+    totalCents: number;
+    matchedCents: number;
+    unmatchedCents: number;
+    knownCents: number;
+    unknownCents: number;
   }): string[] {
     const out = [
       `${euro(a.totalCents)} ging van ${a.fromLabel} naar ${a.toLabel}, in ${a.count} overboeking${a.count === 1 ? "" : "en"}.`,
     ];
-    if (a.unmatchedCents === 0) out.push("Van al deze overboekingen staan beide kanten in je vault.");
-    else if (a.matchedCents === 0) out.push("Van geen van deze overboekingen staat de tegenboeking in je vault; elke rij is aan één kant gemeten.");
-    else out.push(`Van ${euro(a.matchedCents)} staan beide kanten in je vault; van ${euro(a.unmatchedCents)} maar één kant.`);
+    if (a.unmatchedCents === 0)
+      out.push("Van al deze overboekingen staan beide kanten in je vault.");
+    else if (a.matchedCents === 0)
+      out.push(
+        "Van geen van deze overboekingen staat de tegenboeking in je vault; elke rij is aan één kant gemeten.",
+      );
+    else
+      out.push(
+        `Van ${euro(a.matchedCents)} staan beide kanten in je vault; van ${euro(a.unmatchedCents)} maar één kant.`,
+      );
 
     if (a.unknownCents === 0) out.push("Je hebt zelf gezegd wat deze overboekingen waren.");
-    else if (a.knownCents === 0) out.push("LaVega weet van geen van deze overboekingen wat het was.");
-    else out.push(`Van ${euro(a.knownCents)} heb je zelf gezegd wat het was; van ${euro(a.unknownCents)} weet LaVega niet wat het was.`);
+    else if (a.knownCents === 0)
+      out.push("LaVega weet van geen van deze overboekingen wat het was.");
+    else
+      out.push(
+        `Van ${euro(a.knownCents)} heb je zelf gezegd wat het was; van ${euro(a.unknownCents)} weet LaVega niet wat het was.`,
+      );
     return out;
   },
 
@@ -225,8 +267,12 @@ export const GRENS_COPY = {
    *  STROOM, dus een antwoord uit maart spreekt ook voor december. Door het
    *  bereik erbij te zetten kan hij zien wanneer dat niet meer klopt. */
   stroomAntwoord(a: {
-    kind: CrossScopeKind; source: "user" | "agent"; at: string | null;
-    count: number; firstDate: string; lastDate: string;
+    kind: CrossScopeKind;
+    source: "user" | "agent";
+    at: string | null;
+    count: number;
+    firstDate: string;
+    lastDate: string;
   }): string[] {
     return [
       `${SOURCE_LABELS[a.source]} deze stroom “${KIND_LABELS[a.kind]}”${a.at ? ` op ${a.at}` : ""}. Dat antwoord staat bij alle ${a.count} overboeking${a.count === 1 ? "" : "en"} van deze stroom, van ${a.firstDate} t/m ${a.lastDate}.`,
@@ -236,7 +282,11 @@ export const GRENS_COPY = {
   /** De vraag. Dit is de zin die het ontwerp zelf toestaat, letterlijk: een
    *  bedrag, een aantal, een datum en een vraagteken. */
   stroomVraag(a: {
-    fromLabel: string; toLabel: string; unknownCents: number; unknownCount: number; lastDate: string;
+    fromLabel: string;
+    toLabel: string;
+    unknownCents: number;
+    unknownCount: number;
+    lastDate: string;
   }): string[] {
     return [
       `${euro(a.unknownCents)} · ${a.unknownCount} overboeking${a.unknownCount === 1 ? "" : "en"}, de laatste op ${a.lastDate} · ${a.fromLabel} → ${a.toLabel}. LaVega ziet niet wat deze overboekingen waren. Wat was dit?`,
@@ -247,9 +297,16 @@ export const GRENS_COPY = {
    *  het uit komt. Dat is de herkomst-toets in zijn strengste vorm — twee
    *  documenten, met hun datum, voor één bedrag. */
   kruisingTweeBenen(a: {
-    amountCents: number; date: string; fromLabel: string; toLabel: string;
-    uitLabel: string; uitDate: string; uitCents: number;
-    inLabel: string; inDate: string; inCents: number;
+    amountCents: number;
+    date: string;
+    fromLabel: string;
+    toLabel: string;
+    uitLabel: string;
+    uitDate: string;
+    uitCents: number;
+    inLabel: string;
+    inDate: string;
+    inCents: number;
   }): string[] {
     // De richting staat er in WOORDEN en niet als minteken voor een bedrag:
     // "€ -4.300,00 op BV1" is te lezen als een negatief saldo in plaats van als
@@ -266,8 +323,12 @@ export const GRENS_COPY = {
    *  in het totaal erboven — anders leest een lezer een dubbeltelling waar er
    *  geen is. Eindigt in een vraag, want dit is precies wat LaVega niet ziet. */
   kruisingEenBeen(a: {
-    amountCents: number; date: string; fromLabel: string; toLabel: string;
-    evidence: CrossScopeEvidence; uitgaand: boolean;
+    amountCents: number;
+    date: string;
+    fromLabel: string;
+    toLabel: string;
+    evidence: CrossScopeEvidence;
+    uitgaand: boolean;
   }): string[] {
     return [
       `${euro(a.amountCents)} · ${a.date} · ${a.fromLabel} → ${a.toLabel}. LaVega ziet geen tegenboeking in je vault: een rekening die je niet geïmporteerd hebt, laat er geen achter. ${EVIDENCE_REASON[a.evidence]} Eén kant is dus gemeten, en dit bedrag telt één keer mee in het totaal hierboven. ${a.uitgaand ? "Waar kwam dit terecht?" : "Waar kwam dit vandaan?"}`,
@@ -284,7 +345,12 @@ export const GRENS_COPY = {
   /** WAT ER BUITEN DE METING VIEL. Dit blok hoort onlosmakelijk bij het totaal:
    *  core geeft `unseen` op elke uitkomst mee juist zodat een scherm geen totaal
    *  kan tonen zonder zijn eigen uitzonderingen in de hand te hebben. */
-  uitgesloten(a: { noAccount: number; noEntity: number; currencyMismatch: number; mirrorSuppressed: number }): string[] {
+  uitgesloten(a: {
+    noAccount: number;
+    noEntity: number;
+    currencyMismatch: number;
+    mirrorSuppressed: number;
+  }): string[] {
     const out: string[] = [];
     if (a.noAccount > 0) {
       out.push(
@@ -311,7 +377,10 @@ export const GRENS_COPY = {
     // plaatsen", vlak boven een blok dat vertelt welke rekeningnummers LaVega
     // juist NIET kon plaatsen — twee betekenissen van hetzelfde woord onder
     // elkaar, waarvan de eerste als volledigheidsclaim te lezen was.
-    if (out.length === 0) out.push("Elke transactie in dit venster stond op een rekening die bij een onderneming hoort.");
+    if (out.length === 0)
+      out.push(
+        "Elke transactie in dit venster stond op een rekening die bij een onderneming hoort.",
+      );
     return out;
   },
 
@@ -329,7 +398,10 @@ export const GRENS_COPY = {
    *  factuur is er niets terug te vragen, dus staat hier geen woord over
    *  aftrekbaarheid, en het retourtype van core draagt er ook geen veld voor. */
   bijproductKop(a: { rows: number }): string[] {
-    if (a.rows === 0) return ["Geen enkele tegenpartij komt in dit venster op zowel een privérekening als een zakelijke rekening voor."];
+    if (a.rows === 0)
+      return [
+        "Geen enkele tegenpartij komt in dit venster op zowel een privérekening als een zakelijke rekening voor.",
+      ];
     return [
       `${a.rows} tegenpartij${a.rows === 1 ? "" : "en"} ${a.rows === 1 ? "komt" : "komen"} in dit venster op zowel een privérekening als een zakelijke rekening voor. Dat is één naam op twee rekeningen — gemeten, en het zegt niets over aftrekbaarheid.`,
       "Een bank, een telefoonmaatschappij of een verzekeraar staat daar met recht tussen. LaVega filtert die niet weg: een uitzonderingenlijst is hoe een meting stilletjes een mening wordt.",
@@ -337,8 +409,13 @@ export const GRENS_COPY = {
   },
 
   bijproductRij(a: {
-    label: string; personalCount: number; personalCents: number;
-    businessCount: number; businessCents: number; firstDate: string; lastDate: string;
+    label: string;
+    personalCount: number;
+    personalCents: number;
+    businessCount: number;
+    businessCents: number;
+    firstDate: string;
+    lastDate: string;
   }): string[] {
     return [
       `${a.label}: ${a.personalCount} betaling${a.personalCount === 1 ? "" : "en"} van ${a.personalCount === 1 ? "" : "samen "}${euro(a.personalCents)} vanaf een privérekening en ${a.businessCount} van ${a.businessCount === 1 ? "" : "samen "}${euro(a.businessCents)} vanaf een zakelijke rekening, tussen ${a.firstDate} en ${a.lastDate}. Horen die privébetalingen bij je onderneming?`,
@@ -382,9 +459,15 @@ export const GRENS_COPY = {
    *  typegedwongen op elke sleutel van `GRENS_COPY` en heeft geen render nodig. */
   reviewChrome(): string[] {
     return [
-      "Stroom", "Gemeten", "Wat was dit?",
-      "nog niet beantwoord", "Salaris", "Dividend", "Weet ik niet",
-      "Bewaar antwoorden", "Annuleer",
+      "Stroom",
+      "Gemeten",
+      "Wat was dit?",
+      "nog niet beantwoord",
+      "Salaris",
+      "Dividend",
+      "Weet ik niet",
+      "Bewaar antwoorden",
+      "Annuleer",
     ];
   },
 } as const;
@@ -420,7 +503,14 @@ type GrensProps = {
 };
 
 export default function Grens({
-  allAccounts, allTxs, entityProfiles, asOf, ownNames, answers, busy, onSaveAnswers,
+  allAccounts,
+  allTxs,
+  entityProfiles,
+  asOf,
+  ownNames,
+  answers,
+  busy,
+  onSaveAnswers,
 }: GrensProps) {
   // idle → review → idle. Geen `consent`-fase: die bestaat bij de
   // AI-categorisatie omdat er data naar een model gaat, en hier gaat er niets
@@ -430,7 +520,14 @@ export default function Grens({
   const [note, setNote] = useState<string | null>(null);
 
   const input = useMemo(
-    () => ({ accounts: allAccounts, txs: allTxs, profiles: entityProfiles, asOf, names: ownNames, answers }),
+    () => ({
+      accounts: allAccounts,
+      txs: allTxs,
+      profiles: entityProfiles,
+      asOf,
+      names: ownNames,
+      answers,
+    }),
     [allAccounts, allTxs, entityProfiles, asOf, ownNames, answers],
   );
   const report = useMemo(() => crossScopeTransfers(input), [input]);
@@ -462,7 +559,10 @@ export default function Grens({
   if (report.state !== "gemeten") {
     const lines =
       report.state === "geen-zakelijke-entiteit"
-        ? GRENS_COPY.geenZakelijkeEntiteit({ unclassified: report.entities.unclassified, personal: report.entities.personal })
+        ? GRENS_COPY.geenZakelijkeEntiteit({
+            unclassified: report.entities.unclassified,
+            personal: report.entities.personal,
+          })
         : report.state === "geen-persoonlijke-entiteit"
           ? GRENS_COPY.geenPersoonlijkeEntiteit({ business: report.entities.business })
           : GRENS_COPY.geenTransacties({
@@ -475,7 +575,10 @@ export default function Grens({
       <Module title="Privé en zakelijk" span={2} footer={footer}>
         <div data-testid={`grens-${report.state}`}>{paragraphs(lines, "leeg")}</div>
         {report.state === "geen-transacties" &&
-          paragraphs(GRENS_COPY.uitgesloten({ ...report.unseen, currencyMismatch: 0, mirrorSuppressed: 0 }), "uitgesloten")}
+          paragraphs(
+            GRENS_COPY.uitgesloten({ ...report.unseen, currencyMismatch: 0, mirrorSuppressed: 0 }),
+            "uitgesloten",
+          )}
       </Module>
     );
   }
@@ -486,8 +589,11 @@ export default function Grens({
   // precies één kant zakelijk (core matcht alleen tegengestelde kanten), dus
   // die keuze is eenduidig — en het is dezelfde onderneming waarop het antwoord
   // straks wordt bewaard.
-  const businessOf = (s: { fromEntity: string | null; toEntity: string | null; fromScope: EntityScope }): string =>
-    (s.fromScope === "business" ? s.fromEntity : s.toEntity) ?? "";
+  const businessOf = (s: {
+    fromEntity: string | null;
+    toEntity: string | null;
+    fromScope: EntityScope;
+  }): string => (s.fromScope === "business" ? s.fromEntity : s.toEntity) ?? "";
 
   // GEEN useMemo hieronder, en dat is met opzet: dit staat NA de vroege return
   // van de drie lege toestanden, en een hook achter een return is een hook die
@@ -542,7 +648,12 @@ export default function Grens({
       {crossings.length === 0 ? (
         <div data-testid="grens-niets-gekruist">
           {paragraphs(
-            GRENS_COPY.nietsGekruist({ from: win.from, to: win.to, obsFrom: observed.from, obsTo: observed.to }),
+            GRENS_COPY.nietsGekruist({
+              from: win.from,
+              to: win.to,
+              obsFrom: observed.from,
+              obsTo: observed.to,
+            }),
             "niets",
           )}
         </div>
@@ -553,76 +664,97 @@ export default function Grens({
               en ruis is precies hoe een herkomstregel ophoudt gelezen te worden. */}
           {paragraphs(
             GRENS_COPY.herkomst({
-              from: win.from, to: win.to, obsFrom: observed.from, obsTo: observed.to,
+              from: win.from,
+              to: win.to,
+              obsFrom: observed.from,
+              obsTo: observed.to,
               pairWindowDays: CROSS_SCOPE_PAIR_WINDOW_DAYS,
             }),
             "herkomst",
           )}
           {groups.map(([entity, entityStreams]) => (
-          <div className="tax-entity" key={entity || "zonder-naam"}>
-            <div className="tax-entity-head">
-              <span className="tax-entity-name">{entity}</span>
-            </div>
-            {entityStreams.map((s) => {
-              const rows = crossingsByStream.get(s.key) ?? [];
-              const shown = rows.slice(0, MAX_ROWS_PER_STREAM);
-              const fromLabel = sideLabel(s.fromEntity, s.fromScope);
-              const toLabel = sideLabel(s.toEntity, s.toScope);
-              return (
-                <div className="grens-stroom" key={s.key}>
-                  {paragraphs(
-                    GRENS_COPY.stroomKop({
-                      fromLabel, toLabel, count: s.count,
-                      totalCents: s.totalCents, matchedCents: s.matchedCents, unmatchedCents: s.unmatchedCents,
-                      knownCents: s.totalCents - s.unknownCents, unknownCents: s.unknownCents,
-                    }),
-                    `kop-${s.key}`,
-                  )}
-                  {s.kindSource !== null &&
-                    paragraphs(
-                      GRENS_COPY.stroomAntwoord({
-                        kind: s.kind, source: s.kindSource, at: answerDate(s.key),
-                        count: s.count, firstDate: s.firstDate, lastDate: s.lastDate,
+            <div className="tax-entity" key={entity || "zonder-naam"}>
+              <div className="tax-entity-head">
+                <span className="tax-entity-name">{entity}</span>
+              </div>
+              {entityStreams.map((s) => {
+                const rows = crossingsByStream.get(s.key) ?? [];
+                const shown = rows.slice(0, MAX_ROWS_PER_STREAM);
+                const fromLabel = sideLabel(s.fromEntity, s.fromScope);
+                const toLabel = sideLabel(s.toEntity, s.toScope);
+                return (
+                  <div className="grens-stroom" key={s.key}>
+                    {paragraphs(
+                      GRENS_COPY.stroomKop({
+                        fromLabel,
+                        toLabel,
+                        count: s.count,
+                        totalCents: s.totalCents,
+                        matchedCents: s.matchedCents,
+                        unmatchedCents: s.unmatchedCents,
+                        knownCents: s.totalCents - s.unknownCents,
+                        unknownCents: s.unknownCents,
                       }),
-                      `antwoord-${s.key}`,
+                      `kop-${s.key}`,
                     )}
-                  {s.unknownCount > 0 &&
-                    paragraphs(
-                      GRENS_COPY.stroomVraag({
-                        fromLabel, toLabel, unknownCents: s.unknownCents,
-                        unknownCount: s.unknownCount,
-                        // De datum van de laatste ONBEANTWOORDE overboeking, niet
-                        // die van de stroom: die twee lopen uiteen zodra één rij
-                        // wel een antwoord heeft, en dan zou de zin naar een rij
-                        // wijzen waar de vraag niet over gaat.
-                        lastDate: rows.reduce((d, c) => (c.kind === "onbekend" && c.date > d ? c.date : d), s.firstDate),
-                      }),
-                      `vraag-${s.key}`,
-                    )}
-                  {/* KOP + ANTWOORD/VRAAG hierboven zijn het antwoord; de losse
+                    {s.kindSource !== null &&
+                      paragraphs(
+                        GRENS_COPY.stroomAntwoord({
+                          kind: s.kind,
+                          source: s.kindSource,
+                          at: answerDate(s.key),
+                          count: s.count,
+                          firstDate: s.firstDate,
+                          lastDate: s.lastDate,
+                        }),
+                        `antwoord-${s.key}`,
+                      )}
+                    {s.unknownCount > 0 &&
+                      paragraphs(
+                        GRENS_COPY.stroomVraag({
+                          fromLabel,
+                          toLabel,
+                          unknownCents: s.unknownCents,
+                          unknownCount: s.unknownCount,
+                          // De datum van de laatste ONBEANTWOORDE overboeking, niet
+                          // die van de stroom: die twee lopen uiteen zodra één rij
+                          // wel een antwoord heeft, en dan zou de zin naar een rij
+                          // wijzen waar de vraag niet over gaat.
+                          lastDate: rows.reduce(
+                            (d, c) => (c.kind === "onbekend" && c.date > d ? c.date : d),
+                            s.firstDate,
+                          ),
+                        }),
+                        `vraag-${s.key}`,
+                      )}
+                    {/* KOP + ANTWOORD/VRAAG hierboven zijn het antwoord; de losse
                       rijen met hun bewijs (welk been gemeten is, en waarom) zijn
                       de onderbouwing. Zelfde indeling als de btw-module in
                       Belasting.tsx — zie ToonMeer.tsx voor waarom dit een
                       <details> is en geen useState. */}
-                  <ToonMeer summary="Hoe dit gemeten is">
-                    <div className="grens-rijen">
-                      {shown.map((c) => (
-                        <div className="grens-rij" key={c.id}>
-                          {paragraphs(crossingLines(c), `rij-${c.id}`)}
-                        </div>
-                      ))}
-                    </div>
-                    {rows.length > shown.length &&
-                      paragraphs(
-                        GRENS_COPY.meerRijen({ hidden: rows.length - shown.length, shown: shown.length, count: rows.length }),
-                        `meer-${s.key}`,
-                      )}
-                  </ToonMeer>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                    <ToonMeer summary="Hoe dit gemeten is">
+                      <div className="grens-rijen">
+                        {shown.map((c) => (
+                          <div className="grens-rij" key={c.id}>
+                            {paragraphs(crossingLines(c), `rij-${c.id}`)}
+                          </div>
+                        ))}
+                      </div>
+                      {rows.length > shown.length &&
+                        paragraphs(
+                          GRENS_COPY.meerRijen({
+                            hidden: rows.length - shown.length,
+                            shown: shown.length,
+                            count: rows.length,
+                          }),
+                          `meer-${s.key}`,
+                        )}
+                    </ToonMeer>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </>
       )}
 
@@ -645,8 +777,10 @@ export default function Grens({
 
       {paragraphs(
         GRENS_COPY.uitgesloten({
-          noAccount: unseen.noAccount, noEntity: unseen.noEntity,
-          currencyMismatch: report.currencyMismatch, mirrorSuppressed: report.mirrorSuppressed,
+          noAccount: unseen.noAccount,
+          noEntity: unseen.noEntity,
+          currencyMismatch: report.currencyMismatch,
+          mirrorSuppressed: report.mirrorSuppressed,
         }),
         "uitgesloten",
       )}
@@ -655,67 +789,105 @@ export default function Grens({
            lokaal concept, en pas "Bewaar antwoorden" schrijft iets weg. ─────── */}
       {unanswered.length > 0 && phase === "idle" && (
         <div className="stack-form-actions">
-          <button type="button" className="btn" disabled={busy} onClick={() => { setNote(null); setPhase("review"); }}>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => {
+              setNote(null);
+              setPhase("review");
+            }}
+          >
             Beantwoord {unanswered.length} stroom{unanswered.length === 1 ? "" : "en"}
           </button>
         </div>
       )}
 
-      {phase === "review" && (() => {
-        const [kolomStroom, kolomGemeten, kolomWatWasDit, nogNietBeantwoord, salarisLabel, dividendLabel, onbekendLabel, bewaarLabel, annuleerLabel] =
-          GRENS_COPY.reviewChrome();
-        return (
-        <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
-          {paragraphs(GRENS_COPY.antwoordUitleg({ streams: unanswered.length }), "uitleg")}
-          <div className="table-wrap table-cards">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{kolomStroom}</th>
-                  <th>{kolomGemeten}</th>
-                  <th>{kolomWatWasDit}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unanswered.map((s) => {
-                  const label = `${sideLabel(s.fromEntity, s.fromScope)} → ${sideLabel(s.toEntity, s.toScope)}`;
-                  return (
-                    <tr key={s.key}>
-                      <td data-label={kolomStroom}>{label}</td>
-                      <td data-label={kolomGemeten}>
-                        {euro(s.totalCents)} · {s.count}× · {s.firstDate} t/m {s.lastDate}
-                      </td>
-                      <td data-label={kolomWatWasDit}>
-                        <select
-                          value={drafts[s.key] ?? ""}
-                          disabled={busy}
-                          aria-label={`Wat was ${label}`}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({ ...prev, [s.key]: e.target.value as CrossScopeKind | "" }))
-                          }
-                        >
-                          <option value="">{nogNietBeantwoord}</option>
-                          <option value="salaris">{salarisLabel}</option>
-                          <option value="dividend">{dividendLabel}</option>
-                          <option value="onbekend">{onbekendLabel}</option>
-                        </select>
-                      </td>
+      {phase === "review" &&
+        (() => {
+          const [
+            kolomStroom,
+            kolomGemeten,
+            kolomWatWasDit,
+            nogNietBeantwoord,
+            salarisLabel,
+            dividendLabel,
+            onbekendLabel,
+            bewaarLabel,
+            annuleerLabel,
+          ] = GRENS_COPY.reviewChrome();
+          return (
+            <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
+              {paragraphs(GRENS_COPY.antwoordUitleg({ streams: unanswered.length }), "uitleg")}
+              <div className="table-wrap table-cards">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{kolomStroom}</th>
+                      <th>{kolomGemeten}</th>
+                      <th>{kolomWatWasDit}</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={saveAnswers}>
-            {bewaarLabel}
-          </button>{" "}
-          <button type="button" className="btn" disabled={busy} onClick={() => { setDrafts({}); setPhase("idle"); }}>
-            {annuleerLabel}
-          </button>
-        </div>
-        );
-      })()}
-      {note && <p className="cell-sub" role="alert">{note}</p>}
+                  </thead>
+                  <tbody>
+                    {unanswered.map((s) => {
+                      const label = `${sideLabel(s.fromEntity, s.fromScope)} → ${sideLabel(s.toEntity, s.toScope)}`;
+                      return (
+                        <tr key={s.key}>
+                          <td data-label={kolomStroom}>{label}</td>
+                          <td data-label={kolomGemeten}>
+                            {euro(s.totalCents)} · {s.count}× · {s.firstDate} t/m {s.lastDate}
+                          </td>
+                          <td data-label={kolomWatWasDit}>
+                            <select
+                              value={drafts[s.key] ?? ""}
+                              disabled={busy}
+                              aria-label={`Wat was ${label}`}
+                              onChange={(e) =>
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [s.key]: e.target.value as CrossScopeKind | "",
+                                }))
+                              }
+                            >
+                              <option value="">{nogNietBeantwoord}</option>
+                              <option value="salaris">{salarisLabel}</option>
+                              <option value="dividend">{dividendLabel}</option>
+                              <option value="onbekend">{onbekendLabel}</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={saveAnswers}
+              >
+                {bewaarLabel}
+              </button>{" "}
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  setDrafts({});
+                  setPhase("idle");
+                }}
+              >
+                {annuleerLabel}
+              </button>
+            </div>
+          );
+        })()}
+      {note && (
+        <p className="cell-sub" role="alert">
+          {note}
+        </p>
+      )}
 
       {/* ── Het bijproduct ────────────────────────────────────────────────── */}
       <div className="tax-entity" data-testid="grens-bijproduct">
@@ -724,7 +896,9 @@ export default function Grens({
         </div>
         {paragraphs(GRENS_COPY.bijproductKop({ rows: costRows.length }), "bijproduct-kop")}
         {costRows.map((r) => (
-          <div key={r.merchant}>{paragraphs(GRENS_COPY.bijproductRij(r), `bijproduct-${r.merchant}`)}</div>
+          <div key={r.merchant}>
+            {paragraphs(GRENS_COPY.bijproductRij(r), `bijproduct-${r.merchant}`)}
+          </div>
         ))}
       </div>
     </Module>
@@ -740,13 +914,24 @@ function crossingLines(c: CrossScopeCrossing): string[] {
     const uit: CrossScopeLeg = c.legs[0].signedCents < 0 ? c.legs[0] : c.legs[1];
     const bij: CrossScopeLeg = uit === c.legs[0] ? c.legs[1] : c.legs[0];
     return GRENS_COPY.kruisingTweeBenen({
-      amountCents: c.amountCents, date: c.date, fromLabel, toLabel,
-      uitLabel: uit.entity, uitDate: uit.date, uitCents: uit.signedCents,
-      inLabel: bij.entity, inDate: bij.date, inCents: bij.signedCents,
+      amountCents: c.amountCents,
+      date: c.date,
+      fromLabel,
+      toLabel,
+      uitLabel: uit.entity,
+      uitDate: uit.date,
+      uitCents: uit.signedCents,
+      inLabel: bij.entity,
+      inDate: bij.date,
+      inCents: bij.signedCents,
     });
   }
   return GRENS_COPY.kruisingEenBeen({
-    amountCents: c.amountCents, date: c.date, fromLabel, toLabel,
-    evidence: c.evidence, uitgaand: (c.legs[0]?.signedCents ?? 0) < 0,
+    amountCents: c.amountCents,
+    date: c.date,
+    fromLabel,
+    toLabel,
+    evidence: c.evidence,
+    uitgaand: (c.legs[0]?.signedCents ?? 0) < 0,
   });
 }

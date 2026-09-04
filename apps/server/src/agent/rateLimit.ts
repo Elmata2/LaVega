@@ -8,7 +8,11 @@
  * lost on restart. Good enough to keep a runaway client (or a stuck retry loop)
  * from hammering the paid Anthropic API.
  */
-export function createRateLimiter(max: number, windowMs: number, now: () => number = () => Date.now()) {
+export function createRateLimiter(
+  max: number,
+  windowMs: number,
+  now: () => number = () => Date.now(),
+) {
   const hits = new Map<string, number[]>();
   return (key: string): boolean => {
     const t = now();

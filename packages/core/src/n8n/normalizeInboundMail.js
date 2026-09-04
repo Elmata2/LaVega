@@ -38,7 +38,13 @@
  *      een link op die naar niets wijst; dat is een advies dat niet kan werken.
  */
 
-import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './normalizeGmailMessage.js';
+import {
+  MAX_TEXT_CHARS,
+  MIN_TEXT_CHARS,
+  asString,
+  pickBody,
+  pickPdfs,
+} from "./normalizeGmailMessage.js";
 
 /** @typedef {import('./normalizeGmailMessage.js').InvoicePdf} InvoicePdf */
 
@@ -88,7 +94,7 @@ import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './
  */
 
 /** De uitslagen die SPF/DKIM/DMARC volgens RFC 7601 kunnen geven. */
-const AUTH_RESULTS = ['pass', 'fail', 'softfail', 'neutral', 'none', 'temperror', 'permerror'];
+const AUTH_RESULTS = ["pass", "fail", "softfail", "neutral", "none", "temperror", "permerror"];
 
 /**
  * Alles wat we niet als geldige uitslag herkennen wordt 'unknown'. Dit is de
@@ -100,7 +106,7 @@ const AUTH_RESULTS = ['pass', 'fail', 'softfail', 'neutral', 'none', 'temperror'
  */
 function readAuthResult(v) {
   const value = asString(v).toLowerCase().trim();
-  return AUTH_RESULTS.indexOf(value) >= 0 ? /** @type {AuthResult} */ (value) : 'unknown';
+  return AUTH_RESULTS.indexOf(value) >= 0 ? /** @type {AuthResult} */ (value) : "unknown";
 }
 
 /**
@@ -108,8 +114,12 @@ function readAuthResult(v) {
  * @returns {SenderChecks}
  */
 function readSenderChecks(v) {
-  const o = /** @type {Record<string, unknown>} */ (v && typeof v === 'object' ? v : {});
-  return { spf: readAuthResult(o.spf), dkim: readAuthResult(o.dkim), dmarc: readAuthResult(o.dmarc) };
+  const o = /** @type {Record<string, unknown>} */ (v && typeof v === "object" ? v : {});
+  return {
+    spf: readAuthResult(o.spf),
+    dkim: readAuthResult(o.dkim),
+    dmarc: readAuthResult(o.dmarc),
+  };
 }
 
 /**
@@ -126,12 +136,16 @@ function readSenderChecks(v) {
  * @returns {'passed'|'failed'|'unknown'}
  */
 function senderCheckOf(checks) {
-  const bad = ['fail', 'softfail', 'permerror'];
-  if (bad.indexOf(checks.spf) >= 0 || bad.indexOf(checks.dkim) >= 0 || bad.indexOf(checks.dmarc) >= 0) {
-    return 'failed';
+  const bad = ["fail", "softfail", "permerror"];
+  if (
+    bad.indexOf(checks.spf) >= 0 ||
+    bad.indexOf(checks.dkim) >= 0 ||
+    bad.indexOf(checks.dmarc) >= 0
+  ) {
+    return "failed";
   }
-  if (checks.spf === 'pass' || checks.dkim === 'pass') return 'passed';
-  return 'unknown';
+  if (checks.spf === "pass" || checks.dkim === "pass") return "passed";
+  return "unknown";
 }
 
 /**
@@ -145,19 +159,19 @@ function senderCheckOf(checks) {
  */
 function reasonForUnreadable(textChars, skipped, attachmentCount) {
   if (skipped.length > 0) {
-    return 'Geen leesbare tekst, en de bijlage ging niet mee — ' + skipped.join('; ') + '.';
+    return "Geen leesbare tekst, en de bijlage ging niet mee — " + skipped.join("; ") + ".";
   }
   if (textChars > 0) {
-    return 'Maar ' + textChars + ' tekens tekst en geen PDF-bijlage in de doorgestuurde mail.';
+    return "Maar " + textChars + " tekens tekst en geen PDF-bijlage in de doorgestuurde mail.";
   }
   if (attachmentCount > 0) {
     return (
-      'Geen leesbare tekst, en van de ' +
+      "Geen leesbare tekst, en van de " +
       attachmentCount +
-      ' bijlage(n) was er geen enkele een PDF. Een gescande bon als afbeelding wordt niet gelezen; stuur de PDF door.'
+      " bijlage(n) was er geen enkele een PDF. Een gescande bon als afbeelding wordt niet gelezen; stuur de PDF door."
     );
   }
-  return 'Geen leesbare tekst en geen bijlage in de doorgestuurde mail.';
+  return "Geen leesbare tekst en geen bijlage in de doorgestuurde mail.";
 }
 
 /**
@@ -165,7 +179,9 @@ function reasonForUnreadable(textChars, skipped, attachmentCount) {
  * @returns {NormalizedInboundMessage}
  */
 function normalizeInboundMail(payload) {
-  const p = /** @type {Record<string, unknown>} */ (payload && typeof payload === 'object' ? payload : {});
+  const p = /** @type {Record<string, unknown>} */ (
+    payload && typeof payload === "object" ? payload : {}
+  );
 
   // pickBody kijkt naar text / textAsHtml / html en pakt de LANGSTE. Bij gelijke
   // lengte wint text/plain, want die staat vooraan in zijn kandidatenlijst — en
@@ -178,33 +194,33 @@ function normalizeInboundMail(payload) {
 
   const rawAttachments = Array.isArray(p.attachments) ? p.attachments : [];
   const attachments = rawAttachments.map(function (a, index) {
-    const o = /** @type {Record<string, unknown>} */ (a && typeof a === 'object' ? a : {});
+    const o = /** @type {Record<string, unknown>} */ (a && typeof a === "object" ? a : {});
     return {
-      key: 'attachment_' + index,
+      key: "attachment_" + index,
       fileName: asString(o.fileName),
       mimeType: asString(o.mimeType),
       data: asString(o.data),
     };
   });
-  const picked = pickPdfs(attachments, 'inbound-mail');
+  const picked = pickPdfs(attachments, "inbound-mail");
 
   const ok = picked.pdfs.length > 0 || text.length >= MIN_TEXT_CHARS;
   const senderChecks = readSenderChecks(p.auth);
 
   return {
-    source: 'inbound-mail',
+    source: "inbound-mail",
     messageId: asString(p.messageId),
     subject: asString(p.subject),
     from: asString(p.from),
     date: asString(p.date),
     text: text,
-    textSource: textChars === 0 ? 'none' : body.textSource,
+    textSource: textChars === 0 ? "none" : body.textSource,
     textChars: textChars,
     truncated: textChars > text.length,
     pdfs: picked.pdfs,
     skipped: picked.skipped,
     ok: ok,
-    reason: ok ? '' : reasonForUnreadable(textChars, picked.skipped, attachments.length),
+    reason: ok ? "" : reasonForUnreadable(textChars, picked.skipped, attachments.length),
     deliveredTo: asString(p.to),
     queueKey: asString(p.queueKey),
     senderChecks: senderChecks,

@@ -2,11 +2,23 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { makeRewardsBalance, isStale, REWARD_PROGRAMS } from "./rewards.js";
 
-const amex = makeRewardsBalance({ program: "American Express Membership Rewards", points: 10000, updatedAt: "2026-06-01" });
+const amex = makeRewardsBalance({
+  program: "American Express Membership Rewards",
+  points: 10000,
+  updatedAt: "2026-06-01",
+});
 
 test("makeRewardsBalance: stable id per program (same program -> same id)", () => {
-  const a = makeRewardsBalance({ program: "American Express Membership Rewards", points: 1, updatedAt: "2026-01-01" });
-  const b = makeRewardsBalance({ program: "  american express membership rewards ", points: 999, updatedAt: "2026-07-01" });
+  const a = makeRewardsBalance({
+    program: "American Express Membership Rewards",
+    points: 1,
+    updatedAt: "2026-01-01",
+  });
+  const b = makeRewardsBalance({
+    program: "  american express membership rewards ",
+    points: 999,
+    updatedAt: "2026-07-01",
+  });
   expect(a.id).toBe(b.id); // dedupe by normalized program name
   expect(typeof a.id).toBe("string");
   expect(a.id.length).toBeGreaterThan(0);
@@ -14,7 +26,7 @@ test("makeRewardsBalance: stable id per program (same program -> same id)", () =
 
 test("isStale: true past maxDays, false within", () => {
   expect(isStale(amex, "2026-06-15", 90)).toBe(false); // 14 days
-  expect(isStale(amex, "2026-10-01", 90)).toBe(true);   // ~122 days
+  expect(isStale(amex, "2026-10-01", 90)).toBe(true); // ~122 days
 });
 
 test("reference table is non-empty and well-formed", () => {
@@ -44,8 +56,14 @@ const REPO = new URL("../../../", import.meta.url);
  *  regels met "> " ervoor, en een zin die in het document over twee regels staat
  *  is nog steeds dezelfde zin. Zonder deze afvlakking zou de test de opmaak van
  *  het document toetsen in plaats van wat er staat. */
-const flat = (s: string): string => s.replace(/^\s*>\s?/gm, " ").replace(/\s+/g, " ").trim();
-const SOURCE = flat(readFileSync(new URL("docs/research/2026-08-20-punten-koersen.md", REPO), "utf8"));
+const flat = (s: string): string =>
+  s
+    .replace(/^\s*>\s?/gm, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const SOURCE = flat(
+  readFileSync(new URL("docs/research/2026-08-20-punten-koersen.md", REPO), "utf8"),
+);
 
 const ING = REWARD_PROGRAMS.find((p) => p.name === "ING");
 const ingNote = (): string => {
@@ -68,13 +86,19 @@ test("elke drempel in de ING-note staat met hetzelfde cijfer in de bron", () => 
   // Per regel twee toetsen: de bron zegt het (de tabelrij staat er letterlijk),
   // en de note zegt hetzelfde (bedrag en aantal in één zinsdeel, zodat ze niet
   // uit elkaar te lezen zijn).
-  expect(SOURCE).toMatch(/Elke maand minimaal € 700 bijschrijven op je Betaalrekening \| 250 per maand/);
+  expect(SOURCE).toMatch(
+    /Elke maand minimaal € 700 bijschrijven op je Betaalrekening \| 250 per maand/,
+  );
   expect(note).toMatch(/250 punten per maand bij minimaal € 700/);
 
-  expect(SOURCE).toMatch(/Meer dan € 100 uitgeven met je ING Creditcard Extra of Max \| 250 per maand/);
+  expect(SOURCE).toMatch(
+    /Meer dan € 100 uitgeven met je ING Creditcard Extra of Max \| 250 per maand/,
+  );
   expect(note).toMatch(/250 bij meer dan € 100 besteed met de Creditcard Extra of Max/);
 
-  expect(SOURCE).toMatch(/Meer dan € 100 uitgeven met je ING \(studenten\) Creditcard More \| 100 per maand/);
+  expect(SOURCE).toMatch(
+    /Meer dan € 100 uitgeven met je ING \(studenten\) Creditcard More \| 100 per maand/,
+  );
   expect(note).toMatch(/100 met de \(studenten\) Creditcard More/);
 });
 

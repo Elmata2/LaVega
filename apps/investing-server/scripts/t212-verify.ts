@@ -9,9 +9,12 @@ import { createTrading212Adapter } from "@lavega/adapters";
 
 const redact = (v: unknown, depth = 0): unknown => {
   if (v === null || v === undefined) return v;
-  if (Array.isArray(v)) return { __array: v.length, sample: v.length ? redact(v[0], depth + 1) : undefined };
+  if (Array.isArray(v))
+    return { __array: v.length, sample: v.length ? redact(v[0], depth + 1) : undefined };
   if (typeof v === "object") {
-    return Object.fromEntries(Object.entries(v as object).map(([k, val]) => [k, redact(val, depth + 1)]));
+    return Object.fromEntries(
+      Object.entries(v as object).map(([k, val]) => [k, redact(val, depth + 1)]),
+    );
   }
   if (typeof v === "number") return `<number:${v}>`; // amounts kept: signs matter for verification
   if (typeof v === "string") return /^\d{4}-\d{2}-\d{2}/.test(v) ? v : `<str:len${v.length}>`;
@@ -19,14 +22,16 @@ const redact = (v: unknown, depth = 0): unknown => {
 };
 
 const store = createFileCredentialStore();
-if (!(await store.unlock(process.env.LAVEGA_VAULT_PASSPHRASE ?? ""))) throw new Error("vault unlock failed");
+if (!(await store.unlock(process.env.LAVEGA_VAULT_PASSPHRASE ?? "")))
+  throw new Error("vault unlock failed");
 const cred = await store.getCredentials("local", "trading212");
 if (!cred) throw new Error("no Trading 212 credentials in vault");
 console.log("vault unlocked; T212 credentials present");
 
 const base = process.env.TRADING212_BASE_URL ?? "https://live.trading212.com";
 const auth = "Basic " + Buffer.from(`${cred.token}:${cred.secret ?? ""}`).toString("base64");
-const get = async (path: string) => (await fetch(base + path, { headers: { Authorization: auth } })).json();
+const get = async (path: string) =>
+  (await fetch(base + path, { headers: { Authorization: auth } })).json();
 
 // 1. Raw shapes (sanitized)
 const cash = await get("/api/v0/equity/account/cash");
@@ -48,23 +53,32 @@ const result = await createTrading212Adapter({
 }).sync({ entity: "personal" });
 
 console.log("ADAPTER problems:", JSON.stringify(result.problems));
-console.log("counts:", JSON.stringify({
-  positions: result.positions?.length,
-  trades: result.trades?.length,
-  dividends: result.dividends?.length,
-  cashBalances: result.cashBalances?.length,
-  cashFlows: result.cashFlows?.length,
-}));
+console.log(
+  "counts:",
+  JSON.stringify({
+    positions: result.positions?.length,
+    trades: result.trades?.length,
+    dividends: result.dividends?.length,
+    cashBalances: result.cashBalances?.length,
+    cashFlows: result.cashFlows?.length,
+  }),
+);
 console.log("cashBalances:", JSON.stringify(result.cashBalances));
 console.log(
   "cashFlows by kind:",
-  JSON.stringify(Object.entries(Object.groupBy(result.cashFlows ?? [], (f) => f.kind)).map(([k, v]) => ({ kind: k, n: v!.length }))),
+  JSON.stringify(
+    Object.entries(Object.groupBy(result.cashFlows ?? [], (f) => f.kind)).map(([k, v]) => ({
+      kind: k,
+      n: v!.length,
+    })),
+  ),
 );
-console.log(
-  "dividend sample:",
-  JSON.stringify((result.dividends ?? []).slice(0, 3), null, 1),
-);
+console.log("dividend sample:", JSON.stringify((result.dividends ?? []).slice(0, 3), null, 1));
 console.log(
   "diagnostics summary:",
-  JSON.stringify(Object.entries(Object.groupBy(seen as { type?: string }[], (e) => e.type ?? "?")).map(([k, v]) => ({ type: k, n: v!.length }))),
+  JSON.stringify(
+    Object.entries(Object.groupBy(seen as { type?: string }[], (e) => e.type ?? "?")).map(
+      ([k, v]) => ({ type: k, n: v!.length }),
+    ),
+  ),
 );

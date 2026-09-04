@@ -42,10 +42,17 @@ const ROW = {
 };
 
 /** A fetch stand-in: no network, exact status/body control. */
-function fakeFetch(status: number, body: unknown, opts: { throws?: boolean; badJson?: boolean } = {}) {
+function fakeFetch(
+  status: number,
+  body: unknown,
+  opts: { throws?: boolean; badJson?: boolean } = {},
+) {
   const calls: Array<{ url: string; token: string | undefined }> = [];
   const impl = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, token: (init?.headers as Record<string, string> | undefined)?.["x-lavega-token"] });
+    calls.push({
+      url,
+      token: (init?.headers as Record<string, string> | undefined)?.["x-lavega-token"],
+    });
     if (opts.throws) throw new TypeError("Failed to fetch");
     return {
       ok: status >= 200 && status < 300,
@@ -80,7 +87,9 @@ test("an unstated VAT stays null — never 0", () => {
 });
 
 test("a row without a usable amount or messageId is counted, not silently swallowed", () => {
-  const parsed = parseQueue({ invoices: [ROW, { ...ROW, messageId: "x", amountCents: null }, { messageId: "" }] });
+  const parsed = parseQueue({
+    invoices: [ROW, { ...ROW, messageId: "x", amountCents: null }, { messageId: "" }],
+  });
   expect(parsed!.rows).toHaveLength(1);
   expect(parsed!.dropped).toBe(2);
 });
@@ -104,15 +113,37 @@ test("fetchQueue sends the token in x-lavega-token and returns the rows", async 
 
 test("every failure mode is its own outcome, and none of them is 'ok'", async () => {
   expect(await fetchQueue("", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
-  expect(await fetchQueue("https://x", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(401, {}).impl)).toEqual({ kind: "unauthorized", status: 401 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(403, {}).impl)).toEqual({ kind: "unauthorized", status: 403 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(404, {}).impl)).toEqual({ kind: "http-error", status: 404 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { throws: true }).impl)).toEqual({ kind: "network" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { badJson: true }).impl)).toEqual({ kind: "unreadable" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
+  expect(await fetchQueue("https://x", "", fakeFetch(200, {}).impl)).toEqual({
+    kind: "not-configured",
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(401, {}).impl)).toEqual({
+    kind: "unauthorized",
+    status: 401,
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(403, {}).impl)).toEqual({
+    kind: "unauthorized",
+    status: 403,
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(404, {}).impl)).toEqual({
+    kind: "http-error",
+    status: 404,
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { throws: true }).impl)).toEqual({
+    kind: "network",
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { badJson: true }).impl)).toEqual({
+    kind: "unreadable",
+  });
+  expect(await fetchQueue("https://x", "t", fakeFetch(200, { ok: true }).impl)).toEqual({
+    kind: "unreadable",
+  });
   // The empty queue IS ok — it just carries no rows.
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({ kind: "ok", rows: [], notices: [], dropped: 0 });
+  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({
+    kind: "ok",
+    rows: [],
+    notices: [],
+    dropped: 0,
+  });
 });
 
 test("pendingToInvoice refuses what it cannot know, and marks what a model read", () => {
@@ -205,7 +236,10 @@ test("a workflow that sends no notices is not an error — the owner hasn't re-i
 test("a notice without a messageId or with an unknown kind is not shown at all", () => {
   const parsed = parseQueue({
     invoices: [],
-    notices: [{ ...NOTICE, messageId: "" }, { ...NOTICE, kind: "iets-nieuws" }],
+    notices: [
+      { ...NOTICE, messageId: "" },
+      { ...NOTICE, kind: "iets-nieuws" },
+    ],
   });
   expect(parsed!.notices).toEqual([]);
 });
@@ -267,16 +301,28 @@ test("een regel zonder afzendercontrole krijgt 'unknown', nooit 'passed'", () =>
   expect(row.senderCheck).toBe("unknown");
   expect(row.deliveredTo).toBeUndefined();
   // En een verzonnen waarde ook niet.
-  expect(parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck).toBe("unknown");
+  expect(
+    parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck,
+  ).toBe("unknown");
 });
 
 test("autoBookDecision: geverifieerde afzender + complete factuur + één onderneming = boekt zichzelf", () => {
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
-  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({ book: true });
+  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({
+    book: true,
+  });
 });
 
 test("autoBookDecision: een afzender die de controle niet haalt of niet had, boekt niets", () => {
-  const failed = parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] })!.rows[0];
+  const failed = parseQueue({
+    invoices: [
+      {
+        ...FORWARDED,
+        senderCheck: "failed",
+        senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+      },
+    ],
+  })!.rows[0];
   const d1 = autoBookDecision(failed, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d1.book).toBe(false);
   expect(d1.book === false && d1.reason).toContain("SPF");
@@ -292,7 +338,9 @@ test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt
   // GEEN openstaande vraag — het is het antwoord: alles staat op hem. De eis
   // "precies één" hield hem hier tegen op een keuze die niet bestond.
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
-  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({ book: true });
+  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({
+    book: true,
+  });
 });
 
 test("bookingEntity: de poort en de boeking gebruiken dezelfde regel", () => {
@@ -362,7 +410,11 @@ test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag
   // De volgorde van de poorten bepaalt welke melding hij leest, en bij een
   // nagemaakte afzender van € 50.000 is "de afzender klopt niet" het nuttige feit.
   const d = autoBookDecision(
-    { ...verifiedRow({ amountCents: 5_000_000 }), senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    {
+      ...verifiedRow({ amountCents: 5_000_000 }),
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+    },
     { entityChoices: ["BV1"], defaultEntity: "BV1" },
   );
   if (d.book) throw new Error("verwacht dat een gespoofte afzender dit tegenhoudt");
@@ -407,7 +459,10 @@ test("de poort gaat niet open van een geldige DKIM alleen", () => {
    * is veranderd; het zegt niets over wie het doorstuurde. Zou deze test omvallen,
    * dan is er een tekstwijziging uitgelopen op een besluit over veiligheid. */
   const d = autoBookDecision(
-    verifiedRow({ senderCheck: "failed", senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" } }),
+    verifiedRow({
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" },
+    }),
     { entityChoices: [], defaultEntity: "Prive" },
   );
   expect(d.book).toBe(false);

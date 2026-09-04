@@ -1,4 +1,8 @@
-import { useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { CategorySlice } from "./blocks/statistics.js";
 
 /* SpendPie — what a period's spending is made of.
@@ -98,7 +102,13 @@ export type SpendPieProps = {
   onSelect?: (category: string) => void;
 };
 
-export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSelect }: SpendPieProps) {
+export default function SpendPie({
+  slices,
+  totalCents,
+  euro,
+  maxSlices = 8,
+  onSelect,
+}: SpendPieProps) {
   // Which slice is being asked about — by hover, by focus, or by a tap on the
   // ring. null means nobody asked, and then the hole shows the total.
   const [active, setActive] = useState<number | null>(null);
@@ -123,17 +133,20 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
 
   // Build the gradient as cumulative stops. Rounding each boundary to two
   // decimals keeps the string short without a visible seam.
-  let at = 0;
   const stops = shown.map((s, i) => {
-    const from = at;
-    at += s.share * 100;
+    const from = shown.slice(0, i).reduce((sum, slice) => sum + slice.share * 100, 0);
+    const at = from + s.share * 100;
     const to = i === shown.length - 1 ? 100 : Math.round(at * 100) / 100;
     const colour = reading === null || i === active ? sliceColor(i) : `${sliceColor(i)}${DIMMED}`;
     return `${colour} ${Math.round(from * 100) / 100}% ${to}%`;
   });
 
   /** Which arc a pointer event landed on, or null for the hole and the corners. */
-  function arcAt(e: { currentTarget: HTMLDivElement; clientX: number; clientY: number }): number | null {
+  function arcAt(e: {
+    currentTarget: HTMLDivElement;
+    clientX: number;
+    clientY: number;
+  }): number | null {
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
     return sliceAtPoint(
@@ -226,7 +239,11 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive((a) => (a === i ? null : a))}
               >
-                <span className="spend-pie-swatch" style={{ background: sliceColor(i) }} aria-hidden="true" />
+                <span
+                  className="spend-pie-swatch"
+                  style={{ background: sliceColor(i) }}
+                  aria-hidden="true"
+                />
                 <span className="spend-pie-name">{s.category}</span>
                 <span className="spend-pie-value">{euro(s.cents)}</span>
                 <span className="spend-pie-share">{Math.round(s.share * 100)}%</span>

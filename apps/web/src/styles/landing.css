@@ -81,7 +81,10 @@ body.lp-scroll #root {
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
 }
 .lp-btn:hover {
   transform: translateY(-1px);
@@ -153,7 +156,9 @@ body.lp-scroll #root {
   border-radius: 24px;
   padding: 24px;
   text-align: left;
-  box-shadow: 0 40px 80px -40px rgba(43, 33, 23, 0.45), 0 8px 20px -12px rgba(43, 33, 23, 0.2);
+  box-shadow:
+    0 40px 80px -40px rgba(43, 33, 23, 0.45),
+    0 8px 20px -12px rgba(43, 33, 23, 0.2);
 }
 .lp-device-eyebrow {
   font-family: var(--font-mono);
@@ -482,9 +487,15 @@ body.lp-scroll #root {
   border-radius: 50%;
   border: 1.5px solid var(--lp-line);
 }
-.lp-ill-fast .c1 { translate: -48px 16px; }
-.lp-ill-fast .c2 { translate: -24px 6px; }
-.lp-ill-fast .c3 { translate: 0 -4px; }
+.lp-ill-fast .c1 {
+  translate: -48px 16px;
+}
+.lp-ill-fast .c2 {
+  translate: -24px 6px;
+}
+.lp-ill-fast .c3 {
+  translate: 0 -4px;
+}
 .lp-ill-fast .c4 {
   translate: 30px -14px;
   background: var(--lp-tan);
@@ -493,8 +504,13 @@ body.lp-scroll #root {
   animation: lp-breathe 3.2s ease-in-out infinite;
 }
 @keyframes lp-breathe {
-  0%, 100% { scale: 1; }
-  50% { scale: 1.09; }
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.09;
+  }
 }
 /* toggles — connect all accounts */
 .lp-ill-toggles {
@@ -528,9 +544,17 @@ body.lp-scroll #root {
   animation: lp-toggle 2.8s ease-in-out infinite;
 }
 @keyframes lp-toggle {
-  0%, 28% { left: calc(100% - 23px); }
-  58%, 70% { left: 3px; }
-  100% { left: calc(100% - 23px); }
+  0%,
+  28% {
+    left: calc(100% - 23px);
+  }
+  58%,
+  70% {
+    left: 3px;
+  }
+  100% {
+    left: calc(100% - 23px);
+  }
 }
 /* rings — encryption */
 .lp-ill-rings .ring,
@@ -545,8 +569,14 @@ body.lp-scroll #root {
   border-radius: 50%;
   border: 1.5px solid var(--lp-line);
 }
-.lp-ill-rings .r1 { width: 120px; height: 120px; }
-.lp-ill-rings .r2 { width: 80px; height: 80px; }
+.lp-ill-rings .r1 {
+  width: 120px;
+  height: 120px;
+}
+.lp-ill-rings .r2 {
+  width: 80px;
+  height: 80px;
+}
 .lp-ill-rings .core {
   width: 26px;
   height: 26px;
@@ -568,19 +598,46 @@ body.lp-scroll #root {
   background: var(--lp-ink);
 }
 @keyframes lp-spin {
-  to { rotate: 360deg; }
+  to {
+    rotate: 360deg;
+  }
 }
 /* tree — overview */
-.lp-ill-tree svg { overflow: visible; }
-.lp-ill-tree .tree-node { fill: rgba(207, 159, 94, 0.18); stroke: var(--lp-tan-deep); stroke-width: 1.5; }
-.lp-ill-tree .tree-core { fill: var(--lp-ink); }
-.lp-ill-tree .tree-branch { fill: none; stroke: var(--lp-ink2); stroke-width: 1.5; stroke-dasharray: 3 4; }
-.lp-ill-tree .tree-leaf { fill: var(--lp-tan-deep); animation: lp-pulse 2.4s ease-in-out infinite; }
-.lp-ill-tree .tree-leaf:nth-of-type(2) { animation-delay: 0.4s; }
-.lp-ill-tree .tree-leaf:nth-of-type(3) { animation-delay: 0.8s; }
+.lp-ill-tree svg {
+  overflow: visible;
+}
+.lp-ill-tree .tree-node {
+  fill: rgba(207, 159, 94, 0.18);
+  stroke: var(--lp-tan-deep);
+  stroke-width: 1.5;
+}
+.lp-ill-tree .tree-core {
+  fill: var(--lp-ink);
+}
+.lp-ill-tree .tree-branch {
+  fill: none;
+  stroke: var(--lp-ink2);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+}
+.lp-ill-tree .tree-leaf {
+  fill: var(--lp-tan-deep);
+  animation: lp-pulse 2.4s ease-in-out infinite;
+}
+.lp-ill-tree .tree-leaf:nth-of-type(2) {
+  animation-delay: 0.4s;
+}
+.lp-ill-tree .tree-leaf:nth-of-type(3) {
+  animation-delay: 0.8s;
+}
 @keyframes lp-pulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ---- Agents feature carousel ---- */
@@ -608,7 +665,9 @@ body.lp-scroll #root {
   font-size: 1.2rem;
   color: var(--lp-ink);
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
 }
 .lp-carousel-nav button:hover {
   transform: translateY(-1px);
@@ -709,7 +768,9 @@ body.lp-scroll #root {
   position: absolute;
   background: var(--lp-tan-deep);
   border-radius: 2px;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 .lp-faq-mark::before {
   top: 7px;
@@ -939,7 +1000,9 @@ body.lp-scroll #root {
 .lp-reveal {
   opacity: 0;
   transform: translateY(18px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
 }
 .lp-reveal.lp-in {
   opacity: 1;

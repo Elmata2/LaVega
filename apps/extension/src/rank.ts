@@ -73,7 +73,12 @@
 
 import type { CheckoutCard, CardFee, Sourced } from "./types.js";
 import { pctOfCents, points as pointsOn } from "./money.js";
-import { minimumCharge, comparableHorizonMonths, DEFAULT_HORIZON_MONTHS, type MinimumCharge } from "./horizon.js";
+import {
+  minimumCharge,
+  comparableHorizonMonths,
+  DEFAULT_HORIZON_MONTHS,
+  type MinimumCharge,
+} from "./horizon.js";
 
 export type Currency = string;
 
@@ -142,12 +147,32 @@ export type Caveat =
   | { soort: "onbeoordeeld"; veld: Veld };
 
 const MAANDEN_EN: Record<string, number> = {
-  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
-  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
 };
 const MAANDEN_NL: Record<string, number> = {
-  januari: 1, februari: 2, maart: 3, april: 4, mei: 5, juni: 6,
-  juli: 7, augustus: 8, september: 9, oktober: 10, november: 11, december: 12,
+  januari: 1,
+  februari: 2,
+  maart: 3,
+  april: 4,
+  mei: 5,
+  juni: 6,
+  juli: 7,
+  augustus: 8,
+  september: 9,
+  oktober: 10,
+  november: 11,
+  december: 12,
 };
 
 /** "30 September 2026" of "30 september 2026" → "2026-09-30". Onleesbaar → null.
@@ -232,7 +257,8 @@ const CAP_MET_BEDRAG =
 
 /** Is er überhaupt sprake van een plafond? Alleen woorden die een plafond
  *  BENOEMEN, niet elk bedrag dat toevallig een periode draagt. */
-const CAP_AANWEZIG = /\bcap\b|\bcapped\b|spending cap|\bplafond\b|\blimiet\b|maximum[^.]{0,25}\bspend\b/i;
+const CAP_AANWEZIG =
+  /\bcap\b|\bcapped\b|spending cap|\bplafond\b|\blimiet\b|maximum[^.]{0,25}\bspend\b/i;
 
 /** Uitgesproken géén plafond. De keerzijde van regel 1 — maar alleen als de bron
  *  het zelf zegt, en niet als ze zegt dat ze het NIET weet. */
@@ -351,7 +377,10 @@ export type GelezenZin = { zin: string; soort: ZinSoort; vorm: string | null };
 const RESTRICTIE_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
   /* Voor wie het cijfer geldt. */
   ["geschiktheid", /\balleen\s+(?:voor|bij|binnen|met|aan te vragen|geldig|bestaande)/i],
-  ["geschiktheid", /\buitsluitend\b|\binwoners van\b|\bgeselecteerde\b|\bresidents? of\b|\bavailable only\b/i],
+  [
+    "geschiktheid",
+    /\buitsluitend\b|\binwoners van\b|\bgeselecteerde\b|\bresidents? of\b|\bavailable only\b/i,
+  ],
   ["geschiktheid", /\bvanaf \d{1,2} jaar\b|\bleeftijd\b|\btot en met \d{1,2} jaar\b/i],
   /* Het cijfer hangt aan een ander product dat óók geld kost. Regel 2 van de
    * opdracht woont hier: "inbegrepen in het pakket" is geen nul. */
@@ -378,12 +407,21 @@ const RESTRICTIE_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
   /* Aangekondigd, tegengesproken of oud: het cijfer is dan een ondergrens en
    * geen actuele prijs. */
   ["aangekondigd", /\b(?:per|vanaf)\s+\d{1,2}\s+[a-zA-Z]+\s+\d{4}\b/i],
-  ["aangekondigd", /\bwijzig|\bverhoog|\bverhoging|\bverhogen|\bverhoogd|\bverhoogt|\bprijsstijging\b/i],
+  [
+    "aangekondigd",
+    /\bwijzig|\bverhoog|\bverhoging|\bverhogen|\bverhoogd|\bverhoogt|\bprijsstijging\b/i,
+  ],
   ["aangekondigd", /\bgaat\b[^.]{0,40}\bnaar\s*€|\bondergrens\b|\bgeen actuele prijs\b/i],
   ["aangekondigd", /\bhercontroleer\b|\bhoudbaarheid\b|\bveroudering\b|\bachterhaald\b/i],
-  ["aangekondigd", /\bstaleness\b|re-check|\bspreekt[^.]{0,25}\btegen\b|\btegenspraak\b|\bnieuwer\b/i],
+  [
+    "aangekondigd",
+    /\bstaleness\b|re-check|\bspreekt[^.]{0,25}\btegen\b|\btegenspraak\b|\bnieuwer\b/i,
+  ],
   /* Kosten die er nog bij komen: eenmalig, verzending, vervanging, "may apply". */
-  ["extra-kosten", /\beenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i],
+  [
+    "extra-kosten",
+    /\beenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i,
+  ],
   ["extra-kosten", /\bone-off\b|\bone-time\b|\bmay apply\b|\bkomen er\b|\bper keer\b/i],
   ["extra-kosten", /\bvervanging\b|\bvervangende?\b|\bverzendkosten\b|\bbezorging\b|\bissuance\b/i],
   ["extra-kosten", /\bwat wel geld kost\b|\bwat niet nul is\b/i],
@@ -398,7 +436,10 @@ const RESTRICTIE_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
    * een zin die er een draagt NOOIT als herkomst wordt weggefilterd — anders
    * zou de detector zijn eigen bewijs niet meer zien. */
   ["plafond-of-uitsluiting", /\bcap\b|\bcapped\b|\bplafond\b|\blimiet\b|\blimit\b|\bdaglimiet\b/i],
-  ["plafond-of-uitsluiting", /\bmaximum\b|\bmaximaal\b|\bexclusions?\b|\bineligible\b|\bexcluded\b/i],
+  [
+    "plafond-of-uitsluiting",
+    /\bmaximum\b|\bmaximaal\b|\bexclusions?\b|\bineligible\b|\bexcluded\b/i,
+  ],
   ["plafond-of-uitsluiting", /\buitgesloten\b|\buitsluiting|\bin crypto\b|\bniet in euro/i],
 ];
 
@@ -420,18 +461,27 @@ const HERKOMST_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
     "vindplaats",
     /\btarievenstuk\b|\btarieventabel\b|\bkostenoverzicht\b|\bkostenpagina\b|\bprijslijst\b|\boverzicht\b/i,
   ],
-  ["vindplaats", /\bproductpagina\b|\blandingspagina\b|\blegal-pagina\b|\baanvraagbrochure\b|\bde bron\b|\bpayload\b/i],
+  [
+    "vindplaats",
+    /\bproductpagina\b|\blandingspagina\b|\blegal-pagina\b|\baanvraagbrochure\b|\bde bron\b|\bpayload\b/i,
+  ],
   /* Wanneer het gelezen is, en waaraan die datum hangt. */
   ["datering", /\bversiestempel\b|\bFEE_[A-Z0-9_]+\b|\bde datum is\b|\bdateert\b|\bgedateerd\b/i],
   ["datering", /\bgepubliceerd op\b|\blaatst bijgewerkt\b|\bbijwerkdatum\b|\bingangsdatum\b/i],
-  ["datering", /\blastUpdatedDate\b|\bupdatedAt\b|\bpageUpdateDate\b|\baanmaakdatum\b|\bvolgnummer\b/i],
+  [
+    "datering",
+    /\blastUpdatedDate\b|\bupdatedAt\b|\bpageUpdateDate\b|\baanmaakdatum\b|\bvolgnummer\b/i,
+  ],
   ["datering", /\bdraagt geen datum\b|\bzonder datum\b/i],
   /* Hoe we eraan zijn gekomen toen de bron verdween. */
   ["archief", /\bwayback\b|\bsnapshot\b|\b404\b|\bHTTP \d{3}\b|\bgelezen is de\b|\blive URL\b/i],
   /* Een tweede bron die hetzelfde zegt. Dit is de enige vorm die een BEDRAG mag
    * dragen zonder van een ander product te zijn: hij zegt dat het bedrag
    * hetzelfde is, niet dat het iets anders is. */
-  ["bevestiging", /\bhetzelfde bedrag\b|\bwoordelijk gelijk\b|\bhetzelfde stempel\b|\bstaat ook op\b/i],
+  [
+    "bevestiging",
+    /\bhetzelfde bedrag\b|\bwoordelijk gelijk\b|\bhetzelfde stempel\b|\bstaat ook op\b/i,
+  ],
   ["bevestiging", /\bzegt hetzelfde\b|\bnog steeds zo\b|\bbevestigt\b|\bnoemt ook\b/i],
   /* Het jaartotaal van dít bedrag. MET OPZET HERKOMST: zo kan het nooit als
    * waarde worden gebruikt, en blijft regel 3 (de bron bepaalt de eenheid)
@@ -439,7 +489,10 @@ const HERKOMST_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
   ["jaartotaal", /\bhet jaartotaal\b|\bjaarprijs\b|\bin jaarvorm\b|\bniet omgerekend\b/i],
   ["jaartotaal", /\bzowel de maand- als de jaar/i],
   /* Het bedrag van een ANDER product uit dezelfde tabel. */
-  ["ander-product", /\b(?:extra|additionele|tweede)\s+(?:kaart|kaarten|card|betaalpas|kaarthouder)\b/i],
+  [
+    "ander-product",
+    /\b(?:extra|additionele|tweede)\s+(?:kaart|kaarten|card|betaalpas|kaarthouder)\b/i,
+  ],
   /* "extra Green Cards", "extra Platinum Card": het woord "extra" met een
    * EIGENNAAM erachter. Drie van de vier Flying Blue-teksten zeggen dit met een
    * kleine letter en één met een hoofdletter; dat is spelling en geen betekenis,
@@ -449,7 +502,10 @@ const HERKOMST_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
    * zin overblijft. Met één hoofdletter bleef er "reen" van "Green" staan, en dan
    * zou dat brokstuk in het woordenboek moeten. Aan WAT er matcht verandert het
    * niets: een hoofdletter met letters erachter is nog steeds een hoofdletter. */
-  ["ander-product", /\b(?:[Ee]xtra|[Aa]dditionele|[Tt]weede)\s+[A-Z][a-zA-Z]*|\bper extra kaart\b|\bkaarthouder\b/],
+  [
+    "ander-product",
+    /\b(?:[Ee]xtra|[Aa]dditionele|[Tt]weede)\s+[A-Z][a-zA-Z]*|\bper extra kaart\b|\bkaarthouder\b/,
+  ],
   /* Wie de rekening stuurt. */
   ["uitgever", /\buitgegeven door\b|\bis een product van\b|\bde uitgever\b|\bICS-product\b/i],
   /* Wat er in de prijs zit. Let op de buurman in de beperkingslijst:
@@ -485,11 +541,14 @@ const HERKOMST_VORMEN: ReadonlyArray<readonly [string, RegExp]> = [
  * uitgesproken nul" is één tekst met twee beweringen), en valt de zin bij een
  * ontkenning naar "onbekend" — niet naar herkomst, en niet naar een nul. */
 const UITGESPROKEN_NUL = /\buitgesproken nul\b/i;
-const UITGESPROKEN_NUL_ONTKEND = /\b(?:geen|niet|nooit|no|not)\b[^.;!?]{0,40}?\buitgesproken nul\b/i;
+const UITGESPROKEN_NUL_ONTKEND =
+  /\b(?:geen|niet|nooit|no|not)\b[^.;!?]{0,40}?\buitgesproken nul\b/i;
 
 /** Zegt deze tekst ergens BEVESTIGEND dat de nul uitgesproken is? */
 function bevestigtUitgesprokenNul(tekst: string): boolean {
-  return splitsZinnen(tekst).some((z) => UITGESPROKEN_NUL.test(z) && !UITGESPROKEN_NUL_ONTKEND.test(z));
+  return splitsZinnen(tekst).some(
+    (z) => UITGESPROKEN_NUL.test(z) && !UITGESPROKEN_NUL_ONTKEND.test(z),
+  );
 }
 
 /* HET GESLOTEN WOORDENBOEK, en dit is de helft die de ontsnapping per ZIN maakt
@@ -515,24 +574,78 @@ function bevestigtUitgesprokenNul(tekst: string): boolean {
  * Zonder eigenaar valt "daarna € 59,50" alsnog naar "onbekend". */
 const HERKOMST_WOORDEN: ReadonlySet<string> = new Set<string>([
   /* Lidwoorden, voornaamwoorden, voegwoorden, voorzetsels. */
-  "de", "het", "een", "dit", "dat", "die", "deze", "dezelfde", "zelf", "u",
-  "en", "als", "maar", "daarna", "niet", "geen",
-  "in", "op", "van", "voor", "uit", "boven", "per",
+  "de",
+  "het",
+  "een",
+  "dit",
+  "dat",
+  "die",
+  "deze",
+  "dezelfde",
+  "zelf",
+  "u",
+  "en",
+  "als",
+  "maar",
+  "daarna",
+  "niet",
+  "geen",
+  "in",
+  "op",
+  "van",
+  "voor",
+  "uit",
+  "boven",
+  "per",
   /* Neutrale meldwerkwoorden: ze zeggen dat de bron iets STAAT, niet onder welke
    * voorwaarde het geldt. */
-  "is", "was", "staat", "staan", "heeft", "hebben", "draagt", "dragen",
-  "noemt", "noemen", "zegt", "zeggen", "blijkt", "betaalt",
+  "is",
+  "was",
+  "staat",
+  "staan",
+  "heeft",
+  "hebben",
+  "draagt",
+  "dragen",
+  "noemt",
+  "noemen",
+  "zegt",
+  "zeggen",
+  "blijkt",
+  "betaalt",
   /* Hoe een vindplaats zichzelf beschrijft. */
-  "titel", "voettekst", "datum", "voorganger", "toepassing",
+  "titel",
+  "voettekst",
+  "datum",
+  "voorganger",
+  "toepassing",
   /* De eenheid en het voorwerp van de prijs. Regel 3 blijft overeind: er wordt
    * hier niets omgerekend, deze woorden mogen alleen MEEKOMEN in een zin. */
-  "kaart", "kaarten", "kaarthouder", "card", "cards", "maand", "jaar",
-  "jaarbijdrage", "kaartlidmaatschapsbijdragen",
+  "kaart",
+  "kaarten",
+  "kaarthouder",
+  "card",
+  "cards",
+  "maand",
+  "jaar",
+  "jaarbijdrage",
+  "kaartlidmaatschapsbijdragen",
   /* Eigennamen uit de herkomstproza die we hebben gelezen. */
-  "abn", "amro", "american", "express", "flying", "blue",
-  "the", "green", "gold", "silver", "platinum", "entry",
+  "abn",
+  "amro",
+  "american",
+  "express",
+  "flying",
+  "blue",
+  "the",
+  "green",
+  "gold",
+  "silver",
+  "platinum",
+  "entry",
   /* Maandnamen, uit dezelfde tabellen als `leesDatum` — één bron van waarheid. */
-  ...Object.keys(MAANDEN_NL), ...Object.keys(MAANDEN_EN),
+  ...Object.keys(MAANDEN_NL),
+  ...Object.keys(MAANDEN_EN),
 ]);
 
 /* Dezelfde herkomstvormen, maar globaal, zodat ze uit een zin kunnen worden
@@ -564,7 +677,11 @@ function restwoorden(zin: string): string[] {
 const BEDRAG_IN_ZIN = /(?:€|EUR\b|USD\b|\$)\s?\d/i;
 
 /** De enige drie vormen waaruit blijkt van WIE een bedrag in de zin is. */
-const BEDRAG_MET_EIGENAAR: ReadonlySet<string> = new Set(["ander-product", "jaartotaal", "bevestiging"]);
+const BEDRAG_MET_EIGENAAR: ReadonlySet<string> = new Set([
+  "ander-product",
+  "jaartotaal",
+  "bevestiging",
+]);
 
 /** De tekst in zinnen. Splitst op punt, puntkomma, uitroep- en vraagteken, met
  *  een eventueel afsluitend aanhalingsteken erbij.
@@ -658,7 +775,10 @@ export function leesVoorwaarden(
   const perZin = PER_ZIN_GELEZEN.has(veld);
   const zinnen = perZin ? leesZinnen(t) : [];
   const tv = perZin
-    ? zinnen.filter((z) => z.soort !== "herkomst").map((z) => z.zin).join(" ")
+    ? zinnen
+        .filter((z) => z.soort !== "herkomst")
+        .map((z) => z.zin)
+        .join(" ")
     : t;
 
   const uit: Caveat[] = [];
@@ -675,8 +795,12 @@ export function leesVoorwaarden(
    *    hoort"). De zinslezer hierboven vangt dat geval nu ook al; deze grens
    *    zorgt ervoor dat de detector de fout niet meer KÁN maken. */
   if (veld !== "kaartkosten") {
-    const inCrypto = /\bin\s+crypto\b/i.test(tv) || /cryptoback/i.test(tv) || /a digital currency/i.test(tv);
-    const ticker = /\b(?:paid|PAID|Paid|credited|Credited)\b[^.]{0,60}?\b(?:in|IN|In)\s+(?!CRYPTO\b)([A-Z]{2,5})\b/.exec(tv);
+    const inCrypto =
+      /\bin\s+crypto\b/i.test(tv) || /cryptoback/i.test(tv) || /a digital currency/i.test(tv);
+    const ticker =
+      /\b(?:paid|PAID|Paid|credited|Credited)\b[^.]{0,60}?\b(?:in|IN|In)\s+(?!CRYPTO\b)([A-Z]{2,5})\b/.exec(
+        tv,
+      );
     if (ticker) uit.push({ soort: "in-token", veld, token: ticker[1]! });
     else if (inCrypto || /\bnot euro\b/i.test(tv) || /niet in euro/i.test(tv)) {
       uit.push({ soort: "in-token", veld, token: "crypto" });
@@ -784,13 +908,16 @@ export function leesVoorwaarden(
    *    voorwaardeVRIJE netto-uitspraak aan overhouden, en dan is artikel 6.2
    *    ("other fees may apply") ongezien weg. Samen doen ze het werk. */
   if (
-    /eenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i.test(tv) ||
+    /eenmalige?\s+(?:kosten|vergoeding|bijdrage|uitgiftevergoeding|fee|post|maandpost)\b/i.test(
+      tv,
+    ) ||
     /one-off fee/i.test(tv) ||
     /one-time fee/i.test(tv)
   ) {
     uit.push({ soort: "eenmalig", veld });
   }
-  if (/\bbovenop\b/i.test(tv) || /komt.{0,40}lidmaatschap/i.test(tv)) uit.push({ soort: "bovenop", veld });
+  if (/\bbovenop\b/i.test(tv) || /komt.{0,40}lidmaatschap/i.test(tv))
+    uit.push({ soort: "bovenop", veld });
 
   /* 10. Er staat iets, en we herkenden er niets in.
    *
@@ -805,7 +932,8 @@ export function leesVoorwaarden(
    *     groen licht. De ontsnapping vraagt dus een positieve herkenning van
    *     ELKE zin. Onbekende proza valt naar de behoudende kant. */
   if (uit.length === 0) {
-    const alleenHerkomst = perZin && zinnen.length > 0 && zinnen.every((z) => z.soort === "herkomst");
+    const alleenHerkomst =
+      perZin && zinnen.length > 0 && zinnen.every((z) => z.soort === "herkomst");
     if (!alleenHerkomst) uit.push({ soort: "onbeoordeeld", veld });
   }
 
@@ -844,7 +972,8 @@ function bepaalClaim(caveats: readonly Caveat[], veld: Veld): EuroClaim {
   if (opbrengst.length === 0) return { soort: "vast" };
 
   const verlopen = opbrengst.find((c) => c.soort === "einddatum" && c.verlopen);
-  if (verlopen && verlopen.soort === "einddatum") return { soort: "vervallen", datum: verlopen.datum };
+  if (verlopen && verlopen.soort === "einddatum")
+    return { soort: "vervallen", datum: verlopen.datum };
 
   const token = opbrengst.find((c) => c.soort === "in-token");
   if (token && token.soort === "in-token") return { soort: "niet-in-euro", token: token.token };
@@ -864,9 +993,7 @@ function bepaalClaim(caveats: readonly Caveat[], veld: Veld): EuroClaim {
 
 /** Waarom een kaart niet gerangschikt kon worden. Een echte oorzaak, geen
  *  categorie: dit is de tekst die de gebruiker te zien krijgt. */
-export type UnknownReason =
-  | "geen-koersopslag-bekend"
-  | "geen-cashback-bekend";
+export type UnknownReason = "geen-koersopslag-bekend" | "geen-cashback-bekend";
 
 export type UnknownRow = {
   card: CheckoutCard;
@@ -981,7 +1108,9 @@ function buildRow(
   const caveats: Caveat[] = [
     ...leesVoorwaarden(card.cashbackPct.conditions, "cashback", cashbackPct, input.asOf),
     ...(fxBron ? leesVoorwaarden(fxBron.conditions, "koersopslag", fxBron.value, input.asOf) : []),
-    ...(card.fee ? leesVoorwaarden(card.fee.conditions, "kaartkosten", card.fee.value, input.asOf) : []),
+    ...(card.fee
+      ? leesVoorwaarden(card.fee.conditions, "kaartkosten", card.fee.value, input.asOf)
+      : []),
   ];
 
   const claim = bepaalClaim(caveats, "cashback");
@@ -1010,11 +1139,19 @@ function buildRow(
   let euroCents: number | null;
   if (input.amountCents === null) {
     euroCents = null;
-  } else if (claim.soort === "niet-in-euro" || claim.soort === "vervallen" || claim.soort === "onbeoordeeld") {
+  } else if (
+    claim.soort === "niet-in-euro" ||
+    claim.soort === "vervallen" ||
+    claim.soort === "onbeoordeeld"
+  ) {
     euroCents = null;
   } else if (fxOnzeker) {
     euroCents = null;
-  } else if (claim.soort === "hooguit" && claim.capCents !== null && input.amountCents > claim.capCents) {
+  } else if (
+    claim.soort === "hooguit" &&
+    claim.capCents !== null &&
+    input.amountCents > claim.capCents
+  ) {
     euroCents = pctOfCents(claim.capCents, cashbackPct) - pctOfCents(input.amountCents, fxPct);
   } else {
     euroCents = grossCents;
@@ -1025,7 +1162,20 @@ function buildRow(
       ? null
       : pointsOn(input.amountCents, card.pointsPerEuro.value);
 
-  const gedeeld = { card, held, fxPct, fxNote, cashbackPct, grossPct, grossCents, euroCents, claim, fxClaim, caveats, points };
+  const gedeeld = {
+    card,
+    held,
+    fxPct,
+    fxNote,
+    cashbackPct,
+    grossPct,
+    grossCents,
+    euroCents,
+    claim,
+    fxClaim,
+    caveats,
+    points,
+  };
 
   /* Hier valt de beslissing uit de kop van dit bestand. */
   if (held) {
@@ -1161,7 +1311,8 @@ export function rankCheckout(input: RankInput): Ranking {
    * met zijn voorwaarde erbij. Dat is de opdracht: het cijfer niet als opbrengst
    * tonen, maar de voorwaarde noemen die we niet konden wegstrepen. */
   const bruikbaarVoorVergelijking = mine.filter(inEuros);
-  const bestMine = bruikbaarVoorVergelijking.length > 0 ? bruikbaarVoorVergelijking[0]!.grossPct : null;
+  const bestMine =
+    bruikbaarVoorVergelijking.length > 0 ? bruikbaarVoorVergelijking[0]!.grossPct : null;
   const candidates =
     mine.length === 0
       ? others

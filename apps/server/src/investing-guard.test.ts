@@ -1,9 +1,16 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { shouldMountInvestingMock, investingTenantIdMock, forwardInvestingMock, runInvestingCronMock } = vi.hoisted(() => ({
+const {
+  shouldMountInvestingMock,
+  investingTenantIdMock,
+  forwardInvestingMock,
+  runInvestingCronMock,
+} = vi.hoisted(() => ({
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
-  forwardInvestingMock: vi.fn(async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`)),
+  forwardInvestingMock: vi.fn(
+    async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`),
+  ),
   runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
 }));
 
@@ -39,7 +46,13 @@ test("an investing API request is forwarded under the tenant the session named",
   investingTenantIdMock.mockResolvedValue("user-123");
   const app = await investingApp();
 
-  for (const path of ["/api/investing/dashboard", "/api/brokers/sync/status", "/api/prices/sync/status", "/api/market-data/consent", "/api/config/status"]) {
+  for (const path of [
+    "/api/investing/dashboard",
+    "/api/brokers/sync/status",
+    "/api/prices/sync/status",
+    "/api/market-data/consent",
+    "/api/config/status",
+  ]) {
     const response = await app.request(path);
     expect(await response.text(), path).toBe("tenant:user-123");
   }

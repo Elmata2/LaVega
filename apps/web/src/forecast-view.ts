@@ -21,7 +21,9 @@ export type BannerState = "shortfall" | "unknown" | "insufficient" | "none";
  *  flat — and calling that "geen tekort verwacht in de komende 13 weken" is a
  *  promise made out of no evidence, which is exactly the failure this codebase
  *  keeps hunting. Only a projection with something behind it gets the green. */
-export function bannerState(f: Pick<EntityForecast, "openingCents" | "shortfall" | "basis">): BannerState {
+export function bannerState(
+  f: Pick<EntityForecast, "openingCents" | "shortfall" | "basis">,
+): BannerState {
   if (f.shortfall !== null) return "shortfall";
   if (f.openingCents === null) return "unknown";
   if (f.basis && f.basis.confidence === "none") return "insufficient";
@@ -39,13 +41,21 @@ export function isThinData(f: Pick<EntityForecast, "streams" | "basis">): boolea
 /** Whether any weekly point carries a band with actual width. A band of zero
  *  width is a measurement ("these amounts never varied"), not a drawing. */
 export function hasBand(f: Pick<EntityForecast, "points">): boolean {
-  return f.points.some((p) => p.lowerCents !== null && p.upperCents !== null && p.upperCents !== p.lowerCents);
+  return f.points.some(
+    (p) => p.lowerCents !== null && p.upperCents !== null && p.upperCents !== p.lowerCents,
+  );
 }
 
 /** Dutch label for the engine's confidence grade. Deliberately plain words: a
  *  percentage here would claim a precision the grade does not have. */
 export function confidenceLabel(c: ForecastConfidence): string {
-  return c === "none" ? "geen prognose mogelijk" : c === "low" ? "beperkte basis" : c === "medium" ? "redelijke basis" : "brede basis";
+  return c === "none"
+    ? "geen prognose mogelijk"
+    : c === "low"
+      ? "beperkte basis"
+      : c === "medium"
+        ? "redelijke basis"
+        : "brede basis";
 }
 
 /** Whole days from ISO `a` to ISO `b`. Same Date.UTC arithmetic the engine uses
@@ -56,7 +66,9 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
 }
 
-const euro = (cents: number): string => "€" + new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 }).format(Math.round(cents / 100));
+const euro = (cents: number): string =>
+  "€" +
+  new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 }).format(Math.round(cents / 100));
 
 /** How many days behind `asOf` the newest transaction may be before the data
  *  itself is worth mentioning. Two weeks: shorter than a payment cycle, long
@@ -91,7 +103,11 @@ export function coverageNotes(f: EntityForecast): CoverageNote[] {
     });
   } else {
     const parts = [`${b.historyDays} dagen historie (${b.firstTxDate} t/m ${b.lastTxDate})`];
-    parts.push(b.liveStreamCount === 1 ? "1 lopende terugkerende stroom" : `${b.liveStreamCount} lopende terugkerende stromen`);
+    parts.push(
+      b.liveStreamCount === 1
+        ? "1 lopende terugkerende stroom"
+        : `${b.liveStreamCount} lopende terugkerende stromen`,
+    );
     if (b.projectedFlowCount > 0) parts.push(`${b.projectedFlowCount} ingeplande post(en)`);
     notes.push({ id: "basis", text: `Gebaseerd op ${parts.join(", ")}.` });
   }
@@ -109,7 +125,11 @@ export function coverageNotes(f: EntityForecast): CoverageNote[] {
   // Relative, not against a fixed threshold: the point is that ONE account is
   // far shorter than the picture the totals suggest, and repeating the engine's
   // own constant here would be a second place to keep it in step.
-  if (b.accountsWithHistory > 1 && b.shortestAccountDays !== null && b.shortestAccountDays * 2 < b.historyDays) {
+  if (
+    b.accountsWithHistory > 1 &&
+    b.shortestAccountDays !== null &&
+    b.shortestAccountDays * 2 < b.historyDays
+  ) {
     notes.push({
       id: "short-account",
       text: `De kortst geïmporteerde rekening heeft ${b.shortestAccountDays} dagen historie — wat daarop terugkeert is nog niet te zien.`,
@@ -124,7 +144,10 @@ export function coverageNotes(f: EntityForecast): CoverageNote[] {
   }
 
   if (b.bandBasis === "none") {
-    notes.push({ id: "no-band", text: "Geen bandbreedte: er is nog niets gemeten waaruit spreiding af te leiden valt." });
+    notes.push({
+      id: "no-band",
+      text: "Geen bandbreedte: er is nog niets gemeten waaruit spreiding af te leiden valt.",
+    });
   } else if (!hasBand(f)) {
     notes.push({
       id: "flat-band",

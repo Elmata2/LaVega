@@ -1,4 +1,11 @@
-import { crossRate, type Dividend, type FxRate, type Position, type PriceBar, type Trade } from "@lavega/core";
+import {
+  crossRate,
+  type Dividend,
+  type FxRate,
+  type Position,
+  type PriceBar,
+  type Trade,
+} from "@lavega/core";
 import type { FxProviderResult, FxRequest } from "@lavega/adapters";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
@@ -11,12 +18,44 @@ const ENTITY = "personal";
 const FIXTURE_BROKER = "trading212";
 const HISTORY_DAYS = 270;
 
-type FixtureSymbol = { symbol: string; currency: string; quantity: number; averagePrice: number; marketPrice: number; startClose: number; volatility: number };
+type FixtureSymbol = {
+  symbol: string;
+  currency: string;
+  quantity: number;
+  averagePrice: number;
+  marketPrice: number;
+  startClose: number;
+  volatility: number;
+};
 
 const SYMBOLS: FixtureSymbol[] = [
-  { symbol: "AAPL", currency: "USD", quantity: 25, averagePrice: 178.4, marketPrice: 231.2, startClose: 150, volatility: 6 },
-  { symbol: "MSFT", currency: "USD", quantity: 10, averagePrice: 352.1, marketPrice: 418.7, startClose: 300, volatility: 9 },
-  { symbol: "ASML", currency: "EUR", quantity: 4, averagePrice: 612, marketPrice: 706.5, startClose: 560, volatility: 15 },
+  {
+    symbol: "AAPL",
+    currency: "USD",
+    quantity: 25,
+    averagePrice: 178.4,
+    marketPrice: 231.2,
+    startClose: 150,
+    volatility: 6,
+  },
+  {
+    symbol: "MSFT",
+    currency: "USD",
+    quantity: 10,
+    averagePrice: 352.1,
+    marketPrice: 418.7,
+    startClose: 300,
+    volatility: 9,
+  },
+  {
+    symbol: "ASML",
+    currency: "EUR",
+    quantity: 4,
+    averagePrice: 612,
+    marketPrice: 706.5,
+    startClose: 560,
+    volatility: 15,
+  },
 ];
 
 function isoDate(date: Date): string {
@@ -33,12 +72,45 @@ function currencyOf(symbol: string): string {
   return SYMBOLS.find((entry) => entry.symbol === symbol)?.currency ?? "EUR";
 }
 
-function trade(id: string, now: Date, daysAgoCount: number, symbol: string, side: Trade["side"], quantity: number, price: number): Trade {
-  return { id, entity: ENTITY, date: isoDate(daysAgo(now, daysAgoCount)), symbol, side, quantity, price, amount: Math.round(quantity * price * 100) / 100, currency: currencyOf(symbol), commission: 1 };
+function trade(
+  id: string,
+  now: Date,
+  daysAgoCount: number,
+  symbol: string,
+  side: Trade["side"],
+  quantity: number,
+  price: number,
+): Trade {
+  return {
+    id,
+    entity: ENTITY,
+    date: isoDate(daysAgo(now, daysAgoCount)),
+    symbol,
+    side,
+    quantity,
+    price,
+    amount: Math.round(quantity * price * 100) / 100,
+    currency: currencyOf(symbol),
+    commission: 1,
+  };
 }
 
-function dividend(id: string, now: Date, daysAgoCount: number, symbol: string, amount: number): Dividend {
-  return { id, entity: ENTITY, broker: FIXTURE_BROKER, date: isoDate(daysAgo(now, daysAgoCount)), symbol, amount, currency: currencyOf(symbol) };
+function dividend(
+  id: string,
+  now: Date,
+  daysAgoCount: number,
+  symbol: string,
+  amount: number,
+): Dividend {
+  return {
+    id,
+    entity: ENTITY,
+    broker: FIXTURE_BROKER,
+    date: isoDate(daysAgo(now, daysAgoCount)),
+    symbol,
+    amount,
+    currency: currencyOf(symbol),
+  };
 }
 
 export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataSnapshot {
@@ -68,13 +140,25 @@ export function createDevFixtureBrokerData(now = new Date()): RuntimeBrokerDataS
   return { [FIXTURE_BROKER]: { positions, trades, dividends, cashBalances: [], cashFlows: [] } };
 }
 
-function series(symbol: string, currency: string, startClose: number, endClose: number, volatility: number, now: Date): PriceBar[] {
+function series(
+  symbol: string,
+  currency: string,
+  startClose: number,
+  endClose: number,
+  volatility: number,
+  now: Date,
+): PriceBar[] {
   const bars: PriceBar[] = [];
   for (let day = HISTORY_DAYS; day >= 0; day -= 1) {
     const progress = 1 - day / HISTORY_DAYS;
     const drift = startClose + (endClose - startClose) * progress;
     const wobble = Math.sin(day * 0.35) * volatility;
-    bars.push({ symbol, date: isoDate(daysAgo(now, day)), close: Math.round((drift + wobble) * 100) / 100, currency });
+    bars.push({
+      symbol,
+      date: isoDate(daysAgo(now, day)),
+      close: Math.round((drift + wobble) * 100) / 100,
+      currency,
+    });
   }
   return bars;
 }
@@ -84,7 +168,16 @@ function series(symbol: string, currency: string, startClose: number, endClose: 
  * keeps the frontend's on-mount price sync from making any real network calls. */
 export function createDevFixturePriceBars(now = new Date()): PriceBar[] {
   return [
-    ...SYMBOLS.flatMap((entry) => series(entry.symbol, entry.currency, entry.startClose, entry.marketPrice, entry.volatility, now)),
+    ...SYMBOLS.flatMap((entry) =>
+      series(
+        entry.symbol,
+        entry.currency,
+        entry.startClose,
+        entry.marketPrice,
+        entry.volatility,
+        now,
+      ),
+    ),
     ...series("SP500", "EUR", 4200, 5650, 40, now),
   ];
 }
@@ -104,7 +197,10 @@ export function createDevFixtureFxProvider() {
         return { rate: crossRate(request.from, request.to, FIXTURE_FX_RATE), problems: [] };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { rate: 0, problems: [`Dev fixture has no FX rate for ${request.from} to ${request.to}: ${message}`] };
+        return {
+          rate: 0,
+          problems: [`Dev fixture has no FX rate for ${request.from} to ${request.to}: ${message}`],
+        };
       }
     },
     async getLatestRate(): Promise<{ rate: FxRate; problems: string[] }> {

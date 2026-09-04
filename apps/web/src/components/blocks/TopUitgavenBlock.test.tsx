@@ -13,7 +13,9 @@ import { own, rules, txs } from "./fixtures";
  * printed as a confident percentage. */
 
 const block = (list: Tx[]) =>
-  renderToStaticMarkup(<TopUitgavenBlock txs={list} rules={rules} own={own} onSelectCategory={() => {}} />);
+  renderToStaticMarkup(
+    <TopUitgavenBlock txs={list} rules={rules} own={own} onSelectCategory={() => {}} />,
+  );
 
 const view = (comparison: CategoryComparison) =>
   renderToStaticMarkup(<TopUitgavenView comparison={comparison} onSelectCategory={() => {}} />);
@@ -50,8 +52,28 @@ const AMEX: Account = {
 };
 
 const augustOnlyCard: Tx[] = [
-  { id: "a1", accountKey: "AMEX1", date: "2026-08-02", amount: -24_000, currency: "EUR", counterparty: "Leverancier", description: "Groot", category: "Inkoop", manual: true },
-  { id: "a2", accountKey: "AMEX1", date: "2026-08-09", amount: -400, currency: "EUR", counterparty: "Restaurant", description: "Diner", category: "", manual: false },
+  {
+    id: "a1",
+    accountKey: "AMEX1",
+    date: "2026-08-02",
+    amount: -24_000,
+    currency: "EUR",
+    counterparty: "Leverancier",
+    description: "Groot",
+    category: "Inkoop",
+    manual: true,
+  },
+  {
+    id: "a2",
+    accountKey: "AMEX1",
+    date: "2026-08-09",
+    amount: -400,
+    currency: "EUR",
+    counterparty: "Restaurant",
+    description: "Diner",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("an account that only covers the newest month is named, never silently added to the delta", () => {

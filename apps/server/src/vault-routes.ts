@@ -1,5 +1,9 @@
 import type { Hono } from "hono";
-import { createOpaqueVaultRepository, type OpaqueVaultRow, type OpaqueVaultWrite } from "@lavega/database";
+import {
+  createOpaqueVaultRepository,
+  type OpaqueVaultRow,
+  type OpaqueVaultWrite,
+} from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { PBKDF2_ITERATIONS } from "@lavega/adapters";
 import { investingTenantId } from "./investing-mount.js";
@@ -16,14 +20,16 @@ const MAX_ITERATIONS = 10_000_000;
 function isSealedVault(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const blob = value as Record<string, unknown>;
-  return blob.v === 1
-    && blob.kdf === "PBKDF2-SHA256"
-    && typeof blob.salt === "string"
-    && typeof blob.iv === "string"
-    && typeof blob.ct === "string"
-    && typeof blob.iterations === "number"
-    && blob.iterations >= MIN_ITERATIONS
-    && blob.iterations <= MAX_ITERATIONS;
+  return (
+    blob.v === 1 &&
+    blob.kdf === "PBKDF2-SHA256" &&
+    typeof blob.salt === "string" &&
+    typeof blob.iv === "string" &&
+    typeof blob.ct === "string" &&
+    typeof blob.iterations === "number" &&
+    blob.iterations >= MIN_ITERATIONS &&
+    blob.iterations <= MAX_ITERATIONS
+  );
 }
 
 export type VaultRouteDependencies = {
@@ -55,14 +61,20 @@ export function registerVaultRoutes(app: Hono, dependencies: VaultRouteDependenc
     const stored = await repository.get();
     // No backup yet is the normal state of a new account, not a failure.
     if (!stored) return c.json({ blob: null, updatedAt: null });
-    return c.json({ blob: JSON.parse(stored.blob.toString("utf8")) as unknown, updatedAt: stored.updatedAt });
+    return c.json({
+      blob: JSON.parse(stored.blob.toString("utf8")) as unknown,
+      updatedAt: stored.updatedAt,
+    });
   });
 
   app.put("/api/vault/backup", async (c) => {
     const repository = await forTenant(c.req.raw);
     if (!repository) return c.json({ problems: ["Authentication is required"] }, 401);
-    const body: { blob?: unknown; baseUpdatedAt?: unknown } = await c.req.json<{ blob?: unknown; baseUpdatedAt?: unknown }>().catch(() => ({}));
-    if (!isSealedVault(body.blob)) return c.json({ problems: ["Back-up is geen versleutelde kluis"] }, 400);
+    const body: { blob?: unknown; baseUpdatedAt?: unknown } = await c.req
+      .json<{ blob?: unknown; baseUpdatedAt?: unknown }>()
+      .catch(() => ({}));
+    if (!isSealedVault(body.blob))
+      return c.json({ problems: ["Back-up is geen versleutelde kluis"] }, 400);
     const bytes = Buffer.from(JSON.stringify(body.blob), "utf8");
 
     if (c.req.query("overwrite") === "true") return c.json(await repository.overwrite(bytes));
@@ -73,7 +85,13 @@ export function registerVaultRoutes(app: Hono, dependencies: VaultRouteDependenc
     /* The client's copy is not based on what the server holds. Returning the
      * server's timestamp lets the screen say which is newer instead of picking
      * one and destroying the other. */
-    return c.json({ problems: ["De server heeft een nieuwere back-up"], updatedAt: (await repository.get())?.updatedAt ?? null }, 409);
+    return c.json(
+      {
+        problems: ["De server heeft een nieuwere back-up"],
+        updatedAt: (await repository.get())?.updatedAt ?? null,
+      },
+      409,
+    );
   });
 }
 

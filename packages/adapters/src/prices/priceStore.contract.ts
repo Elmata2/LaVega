@@ -14,7 +14,9 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
     test("returns inclusive range ends and filters by symbol", async () => {
       const store = createStore();
       await store.upsert("local", bars);
-      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-03")).toEqual(bars.slice(0, 3));
+      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-03")).toEqual(
+        bars.slice(0, 3),
+      );
     });
 
     test("returns empty and single-day ranges", async () => {
@@ -30,7 +32,9 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       await store.upsert("local", bars);
       await store.upsert("other", [other]);
       expect(await store.getRange("other", "AAA", "2026-01-01", "2026-01-03")).toEqual([other]);
-      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-03")).toEqual(bars.slice(0, 3));
+      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-03")).toEqual(
+        bars.slice(0, 3),
+      );
       expect(await store.lastDate("other", "AAA")).toBe("2026-01-02");
     });
 
@@ -39,7 +43,9 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       await store.upsert("local", [bars[0]!]);
       await store.upsert("other", [{ ...bars[0]!, close: 42 }]);
       expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-01")).toEqual([bars[0]]);
-      expect(await store.getRange("other", "AAA", "2026-01-01", "2026-01-01")).toEqual([{ ...bars[0]!, close: 42 }]);
+      expect(await store.getRange("other", "AAA", "2026-01-01", "2026-01-01")).toEqual([
+        { ...bars[0]!, close: 42 },
+      ]);
     });
 
     test("returns null lastDate on empty store and latest date otherwise", async () => {
@@ -54,7 +60,9 @@ export function registerPriceStoreContract(name: string, createStore: () => Pric
       const store = createStore();
       await store.upsert("local", [bars[0]!]);
       await store.upsert("local", [{ ...bars[0]!, close: 99 }]);
-      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-01")).toEqual([{ ...bars[0]!, close: 99 }]);
+      expect(await store.getRange("local", "AAA", "2026-01-01", "2026-01-01")).toEqual([
+        { ...bars[0]!, close: 99 },
+      ]);
     });
 
     test("purgeAll leaves store readable and empty", async () => {

@@ -22,8 +22,11 @@ export default function CardSpiral() {
         const gsapMod = await import("gsap");
         const stMod = await import("gsap/ScrollTrigger");
         if (killed || !stageRef.current || !sectionRef.current) return;
-        const gsap = (gsapMod as { gsap?: typeof import("gsap").gsap; default?: unknown }).gsap ?? (gsapMod.default as typeof import("gsap").gsap);
-        const ScrollTrigger = (stMod as { ScrollTrigger?: unknown; default?: unknown }).ScrollTrigger ?? stMod.default;
+        const gsap =
+          (gsapMod as { gsap?: typeof import("gsap").gsap; default?: unknown }).gsap ??
+          (gsapMod.default as typeof import("gsap").gsap);
+        const ScrollTrigger =
+          (stMod as { ScrollTrigger?: unknown; default?: unknown }).ScrollTrigger ?? stMod.default;
         gsap.registerPlugin(ScrollTrigger as Parameters<typeof gsap.registerPlugin>[0]);
         const cards = Array.from(stageRef.current.querySelectorAll<HTMLElement>(".lp-card3d"));
         stageRef.current.classList.add("lp-anim"); // hand control to GSAP (drop the CSS fan)
@@ -76,7 +79,9 @@ export default function CardSpiral() {
   return (
     <section className="lp-spiral" ref={sectionRef} aria-label="Slimmer met je geld">
       <div className="lp-spiral-stage" ref={stageRef}>
-        <div className="lp-spiral-word" aria-hidden="true">LaVega</div>
+        <div className="lp-spiral-word" aria-hidden="true">
+          LaVega
+        </div>
         <p className="lp-spiral-tag">Niet méér uitgeven — slimmer met je geld.</p>
         <div className="lp-spiral-cards" aria-hidden="true">
           {Array.from({ length: N }).map((_, i) => (

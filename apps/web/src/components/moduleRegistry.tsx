@@ -62,7 +62,16 @@ export const HOME_MODULE: ModuleId = "overview";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       {children}
     </svg>
   );
@@ -82,12 +91,24 @@ function Thumb({ children }: { children: ReactNode }) {
 
 /** A miniature module card inside a preview. */
 function Tile({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
-  return <rect x={x} y={y} width={w} height={h} rx="3" fill="var(--surface)" stroke="var(--line)" />;
+  return (
+    <rect x={x} y={y} width={w} height={h} rx="3" fill="var(--surface)" stroke="var(--line)" />
+  );
 }
 
 /** A miniature text line inside a preview. */
 function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: boolean }) {
-  return <rect x={x} y={y} width={w} height={strong ? 4 : 2.5} rx="1.25" fill={strong ? "var(--ink)" : "var(--muted)"} opacity={strong ? 0.85 : 0.45} />;
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={w}
+      height={strong ? 4 : 2.5}
+      rx="1.25"
+      fill={strong ? "var(--ink)" : "var(--muted)"}
+      opacity={strong ? 0.85 : 0.45}
+    />
+  );
 }
 
 export const MODULES: ModuleDef[] = [
@@ -187,8 +208,21 @@ export const MODULES: ModuleDef[] = [
     preview: (
       <Thumb>
         <path d="M8 44h80" stroke="var(--line)" strokeWidth="1.5" />
-        <path d="M8 40 L26 34 L44 38 L62 24 L80 16" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8 50h80" stroke="var(--warn)" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+        <path
+          d="M8 40 L26 34 L44 38 L62 24 L80 16"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M8 50h80"
+          stroke="var(--warn)"
+          strokeWidth="1.5"
+          strokeDasharray="4 3"
+          opacity="0.7"
+        />
         <circle cx="80" cy="16" r="3" fill="var(--accent)" />
         <Line x={8} y={8} w={24} strong />
       </Thumb>
@@ -211,7 +245,14 @@ export const MODULES: ModuleDef[] = [
         <rect x="8" y="20" width="18" height="28" rx="3" fill="var(--muted)" opacity="0.35" />
         <rect x="32" y="30" width="18" height="18" rx="3" fill="var(--muted)" opacity="0.35" />
         <rect x="56" y="14" width="18" height="34" rx="3" fill="var(--pos)" opacity="0.75" />
-        <path d="M78 26 L84 18 L90 26" fill="none" stroke="var(--pos)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M78 26 L84 18 L90 26"
+          fill="none"
+          stroke="var(--pos)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </Thumb>
     ),
   },
@@ -233,8 +274,22 @@ export const MODULES: ModuleDef[] = [
         <Tile x={58} y={14} w={30} h={32} />
         <Line x={63} y={20} w={14} strong />
         <Line x={63} y={30} w={20} />
-        <path d="M42 25h12M54 25l-4-3.5M54 25l-4 3.5" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M54 36H42M42 36l4-3.5M42 36l4 3.5" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M42 25h12M54 25l-4-3.5M54 25l-4 3.5"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M54 36H42M42 36l4-3.5M42 36l4 3.5"
+          fill="none"
+          stroke="var(--muted)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </Thumb>
     ),
   },
@@ -256,7 +311,15 @@ export const MODULES: ModuleDef[] = [
     preview: (
       <Thumb>
         <Line x={8} y={8} w={22} strong />
-        <circle cx="22" cy="34" r="12" fill="none" stroke="var(--accent)" strokeWidth="2.5" opacity="0.8" />
+        <circle
+          cx="22"
+          cy="34"
+          r="12"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.5"
+          opacity="0.8"
+        />
         <circle cx="22" cy="34" r="5" fill="var(--accent)" opacity="0.35" />
         <Line x={44} y={26} w={34} strong />
         <Line x={44} y={34} w={26} />
@@ -327,7 +390,9 @@ export const MODULES: ModuleDef[] = [
  *  betekent hier "de nav blijft zoals hij was", en dat is precies waarom een
  *  module die eerder WEGGEHAALD is er niet vanzelf weer bij komt: dat zou net zo
  *  goed een verandering zijn die niemand vroeg. */
-export const DEFAULT_MODULES: ModuleId[] = MODULES.filter((m) => m.defaultOn !== false).map((m) => m.id);
+export const DEFAULT_MODULES: ModuleId[] = MODULES.filter((m) => m.defaultOn !== false).map(
+  (m) => m.id,
+);
 
 const KNOWN = new Set<string>(MODULES.map((m) => m.id));
 
@@ -339,7 +404,8 @@ const KNOWN = new Set<string>(MODULES.map((m) => m.id));
  *  always added back, and the result is always in registry order so the nav
  *  never reshuffles itself because of the order things were toggled in. */
 export function enabledModules(stored: string[] | null): ModuleId[] {
-  const chosen = stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
+  const chosen =
+    stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
   const set = new Set<ModuleId>(chosen);
   set.add(HOME_MODULE);
   return MODULES.filter((m) => set.has(m.id)).map((m) => m.id);
@@ -462,12 +528,28 @@ export const WIDGETS: WidgetDef[] = [
     defaultOn: true,
     preview: (
       <Thumb>
-        <rect x="8" y="10" width="14" height="14" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <rect
+          x="8"
+          y="10"
+          width="14"
+          height="14"
+          rx="3"
+          fill="var(--surface)"
+          stroke="var(--line)"
+        />
         <Line x={11} y={14} w={8} strong />
         <Line x={28} y={13} w={34} strong />
         <Line x={28} y={20} w={22} />
         <Line x={74} y={16} w={14} />
-        <rect x="8" y="30" width="14" height="14" rx="3" fill="rgba(176, 120, 30, 0.18)" stroke="var(--warn)" />
+        <rect
+          x="8"
+          y="30"
+          width="14"
+          height="14"
+          rx="3"
+          fill="rgba(176, 120, 30, 0.18)"
+          stroke="var(--warn)"
+        />
         <Line x={11} y={34} w={8} strong />
         <Line x={28} y={33} w={28} strong />
         <Line x={28} y={40} w={18} />
@@ -511,7 +593,15 @@ export const WIDGETS: WidgetDef[] = [
         <rect x="8" y="18" width="34" height="9" rx="2" fill="var(--neg)" opacity="0.55" />
         <Line x={8} y={33} w={44} />
         <Line x={8} y={41} w={30} />
-        <rect x="58" y="16" width="30" height="30" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <rect
+          x="58"
+          y="16"
+          width="30"
+          height="30"
+          rx="3"
+          fill="var(--surface)"
+          stroke="var(--line)"
+        />
         <Line x={63} y={22} w={12} strong />
         <Line x={63} y={30} w={20} />
         <rect x="63" y="36" width="20" height="5" rx="2.5" fill="var(--warn)" opacity="0.45" />
@@ -576,7 +666,9 @@ export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetI
   if (pref === null) return [...DEFAULT_WIDGETS];
   const on = new Set(pref.on);
   const seen = new Set(pref.seen);
-  return WIDGETS.filter((w) => (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true)).map((w) => w.id);
+  return WIDGETS.filter((w) => (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true)).map(
+    (w) => w.id,
+  );
 }
 
 /** Een lijst ids opschonen: alleen bestaande widgets, ontdubbeld, in
@@ -654,7 +746,10 @@ let widgetCache: WidgetId[] | null = null;
  *  a stable identity to stop re-rendering. */
 function widgetSnapshot(): WidgetId[] {
   const next = enabledWidgets(getEnabledWidgets());
-  const same = widgetCache !== null && widgetCache.length === next.length && widgetCache.every((id, i) => id === next[i]);
+  const same =
+    widgetCache !== null &&
+    widgetCache.length === next.length &&
+    widgetCache.every((id, i) => id === next[i]);
   if (!same) widgetCache = next;
   return widgetCache as WidgetId[];
 }
@@ -674,12 +769,13 @@ export function setEnabledWidgets(ids: WidgetId[]): void {
   const next = normaliseWidgets(ids);
   try {
     const value: StoredWidgets = { on: next, seen: ALL_WIDGETS };
-    if (typeof localStorage !== "undefined") localStorage.setItem(WIDGETS_KEY, JSON.stringify(value));
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(WIDGETS_KEY, JSON.stringify(value));
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
   widgetCache = next;
-  for (const listener of [...widgetListeners]) listener();
+  for (const listener of widgetListeners) listener();
 }
 
 /** The widgets that are on, plus the setter. Re-renders when either side

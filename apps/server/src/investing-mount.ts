@@ -6,11 +6,24 @@ import { LOCAL_TENANT_ID } from "@lavega/core";
 import { createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
-import { createFileBenchmarkSelectionStore, runtimeBenchmarkSelectionFile } from "@lavega/investing-server/src/fileBenchmarkSelectionStore.js";
-import { createFileMarketDataConsentStore, runtimeMarketDataConsentFile } from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
-import { createFilePriceStore, runtimePriceStoreFile } from "@lavega/investing-server/src/filePriceStore.js";
+import {
+  createFileBenchmarkSelectionStore,
+  runtimeBenchmarkSelectionFile,
+} from "@lavega/investing-server/src/fileBenchmarkSelectionStore.js";
+import {
+  createFileMarketDataConsentStore,
+  runtimeMarketDataConsentFile,
+} from "@lavega/investing-server/src/fileMarketDataConsentStore.js";
+import {
+  createFilePriceStore,
+  runtimePriceStoreFile,
+} from "@lavega/investing-server/src/filePriceStore.js";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { createNeonBenchmarkSelectionStore, createNeonMarketDataConsentStore, createNeonPriceStore } from "@lavega/investing-server/src/neonStores.js";
+import {
+  createNeonBenchmarkSelectionStore,
+  createNeonMarketDataConsentStore,
+  createNeonPriceStore,
+} from "@lavega/investing-server/src/neonStores.js";
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 const defaultInvestingDist = resolve(serverDir, "../../investing-web/dist");
@@ -50,7 +63,10 @@ export function withInvestingTenant<T>(tenantId: string, fn: () => T): T {
 }
 
 export function investingCronTenantIds(): string[] {
-  const configured = process.env.INVESTING_CRON_TENANT_IDS?.split(",").map((tenant) => tenant.trim()).filter(Boolean) ?? [];
+  const configured =
+    process.env.INVESTING_CRON_TENANT_IDS?.split(",")
+      .map((tenant) => tenant.trim())
+      .filter(Boolean) ?? [];
   if (configured.length > 0) return [...new Set(configured)];
   return getAuth() ? [] : [LOCAL_TENANT_ID];
 }
@@ -81,9 +97,15 @@ async function getInvestingFetch(): Promise<(request: Request) => Promise<Respon
   const database = runtimeDatabase();
   const runtimeApp = await createRuntimeApp({
     resolveTenantId: currentInvestingTenant,
-    priceStore: database ? createNeonPriceStore(database, currentInvestingTenant) : createFilePriceStore(runtimePriceStoreFile()),
-    benchmarkSelectionStore: database ? createNeonBenchmarkSelectionStore(database) : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
-    marketDataConsentStore: database ? createNeonMarketDataConsentStore(database) : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
+    priceStore: database
+      ? createNeonPriceStore(database, currentInvestingTenant)
+      : createFilePriceStore(runtimePriceStoreFile()),
+    benchmarkSelectionStore: database
+      ? createNeonBenchmarkSelectionStore(database)
+      : createFileBenchmarkSelectionStore(runtimeBenchmarkSelectionFile()),
+    marketDataConsentStore: database
+      ? createNeonMarketDataConsentStore(database)
+      : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
   });
   investingFetch = createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist());
   return investingFetch;
@@ -97,21 +119,40 @@ export function rewriteInvestingRequest(request: Request): Request {
   return new Request(url, request);
 }
 
-export async function forwardInvesting(request: Request, tenantId = LOCAL_TENANT_ID): Promise<Response> {
+export async function forwardInvesting(
+  request: Request,
+  tenantId = LOCAL_TENANT_ID,
+): Promise<Response> {
   const fetch = await getInvestingFetch();
   return withInvestingTenant(tenantId, () => fetch(rewriteInvestingRequest(request)));
 }
 
 export async function runInvestingCron(request: Request): Promise<Response> {
-  if (!authorizedCronRequest(request)) return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
+  if (!authorizedCronRequest(request))
+    return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
   const tenants = investingCronTenantIds();
-  if (tenants.length === 0) return Response.json({ problems: ["INVESTING_CRON_TENANT_IDS is required when authentication is configured"] }, { status: 503 });
+  if (tenants.length === 0)
+    return Response.json(
+      { problems: ["INVESTING_CRON_TENANT_IDS is required when authentication is configured"] },
+      { status: 503 },
+    );
   const results = [];
   for (const tenantId of tenants) {
     const origin = new URL(request.url).origin;
-    const broker = await forwardInvesting(new Request(`${origin}/api/brokers/sync`, { method: "POST" }), tenantId);
-    const price = await forwardInvesting(new Request(`${origin}/api/prices/sync`, { method: "POST" }), tenantId);
-    results.push({ tenantId, brokerStatus: broker.status, priceStatus: price.status, price: await price.json().catch(() => null) });
+    const broker = await forwardInvesting(
+      new Request(`${origin}/api/brokers/sync`, { method: "POST" }),
+      tenantId,
+    );
+    const price = await forwardInvesting(
+      new Request(`${origin}/api/prices/sync`, { method: "POST" }),
+      tenantId,
+    );
+    results.push({
+      tenantId,
+      brokerStatus: broker.status,
+      priceStatus: price.status,
+      price: await price.json().catch(() => null),
+    });
   }
   return Response.json({ tenants: results });
 }

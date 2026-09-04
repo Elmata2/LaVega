@@ -1,12 +1,28 @@
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
 import {
-  CATEGORY_OPTIONS, uncategorizedTxs, applyCategorizations, recategorize, uncategorizedByMonth,
-  redactForAi, aiCategorizeItems, foreignCode, unknownReason, unknownBreakdown,
+  CATEGORY_OPTIONS,
+  uncategorizedTxs,
+  applyCategorizations,
+  recategorize,
+  uncategorizedByMonth,
+  redactForAi,
+  aiCategorizeItems,
+  foreignCode,
+  unknownReason,
+  unknownBreakdown,
 } from "./categorize.js";
 
 const tx = (id: string, cp: string, amount: number, category = ""): Tx => ({
-  id, accountKey: "A1", date: "2026-08-01", amount, currency: "EUR", counterparty: cp, description: "", category, manual: false,
+  id,
+  accountKey: "A1",
+  date: "2026-08-01",
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category,
+  manual: false,
 });
 const dated = (id: string, cp: string, date: string): Tx => ({ ...tx(id, cp, -10), date });
 
@@ -19,7 +35,11 @@ test("uncategorizedTxs returns only txs that resolve to 'onbekend'", () => {
 });
 
 test("applyCategorizations sets manual category on decided txs + builds deduped rules", () => {
-  const txs = [tx("t1", "Jan Jansen priv", -10), tx("t2", "Jan Jansen priv", -12), tx("t3", "Mystery BV", -5)];
+  const txs = [
+    tx("t1", "Jan Jansen priv", -10),
+    tx("t2", "Jan Jansen priv", -12),
+    tx("t3", "Mystery BV", -5),
+  ];
   const rules: Rule[] = [];
   const out = applyCategorizations(txs, rules, [
     { id: "t1", category: "Overboekingen" },
@@ -45,7 +65,10 @@ test("applyCategorizations does not duplicate an existing rule and skips empty c
   ]);
   expect(out.rules.filter((r) => r.match.toLowerCase() === "albert heijn")).toHaveLength(1); // no dup
   expect(out.rules.some((r) => r.match === "")).toBe(false); // empty counterparty -> no rule
-  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({ category: "Overboekingen", manual: true });
+  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
+    category: "Overboekingen",
+    manual: true,
+  });
 });
 
 /* --- recategorize: the pass over transactions that are ALREADY stored ----- */
@@ -95,8 +118,14 @@ test("recategorize picks up a rule the AI review just appended", () => {
   const applied = applyCategorizations(stored, [], [{ id: "t1", category: "Abonnementen" }]);
   // ...and a re-run over storage now also places t2, which was never reviewed.
   const out = recategorize(applied.txs, applied.rules);
-  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({ category: "Abonnementen", manual: false });
-  expect(out.txs.find((t) => t.id === "t1")).toMatchObject({ category: "Abonnementen", manual: true });
+  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
+    category: "Abonnementen",
+    manual: false,
+  });
+  expect(out.txs.find((t) => t.id === "t1")).toMatchObject({
+    category: "Abonnementen",
+    manual: true,
+  });
 });
 
 /* --- uncategorizedByMonth: point the AI pass at the newest month first ---- */
@@ -120,7 +149,10 @@ test("uncategorizedByMonth groups the remainder newest month first", () => {
 });
 
 test("uncategorizedByMonth shrinks as rules improve", () => {
-  const stored: Tx[] = [dated("a", "Mystery Holding BV", "2026-08-02"), dated("b", "Andere BV", "2026-08-03")];
+  const stored: Tx[] = [
+    dated("a", "Mystery Holding BV", "2026-08-02"),
+    dated("b", "Andere BV", "2026-08-03"),
+  ];
   expect(uncategorizedByMonth(stored, [])[0].txs).toHaveLength(2);
   const rules: Rule[] = [{ id: "r1", match: "Mystery Holding", category: "Abonnementen" }];
   expect(uncategorizedByMonth(stored, rules)[0].txs.map((t) => t.id)).toEqual(["b"]);
@@ -142,17 +174,28 @@ test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () =
  * ------------------------------------------------------------------------ */
 
 const abroad = (id: string, cp: string, desc: string): Tx => ({
-  id, accountKey: "A1", date: "2026-07-14", amount: -24.5, currency: "EUR",
-  counterparty: cp, description: desc, category: "", manual: false,
+  id,
+  accountKey: "A1",
+  date: "2026-07-14",
+  amount: -24.5,
+  currency: "EUR",
+  counterparty: cp,
+  description: desc,
+  category: "",
+  manual: false,
 });
 
 test("redactForAi keeps the merchant name that follows an IBAN", () => {
   // THE BUG this whole block exists for: 747 of 1.394 (53,6%) onbekend rows
   // reached the model as an EMPTY string, because the IBAN pattern was allowed
   // to hop across spaces and ate every word after the IBAN.
-  expect(redactForAi("NL17INGB0539576085 Albert Heijn 1234 Rotterdam")).toBe("Albert Heijn Rotterdam");
+  expect(redactForAi("NL17INGB0539576085 Albert Heijn 1234 Rotterdam")).toBe(
+    "Albert Heijn Rotterdam",
+  );
   expect(redactForAi("DE77100110012424146089 Wise Europe SA")).toBe("Wise Europe SA");
-  expect(redactForAi("PT50002300004565716939794 Continente Lisboa PRT")).toBe("Continente Lisboa PRT");
+  expect(redactForAi("PT50002300004565716939794 Continente Lisboa PRT")).toBe(
+    "Continente Lisboa PRT",
+  );
 });
 
 test("redactForAi still removes IBANs, amounts and dates", () => {

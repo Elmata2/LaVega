@@ -15,7 +15,13 @@ import { expect, test } from "vitest";
 import { buildPayload, SECRET_HEADER } from "../src/handler.js";
 import { parseMail } from "../src/parseMail.js";
 import { fakeMessage } from "./fakeMessage.js";
-import { RAW_HTML_ONLY, RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
+import {
+  RAW_HTML_ONLY,
+  RAW_IMAGE_ONLY,
+  RAW_PDF_INVOICE,
+  RAW_PLAIN_TEXT,
+  RAW_SPOOFED,
+} from "./rawMail.js";
 import { normalizeInboundMail } from "../../../packages/core/src/n8n/normalizeInboundMail.js";
 import { TOKEN_HEADER } from "../../web/src/n8n-provision.js";
 
@@ -74,7 +80,18 @@ test("een gezakte afzender komt door tot in het bericht, gemarkeerd", () => {
 test("elke sleutel die de Worker stuurt is een sleutel die core leest, en omgekeerd", () => {
   const payload = buildPayload(fakeMessage({ raw: RAW_PDF_INVOICE }), parseMail(RAW_PDF_INVOICE));
   expect(Object.keys(payload).sort()).toEqual(
-    ["attachments", "auth", "date", "from", "html", "messageId", "queueKey", "subject", "text", "to"].sort(),
+    [
+      "attachments",
+      "auth",
+      "date",
+      "from",
+      "html",
+      "messageId",
+      "queueKey",
+      "subject",
+      "text",
+      "to",
+    ].sort(),
   );
   expect(Object.keys(payload.attachments[0]).sort()).toEqual(["data", "fileName", "mimeType"]);
 

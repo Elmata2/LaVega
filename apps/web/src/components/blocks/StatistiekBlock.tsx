@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 import { categorize, categorySpendPercentiles } from "@lavega/core";
-import type { CategoryPercentile, OwnAccounts, Rule, SpendPercentiles, SpendRow, Tx } from "@lavega/core";
+import type {
+  CategoryPercentile,
+  OwnAccounts,
+  Rule,
+  SpendPercentiles,
+  SpendRow,
+  Tx,
+} from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import CategoryBars from "../CategoryBars.js";
 import Module, { ModulePeriod } from "../Module.js";
@@ -106,11 +113,18 @@ import {
  *
  *  Geeft `null` terug als er niets weggelaten is — dan hoort er ook geen regel
  *  te staan die belooft dat er iets te zien valt. */
-export function weggelatenLabelNL(counts: { maanden: number; klein: number; gecapt: number }): string | null {
+export function weggelatenLabelNL(counts: {
+  maanden: number;
+  klein: number;
+  gecapt: number;
+}): string | null {
   const delen: string[] = [];
-  if (counts.maanden > 0) delen.push(`${counts.maanden} maand${counts.maanden === 1 ? "" : "en"} zonder afschrift`);
-  if (counts.klein > 0) delen.push(`${counts.klein} kleinere categorie${counts.klein === 1 ? "" : "ën"}`);
-  if (counts.gecapt > 0) delen.push(`${counts.gecapt} categorie${counts.gecapt === 1 ? "" : "ën"} buiten de grafiek`);
+  if (counts.maanden > 0)
+    delen.push(`${counts.maanden} maand${counts.maanden === 1 ? "" : "en"} zonder afschrift`);
+  if (counts.klein > 0)
+    delen.push(`${counts.klein} kleinere categorie${counts.klein === 1 ? "" : "ën"}`);
+  if (counts.gecapt > 0)
+    delen.push(`${counts.gecapt} categorie${counts.gecapt === 1 ? "" : "ën"} buiten de grafiek`);
   return delen.length === 0 ? null : `Wat hier niet in staat: ${delen.join(" · ")}`;
 }
 
@@ -172,7 +186,12 @@ export const STAT_VIEWS: { value: StatView; label: string }[] = [
 const TOP_CATEGORIES = 4;
 
 /** One token per category slot. Cycled, never invented. */
-const CATEGORY_COLORS = ["var(--accent)", "var(--chart-teal)", "var(--chart-purple)", "var(--warn)"];
+const CATEGORY_COLORS = [
+  "var(--accent)",
+  "var(--chart-teal)",
+  "var(--chart-purple)",
+  "var(--warn)",
+];
 
 /** Everything that comes out of statistics.ts as a SHARE or a DELTA is in
  *  CENTS; `formatEuro` takes euros. Feeding one to the other is what printed
@@ -182,7 +201,11 @@ const CATEGORY_COLORS = ["var(--accent)", "var(--chart-teal)", "var(--chart-purp
 const euroFromCents = (cents: number): string => formatEuro(cents / 100);
 
 /** Whole euros on the axis; the exact number is in each bar's tooltip. */
-const wholeEuro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const wholeEuro = new Intl.NumberFormat("nl-NL", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
 
 /** The typed range, or null when it is not (yet) a range: an empty field, or an
  *  end before its start. Null renders as an instruction, never as a window. */
@@ -251,7 +274,13 @@ function positionNL(r: CategoryPercentile): string {
 
 /** De lijst onder de grafiek: per getekende categorie het bedrag van deze maand
  *  en waar dat ligt in zijn eigen eerdere maanden. */
-function PercentielLijst({ result, categories }: { result: SpendPercentiles; categories: string[] }) {
+function PercentielLijst({
+  result,
+  categories,
+}: {
+  result: SpendPercentiles;
+  categories: string[];
+}) {
   // De volgorde van de grafiek, niet die van core: de lijst leest als bijschrift
   // bij de staven erboven.
   const rows = categories
@@ -353,7 +382,12 @@ type StatistiekBlockProps = {
   onSelectCategory: (category: string) => void;
 };
 
-export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: StatistiekBlockProps) {
+export default function StatistiekBlock({
+  txs,
+  rules,
+  own,
+  onSelectCategory,
+}: StatistiekBlockProps) {
   const [period, setPeriod] = useState<StatPeriod>("12m");
   const [view, setView] = useState<StatView>("categorie");
   const [custom, setCustom] = useState<{ start: string; end: string }>({ start: "", end: "" });
@@ -376,7 +410,13 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   /** Switching to "Aangepast" opens on the window that was showing, so the
    *  owner adjusts a range rather than starting from two empty fields. */
   function choosePeriod(next: StatPeriod) {
-    if (next === "aangepast" && period !== "aangepast" && anchor !== null && custom.start === "" && custom.end === "") {
+    if (
+      next === "aangepast" &&
+      period !== "aangepast" &&
+      anchor !== null &&
+      custom.start === "" &&
+      custom.end === ""
+    ) {
       setCustom(presetWindow(period, anchor));
     }
     setPeriod(next);
@@ -391,11 +431,17 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
     [txs, rules, own, range],
   );
   const share = useMemo(
-    () => (range === null ? { slices: [], totalCents: 0, covered: null } : categoryShare(txs, rules, own, range)),
+    () =>
+      range === null
+        ? { slices: [], totalCents: 0, covered: null }
+        : categoryShare(txs, rules, own, range),
     [txs, rules, own, range],
   );
   const growth = useMemo(
-    () => (range === null ? { rows: [], before: { start: "", end: "" } } : categoryGrowth(txs, rules, own, range)),
+    () =>
+      range === null
+        ? { rows: [], before: { start: "", end: "" } }
+        : categoryGrowth(txs, rules, own, range),
     [txs, rules, own, range],
   );
   const windowDays = useMemo(
@@ -482,7 +528,8 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
      blok: op de klok kijken zou van een geïmporteerd historisch afschrift een
      lege maand maken en dat als "niets uitgegeven" laten lezen. */
   const percentiles = useMemo(
-    () => (anchor === null ? null : categorySpendPercentiles(spendRows, { asOf: anchor, coverage })),
+    () =>
+      anchor === null ? null : categorySpendPercentiles(spendRows, { asOf: anchor, coverage }),
     [spendRows, coverage, anchor],
   );
 
@@ -499,7 +546,9 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
   // nothing that month" when the truth is that no statement was imported for
   // it. They are named instead, so the gap is stated rather than hidden.
   const emptyMonths =
-    perCategory && perCategory.unit === "maand" ? perCategory.buckets.filter((b) => !b.hasData) : [];
+    perCategory && perCategory.unit === "maand"
+      ? perCategory.buckets.filter((b) => !b.hasData)
+      : [];
   const drawn = (perCategory?.buckets ?? [])
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => perCategory?.unit !== "maand" || b.hasData);
@@ -540,7 +589,9 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
      BUITEN het gekozen venster ligt is dat waar; anders is "kies een langere
      periode" advies dat in deze toestand niet werkt. */
   const meerBuitenVenster =
-    coverage !== null && range !== null && (coverage.start < range.start || coverage.end > range.end);
+    coverage !== null &&
+    range !== null &&
+    (coverage.start < range.start || coverage.end > range.end);
 
   return (
     <Module
@@ -583,7 +634,9 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
       }
     >
       {txs.length === 0 ? (
-        <p className="block-empty">Nog geen transacties — importeer een bestand of koppel een bank.</p>
+        <p className="block-empty">
+          Nog geen transacties — importeer een bestand of koppel een bank.
+        </p>
       ) : range === null ? (
         <p className="block-empty">
           {period !== "aangepast"
@@ -664,22 +717,25 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   <ToonMeer summary={weggelaten}>
                     {emptyMonths.length > 0 && (
                       <p className="cell-sub">
-                        Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} — daar is geen afschrift
-                        van geïmporteerd. Een lege maand is geen maand zonder uitgaven.
+                        Niet getoond: {emptyMonths.map((b) => monthLabelNL(b.key)).join(", ")} —
+                        daar is geen afschrift van geïmporteerd. Een lege maand is geen maand zonder
+                        uitgaven.
                       </p>
                     )}
                     {small.length > 0 && perCategory.covered && (
                       <p className="cell-sub">
-                        {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet getoond in{" "}
+                        {small.length} kleinere categorie{small.length === 1 ? "" : "ën"} niet
+                        getoond in{" "}
                         {rangeLabelNL(perCategory.covered.start, perCategory.covered.end)}: samen{" "}
-                        {formatEuro(smallOut)}, elk onder {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over
-                        deze {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
+                        {formatEuro(smallOut)}, elk onder{" "}
+                        {formatEuro(perCategory.selection?.thresholdOut ?? 0)} over deze{" "}
+                        {perCategory.windowDays} dagen. Een kortere periode legt die grens lager.
                       </p>
                     )}
                     {capped.length > 0 && (
                       <p className="cell-sub">
-                        Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de grafiek:{" "}
-                        {capped.map((h) => h.category).join(", ")}.
+                        Nog {capped.length} categorie{capped.length === 1 ? "" : "ën"} buiten de
+                        grafiek: {capped.map((h) => h.category).join(", ")}.
                       </p>
                     )}
                   </ToonMeer>
@@ -687,12 +743,16 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                 {/* Waar deze maand ligt in zijn eigen eerdere maanden. Alleen in
                     deze weergave: hier staan de maanden al als staven, dus de
                     lijst is het bijschrift bij wat hij ziet. */}
-                {percentiles && <PercentielLijst result={percentiles} categories={perCategory.categories} />}
+                {percentiles && (
+                  <PercentielLijst result={percentiles} categories={perCategory.categories} />
+                )}
               </>
             )
           ) : view === "verdeling" ? (
             share.slices.length === 0 ? (
-              <p className="block-empty">Geen uitgaven in deze periode — kies een langere periode.</p>
+              <p className="block-empty">
+                Geen uitgaven in deze periode — kies een langere periode.
+              </p>
             ) : (
               <SpendPie
                 slices={share.slices}
@@ -713,8 +773,14 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   {growth.rows[0].deltaCents > 0 ? (
                     <>
                       <strong>{growth.rows[0].category}</strong> steeg het hardst:{" "}
-                      {euroFromCents(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen ervoor
-                      {growth.rows[0].deltaPct !== null ? <> ({Math.round(growth.rows[0].deltaPct * 100)}%)</> : <> (nieuw)</>}.
+                      {euroFromCents(growth.rows[0].deltaCents)} meer dan de {windowDays} dagen
+                      ervoor
+                      {growth.rows[0].deltaPct !== null ? (
+                        <> ({Math.round(growth.rows[0].deltaPct * 100)}%)</>
+                      ) : (
+                        <> (nieuw)</>
+                      )}
+                      .
                     </>
                   ) : (
                     <>Niets is gestegen tegenover de {windowDays} dagen ervoor.</>
@@ -732,8 +798,9 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                     van het eerste, dus het staat eronder en het staat dicht. */}
                 <ToonMeer summary="Welke periode ernaast ligt, en wat er meetelt">
                   <p className="cell-sub">
-                    Vergeleken met {dayLabelYearNL(growth.before.start)} — {dayLabelYearNL(growth.before.end)},
-                    dezelfde lengte als de gekozen periode. Alleen uitgaven.
+                    Vergeleken met {dayLabelYearNL(growth.before.start)} —{" "}
+                    {dayLabelYearNL(growth.before.end)}, dezelfde lengte als de gekozen periode.
+                    Alleen uitgaven.
                   </p>
                 </ToonMeer>
               </>
@@ -751,7 +818,8 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   "Geen enkele weekdag springt eruit — er zijn nog geen uitgaven gemeten."
                 ) : (
                   <>
-                    <strong>{peak.label}</strong> kost je gemiddeld <strong>{formatEuro(peak.average)}</strong>
+                    <strong>{peak.label}</strong> kost je gemiddeld{" "}
+                    <strong>{formatEuro(peak.average)}</strong>
                     {peak.pctVsAverage !== null && peak.pctVsAverage > 0 && (
                       <>
                         {" — "}
@@ -789,8 +857,8 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
               {peak !== null && (
                 <ToonMeer summary={`Waarop dit gemiddelde rust: ${weekdays?.spanDays} dagen`}>
                   <p className="stat-insight-basis">
-                    Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt mee, ook de dagen
-                    zonder transactie.
+                    Gemeten over {weekdays?.spanDays} dagen — elk voorkomen van die weekdag telt
+                    mee, ook de dagen zonder transactie.
                   </p>
                 </ToonMeer>
               )}
@@ -869,7 +937,11 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   onderbouwing van een gemiddelde dat er wél is, wel. */}
               {geenGemiddelde && (
                 <p className="stat-insight-basis">
-                  {gemiddeldeWeigeringNL(geenGemiddelde.reason, geenGemiddelde.coveredDays, meerBuitenVenster)}
+                  {gemiddeldeWeigeringNL(
+                    geenGemiddelde.reason,
+                    geenGemiddelde.coveredDays,
+                    meerBuitenVenster,
+                  )}
                 </p>
               )}
               {gemiddeld && (
@@ -888,22 +960,24 @@ export default function StatistiekBlock({ txs, rules, own, onSelectCategory }: S
                   )}`}
                 >
                   <p className="cell-sub">
-                    Gedeeld door {gemiddeld.units} hele {unitPluralNL(gemiddeld.unit, gemiddeld.units)}:{" "}
-                    {rangeLabelNL(gemiddeld.span.start, gemiddeld.span.end)}. Geld dat alleen van plaats
-                    veranderde telt er niet in mee, net als in de rest van dit blok.
+                    Gedeeld door {gemiddeld.units} hele{" "}
+                    {unitPluralNL(gemiddeld.unit, gemiddeld.units)}:{" "}
+                    {rangeLabelNL(gemiddeld.span.start, gemiddeld.span.end)}. Geld dat alleen van
+                    plaats veranderde telt er niet in mee, net als in de rest van dit blok.
                   </p>
                   {gemiddeld.restDays > 0 && (
                     <p className="cell-sub">
-                      {gemiddeld.restDays} dag{gemiddeld.restDays === 1 ? "" : "en"} aan de randen tellen niet
-                      mee — een aangebroken {gemiddeld.unit} is geen {gemiddeld.unit}. Zouden ze meetellen, dan
-                      hing dit gemiddelde ervan af of een vaste afschrijving nog net vóór het einde van de
-                      periode viel.
+                      {gemiddeld.restDays} dag{gemiddeld.restDays === 1 ? "" : "en"} aan de randen
+                      tellen niet mee — een aangebroken {gemiddeld.unit} is geen {gemiddeld.unit}.
+                      Zouden ze meetellen, dan hing dit gemiddelde ervan af of een vaste
+                      afschrijving nog net vóór het einde van de periode viel.
                     </p>
                   )}
                   {gemiddeld.unit !== gemiddeld.askedUnit && (
                     <p className="cell-sub">
-                      Niet per {gemiddeld.askedUnit}: deze periode bevat er geen {MIN_AVERAGE_UNITS} hele. Over
-                      één {gemiddeld.askedUnit} middelen levert dat {gemiddeld.askedUnit}bedrag zelf op.
+                      Niet per {gemiddeld.askedUnit}: deze periode bevat er geen {MIN_AVERAGE_UNITS}{" "}
+                      hele. Over één {gemiddeld.askedUnit} middelen levert dat {gemiddeld.askedUnit}
+                      bedrag zelf op.
                     </p>
                   )}
                 </ToonMeer>

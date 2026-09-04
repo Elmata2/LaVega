@@ -89,7 +89,10 @@ test("herkomst reist mee: op welk adres hij binnenkwam en wie hem stuurde", () =
 });
 
 test("een afzender die zakt wordt GEMARKEERD, niet weggegooid", () => {
-  const m = normalizeInboundMail({ ...INBOUND_PLAIN_TEXT, auth: { spf: "fail", dkim: "none", dmarc: "fail" } });
+  const m = normalizeInboundMail({
+    ...INBOUND_PLAIN_TEXT,
+    auth: { spf: "fail", dkim: "none", dmarc: "fail" },
+  });
   expect(m.senderCheck).toBe("failed");
   expect(m.senderChecks).toEqual({ spf: "fail", dkim: "none", dmarc: "fail" });
   // Nog steeds leesbaar, dus hij gaat gewoon naar het model. Wegfilteren zou
@@ -114,7 +117,11 @@ test("readAuthResult kent alleen de RFC-uitslagen; de rest is unknown", () => {
 
 test("readSenderChecks maakt van een kapot object drie keer unknown", () => {
   expect(readSenderChecks(null)).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
-  expect(readSenderChecks({ spf: "pass" })).toEqual({ spf: "pass", dkim: "unknown", dmarc: "unknown" });
+  expect(readSenderChecks({ spf: "pass" })).toEqual({
+    spf: "pass",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
 });
 
 test("senderCheckOf: 'passed' vereist een echte pass, niet de afwezigheid van een fail", () => {

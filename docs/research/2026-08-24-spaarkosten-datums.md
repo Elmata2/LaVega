@@ -32,23 +32,23 @@ maandprijs zou een cijfer beweren dat in geen enkel document staat.
 
 Vandaar drie bakken in het staging-bestand in plaats van twee:
 
-| bak | wat het is |
-|---|---|
-| `entries` | gedateerde nul voor het **aanhouden** — samen te voegen |
+| bak                             | wat het is                                                                |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| `entries`                       | gedateerde nul voor het **aanhouden** — samen te voegen                   |
 | `gedateerdMaarAndereKostenpost` | gedateerde nul, maar voor openen/opnemen/opzeggen — **geen** `accountFee` |
-| `strandtOpDatum` | nul voor het aanhouden staat er, het document draagt geen datum |
+| `strandtOpDatum`                | nul voor het aanhouden staat er, het document draagt geen datum           |
 
 ## Wat erin ging: 7 rijen
 
-| catalogusrij | waarde | datum | document |
-|---|---|---|---|
-| `santander-consumer-bank-spaarrekening` | € 0,00 | 2026-07-23 | Tarieven en Intresten (PDF, `TINL20260723`) |
-| `argenta-internetspaarrekening` | € 0,00 | 2025-09 | Algemene voorwaarden De Argenta spaarrekening (PDF) |
-| `lloyds-bank-spaarrekening` | € 0,00 | 2024-12-15 | Voorwaarden Lloyds Bank Sparen (PDF), artikel 3 |
-| `openbank-welkom-spaarrekening` | € 0,00 | 2023-06-14 | eigen page-data JSON, FAQ-node |
-| `openbank-open-spaarrekening` | € 0,00 | 2023-02-28 | eigen page-data JSON, FAQ-node |
-| `nexent-bank-spaarrekening` | € 0,00 | 2026-07-02 | Tarieven en Renteoverzicht (PDF), § 3 |
-| `brand-new-day-de-spaarrekening` | € 0,00 | 2025-02-25 | Kosten spaarrekening, `dateModified` in de eigen JSON-LD |
+| catalogusrij                            | waarde | datum      | document                                                 |
+| --------------------------------------- | ------ | ---------- | -------------------------------------------------------- |
+| `santander-consumer-bank-spaarrekening` | € 0,00 | 2026-07-23 | Tarieven en Intresten (PDF, `TINL20260723`)              |
+| `argenta-internetspaarrekening`         | € 0,00 | 2025-09    | Algemene voorwaarden De Argenta spaarrekening (PDF)      |
+| `lloyds-bank-spaarrekening`             | € 0,00 | 2024-12-15 | Voorwaarden Lloyds Bank Sparen (PDF), artikel 3          |
+| `openbank-welkom-spaarrekening`         | € 0,00 | 2023-06-14 | eigen page-data JSON, FAQ-node                           |
+| `openbank-open-spaarrekening`           | € 0,00 | 2023-02-28 | eigen page-data JSON, FAQ-node                           |
+| `nexent-bank-spaarrekening`             | € 0,00 | 2026-07-02 | Tarieven en Renteoverzicht (PDF), § 3                    |
+| `brand-new-day-de-spaarrekening`        | € 0,00 | 2025-02-25 | Kosten spaarrekening, `dateModified` in de eigen JSON-LD |
 
 Vier daarvan komen uit de negen (Santander, Argenta, Lloyds, Openbank Welkom).
 Drie zaten er niet in: Openbank Open, Nexent Bank en Brand New Day.
@@ -251,12 +251,12 @@ opengeslagen, met wat het opleverde:
 
 Vier hosts weigerden. Er is niets omzeild; de status is genoteerd zoals hij was.
 
-| host | status | wat er is opgevraagd |
-|---|---|---|
-| `rabobank.nl` | HTTP 403 | actuele spaarrentes |
-| `revolut.com` | HTTP 403 | precontractuele informatie spaarrekening |
-| `klarna.com` | HTTP 202, 0 bytes | productpagina Flex rekening |
-| `garantibank.nl` | HTTP 403 | Gouden Internet Rekening |
+| host             | status            | wat er is opgevraagd                     |
+| ---------------- | ----------------- | ---------------------------------------- |
+| `rabobank.nl`    | HTTP 403          | actuele spaarrentes                      |
+| `revolut.com`    | HTTP 403          | precontractuele informatie spaarrekening |
+| `klarna.com`     | HTTP 202, 0 bytes | productpagina Flex rekening              |
+| `garantibank.nl` | HTTP 403          | Gouden Internet Rekening                 |
 
 De 403 van Revolut is de vervelendste, want `state.json` noemt voor die rij een
 `docDate` van 2026-07-09 op precies dat precontractuele stuk — het bestaat en het
@@ -286,7 +286,7 @@ Dat gebeurt niet.
   Triodos-downloads (`/downloads/kenmerken-internet-sparen?id=…`), de
   NN-downloads (`/Download/….htm`) en de Santander-documenten
   (`/nl/document/…pdf` zonder extensie). Sniffen op `%PDF-` en `pdftotext
-  -layout` was elke keer het antwoord.
+-layout` was elke keer het antwoord.
 - **Wayback CDX** — twee keer geprobeerd (Bigbank op prijslijsten, Ayvens/
   LeasePlan op tariefdocumenten) en beide keren niets bruikbaars: bij Bigbank één
   URL uit 2012, bij LeasePlan alleen productvoorwaarden uit 2011 die het huidige
@@ -304,11 +304,11 @@ Dat gebeurt niet.
 
 Van de negen van 22 augustus:
 
-| | aantal | rijen |
-|---|---|---|
-| gedateerd en compleet | **4** | Santander, Argenta, Lloyds, Openbank Welkom |
-| gedateerd, maar de nul geldt openen/opnemen/opzeggen | **3** | NIBC Spaarrekening, NIBC Kwartaalspaarrekening, Ayvens |
-| nul voor het aanhouden, document zonder datum | **2** | Bigbank, Triodos¹ |
+|                                                      | aantal | rijen                                                  |
+| ---------------------------------------------------- | ------ | ------------------------------------------------------ |
+| gedateerd en compleet                                | **4**  | Santander, Argenta, Lloyds, Openbank Welkom            |
+| gedateerd, maar de nul geldt openen/opnemen/opzeggen | **3**  | NIBC Spaarrekening, NIBC Kwartaalspaarrekening, Ayvens |
+| nul voor het aanhouden, document zonder datum        | **2**  | Bigbank, Triodos¹                                      |
 
 ¹ Triodos is de enige rij die in beide laatste bakken past en staat in de
 tweede. De gedateerde Triodos-stukken (Kenmerken mei 2026, Voorwaarden Sparen

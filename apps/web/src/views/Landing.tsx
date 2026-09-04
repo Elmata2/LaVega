@@ -6,7 +6,8 @@ import { INVESTING_URL } from "../investing.js";
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
  *  shows a "binnenkort" state instead of silently dropping sign-ups. */
-const WAITLIST_ENDPOINT = "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
+const WAITLIST_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
 
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
@@ -98,7 +99,11 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
     <div className="lp" ref={rootRef}>
       {/* Nav */}
       <header className="lp-nav">
-        <button type="button" className="lp-brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <button
+          type="button"
+          className="lp-brand"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
           LaVega
         </button>
         <nav className="lp-nav-links">
@@ -109,7 +114,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           {INVESTING_URL && (
             <a
               href={INVESTING_URL}
-              {...(INVESTING_URL.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              {...(INVESTING_URL.startsWith("http")
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
             >
               Investing
             </a>
@@ -123,7 +130,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Hero */}
       <section className="lp-hero">
         <h1 className="lp-h1 lp-reveal">
-          Al je rekeningen,<br />één helder getal.
+          Al je rekeningen,
+          <br />
+          één helder getal.
         </h1>
         <p className="lp-sub lp-reveal">
           LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment
@@ -158,9 +167,18 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               </svg>
             </div>
             <div className="lp-device-rows">
-              <div><span>Boodschappen</span><span>28%</span></div>
-              <div><span>Vaste lasten</span><span>34%</span></div>
-              <div><span>Sparen</span><span>18%</span></div>
+              <div>
+                <span>Boodschappen</span>
+                <span>28%</span>
+              </div>
+              <div>
+                <span>Vaste lasten</span>
+                <span>34%</span>
+              </div>
+              <div>
+                <span>Sparen</span>
+                <span>18%</span>
+              </div>
             </div>
           </div>
           <div className="lp-chip lp-chip-a lp-float">
@@ -217,7 +235,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             <div className="lp-ill lp-ill-rings" aria-hidden="true">
               <span className="ring r1" />
               <span className="ring r2" />
-              <span className="orbit"><span className="odot" /></span>
+              <span className="orbit">
+                <span className="odot" />
+              </span>
               <span className="core" />
             </div>
           </article>
@@ -245,15 +265,31 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             <h2 className="lp-h2 lp-strengths-title">Slimme agents die het werk doen</h2>
           </div>
           <div className="lp-carousel-nav">
-            <button type="button" aria-label="Vorige" onClick={() => scrollAgents(-1)}>←</button>
-            <button type="button" aria-label="Volgende" className="accent" onClick={() => scrollAgents(1)}>→</button>
+            <button type="button" aria-label="Vorige" onClick={() => scrollAgents(-1)}>
+              ←
+            </button>
+            <button
+              type="button"
+              aria-label="Volgende"
+              className="accent"
+              onClick={() => scrollAgents(1)}
+            >
+              →
+            </button>
           </div>
         </div>
         <div className="lp-carousel lp-reveal" ref={agentsRef}>
           {[
             {
               icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M6 3h8l4 4v14H6z" />
                   <path d="M14 3v4h4" />
                   <path d="M9 13h6M9 17h6" />
@@ -264,7 +300,14 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             },
             {
               icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>
@@ -274,7 +317,14 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             },
             {
               icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M4 8h13M17 8l-3-3M17 8l-3 3" />
                   <path d="M20 16H7M7 16l3 3M7 16l3-3" />
                 </svg>
@@ -284,7 +334,14 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             },
             {
               icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6 6.9 19.2l1-5.7-4.1-4 5.7-.8z" />
                 </svg>
               ),
@@ -293,7 +350,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
-              <div className="lp-feature-medallion" aria-hidden="true">{a.icon}</div>
+              <div className="lp-feature-medallion" aria-hidden="true">
+                {a.icon}
+              </div>
               <h3 className="lp-feature-title">{a.t}</h3>
               <p className="lp-feature-text">{a.d}</p>
             </article>
@@ -306,8 +365,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         <div className="lp-privacy-inner lp-reveal">
           <h2 className="lp-h2">Jouw data blijft van jou.</h2>
           <p className="lp-sub">
-            Alles staat versleuteld op je eigen apparaat. Bankkoppelingen zijn alleen-lezen. Geen cloud,
-            geen meekijken — tenzij jij een agent expliciet aanzet. Zo simpel is het.
+            Alles staat versleuteld op je eigen apparaat. Bankkoppelingen zijn alleen-lezen. Geen
+            cloud, geen meekijken — tenzij jij een agent expliciet aanzet. Zo simpel is het.
           </p>
           <ul className="lp-ticks">
             <li>Lokaal-first: geen server bewaart je transacties</li>
@@ -323,9 +382,21 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         <h2 className="lp-h2 lp-reveal">In een paar minuten opgezet</h2>
         <div className="lp-steps lp-reveal">
           {[
-            { n: "1", t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
-            { n: "2", t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
-            { n: "3", t: "Vraag de assistent", d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee." },
+            {
+              n: "1",
+              t: "Importeer of koppel",
+              d: "Sleep je bankexports erin of koppel je bank alleen-lezen.",
+            },
+            {
+              n: "2",
+              t: "LaVega rekent",
+              d: "Categoriseert automatisch en voorspelt je kaspositie vooruit.",
+            },
+            {
+              n: "3",
+              t: "Vraag de assistent",
+              d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee.",
+            },
           ].map((s) => (
             <div className="lp-step" key={s.n}>
               <div className="lp-step-n">{s.n}</div>
@@ -380,11 +451,13 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <p className="lp-eyebrow">Wachtlijst</p>
           <h2 className="lp-h2">Wees er als eerste bij</h2>
           <p className="lp-sub">
-            LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan de
-            beurt bent — plus af en toe een update over nieuwe agents.
+            LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan
+            de beurt bent — plus af en toe een update over nieuwe agents.
           </p>
           {wlStatus === "done" ? (
-            <p className="lp-waitlist-done">Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.</p>
+            <p className="lp-waitlist-done">
+              Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.
+            </p>
           ) : (
             <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
               <input
@@ -406,13 +479,23 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                 onChange={(e) => setWlEmail(e.target.value)}
                 disabled={!wlReady || wlStatus === "sending"}
               />
-              <button type="submit" className="lp-btn lp-btn-dark lp-btn-lg" disabled={!wlReady || wlStatus === "sending"}>
-                {wlReady ? (wlStatus === "sending" ? "Bezig…" : "Zet me op de lijst") : "Binnenkort"}
+              <button
+                type="submit"
+                className="lp-btn lp-btn-dark lp-btn-lg"
+                disabled={!wlReady || wlStatus === "sending"}
+              >
+                {wlReady
+                  ? wlStatus === "sending"
+                    ? "Bezig…"
+                    : "Zet me op de lijst"
+                  : "Binnenkort"}
               </button>
             </form>
           )}
           {!wlReady && <p className="lp-waitlist-note">De wachtlijst opent zeer binnenkort.</p>}
-          {wlStatus === "error" && <p className="lp-waitlist-note">Er ging iets mis — probeer het zo nog eens.</p>}
+          {wlStatus === "error" && (
+            <p className="lp-waitlist-note">Er ging iets mis — probeer het zo nog eens.</p>
+          )}
         </div>
       </section>
 
@@ -427,7 +510,9 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         <div className="lp-footer2-grid">
           <div className="lp-footer2-about">
             <div className="lp-footer2-brand">LaVega</div>
-            <p className="lp-footer2-note">Lokaal-first personal finance — van student tot ondernemer.</p>
+            <p className="lp-footer2-note">
+              Lokaal-first personal finance — van student tot ondernemer.
+            </p>
           </div>
           <div className="lp-footer2-col">
             <span className="lp-footer2-h">Product</span>

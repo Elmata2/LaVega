@@ -72,7 +72,9 @@ test("TrendChart draws one smooth path and opens its readout on the last point",
 });
 
 test("TrendChart puts every label in HTML, never in the SVG", () => {
-  const html = renderToStaticMarkup(<TrendChart points={points} format={format} ariaLabel="Testtrend" showAxis />);
+  const html = renderToStaticMarkup(
+    <TrendChart points={points} format={format} ariaLabel="Testtrend" showAxis />,
+  );
   // The bug this design exists to prevent: SVG <text> shrank to ~6px when the
   // grid collapsed to one column on a phone.
   expect(html).not.toContain("<text");
@@ -103,12 +105,22 @@ test("TrendChart draws the band and the reference line only when given them", ()
 
 test("TrendChart marks a named point and skips an out-of-range one", () => {
   const inside = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="A" mark={{ index: 2, color: "var(--neg)" }} />,
+    <TrendChart
+      points={points}
+      format={format}
+      ariaLabel="A"
+      mark={{ index: 2, color: "var(--neg)" }}
+    />,
   );
   expect(inside).toContain('class="lv-chart-mark" style="left:66.67%');
 
   const outside = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="A" mark={{ index: 9, color: "var(--neg)" }} />,
+    <TrendChart
+      points={points}
+      format={format}
+      ariaLabel="A"
+      mark={{ index: 9, color: "var(--neg)" }}
+    />,
   );
   expect(outside).not.toContain("lv-chart-mark");
 });
@@ -144,13 +156,17 @@ test("the trend can be scrubbed from the keyboard, and says where it is", () => 
 });
 
 test("the plot is a group, not an image — an image would hide the scrubber", () => {
-  const html = renderToStaticMarkup(<TrendChart points={points} format={format} ariaLabel="Testtrend" />);
+  const html = renderToStaticMarkup(
+    <TrendChart points={points} format={format} ariaLabel="Testtrend" />,
+  );
   expect(html).toContain('role="group"');
   expect(html).not.toContain('role="img"');
 });
 
 test("arrow keys walk the readout point by point, Home and End jump to the ends", () => {
-  const el = mount(<TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />);
+  const el = mount(
+    <TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />,
+  );
   const hit = el.querySelector<HTMLElement>(".lv-chart-hit");
   const readout = el.querySelector<HTMLElement>(".lv-chart-readout");
   expect(hit).not.toBeNull();
@@ -219,5 +235,7 @@ test("the scrubber shows where the keyboard is", () => {
 
 test("the axis gutter is a variable the drawing area subtracts, so a tick never shifts the data", () => {
   expect(css).toContain("--lv-axis-w: 0px");
-  expect(css.replace(/\s+/g, " ")).toContain(".lv-chart-area { position: absolute; inset: 0 0 0 var(--lv-axis-w); }");
+  expect(css.replace(/\s+/g, " ")).toContain(
+    ".lv-chart-area { position: absolute; inset: 0 0 0 var(--lv-axis-w); }",
+  );
 });

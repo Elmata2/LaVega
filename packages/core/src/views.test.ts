@@ -1,17 +1,87 @@
 import { describe, expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
-import { enrichTxs, filterTxs, accountSummaries, reassignEntity, monthlyTotals, categorize, categoryTotals, categoryComparison, foreignTerminalCategory, ownAccounts, mergeImportedAccounts, selectMajorCategories, windowDaysFromMonths } from "./views.js";
+import {
+  enrichTxs,
+  filterTxs,
+  accountSummaries,
+  reassignEntity,
+  monthlyTotals,
+  categorize,
+  categoryTotals,
+  categoryComparison,
+  foreignTerminalCategory,
+  ownAccounts,
+  mergeImportedAccounts,
+  selectMajorCategories,
+  windowDaysFromMonths,
+} from "./views.js";
 import type { Rule } from "./model.js";
 
 const accounts: Account[] = [
-  { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING lopend", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-  { key: "NL91ABNA0417164300", iban: "NL91ABNA0417164300", name: "ABN zakelijk", bank: "ABN AMRO", entity: "BV2", currency: "EUR", balance: 3424.5 },
+  {
+    key: "NL01INGB0001",
+    iban: "NL01INGB0001",
+    name: "ING lopend",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
+  {
+    key: "NL91ABNA0417164300",
+    iban: "NL91ABNA0417164300",
+    name: "ABN zakelijk",
+    bank: "ABN AMRO",
+    entity: "BV2",
+    currency: "EUR",
+    balance: 3424.5,
+  },
 ];
 const txs: Tx[] = [
-  { id: "t1", accountKey: "NL01INGB0001", date: "2026-01-03", amount: 2500, currency: "EUR", counterparty: "Salaris", description: "Loon januari", category: "", manual: false },
-  { id: "t2", accountKey: "NL01INGB0001", date: "2026-01-02", amount: -12.34, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
-  { id: "t3", accountKey: "NL91ABNA0417164300", date: "2026-01-05", amount: -45, currency: "EUR", counterparty: "Coolblue", description: "Laptop", category: "", manual: false },
-  { id: "t4", accountKey: "NL99UNKNOWN000", date: "2026-01-06", amount: -9.99, currency: "EUR", counterparty: "Onbekend", description: "x", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "NL01INGB0001",
+    date: "2026-01-03",
+    amount: 2500,
+    currency: "EUR",
+    counterparty: "Salaris",
+    description: "Loon januari",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "NL01INGB0001",
+    date: "2026-01-02",
+    amount: -12.34,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t3",
+    accountKey: "NL91ABNA0417164300",
+    date: "2026-01-05",
+    amount: -45,
+    currency: "EUR",
+    counterparty: "Coolblue",
+    description: "Laptop",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t4",
+    accountKey: "NL99UNKNOWN000",
+    date: "2026-01-06",
+    amount: -9.99,
+    currency: "EUR",
+    counterparty: "Onbekend",
+    description: "x",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("enrichTxs joins each tx to its account's entity/bank/name; missing account -> onbekend", () => {
@@ -19,7 +89,12 @@ test("enrichTxs joins each tx to its account's entity/bank/name; missing account
   expect(e).toHaveLength(4);
   expect(e[0]).toMatchObject({ id: "t1", entity: "BV1", bank: "ING", accountName: "ING lopend" });
   expect(e[2]).toMatchObject({ id: "t3", entity: "BV2", bank: "ABN AMRO" });
-  expect(e[3]).toMatchObject({ id: "t4", entity: "onbekend", bank: "", accountName: "NL99UNKNOWN000" });
+  expect(e[3]).toMatchObject({
+    id: "t4",
+    entity: "onbekend",
+    bank: "",
+    accountName: "NL99UNKNOWN000",
+  });
 });
 
 test("filterTxs filters by entity, account, and case-insensitive search, combinable", () => {
@@ -35,7 +110,15 @@ test("filterTxs filters by entity, account, and case-insensitive search, combina
 test("accountSummaries counts txs per account, including accounts with zero txs", () => {
   const accountsPlusEmpty: Account[] = [
     ...accounts,
-    { key: "NL22KNAB0000", iban: "NL22KNAB0000", name: "Knab", bank: "Knab", entity: "BV1", currency: "EUR", balance: null },
+    {
+      key: "NL22KNAB0000",
+      iban: "NL22KNAB0000",
+      name: "Knab",
+      bank: "Knab",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
   ];
   const s = accountSummaries(accountsPlusEmpty, txs);
   expect(s.find((x) => x.account.key === "NL01INGB0001")!.txCount).toBe(2);
@@ -52,9 +135,39 @@ test("reassignEntity changes only the target account, immutably", () => {
 });
 
 const txsForMonths: Tx[] = [
-  { id: "a", accountKey: "A1", date: "2026-06-05", amount: 100, currency: "EUR", counterparty: "Klant", description: "Factuur", category: "", manual: false },
-  { id: "b", accountKey: "A1", date: "2026-06-20", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
-  { id: "c", accountKey: "A1", date: "2026-07-02", amount: -12.5, currency: "EUR", counterparty: "Coffee", description: "Koffie", category: "", manual: false },
+  {
+    id: "a",
+    accountKey: "A1",
+    date: "2026-06-05",
+    amount: 100,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "Factuur",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "b",
+    accountKey: "A1",
+    date: "2026-06-20",
+    amount: -30,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "c",
+    accountKey: "A1",
+    date: "2026-07-02",
+    amount: -12.5,
+    currency: "EUR",
+    counterparty: "Coffee",
+    description: "Koffie",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("filterTxs: from/to bound the date range (inclusive), combinable with other filters", () => {
@@ -62,7 +175,9 @@ test("filterTxs: from/to bound the date range (inclusive), combinable with other
   expect(filterTxs(e, { from: "2026-07-01" }).map((t) => t.id)).toEqual(["c"]);
   expect(filterTxs(e, { to: "2026-06-30" }).map((t) => t.id)).toEqual(["a", "b"]);
   expect(filterTxs(e, { from: "2026-06-10", to: "2026-06-30" }).map((t) => t.id)).toEqual(["b"]);
-  expect(filterTxs(e, { from: "2026-06-01", to: "2026-07-31", search: "koffie" }).map((t) => t.id)).toEqual(["c"]);
+  expect(
+    filterTxs(e, { from: "2026-06-01", to: "2026-07-31", search: "koffie" }).map((t) => t.id),
+  ).toEqual(["c"]);
 });
 
 test("monthlyTotals: groups by YYYY-MM, sums in/out, sorted ascending by month", () => {
@@ -94,7 +209,17 @@ test("categorize: a whitespace-only rule match does NOT match everything (guards
   // last-resort reading of who it is: "Jan Jansen" used to serve here and is now
   // read as a person (review 20-08-2026, item 6), so this uses a kiosk number
   // instead — a digit rules the person reading out.
-  const unmatched: Tx = { id: "u", accountKey: "A1", date: "2026-06-01", amount: -5, currency: "EUR", counterparty: "Quiosc 4412", description: "particuliere betaling", category: "", manual: false };
+  const unmatched: Tx = {
+    id: "u",
+    accountKey: "A1",
+    date: "2026-06-01",
+    amount: -5,
+    currency: "EUR",
+    counterparty: "Quiosc 4412",
+    description: "particuliere betaling",
+    category: "",
+    manual: false,
+  };
   expect(categorize(unmatched, bad)).toBe("onbekend");
 });
 
@@ -107,35 +232,104 @@ test("categoryTotals: sums in/out per derived category", () => {
 
 test("mergeImportedAccounts preserves user entity/type + manual balance on re-import; new accounts pass through", () => {
   const existing: Account[] = [
-    { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV2", type: "Spaarrekening", currency: "EUR", balance: 500, balanceDate: "2026-08-01" },
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV2",
+      type: "Spaarrekening",
+      currency: "EUR",
+      balance: 500,
+      balanceDate: "2026-08-01",
+    },
   ];
   const imported: Account[] = [
-    { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null }, // CSV re-import
-    { key: "A2", iban: "A2", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 100, balanceDate: "2026-07-31" },
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    }, // CSV re-import
+    {
+      key: "A2",
+      iban: "A2",
+      name: "ABN",
+      bank: "ABN AMRO",
+      entity: "BV1",
+      currency: "EUR",
+      balance: 100,
+      balanceDate: "2026-07-31",
+    },
   ];
   const merged = mergeImportedAccounts(existing, imported);
   const a1 = merged.find((a) => a.key === "A1")!;
-  expect(a1.entity).toBe("BV2");           // user entity kept
-  expect(a1.type).toBe("Spaarrekening");   // user type kept
-  expect(a1.balance).toBe(500);            // CSV null -> manual saldo kept
+  expect(a1.entity).toBe("BV2"); // user entity kept
+  expect(a1.type).toBe("Spaarrekening"); // user type kept
+  expect(a1.balance).toBe(500); // CSV null -> manual saldo kept
   expect(a1.balanceDate).toBe("2026-08-01");
   expect(merged.find((a) => a.key === "A2")).toMatchObject({ entity: "BV1", balance: 100 }); // new passes through
 });
 
 test("mergeImportedAccounts: a fresh non-null statement balance updates the existing account (entity still kept)", () => {
-  const existing: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: 10, balanceDate: "2026-06-01" }];
-  const imported: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "ABN AMRO", entity: "BV9", currency: "EUR", balance: 999, balanceDate: "2026-07-31" }];
-  expect(mergeImportedAccounts(existing, imported)[0]).toMatchObject({ entity: "BV1", balance: 999, balanceDate: "2026-07-31" });
+  const existing: Account[] = [
+    {
+      key: "A1",
+      iban: "A1",
+      name: "x",
+      bank: "ABN AMRO",
+      entity: "BV1",
+      currency: "EUR",
+      balance: 10,
+      balanceDate: "2026-06-01",
+    },
+  ];
+  const imported: Account[] = [
+    {
+      key: "A1",
+      iban: "A1",
+      name: "x",
+      bank: "ABN AMRO",
+      entity: "BV9",
+      currency: "EUR",
+      balance: 999,
+      balanceDate: "2026-07-31",
+    },
+  ];
+  expect(mergeImportedAccounts(existing, imported)[0]).toMatchObject({
+    entity: "BV1",
+    balance: 999,
+    balanceDate: "2026-07-31",
+  });
 });
 
 test("categoryComparison: latest month vs prior — share % + change %, transfers excluded", () => {
   // Build `own` via the real helper so the transfer ids are normalized exactly
   // as categorize expects (the ING account is "own"; the tx below references it).
   const own = ownAccounts([
-    { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+    {
+      key: "NL01INGB0001",
+      iban: "NL01INGB0001",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
   ]);
   const t = (id: string, date: string, amount: number, cp: string): Tx => ({
-    id, accountKey: "NL91ABNA0417164300", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false,
+    id,
+    accountKey: "NL91ABNA0417164300",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty: cp,
+    description: "",
+    category: "",
+    manual: false,
   });
   const rows: Tx[] = [
     // previous month (2026-07): boodschappen 100, transport 50
@@ -148,7 +342,17 @@ test("categoryComparison: latest month vs prior — share % + change %, transfer
     t("c3", "2026-08-12", -50, "NS"),
     t("c4", "2026-08-14", -30, "Restaurant"),
     // an own-account transfer in the current month — must be EXCLUDED from spend
-    { id: "x1", accountKey: "NL91ABNA0417164300", date: "2026-08-15", amount: -500, currency: "EUR", counterparty: "NL01INGB0001 eigen", description: "spaar", category: "", manual: false },
+    {
+      id: "x1",
+      accountKey: "NL91ABNA0417164300",
+      date: "2026-08-15",
+      amount: -500,
+      currency: "EUR",
+      counterparty: "NL01INGB0001 eigen",
+      description: "spaar",
+      category: "",
+      manual: false,
+    },
     // income — ignored
     t("i1", "2026-08-01", 3000, "Salaris"),
   ];
@@ -193,7 +397,15 @@ test("categoryComparison: empty input yields empty result, and nothing comparabl
 /* ── Like-for-like coverage: the ~€24.000 rise that was not real ──────────── */
 
 const cmpTx = (accountKey: string, id: string, date: string, amount: number, cp: string): Tx => ({
-  id, accountKey, date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false,
+  id,
+  accountKey,
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category: "",
+  manual: false,
 });
 const shopRules: Rule[] = [
   { id: "b1", match: "albert heijn", category: "Boodschappen" },
@@ -275,7 +487,12 @@ test("categoryComparison: the newest month is flagged PARTIAL when the data stop
   });
   // July ran to its last day, so it is not partial — eleven days against a full
   // month is exactly the asymmetry the caller has to be able to see.
-  expect(cmp.previous).toMatchObject({ month: "2026-07", daysObserved: 31, daysInMonth: 31, partial: false });
+  expect(cmp.previous).toMatchObject({
+    month: "2026-07",
+    daysObserved: 31,
+    daysInMonth: 31,
+    partial: false,
+  });
 });
 
 test("categoryComparison: a February that runs to the 28th of a 28-day month is NOT partial", () => {
@@ -284,7 +501,12 @@ test("categoryComparison: a February that runs to the 28th of a 28-day month is 
     cmpTx("ABN", "a2", "2026-02-28", -100, "Albert Heijn"),
   ];
   const cmp = categoryComparison(rows, shopRules);
-  expect(cmp.current).toMatchObject({ month: "2026-02", daysInMonth: 28, daysObserved: 28, partial: false });
+  expect(cmp.current).toMatchObject({
+    month: "2026-02",
+    daysInMonth: 28,
+    daysObserved: 28,
+    partial: false,
+  });
 });
 
 test("categoryComparison: December rolls back to November, not to month 0", () => {
@@ -326,7 +548,14 @@ test("selectMajorCategories: the same category survives a one-month window and i
 
 test("selectMajorCategories: what was folded away is named, totalled and shared", () => {
   const sel = selectMajorCategories(
-    [["A", 500], ["B", 300], ["C", 200], ["D", 100], ["E", 60], ["F", 20]],
+    [
+      ["A", 500],
+      ["B", 300],
+      ["C", 200],
+      ["D", 100],
+      ["E", 60],
+      ["F", 20],
+    ],
     { windowDays: 30, maxShown: 3 },
   );
   expect(sel.shown.map((s) => s.category)).toEqual(["A", "B", "C"]);
@@ -343,7 +572,12 @@ test("selectMajorCategories: what was folded away is named, totalled and shared"
 
 test("selectMajorCategories: a Map works, zero/negative totals are dropped, ties are stable", () => {
   const sel = selectMajorCategories(
-    new Map([["A", 100], ["B", 100], ["Leeg", 0], ["Negatief", -10]]),
+    new Map([
+      ["A", 100],
+      ["B", 100],
+      ["Leeg", 0],
+      ["Negatief", -10],
+    ]),
     { windowDays: 30 },
   );
   expect(sel.shown.map((s) => s.category)).toEqual(["A", "B"]);
@@ -351,14 +585,26 @@ test("selectMajorCategories: a Map works, zero/negative totals are dropped, ties
 });
 
 test("selectMajorCategories: no window means no floor — nothing is dropped for being small", () => {
-  const sel = selectMajorCategories([["A", 100], ["B", 1]], { windowDays: 0 });
+  const sel = selectMajorCategories(
+    [
+      ["A", 100],
+      ["B", 1],
+    ],
+    { windowDays: 0 },
+  );
   expect(sel.thresholdOut).toBe(0);
   expect(sel.shown.map((s) => s.category)).toEqual(["A", "B"]);
 });
 
 test("selectMajorCategories: an empty window yields zeroed shares, not NaN", () => {
   const sel = selectMajorCategories([], { windowDays: 30 });
-  expect(sel).toMatchObject({ shown: [], hidden: [], hiddenOut: 0, hiddenSharePct: 0, totalOut: 0 });
+  expect(sel).toMatchObject({
+    shown: [],
+    hidden: [],
+    hiddenOut: 0,
+    hiddenSharePct: 0,
+    totalOut: 0,
+  });
 });
 
 test("windowDaysFromMonths counts real calendar days, leap year included", () => {
@@ -370,12 +616,37 @@ test("windowDaysFromMonths counts real calendar days, leap year included", () =>
 });
 
 test("a re-import keeps a bank/name the owner typed, but may fix a stale parser one", () => {
-  const renamed = { key: "A28641213", iban: "", name: "Oranje Spaarrekening", bank: "ING", entity: "Prive",
-    currency: "EUR", balance: 100, type: "Spaarrekening", renamed: true };
+  const renamed = {
+    key: "A28641213",
+    iban: "",
+    name: "Oranje Spaarrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 100,
+    type: "Spaarrekening",
+    renamed: true,
+  };
   const stale = { ...renamed, key: "D12883091", name: "D 128-83091", bank: "", renamed: undefined };
   const imported = [
-    { key: "A28641213", iban: "", name: "D 286-41213", bank: "", entity: "", currency: "EUR", balance: null },
-    { key: "D12883091", iban: "", name: "Oranje Spaarrekening", bank: "ING", entity: "", currency: "EUR", balance: null },
+    {
+      key: "A28641213",
+      iban: "",
+      name: "D 286-41213",
+      bank: "",
+      entity: "",
+      currency: "EUR",
+      balance: null,
+    },
+    {
+      key: "D12883091",
+      iban: "",
+      name: "Oranje Spaarrekening",
+      bank: "ING",
+      entity: "",
+      currency: "EUR",
+      balance: null,
+    },
   ];
   const merged = mergeImportedAccounts([renamed, stale], imported);
 
@@ -396,27 +667,50 @@ test("a re-import keeps a bank/name the owner typed, but may fix a stale parser 
  */
 describe("onbekend: the rows he showed us", () => {
   const row = (counterparty: string, description: string, amount: number): Tx => ({
-    id: "t", accountKey: "NL88INGB0793113504", date: "2026-07-19",
-    amount, currency: "EUR", counterparty, description, category: "", manual: false,
+    id: "t",
+    accountKey: "NL88INGB0793113504",
+    date: "2026-07-19",
+    amount,
+    currency: "EUR",
+    counterparty,
+    description,
+    category: "",
+    manual: false,
   });
 
   test("a metro ride in Barcelona is Transport, not onbekend", () => {
-    const t = row("METRO BARCELONA", "METRO BARCELONA BARCELONA ESP Kaartnr: 5238 53** **** 1748 Datum: 18-07-2026 Tijd: 18:43 Transactie: I13241 Term: 86324463 Apple Pay", -7.8);
+    const t = row(
+      "METRO BARCELONA",
+      "METRO BARCELONA BARCELONA ESP Kaartnr: 5238 53** **** 1748 Datum: 18-07-2026 Tijd: 18:43 Transactie: I13241 Term: 86324463 Apple Pay",
+      -7.8,
+    );
     expect(categorize(t, [])).toBe("Transport");
   });
 
   test("a campsite abroad is Reizen", () => {
-    const t = row("CAMPER PARK BARCELONA", "CAMPER PARK BARCELONA TEIA ESP Kaartnr: 5238 53** **** 1748 Tijd: 11:36 Term: KJOLH2QT Apple Pay", -30);
+    const t = row(
+      "CAMPER PARK BARCELONA",
+      "CAMPER PARK BARCELONA TEIA ESP Kaartnr: 5238 53** **** 1748 Tijd: 11:36 Term: KJOLH2QT Apple Pay",
+      -30,
+    );
     expect(categorize(t, [])).toBe("Reizen");
   });
 
   test("gelato is Café", () => {
-    const t = row("MUST GELATO", "MUST GELATO BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 21:41 Term: 02013791 Apple Pay", -4.2);
+    const t = row(
+      "MUST GELATO",
+      "MUST GELATO BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 21:41 Term: 02013791 Apple Pay",
+      -4.2,
+    );
     expect(categorize(t, [])).toBe("Café");
   });
 
   test("an unrecognised merchant at a terminal abroad still lands somewhere honest", () => {
-    const t = row("XURRERIA TREBOL", "XURRERIA TREBOL BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 09:12 Term: 11223344", -3.5);
+    const t = row(
+      "XURRERIA TREBOL",
+      "XURRERIA TREBOL BARCELONA ESP Kaartnr: 5238 53** **** 1748 Tijd: 09:12 Term: 11223344",
+      -3.5,
+    );
     expect(categorize(t, [])).toBe("Reizen");
   });
 
@@ -426,7 +720,11 @@ describe("onbekend: the rows he showed us", () => {
     // "Overboekingen". The person is right there in the counterparty; "via Rabo
     // Betaalverzoek" is only the mechanism, and the mechanism is what is left
     // when the requester is not a person (asserted in categories.test.ts).
-    const t = row("T.J. van Wijngaarden via Rabo Betaalverzoek", "Naam: T.J. van Wijngaarden via Rabo Betaalverzoek Omschrijving: Vacance IBAN: NL42RABO0114668043", -52.8);
+    const t = row(
+      "T.J. van Wijngaarden via Rabo Betaalverzoek",
+      "Naam: T.J. van Wijngaarden via Rabo Betaalverzoek Omschrijving: Vacance IBAN: NL42RABO0114668043",
+      -52.8,
+    );
     expect(categorize(t, [])).toBe("Tussen personen");
   });
 
@@ -447,7 +745,11 @@ describe("onbekend: the rows he showed us", () => {
   });
 
   test("a DOMESTIC terminal payment is untouched by the abroad rule", () => {
-    const t = row("ALBERT HEIJN 1234", "ALBERT HEIJN 1234 AMSTERDAM Kaartnr: 5238 53** **** 1748 Term: 8899 Tijd: 12:03", -42.15);
+    const t = row(
+      "ALBERT HEIJN 1234",
+      "ALBERT HEIJN 1234 AMSTERDAM Kaartnr: 5238 53** **** 1748 Term: 8899 Tijd: 12:03",
+      -42.15,
+    );
     expect(categorize(t, [])).toBe("Boodschappen");
   });
 });
@@ -464,16 +766,72 @@ describe("onbekend: the rows he showed us", () => {
  * € 250 die als inkomen meetelt maakt van geld verplaatsen geld verdienen. */
 test("een overboeking tussen zijn eigen twee rekeningen telt aan GEEN van beide kanten mee", () => {
   const own = ownAccounts([
-    { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
-    { key: "NL91ABNA0417164300", iban: "NL91ABNA0417164300", name: "ABN", bank: "ABN AMRO", entity: "BV1", currency: "EUR", balance: null },
+    {
+      key: "NL01INGB0001",
+      iban: "NL01INGB0001",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
+    {
+      key: "NL91ABNA0417164300",
+      iban: "NL91ABNA0417164300",
+      name: "ABN",
+      bank: "ABN AMRO",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
   ]);
   const rows: Tx[] = [
     // De twee kanten van één overboeking, elk op hun eigen rekening.
-    { id: "uit", accountKey: "NL91ABNA0417164300", date: "2026-08-15", amount: -250, currency: "EUR", counterparty: "NL01INGB0001", description: "sparen", category: "", manual: false },
-    { id: "in", accountKey: "NL01INGB0001", date: "2026-08-15", amount: 250, currency: "EUR", counterparty: "NL91ABNA0417164300", description: "sparen", category: "", manual: false },
+    {
+      id: "uit",
+      accountKey: "NL91ABNA0417164300",
+      date: "2026-08-15",
+      amount: -250,
+      currency: "EUR",
+      counterparty: "NL01INGB0001",
+      description: "sparen",
+      category: "",
+      manual: false,
+    },
+    {
+      id: "in",
+      accountKey: "NL01INGB0001",
+      date: "2026-08-15",
+      amount: 250,
+      currency: "EUR",
+      counterparty: "NL91ABNA0417164300",
+      description: "sparen",
+      category: "",
+      manual: false,
+    },
     // Een echte uitgave en een echt inkomen, als ijkpunt.
-    { id: "ah", accountKey: "NL91ABNA0417164300", date: "2026-08-03", amount: -70, currency: "EUR", counterparty: "Albert Heijn", description: "", category: "", manual: false },
-    { id: "sal", accountKey: "NL91ABNA0417164300", date: "2026-08-01", amount: 3000, currency: "EUR", counterparty: "Salaris", description: "", category: "", manual: false },
+    {
+      id: "ah",
+      accountKey: "NL91ABNA0417164300",
+      date: "2026-08-03",
+      amount: -70,
+      currency: "EUR",
+      counterparty: "Albert Heijn",
+      description: "",
+      category: "",
+      manual: false,
+    },
+    {
+      id: "sal",
+      accountKey: "NL91ABNA0417164300",
+      date: "2026-08-01",
+      amount: 3000,
+      currency: "EUR",
+      counterparty: "Salaris",
+      description: "",
+      category: "",
+      manual: false,
+    },
   ];
   const rules: Rule[] = [{ id: "b1", match: "albert heijn", category: "Boodschappen" }];
 
@@ -483,5 +841,11 @@ test("een overboeking tussen zijn eigen twee rekeningen telt aan GEEN van beide 
     expect(categorize(tx, rules, own)).toBe("Eigen overboeking");
   }
   // En het ijkpunt blijft staan: de echte uitgave is geen eigen overboeking.
-  expect(categorize(rows.find((r) => r.id === "ah")!, rules, own)).toBe("Boodschappen");
+  expect(
+    categorize(
+      rows.find((r) => r.id === "ah")!,
+      rules,
+      own,
+    ),
+  ).toBe("Boodschappen");
 });

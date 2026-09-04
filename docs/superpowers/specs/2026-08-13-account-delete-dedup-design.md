@@ -12,7 +12,7 @@
 
 ## The two capabilities
 
-Deleting a duplicate row loses that row's transactions (duplicates often hold *different* date ranges), so it is **not** a safe duplicate fix. Merge is. Both are built, from orthogonal storage primitives.
+Deleting a duplicate row loses that row's transactions (duplicates often hold _different_ date ranges), so it is **not** a safe duplicate fix. Merge is. Both are built, from orthogonal storage primitives.
 
 ### 1. Duplicate detection (pure core, new `packages/core/src/accounts.ts`)
 
@@ -32,6 +32,7 @@ To keep merge and id-assignment in sync (DRY), factor the base/id out of `assign
 ## Storage — two new removal primitives (both adapters + parity tests)
 
 Add to `StorageAdapter`:
+
 - `deleteAccount(key: string): Promise<void>` — removes the account row **only** (not its txs; deletion of txs is a separate call so merge can reassign first).
 - `deleteTxs(ids: string[]): Promise<void>` — removes tx rows by id.
 
@@ -45,7 +46,7 @@ Add to `StorageAdapter`:
   - `handleMergeDuplicates(survivorKey, duplicateKey)`: run `mergeAccounts`; persist the diff (`deleteTxs(old duplicate tx ids)`, `putTxs(new surplus txs)`, `putAccounts([survivor])`, `deleteAccount(duplicateKey)`); `setAccounts`/`setTxs` to the merged arrays.
 - `Rekeningen`: new props `onDeleteAccount(key)`, `duplicateGroups`, `onMergeDuplicates(survivorKey, duplicateKey)`.
   - Per-row **"Verwijder"** button (trailing cell) → inline "Weet je het zeker? Ja / Nee" confirm (never `window.confirm`-less one-click) → `onDeleteAccount`. Copy names the tx count being removed.
-  - **Duplicate banner** under `<h2>`: one row per group intersecting the current (scoped) view — *"Deze rekeningen lijken dezelfde rekening: ‹A›, ‹B›. LaVega houdt ‹survivor› aan."* + **"Samenvoegen"** (inline confirm) → `onMergeDuplicates`.
+  - **Duplicate banner** under `<h2>`: one row per group intersecting the current (scoped) view — _"Deze rekeningen lijken dezelfde rekening: ‹A›, ‹B›. LaVega houdt ‹survivor› aan."_ + **"Samenvoegen"** (inline confirm) → `onMergeDuplicates`.
 
 ## Edge cases
 

@@ -45,7 +45,10 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
       .sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
   }, [accounts]);
 
-  const positiveTotal = rows.reduce((s, r) => s + (r.balance !== null && r.balance > 0 ? r.balance : 0), 0);
+  const positiveTotal = rows.reduce(
+    (s, r) => s + (r.balance !== null && r.balance > 0 ? r.balance : 0),
+    0,
+  );
   const shown = rows.slice(0, ROWS);
   const hidden = rows.length - shown.length;
   const unknown = rows.filter((r) => r.balance === null).length;
@@ -71,10 +74,16 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
       }
     >
       {rows.length === 0 ? (
-        <p className="block-empty">Nog geen rekeningen met een entiteit — importeer eerst een bestand.</p>
+        <p className="block-empty">
+          Nog geen rekeningen met een entiteit — importeer eerst een bestand.
+        </p>
       ) : (
         <>
-          <div className="proportion-bar" role="img" aria-label="Verhouding van positieve posities per bedrijf">
+          <div
+            className="proportion-bar"
+            role="img"
+            aria-label="Verhouding van positieve posities per bedrijf"
+          >
             {rows
               .filter((r) => r.balance !== null && r.balance > 0)
               .map((r) => (

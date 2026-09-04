@@ -58,7 +58,17 @@ function serving(bodies: unknown[]) {
 
 /** Facturen gets its pending rows from App (they must survive the view
  *  unmounting), so the test owns that state exactly like App does. */
-function Harness({ fetchImpl, invoices, txs, entities }: { fetchImpl: typeof fetch; invoices: Invoice[]; txs: Tx[]; entities: string[] }) {
+function Harness({
+  fetchImpl,
+  invoices,
+  txs,
+  entities,
+}: {
+  fetchImpl: typeof fetch;
+  invoices: Invoice[];
+  txs: Tx[];
+  entities: string[];
+}) {
   const [pending, setPending] = useState<PendingInvoice[]>([]);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
@@ -80,18 +90,27 @@ function Harness({ fetchImpl, invoices, txs, entities }: { fetchImpl: typeof fet
   );
 }
 
-function render(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
+function render(
+  fetchImpl: typeof fetch,
+  invoices: Invoice[] = [],
+  txs: Tx[] = [],
+  entities: string[] = ["BV1"],
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Harness fetchImpl={fetchImpl} invoices={invoices} txs={txs} entities={entities} />);
+    root!.render(
+      <Harness fetchImpl={fetchImpl} invoices={invoices} txs={txs} entities={entities} />,
+    );
   });
   return container;
 }
 
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -109,7 +128,8 @@ function click(el: Element) {
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -117,7 +137,12 @@ function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string)
 
 /** Fresh tree, one press of "Ophalen uit n8n". Each call replaces the previous
  *  render so a test that fetches twice isn't reading a stale DOM. */
-async function fetchOnce(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
+async function fetchOnce(
+  fetchImpl: typeof fetch,
+  invoices: Invoice[] = [],
+  txs: Tx[] = [],
+  entities: string[] = ["BV1"],
+) {
   if (root) act(() => root!.unmount());
   container?.remove();
   const c = render(fetchImpl, invoices, txs, entities);
@@ -134,7 +159,8 @@ test("a fetched row renders as an editable proposal, and nothing is booked yet",
   expect(c.textContent).toContain("Factuur juli 2026");
 
   const value = (label: string) =>
-    (c.querySelector(`.n8n-row [aria-label="${label}"]`) as HTMLInputElement | HTMLSelectElement).value;
+    (c.querySelector(`.n8n-row [aria-label="${label}"]`) as HTMLInputElement | HTMLSelectElement)
+      .value;
   expect(value("Relatie (n8n)")).toBe("ACME BV");
   expect(value("Bedrag (n8n)")).toBe("121.00");
   expect(value("Btw (n8n)")).toBe("21.00");
@@ -200,7 +226,7 @@ test("a second fetch does not duplicate a row that is still awaiting a decision"
 });
 
 test("a row whose invoice is already stored is not booked twice", async () => {
-  const c = await fetchOnce(serving([{ invoices: [ROW] }]));
+  await fetchOnce(serving([{ invoices: [ROW] }]));
   // Confirm once to learn the exact invoice this row produces.
   click(byText(".n8n-row button", "Bevestigen"));
   const existing = saved[0];
@@ -222,7 +248,9 @@ test("a row whose invoice is already stored is not booked twice", async () => {
 
 test("a missing due date blocks confirming instead of inventing a payment term", async () => {
   const c = await fetchOnce(serving([{ invoices: [{ ...ROW, dueDate: null }] }]));
-  expect((c.querySelector('.n8n-row [aria-label="Vervaldatum (n8n)"]') as HTMLInputElement).value).toBe("");
+  expect(
+    (c.querySelector('.n8n-row [aria-label="Vervaldatum (n8n)"]') as HTMLInputElement).value,
+  ).toBe("");
   expect(c.textContent).toContain("Geen vervaldatum gevonden");
 
   click(byText(".n8n-row button", "Bevestigen"));
@@ -241,7 +269,11 @@ test("an empty queue, a refused token and a dead connection each say their own t
   expect(c.textContent).toContain("De wachtrij in n8n was leeg");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
 
-  const denied = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
+  const denied = (async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
   const c2 = await fetchOnce(denied);
   expect(c2.textContent).toContain("weigerde het token (401)");
   expect(c2.textContent).toContain("Er is niets opgehaald");
@@ -252,7 +284,11 @@ test("an empty queue, a refused token and a dead connection each say their own t
   const c3 = await fetchOnce(dead);
   expect(c3.textContent).toContain("Geen antwoord van n8n");
 
-  const garbled = (async () => ({ ok: true, status: 200, json: async () => ({ message: "Workflow started" }) })) as unknown as typeof fetch;
+  const garbled = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ message: "Workflow started" }),
+  })) as unknown as typeof fetch;
   const c4 = await fetchOnce(garbled);
   expect(c4.textContent).toContain("niet te lezen");
   expect(c4.textContent).toContain("kan die rij verloren zijn");
@@ -483,8 +519,16 @@ const FORWARDED = {
 };
 
 const bankTx = (o: Partial<Tx> = {}): Tx => ({
-  id: "t1", accountKey: "A", date: "2026-07-30", amount: -121, currency: "EUR",
-  counterparty: "ACME BV", description: "", category: "", manual: false, ...o,
+  id: "t1",
+  accountKey: "A",
+  date: "2026-07-30",
+  amount: -121,
+  currency: "EUR",
+  counterparty: "ACME BV",
+  description: "",
+  category: "",
+  manual: false,
+  ...o,
 });
 
 test("een geverifieerde, complete factuur boekt zichzelf — hij hoeft niets in te drukken", async () => {
@@ -520,7 +564,19 @@ test("bevestigen koppelt óók meteen — niet pas bij de volgende import", asyn
 });
 
 test("een afzender die de controle niet haalde blijft een voorstel, met de echte reden erbij", async () => {
-  const c = await fetchOnce(serving([{ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] }]));
+  const c = await fetchOnce(
+    serving([
+      {
+        invoices: [
+          {
+            ...FORWARDED,
+            senderCheck: "failed",
+            senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+          },
+        ],
+      },
+    ]),
+  );
   expect(saved).toHaveLength(0);
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
   // De regel zelf noemt de echte uitslag, en noemt hem nergens geverifieerd:

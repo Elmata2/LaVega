@@ -1,7 +1,5 @@
 # Lavega
 
-
-
 ## Agent skills
 
 When you are using a research agents, you can downscale to the cheapest model for the fetching etcetera, otherwise it cost a lot of tokens that we can better use elsewhere.
@@ -36,9 +34,10 @@ ask-sonner — Your guide to working with Sonner, my toast library. Contains set
 Issues live as GitHub issues in `Elmata2/lavega`, driven through the `gh` CLI.
 
 When you finish a Github Issue, commit and push it to main, with a summary of the changes.
-You can use the /caveman-commit skill for that, to create a dense but thoughtful summary 
+You can use the /caveman-commit skill for that, to create a dense but thoughtful summary
 
 When issues are solved in github, we will provide a short summary of what our changes are doing inside the repo
+
 ### Triage labels
 
 Five canonical triage roles, used with their default label strings.
@@ -51,15 +50,15 @@ See `docs/agents/domain.md`.
 
 ### Monorepo
 
-[Turborepo](https://turbo.build) + Bun workspaces. `apps/*` for deployables (MCP server,
+[Turborepo](https://turbo.build) + pnpm workspaces. `apps/*` for deployables (MCP server,
 web UI, macOS daemon); `packages/*` for shared libraries and config. Root scripts:
-`bun run build`, `bun run dev`, `
-bun run lint`, `bun run test`, `bun run typecheck`.
-
+`pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
+`pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
 Rules:
+
 - Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
 - Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
 - Pattern: [thing] [action] [reason]. [next step].

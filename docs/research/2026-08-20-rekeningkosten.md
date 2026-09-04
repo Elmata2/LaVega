@@ -13,8 +13,8 @@ niet aan.
 2. **26 van die 105 zijn een uitgesproken nul.** Elke studentenrekening in dit land staat op
    € 0,00 en de aanbieder zegt dat zelf, letterlijk, in het wettelijk verplichte kostendocument.
    Dat is een bekende nul, geen leeg veld.
-3. **Route 1 uit de opdracht deed bijna al het werk.** Het EU-verplichte *Informatiedocument
-   betreffende de vergoedingen*, de Tarievenwijzer en het ABN-Informatieblad leverden ING, ABN AMRO,
+3. **Route 1 uit de opdracht deed bijna al het werk.** Het EU-verplichte _Informatiedocument
+   betreffende de vergoedingen_, de Tarievenwijzer en het ABN-Informatieblad leverden ING, ABN AMRO,
    Rabobank, SNS, ASN, RegioBank, Knab en Triodos in één ochtend. Dat zijn de acht grootste
    Nederlandse aanbieders.
 4. **`r.jina.ai` is dood.** Route 3 geeft nu HTTP 403 met een Cloudflare-challenge, ook op
@@ -25,7 +25,7 @@ niet aan.
 
 ## Wat de vraag was, en wat er nu ligt
 
-Zijn vraag: *"Hoeveel kost een rekening om te behouden (ING student etc)"*. Dus de vaste maand- of
+Zijn vraag: _"Hoeveel kost een rekening om te behouden (ING student etc)"_. Dus de vaste maand- of
 jaarlast van een betaalpakket of creditcard — niet de transactiekosten, niet de koersopslag (die
 staat al in `catalog.json` als `fxFeePct`).
 
@@ -40,16 +40,16 @@ Alle acht publiceren een gedateerd kostendocument. Dat is geen toeval: het is we
 (het Informatiedocument betreffende de vergoedingen uit de Payment Accounts Directive). Route 1 uit
 de opdracht is daarom niet zomaar de eerste route — het is de enige die per definitie moet bestaan.
 
-| Aanbieder | Basispakket | Gratis variant | Datum in het document |
-|---|---|---|---|
-| ING | ING Go € 4,00/mnd | ING Student (18–30) € 0 | 15 juni 2026 |
-| ABN AMRO | BasisPakket Betalen € 4,30/mnd | Studenten Pakket (18–25) gratis | januari 2026 |
-| Rabobank | Rabo Standaard € 3,45/mnd | Rabo Free (18–24) € 0,00 | 1 juli 2026 / dec 2025 |
-| SNS | SNS Basis € 4,00/mnd | SNS Studentenrekening € 0,00 | 1 februari 2026 |
-| ASN | ASN Bankrekening € 4,00/mnd | ASN Studentenrekening kosteloos | 1 juli 2026 |
-| RegioBank | Plus Betalen € 4,00/mnd | Studentenrekening € 0,00 | 1 februari 2026 |
-| Knab | Privérekening € 6,00/mnd | — | 18-02-2026 |
-| Triodos | € 5,00/mnd vanaf 26 jaar | 18 t/m 22 jaar € 0,00 | mei 2026 |
+| Aanbieder | Basispakket                    | Gratis variant                  | Datum in het document  |
+| --------- | ------------------------------ | ------------------------------- | ---------------------- |
+| ING       | ING Go € 4,00/mnd              | ING Student (18–30) € 0         | 15 juni 2026           |
+| ABN AMRO  | BasisPakket Betalen € 4,30/mnd | Studenten Pakket (18–25) gratis | januari 2026           |
+| Rabobank  | Rabo Standaard € 3,45/mnd      | Rabo Free (18–24) € 0,00        | 1 juli 2026 / dec 2025 |
+| SNS       | SNS Basis € 4,00/mnd           | SNS Studentenrekening € 0,00    | 1 februari 2026        |
+| ASN       | ASN Bankrekening € 4,00/mnd    | ASN Studentenrekening kosteloos | 1 juli 2026            |
+| RegioBank | Plus Betalen € 4,00/mnd        | Studentenrekening € 0,00        | 1 februari 2026        |
+| Knab      | Privérekening € 6,00/mnd       | —                               | 18-02-2026             |
+| Triodos   | € 5,00/mnd vanaf 26 jaar       | 18 t/m 22 jaar € 0,00           | mei 2026               |
 
 ### ING — het pakketlandschap is verbouwd
 
@@ -63,7 +63,7 @@ misleidende naam: de inhoud is **geldig vanaf 15 juni 2026** en beschrijft vier 
 Twee dingen die niet in het lijstje uit de opdracht pasten:
 
 - **"ING Basis" bestaat niet meer als open pakket.** Het BasisPakket staat op pagina 16 onder
-  *Niet meer te openen betaalpakketten*, samen met OranjePakket met korting (€ 3,55), BetaalPakket
+  _Niet meer te openen betaalpakketten_, samen met OranjePakket met korting (€ 3,55), BetaalPakket
   (€ 6,85) en RoyaalPakket (€ 9,90). Het BasisPakket kost € 4,85 per maand voor wie het nog heeft.
   Dat is een prijs voor bestaande klanten, geen keuze die iemand vandaag kan maken — het staat als
   aparte regel in het stagingbestand, zodat de app niet gaat suggereren dat je erheen kunt.
@@ -102,7 +102,7 @@ Vreemde Valuta Rekening (€ 5,00/mnd). Eén PDF, acht tarieven.
 `rabobank.nl` geeft op elke productpagina HTTP 403 op een gewone `curl`. Dat blokkeerde niets:
 `media.rabobank.com` serveert de PDF's zonder enige horde, en de Wayback-snapshot van
 `kosten-voorwaarden` (23 april 2026) bevat de directe links naar al die PDF's. Zo kwamen de vier
-informatiedocumenten binnen plus *Tarieven en limieten — Nieuwe betaalpakketten, December 2025*,
+informatiedocumenten binnen plus _Tarieven en limieten — Nieuwe betaalpakketten, December 2025_,
 dat in één tabel elf pakketprijzen zet.
 
 Let op de valkuil die ik bijna in liep: `media.rabobank.com/asset/<uuid>/<willekeurige-naam>.pdf`
@@ -114,7 +114,7 @@ Rabo Free is de gratis variant, en de voorwaarden staan in een apart document:
 
 > Rabo Free is bedoeld voor rekeninghouders van 18 tot en met 24 jaar. Als wij dat toestaan, kan
 > een minderjarige vanaf 16 jaar ook gebruik maken van het pakket.
-> — *Bijzondere voorwaarden Rabo Free 2025*, artikel 2
+> — _Bijzondere voorwaarden Rabo Free 2025_, artikel 2
 
 Wij zetten het pakket in ieder geval om als je 25 wordt, zegt artikel 3. Die omzetting is precies
 het soort ding waar een alert over zou moeten gaan; de bank bepaalt zelf naar welk pakket.
@@ -166,13 +166,13 @@ Wayback-snapshots werkten wel, maar de archiefserver gaf onderweg voortdurend 50
 (8–12 seconden ertussen) kwamen alle vijf plannen binnen. Dat kost tijd en het is de moeite waard
 om te weten: dit is geen blokkade, het is een wachtrij.
 
-| Revolut | Per maand | Per jaar | Document van |
-|---|---|---|---|
-| Standaard | Kosteloos | — | 22 april 2025 |
-| Plus | € 3,99 | € 40,00 | 22 april 2025 |
-| Premium | € 9,99 | € 100 | 28 augustus 2024 |
-| Metal | € 18,99 | € 185 | 16 september 2024 |
-| Ultra | € 60 | € 600 | 22 april 2025 |
+| Revolut   | Per maand | Per jaar | Document van      |
+| --------- | --------- | -------- | ----------------- |
+| Standaard | Kosteloos | —        | 22 april 2025     |
+| Plus      | € 3,99    | € 40,00  | 22 april 2025     |
+| Premium   | € 9,99    | € 100    | 28 augustus 2024  |
+| Metal     | € 18,99   | € 185    | 16 september 2024 |
+| Ultra     | € 60      | € 600    | 22 april 2025     |
 
 Premium en Metal komen uit oudere versies van de voorwaarden dan Standaard en Plus. Dat betekent
 niet dat ze verouderd zijn — Revolut dateert per plan — maar het is wél het eerste wat een volgende
@@ -184,8 +184,8 @@ eenmalige kaartprijs achter die géén nul is:
 
 - Trade Republic: virtuele kaart gratis, Classic € 5, Mirror € 50 (eenmalig).
 - Wise: € 7 eenmalig voor de debitcard, met er letterlijk naast "Geen abonnementskosten".
-- Trading 212: er ís een eenmalige uitgiftevergoeding, maar het bedrag staat er niet — *"You will
-  see it upon completing your order"*. Dat is onbekend, niet nul, en staat in de `unknown`-lijst.
+- Trading 212: er ís een eenmalige uitgiftevergoeding, maar het bedrag staat er niet — _"You will
+  see it upon completing your order"_. Dat is onbekend, niet nul, en staat in de `unknown`-lijst.
 
 ## De creditcards
 
@@ -243,20 +243,20 @@ kan verdedigen.
 
 ## Doodlopende wegen
 
-| Wat | Route | Waarom niet |
-|---|---|---|
-| **`r.jina.ai` (route 3)** | lezer-proxy | HTTP 403 met een Cloudflare-"Just a moment"-challenge, óók op `r.jina.ai/https://example.com`. De proxy zelf is dicht, niet de doelsite. Route 3 bestaat niet meer. |
-| ABN AMRO Studenten Pakket | FID-URL raden | 8 varianten op `assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-*.pdf`, alle 404. Er ís geen losse FID; het bedrag staat in het Informatieblad. |
-| ABN AMRO tarievenpagina | directe fetch | `tarieven.html` redirect naar de algemene betalen-pagina. `tarieven/dagelijkse-bankzaken.html` heeft de complete tarieftabel wél statisch in de HTML — maar draagt geen datum. |
-| Rabobank productpagina's | directe fetch | HTTP 403 op `rabobank.nl/particulieren/...`. Wayback + `media.rabobank.com` lossen het volledig op. |
-| Rabobank asset-URL's | naam raden | `media.rabobank.com/asset/<uuid>/<naam>.pdf` geeft 200 voor élke naam en levert altijd het bestand van die UUID. Vier "gevonden" documenten bleken één document. |
-| Revolut | directe fetch én WebFetch | HTTP 403 op `revolut.com/nl-NL/legal/*` en op de prijzenpagina. Alleen Wayback werkt. |
-| Wayback (tijdens deze ronde) | `web.archive.org/web/<ts>id_/` | Structureel HTTP 503 bij de eerste poging; 2–3 herhalingen met ~10 s ertussen halen hem binnen. Niet opgeven na één 503. |
-| Trading 212 | directe fetch | HTTP 403 op `trading212.com/nl/card`. De Zendesk-API van het helpcentrum (`/api/v2/help_center/articles/search.json`) geeft 200 met de volledige artikeltekst én `edited_at`/`updated_at`. |
-| American Express "Overzicht Kaartlidmaatschapsbijdragen" | directe fetch | De consumentenovereenkomst verwijst ernaar op `americanexpress.nl/voorwaarden`. Vier padvarianten geprobeerd, alle 404. Het overzicht is niet gevonden; de bedragen komen daarom van de ongedateerde productpagina's. |
-| ABN AMRO `informatiedocument-betreffende-de-vergoedingen.pdf` | directe fetch | Werkt (200, februari 2026) maar gaat over de Belgische **Zichtrekening** (EUR 60,50 per jaar). Niet het Nederlandse retailaanbod. |
-| bunq helpcentrum over studentenkorting | directe fetch | 404 op vier URL-varianten; het helpcentrum draait op Framer zonder doorzoekbare API. |
-| Wise-datum | alle routes | `wise.com/nl/pricing/` bevat geen datum, geen `dateModified` in de HTML en geen `Last-Modified`-header. De bedragen kloppen, de datum is er niet. |
+| Wat                                                           | Route                          | Waarom niet                                                                                                                                                                                                           |
+| ------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`r.jina.ai` (route 3)**                                     | lezer-proxy                    | HTTP 403 met een Cloudflare-"Just a moment"-challenge, óók op `r.jina.ai/https://example.com`. De proxy zelf is dicht, niet de doelsite. Route 3 bestaat niet meer.                                                   |
+| ABN AMRO Studenten Pakket                                     | FID-URL raden                  | 8 varianten op `assets.abnamro.com/api/public/content/informatiedocument-vergoedingen-*.pdf`, alle 404. Er ís geen losse FID; het bedrag staat in het Informatieblad.                                                 |
+| ABN AMRO tarievenpagina                                       | directe fetch                  | `tarieven.html` redirect naar de algemene betalen-pagina. `tarieven/dagelijkse-bankzaken.html` heeft de complete tarieftabel wél statisch in de HTML — maar draagt geen datum.                                        |
+| Rabobank productpagina's                                      | directe fetch                  | HTTP 403 op `rabobank.nl/particulieren/...`. Wayback + `media.rabobank.com` lossen het volledig op.                                                                                                                   |
+| Rabobank asset-URL's                                          | naam raden                     | `media.rabobank.com/asset/<uuid>/<naam>.pdf` geeft 200 voor élke naam en levert altijd het bestand van die UUID. Vier "gevonden" documenten bleken één document.                                                      |
+| Revolut                                                       | directe fetch én WebFetch      | HTTP 403 op `revolut.com/nl-NL/legal/*` en op de prijzenpagina. Alleen Wayback werkt.                                                                                                                                 |
+| Wayback (tijdens deze ronde)                                  | `web.archive.org/web/<ts>id_/` | Structureel HTTP 503 bij de eerste poging; 2–3 herhalingen met ~10 s ertussen halen hem binnen. Niet opgeven na één 503.                                                                                              |
+| Trading 212                                                   | directe fetch                  | HTTP 403 op `trading212.com/nl/card`. De Zendesk-API van het helpcentrum (`/api/v2/help_center/articles/search.json`) geeft 200 met de volledige artikeltekst én `edited_at`/`updated_at`.                            |
+| American Express "Overzicht Kaartlidmaatschapsbijdragen"      | directe fetch                  | De consumentenovereenkomst verwijst ernaar op `americanexpress.nl/voorwaarden`. Vier padvarianten geprobeerd, alle 404. Het overzicht is niet gevonden; de bedragen komen daarom van de ongedateerde productpagina's. |
+| ABN AMRO `informatiedocument-betreffende-de-vergoedingen.pdf` | directe fetch                  | Werkt (200, februari 2026) maar gaat over de Belgische **Zichtrekening** (EUR 60,50 per jaar). Niet het Nederlandse retailaanbod.                                                                                     |
+| bunq helpcentrum over studentenkorting                        | directe fetch                  | 404 op vier URL-varianten; het helpcentrum draait op Framer zonder doorzoekbare API.                                                                                                                                  |
+| Wise-datum                                                    | alle routes                    | `wise.com/nl/pricing/` bevat geen datum, geen `dateModified` in de HTML en geen `Last-Modified`-header. De bedragen kloppen, de datum is er niet.                                                                     |
 
 ## Wat de volgende ronde als eerste moet doen
 

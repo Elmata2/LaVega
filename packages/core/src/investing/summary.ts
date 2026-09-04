@@ -21,7 +21,8 @@ function alignedReturns(points: readonly MetricPoint[]): Array<{ date: string; r
   let previous: { date: string; value: number } | null = null;
   for (const point of sorted) {
     if (point.value === null) continue;
-    if (previous && previous.value !== 0 && point.value > 0) returns.push({ date: point.date, ret: point.value / previous.value - 1 });
+    if (previous && previous.value !== 0 && point.value > 0)
+      returns.push({ date: point.date, ret: point.value / previous.value - 1 });
     previous = { date: point.date, value: point.value };
   }
   return returns;
@@ -36,31 +37,60 @@ function sampleVariance(values: readonly number[], meanValue: number): number {
   return values.reduce((sum, value) => sum + (value - meanValue) ** 2, 0) / (values.length - 1);
 }
 
-export function computePortfolioMetrics(input: { valuePoints: readonly MetricPoint[]; benchmarkPoints?: readonly MetricPoint[] }): PortfolioMetrics {
-  const empty: PortfolioMetrics = { dailyVolatility: null, annualizedVolatility: null, beta: null, alpha: null, maxDrawdown: null, observationDays: 0 };
+export function computePortfolioMetrics(input: {
+  valuePoints: readonly MetricPoint[];
+  benchmarkPoints?: readonly MetricPoint[];
+}): PortfolioMetrics {
+  const empty: PortfolioMetrics = {
+    dailyVolatility: null,
+    annualizedVolatility: null,
+    beta: null,
+    alpha: null,
+    maxDrawdown: null,
+    observationDays: 0,
+  };
   const returns = alignedReturns(input.valuePoints);
-  const values = input.valuePoints.filter((point): point is { date: string; value: number } => point.value !== null);
+  const values = input.valuePoints.filter(
+    (point): point is { date: string; value: number } => point.value !== null,
+  );
   const drawdown = values.length >= 2 ? maxDrawdown(values.map((point) => point.value)) : null;
-  if (returns.length < MIN_OBSERVATIONS) return { ...empty, observationDays: returns.length, maxDrawdown: drawdown };
+  if (returns.length < MIN_OBSERVATIONS)
+    return { ...empty, observationDays: returns.length, maxDrawdown: drawdown };
   const meanReturn = mean(returns.map((entry) => entry.ret));
-  const variance = sampleVariance(returns.map((entry) => entry.ret), meanReturn);
+  const variance = sampleVariance(
+    returns.map((entry) => entry.ret),
+    meanReturn,
+  );
   if (!Number.isFinite(variance)) return { ...empty, maxDrawdown: drawdown };
   const dailyVolatility = Math.sqrt(variance);
 
   let beta: number | null = null;
   let alpha: number | null = null;
   if (input.benchmarkPoints) {
-    const benchmarkByDate = new Map(alignedReturns(input.benchmarkPoints).map((entry) => [entry.date, entry.ret]));
+    const benchmarkByDate = new Map(
+      alignedReturns(input.benchmarkPoints).map((entry) => [entry.date, entry.ret]),
+    );
     const pairs = returns.flatMap((entry) => {
       const benchmarkReturn = benchmarkByDate.get(entry.date);
-      return benchmarkReturn === undefined ? [] : [{ portfolio: entry.ret, benchmark: benchmarkReturn }];
+      return benchmarkReturn === undefined
+        ? []
+        : [{ portfolio: entry.ret, benchmark: benchmarkReturn }];
     });
     if (pairs.length >= MIN_OBSERVATIONS) {
       const meanPortfolio = mean(pairs.map((pair) => pair.portfolio));
       const meanBenchmark = mean(pairs.map((pair) => pair.benchmark));
-      const benchmarkVariance = sampleVariance(pairs.map((pair) => pair.benchmark), meanBenchmark);
+      const benchmarkVariance = sampleVariance(
+        pairs.map((pair) => pair.benchmark),
+        meanBenchmark,
+      );
       if (Number.isFinite(benchmarkVariance) && benchmarkVariance > 0) {
-        const covariance = pairs.reduce((sum, pair) => sum + (pair.portfolio - meanPortfolio) * (pair.benchmark - meanBenchmark), 0) / (pairs.length - 1);
+        const covariance =
+          pairs.reduce(
+            (sum, pair) =>
+              sum + (pair.portfolio - meanPortfolio) * (pair.benchmark - meanBenchmark),
+            0,
+          ) /
+          (pairs.length - 1);
         beta = covariance / benchmarkVariance;
         alpha = meanPortfolio * TRADING_DAYS - beta * meanBenchmark * TRADING_DAYS;
       }

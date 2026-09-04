@@ -1,5 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import type { Account, CatalogueEntryLike, FxRate, FxRouteDelta, FxRouteOption, LearnedFact } from "@lavega/core";
+import type {
+  Account,
+  CatalogueEntryLike,
+  FxRate,
+  FxRouteDelta,
+  FxRouteOption,
+  LearnedFact,
+} from "@lavega/core";
 import {
   FX_RATE_FALLBACK,
   accountLabel,
@@ -157,7 +164,10 @@ type FxProvenance = {
  *  ze er dan uit filtert. Dat is de enige manier om de plicht structureel te
  *  maken in plaats van een belofte: een vermelding die je kunt vergeten is geen
  *  vermelding. */
-const AGGREGATOR_CREDIT: Record<string, { naam: string; url: string; linktekst: string; voorwaarden: string }> = {
+const AGGREGATOR_CREDIT: Record<
+  string,
+  { naam: string; url: string; linktekst: string; voorwaarden: string }
+> = {
   erapi: {
     naam: "ExchangeRate-API",
     url: "https://www.exchangerate-api.com",
@@ -256,7 +266,8 @@ function pairOrigin(from: string, to: string, base: string, prov: FxProvenance |
  *  in juli onwaar maakte. */
 function ecbVersheid(layer: FxLayer): string {
   if (layer.status === "live") return `ECB-referentiekoers van ${layer.date}`;
-  if (layer.status === "geheugen") return `ECB-referentiekoers van ${layer.date}, de laatste die de server binnenkreeg`;
+  if (layer.status === "geheugen")
+    return `ECB-referentiekoers van ${layer.date}, de laatste die de server binnenkreeg`;
   return `de meegebundelde ECB-referentiekoers van ${layer.date}`;
 }
 
@@ -279,7 +290,11 @@ const NO_ACCOUNT = "";
 
 function fmt(n: number, ccy: string): string {
   try {
-    return new Intl.NumberFormat("nl-NL", { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat("nl-NL", {
+      style: "currency",
+      currency: ccy,
+      maximumFractionDigits: 2,
+    }).format(n);
   } catch {
     // A currency code Intl doesn't know: still show the number, never a blank.
     return `${n.toLocaleString("nl-NL", { maximumFractionDigits: 2 })} ${ccy}`;
@@ -316,9 +331,13 @@ function deltaWords(delta: FxRouteDelta): string | null {
   if (delta.kind === "unknown") return null;
   const money = formatEuro(Math.abs(delta.cents) / 100);
   if (delta.kind === "net") {
-    return delta.cents === 0 ? "even duur" : `${money} ${delta.cents < 0 ? "minder" : "meer"} in totaal`;
+    return delta.cents === 0
+      ? "even duur"
+      : `${money} ${delta.cents < 0 ? "minder" : "meer"} in totaal`;
   }
-  return delta.cents === 0 ? "dezelfde opslag" : `${money} ${delta.cents < 0 ? "minder" : "meer"} aan opslag`;
+  return delta.cents === 0
+    ? "dezelfde opslag"
+    : `${money} ${delta.cents < 0 ? "minder" : "meer"} aan opslag`;
 }
 
 type CcyGroup = { key: string; label: string | null; codes: string[] };
@@ -355,7 +374,12 @@ function CcySelect({
     </option>
   );
   return (
-    <select className="xfer-ccy" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className="xfer-ccy"
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {option(base)}
       {groups.map((g) =>
         g.label === null ? (
@@ -401,8 +425,7 @@ function RouteRow({
       >
         <div className="travel-journey-head">
           <span className="travel-journey-name">
-            {route.bank}{" "}
-            <span className="badge">{route.held ? "van jou" : "niet van jou"}</span>
+            {route.bank} <span className="badge">{route.held ? "van jou" : "niet van jou"}</span>
             {route.kind && KIND_LABEL[route.kind] ? (
               <>
                 {" "}
@@ -469,14 +492,18 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
           setSource("live");
         }
       })
-      .catch(() => {/* keep fallback */});
-    return () => { ok = false; };
+      .catch(() => {
+        /* keep fallback */
+      });
+    return () => {
+      ok = false;
+    };
   }, []);
 
   /** De aanbieder van de tweede laag, zoals dit bestand hem kent. Null als er geen
    *  tweede laag is — of als de server een aanbieder noemt die hier niet in
    *  `AGGREGATOR_CREDIT` staat. */
-  const credit = prov?.aggregator ? AGGREGATOR_CREDIT[prov.aggregator.provider] ?? null : null;
+  const credit = prov?.aggregator ? (AGGREGATOR_CREDIT[prov.aggregator.provider] ?? null) : null;
 
   /** GEEN VERMELDING, GEEN GEBRUIK.
    *
@@ -516,16 +543,21 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
     const out: CcyGroup[] = [];
     const ecb = of("ecb");
     const agg = of("aggregator");
-    if (ecb.length > 0) out.push({ key: "ecb", label: `ECB-referentiekoers (${ecb.length})`, codes: ecb });
+    if (ecb.length > 0)
+      out.push({ key: "ecb", label: `ECB-referentiekoers (${ecb.length})`, codes: ecb });
     if (agg.length > 0 && credit) {
-      out.push({ key: "aggregator", label: `Dagkoers via ${credit.naam} (${agg.length})`, codes: agg });
+      out.push({
+        key: "aggregator",
+        label: `Dagkoers via ${credit.naam} (${agg.length})`,
+        codes: agg,
+      });
     }
     return out;
   }, [currencies, rate.base, prov, credit]);
 
   const byKey = useMemo(() => new Map(accounts.map((a) => [a.key, a])), [accounts]);
-  const fromAcc = fromKey ? byKey.get(fromKey) ?? null : null;
-  const toAcc = toKey ? byKey.get(toKey) ?? null : null;
+  const fromAcc = fromKey ? (byKey.get(fromKey) ?? null) : null;
+  const toAcc = toKey ? (byKey.get(toKey) ?? null) : null;
 
   const amt = Number(amount.replace(",", ".")) || 0;
 
@@ -578,11 +610,14 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
       // De bundel krijgt zijn eigen woord in de kop. "ECB-referentiekoers" is voor
       // die stand waar, maar het verzwijgt dat hij uit de app komt en weken oud
       // kan zijn — en dat is nou net wat een kop wél moet dragen.
-      const woord = prov.ecb.status === "bundel" ? "meegebundelde ECB-koersen" : "ECB-referentiekoersen";
+      const woord =
+        prov.ecb.status === "bundel" ? "meegebundelde ECB-koersen" : "ECB-referentiekoersen";
       stukken.push(`${prov.ecb.count} ${woord} van ${prov.ecb.date}`);
     }
     if (prov.aggregator && credit) {
-      stukken.push(`${prov.aggregator.count} dagkoersen via ${credit.naam} van ${prov.aggregator.date}`);
+      stukken.push(
+        `${prov.aggregator.count} dagkoersen via ${credit.naam} van ${prov.aggregator.date}`,
+      );
     }
     // Geen enkele laag is geen lege kop maar een mededeling: dan staat er geen
     // koers in dit scherm, en dat hoort er te staan in plaats van niets.
@@ -615,7 +650,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
   );
   const auto = useMemo(() => fxRouteDefault(routes), [routes]);
   const chosen = useMemo(
-    () => (pickedBank ? routes.find((r) => r.key === pickedBank) ?? auto : auto),
+    () => (pickedBank ? (routes.find((r) => r.key === pickedBank) ?? auto) : auto),
     [routes, pickedBank, auto],
   );
   /** Het beste alternatief voor de gekozen route, met de prijs van de rekening
@@ -626,9 +661,10 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
   const sameCurrency = from === to;
   // No conversion means no conversion cost — that is a fact, not an assumption.
   // Otherwise the cost is the chosen route's; unknown stays unknown.
-  const costPct = sameCurrency ? 0 : chosen?.pct ?? null;
+  const costPct = sameCurrency ? 0 : (chosen?.pct ?? null);
   const grossReceived = mid !== null ? amt * mid : null;
-  const netReceived = grossReceived !== null && costPct !== null ? grossReceived * (1 - costPct / 100) : null;
+  const netReceived =
+    grossReceived !== null && costPct !== null ? grossReceived * (1 - costPct / 100) : null;
   const costInFrom = costPct !== null ? (amt * costPct) / 100 : null;
 
   const heldBanks = useMemo(() => routes.filter((r) => r.held), [routes]);
@@ -716,10 +752,17 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             <div className="xfer-leg">
               <div className="xfer-leg-head">
                 <span className="xfer-leg-label">Van rekening</span>
-                <select className="xfer-account" aria-label="Van rekening" value={fromKey} onChange={(e) => pickFrom(e.target.value)}>
+                <select
+                  className="xfer-account"
+                  aria-label="Van rekening"
+                  value={fromKey}
+                  onChange={(e) => pickFrom(e.target.value)}
+                >
                   <option value={NO_ACCOUNT}>geen rekening gekozen</option>
                   {accounts.map((a) => (
-                    <option key={a.key} value={a.key}>{accountLabel(a)}</option>
+                    <option key={a.key} value={a.key}>
+                      {accountLabel(a)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -733,7 +776,13 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   aria-label="Bedrag"
                   onChange={(e) => setAmount(e.target.value)}
                 />
-                <CcySelect label="Van valuta" value={from} onChange={setFrom} base={rate.base} groups={ccyGroups} />
+                <CcySelect
+                  label="Van valuta"
+                  value={from}
+                  onChange={setFrom}
+                  base={rate.base}
+                  groups={ccyGroups}
+                />
               </div>
               <div className="xfer-foot">
                 <span>Beschikbaar</span>
@@ -741,25 +790,46 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               </div>
             </div>
 
-            <button type="button" className="xfer-swap" aria-label="Wissel van en naar" onClick={swap}>
+            <button
+              type="button"
+              className="xfer-swap"
+              aria-label="Wissel van en naar"
+              onClick={swap}
+            >
               <span aria-hidden="true">⇅</span>
             </button>
 
             <div className="xfer-leg">
               <div className="xfer-leg-head">
                 <span className="xfer-leg-label">Naar rekening</span>
-                <select className="xfer-account" aria-label="Naar rekening" value={toKey} onChange={(e) => pickTo(e.target.value)}>
+                <select
+                  className="xfer-account"
+                  aria-label="Naar rekening"
+                  value={toKey}
+                  onChange={(e) => pickTo(e.target.value)}
+                >
                   <option value={NO_ACCOUNT}>geen rekening gekozen</option>
                   {accounts.map((a) => (
-                    <option key={a.key} value={a.key}>{accountLabel(a)}</option>
+                    <option key={a.key} value={a.key}>
+                      {accountLabel(a)}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="xfer-amount-row">
-                <span className={`xfer-out${netReceived === null ? " xfer-out-unknown" : ""}`} data-testid="arrives">
+                <span
+                  className={`xfer-out${netReceived === null ? " xfer-out-unknown" : ""}`}
+                  data-testid="arrives"
+                >
                   {netReceived === null ? "onbekend" : fmt(netReceived, to)}
                 </span>
-                <CcySelect label="Naar valuta" value={to} onChange={setTo} base={rate.base} groups={ccyGroups} />
+                <CcySelect
+                  label="Naar valuta"
+                  value={to}
+                  onChange={setTo}
+                  base={rate.base}
+                  groups={ccyGroups}
+                />
               </div>
               <div className="xfer-foot">
                 <span>Komt aan na kosten · beschikbaar</span>
@@ -777,25 +847,29 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
             {netReceived === null ? (
               <>
                 <strong>Wat er aankomt is onbekend.</strong>{" "}
-                {mid === null
-                  ? `LaVega heeft geen koers voor ${from} → ${to}.`
-                  : (
-                    <>
-                      Tegen de middenkoers is dit {fmt(grossReceived ?? 0, to)} waard, maar dat is de marktwaarde
-                      en niet het bedrag dat aankomt. {noRouteReason()}
-                    </>
-                  )}
+                {mid === null ? (
+                  `LaVega heeft geen koers voor ${from} → ${to}.`
+                ) : (
+                  <>
+                    Tegen de middenkoers is dit {fmt(grossReceived ?? 0, to)} waard, maar dat is de
+                    marktwaarde en niet het bedrag dat aankomt. {noRouteReason()}
+                  </>
+                )}
               </>
             ) : (
               <>
                 Je zet <span className="reason-figure">{fmt(amt, from)}</span> over,{" "}
                 {sameCurrency ? (
-                  <>zonder omwisseling. Er komt <span className="reason-figure">{fmt(netReceived, to)}</span> aan.</>
+                  <>
+                    zonder omwisseling. Er komt{" "}
+                    <span className="reason-figure">{fmt(netReceived, to)}</span> aan.
+                  </>
                 ) : (
                   <>
                     tegen middenkoers {mid?.toFixed(4)} is dat {fmt(grossReceived ?? 0, to)}. Via{" "}
-                    <strong>{chosen?.bank}</strong> kost dat {pctText(costPct ?? 0)} ({fmt(costInFrom ?? 0, from)}),
-                    dus er komt <span className="reason-figure">{fmt(netReceived, to)}</span> aan.
+                    <strong>{chosen?.bank}</strong> kost dat {pctText(costPct ?? 0)} (
+                    {fmt(costInFrom ?? 0, from)}), dus er komt{" "}
+                    <span className="reason-figure">{fmt(netReceived, to)}</span> aan.
                   </>
                 )}
               </>
@@ -887,9 +961,17 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               <div className="empty-guide">
                 <p>Nog geen bank om te rangschikken.</p>
                 <ul>
-                  <li>De catalogus levert de tarieven; die zit in de app en wordt niet opgehaald.</li>
-                  <li>Een tarief telt alleen mee met waarde, bron, datum én voorwaarden — anders wordt het geweigerd.</li>
-                  <li>Rekeningen zonder bank kunnen niet opgezocht worden; vul de bank in bij Rekeningen.</li>
+                  <li>
+                    De catalogus levert de tarieven; die zit in de app en wordt niet opgehaald.
+                  </li>
+                  <li>
+                    Een tarief telt alleen mee met waarde, bron, datum én voorwaarden — anders wordt
+                    het geweigerd.
+                  </li>
+                  <li>
+                    Rekeningen zonder bank kunnen niet opgezocht worden; vul de bank in bij
+                    Rekeningen.
+                  </li>
                 </ul>
               </div>
             ) : (
@@ -904,18 +986,25 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     is dezelfde rekensom. De periode hoort er hardop bij: een netto
                     bedrag zonder periode is niet na te rekenen. */}
                 <p className="cell-sub">
-                  De volgorde is wat deze conversie je bij die bank kost: de koersopslag op {fmt(amt, from)} plus wat
-                  de rekening kost om te openen. Dat laatste telt voor minstens één hele factureringsperiode — een
-                  maand, of een jaar bij een jaarproduct — want je kunt geen rekening voor een dag openen. Een bank
-                  die je al hebt kost je niets extra: die prijs loopt toch al. Staat er “kaartkosten onbekend”, dan
-                  zit alleen de opslag in het bedrag; dat is een ondergrens, geen bewijs dat de rekening gratis is.
-                  Het verschil achter elke bank is gerekend tegen {chosen ? chosen.bank : "de gekozen route"}.
+                  De volgorde is wat deze conversie je bij die bank kost: de koersopslag op{" "}
+                  {fmt(amt, from)} plus wat de rekening kost om te openen. Dat laatste telt voor
+                  minstens één hele factureringsperiode — een maand, of een jaar bij een jaarproduct
+                  — want je kunt geen rekening voor een dag openen. Een bank die je al hebt kost je
+                  niets extra: die prijs loopt toch al. Staat er “kaartkosten onbekend”, dan zit
+                  alleen de opslag in het bedrag; dat is een ondergrens, geen bewijs dat de rekening
+                  gratis is. Het verschil achter elke bank is gerekend tegen{" "}
+                  {chosen ? chosen.bank : "de gekozen route"}.
                 </p>
                 {/* Terug naar de standaardkeuze. Stond als "···"-menu in de kop van
                     de module die hier stond; die kop is weg, en een knop hoort toch
                     bij de lijst waarin je de andere keuze maakte. */}
                 {pickedBank && auto && pickedBank !== auto.key && (
-                  <button type="button" className="btn" style={{ marginBottom: "var(--sp-3)" }} onClick={() => setPickedBank(null)}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ marginBottom: "var(--sp-3)" }}
+                    onClick={() => setPickedBank(null)}
+                  >
                     Terug naar beste
                   </button>
                 )}
@@ -931,7 +1020,12 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   ))}
                 </ul>
                 {hidden > 0 && (
-                  <button type="button" className="btn" style={{ marginTop: "var(--sp-3)" }} onClick={() => setShowAll(true)}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ marginTop: "var(--sp-3)" }}
+                    onClick={() => setShowAll(true)}
+                  >
                     Nog {hidden} {hidden === 1 ? "bank" : "banken"} tonen
                   </button>
                 )}
@@ -939,23 +1033,28 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     modulekop; dat was een tweede uitklapper voor tekst die over deze
                     lijst gaat, dus hij staat nu onder de lijst zelf. */}
                 <p>
-                  <strong>De lijst gaat over alle banken die LaVega kan onderbouwen</strong> — niet alleen die van
-                  jou. Standaard rekent LaVega met de goedkoopste route die je vandaag echt kunt gebruiken; een bank
-                  die je niet hebt staat erbij, met het verschil in euro's, maar wordt nooit stilzwijgend gekozen.
+                  <strong>De lijst gaat over alle banken die LaVega kan onderbouwen</strong> — niet
+                  alleen die van jou. Standaard rekent LaVega met de goedkoopste route die je
+                  vandaag echt kunt gebruiken; een bank die je niet hebt staat erbij, met het
+                  verschil in euro's, maar wordt nooit stilzwijgend gekozen.
                 </p>
                 <p>
-                  Eén regel per bank: bij overzetten maakt het product niet uit, dus dezelfde bank staat niet
-                  driemaal in de lijst. Welk product achter het tarief zit, staat er wel bij — "ING 0%" geldt alleen
-                  voor de Platinumcard.
+                  Eén regel per bank: bij overzetten maakt het product niet uit, dus dezelfde bank
+                  staat niet driemaal in de lijst. Welk product achter het tarief zit, staat er wel
+                  bij — "ING 0%" geldt alleen voor de Platinumcard.
                 </p>
                 {costPct === null ? (
-                  <p>{noRouteReason()} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een onbekend tarief is geen 0%.</p>
+                  <p>
+                    {noRouteReason()} Zolang dat zo is, kan LaVega niet zeggen wat er aankomt. Een
+                    onbekend tarief is geen 0%.
+                  </p>
                 ) : (
                   <p>
-                    <strong>Waar overstappen je zou verslaan:</strong> je huidige keuze kost {pctText(costPct)}.
-                    Elke bank die minder rekent, houdt op dit bedrag meer dan {fmt(costInFrom ?? 0, from)} voor je
-                    over — aan koersopslag. Wat die rekening kost om te openen gaat daar nog vanaf, en dat is
-                    precies waarom de volgorde niet op het percentage gaat.
+                    <strong>Waar overstappen je zou verslaan:</strong> je huidige keuze kost{" "}
+                    {pctText(costPct)}. Elke bank die minder rekent, houdt op dit bedrag meer dan{" "}
+                    {fmt(costInFrom ?? 0, from)} voor je over — aan koersopslag. Wat die rekening
+                    kost om te openen gaat daar nog vanaf, en dat is precies waarom de volgorde niet
+                    op het percentage gaat.
                   </p>
                 )}
                 {heldUnknown.length > 0 && (
@@ -1016,23 +1115,27 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                     {prov.ecb.status === "geheugen"
                       ? " — dat is de laatste lijst die de server binnenkreeg; de poging van zojuist mislukte"
                       : ""}
-                    . De ECB publiceert die op een vast tijdstip volgens een methode die je kunt nalezen.
+                    . De ECB publiceert die op een vast tijdstip volgens een methode die je kunt
+                    nalezen.
                   </p>
                 ) : (
                   <p>
-                    <strong>Koers, laag 1:</strong> er staat op dit moment geen ECB-lijst in dit scherm. Alle koersen
-                    hieronder komen uit laag 2.
+                    <strong>Koers, laag 1:</strong> er staat op dit moment geen ECB-lijst in dit
+                    scherm. Alle koersen hieronder komen uit laag 2.
                   </p>
                 )}
                 {prov.aggregator && credit ? (
                   <p>
-                    <strong>Koers, laag 2:</strong> {prov.aggregator.count} koersen van {credit.naam}, peildatum{" "}
-                    {prov.aggregator.date}
-                    {prov.aggregator.nextUpdate ? `, volgende ronde ${prov.aggregator.nextUpdate}` : ""}. Dit zijn
-                    samengestelde dagkoersen: de aanbieder voegt ze samen uit bronnen die hij niet noemt en ververst
-                    één keer per dag. Ze vullen alleen de valuta's die de ECB niet publiceert — een ECB-koers wordt er
-                    nooit door overschreven. Valt deze bron weg, dan zijn die valuta's weer "geen koers"; er blijft
-                    geen oude waarde staan.{" "}
+                    <strong>Koers, laag 2:</strong> {prov.aggregator.count} koersen van{" "}
+                    {credit.naam}, peildatum {prov.aggregator.date}
+                    {prov.aggregator.nextUpdate
+                      ? `, volgende ronde ${prov.aggregator.nextUpdate}`
+                      : ""}
+                    . Dit zijn samengestelde dagkoersen: de aanbieder voegt ze samen uit bronnen die
+                    hij niet noemt en ververst één keer per dag. Ze vullen alleen de valuta's die de
+                    ECB niet publiceert — een ECB-koers wordt er nooit door overschreven. Valt deze
+                    bron weg, dan zijn die valuta's weer "geen koers"; er blijft geen oude waarde
+                    staan.{" "}
                     <a href={credit.url} target="_blank" rel="noreferrer">
                       {credit.linktekst}
                     </a>
@@ -1050,16 +1153,17 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
                   // opvolgen: dit is een deploy die uit de pas loopt, en daar kan
                   // hij vanaf dit scherm niets aan doen.
                   <p>
-                    <strong>Koers, laag 2:</strong> de server levert koersen van een aanbieder ({prov.aggregator.provider})
-                    die dit scherm niet kent. Die koersen mogen alleen getoond worden met de bronvermelding die de
-                    aanbieder voorschrijft, en die staat hier niet — dus worden ze niet gebruikt. De lijst is daardoor
-                    beperkt tot wat de ECB publiceert; voor de valuta's daarbuiten heeft LaVega nu geen koers.
+                    <strong>Koers, laag 2:</strong> de server levert koersen van een aanbieder (
+                    {prov.aggregator.provider}) die dit scherm niet kent. Die koersen mogen alleen
+                    getoond worden met de bronvermelding die de aanbieder voorschrijft, en die staat
+                    hier niet — dus worden ze niet gebruikt. De lijst is daardoor beperkt tot wat de
+                    ECB publiceert; voor de valuta's daarbuiten heeft LaVega nu geen koers.
                   </p>
                 ) : (
                   <p>
-                    <strong>Koers, laag 2:</strong> er staat geen tweede laag in dit scherm, dus de lijst is beperkt
-                    tot wat de ECB publiceert. Voor de valuta's daarbuiten heeft LaVega nu geen koers — dat is iets
-                    anders dan een koers van nul.
+                    <strong>Koers, laag 2:</strong> er staat geen tweede laag in dit scherm, dus de
+                    lijst is beperkt tot wat de ECB publiceert. Voor de valuta's daarbuiten heeft
+                    LaVega nu geen koers — dat is iets anders dan een koers van nul.
                   </p>
                 )}
               </>
@@ -1073,10 +1177,12 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               </p>
             )}
             <p>
-              <strong>Kosten:</strong> de koersopslag zoals de bank die zelf in haar tarievenoverzicht noemt.
-              Elke regel draagt de bron en de datum die dat document noemt.
+              <strong>Kosten:</strong> de koersopslag zoals de bank die zelf in haar
+              tarievenoverzicht noemt. Elke regel draagt de bron en de datum die dat document noemt.
             </p>
-            <p>Er wordt niets over je rekeningen verstuurd om die koers of die tarieven op te halen.</p>
+            <p>
+              Er wordt niets over je rekeningen verstuurd om die koers of die tarieven op te halen.
+            </p>
           </ToonMeer>
         </Module>
 

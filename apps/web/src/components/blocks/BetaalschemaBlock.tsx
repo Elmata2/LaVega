@@ -83,7 +83,12 @@ export function nextOccurrence(lastDate: string, cadenceDays: number, asOf: stri
 
 /** Planned flows and detected recurring payments, merged and sorted by date.
  *  Pure — `asOf` decides what is late, never the clock. */
-export function agendaRows(scheduledFlows: ScheduledFlow[], txs: Tx[], asOf: string, limit = ROWS): AgendaRow[] {
+export function agendaRows(
+  scheduledFlows: ScheduledFlow[],
+  txs: Tx[],
+  asOf: string,
+  limit = ROWS,
+): AgendaRow[] {
   const planned: AgendaRow[] = scheduledFlows
     .filter((f) => f.status !== "paid" && f.status !== "cancelled")
     .map((f) => ({
@@ -109,7 +114,9 @@ export function agendaRows(scheduledFlows: ScheduledFlow[], txs: Tx[], asOf: str
     }));
 
   return [...planned, ...recurring]
-    .sort((a, b) => (a.date === b.date ? a.label.localeCompare(b.label) : a.date.localeCompare(b.date)))
+    .sort((a, b) =>
+      a.date === b.date ? a.label.localeCompare(b.label) : a.date.localeCompare(b.date),
+    )
     .slice(0, limit);
 }
 
@@ -122,7 +129,10 @@ type BetaalschemaBlockProps = {
 };
 
 export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
-  const upcoming = useMemo(() => agendaRows(scheduledFlows, txs, asOf), [scheduledFlows, txs, asOf]);
+  const upcoming = useMemo(
+    () => agendaRows(scheduledFlows, txs, asOf),
+    [scheduledFlows, txs, asOf],
+  );
   const overdueCount = upcoming.filter((r) => r.date < asOf).length;
   const predictedCount = upcoming.filter((r) => r.predicted).length;
   /* De rij die OPEN staat, en waarom dat een toestand is en geen tooltip.
@@ -165,7 +175,8 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
       footer={
         upcoming.length > 0 ? (
           <>
-            {overdueCount > 0 && `${overdueCount} datum${overdueCount === 1 ? "" : "s"} al verstreken. `}
+            {overdueCount > 0 &&
+              `${overdueCount} datum${overdueCount === 1 ? "" : "s"} al verstreken. `}
             {predictedCount > 0
               ? `${predictedCount} regel${predictedCount === 1 ? "" : "s"} voorspeld uit je eigen geschiedenis, niet bevestigd.`
               : "Alle regels zijn ingeplande bedragen."}
@@ -175,7 +186,8 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
     >
       {upcoming.length === 0 ? (
         <p className="block-empty">
-          Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.
+          Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste
+          lasten te staan.
         </p>
       ) : (
         <div className="pay-list">
@@ -198,7 +210,10 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                 aria-expanded={isOpen}
                 onClick={() => setOpen((cur) => (cur === r.id ? null : r.id))}
               >
-                <span className={`pay-date ${overdue ? "pay-date-overdue" : ""}`} aria-hidden="true">
+                <span
+                  className={`pay-date ${overdue ? "pay-date-overdue" : ""}`}
+                  aria-hidden="true"
+                >
                   <span className="pay-date-day">{r.date.slice(8, 10)}</span>
                   <span className="pay-date-month">{monthShortNL(r.date)}</span>
                 </span>
@@ -220,7 +235,9 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                     {overdue ? " · te laat" : ""}
                   </span>
                 </span>
-                <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>{formatEuro(r.amount)}</span>
+                <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                  {formatEuro(r.amount)}
+                </span>
               </button>
             );
           })}

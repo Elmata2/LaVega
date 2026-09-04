@@ -30,7 +30,10 @@ const ROWS = 7;
 
 /** Does this row match what was typed? Counterparty, description and the
  *  derived category, case-insensitively. */
-export function matchesSearch(row: { counterparty: string; description: string; category: string }, q: string): boolean {
+export function matchesSearch(
+  row: { counterparty: string; description: string; category: string },
+  q: string,
+): boolean {
   const needle = q.trim().toLowerCase();
   if (needle === "") return true;
   return `${row.counterparty} ${row.description} ${row.category}`.toLowerCase().includes(needle);

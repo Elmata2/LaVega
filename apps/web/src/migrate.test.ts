@@ -6,10 +6,26 @@ import type { Account, Tx, Rule } from "@lavega/core";
 import { createIndexedDbStorage, createEncryptedStorage } from "@lavega/adapters";
 import { hasLegacyData, migrateToVault } from "./migrate.js";
 
-const acc = (key: string, balance: number | null = null): Account =>
-  ({ key, iban: key, name: key, bank: "", entity: "BV1", currency: "EUR", balance });
-const tx = (id: string, accountKey: string): Tx =>
-  ({ id, accountKey, date: "2026-06-01", amount: 12.34, currency: "EUR", counterparty: "Test", description: "", category: "", manual: false });
+const acc = (key: string, balance: number | null = null): Account => ({
+  key,
+  iban: key,
+  name: key,
+  bank: "",
+  entity: "BV1",
+  currency: "EUR",
+  balance,
+});
+const tx = (id: string, accountKey: string): Tx => ({
+  id,
+  accountKey,
+  date: "2026-06-01",
+  amount: 12.34,
+  currency: "EUR",
+  counterparty: "Test",
+  description: "",
+  category: "",
+  manual: false,
+});
 const rule = (id: string): Rule => ({ id, match: "test", category: "Diversen" });
 
 beforeEach(() => {

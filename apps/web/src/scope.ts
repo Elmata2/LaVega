@@ -93,7 +93,11 @@ export function unfilteredScreen(view: View): ScopeScreen {
 
 /** The screen to show after switching to `next`: the one that half was left on,
  *  else the current module with the filters dropped. */
-export function screenOnSwitch(parked: ParkedScreens, next: EntityScope, current: ScopeScreen): ScopeScreen {
+export function screenOnSwitch(
+  parked: ParkedScreens,
+  next: EntityScope,
+  current: ScopeScreen,
+): ScopeScreen {
   return parked[next] ?? unfilteredScreen(current.view);
 }
 

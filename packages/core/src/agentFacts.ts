@@ -58,7 +58,14 @@ export const AGENTS = {
  *  (see `taxSheet.ts`). A closed vocabulary on purpose: it is the subject list
  *  of the `belasting` namespace, so a column mapping can only ever be about one
  *  of these six figures. */
-export const TAX_SHEET_FIELDS = ["period", "revenue", "expenses", "profit", "vatCharged", "vatPaid"] as const;
+export const TAX_SHEET_FIELDS = [
+  "period",
+  "revenue",
+  "expenses",
+  "profit",
+  "vatCharged",
+  "vatPaid",
+] as const;
 export type TaxSheetField = (typeof TAX_SHEET_FIELDS)[number];
 
 export type AgentId = (typeof AGENTS)[keyof typeof AGENTS];
@@ -89,11 +96,27 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
     subject: "brand",
     subjectWhat: "A public product name, e.g. 'ING betaalpas' or 'Trading 212 creditcard'.",
     keys: [
-      { key: "fxFeePct", kind: "percentage", what: "Surcharge on a foreign-currency transaction, on top of the mid-market rate." },
-      { key: "convertFeePct", kind: "percentage", what: "Cost of converting euros into the destination currency INSIDE this provider, before spending — often different from fxFeePct, and the leg that decides whether moving money first is worth it." },
-      { key: "cashbackPct", kind: "percentage", what: "Cashback actually paid on ordinary card spending." },
+      {
+        key: "fxFeePct",
+        kind: "percentage",
+        what: "Surcharge on a foreign-currency transaction, on top of the mid-market rate.",
+      },
+      {
+        key: "convertFeePct",
+        kind: "percentage",
+        what: "Cost of converting euros into the destination currency INSIDE this provider, before spending — often different from fxFeePct, and the leg that decides whether moving money first is worth it.",
+      },
+      {
+        key: "cashbackPct",
+        kind: "percentage",
+        what: "Cashback actually paid on ordinary card spending.",
+      },
       { key: "pointsPerEuro", kind: "percentage", what: "Reward points earned per euro spent." },
-      { key: "transferFreeViaIdeal", kind: "flag", what: "1 when the account can be topped up for free via iDEAL." },
+      {
+        key: "transferFreeViaIdeal",
+        kind: "flag",
+        what: "1 when the account can be topped up for free via iDEAL.",
+      },
     ],
   },
   {
@@ -102,7 +125,11 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
     subject: "category",
     subjectWhat: "The category the agent suggested, from CATEGORY_OPTIONS.",
     keys: [
-      { key: "corrigeerNaar", kind: "category", what: "The category the owner keeps moving it to instead." },
+      {
+        key: "corrigeerNaar",
+        kind: "category",
+        what: "The category the owner keeps moving it to instead.",
+      },
     ],
   },
   {
@@ -111,14 +138,19 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
     subject: ["dueDate", "currency", "direction", "vatAmount"],
     subjectWhat: "The invoice field being corrected.",
     keys: [
-      { key: "voorkeur", kind: "text", what: "What to do with that field by default, e.g. 'issueDate+30' or 'EUR'." },
+      {
+        key: "voorkeur",
+        kind: "text",
+        what: "What to do with that field by default, e.g. 'issueDate+30' or 'EUR'.",
+      },
     ],
   },
   {
     agent: AGENTS.chat,
     what: "How the owner wants the assistant to answer.",
     subject: ["antwoord"],
-    subjectWhat: "Always 'antwoord' — chat learns about its own replies, never about the owner's money.",
+    subjectWhat:
+      "Always 'antwoord' — chat learns about its own replies, never about the owner's money.",
     keys: [
       { key: "lengte", kind: "text", what: "Preferred answer length, e.g. 'kort'." },
       { key: "toon", kind: "text", what: "Preferred tone, e.g. 'zakelijk'." },
@@ -131,7 +163,11 @@ export const AGENT_SPECS: readonly AgentSpec[] = [
     subject: TAX_SHEET_FIELDS,
     subjectWhat: "The tax figure being mapped.",
     keys: [
-      { key: "kolom", kind: "column", what: "The header of the column in the owner's sheet that holds it." },
+      {
+        key: "kolom",
+        kind: "column",
+        what: "The header of the column in the owner's sheet that holds it.",
+      },
     ],
   },
 ];
@@ -156,7 +192,8 @@ const IDENTIFIER = /\d{4}/;
  *  mentions public thresholds like "€2000" but never an account number. */
 const LONG_IDENTIFIER = /\d{5,}/;
 /** A number next to a currency marker: "€ 12,50", "1234 EUR", "$40". */
-const MONEY = /(?:€|\$|£|\beur\b|\busd\b|\bgbp\b)\s*-?\d|-?\d[\d.,]*\s*(?:€|\$|£|\beur\b|\busd\b|\bgbp\b)/i;
+const MONEY =
+  /(?:€|\$|£|\beur\b|\busd\b|\bgbp\b)\s*-?\d|-?\d[\d.,]*\s*(?:€|\$|£|\beur\b|\busd\b|\bgbp\b)/i;
 /** Thousands-separated money: "1.234,56", "12.500". */
 const THOUSANDS = /\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?/;
 
@@ -195,7 +232,12 @@ function valueAllowed(kind: FactValueKind, value: string): string | null {
     // shapes that really do mean personal data: an IBAN, a long number run, and
     // money notation. "Omzet 2026" passes; "NL91ABNA0417164300", "12345678" and
     // "€ 1.234,56" do not.
-    if (IBAN.test(value) || LONG_IDENTIFIER.test(value) || MONEY.test(value) || THOUSANDS.test(value)) {
+    if (
+      IBAN.test(value) ||
+      LONG_IDENTIFIER.test(value) ||
+      MONEY.test(value) ||
+      THOUSANDS.test(value)
+    ) {
       return "kolomnaam bevat een bedrag of rekeningnummer";
     }
     return null;
@@ -215,7 +257,9 @@ function valueAllowed(kind: FactValueKind, value: string): string | null {
     case "flag":
       return value === "0" || value === "1" ? null : "waarde moet 0 of 1 zijn";
     case "category":
-      return CATEGORY_OPTIONS.some((c) => norm(c) === norm(value)) ? null : "waarde is geen bestaande categorie";
+      return CATEGORY_OPTIONS.some((c) => norm(c) === norm(value))
+        ? null
+        : "waarde is geen bestaande categorie";
     case "text":
       return null; // already scanned above; length is the only other limit
   }
@@ -256,7 +300,10 @@ export type FactRejection = { fact: LearnedFact; reason: string };
 /** Split facts into the ones that may be stored and the ones that may not,
  *  with the reason — so a caller can tell the owner what was refused instead of
  *  silently losing it. */
-export function validateFacts(incoming: readonly LearnedFact[]): { valid: LearnedFact[]; rejected: FactRejection[] } {
+export function validateFacts(incoming: readonly LearnedFact[]): {
+  valid: LearnedFact[];
+  rejected: FactRejection[];
+} {
   const valid: LearnedFact[] = [];
   const rejected: FactRejection[] = [];
   for (const f of incoming) {

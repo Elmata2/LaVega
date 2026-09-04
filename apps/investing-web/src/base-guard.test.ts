@@ -1,7 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { assertHtmlMatchesBase, collectAssetRefs, findBaseViolations, normalizeBase } from "./base-guard";
+import {
+  assertHtmlMatchesBase,
+  collectAssetRefs,
+  findBaseViolations,
+  normalizeBase,
+} from "./base-guard";
 
 /* The exact index.html that shipped to lavega.dev and rendered a blank page:
  * built with base "/" while being served under "/investing/". Kept verbatim,
@@ -35,7 +40,9 @@ test("the HTML that shipped blank is rejected against the base it was served und
   );
   // The message has to name the offending URLs — that is what turns a red build
   // into a diagnosis instead of a puzzle.
-  expect(() => assertHtmlMatchesBase(SHIPPED_BROKEN, "/investing/")).toThrow(/src="\/assets\/index-DQzV9ttd\.js"/);
+  expect(() => assertHtmlMatchesBase(SHIPPED_BROKEN, "/investing/")).toThrow(
+    /src="\/assets\/index-DQzV9ttd\.js"/,
+  );
 });
 
 test("that same HTML is correct for the standalone deploy, which serves at the root", () => {
@@ -76,7 +83,9 @@ test("URLs the base does not apply to are left alone", () => {
 
 test("an HTML file with nothing to check fails instead of passing vacuously", () => {
   const shell = `<!doctype html><html><head><title>LaVega Investing</title></head><body><div id="root"></div></body></html>`;
-  expect(() => assertHtmlMatchesBase(shell, "/investing/", "dist/index.html")).toThrow(/found no asset URLs to check/);
+  expect(() => assertHtmlMatchesBase(shell, "/investing/", "dist/index.html")).toThrow(
+    /found no asset URLs to check/,
+  );
 });
 
 /* The deploy gate. `pnpm --filter @lavega/investing-web verify:base` runs this
@@ -92,7 +101,10 @@ test("the emitted dist/index.html agrees with the base the deploy serves it unde
   if (!existsSync(distFile)) {
     // No build in the tree — fine on a developer machine, never fine in the
     // image, where the expectation is always set.
-    expect(expectedBase, `no build at ${distFile}: build the app before verifying its base`).toBeUndefined();
+    expect(
+      expectedBase,
+      `no build at ${distFile}: build the app before verifying its base`,
+    ).toBeUndefined();
     return;
   }
   const base = expectedBase ?? process.env.VITE_INVESTING_BASE ?? "/";

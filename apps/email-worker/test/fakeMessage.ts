@@ -76,9 +76,15 @@ export function fakeMessage(options: {
 }
 
 /** Een `fetch` die altijd hetzelfde teruggeeft, en die opschrijft wat hij kreeg. */
-export function fakeFetch(
-  reply: { status?: number; body?: unknown; text?: string; throws?: string },
-): { fetch: typeof fetch; calls: { url: string; headers: Record<string, string>; body: unknown }[] } {
+export function fakeFetch(reply: {
+  status?: number;
+  body?: unknown;
+  text?: string;
+  throws?: string;
+}): {
+  fetch: typeof fetch;
+  calls: { url: string; headers: Record<string, string>; body: unknown }[];
+} {
   const calls: { url: string; headers: Record<string, string>; body: unknown }[] = [];
   const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (reply.throws) throw new Error(reply.throws);

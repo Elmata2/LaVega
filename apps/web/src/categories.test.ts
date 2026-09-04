@@ -6,8 +6,28 @@ import { categorize, categoryTotals } from "@lavega/core";
 import { createIndexedDbStorage } from "@lavega/adapters";
 
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-06-05", amount: 2500, currency: "EUR", counterparty: "Salaris", description: "Loon", category: "", manual: false },
-  { id: "t2", accountKey: "A1", date: "2026-06-06", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-06-05",
+    amount: 2500,
+    currency: "EUR",
+    counterparty: "Salaris",
+    description: "Loon",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A1",
+    date: "2026-06-06",
+    amount: -30,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("Categories wiring: rules persist and drive categorize + categoryTotals", async () => {

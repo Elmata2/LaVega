@@ -1,21 +1,55 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
-import { authorizedCronRequest, currentInvestingTenant, forwardInvesting, investingCronTenantIds, investingDist, investingTenantId, rewriteInvestingRequest, shouldMountInvesting, withInvestingTenant } from "./investing-mount.js";
+import {
+  authorizedCronRequest,
+  currentInvestingTenant,
+  forwardInvesting,
+  investingCronTenantIds,
+  investingDist,
+  investingTenantId,
+  rewriteInvestingRequest,
+  shouldMountInvesting,
+  withInvestingTenant,
+} from "./investing-mount.js";
 
-const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } = vi.hoisted(() => ({
-  createRuntimeAppMock: vi.fn(async () => ({ fetch: vi.fn(async () => new Response(JSON.stringify({ ok: true, service: "investing-server" }), { headers: { "content-type": "application/json" } })) })),
-  createDockerFetchMock: vi.fn((_fetch: unknown, _root: string) => async (request: Request) => new Response(`path:${new URL(request.url).pathname}`, { status: 200 })),
-  getAuthMock: vi.fn(() => null as unknown),
-  verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
+const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } =
+  vi.hoisted(() => ({
+    createRuntimeAppMock: vi.fn(async () => ({
+      fetch: vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ok: true, service: "investing-server" }), {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    })),
+    createDockerFetchMock: vi.fn(
+      (_fetch: unknown, _root: string) => async (request: Request) =>
+        new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
+    ),
+    getAuthMock: vi.fn(() => null as unknown),
+    verifiedSessionMock: vi.fn(async () => null as { user?: { id: string } } | null),
+  }));
+
+vi.mock("@lavega/investing-server/src/index.js", () => ({
+  createRuntimeApp: createRuntimeAppMock,
 }));
-
-vi.mock("@lavega/investing-server/src/index.js", () => ({ createRuntimeApp: createRuntimeAppMock }));
 vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
-vi.mock("@lavega/investing-server/src/docker.js", () => ({ createDockerFetch: createDockerFetchMock }));
-vi.mock("@lavega/investing-server/src/filePriceStore.js", () => ({ createFilePriceStore: vi.fn(), runtimePriceStoreFile: () => "/tmp/prices.json" }));
-vi.mock("@lavega/investing-server/src/fileBenchmarkSelectionStore.js", () => ({ createFileBenchmarkSelectionStore: vi.fn(), runtimeBenchmarkSelectionFile: () => "/tmp/benchmarks.json" }));
-vi.mock("@lavega/investing-server/src/fileMarketDataConsentStore.js", () => ({ createFileMarketDataConsentStore: vi.fn(), runtimeMarketDataConsentFile: () => "/tmp/consent.json" }));
+vi.mock("@lavega/investing-server/src/docker.js", () => ({
+  createDockerFetch: createDockerFetchMock,
+}));
+vi.mock("@lavega/investing-server/src/filePriceStore.js", () => ({
+  createFilePriceStore: vi.fn(),
+  runtimePriceStoreFile: () => "/tmp/prices.json",
+}));
+vi.mock("@lavega/investing-server/src/fileBenchmarkSelectionStore.js", () => ({
+  createFileBenchmarkSelectionStore: vi.fn(),
+  runtimeBenchmarkSelectionFile: () => "/tmp/benchmarks.json",
+}));
+vi.mock("@lavega/investing-server/src/fileMarketDataConsentStore.js", () => ({
+  createFileMarketDataConsentStore: vi.fn(),
+  runtimeMarketDataConsentFile: () => "/tmp/consent.json",
+}));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -67,7 +101,9 @@ test("investingDist defaults next to investing-web dist", () => {
 test("investingTenantId falls back to the local tenant when authentication is not configured", async () => {
   getAuthMock.mockReturnValueOnce(null);
 
-  expect(await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard"))).toBe("local");
+  expect(await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard"))).toBe(
+    "local",
+  );
   expect(verifiedSessionMock).not.toHaveBeenCalled();
 });
 
@@ -75,14 +111,18 @@ test("investingTenantId refuses an unauthenticated request once authentication i
   getAuthMock.mockReturnValueOnce({});
   verifiedSessionMock.mockResolvedValueOnce(null);
 
-  expect(await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard"))).toBeNull();
+  expect(
+    await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard")),
+  ).toBeNull();
 });
 
 test("investingTenantId returns the verified user id as the tenant", async () => {
   getAuthMock.mockReturnValueOnce({});
   verifiedSessionMock.mockResolvedValueOnce({ user: { id: "user-123" } });
 
-  expect(await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard"))).toBe("user-123");
+  expect(await investingTenantId(new Request("https://lavega.dev/api/investing/dashboard"))).toBe(
+    "user-123",
+  );
 });
 
 test("the investing tenant is scoped to one request and never leaks to the next", async () => {
@@ -95,8 +135,16 @@ test("the investing tenant is scoped to one request and never leaks to the next"
 test("cron requests require the configured secret", () => {
   process.env.CRON_SECRET = "secret-123";
 
-  expect(authorizedCronRequest(new Request("https://lavega.dev/api/cron/investing-sync", { headers: { authorization: "Bearer secret-123" } }))).toBe(true);
-  expect(authorizedCronRequest(new Request("https://lavega.dev/api/cron/investing-sync"))).toBe(false);
+  expect(
+    authorizedCronRequest(
+      new Request("https://lavega.dev/api/cron/investing-sync", {
+        headers: { authorization: "Bearer secret-123" },
+      }),
+    ),
+  ).toBe(true);
+  expect(authorizedCronRequest(new Request("https://lavega.dev/api/cron/investing-sync"))).toBe(
+    false,
+  );
 });
 
 test("cron tenants come from env when auth exists, with local fallback only when auth is off", () => {
@@ -121,7 +169,11 @@ test("investing cron runs broker sync then a fresh price slice for each configur
   process.env.CRON_SECRET = "cron-secret";
   process.env.INVESTING_CRON_TENANT_IDS = "user-a,user-b";
 
-  const response = await mount.runInvestingCron(new Request("https://lavega.dev/api/cron/investing-sync", { headers: { authorization: "Bearer cron-secret" } }));
+  const response = await mount.runInvestingCron(
+    new Request("https://lavega.dev/api/cron/investing-sync", {
+      headers: { authorization: "Bearer cron-secret" },
+    }),
+  );
 
   expect(response.status).toBe(200);
   expect(seen).toEqual([
@@ -143,8 +195,13 @@ test("forwardInvesting runs the forwarded request inside the caller's tenant sco
     return new Response("ok");
   });
 
-  await mount.forwardInvesting(new Request("https://lavega.dev/api/investing/dashboard"), "user-123");
+  await mount.forwardInvesting(
+    new Request("https://lavega.dev/api/investing/dashboard"),
+    "user-123",
+  );
 
   expect(seen).toEqual(["user-123"]);
-  expect(createRuntimeAppMock).toHaveBeenCalledWith(expect.objectContaining({ resolveTenantId: expect.any(Function) }));
+  expect(createRuntimeAppMock).toHaveBeenCalledWith(
+    expect.objectContaining({ resolveTenantId: expect.any(Function) }),
+  );
 });

@@ -20,14 +20,17 @@ export function runtimeAgentRunFile(): string {
 function isRecord(value: unknown): value is AgentRunRecord {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<AgentRunRecord>;
-  const optionalString = (item: unknown) => item === undefined || item === null || typeof item === "string";
-  return typeof record.id === "string"
-    && optionalString(record.agentId)
-    && typeof record.startedAt === "string"
-    && optionalString(record.finishedAt)
-    && (record.status === "running" || record.status === "done" || record.status === "error")
-    && optionalString(record.summary)
-    && optionalString(record.error);
+  const optionalString = (item: unknown) =>
+    item === undefined || item === null || typeof item === "string";
+  return (
+    typeof record.id === "string" &&
+    optionalString(record.agentId) &&
+    typeof record.startedAt === "string" &&
+    optionalString(record.finishedAt) &&
+    (record.status === "running" || record.status === "done" || record.status === "error") &&
+    optionalString(record.summary) &&
+    optionalString(record.error)
+  );
 }
 
 /** Only the latest agent run is kept: this is operational state, not history. */

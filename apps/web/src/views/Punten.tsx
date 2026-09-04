@@ -1,8 +1,14 @@
 import { useState } from "react";
 import type { RewardProgram, RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
 import {
-  makeRewardsBalance, REWARD_PROGRAMS, rewardsTracked, trackingStatuses,
-  applyRewardsReply, snoozeTracker, parseBalanceReply, norm,
+  makeRewardsBalance,
+  REWARD_PROGRAMS,
+  rewardsTracked,
+  trackingStatuses,
+  applyRewardsReply,
+  snoozeTracker,
+  parseBalanceReply,
+  norm,
 } from "@lavega/core";
 import { formatEuro } from "../format";
 import "../styles/views.css";
@@ -108,10 +114,19 @@ export type ProgramFacts = {
 const ING_PUNTEN: ProgramFacts = {
   program: "ING Punten",
   earn: [
-    { what: "Elke maand minimaal € 700 bijschrijven op je Betaalrekening", reward: "250 punten per maand" },
+    {
+      what: "Elke maand minimaal € 700 bijschrijven op je Betaalrekening",
+      reward: "250 punten per maand",
+    },
     { what: "10 transacties met je Betaalrekening", reward: "100 punten per maand" },
-    { what: "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max", reward: "250 punten per maand" },
-    { what: "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More", reward: "100 punten per maand" },
+    {
+      what: "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max",
+      reward: "250 punten per maand",
+    },
+    {
+      what: "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More",
+      reward: "100 punten per maand",
+    },
     { what: "Rond af & Spaar actief gebruiken", reward: "100 punten per maand" },
     { what: "Een hypotheek hebben", reward: "250 punten per maand" },
     { what: "Je eerste Betaalrekening openen", reward: "2.500 punten, eenmalig" },
@@ -133,7 +148,8 @@ const ING_PUNTEN: ProgramFacts = {
   noRateShort: "Geen koers per bestede euro: ING beloont drempels per maand, niet wat je uitgeeft.",
   cash: {
     kind: "stated-none",
-    quote: "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
+    quote:
+      "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
     source: "Voorwaarden ING Punten",
     validFrom: "1 oktober 2025",
   },
@@ -149,7 +165,9 @@ const ING_PUNTEN: ProgramFacts = {
 };
 
 /** Programma's die deze view kent en core (nog) niet. Zie de kop hierboven. */
-export const EXTRA_PROGRAMS: readonly RewardProgram[] = [{ name: ING_PUNTEN.program, category: "Bank" }];
+export const EXTRA_PROGRAMS: readonly RewardProgram[] = [
+  { name: ING_PUNTEN.program, category: "Bank" },
+];
 
 /** Alles wat deze view over programma's weet: core eerst, daarna wat deze view
  *  zelf kent, zonder dubbele namen. Dit is de OPZOEKLIJST — categorie, eenheid,
@@ -188,7 +206,9 @@ function describesFacts(p: RewardProgram): boolean {
 }
 
 /** De lijst waaruit hij KIEST: elk programma één keer. */
-export const PICK_PROGRAMS: readonly RewardProgram[] = ALL_PROGRAMS.filter((p) => !describesFacts(p));
+export const PICK_PROGRAMS: readonly RewardProgram[] = ALL_PROGRAMS.filter(
+  (p) => !describesFacts(p),
+);
 
 /** De gepubliceerde regels van dit programma, of null als we ze niet hebben.
  *  Matcht alleen op de canonieke naam: de losse core-regel "ING" kan iets anders
@@ -367,7 +387,20 @@ export function addDaysISO(iso: string, n: number): string {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
-const MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const MONTHS_NL = [
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
+];
 
 /** "2026-05-12" → "12 mei 2026". */
 export function dateNL(iso: string): string {
@@ -404,10 +437,16 @@ const STATE_LABEL: Record<TrackingState, string> = {
 /** How old the number is, in the owner's words — never a claim about the real
  *  balance today, only about when he last confirmed it. */
 function ageSentence(s: TrackedStatus): string {
-  const age = s.ageDays === 0 ? "vandaag ingevoerd" : `${s.ageDays} ${s.ageDays === 1 ? "dag" : "dagen"} geleden ingevoerd`;
-  if (s.state === "fresh") return `${age}. LaVega vraagt hier vanaf ${dateNL(s.dueDate)} weer naar.`;
-  if (s.state === "snoozed") return `${age}. Je vroeg om later — LaVega vraagt weer vanaf ${dateNL(s.snoozedUntil ?? s.dueDate)}.`;
-  if (s.state === "overdue") return `${age}, ${s.daysOverdue} ${s.daysOverdue === 1 ? "dag" : "dagen"} over de afgesproken termijn.`;
+  const age =
+    s.ageDays === 0
+      ? "vandaag ingevoerd"
+      : `${s.ageDays} ${s.ageDays === 1 ? "dag" : "dagen"} geleden ingevoerd`;
+  if (s.state === "fresh")
+    return `${age}. LaVega vraagt hier vanaf ${dateNL(s.dueDate)} weer naar.`;
+  if (s.state === "snoozed")
+    return `${age}. Je vroeg om later — LaVega vraagt weer vanaf ${dateNL(s.snoozedUntil ?? s.dueDate)}.`;
+  if (s.state === "overdue")
+    return `${age}, ${s.daysOverdue} ${s.daysOverdue === 1 ? "dag" : "dagen"} over de afgesproken termijn.`;
   return `${age}. Tijd om te bevestigen.`;
 }
 
@@ -419,8 +458,16 @@ const INTERVALS: { days: number; label: string }[] = [
 ];
 
 export default function Punten({
-  balances, asOf, busy, onSave,
-}: { balances: RewardsBalance[]; asOf: string; busy: boolean; onSave: (next: RewardsBalance[]) => void }) {
+  balances,
+  asOf,
+  busy,
+  onSave,
+}: {
+  balances: RewardsBalance[];
+  asOf: string;
+  busy: boolean;
+  onSave: (next: RewardsBalance[]) => void;
+}) {
   const [program, setProgram] = useState(REWARD_PROGRAMS[0].name);
   const [points, setPoints] = useState("");
   const [updatedAt, setUpdatedAt] = useState(asOf);
@@ -436,7 +483,9 @@ export default function Punten({
   const [removed, setRemoved] = useState<RewardsBalance | null>(null);
 
   const rows = puntenRows(balances, asOf);
-  const attention = rows.filter((r) => r.status.state === "due" || r.status.state === "overdue").length;
+  const attention = rows.filter(
+    (r) => r.status.state === "due" || r.status.state === "overdue",
+  ).length;
   const addUnit = programUnit(program);
   // De regels van het programma waar dit formulier nú op gericht staat, zodat hij
   // ze ziet vóórdat hij een getal opslaat en niet pas op de kaart erna.
@@ -453,11 +502,15 @@ export default function Punten({
   function add() {
     const pts = parseBalanceReply(points);
     if (pts === null || pts < 0) {
-      setAddError("Ik kon hier geen getal in vinden — vul alleen het saldo in, bijvoorbeeld 245000 of 245k.");
+      setAddError(
+        "Ik kon hier geen getal in vinden — vul alleen het saldo in, bijvoorbeeld 245000 of 245k.",
+      );
       return;
     }
     if (!program.trim()) {
-      setAddError("Bij welk programma hoort dit saldo? Kies of typ een programma — anders weet ik niet waar dit getal thuishoort.");
+      setAddError(
+        "Bij welk programma hoort dit saldo? Kies of typ een programma — anders weet ik niet waar dit getal thuishoort.",
+      );
       return;
     }
     if (!updatedAt) {
@@ -466,7 +519,12 @@ export default function Punten({
     }
     setAddError("");
     setRemoved(null);
-    onSave(upsertBalance(balances, makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt })));
+    onSave(
+      upsertBalance(
+        balances,
+        makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt }),
+      ),
+    );
     setPoints("");
     // Leave the form aimed at nothing. Keeping the programme he just saved here
     // is what turned the next number he typed into an overwrite of it.
@@ -489,7 +547,11 @@ export default function Punten({
   function submitAsk(id: string) {
     const next = applyRewardsReply(balances, id, ask?.text ?? "", asOf);
     if (next === null) {
-      setAsk({ id, text: ask?.text ?? "", error: "Ik kon daar geen enkel getal in vinden — stuur alleen het saldo." });
+      setAsk({
+        id,
+        text: ask?.text ?? "",
+        error: "Ik kon daar geen enkel getal in vinden — stuur alleen het saldo.",
+      });
       return;
     }
     setAsk(null);
@@ -532,7 +594,10 @@ export default function Punten({
           <ul>
             <li>Zoek het saldo op in de app of de mail van het programma zelf.</li>
             <li>Voeg het hieronder toe met de datum waarop je het zag.</li>
-            <li>LaVega vraagt je daarna elk kwartaal om het te bevestigen — dat interval kun je per programma aanpassen.</li>
+            <li>
+              LaVega vraagt je daarna elk kwartaal om het te bevestigen — dat interval kun je per
+              programma aanpassen.
+            </li>
           </ul>
         </div>
       ) : (
@@ -548,7 +613,9 @@ export default function Punten({
                     <div className="punt-program">{b.program}</div>
                     <div className="punt-category">{category ?? "eigen programma"}</div>
                   </div>
-                  <span className={`badge punt-badge-${status.state}`}>{STATE_LABEL[status.state]}</span>
+                  <span className={`badge punt-badge-${status.state}`}>
+                    {STATE_LABEL[status.state]}
+                  </span>
                 </header>
 
                 <div className="punt-figure">
@@ -576,10 +643,20 @@ export default function Punten({
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
                       />
-                      <button type="button" className="btn btn-primary" disabled={busy} onClick={() => submitAsk(b.id)}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => submitAsk(b.id)}
+                      >
                         Opslaan
                       </button>
-                      <button type="button" className="btn" disabled={busy} onClick={() => setAsk(null)}>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={busy}
+                        onClick={() => setAsk(null)}
+                      >
                         Annuleer
                       </button>
                     </div>
@@ -623,7 +700,12 @@ export default function Punten({
                       ))}
                     </select>
                   </label>
-                  <button type="button" className="card-link card-link-danger" disabled={busy} onClick={() => remove(b.id)}>
+                  <button
+                    type="button"
+                    className="card-link card-link-danger"
+                    disabled={busy}
+                    onClick={() => remove(b.id)}
+                  >
                     Verwijder
                   </button>
                 </footer>
@@ -654,26 +736,43 @@ export default function Punten({
         <div className="stack-form-row">
           <label>
             Programma
-            <input list="reward-programs" value={program} disabled={busy} aria-label="Programma"
+            <input
+              list="reward-programs"
+              value={program}
+              disabled={busy}
+              aria-label="Programma"
               placeholder="bijv. Marriott Bonvoy"
-              onChange={(e) => setProgram(e.target.value)} />
+              onChange={(e) => setProgram(e.target.value)}
+            />
             {/* PICK_PROGRAMS en niet ALL_PROGRAMS: elk programma één keer. Zie
                 daar waarom core's losse "ING" hier niet meer bij staat. */}
             <datalist id="reward-programs">
-              {PICK_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
+              {PICK_PROGRAMS.map((p) => (
+                <option key={p.name} value={p.name} />
+              ))}
             </datalist>
           </label>
           <label>
             {addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
-            <input className="saldo-input" inputMode="decimal" value={points}
-              disabled={busy} aria-label={addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
+            <input
+              className="saldo-input"
+              inputMode="decimal"
+              value={points}
+              disabled={busy}
+              aria-label={addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
               placeholder={addUnit === "eur" ? "bijv. 42" : "bijv. 245000"}
-              onChange={(e) => setPoints(e.target.value)} />
+              onChange={(e) => setPoints(e.target.value)}
+            />
           </label>
           <label>
             Gezien op
-            <input type="date" value={updatedAt} disabled={busy} aria-label="Bijgewerkt op"
-              onChange={(e) => setUpdatedAt(e.target.value)} />
+            <input
+              type="date"
+              value={updatedAt}
+              disabled={busy}
+              aria-label="Bijgewerkt op"
+              onChange={(e) => setUpdatedAt(e.target.value)}
+            />
           </label>
         </div>
         {addFacts ? <ProgramFactsBlock facts={addFacts} /> : null}
@@ -684,8 +783,8 @@ export default function Punten({
             staat één veld hoger in dezelfde lijst. */}
         {norm(program) === "ing" ? (
           <p className="field-note">
-            Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar staan de
-            verdienregels van ING bij. Wat “ING” zelf bijhoudt, weet LaVega niet.
+            Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar
+            staan de verdienregels van ING bij. Wat “ING” zelf bijhoudt, weet LaVega niet.
           </p>
         ) : null}
         {existing ? (
@@ -694,9 +793,9 @@ export default function Punten({
             {programUnit(existing.program) === "eur"
               ? `${formatEuro(existing.points)} cashback`
               : `${existing.points.toLocaleString("nl-NL")} punten`}{" "}
-            van {dateNL(existing.updatedAt)}. Overschrijven zet jouw nieuwe getal daarvoor in de plaats —
-            dat oude saldo is er dan niet meer. Je herinnering blijft wel staan. Wil je een ander
-            programma toevoegen, verander dan eerst het veld hierboven.
+            van {dateNL(existing.updatedAt)}. Overschrijven zet jouw nieuwe getal daarvoor in de
+            plaats — dat oude saldo is er dan niet meer. Je herinnering blijft wel staan. Wil je een
+            ander programma toevoegen, verander dan eerst het veld hierboven.
           </p>
         ) : null}
         <div className="stack-form-actions">

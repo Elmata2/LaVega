@@ -5,8 +5,26 @@
  * transactions or other line-level data; only pre-computed aggregates leave
  * the browser for a tab's system prompt. */
 
-import type { Account, FxRate, Invoice, RewardsBalance, Rule, ScheduledFlow, Tx, VatSettings } from "@lavega/core";
-import { categoryTotals, computeAlerts, computeVatSetAside, detectSubscriptions, forecastCashflow, nextBtwDeadline, ownAccounts, resolveAccountRate } from "@lavega/core";
+import type {
+  Account,
+  FxRate,
+  Invoice,
+  RewardsBalance,
+  Rule,
+  ScheduledFlow,
+  Tx,
+  VatSettings,
+} from "@lavega/core";
+import {
+  categoryTotals,
+  computeAlerts,
+  computeVatSetAside,
+  detectSubscriptions,
+  forecastCashflow,
+  nextBtwDeadline,
+  ownAccounts,
+  resolveAccountRate,
+} from "@lavega/core";
 
 /** Minimal per-account fields any tab's context builder might read. */
 export type TabAccount = {
@@ -65,7 +83,9 @@ function defaultVatSettings(entity: string): VatSettings {
  *  null when any account in that entity has no saldo yet (mirrors
  *  Overzicht's own "unknown balance" rule — never invent a number). */
 function entityBalances(accounts: TabAccount[]): { entity: string; balance: number | null }[] {
-  const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
+  const entities = Array.from(
+    new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)),
+  );
   return entities.map((entity) => {
     const entityAccounts = accounts.filter((a) => a.entity === entity);
     const balance = entityAccounts.some((a) => a.balance == null)
@@ -80,7 +100,10 @@ function entitiesOf(accounts: TabAccount[]): string[] {
   return Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
 }
 
-export function buildTabContext(view: string, state: TabState): { tab: string; context: Record<string, unknown> } {
+export function buildTabContext(
+  view: string,
+  state: TabState,
+): { tab: string; context: Record<string, unknown> } {
   const tab = VIEW_TO_TAB[view] ?? view;
   // Common, already-scoped inputs the compute tabs share (App pre-filters
   // accounts/txs/flows by the active top-bar entity scope).
@@ -113,8 +136,13 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
       // Top category totals (name + in/out), ranked by absolute volume like
       // Overzicht's "Per categorie" table, capped to keep the slice small.
       const own = ownAccounts(accounts as Account[]);
-      const categories = Object.entries(categoryTotals(txs as Tx[], (state.rules ?? []) as Rule[], own))
-        .sort((a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)))
+      const categories = Object.entries(
+        categoryTotals(txs as Tx[], (state.rules ?? []) as Rule[], own),
+      )
+        .sort(
+          (a, b) =>
+            Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)),
+        )
         .slice(0, 10)
         .map(([name, b]) => ({ name, in: b.in, out: b.out }));
       const context: Record<string, unknown> = {
@@ -189,7 +217,14 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
         // web-searches current rates).
         rates: (accounts as Account[]).slice(0, MAX_ITEMS).map((a) => {
           const { ratePct, source } = resolveAccountRate(a, txs as Tx[], asOf, []);
-          return { bank: a.bank, type: a.type, entity: a.entity, balance: a.balance ?? null, ratePct, source };
+          return {
+            bank: a.bank,
+            type: a.type,
+            entity: a.entity,
+            balance: a.balance ?? null,
+            ratePct,
+            source,
+          };
         }),
       };
       // Live public benchmark: only if App already has it; else omitted so the
@@ -200,7 +235,11 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
 
     case "valuta": {
       const holdings = Array.from(
-        new Set((accounts as TabAccount[]).map((a) => a.currency).filter((c): c is string => !!c && c !== "EUR")),
+        new Set(
+          (accounts as TabAccount[])
+            .map((a) => a.currency)
+            .filter((c): c is string => !!c && c !== "EUR"),
+        ),
       );
       const context: Record<string, unknown> = { holdings };
       // ECB rate is live-fetched in the Valuta view, not in App scope — include
@@ -215,7 +254,9 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
       const keyToEntity = new Map((accounts as Account[]).map((a) => [a.key, a.entity]));
       // Entities to report on: those with accounts, plus any that only have
       // saved VAT settings.
-      const entities = Array.from(new Set([...entitiesOf(accounts), ...vatSettings.map((s) => s.entity)]));
+      const entities = Array.from(
+        new Set([...entitiesOf(accounts), ...vatSettings.map((s) => s.entity)]),
+      );
 
       const vat = entities.map((entity) => {
         const settings = savedByEntity.get(entity) ?? defaultVatSettings(entity);

@@ -55,7 +55,9 @@ export async function scrapeGeldNl(): Promise<RatesPayload | null> {
       let promoNote: string | undefined;
       if (standardRatePct !== undefined && ratePct > standardRatePct + 0.001) {
         const std = standardRatePct.toFixed(2).replace(".", ",");
-        promoNote = maanden ? `Actierente ${maanden} mnd, daarna ${std}%` : `Actierente, daarna ${std}%`;
+        promoNote = maanden
+          ? `Actierente ${maanden} mnd, daarna ${std}%`
+          : `Actierente, daarna ${std}%`;
       }
       const product = (attr(row, "productnaam") || "Spaarrekening") + (dgs ? ` · DGS ${dgs}` : "");
       rates.push({ bank, product, ratePct, freeWithdrawal: true, standardRatePct, promoNote });
@@ -79,10 +81,38 @@ export async function scrapeGeldNl(): Promise<RatesPayload | null> {
 const STATIC: RatesPayload = {
   asOf: "2026-08-03",
   rates: [
-    { bank: "Bigbank", product: "Flexibel Sparen", ratePct: 3.1, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
-    { bank: "bunq", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 1.5, promoNote: "Actierente t/m 01-01-2027, daarna 1,50%", freeWithdrawal: true },
-    { bank: "Santander Consumer Bank", product: "Spaarrekening", ratePct: 3.01, standardRatePct: 2.1, promoNote: "Actierente 6 mnd, daarna 2,10%", freeWithdrawal: true },
-    { bank: "Trade Republic", product: "Cash", ratePct: 3.0, standardRatePct: 2.25, promoNote: "Introrente, daarna 2,25%", freeWithdrawal: true },
+    {
+      bank: "Bigbank",
+      product: "Flexibel Sparen",
+      ratePct: 3.1,
+      standardRatePct: 2.1,
+      promoNote: "Actierente 6 mnd, daarna 2,10%",
+      freeWithdrawal: true,
+    },
+    {
+      bank: "bunq",
+      product: "Spaarrekening",
+      ratePct: 3.01,
+      standardRatePct: 1.5,
+      promoNote: "Actierente t/m 01-01-2027, daarna 1,50%",
+      freeWithdrawal: true,
+    },
+    {
+      bank: "Santander Consumer Bank",
+      product: "Spaarrekening",
+      ratePct: 3.01,
+      standardRatePct: 2.1,
+      promoNote: "Actierente 6 mnd, daarna 2,10%",
+      freeWithdrawal: true,
+    },
+    {
+      bank: "Trade Republic",
+      product: "Cash",
+      ratePct: 3.0,
+      standardRatePct: 2.25,
+      promoNote: "Introrente, daarna 2,25%",
+      freeWithdrawal: true,
+    },
     { bank: "Klarna", product: "Spaarrekening", ratePct: 1.95, freeWithdrawal: true },
     { bank: "NIBC", product: "Spaarrekening", ratePct: 1.44, freeWithdrawal: true },
     { bank: "Rabobank", product: "Spaarrekening", ratePct: 1.4, freeWithdrawal: true },

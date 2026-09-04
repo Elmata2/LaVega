@@ -105,7 +105,13 @@ export function mapCountries(): DrawableCountry[] {
 /** Een land op ISO-code. Onbekende of rommelige invoer geeft null, geen
  *  gegokt land. */
 export function countryById(id: string): WorldCountry | null {
-  return BY_ID.get(String(id ?? "").trim().toUpperCase()) ?? null;
+  return (
+    BY_ID.get(
+      String(id ?? "")
+        .trim()
+        .toUpperCase(),
+    ) ?? null
+  );
 }
 
 /** De naam zoals hij op het scherm hoort. Het platform gaat voor op de
@@ -207,7 +213,9 @@ export function conversionFor(id: string): ConversionAnswer {
   if (currencies.every((x) => x.code === "EUR")) return { kind: "euro", currencies };
   if (currencies.length > 1) return { kind: "choice", currencies };
   const only = currencies[0];
-  return only.priceable ? { kind: "priceable", currency: only, currencies } : { kind: "noRate", currency: only, currencies };
+  return only.priceable
+    ? { kind: "priceable", currency: only, currencies }
+    : { kind: "noRate", currency: only, currencies };
 }
 
 /* --- van de bol terug naar een land ---------------------------------------- */
@@ -226,7 +234,12 @@ export function conversionFor(id: string): ConversionAnswer {
  *  Bij de datumgrens levert dit voor Rusland en Fiji −180…180 op. Dat maakt het
  *  voorfilter voor die landen nutteloos, niet verkeerd: er wordt dan gewoon door
  *  de ringen heen gelopen. */
-type Extent = { c: WorldCountry; rings: readonly Ring[]; box: [number, number, number, number]; area: number };
+type Extent = {
+  c: WorldCountry;
+  rings: readonly Ring[];
+  box: [number, number, number, number];
+  area: number;
+};
 
 const EXTENTS: Extent[] = (() => {
   const out: Extent[] = [];
@@ -309,7 +322,8 @@ function insideRings(rings: readonly Ring[], lon: number, lat: number): boolean 
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
       const [xi, yi] = r[i];
       const [xj, yj] = r[j];
-      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi)
+        inside = !inside;
     }
   }
   return inside;
@@ -332,7 +346,7 @@ function insideRings(rings: readonly Ring[], lon: number, lat: number): boolean 
 export function countryAtLonLat(lon: number, lat: number): WorldCountry | null {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
   if (lat < -90 || lat > 90) return null;
-  const x = lon >= -180 && lon <= 180 ? lon : (((lon + 180) % 360) + 360) % 360 - 180;
+  const x = lon >= -180 && lon <= 180 ? lon : ((((lon + 180) % 360) + 360) % 360) - 180;
   for (const e of EXTENTS) {
     if (x < e.box[0] || x > e.box[2] || lat < e.box[1] || lat > e.box[3]) continue;
     if (insideRings(e.rings, x, lat)) return e.c;

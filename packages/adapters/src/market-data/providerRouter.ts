@@ -36,7 +36,9 @@ export async function firstProviderResult<Request, Result>(
       }
     } catch (error) {
       log(provider.sourceKey, error);
-      problems.push(`${provider.sourceKey}: ${error instanceof Error ? error.message : String(error)}`);
+      problems.push(
+        `${provider.sourceKey}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   if (problemResult && problems.length > 0) return withProviderProblems(problemResult, problems);
@@ -45,12 +47,23 @@ export async function firstProviderResult<Request, Result>(
 
 function providerProblems(value: unknown): string[] {
   const problems = (value as { problems?: unknown }).problems;
-  return Array.isArray(problems) ? problems.filter((problem): problem is string => typeof problem === "string") : [];
+  return Array.isArray(problems)
+    ? problems.filter((problem): problem is string => typeof problem === "string")
+    : [];
 }
 
-function withProviderProblems<Result>(result: ProviderResult<Result>, problems: string[]): ProviderResult<Result> {
-  if (result.value === null || typeof result.value !== "object" || Array.isArray(result.value)) return result;
+function withProviderProblems<Result>(
+  result: ProviderResult<Result>,
+  problems: string[],
+): ProviderResult<Result> {
+  if (result.value === null || typeof result.value !== "object" || Array.isArray(result.value))
+    return result;
   const value = result.value as { problems?: unknown } & Record<string, unknown>;
-  const ownProblems = Array.isArray(value.problems) ? value.problems.filter((problem): problem is string => typeof problem === "string") : [];
-  return { ...result, value: { ...value, problems: [...new Set([...problems, ...ownProblems])] } as Result };
+  const ownProblems = Array.isArray(value.problems)
+    ? value.problems.filter((problem): problem is string => typeof problem === "string")
+    : [];
+  return {
+    ...result,
+    value: { ...value, problems: [...new Set([...problems, ...ownProblems])] } as Result,
+  };
 }

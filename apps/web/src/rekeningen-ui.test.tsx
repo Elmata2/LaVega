@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import { accountSummaries } from "@lavega/core";
-import Rekeningen, { groupAccountsByBank, bankInitials, bankTone, UNKNOWN_BANK } from "./views/Rekeningen";
+import Rekeningen, {
+  groupAccountsByBank,
+  bankInitials,
+  bankTone,
+  UNKNOWN_BANK,
+} from "./views/Rekeningen";
 
 /* B4 — Rekeningen grouped by bank.
  *
@@ -21,21 +26,49 @@ import Rekeningen, { groupAccountsByBank, bankInitials, bankTone, UNKNOWN_BANK }
 
 function acc(p: Partial<Account> & { key: string }): Account {
   return {
-    iban: "", name: p.key, bank: "", entity: "Prive", currency: "EUR", balance: null,
+    iban: "",
+    name: p.key,
+    bank: "",
+    entity: "Prive",
+    currency: "EUR",
+    balance: null,
     ...p,
   } as Account;
 }
 
 const ACCOUNTS: Account[] = [
   acc({ key: "NL01INGB", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", balance: 1200.5 }),
-  acc({ key: "NL02INGB", iban: "NL02INGB", name: "Oranje Spaarrekening", bank: "ING", balance: 25000 }),
-  acc({ key: "NL03ABNA", iban: "NL03ABNA", name: "Zakelijk", bank: "ABN AMRO", entity: "BV1", balance: null }),
+  acc({
+    key: "NL02INGB",
+    iban: "NL02INGB",
+    name: "Oranje Spaarrekening",
+    bank: "ING",
+    balance: 25000,
+  }),
+  acc({
+    key: "NL03ABNA",
+    iban: "NL03ABNA",
+    name: "Zakelijk",
+    bank: "ABN AMRO",
+    entity: "BV1",
+    balance: null,
+  }),
   acc({ key: "AMEX", name: "Gold Card", bank: "American Express", balance: -430.25 }),
   acc({ key: "0123456789", name: "0123456789", bank: "" }),
 ];
 
 function tx(id: string, accountKey: string): Tx {
-  return { id, accountKey, date: "2026-08-01", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey,
+    date: "2026-08-01",
+    amount: -10,
+    currency: "EUR",
+    counterparty: "X",
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 const TXS: Tx[] = [tx("t1", "NL01INGB"), tx("t2", "NL01INGB"), tx("t3", "AMEX")];
 
@@ -46,7 +79,10 @@ const rows = () => accountSummaries(ACCOUNTS, TXS);
 test("accounts are grouped under their bank, named banks first and 'Zonder bank' last", () => {
   const groups = groupAccountsByBank(rows());
   expect(groups.map((g) => g.label)).toEqual(["ABN AMRO", "American Express", "ING", UNKNOWN_BANK]);
-  expect(groups[2].rows.map((r) => r.account.name)).toEqual(["Betaalrekening", "Oranje Spaarrekening"]);
+  expect(groups[2].rows.map((r) => r.account.name)).toEqual([
+    "Betaalrekening",
+    "Oranje Spaarrekening",
+  ]);
   expect(groups[2].txCount).toBe(2);
 });
 
@@ -65,10 +101,10 @@ test("a bank whose every saldo is unknown gets NO total — not a zero", () => {
 
 test("a partly-known bank reports how many of its accounts the total covers", () => {
   const mixed = groupAccountsByBank(
-    accountSummaries([
-      acc({ key: "A", bank: "ING", balance: 100 }),
-      acc({ key: "B", bank: "ING", balance: null }),
-    ], []),
+    accountSummaries(
+      [acc({ key: "A", bank: "ING", balance: 100 }), acc({ key: "B", bank: "ING", balance: null })],
+      [],
+    ),
   )[0];
   expect(mixed.total).toBe(100);
   expect(mixed.knownCount).toBe(1);
@@ -84,7 +120,10 @@ test("banks typed with different casing are one group", () => {
 });
 
 test("bankOf freezes a half-typed rename in its own group, so the row cannot jump per keystroke", () => {
-  const list = accountSummaries([acc({ key: "A", bank: "IN" }), acc({ key: "B", bank: "ING" })], []);
+  const list = accountSummaries(
+    [acc({ key: "A", bank: "IN" }), acc({ key: "B", bank: "ING" })],
+    [],
+  );
   // Live: two groups, because "IN" is not yet "ING".
   expect(groupAccountsByBank(list)).toHaveLength(2);
   // Frozen at the value the rename started from:
@@ -123,10 +162,18 @@ type Props = ComponentProps<typeof Rekeningen>;
 const noop = () => {};
 function props(): Props {
   return {
-    accounts: ACCOUNTS, txs: TXS, busy: false,
-    onEntityChange: noop, onAccountCommit: noop, onAccountFieldChange: noop,
-    onSaldoCommit: noop, onTypeCommit: noop, onSelectAccount: noop, onDeleteAccount: noop,
-    duplicateGroups: [], onMergeDuplicates: noop,
+    accounts: ACCOUNTS,
+    txs: TXS,
+    busy: false,
+    onEntityChange: noop,
+    onAccountCommit: noop,
+    onAccountFieldChange: noop,
+    onSaldoCommit: noop,
+    onTypeCommit: noop,
+    onSelectAccount: noop,
+    onDeleteAccount: noop,
+    duplicateGroups: [],
+    onMergeDuplicates: noop,
   };
 }
 
@@ -149,7 +196,9 @@ function render(overrides: Partial<Props> = {}) {
 }
 
 const byText = (sel: string, text: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) => (n.textContent ?? "").includes(text))!;
+  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  )!;
 
 function click(el: HTMLElement) {
   act(() => {
@@ -159,7 +208,8 @@ function click(el: HTMLElement) {
 
 /** Type into a controlled input the way React notices it. */
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -212,7 +262,9 @@ test("a second sub-tab swaps the panel to that account", () => {
   click(byText(".bank-group-head", "ING"));
   click(byText('[role="tab"]', "Oranje Spaarrekening"));
   const panel = container!.querySelector(".bank-panel")!;
-  expect(panel.querySelector<HTMLInputElement>('[aria-label="Saldo Oranje Spaarrekening"]')!.value).toBe("25000");
+  expect(
+    panel.querySelector<HTMLInputElement>('[aria-label="Saldo Oranje Spaarrekening"]')!.value,
+  ).toBe("25000");
   expect(panel.textContent).toContain("Nog geen transacties geïmporteerd");
 });
 
@@ -221,7 +273,9 @@ test("a bank with one account shows the account straight away, without a tab str
   click(byText(".bank-group-head", "American Express"));
   expect(container!.querySelectorAll('[role="tab"]')).toHaveLength(0);
   // A card's debt is typed and read as a positive.
-  expect(container!.querySelector<HTMLInputElement>('[aria-label="Openstaand bedrag Gold Card"]')!.value).toBe("430.25");
+  expect(
+    container!.querySelector<HTMLInputElement>('[aria-label="Openstaand bedrag Gold Card"]')!.value,
+  ).toBe("430.25");
 });
 
 test("the panel still carries every edit the table had", () => {
@@ -306,13 +360,17 @@ test("'Alle rekeningen' falls back to the flat table, with every account in it",
 
 test("the duplicate banner still sits above the groups", () => {
   render({
-    duplicateGroups: [{
-      canonicalId: "dup1",
-      survivor: ACCOUNTS[0],
-      accounts: [ACCOUNTS[0], ACCOUNTS[1]],
-    }] as Props["duplicateGroups"],
+    duplicateGroups: [
+      {
+        canonicalId: "dup1",
+        survivor: ACCOUNTS[0],
+        accounts: [ACCOUNTS[0], ACCOUNTS[1]],
+      },
+    ] as Props["duplicateGroups"],
   });
-  expect(container!.querySelector(".dup-banner")!.textContent).toContain("lijken dezelfde rekening");
+  expect(container!.querySelector(".dup-banner")!.textContent).toContain(
+    "lijken dezelfde rekening",
+  );
   expect(container!.querySelectorAll(".bank-group").length).toBeGreaterThan(0);
 });
 

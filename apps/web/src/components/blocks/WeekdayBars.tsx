@@ -90,7 +90,13 @@ const MIN_DAYS_FOR_AVERAGE = 3;
 const TALL_BAR = 72;
 
 export default function WeekdayBars({
-  days, format, ariaLabel, peakIndex = -1, averageValue = null, averageLabel = "gemiddelde dag", height = 180,
+  days,
+  format,
+  ariaLabel,
+  peakIndex = -1,
+  averageValue = null,
+  averageLabel = "gemiddelde dag",
+  height = 180,
 }: WeekdayBarsProps) {
   // Which bar was tapped; hover and focus are handled in CSS. See CategoryBars
   // for why a tap needs state of its own at all.
@@ -103,7 +109,9 @@ export default function WeekdayBars({
   const max = domain.max;
 
   const average =
-    averageValue !== null && averageValue > 0 && known.length >= MIN_DAYS_FOR_AVERAGE ? averageValue : null;
+    averageValue !== null && averageValue > 0 && known.length >= MIN_DAYS_FOR_AVERAGE
+      ? averageValue
+      : null;
 
   // Bar-group centres in the 0–100 box; the groups share the area equally.
   const centre = (i: number) => Math.round(((i + 0.5) / days.length) * 10_000) / 100;
@@ -133,7 +141,12 @@ export default function WeekdayBars({
 
         <div className="lv-chart-area">
           {domain.ticks.map((t) => (
-            <span key={t} className="lv-chart-grid" style={{ top: `${100 - barPercent(t, max)}%` }} aria-hidden="true" />
+            <span
+              key={t}
+              className="lv-chart-grid"
+              style={{ top: `${100 - barPercent(t, max)}%` }}
+              aria-hidden="true"
+            />
           ))}
 
           <div className="lv-bars-groups">
@@ -170,7 +183,10 @@ export default function WeekdayBars({
                         className={`lv-bar weekday-bar${i === peakIndex ? " weekday-bar-peak" : ""}`}
                         style={{ height: `${pct}%` }}
                       >
-                        <span className={`lv-tip${pct > TALL_BAR ? " lv-tip-inside" : ""}`} aria-hidden="true">
+                        <span
+                          className={`lv-tip${pct > TALL_BAR ? " lv-tip-inside" : ""}`}
+                          aria-hidden="true"
+                        >
                           <span className="lv-tip-when">{d.label}</span>
                           <span className="lv-tip-value">{format(d.value)}</span>
                         </span>
@@ -183,7 +199,13 @@ export default function WeekdayBars({
           </div>
 
           {line && (
-            <svg className="lv-chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <svg
+              className="lv-chart-svg"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              focusable="false"
+            >
               <path
                 d={line}
                 fill="none"
@@ -219,7 +241,11 @@ export default function WeekdayBars({
 
       <div className="lv-bars-xaxis">
         {days.map((d, i) => (
-          <span key={d.label} className={i === peakIndex ? "weekday-label-peak" : undefined} title={d.label}>
+          <span
+            key={d.label}
+            className={i === peakIndex ? "weekday-label-peak" : undefined}
+            title={d.label}
+          >
             {d.label}
           </span>
         ))}

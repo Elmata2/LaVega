@@ -108,7 +108,11 @@ export const INBOUND_WITH_PDF: InboundPayloadFixture = {
   html: "",
   auth: { spf: "pass", dkim: "none", dmarc: "none" },
   attachments: [
-    { fileName: "logo.png", mimeType: "image/png", data: Buffer.from("PNG-bytes").toString("base64") },
+    {
+      fileName: "logo.png",
+      mimeType: "image/png",
+      data: Buffer.from("PNG-bytes").toString("base64"),
+    },
     { fileName: "factuur-2026-0207.pdf", mimeType: "application/pdf", data: PDF_BASE64 },
   ],
 };

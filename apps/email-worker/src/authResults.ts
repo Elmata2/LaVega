@@ -38,7 +38,15 @@ export type AuthResult =
 
 export type SenderChecks = { spf: AuthResult; dkim: AuthResult; dmarc: AuthResult };
 
-const KNOWN: AuthResult[] = ["pass", "fail", "softfail", "neutral", "none", "temperror", "permerror"];
+const KNOWN: AuthResult[] = [
+  "pass",
+  "fail",
+  "softfail",
+  "neutral",
+  "none",
+  "temperror",
+  "permerror",
+];
 
 /** Drie keer 'unknown' — de eerlijke uitkomst als er geen header was. */
 export const UNKNOWN_CHECKS: SenderChecks = { spf: "unknown", dkim: "unknown", dmarc: "unknown" };
