@@ -5,6 +5,7 @@ const {
   investingTenantIdMock,
   forwardInvestingMock,
   runInvestingCronMock,
+  investingOwnsApiPathMock,
 } = vi.hoisted(() => ({
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
@@ -12,6 +13,11 @@ const {
     async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`),
   ),
   runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
+  investingOwnsApiPathMock: vi.fn(async (path: string) =>
+    ["investing", "brokers", "prices", "market-data", "config", "agents"].includes(
+      path.split("/")[2] ?? "",
+    ),
+  ),
 }));
 
 vi.mock("./investing-mount.js", () => ({
@@ -19,6 +25,7 @@ vi.mock("./investing-mount.js", () => ({
   investingTenantId: investingTenantIdMock,
   forwardInvesting: forwardInvestingMock,
   runInvestingCron: runInvestingCronMock,
+  investingOwnsApiPath: investingOwnsApiPathMock,
   investingDist: () => "/tmp/investing-dist",
 }));
 
@@ -52,10 +59,41 @@ test("an investing API request is forwarded under the tenant the session named",
     "/api/prices/sync/status",
     "/api/market-data/consent",
     "/api/config/status",
+    "/api/agents/portfolio",
   ]) {
     const response = await app.request(path);
     expect(await response.text(), path).toBe("tenant:user-123");
   }
+});
+
+test("a namespace the investing app claims is forwarded without touching this server", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  investingOwnsApiPathMock.mockResolvedValue(true);
+  const app = await investingApp();
+
+  const response = await app.request("/api/a-namespace-nobody-has-written-yet");
+
+  expect(await response.text()).toBe("tenant:user-123");
+});
+
+test("an /api path the investing app does not claim is not answered by it", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  investingOwnsApiPathMock.mockResolvedValue(false);
+  const app = await investingApp();
+
+  await app.request("/api/vault/backup");
+
+  expect(forwardInvestingMock).not.toHaveBeenCalled();
+});
+
+test("this server keeps its own API routes ahead of the investing wildcard", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  const app = await investingApp();
+
+  const response = await app.request("/api/eb/status");
+
+  expect(forwardInvestingMock).not.toHaveBeenCalled();
+  expect(response.status).toBe(200);
 });
 
 test("the investing SPA shell stays reachable without a session", async () => {

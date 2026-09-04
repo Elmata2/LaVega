@@ -88,6 +88,15 @@ export async function investingTenantId(request: Request): Promise<string | null
 }
 
 let investingFetch: ((request: Request) => Promise<Response>) | null = null;
+let investingApiNamespaces: Set<string> | null = null;
+
+/** The `/api/<namespace>` segments the investing app answers, read from its own
+ *  routing table. This server holding a second, hand-written copy is what let
+ *  `/api/agents` ship and 404: the copy went stale and nobody noticed. */
+export async function investingOwnsApiPath(path: string): Promise<boolean> {
+  await getInvestingFetch();
+  return investingApiNamespaces?.has(path.split("/")[2] ?? "") ?? false;
+}
 
 async function getInvestingFetch(): Promise<(request: Request) => Promise<Response>> {
   if (investingFetch) return investingFetch;
@@ -107,6 +116,12 @@ async function getInvestingFetch(): Promise<(request: Request) => Promise<Respon
       ? createNeonMarketDataConsentStore(database)
       : createFileMarketDataConsentStore(runtimeMarketDataConsentFile()),
   });
+  investingApiNamespaces = new Set(
+    runtimeApp.routes
+      .map((route) => route.path.split("/"))
+      .filter((segments) => segments[1] === "api" && segments[2])
+      .map((segments) => segments[2]!),
+  );
   investingFetch = createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist());
   return investingFetch;
 }

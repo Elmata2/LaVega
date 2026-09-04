@@ -13,6 +13,7 @@ import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
+  investingOwnsApiPath,
   investingTenantId,
   runInvestingCron,
   shouldMountInvesting,
@@ -189,11 +190,15 @@ if (shouldMountInvesting()) {
    * runtime, not a tenant, and the footer that shows it renders before anyone
    * has signed in. */
   app.get("/api/investing/health", toInvestingStatic);
-  app.all("/api/investing/*", toInvesting);
-  app.all("/api/brokers/*", toInvesting);
-  app.all("/api/prices/*", toInvesting);
-  app.all("/api/market-data/*", toInvesting);
-  app.all("/api/config/status", toInvesting);
+  /* Which /api namespaces to forward comes from the investing app's own routing
+   * table. Listing them here instead kept a second copy, and that copy went
+   * stale the moment the app grew one: /api/agents shipped and 404'd in
+   * production. Anything the investing app does not claim falls through, so a
+   * wrong method or a route this server only registers conditionally still gets
+   * this server's own answer rather than a misleading 401. */
+  app.all("/api/*", async (c, next) =>
+    (await investingOwnsApiPath(c.req.path)) ? toInvesting(c) : next(),
+  );
   /* The SPA shell itself is public: it has to load before anyone can sign in.
    * Its data comes from the /api routes above, which are not. */
   app.get("/investing", (c) => c.redirect("/investing/"));

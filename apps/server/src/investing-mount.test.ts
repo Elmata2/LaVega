@@ -7,6 +7,7 @@ import {
   forwardInvesting,
   investingCronTenantIds,
   investingDist,
+  investingOwnsApiPath,
   investingTenantId,
   rewriteInvestingRequest,
   shouldMountInvesting,
@@ -16,6 +17,10 @@ import {
 const { createRuntimeAppMock, createDockerFetchMock, getAuthMock, verifiedSessionMock } =
   vi.hoisted(() => ({
     createRuntimeAppMock: vi.fn(async () => ({
+      routes: [
+        { method: "GET", path: "/api/investing/dashboard" },
+        { method: "GET", path: "/api/agents/portfolio" },
+      ],
       fetch: vi.fn(
         async () =>
           new Response(JSON.stringify({ ok: true, service: "investing-server" }), {
@@ -204,4 +209,12 @@ test("forwardInvesting runs the forwarded request inside the caller's tenant sco
   expect(createRuntimeAppMock).toHaveBeenCalledWith(
     expect.objectContaining({ resolveTenantId: expect.any(Function) }),
   );
+});
+
+test("the forwarded /api namespaces are read from the investing app's own routes", async () => {
+  /* A hand-written copy of this list in apps/server went stale when the
+   * investing app grew /api/agents, which then 404'd in production. */
+  expect(await investingOwnsApiPath("/api/agents/portfolio")).toBe(true);
+  expect(await investingOwnsApiPath("/api/investing/dashboard")).toBe(true);
+  expect(await investingOwnsApiPath("/api/vault/backup")).toBe(false);
 });
