@@ -1,5 +1,5 @@
-import { crossRate, type FxRate } from "../fx.js";
 import type { Position } from "./model.js";
+import { convertCurrency, type FxRates } from "./portfolio.js";
 
 export type AllocationGroup = "instrument" | "entity";
 export type AllocationBucket = {
@@ -17,28 +17,17 @@ export type PricedAllocationPosition = Pick<Position, "symbol" | "entity" | "des
   marketValue: number | null;
 };
 
-function rateFor(rates: FxRate | FxRate[], date: string): FxRate {
-  const candidates = Array.isArray(rates) ? rates : [rates];
-  const rate = candidates
-    .filter((candidate) => candidate.date <= date)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-  if (!rate) throw new Error(`No FX rate available for ${date}`);
-  return rate;
-}
-
 function positionValue(
   position: Position,
   presentationCurrency: string,
-  fxRates: FxRate | FxRate[],
+  fxRates: FxRates,
 ): number | null {
   const value =
     position.marketValue ??
     (position.marketPrice === null ? null : position.quantity * position.marketPrice);
   if (value === null) return null;
   try {
-    return (
-      value * crossRate(position.currency, presentationCurrency, rateFor(fxRates, position.asOf))
-    );
+    return convertCurrency(value, position.currency, presentationCurrency, position.asOf, fxRates);
   } catch {
     return null;
   }
@@ -49,7 +38,7 @@ export function bucketAllocation(
   positions: Position[],
   group: AllocationGroup,
   presentationCurrency: string,
-  fxRates: FxRate | FxRate[],
+  fxRates: FxRates,
 ): Allocation {
   const buckets = new Map<string, AllocationBucket>();
   const unpriced = new Set<string>();
@@ -81,7 +70,7 @@ export function bucketAllocation(
 export function bucketAllocationByInstrument(
   positions: Position[],
   presentationCurrency: string,
-  fxRates: FxRate | FxRate[],
+  fxRates: FxRates,
 ): Allocation {
   return bucketAllocation(positions, "instrument", presentationCurrency, fxRates);
 }
@@ -89,7 +78,7 @@ export function bucketAllocationByInstrument(
 export function bucketAllocationByEntity(
   positions: Position[],
   presentationCurrency: string,
-  fxRates: FxRate | FxRate[],
+  fxRates: FxRates,
 ): Allocation {
   return bucketAllocation(positions, "entity", presentationCurrency, fxRates);
 }
