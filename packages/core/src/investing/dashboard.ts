@@ -18,6 +18,7 @@ import {
   type PositionReturn,
   type PositionReturnStatus,
 } from "./positions.js";
+import { tradeDelta } from "./quantity.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -248,7 +249,7 @@ function buildPositionDetail(input: {
   const quantityHistory: PositionQuantityChange[] = [];
   for (const { trade, sourceOrder } of orderedTrades) {
     if (trade.side === "other") continue;
-    const delta = trade.side === "buy" ? trade.quantity : -trade.quantity;
+    const delta = tradeDelta(trade);
     reconstructedQuantity += delta;
     quantityHistory.push({
       date: trade.date,

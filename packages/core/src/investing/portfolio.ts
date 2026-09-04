@@ -2,6 +2,7 @@ import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
 import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
 import { businessDateRange, isPriceFresh } from "./calendar.js";
+import { tradeDelta } from "./quantity.js";
 
 export type PortfolioValuePoint = {
   date: string;
@@ -47,10 +48,6 @@ function businessCalendar(from: string, to: string, priceBars: readonly PriceBar
   );
   for (const date of businessDateRange(from, to)) dates.add(date);
   return [...dates].sort();
-}
-
-function signedQuantity(trade: Trade): number {
-  return trade.side === "buy" ? trade.quantity : trade.side === "sell" ? -trade.quantity : 0;
 }
 
 function cashKey(value: { entity: string; broker: string; currency: string }): string {
@@ -140,7 +137,7 @@ function holdingsBySymbol(
   for (const trade of trades)
     holding(trade.symbol, trade.entity).events.push({
       date: trade.date,
-      amount: signedQuantity(trade),
+      amount: tradeDelta(trade),
     });
   return bySymbol;
 }
