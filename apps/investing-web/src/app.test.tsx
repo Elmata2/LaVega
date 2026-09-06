@@ -605,8 +605,8 @@ test("overview preserves responsive reading order and independent chart ranges",
   );
   expect(order).toEqual([
     "performance",
-    "kpis",
     "allocation",
+    "kpis",
     "agent",
     "status",
     "positions",

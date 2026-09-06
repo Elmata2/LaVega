@@ -66,7 +66,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
             description="Jouw verdeling verschijnt na de eerste brokersynchronisatie."
           />
         ) : (
-          <div className="grid gap-4">
+          <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
             <div
               className="relative"
               role="img"

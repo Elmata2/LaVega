@@ -1780,16 +1780,15 @@ function Overview() {
             className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
             data-dashboard-layout="overview"
           >
-            <div className="min-w-0" data-dashboard-section="performance">
-              <PortfolioBenchmarkChart
-                data={state.data.portfolio}
-                benchmarks={state.data.benchmarks ?? []}
-                externalCashFlows={state.data.externalCashFlows}
-                currency={state.data.presentationCurrency}
-              />
-            </div>
-            <aside aria-label="Portefeuilleoverzicht" className="space-y-5">
-              <PortfolioKpis data={state.data} />
+            <div className="min-w-0 space-y-5">
+              <div data-dashboard-section="performance">
+                <PortfolioBenchmarkChart
+                  data={state.data.portfolio}
+                  benchmarks={state.data.benchmarks ?? []}
+                  externalCashFlows={state.data.externalCashFlows}
+                  currency={state.data.presentationCurrency}
+                />
+              </div>
               <div data-dashboard-section="allocation">
                 <AllocationDonut
                   instrument={state.data.allocation.instrument}
@@ -1797,6 +1796,9 @@ function Overview() {
                   currency={state.data.presentationCurrency}
                 />
               </div>
+            </div>
+            <aside aria-label="Portefeuilleoverzicht" className="space-y-5">
+              <PortfolioKpis data={state.data} />
               <PortfolioSummaryCard currency={state.data.presentationCurrency} />
               <PortfolioAgentCard />
               <OverviewStatusRail dataVersion={state.data.dataVersion} />
