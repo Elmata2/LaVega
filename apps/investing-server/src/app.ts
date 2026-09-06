@@ -202,6 +202,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     c.json({ ok: true, service: "investing-server" });
   investingApp.get("/health", health);
   investingApp.get("/api/investing/health", health);
+  /* This app never mounts real auth (single local tenant, no session).
+   * apps/server signals that with 503 on /api/auth/* when DATABASE_URL /
+   * BETTER_AUTH_SECRET are unset; match that here so investing-web's
+   * RequireAuth renders unguarded on standalone instead of reading the
+   * default Hono 404 as "anonymous" and redirecting to /sign-in. */
+  investingApp.all("/api/auth/*", (c) =>
+    c.json({ message: "Authentication is not configured" }, 503),
+  );
   investingApp.get("/api/investing/summary", async (c) => {
     try {
       const data = await dashboardReader({});
