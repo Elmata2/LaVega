@@ -166,6 +166,35 @@ Render cached partial data while backfill continues. A failed symbol retries on 
 
 Maintain an in-memory `dataVersion`. Increment it after broker data is applied and after a price-store upsert completes. Cache the last `InvestingDashboardData` with its version. Recompute only when the version changes.
 
+### Dashboard latency and resumed history
+
+The Neon dashboard reads all requested price histories in one tenant-scoped transaction.
+File and in-memory stores retain the bounded per-symbol reader. A failed bulk read returns
+the existing degraded-data warning rather than issuing a second wave of individual queries.
+Dashboard cache entries expire after 15 seconds. On expiry, database-backed runtimes reload
+the persisted broker snapshot so another server instance's sync becomes visible. An active
+local sync prevents snapshot restoration; a version check rejects a read overtaken by a sync.
+
+Trading 212 resumed history batches are incremental, including the final batch. Completion
+does not make that final page a full snapshot: earlier trades, dividends, and cash flows
+must remain present. A fresh, complete sync still replaces historical collections. Data
+already lost by the old final-page replacement requires a fresh complete broker sync.
+
+The September 6, 2026 production probe measured a dashboard response at 34.8 seconds before
+these changes. A direct tenant-scoped database read found 358,756 price rows for 144 symbols.
+Broker history also has provider rate limits; rewriting calculation code in Rust does not
+remove those limits. These are baseline measurements, not post-deployment speed claims.
+Production verification requires an authenticated session.
+
+A read-only comparison against those same 358,756 live rows took 24,541 ms with the
+three-worker per-symbol reader and 2,549 ms with the bulk reader (about 9.6 times faster).
+This measures the database read from the development machine, not total browser latency.
+The report is stored at `/tmp/lavega-verify-investing/evidence/price-read-benchmark.json`.
+Broker snapshots are saved before resume cursors advance; failed saves leave the previous
+cursor available for retry. Sync merges the latest persisted snapshot rather than a warm
+instance's older copy. Concurrent broker syncs across server instances still lack a shared
+lease; serial syncs are covered by these changes.
+
 ## Overview layout
 
 Use the chart-and-right-rail layout selected by the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)).
@@ -382,6 +411,14 @@ Keep broker sync, price sync, vault, cache, market-data, and incomplete-history 
 Status changes must not depend on animation. Pressable controls respond immediately. Honor `prefers-reduced-motion`. Preserve visible focus, adequate touch targets, and keyboard equivalence for pointer actions.
 
 ## Future work
+
+## Portfolio agent conversation
+
+The overview agent panel links each investor persona to `/agents/:agentId`. The route keeps a
+conversation on the left and shows the current account positions on the right. Each user message
+calls `POST /api/agents/portfolio/run` with `agentId` and `prompt`; the server rebuilds the
+tenant-scoped dashboard snapshot before asking the selected persona for an answer. Messages stay
+in browser memory until streaming and durable conversation history are added.
 
 Map-wide future work:
 

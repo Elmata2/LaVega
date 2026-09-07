@@ -84,6 +84,7 @@ import { readPriceBars } from "./priceReader.js";
 export { app };
 
 const LOCAL_TENANT_ID = "local";
+const DASHBOARD_CACHE_TTL_MS = 15_000;
 
 function environment(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -144,9 +145,7 @@ export function createRuntimeBrokerSync(
       tenantId,
       entity,
       force,
-    }).then(async (result) => {
-      await onCompleted?.(result);
-      return result;
+      onCompleted,
     });
     inFlight = run;
     try {
@@ -171,7 +170,11 @@ export type RuntimeAppOptions = {
 };
 
 export type RuntimeApp = ReturnType<typeof createApp> & {
-  runPortfolioAgentOnce: (agentId?: PortfolioAgentId, model?: string) => Promise<AgentRunRecord>;
+  runPortfolioAgentOnce: (
+    agentId?: PortfolioAgentId,
+    model?: string,
+    prompt?: string,
+  ) => Promise<AgentRunRecord>;
 };
 
 const PORTFOLIO_AGENT_PROMPT = [
@@ -240,6 +243,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         if (outcome.result === null) continue;
         const incoming = outcome.result;
         const complete = tradesComplete(incoming) && !historyPending(incoming.resume);
+        const replaceHistory = complete && incoming.historyMode !== "incremental";
         // Holdings can fail independently of order history (different T212
         // budgets). An empty positions array on that failure must not replace
         // last-good rows, or the dashboard goes blank after a "completed" history.
@@ -257,14 +261,14 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
         // A truncated trade history must not wipe good stored trades. A first
         // truncated run (empty vault) must still keep the pages it did read,
         // or a Vercel time-limit stop would persist nothing.
-        if (complete) tradesByBroker.set(outcome.broker, mappedTrades);
+        if (replaceHistory) tradesByBroker.set(outcome.broker, mappedTrades);
         else if (mappedTrades.length > 0)
           tradesByBroker.set(
             outcome.broker,
             mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades),
           );
         const incomingDividends = incoming.dividends ?? [];
-        if (complete) dividendsByBroker.set(outcome.broker, incomingDividends);
+        if (replaceHistory) dividendsByBroker.set(outcome.broker, incomingDividends);
         else if (incomingDividends.length > 0)
           dividendsByBroker.set(
             outcome.broker,
@@ -278,7 +282,7 @@ export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot 
           cashBalancesByBroker.set(outcome.broker, incoming.cashBalances ?? []);
         }
         const incomingFlows = incoming.cashFlows ?? [];
-        if (complete) cashFlowsByBroker.set(outcome.broker, incomingFlows);
+        if (replaceHistory) cashFlowsByBroker.set(outcome.broker, incomingFlows);
         else if (incomingFlows.length > 0)
           cashFlowsByBroker.set(
             outcome.broker,
@@ -384,7 +388,36 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       await priceStore.upsert(tenantId, createDevFixturePriceBars());
       onPriceDataChanged();
     }
-    const restoreBrokerData = async () => brokerData.restore(await credentials.getBrokerData());
+    let brokerDataReadAt = Date.now();
+    let brokerDataRefresh: Promise<void> | null = null;
+    const restoreBrokerData = async () => {
+      brokerData.restore(await credentials.getBrokerData());
+      brokerDataReadAt = Date.now();
+    };
+    const refreshBrokerData = async () => {
+      if (!database || devFixtureEnabled || Date.now() - brokerDataReadAt < DASHBOARD_CACHE_TTL_MS)
+        return;
+      if (syncProgress.status === "running" || syncProgress.status === "waiting") return;
+      if (brokerDataRefresh) return brokerDataRefresh;
+      const version = brokerData.read().dataVersion;
+      const refresh = (async () => {
+        const snapshot = await credentials.getBrokerData();
+        if (
+          brokerData.read().dataVersion === version &&
+          syncProgress.status !== "running" &&
+          syncProgress.status !== "waiting"
+        ) {
+          brokerData.restore(snapshot);
+          brokerDataReadAt = Date.now();
+        }
+      })();
+      brokerDataRefresh = refresh;
+      try {
+        await refresh;
+      } finally {
+        if (brokerDataRefresh === refresh) brokerDataRefresh = null;
+      }
+    };
     const updateProgress = (event: Trading212DiagnosticEvent) => {
       const updatedAt = new Date().toISOString();
       if (event.type === "history-page") {
@@ -464,15 +497,24 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
     };
     const scheduledBrokerSync = createRuntimeBrokerSync(
       async (result) => {
-        brokerData.apply(result);
-        if (!result.outcomes.some((outcome) => outcome.result !== null)) return;
+        if (!result.outcomes.some((outcome) => outcome.result !== null)) {
+          brokerData.apply(result);
+          return;
+        }
+        const pendingData = createRuntimeBrokerDataCache(
+          database ? await credentials.getBrokerData() : brokerData.snapshot(),
+        );
+        pendingData.apply(result);
         try {
-          await credentials.putBrokerData(brokerData.snapshot());
+          await credentials.putBrokerData(pendingData.snapshot());
         } catch (error) {
-          result.problems.push(
+          throw new Error(
             `Broker snapshot could not be stored: ${error instanceof Error ? error.message : "unknown error"}`,
           );
         }
+        brokerData.restore(pendingData.snapshot());
+        brokerData.apply({ outcomes: [], problems: result.problems });
+        brokerDataReadAt = Date.now();
       },
       credentials,
       syncStateStore,
@@ -531,8 +573,29 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         throw error;
       }
     };
-    const dashboardCache = new Map<string, { version: number; data: InvestingDashboardData }>();
+    const dashboardCache = new Map<
+      string,
+      { version: number; storedAt: number; data: InvestingDashboardData }
+    >();
     const dashboardReader = async ({ symbol }: { symbol?: string }) => {
+      const refreshProblems: string[] = [];
+      try {
+        await refreshBrokerData();
+      } catch (error) {
+        const snapshot = brokerData.read();
+        if (
+          snapshot.positions.length +
+            snapshot.trades.length +
+            snapshot.dividends.length +
+            snapshot.cashBalances.length +
+            snapshot.cashFlows.length ===
+          0
+        )
+          throw error;
+        refreshProblems.push(
+          "Brokergegevens konden niet worden vernieuwd. Laatst geladen gegevens worden getoond.",
+        );
+      }
       const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } =
         brokerData.read();
       const version = dataVersion + priceDataVersion;
@@ -541,7 +604,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         : (await benchmarkSelectionStore.get(tenantId)).symbols;
       const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
       const cached = dashboardCache.get(cacheKey);
-      if (cached?.version === version) return cached.data;
+      if (refreshProblems.length > 0 && cached?.version === version)
+        return { ...cached.data, problems: [...cached.data.problems, ...refreshProblems] };
+      if (cached?.version === version && Date.now() - cached.storedAt < DASHBOARD_CACHE_TTL_MS)
+        return cached.data;
       const symbols = [
         ...new Set([
           ...positions.map((position) => position.symbol),
@@ -572,19 +638,21 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         presentationCurrency: "EUR",
         fxRates: fxResult.rate,
         selectedSymbol: symbol,
-        problems: [...problems, ...priceProblems, ...fxResult.problems],
+        problems: [...problems, ...refreshProblems, ...priceProblems, ...fxResult.problems],
         dataVersion: version,
       });
-      dashboardCache.set(cacheKey, { version, data });
+      if (refreshProblems.length === 0)
+        dashboardCache.set(cacheKey, { version, storedAt: Date.now(), data });
       return data;
     };
     const agentInFlight = new Map<string, Promise<AgentRunRecord>>();
     const runPortfolioAgentOnce = async (
       agentId?: PortfolioAgentId,
       model?: string,
+      prompt: string = PORTFOLIO_AGENT_PROMPT,
     ): Promise<AgentRunRecord> => {
       const agent = getPortfolioAgent(agentId);
-      const runKey = `${agent.id}\u0000${model?.trim() ?? ""}`;
+      const runKey = `${agent.id}\u0000${model?.trim() ?? ""}\u0000${prompt}`;
       const inFlight = agentInFlight.get(runKey);
       if (inFlight) return inFlight;
       const record: AgentRunRecord = {
@@ -606,13 +674,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 agentId: agent.id,
                 dashboard,
                 model,
-                prompt: PORTFOLIO_AGENT_PROMPT,
+                prompt,
                 tools: createPortfolioAgentTools({
                   readBrokerData: () => brokerData.read(),
                   priceStore,
                 }),
               })
-            : await runPortfolioAgent({ agentId: agent.id, dashboard, model });
+            : await runPortfolioAgent({ agentId: agent.id, dashboard, model, prompt });
           const normalized = normalizePortfolioAgentInsight(insight, agent.id);
           const done: AgentRunRecord = {
             ...record,
@@ -697,7 +765,9 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   const runPortfolioAgentOnce = async (
     agentId?: PortfolioAgentId,
     model?: string,
-  ): Promise<AgentRunRecord> => (await currentRuntime()).runPortfolioAgentOnce(agentId, model);
+    prompt?: string,
+  ): Promise<AgentRunRecord> =>
+    (await currentRuntime()).runPortfolioAgentOnce(agentId, model, prompt);
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
     honoApp.get("/api/agents/portfolio", (c) =>
@@ -706,15 +776,17 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       }),
     );
     honoApp.post("/api/agents/portfolio/run", async (c) => {
-      const body: { agentId?: unknown; model?: unknown } = await c.req
-        .json<{ agentId?: unknown; model?: unknown }>()
+      const body: { agentId?: unknown; model?: unknown; prompt?: unknown } = await c.req
+        .json<{ agentId?: unknown; model?: unknown; prompt?: unknown }>()
         .catch(() => ({}));
       const agentId =
         typeof body.agentId === "string" ? getPortfolioAgent(body.agentId).id : undefined;
       const model =
         typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
+      const prompt =
+        typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : undefined;
       try {
-        const run = await runPortfolioAgentOnce(agentId, model);
+        const run = await runPortfolioAgentOnce(agentId, model, prompt);
         return c.json({ summary: run.summary, result: run.result ?? null });
       } catch (error) {
         return c.json(

@@ -265,7 +265,11 @@ export async function runPortfolioAgent({
     apiKey: config.apiKey,
   });
   const agent = getPortfolioAgent(agentId);
-  const userPrompt = prompt ?? buildPortfolioAgentPrompt(agent, dashboard);
+  const userPrompt = prompt
+    ? dashboard
+      ? [prompt, "", "Portfolio snapshot:", renderPortfolioSnapshot(dashboard)].join("\n")
+      : prompt
+    : buildPortfolioAgentPrompt(agent, dashboard);
   const { text } = await generateText({
     model: provider.chatModel(config.modelId),
     tools,

@@ -167,11 +167,12 @@ async function fetchPortfolioAgents(): Promise<PortfolioAgentDefinition[]> {
   return agents;
 }
 
-async function runPortfolioAgent(agentId: string): Promise<PortfolioAgentInsight> {
+async function runPortfolioAgent(agentId: string, prompt?: string): Promise<PortfolioAgentInsight> {
+  const body = prompt ? { agentId, prompt } : { agentId };
   const response = await fetch("/api/agents/portfolio/run", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ agentId }),
+    body: JSON.stringify(body),
   });
   const payload = (await response.json().catch(() => ({}))) as {
     result?: unknown;
@@ -451,8 +452,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
     (sum, position) => sum + (position.marketValue ?? 0),
     0,
   );
-  const portfolioValue =
-    latest?.value ?? (pricedPositionsValue > 0 ? pricedPositionsValue : null);
+  const portfolioValue = latest?.value ?? (pricedPositionsValue > 0 ? pricedPositionsValue : null);
   const usingPositionsFallback =
     (latest?.value === null || latest?.value === undefined) && pricedPositionsValue > 0;
   const dailyChange =
@@ -586,6 +586,13 @@ function PortfolioAgentCard() {
   }
 
   const active = agents.find((agent) => agent.id === selected);
+  const navigate = useNavigate();
+  function openAgentWindow(agentId: string) {
+    const base = window.location.pathname.startsWith("/investing") ? "/investing" : "";
+    const target = `${base}/agents/${encodeURIComponent(agentId)}`;
+    const popup = window.open(target, "lavega-agent-workbench", "popup,width=1180,height=860");
+    if (!popup) navigate(`/agents/${encodeURIComponent(agentId)}`);
+  }
   const tone =
     insight?.signal === "bullish"
       ? "text-positive"
@@ -622,9 +629,7 @@ function PortfolioAgentCard() {
               <button
                 key={agent.id}
                 type="button"
-                role="radio"
-                aria-checked={selected === agent.id}
-                onClick={() => setSelected(agent.id)}
+                onClick={() => openAgentWindow(agent.id)}
                 className={`pressable rounded-[14px] border px-3 py-2 text-left text-xs font-semibold transition-colors ${selected === agent.id ? "border-primary bg-secondary text-foreground" : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground"}`}
               >
                 {agent.displayName}
@@ -633,6 +638,15 @@ function PortfolioAgentCard() {
           </div>
           {active && (
             <p className="mt-3 text-xs leading-5 text-muted-foreground">{active.investingStyle}</p>
+          )}
+          {active && (
+            <Link
+              to={`/agents/${active.id}`}
+              className="pressable mt-4 flex items-center justify-between rounded-[14px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              <span>Open gesprek met {active.displayName}</span>
+              <span aria-hidden="true">→</span>
+            </Link>
           )}
           <Button
             type="button"
@@ -664,6 +678,170 @@ function PortfolioAgentCard() {
         </>
       )}
     </section>
+  );
+}
+
+type AgentMessage = { role: "user" | "assistant"; content: string };
+
+function AgentView() {
+  const { agentId } = useParams();
+  const dashboard = useDashboard();
+  const [agents, setAgents] = useState<PortfolioAgentDefinition[]>([]);
+  const [conversations, setConversations] = useState<Record<string, AgentMessage[]>>({});
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchPortfolioAgents()
+      .then(setAgents)
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : "Agents laden mislukt.");
+      });
+  }, []);
+
+  const agent = agents.find((item) => item.id === agentId);
+
+  const initialMessage: AgentMessage | null = agent
+    ? {
+        role: "assistant",
+        content: `Ik ben ${agent.displayName}. Ik kijk naar jouw posities vanuit deze lens. Stel een vraag over concentratie, rendement of risico.`,
+      }
+    : null;
+  const messages = agent ? (conversations[agent.id] ?? [initialMessage!]) : [];
+
+  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = input.trim();
+    if (!agent || !question || sending) return;
+    setInput("");
+    setError(null);
+    setConversations((current) => ({
+      ...current,
+      [agent.id]: [
+        ...(current[agent.id] ?? [initialMessage!]),
+        { role: "user", content: question },
+      ],
+    }));
+    setSending(true);
+    try {
+      const insight = await runPortfolioAgent(agent.id, question);
+      const response = [insight.summary, ...insight.insights].filter(Boolean).join("\n\n");
+      setConversations((current) => ({
+        ...current,
+        [agent.id]: [
+          ...(current[agent.id] ?? [initialMessage!]),
+          { role: "assistant", content: response },
+        ],
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Agent-antwoord mislukt.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (dashboard.status === "loading" || agents.length === 0) return <DashboardLoading />;
+  if (dashboard.status === "error") return <DashboardError message={dashboard.message} />;
+  if (!agent) {
+    return (
+      <EmptyState title="Agent niet gevonden" description="Kies een agent vanuit overzicht." />
+    );
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-soft">
+        <div className="border-b border-border px-5 py-5 sm:px-6">
+          <Link to="/" className="text-sm font-semibold text-primary hover:underline">
+            ← Terug naar overzicht
+          </Link>
+          <p className="mt-6 text-xs font-semibold uppercase tracking-[.16em] text-primary">
+            Portfolio agent
+          </p>
+          <h2 className="mt-1 font-display text-4xl font-semibold">{agent.displayName}</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
+        </div>
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
+          {messages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <p
+                className={`max-w-[86%] whitespace-pre-line rounded-[18px] px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+              >
+                {message.content}
+              </p>
+            </div>
+          ))}
+          {sending && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {agent.displayName} leest posities…
+            </p>
+          )}
+        </div>
+        <form onSubmit={sendMessage} className="border-t border-border p-4 sm:p-5">
+          <label htmlFor="agent-message" className="sr-only">
+            Vraag aan {agent.displayName}
+          </label>
+          <div className="flex gap-2 rounded-[16px] border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+            <input
+              id="agent-message"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Vraag over jouw posities…"
+              className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none"
+              disabled={sending}
+            />
+            <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
+              Verstuur
+            </Button>
+          </div>
+          {error && (
+            <p role="alert" className="mt-3 text-sm text-negative">
+              {error}
+            </p>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Educatieve analyse. Geen persoonlijk handelsadvies.
+          </p>
+        </form>
+      </section>
+      <aside
+        aria-label="Posities in gesprek"
+        className="rounded-card border border-border bg-card p-5 shadow-soft"
+      >
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Context</p>
+        <h3 className="mt-1 font-display text-2xl font-semibold">Jouw posities</h3>
+        <div className="mt-4 space-y-3">
+          {dashboard.data.positions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Geen posities beschikbaar.</p>
+          ) : (
+            dashboard.data.positions.map((position) => (
+              <div
+                key={`${position.symbol}-${position.entity}`}
+                className="rounded-[14px] bg-secondary/60 p-3"
+              >
+                <p className="font-semibold">{position.description ?? position.symbol}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {position.symbol} · {position.quantity.toLocaleString("nl-NL")} stuks
+                </p>
+                <p className="mt-2 text-sm font-semibold tabular-nums">
+                  {position.marketValue === null
+                    ? "Waarde onbekend"
+                    : position.marketValue.toLocaleString("nl-NL", {
+                        style: "currency",
+                        currency: dashboard.data.presentationCurrency,
+                        maximumFractionDigits: 2,
+                      })}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -1685,6 +1863,7 @@ function SignOutLink() {
 function Layout() {
   const location = useLocation();
   const detail = location.pathname.startsWith("/positions/");
+  const agentView = location.pathname.startsWith("/agents/");
   const connect = location.pathname === "/brokers/connect";
   return (
     <div className="min-h-screen p-3 sm:p-6">
@@ -1724,13 +1903,17 @@ function Layout() {
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-primary">
-                  {detail ? "Positiedetail" : "Jouw financiële overzicht"}
+                  {detail
+                    ? "Positiedetail"
+                    : agentView
+                      ? "Agentgesprek"
+                      : "Jouw financiële overzicht"}
                 </p>
                 <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {detail ? "Positie" : "Overzicht"}
+                  {detail ? "Positie" : agentView ? "Agent" : "Overzicht"}
                 </h2>
               </div>
-              {!detail && (
+              {!detail && !agentView && (
                 <Link
                   to="/brokers/connect"
                   className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
@@ -2179,6 +2362,7 @@ export function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/positions" element={<Positions />} />
           <Route path="/positions/:symbol" element={<PositionDetail />} />
+          <Route path="/agents/:agentId" element={<AgentView />} />
           <Route path="/brokers/connect" element={<BrokerConnect />} />
         </Route>
       </Route>

@@ -633,7 +633,7 @@ test("overview preserves responsive reading order and independent chart ranges",
   root.unmount();
 });
 
-test("overview runs selected portfolio investor agent and renders its insight", async () => {
+test("overview runs portfolio investor agent and renders its insight", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   vi.stubGlobal(
     "fetch",
@@ -659,14 +659,10 @@ test("overview runs selected portfolio investor agent and renders its insight", 
   expect(container.textContent).toContain("Investeerderslens");
   expect(container.textContent).toContain("Warren Buffett");
   expect(container.textContent).toContain("Bill Ackman");
-  const ackman = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(
+  const ackmanButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
     (button) => button.textContent === "Bill Ackman",
   );
-  expect(ackman?.getAttribute("aria-checked")).toBe("false");
-  await act(async () => {
-    ackman?.click();
-  });
-  expect(ackman?.getAttribute("aria-checked")).toBe("true");
+  expect(ackmanButton).not.toBeUndefined();
 
   await act(async () => {
     Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
@@ -677,9 +673,92 @@ test("overview runs selected portfolio investor agent and renders its insight", 
 
   const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/run");
   expect(runRequest?.init?.method).toBe("POST");
-  expect(runRequest?.init?.body).toBe(JSON.stringify({ agentId: "bill_ackman" }));
+  expect(runRequest?.init?.body).toBe(JSON.stringify({ agentId: "warren_buffett" }));
   expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
   expect(container.textContent).toContain("Missing catalyst data limits confidence.");
+  root.unmount();
+});
+
+test("clicking an agent opens its workbench window", async () => {
+  const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(responseFor(input, init)),
+    ),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Bill Ackman")
+      ?.click();
+  });
+
+  expect(open).toHaveBeenCalledWith(
+    "/agents/bill_ackman",
+    "lavega-agent-workbench",
+    "popup,width=1180,height=860",
+  );
+  root.unmount();
+});
+
+test("agent route opens focused chat with the account positions", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      return Promise.resolve(responseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/agents/bill_ackman"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Bill Ackman");
+  expect(container.textContent).toContain("Jouw posities");
+  expect(container.textContent).toContain("ASML");
+
+  const input = container.querySelector<HTMLInputElement>("#agent-message");
+  const form = input?.closest("form");
+  expect(input).not.toBeNull();
+  await act(async () => {
+    if (!input || !form) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, "Waarom is ASML mijn grootste risico?");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+  });
+
+  const runRequest = requests.find((request) => request.url === "/api/agents/portfolio/run");
+  expect(runRequest?.init?.body).toBe(
+    JSON.stringify({ agentId: "bill_ackman", prompt: "Waarom is ASML mijn grootste risico?" }),
+  );
+  expect(container.textContent).toContain("ASML is concentrated but priced with clear conviction.");
   root.unmount();
 });
 
