@@ -100,6 +100,10 @@ await writeFile(
         { src: "/investing", dest: "/investing/index.html" },
         { src: "/app/(.*)", dest: "/index.html" },
         { src: "/app", dest: "/index.html" },
+        /* The English landing page. Same SPA; `Root` reads the locale off the
+         * path, so this only needs to reach index.html like any other view. */
+        { src: "/en", dest: "/index.html" },
+        { src: "/en/", dest: "/index.html" },
       ],
     },
     null,
