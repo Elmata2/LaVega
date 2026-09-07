@@ -52,3 +52,44 @@ test("localPartOf: zonder @ is er geen sleutel, en die wordt niet verzonnen", ()
   expect(localPartOf("@invoices.lavega.dev")).toBe("");
   expect(localPartOf("")).toBe("");
 });
+
+import { senderHardFail } from "../src/authResults.js";
+
+/* De poort van M6: alleen een GEMETEN mislukking gaat terug. "Weet ik niet" is
+ * geen mislukking — daar zou het hele doorstuuradres op stuklopen, want de
+ * comment hierboven geeft zelf toe dat niet vaststaat welke
+ * Authentication-Results-header Cloudflare meestuurt. */
+
+test("een nagemaakte afzender (DMARC fail, geen geldige DKIM) wordt geweigerd", () => {
+  expect(senderHardFail({ spf: "softfail", dkim: "fail", dmarc: "fail" })).not.toBeNull();
+});
+
+test("een harde SPF-fail zonder geldige DKIM wordt geweigerd", () => {
+  expect(senderHardFail({ spf: "fail", dkim: "none", dmarc: "unknown" })).not.toBeNull();
+});
+
+test("een DOORGESTUURDE mail komt er gewoon door: SPF zakt, DKIM klopt", () => {
+  // Het hoofdgebruik van het doorstuuradres. Sluiten we dit, dan sluiten we de
+  // functie.
+  expect(senderHardFail({ spf: "fail", dkim: "pass", dmarc: "pass" })).toBeNull();
+  expect(senderHardFail({ spf: "softfail", dkim: "pass", dmarc: "fail" })).toBeNull();
+});
+
+test("geen header gemeten is geen mislukking", () => {
+  expect(senderHardFail({ spf: "unknown", dkim: "unknown", dmarc: "unknown" })).toBeNull();
+});
+
+test("een domein zonder DMARC- of DKIM-beleid wordt niet weggestuurd", () => {
+  expect(senderHardFail({ spf: "pass", dkim: "none", dmarc: "none" })).toBeNull();
+});
+
+test("een tijdelijke fout aan onze kant stuurt de afzender niet weg", () => {
+  expect(senderHardFail({ spf: "temperror", dkim: "temperror", dmarc: "temperror" })).toBeNull();
+});
+
+test("de reden noemt de drie uitslagen, zodat een bounce bruikbaar is", () => {
+  const reason = senderHardFail({ spf: "softfail", dkim: "fail", dmarc: "fail" });
+  expect(reason).toContain("SPF softfail");
+  expect(reason).toContain("DKIM fail");
+  expect(reason).toContain("DMARC fail");
+});

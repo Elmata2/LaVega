@@ -50,10 +50,32 @@ export function getAuth(): Auth<any> | null {
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: authBaseUrl(),
     trustedOrigins: authTrustedOrigins(),
-    emailAndPassword: { enabled: true },
+    ...authOptions(),
     session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
   });
   return instance;
+}
+
+
+/**
+ * The options that decide who may create an account.
+ *
+ * Registration used to be open: `emailAndPassword: { enabled: true }` with no
+ * `disableSignUp`, writing straight into Neon. On its own that was a write path
+ * with no verification and no rate limit; once /api/* started demanding a
+ * session it became worse than that — an open sign-up is a way to MINT the
+ * credential the guard asks for, which would leave the guard decorative.
+ *
+ * So: closed unless explicitly opened. To create the owner's account, set
+ * LAVEGA_ALLOW_SIGNUP=1, register once, then remove it.
+ */
+export function authOptions() {
+  return {
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: process.env.LAVEGA_ALLOW_SIGNUP !== "1",
+    },
+  };
 }
 
 export async function verifiedSession(request: Request) {

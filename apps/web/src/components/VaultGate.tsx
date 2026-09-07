@@ -4,6 +4,7 @@ import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
 import { migrateToVault } from "../migrate.js";
 import { parseBackup } from "../backup.js";
+import { vaultPasswordProblem } from "../vaultPassword.js";
 
 const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
 
@@ -94,7 +95,10 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
   const [error, setError] = useState("");
 
   const mismatch = pass2.length > 0 && pass1 !== pass2;
-  const canSubmit = pass1.length > 0 && pass1 === pass2 && understood && !busy;
+  // Only judge once something has been typed, so the screen does not open by
+  // scolding an empty field.
+  const weak = pass1.length > 0 ? vaultPasswordProblem(pass1) : null;
+  const canSubmit = weak === null && pass1.length > 0 && pass1 === pass2 && understood && !busy;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -147,6 +151,7 @@ function SetupScreen({ storage, onReady }: ScreenProps) {
             disabled={busy}
           />
         </div>
+        {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">Wachtwoorden komen niet overeen.</p>}
         <label className="vault-checkbox-field">
           <input
@@ -262,7 +267,10 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
   const [migrated, setMigrated] = useState(false);
 
   const mismatch = pass2.length > 0 && pass1 !== pass2;
-  const canSubmit = pass1.length > 0 && pass1 === pass2 && understood && !busy;
+  // Only judge once something has been typed, so the screen does not open by
+  // scolding an empty field.
+  const weak = pass1.length > 0 ? vaultPasswordProblem(pass1) : null;
+  const canSubmit = weak === null && pass1.length > 0 && pass1 === pass2 && understood && !busy;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -327,6 +335,7 @@ function MigrateScreen({ storage, onReady, onBackup }: ScreenProps & { onBackup:
             disabled={busy}
           />
         </div>
+        {weak && <p className="text-warn">{weak}</p>}
         {mismatch && <p className="text-warn">Wachtwoorden komen niet overeen.</p>}
         <label className="vault-checkbox-field">
           <input

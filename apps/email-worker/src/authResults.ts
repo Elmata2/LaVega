@@ -80,3 +80,53 @@ export function localPartOf(address: string): string {
   const at = String(address || "").lastIndexOf("@");
   return at > 0 ? address.slice(0, at).trim().toLowerCase() : "";
 }
+
+/**
+ * Is er een GEMETEN mislukking die deze mail aan de deur laat weigeren?
+ *
+ * De poort uit bevinding M6. De keten hierboven liet elke afzender door: wie het
+ * adres kende (`<naam>-<code>@invoices.lavega.dev`) kon de Facturen-wachtrij
+ * vullen met geloofwaardige nepfacturen, en élke bijlage kostte een
+ * Claude-extractie op de sleutel van de eigenaar. `parseAuthResults` werd wel
+ * uitgelezen en meegestuurd, maar nooit gebruikt om iets tegen te houden.
+ *
+ * WAAROM DIT NIET IN STRIJD IS MET "markeren, niet weggooien" hierboven. Die
+ * regel is er omdat een ECHTE factuur van een domein met een slordig SPF-record
+ * niet ongemerkt mag verdwijnen. Verdwijnen doet hij ook niet: de Worker
+ * weigert met `setReject`, en dat is een bounce met de reden erin — hetzelfde
+ * principe als bij elke andere afwijzing hier ("niets verdwijnt"). De afzender
+ * hoort dus precies wat er mis is in plaats van in stilte te worden geboekt.
+ *
+ * ALLEEN EEN GEMETEN MISLUKKING. `unknown`, `none`, `neutral` en `temperror`
+ * betekenen "niet gemeten" of "geen beleid", niet "nep". Daarop weigeren zou de
+ * functie slopen, want de comment hierboven geeft zelf toe dat niet vaststaat
+ * welke Authentication-Results-header Cloudflare meestuurt — bij een verkeerde
+ * gok is de uitslag `unknown` en zou élke factuur bouncen.
+ *
+ * EERLIJK OVER WAT DIT WEL EN NIET TEGENHOUDT. Dit stopt het NASPELEN van een
+ * bestaande leverancier (de RAW_SPOOFED-nep-ING). Het stopt niet iemand die
+ * vanaf zijn eigen, keurig ingerichte domein een nepfactuur stuurt — die haalt
+ * SPF, DKIM en DMARC gewoon. Tegen het volgooien van de wachtrij op zich helpt
+ * alleen dat het adres geheim is, plus een limiet per wachtrij; die is er niet
+ * en hoort in KV of een Durable Object, niet hier.
+ */
+export function senderHardFail(checks: SenderChecks): string | null {
+  const detail = `SPF ${checks.spf}, DKIM ${checks.dkim}, DMARC ${checks.dmarc}`;
+
+  // DKIM ondertekent het BERICHT en overleeft doorsturen. Klopt hij, dan is dit
+  // geen naspeler — hoe hard SPF of DMARC ook zakt, want dat is precies het
+  // patroon van een doorgestuurde mail (zie forwardedNotSpoofed in n8n.ts).
+  if (checks.dkim === "pass") return null;
+
+  const spfHard = checks.spf === "fail" || checks.spf === "permerror";
+  if (checks.dmarc === "fail" || spfHard) {
+    return (
+      "de afzender kwam niet door de controle op afzenderdomein (" +
+      detail +
+      ") en er is geen geldige DKIM-handtekening. Dat is het patroon van een NAGESPEELDE afzender, " +
+      "dus LaVega neemt deze mail niet aan. Klopt dit niet, dan staat het SPF-, DKIM- of DMARC-record " +
+      "van het verzendende domein verkeerd; laat de afzender dat nakijken, of stuur de factuur als bijlage door."
+    );
+  }
+  return null;
+}

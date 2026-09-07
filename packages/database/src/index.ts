@@ -94,34 +94,6 @@ export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
   ) as T;
 }
 
-export type VaultRepository = {
-  get<T>(): Promise<T | null>;
-  put(value: unknown): Promise<void>;
-};
-
-export function createVaultRepository(
-  db: Database,
-  userId: string | undefined | null,
-): VaultRepository {
-  return {
-    async get<T>() {
-      return withTenant(db, userId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT vault_blob FROM personal.vaults");
-        return result.rows[0] ? decryptBlob<T>(result.rows[0].vault_blob as Buffer) : null;
-      });
-    },
-    async put(value) {
-      const blob = encryptBlob(value);
-      await withTenant(db, userId, async (client) => {
-        await client.query(
-          "INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP",
-          [blob],
-        );
-      });
-    },
-  };
-}
-
 export type EncryptedBrokerRepository = {
   get<T>(broker: string): Promise<{ credentials: T; snapshot: unknown | null } | null>;
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
@@ -531,11 +503,17 @@ export type OpaqueVaultWrite = { status: "stored"; updatedAt: string } | { statu
 /**
  * The personal vault as bytes the server cannot read.
  *
- * `createVaultRepository` above encrypts with the server's key, which is right
- * for data the server has to act on. Personal finances are not that: the
- * browser encrypts them with a key derived from the user's own passphrase, and
- * this only holds the result. There is deliberately no `encryptBlob` here — if
- * a later change needs one, that is a decision to re-open, not a line to add.
+ * `encryptBlob` uses the SERVER's key, which is right for data the server has to
+ * act on — broker credentials it must present to a broker. Personal finances are
+ * not that: the browser encrypts them with a key derived from the user's own
+ * passphrase, and this only holds the result. There is deliberately no
+ * `encryptBlob` here — if a later change needs one, that is a decision to
+ * re-open, not a line to add.
+ *
+ * A `createVaultRepository` that sealed this table with the server's key used to
+ * sit above. It was wired to nothing, but an exported function that decrypts
+ * personal vaults server-side is one import away from making the promise below
+ * false, so it was deleted rather than left for someone to find and use.
  *
  * Writes are conditional on the copy the client last saw. Two devices holding
  * different vaults is a real situation, and last-write-wins would silently
@@ -578,6 +556,159 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
           [blob],
         );
         return { updatedAt: result.rows[0]?.updated_at as string };
+      });
+    },
+  };
+}
+
+/* The six tables that hold anything belonging to a person. Deliberately a
+ * literal list rather than a query over the catalogue: a table added later
+ * should have to be considered here by a human, not silently swept up or —
+ * worse — silently missed. Order is child-before-parent; nothing here has a
+ * foreign key to another, but that stops being true the moment one is added. */
+const USER_DATA_TABLES = [
+  "personal.eb_sessions",
+  "personal.eb_pending_auth",
+  "investing.agent_runs",
+  "investing.sync_state",
+  "investing.preferences",
+  "investing.price_bars",
+  "investing.broker_vaults",
+  "personal.vaults",
+] as const;
+
+export type ErasureReport = { table: string; rows: number }[];
+
+/**
+ * Erase everything this deployment stores about one person (GDPR art. 17).
+ *
+ * Until this existed there was exactly one `DELETE` in this file and it emptied
+ * the price cache. Encryption was doing the privacy work, and encryption is a
+ * mitigation, not a lawful basis: a user asking to be forgotten could not be,
+ * because nothing could remove their rows.
+ *
+ * It runs in ONE transaction inside `withTenant`, so `app.user_id` is set and
+ * the RLS policies in `0001_lavega.sql` scope every statement to that user —
+ * the deletion cannot reach anyone else's rows even if a predicate here were
+ * wrong. Either all six tables are cleared or none are; a half-erased account
+ * is worse than a failed request, because the caller is told they are gone.
+ *
+ * It returns what it deleted per table. An erasure you cannot evidence is one
+ * you cannot answer a regulator about, and "0 rows" is a legitimate result that
+ * needs to be distinguishable from "never ran".
+ *
+ * NOTE: this clears application data. The Better Auth identity itself (the user
+ * and session rows from `0002_auth.sql`) is separate and must be deleted
+ * through Better Auth, or the person is forgotten but can still sign in.
+ */
+export async function eraseUserData(db: Database, userId: string | undefined | null): Promise<ErasureReport> {
+  const identity = requireUserId(userId);
+  return withTenant(db, identity, async (client) => {
+    const report: ErasureReport = [];
+    for (const table of USER_DATA_TABLES) {
+      const result = await client.query(`DELETE FROM ${table}`);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
+    return report;
+  });
+}
+
+export type PendingEbAuth = { userId: string; name: string; country: string };
+
+/**
+ * The Enable Banking authorisation flow's two stores.
+ *
+ * `pending` is read WITHOUT a tenant, on purpose. The callback is a cross-site
+ * redirect from the bank and may arrive with no session cookie; the state is
+ * what authenticates it — server-issued, unguessable, single-use, minutes long
+ * — and the row is where the user's identity comes back from. It is the one
+ * place in this file that queries outside `withTenant`, and it holds nothing
+ * financial: a bank name, a country, and who started the flow.
+ *
+ * `sessions` holds the account list the bank returned, which IS personal data,
+ * so it is written under the user the state named and read back inside
+ * `withTenant` where RLS applies.
+ */
+export function createEbFlowRepository(db: Database) {
+  return {
+    /** Record a started authorisation. Called for an authenticated user. */
+    async startAuth(state: string, pending: PendingEbAuth): Promise<void> {
+      const identity = requireUserId(pending.userId);
+      await withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_pending_auth (state, user_id, aspsp_name, aspsp_country) VALUES ($1, $2, $3, $4)",
+          [state, identity, pending.name, pending.country],
+        );
+      });
+    },
+
+    /**
+     * Take the pending authorisation, or nothing.
+     *
+     * One shot: the DELETE ... RETURNING is the read, so two callbacks racing
+     * the same state cannot both win — a replay gets nothing rather than a
+     * second exchange. Expired rows are refused by the same statement, so a
+     * stale state is indistinguishable from an unknown one, which is what a
+     * caller should be told anyway.
+     */
+    async consumeAuth(state: string, ttlMs: number): Promise<PendingEbAuth | null> {
+      if (!state.trim()) return null;
+      const client = await db.connect();
+      try {
+        const result = await client.query<QueryResultRow>(
+          "DELETE FROM personal.eb_pending_auth WHERE state = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') RETURNING user_id, aspsp_name, aspsp_country",
+          [state, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        return row ? { userId: row.user_id as string, name: row.aspsp_name as string, country: row.aspsp_country as string } : null;
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Housekeeping: drop authorisations nobody came back for. */
+    async sweepAuth(ttlMs: number): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          "DELETE FROM personal.eb_pending_auth WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          [String(ttlMs)],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Stash the bank's account list for the user the state named. */
+    async putSession(userId: string, sessionId: string, payload: unknown): Promise<void> {
+      const identity = requireUserId(userId);
+      const blob = encryptBlob(payload);
+      await withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob) VALUES ($1, $2, $3) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob",
+          [sessionId, identity, blob],
+        );
+      });
+    },
+
+    /** Read it back for its owner. RLS means another user's id finds nothing. */
+    async getSession<T>(userId: string, sessionId: string, ttlMs: number): Promise<T | null> {
+      return withTenant(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT payload_blob FROM personal.eb_sessions WHERE session_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond')",
+          [sessionId, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        if (!row) return null;
+        const payload = tryDecryptBlob<T>(row.payload_blob as Buffer);
+        return payload.readable ? payload.value : null;
+      });
+    },
+
+    /** One-shot: the data has been delivered, so the copy here goes. */
+    async deleteSession(userId: string, sessionId: string): Promise<void> {
+      await withTenant(db, userId, async (client) => {
+        await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [sessionId]);
       });
     },
   };

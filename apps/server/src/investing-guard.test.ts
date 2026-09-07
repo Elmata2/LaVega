@@ -6,6 +6,7 @@ const {
   forwardInvestingMock,
   runInvestingCronMock,
   investingOwnsApiPathMock,
+  verifiedSessionMock,
 } = vi.hoisted(() => ({
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
@@ -18,7 +19,19 @@ const {
       path.split("/")[2] ?? "",
     ),
   ),
+  verifiedSessionMock: vi.fn(async () => ({ user: { id: "user-123" } }) as unknown),
 }));
+
+/* These tests are about TENANCY — which tenant an investing request is served
+ * under — not about authentication. `apiGuard` sits in front of every /api
+ * route and answers the earlier question ("is there a session at all?"), so
+ * without a session here it would refuse first and nothing below would reach
+ * its subject. A verified session is therefore the premise of this file, and
+ * `apiGuard.investing.test.ts` covers the anonymous case. */
+vi.mock("./auth.js", async () => {
+  const actual = await vi.importActual<typeof import("./auth.js")>("./auth.js");
+  return { ...actual, verifiedSession: verifiedSessionMock };
+});
 
 vi.mock("./investing-mount.js", () => ({
   shouldMountInvesting: shouldMountInvestingMock,
@@ -36,6 +49,7 @@ async function investingApp() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });
 });
 
 test("an investing API request without a tenant is refused, not served under the local tenant", async () => {
@@ -97,6 +111,7 @@ test("this server keeps its own API routes ahead of the investing wildcard", asy
 });
 
 test("the investing SPA shell stays reachable without a session", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
   investingTenantIdMock.mockResolvedValue(null);
   const app = await investingApp();
 

@@ -69,6 +69,36 @@ await writeFile(
   ),
 );
 
+/*
+ * Typecheck before building — but only the packages we own.
+ *
+ * esbuild bundles the API function above, and esbuild STRIPS types without
+ * checking them. Nothing else in this pipeline runs `tsc`, so until now a type
+ * error could reach production and only show up as a runtime TypeError. Railway
+ * used to catch that by accident, as the one place that ran `pnpm build`; it is
+ * gone, so the check has to live where the deploys happen.
+ *
+ * `@lavega/investing-web` and `@lavega/investing-server` are deliberately NOT in
+ * this list. They belong to the investing side and are typechecked there; adding
+ * them here would let a failure in that tree block the personal app's deploys.
+ * `@lavega/server` IS checked, and checking it also checks the investing tree:
+ * its `investing-mount.ts` imports `@lavega/investing-server/src/index.js`
+ * directly, so `tsc` cannot look at ours without looking at theirs. That was
+ * briefly a reason to leave it out — the investing side had a type error we did
+ * not own, and including it would have blocked our deploys on someone else's
+ * fix. That error is gone, so the coupling now works in our favour: one command
+ * covers both trees.
+ */
+const TYPECHECKED = [
+  "@lavega/core",
+  "@lavega/adapters",
+  "@lavega/database",
+  "@lavega/server",
+  "@lavega/web",
+  "@lavega/email-worker",
+];
+await exec("pnpm", [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"], execOptions);
+
 await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);
 await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
   cwd: root,

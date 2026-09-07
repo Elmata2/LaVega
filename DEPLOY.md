@@ -12,11 +12,38 @@ storage. Better Auth integration remains pending.
   RLS policies.
 - `db/migrations/0002_auth.sql` — Better Auth tables and the `lavega_runtime`
   grants.
+- `db/migrations/0003_eb_flow.sql` — the Enable Banking flow's two intermediate
+  stores. **Must be applied to Neon before EB is switched on**, or `/api/eb/auth`
+  fails on its first insert. They were module-scope `Map`s, which worked on
+  Railway (one long-lived container) and cannot work on Vercel: `/auth` may write
+  the state in one function instance and the bank's redirect to `/callback` land
+  on another. `personal.eb_pending_auth` deliberately has NO row-level security —
+  the callback arrives cross-site from the bank and may carry no session cookie,
+  so its unguessable single-use `state` is the credential and the row is where
+  the user's identity comes back from. `personal.eb_sessions` holds the account
+  list, so it is encrypted and RLS-scoped like everything else.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
-- Better Auth is mounted at `/api/auth/*` and guards the investing API: with
-  `DATABASE_URL` and `BETTER_AUTH_SECRET` set, `/api/investing`, `/api/brokers`,
-  `/api/prices`, `/api/market-data` and `/api/config/status` answer `401`
-  without a session. The `/investing/*` SPA shell stays public.
+- Better Auth is mounted at `/api/auth/*`, and `apiGuard` (`apps/server/src/apiGuard.ts`)
+  puts **every** `/api/*` route behind it — not just investing. Closed unless the
+  path is on the public list (`/api/auth/*`, `/api/rates`, `/api/fx/rate`, the two
+  `status` probes, and the card-terms ingest endpoint, which carries its own
+  shared secret) or the request has a verified session. Everything else answers
+  `401`, including the routes that spend the Anthropic key (`/api/agent/*`), the
+  bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
+  Investing keeps a second, later check on top: `investingTenantId` decides
+  *which tenant* the request is served under. The `/investing/*` SPA shell and
+  the personal SPA stay public — they have to load before anyone can sign in.
+- **The guard fails closed.** Without `DATABASE_URL` and `BETTER_AUTH_SECRET`
+  there are no sessions to verify, so a deployment with those unset refuses every
+  non-public API call. That is deliberate: a flag defaulting to open would
+  reproduce the hole the guard exists to close. A run that genuinely has no
+  authentication — `pnpm dev`, or a single-user self-host — opens it explicitly
+  with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `pnpm dev` already sets it; `pnpm start`
+  deliberately does not.
+- **Sign-up is closed unless `LAVEGA_ALLOW_SIGNUP=1`.** An open registration is a
+  way to mint the very credential the guard asks for, which would leave the guard
+  decorative. To create the owner's account: set it, register once, remove it,
+  redeploy.
 - With `DATABASE_URL` set, every user-scoped store is in Neon and survives the
   invocation:
 
@@ -104,11 +131,12 @@ runs inside `withTenant` so row-level security applies.
 
 ## Environments
 
-|                | Production | Preview   | Local         |
-| -------------- | ---------- | --------- | ------------- |
-| Neon branch    | `main`     | `preview` | none          |
-| Stores         | Neon       | Neon      | files on disk |
-| Authentication | on         | on        | off           |
+|                | Production | Preview   | Local                                                |
+| -------------- | ---------- | --------- | ---------------------------------------------------- |
+| Neon branch    | `main`     | `preview` | none                                                 |
+| Stores         | Neon       | Neon      | files on disk                                        |
+| Authentication | on         | on        | off                                                  |
+| `/api/*` guard | on         | on        | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `pnpm dev`) |
 
 Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
 production's: a leaked preview key must not open production data. It shares one
@@ -135,6 +163,11 @@ locally, create your own Neon branch and put its connection string, a
 - `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
   they reach Neon; Neon never sees the key. Losing it loses every stored
   credential.
+- `LAVEGA_ALLOW_SIGNUP` — set to `1` only while creating an account, then remove
+  it. Absent means registration is refused.
+- `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
+  authentication at all (local dev, single-user self-host). Never in production
+  or preview: it opens every `/api/*` route to anyone.
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.
@@ -161,11 +194,21 @@ In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
 Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
 
+**Two things to check before the first live connection:**
+- Apply `0003_eb_flow.sql`. Without a `DATABASE_URL` the EB routes are not
+  registered at all, and without the tables the flow fails at `/auth`.
+- `lavega.dev` now 308-redirects to `www.lavega.dev`. Register the redirect URL
+  against whichever hostname is canonical and test that leg deliberately — an
+  OAuth callback is a bad place to discover an extra hop.
+
 ## Local production test
 
 ```
 pnpm build      # builds apps/web/dist
 pnpm start      # Hono serves web + API on http://localhost:8787
 ```
-
+`pnpm start` runs production semantics, so without `DATABASE_URL` +
+`BETTER_AUTH_SECRET` in `apps/server/.env` the API answers `401` — that is the
+guard working, not a broken build. Prefix with `LAVEGA_ALLOW_UNAUTHENTICATED=1`
+to test the build without auth.
 (For day-to-day dev keep using `pnpm dev` + `pnpm dev:server`.)

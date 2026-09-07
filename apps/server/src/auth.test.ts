@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { app } from "./index.js";
-import { authBaseUrl, authTrustedOrigins } from "./auth.js";
+import { authBaseUrl, authOptions, authTrustedOrigins } from "./auth.js";
 
 afterEach(() => {
   delete process.env.DATABASE_URL;
@@ -78,4 +78,15 @@ test("a preview trusts both the URL you click and the one Vercel built", () => {
     delete process.env.VERCEL_URL;
     delete process.env.VERCEL_BRANCH_URL;
   }
+});
+
+test("sign-up is closed by default, so the new API guard cannot be walked around", () => {
+  delete process.env.LAVEGA_ALLOW_SIGNUP;
+  expect(authOptions().emailAndPassword.disableSignUp).toBe(true);
+});
+
+test("sign-up opens only when explicitly allowed, for bootstrapping the owner's account", () => {
+  process.env.LAVEGA_ALLOW_SIGNUP = "1";
+  expect(authOptions().emailAndPassword.disableSignUp).toBe(false);
+  delete process.env.LAVEGA_ALLOW_SIGNUP;
 });

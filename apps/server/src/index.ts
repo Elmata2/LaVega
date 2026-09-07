@@ -1,15 +1,17 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
 import { getFxRate } from "./fx.js";
 import { privacyHtml, termsHtml } from "./legal.js";
-import { registerEbRoutes } from "./eb-routes.js";
+import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
+import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
 import { loadCatalogue } from "./catalogFile.js";
 import {
   forwardInvesting,
@@ -19,6 +21,7 @@ import {
   shouldMountInvesting,
 } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
+import { apiGuard } from "./apiGuard.js";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -79,6 +82,41 @@ export const app = new Hono();
  * the server boots anyway. */
 loadCatalogue();
 
+/**
+ * Security headers on every response, including the static HTML.
+ *
+ * There were none. For an app that holds bank transactions in the browser and a
+ * vault unlock screen, the two that matter most are `frame-ancestors 'none'`
+ * (the unlock screen was clickjackable) and `no-referrer` (the Enable Banking
+ * flow puts a session_id in the URL, which a Referer header would hand to any
+ * link the user then follows).
+ *
+ * The CSP is strict where it counts and honest where it cannot be. `script-src
+ * 'self'` is the anti-XSS directive and is pinned. `connect-src` is NOT pinned
+ * to 'self': the waitlist posts to script.google.com and the n8n features call
+ * a base URL the user types in themselves, so an enumerated list would break
+ * shipped features the first time someone used their own instance. `style-src`
+ * allows inline because that is what React renders a `style={{…}}` prop as.
+ */
+app.use("*", secureHeaders({
+  strictTransportSecurity: "max-age=31536000; includeSubDomains",
+  xContentTypeOptions: "nosniff",
+  xFrameOptions: "DENY",
+  referrerPolicy: "no-referrer",
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", "data:", "blob:", "https:"],
+    fontSrc: ["'self'", "data:"],
+    connectSrc: ["'self'", "https:"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+  },
+}));
+
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
@@ -110,6 +148,11 @@ app.use("/api/*", async (c, next) => {
   }
   await next();
 });
+
+/* Session guard for /api/*. Registered BEFORE every API route below, so a
+ * route added later is closed by default rather than open by omission — which
+ * is exactly how `verifiedSession` came to guard nothing at all. */
+app.use("/api/*", apiGuard());
 
 app.get("/health", (c) => c.json({ ok: true }));
 
@@ -153,8 +196,11 @@ app.get("/api/eb/status", (c) => {
   });
 });
 
-/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts. */
-registerEbRoutes(app);
+/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts.
+ * Its two intermediate states live in Neon, not in this process — a serverless
+ * function does not survive between /auth and the bank's redirect back. */
+const ebDependencies = ebRouteDependencies();
+if (ebDependencies) registerEbRoutes(app, ebDependencies);
 
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */
@@ -165,6 +211,11 @@ registerAgentRoutes(app);
  * than one that is not there. */
 const vaultDependencies = vaultRouteDependencies();
 if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
+
+/* Erasure of everything this deployment stores about the caller. Same condition
+ * as the vault routes: without a database there is nothing to erase. */
+const accountDependencies = accountRouteDependencies();
+if (accountDependencies) registerAccountRoutes(app, accountDependencies);
 
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */
