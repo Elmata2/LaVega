@@ -114,6 +114,37 @@ await cp("apps/investing-web/dist", `${staticDir}/investing`, { recursive: true 
  * is left is either an API path or an SPA view. The SPA fallbacks come last so
  * a missing asset 404s instead of being answered with index.html — that is how
  * a blank /investing page hid behind green probes once before. */
+/*
+ * Security headers for everything the CDN serves.
+ *
+ * `secureHeaders()` in apps/server only covers requests that reach the Hono
+ * function. On Vercel the static build is served by the CDN and never touches
+ * it, so /, /app and /en — the pages that actually run our JavaScript and hold
+ * the vault — came back with no CSP and no clickjacking protection, while
+ * /health and /privacy had both. Exactly backwards.
+ *
+ * Kept deliberately identical to the server's policy: two policies that drift
+ * are worse than one, because whichever is laxer is the one that decides.
+ */
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+};
+
 await writeFile(
   `${output}/config.json`,
   JSON.stringify(
@@ -121,6 +152,9 @@ await writeFile(
       version: 3,
       crons: [{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }],
       routes: [
+        /* Applied to every response, then `continue` so routing carries on and
+         * the filesystem handler still serves the file. */
+        { src: "/(.*)", headers: SECURITY_HEADERS, continue: true },
         { handle: "filesystem" },
         { src: "/api/(.*)", dest: "/api/[...route]" },
         { src: "/health", dest: "/api/[...route]" },
