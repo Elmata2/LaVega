@@ -7,6 +7,24 @@ export const API_BASE: string =
 
 export type ChatMessage = { role: string; content: string };
 
+/** Shown for any 401 from a Better-Auth-guarded server route. */
+export const SIGNED_OUT_MESSAGE = "Je bent uitgelogd, log opnieuw in.";
+
+/** Turn a non-OK `Response` into a user-facing Dutch message: `{error}` from
+ *  the JSON body when present, else a status-based fallback — except a 401,
+ *  which always means the session lapsed. */
+export async function apiErrorMessage(res: Response): Promise<string> {
+  if (res.status === 401) return SIGNED_OUT_MESSAGE;
+  let msg = `Verzoek mislukt (${res.status}).`;
+  try {
+    const parsed = (await res.json()) as { error?: string };
+    if (parsed?.error) msg = parsed.error;
+  } catch {
+    /* non-JSON error body; keep the status-based message */
+  }
+  return msg;
+}
+
 /** One transaction for the AI-categorize proxy. Only these three fields ever
  *  leave the browser — never amounts, balances, account keys, or dates. The
  *  server's `sanitizeCategorizeInput` re-enforces this allowlist. */
@@ -25,16 +43,7 @@ export async function categorizeTxs(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ items }),
   });
-  if (!res.ok) {
-    let msg = `Verzoek mislukt (${res.status}).`;
-    try {
-      const parsed = (await res.json()) as { error?: string };
-      if (parsed?.error) msg = parsed.error;
-    } catch {
-      /* non-JSON error body; keep the status-based message */
-    }
-    throw new Error(msg);
-  }
+  if (!res.ok) throw new Error(await apiErrorMessage(res));
   return (await res.json()) as { id: string; category: string }[];
 }
 
@@ -70,16 +79,7 @@ export async function travelFacts(input: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!res.ok) {
-    let msg = `Verzoek mislukt (${res.status}).`;
-    try {
-      const parsed = (await res.json()) as { error?: string };
-      if (parsed?.error) msg = parsed.error;
-    } catch {
-      /* non-JSON error body; keep the status-based message */
-    }
-    throw new Error(msg);
-  }
+  if (!res.ok) throw new Error(await apiErrorMessage(res));
   const body = (await res.json()) as { terms?: ProviderTerms[]; pending?: string[] };
   return { terms: body.terms ?? [], pending: body.pending ?? [] };
 }
@@ -136,14 +136,7 @@ export async function streamChat(
     signal,
   });
   if (!res.ok) {
-    let msg = `Verzoek mislukt (${res.status}).`;
-    try {
-      const parsed = (await res.json()) as { error?: string };
-      if (parsed?.error) msg = parsed.error;
-    } catch {
-      /* non-JSON error body; keep the status-based message */
-    }
-    handlers.onError?.(msg);
+    handlers.onError?.(await apiErrorMessage(res));
     return;
   }
   if (!res.body) {

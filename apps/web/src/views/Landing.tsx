@@ -3,7 +3,14 @@ import type { FormEvent } from "react";
 import CardSpiral from "./CardSpiral";
 import { INVESTING_URL } from "../investing.js";
 import { landingCopy } from "../landingCopy.js";
-import { alternatePath, applyDocumentLocale, applyHreflang, DEFAULT_LOCALE, type Locale } from "../locale.js";
+import {
+  alternatePath,
+  applyDocumentLocale,
+  applyHreflang,
+  DEFAULT_LOCALE,
+  rememberLocale,
+  type Locale,
+} from "../locale.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -16,15 +23,35 @@ const WAITLIST_ENDPOINT =
  *  ondernemers). The app isn't public yet — it's a waitlist front door: the
  *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
  *  the vault (`/app`) via `onEnter`, for owner/Railway testing. */
-export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter: () => void; locale?: Locale }) {
+export default function Landing({
+  onEnter,
+  locale = DEFAULT_LOCALE,
+}: {
+  onEnter: () => void;
+  locale?: Locale;
+}) {
   const c = landingCopy(locale);
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
-   * engine as content competing with the Dutch one it exists alongside. */
+   * engine as content competing with the Dutch one it exists alongside. Title
+   * and meta description are restored on unmount so entering the vault via
+   * "Inloggen" leaves the plain "LaVega" title behind instead of leaking the
+   * public pitch into the app frame. */
   useEffect(() => {
+    const prev = {
+      title: document.title,
+      metaDescription:
+        document.querySelector('meta[name="description"]')?.getAttribute("content") ?? null,
+    };
     applyDocumentLocale(locale);
     applyHreflang(window.location.origin);
+    return () => {
+      document.title = prev.title;
+      const meta = document.querySelector('meta[name="description"]');
+      if (prev.metaDescription === null) meta?.remove();
+      else meta?.setAttribute("content", prev.metaDescription);
+    };
   }, [locale]);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -107,6 +134,8 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
     return () => io.disconnect();
   }, []);
 
+  const otherLocale = locale === "en" ? "nl" : "en";
+
   return (
     <div className="lp" ref={rootRef}>
       {/* Nav */}
@@ -134,7 +163,13 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
             </a>
           )}
         </nav>
-        <a className="lp-lang" href={alternatePath(locale)} hrefLang={locale === "en" ? "nl" : "en"} title={c.langSwitch.to}>
+        <a
+          className="lp-lang"
+          href={alternatePath(locale)}
+          hrefLang={otherLocale}
+          title={c.langSwitch.to}
+          onClick={() => rememberLocale(otherLocale)}
+        >
           {c.langSwitch.label}
         </a>
         <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
@@ -149,9 +184,7 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
           <br />
           {c.hero.titleBottom}
         </h1>
-        <p className="lp-sub lp-reveal">
-          {c.hero.sub}
-        </p>
+        <p className="lp-sub lp-reveal">{c.hero.sub}</p>
         <div className="lp-cta-row lp-reveal">
           <a className="lp-btn lp-btn-dark lp-btn-lg" href="#wachtlijst">
             {c.hero.ctaPrimary} <span aria-hidden="true">→</span>
@@ -209,16 +242,14 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
       </section>
 
       {/* Signature scroll section (GSAP card spiral + tagline) */}
-      <CardSpiral />
+      <CardSpiral locale={locale} />
 
       {/* Kern-tegels — waarom LaVega (SS1-inspired, our fonts + warm palet) */}
       <section className="lp-section lp-strengths" id="waarom">
         <div className="lp-strengths-head lp-reveal">
           <h2 className="lp-h2 lp-strengths-title">{c.strengths.title}</h2>
           <div className="lp-strengths-aside">
-            <p className="lp-sub lp-strengths-sub">
-              {c.strengths.sub}
-            </p>
+            <p className="lp-sub lp-strengths-sub">{c.strengths.sub}</p>
             <a className="lp-btn lp-btn-dark" href="#agents">
               {c.strengths.cta} <span aria-hidden="true">→</span>
             </a>
@@ -376,9 +407,7 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
       <section className="lp-section lp-privacy" id="privacy">
         <div className="lp-privacy-inner lp-reveal">
           <h2 className="lp-h2">{c.privacy.title}</h2>
-          <p className="lp-sub">
-            {c.privacy.sub}
-          </p>
+          <p className="lp-sub">{c.privacy.sub}</p>
           <ul className="lp-ticks">
             {c.privacy.ticks.map((tick) => (
               <li key={tick}>{tick}</li>
@@ -424,13 +453,9 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
         <div className="lp-waitlist-inner lp-reveal">
           <p className="lp-eyebrow">{c.waitlist.eyebrow}</p>
           <h2 className="lp-h2">{c.waitlist.title}</h2>
-          <p className="lp-sub">
-            {c.waitlist.sub}
-          </p>
+          <p className="lp-sub">{c.waitlist.sub}</p>
           {wlStatus === "done" ? (
-            <p className="lp-waitlist-done">
-              {c.waitlist.done}
-            </p>
+            <p className="lp-waitlist-done">{c.waitlist.done}</p>
           ) : (
             <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
               <input
@@ -466,9 +491,7 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
             </form>
           )}
           {!wlReady && <p className="lp-waitlist-note">{c.waitlist.notReady}</p>}
-          {wlStatus === "error" && (
-            <p className="lp-waitlist-note">{c.waitlist.error}</p>
-          )}
+          {wlStatus === "error" && <p className="lp-waitlist-note">{c.waitlist.error}</p>}
         </div>
       </section>
 
@@ -483,9 +506,7 @@ export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter:
         <div className="lp-footer2-grid">
           <div className="lp-footer2-about">
             <div className="lp-footer2-brand">LaVega</div>
-            <p className="lp-footer2-note">
-              {c.footer.note}
-            </p>
+            <p className="lp-footer2-note">{c.footer.note}</p>
           </div>
           <div className="lp-footer2-col">
             <span className="lp-footer2-h">{c.footer.product}</span>

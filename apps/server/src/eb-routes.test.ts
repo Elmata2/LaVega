@@ -29,8 +29,11 @@ import type { EbFlowStore, EbSession, PendingAuth } from "./eb-routes.js";
 function fakeStore() {
   const pending = new Map<string, PendingAuth>();
   const sessions = new Map<string, { userId: string; payload: EbSession }>();
+  const sweepSessionCalls: Array<{ userId: string; ttlMs: number }> = [];
   const store: EbFlowStore = {
-    async startAuth(state, entry) { pending.set(state, entry); },
+    async startAuth(state, entry) {
+      pending.set(state, entry);
+    },
     async consumeAuth(state) {
       const entry = pending.get(state);
       if (!entry) return null;
@@ -38,7 +41,13 @@ function fakeStore() {
       return entry;
     },
     async sweepAuth() {},
-    async putSession(userId, sessionId, payload) { sessions.set(sessionId, { userId, payload }); },
+    async sweepSessions(userId, ttlMs) {
+      sweepSessionCalls.push({ userId, ttlMs });
+      return 0;
+    },
+    async putSession(userId, sessionId, payload) {
+      sessions.set(sessionId, { userId, payload });
+    },
     async getSession(userId, sessionId) {
       const row = sessions.get(sessionId);
       return row && row.userId === userId ? row.payload : null; // RLS, in miniature
@@ -48,11 +57,11 @@ function fakeStore() {
       if (row?.userId === userId) sessions.delete(sessionId);
     },
   };
-  return { store, pending, sessions };
+  return { store, pending, sessions, sweepSessionCalls };
 }
 
 let signedInAs: string | null = "user-123";
-const { store, pending, sessions } = fakeStore();
+const { store, pending, sessions, sweepSessionCalls } = fakeStore();
 const app = new Hono();
 registerEbRoutes(app, { store, tenantId: async () => signedInAs });
 
@@ -60,6 +69,7 @@ beforeEach(() => {
   signedInAs = "user-123";
   pending.clear();
   sessions.clear();
+  sweepSessionCalls.length = 0;
   ebMock.mockReset();
   loadConfigMock.mockReset();
   loadConfigMock.mockReturnValue({
@@ -125,7 +135,6 @@ test("an error from the bank still short-circuits before any exchange", async ()
   expect(res.headers.get("location")).toContain("Geweigerd");
 });
 
-
 /* The reason this store moved out of process memory at all. */
 
 test("the state survives the flow crossing serverless instances", async () => {
@@ -148,7 +157,11 @@ test("the state survives the flow crossing serverless instances", async () => {
 
 test("the exchanged session belongs to the user who started the flow", async () => {
   const state = await issueState(); // started by user-123
-  ebMock.mockResolvedValueOnce({ session_id: "sess-1", accounts: [{ uid: "a1" }], aspsp: { name: "ING" } });
+  ebMock.mockResolvedValueOnce({
+    session_id: "sess-1",
+    accounts: [{ uid: "a1" }],
+    aspsp: { name: "ING" },
+  });
   await app.request(`/api/eb/callback?code=real-code&state=${state}`);
 
   expect(sessions.get("sess-1")?.userId).toBe("user-123");
@@ -156,7 +169,11 @@ test("the exchanged session belongs to the user who started the flow", async () 
 
 test("another signed-in user cannot collect someone else's bank session", async () => {
   const state = await issueState(); // user-123
-  ebMock.mockResolvedValueOnce({ session_id: "sess-1", accounts: [{ uid: "a1" }], aspsp: { name: "ING" } });
+  ebMock.mockResolvedValueOnce({
+    session_id: "sess-1",
+    accounts: [{ uid: "a1" }],
+    aspsp: { name: "ING" },
+  });
   await app.request(`/api/eb/callback?code=real-code&state=${state}`);
   ebMock.mockClear();
 
@@ -189,4 +206,29 @@ test("collecting accounts requires being signed in", async () => {
 test("the TTLs are still finite", () => {
   expect(PENDING_TTL_MS).toBeGreaterThan(0);
   expect(SESSION_TTL_MS).toBeGreaterThan(PENDING_TTL_MS);
+});
+
+test("starting an authorisation sweeps that user's own stale eb_sessions", async () => {
+  // eb_sessions is RLS-scoped per user (0004_eb_grants.sql, FORCE ROW LEVEL
+  // SECURITY) — there is no table-wide sweep for it the way sweepAuth does for
+  // eb_pending_auth. Instead it is swept per-tenant here, the one request that
+  // already runs as the signed-in user. SESSION_TTL_MS is reused because that
+  // is already the freshness window getSession enforces on read — a session
+  // this stale is unreachable either way.
+  await issueState();
+  expect(sweepSessionCalls).toEqual([{ userId: "user-123", ttlMs: SESSION_TTL_MS }]);
+});
+
+test("a country that is not two letters never reaches the Enable Banking URL (L2)", async () => {
+  for (const country of ["NL&psu_type=business", "N", "nl#", "NLD"]) {
+    const list = await app.request(`/api/eb/aspsps?country=${encodeURIComponent(country)}`);
+    expect(list.status).toBe(400);
+    const start = await app.request("/api/eb/auth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "ING", country }),
+    });
+    expect(start.status).toBe(400);
+  }
+  expect(ebMock).not.toHaveBeenCalled();
 });

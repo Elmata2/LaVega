@@ -43,3 +43,4 @@ export * from "./parsers/parseBankFile.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
 export * from "./spendPercentile.js";
+export * from "./localeRedirect.js";

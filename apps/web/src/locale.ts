@@ -11,6 +11,8 @@
  * The app behind the waitlist is Dutch throughout and is untouched by this.
  */
 
+import { landingCopy } from "./landingCopy.js";
+
 export type Locale = "nl" | "en";
 
 export const DEFAULT_LOCALE: Locale = "nl";
@@ -32,9 +34,33 @@ export function alternatePath(locale: Locale): string {
   return locale === "en" ? "/" : EN_BASE;
 }
 
-/** `<html lang>` has to follow, or a screen reader reads English in Dutch. */
+/** `<html lang>` has to follow, or a screen reader reads English in Dutch. The
+ *  title and meta description follow too — without them a shared or bookmarked
+ *  English link still shows the Dutch pitch in the tab. Client-side only: a
+ *  crawler that does not run JavaScript still sees index.html's static head. */
 export function applyDocumentLocale(locale: Locale): void {
-  if (typeof document !== "undefined") document.documentElement.lang = locale;
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = locale;
+  const copy = landingCopy(locale);
+  document.title = copy.meta.title;
+  let meta = document.querySelector('meta[name="description"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "description");
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", copy.meta.description);
+}
+
+export const LOCALE_COOKIE = "lavega_locale";
+
+/** Persists an explicit switcher click past the visit that made it, so a
+ *  choice made once does not have to be repeated on every return to the site. */
+export function rememberLocale(locale: Locale): void {
+  if (typeof document === "undefined") return;
+  const secure =
+    typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
 }
 
 /**
@@ -54,7 +80,8 @@ export function hreflangLinks(origin: string): Array<{ hreflang: string; href: s
 
 export function applyHreflang(origin: string): void {
   if (typeof document === "undefined") return;
-  for (const old of document.querySelectorAll('link[rel="alternate"][data-lavega-hreflang]')) old.remove();
+  for (const old of document.querySelectorAll('link[rel="alternate"][data-lavega-hreflang]'))
+    old.remove();
   for (const { hreflang, href } of hreflangLinks(origin)) {
     const link = document.createElement("link");
     link.rel = "alternate";

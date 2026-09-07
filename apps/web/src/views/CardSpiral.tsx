@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { landingCopy } from "../landingCopy.js";
+import { DEFAULT_LOCALE, type Locale } from "../locale.js";
 
 const N = 14;
 const KINDS = ["a", "b", "c"] as const; // espresso / tan / cream
@@ -7,7 +9,8 @@ const KINDS = ["a", "b", "c"] as const; // espresso / tan / cream
  *  that curls from a fan into a 3D arc as you scroll (GSAP ScrollTrigger, pinned
  *  + scrubbed). GSAP is dynamically imported so the app bundle never pays for
  *  it. Falls back to a static CSS fan on reduced-motion or if GSAP fails. */
-export default function CardSpiral() {
+export default function CardSpiral({ locale = DEFAULT_LOCALE }: { locale?: Locale }) {
+  const c = landingCopy(locale);
   const sectionRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -77,12 +80,12 @@ export default function CardSpiral() {
   }, []);
 
   return (
-    <section className="lp-spiral" ref={sectionRef} aria-label="Slimmer met je geld">
+    <section className="lp-spiral" ref={sectionRef} aria-label={c.spiral.ariaLabel}>
       <div className="lp-spiral-stage" ref={stageRef}>
         <div className="lp-spiral-word" aria-hidden="true">
           LaVega
         </div>
-        <p className="lp-spiral-tag">Niet méér uitgeven — slimmer met je geld.</p>
+        <p className="lp-spiral-tag">{c.spiral.tagline}</p>
         <div className="lp-spiral-cards" aria-hidden="true">
           {Array.from({ length: N }).map((_, i) => (
             <div

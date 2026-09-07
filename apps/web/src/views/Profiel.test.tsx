@@ -29,6 +29,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  vi.unstubAllGlobals();
 });
 
 /** Wat de kluis in deze tests doet. Back-up raakt hem pas bij een klik, maar de
@@ -115,6 +116,140 @@ function section(label: string): HTMLElement {
   if (!el) throw new Error(`no section labelled "${label}"`);
   return el as HTMLElement;
 }
+
+/* ══════ ACCOUNT — inloggen tegen de geconfigureerde LaVega-server ══════════
+ *
+ * Sign-up blijft verborgen (dat regelt de server). Wat hier wordt bewaakt: de
+ * drie standen van AuthState renderen elk het juiste — geen formulier zonder
+ * server, wél een formulier zonder sessie, en de identiteit plus een uitweg
+ * zodra er een sessie is — en dat een mislukte inlogpoging de Nederlandse
+ * boodschap toont, nooit de rauwe servertekst. */
+
+function submit(form: HTMLFormElement) {
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+test("Account: zonder serveraccount staat er alleen de ene zin, geen formulier", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
+  await render();
+  const account = section("Account");
+  expect(account.textContent).toContain("geen serveraccount ingesteld");
+  expect(account.querySelector("form")).toBeNull();
+  expect(account.querySelector("input")).toBeNull();
+});
+
+test("Account: zonder sessie staat het inlogformulier klaar", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ user: null }))),
+  );
+  await render();
+  const account = section("Account");
+  expect(account.querySelector('input[type="email"]')).not.toBeNull();
+  expect(account.querySelector('input[type="password"]')).not.toBeNull();
+  expect([...account.querySelectorAll("button")].some((b) => b.textContent === "Inloggen")).toBe(
+    true,
+  );
+});
+
+test("Account: een mislukte inlogpoging toont de Nederlandse boodschap, niet de servertekst", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes("/sign-in/email")) {
+        return new Response(JSON.stringify({ message: "invalid credentials" }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ user: null }));
+    }),
+  );
+  await render();
+  const account = section("Account");
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="email"]') as HTMLInputElement,
+      "alexander@generation-c.nl",
+    ),
+  );
+  act(() =>
+    setNativeValue(account.querySelector('input[type="password"]') as HTMLInputElement, "verkeerd"),
+  );
+  await act(async () => submit(account.querySelector("form") as HTMLFormElement));
+  expect(account.querySelector('[role="alert"]')?.textContent).toBe(
+    "Onjuist e-mailadres of wachtwoord.",
+  );
+});
+
+test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop", async () => {
+  let loggedIn = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (path.includes("/sign-in/email") && init?.method === "POST") {
+        loggedIn = true;
+        return new Response(
+          JSON.stringify({ user: { id: "u1", email: "alexander@generation-c.nl" } }),
+        );
+      }
+      return new Response(
+        JSON.stringify(
+          loggedIn ? { user: { id: "u1", email: "alexander@generation-c.nl" } } : { user: null },
+        ),
+      );
+    }),
+  );
+  await render();
+  const account = section("Account");
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="email"]') as HTMLInputElement,
+      "alexander@generation-c.nl",
+    ),
+  );
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="password"]') as HTMLInputElement,
+      "geheim123",
+    ),
+  );
+  await act(async () => submit(account.querySelector("form") as HTMLFormElement));
+  expect(section("Account").textContent).toContain("alexander@generation-c.nl");
+  expect(
+    [...section("Account").querySelectorAll("button")].some((b) => b.textContent === "Uitloggen"),
+  ).toBe(true);
+});
+
+test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het formulier", async () => {
+  let loggedIn = true;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const path = String(url);
+    if (path.includes("/sign-out") && init?.method === "POST") {
+      loggedIn = false;
+      return new Response(null);
+    }
+    return new Response(
+      JSON.stringify(
+        loggedIn ? { user: { id: "u1", email: "alexander@generation-c.nl" } } : { user: null },
+      ),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+  const uitloggen = [...section("Account").querySelectorAll("button")].find(
+    (b) => b.textContent === "Uitloggen",
+  ) as HTMLButtonElement;
+  await act(async () => uitloggen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(
+    fetchMock.mock.calls.some(
+      ([u, i]) =>
+        String(u).includes("/sign-out") && (i as RequestInit | undefined)?.method === "POST",
+    ),
+  ).toBe(true);
+  expect(section("Account").querySelector('input[type="email"]')).not.toBeNull();
+});
 
 test("Regels, Koppelingen, Back-up and Import all render inside the profile", async () => {
   await render();

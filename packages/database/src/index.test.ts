@@ -3,6 +3,7 @@ import {
   eraseUserData,
   createAgentRunRepository,
   createBrokerRepository,
+  createEbFlowRepository,
   createOpaqueVaultRepository,
   createPreferencesRepository,
   createPriceBarRepository,
@@ -437,4 +438,36 @@ test("erasure refuses without an authenticated identity", async () => {
   await expect(eraseUserData(db, " ")).rejects.toThrow("Authenticated user identity is required");
   // Nothing was even connected to, let alone deleted.
   expect(calls).toEqual([]);
+});
+
+/* eb_sessions carries FORCE ROW LEVEL SECURITY (0004_eb_grants.sql), scoped to
+ * app.user_id. The runtime role has no BYPASSRLS, so — unlike eb_pending_auth's
+ * sweepAuth — an unscoped DELETE here would only ever see the caller's own
+ * rows. sweepSessions runs inside withTenant for exactly that reason. */
+test("sweepSessions drops one user's own stale eb_sessions, scoped through withTenant", async () => {
+  const { db, calls, paramCalls } = erasureDatabase(2);
+  const repository = createEbFlowRepository(db);
+
+  const removed = await repository.sweepSessions("user-123", 60 * 60 * 1000);
+
+  expect(removed).toBe(2);
+  expect(calls[0]).toBe("BEGIN");
+  expect(paramCalls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-123"],
+  });
+  const deleteCall = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM personal.eb_sessions"),
+  );
+  expect(deleteCall?.sql).toBe(
+    "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+  );
+  expect(deleteCall?.values).toEqual(["3600000"]);
+  expect(calls.at(-1)).toBe("COMMIT");
+});
+
+test("sweepSessions reports zero rather than pretending it did not run", async () => {
+  const { db } = erasureDatabase(0);
+  const removed = await createEbFlowRepository(db).sweepSessions("user-123", 60 * 60 * 1000);
+  expect(removed).toBe(0);
 });

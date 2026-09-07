@@ -690,6 +690,25 @@ export function createEbFlowRepository(db: Database) {
       }
     },
 
+    /**
+     * Housekeeping: drop this user's own stale sessions — ones the app never
+     * came back to collect. Unlike `sweepAuth`, this cannot run table-wide:
+     * `personal.eb_sessions` carries FORCE ROW LEVEL SECURITY and the runtime
+     * role has no BYPASSRLS, so an unscoped DELETE would only ever reach the
+     * caller's own rows anyway. Called per-tenant, inside the request that
+     * already runs as that user.
+     */
+    async sweepSessions(userId: string, ttlMs: number): Promise<number> {
+      const identity = requireUserId(userId);
+      return withTenant(db, identity, async (client) => {
+        const result = await client.query(
+          "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          [String(ttlMs)],
+        );
+        return result.rowCount ?? 0;
+      });
+    },
+
     /** Stash the bank's account list for the user the state named. */
     async putSession(userId: string, sessionId: string, payload: unknown): Promise<void> {
       const identity = requireUserId(userId);

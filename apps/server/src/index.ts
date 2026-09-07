@@ -22,6 +22,7 @@ import {
 } from "./investing-mount.js";
 import { getAuth } from "./auth.js";
 import { apiGuard } from "./apiGuard.js";
+import { localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
@@ -98,24 +99,27 @@ loadCatalogue();
  * shipped features the first time someone used their own instance. `style-src`
  * allows inline because that is what React renders a `style={{…}}` prop as.
  */
-app.use("*", secureHeaders({
-  strictTransportSecurity: "max-age=31536000; includeSubDomains",
-  xContentTypeOptions: "nosniff",
-  xFrameOptions: "DENY",
-  referrerPolicy: "no-referrer",
-  contentSecurityPolicy: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    imgSrc: ["'self'", "data:", "blob:", "https:"],
-    fontSrc: ["'self'", "data:"],
-    connectSrc: ["'self'", "https:"],
-    objectSrc: ["'none'"],
-    baseUri: ["'self'"],
-    formAction: ["'self'"],
-    frameAncestors: ["'none'"],
-  },
-}));
+app.use(
+  "*",
+  secureHeaders({
+    strictTransportSecurity: "max-age=31536000; includeSubDomains",
+    xContentTypeOptions: "nosniff",
+    xFrameOptions: "DENY",
+    referrerPolicy: "no-referrer",
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      fontSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "https:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  }),
+);
 
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -255,6 +259,16 @@ if (shouldMountInvesting()) {
   app.get("/investing", (c) => c.redirect("/investing/"));
   app.all("/investing/*", toInvestingStatic);
 }
+
+/* The Dutch landing page is canonical at `/` (SEO-critical — see the header
+ * comment in apps/web/src/locale.ts); English lives at `/en`. English-device
+ * visitors get redirected here, unless a `lavega_locale` cookie already
+ * picked a locale. */
+app.get("/", async (c, next) => {
+  const target = localeRedirectTarget(c.req.header("accept-language"), c.req.header("cookie"));
+  if (target === null) return next();
+  return c.body(null, 302, { Location: target, Vary: "Accept-Language, Cookie" });
+});
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web

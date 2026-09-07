@@ -97,7 +97,11 @@ const TYPECHECKED = [
   "@lavega/web",
   "@lavega/email-worker",
 ];
-await exec("pnpm", [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"], execOptions);
+await exec(
+  "pnpm",
+  [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"],
+  execOptions,
+);
 
 await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);
 await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
@@ -155,6 +159,25 @@ await writeFile(
         /* Applied to every response, then `continue` so routing carries on and
          * the filesystem handler still serves the file. */
         { src: "/(.*)", headers: SECURITY_HEADERS, continue: true },
+        /* Locale redirect for the landing page: an English-device visitor to
+         * `/` goes to `/en`, unless a `lavega_locale` cookie already picked a
+         * locale. Keep these two routes in sync with the pure implementation
+         * at packages/core/src/localeRedirect.ts and its parity test at
+         * packages/core/src/localeRedirect.vercelParity.test.ts, which embeds
+         * its own literal copy of these exact objects. */
+        {
+          src: "/",
+          has: [{ type: "cookie", key: "lavega_locale", value: "^en$" }],
+          status: 302,
+          headers: { Location: "/en", Vary: "Accept-Language, Cookie" },
+        },
+        {
+          src: "/",
+          missing: [{ type: "cookie", key: "lavega_locale" }],
+          has: [{ type: "header", key: "accept-language", value: "^[Ee][Nn].*" }],
+          status: 302,
+          headers: { Location: "/en", Vary: "Accept-Language, Cookie" },
+        },
         { handle: "filesystem" },
         { src: "/api/(.*)", dest: "/api/[...route]" },
         { src: "/health", dest: "/api/[...route]" },

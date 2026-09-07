@@ -16,6 +16,7 @@
     "@neondatabase/serverless": "^1.0.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "@types/node": "^22.10.0"
   }
 }

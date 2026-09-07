@@ -141,3 +141,56 @@ test("isStaticAssetPath asks for a file extension, not merely for a dot", () => 
   expect(isStaticAssetPath("/privacy")).toBe(false);
   expect(isStaticAssetPath("/")).toBe(false);
 });
+
+test("GET / redirects an English device to /en", async () => {
+  const res = await app.request("/", {
+    headers: { "Accept-Language": "en-US,en;q=0.9,nl;q=0.8" },
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/en");
+  expect(res.headers.get("vary")).toBe("Accept-Language, Cookie");
+});
+
+test("GET / does not redirect a Dutch device", async () => {
+  const res = await app.request("/", { headers: { "Accept-Language": "nl-NL,en;q=0.9" } });
+  expect(res.status).not.toBe(302);
+  expect(res.headers.get("location")).toBeNull();
+});
+
+test("GET / a lavega_locale=nl cookie overrides an English device", async () => {
+  const res = await app.request("/", {
+    headers: { Cookie: "lavega_locale=nl", "Accept-Language": "en-US,en;q=0.9" },
+  });
+  expect(res.status).not.toBe(302);
+  expect(res.headers.get("location")).toBeNull();
+});
+
+test("GET / a lavega_locale=en cookie overrides a Dutch device", async () => {
+  const res = await app.request("/", {
+    headers: { Cookie: "lavega_locale=en", "Accept-Language": "nl-NL,en;q=0.9" },
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/en");
+  expect(res.headers.get("vary")).toBe("Accept-Language, Cookie");
+});
+
+test("GET / with no headers at all does not redirect", async () => {
+  const res = await app.request("/");
+  expect(res.status).not.toBe(302);
+  expect(res.headers.get("location")).toBeNull();
+});
+
+test("GET /en is never redirected back to Dutch", async () => {
+  const res = await app.request("/en", { headers: { "Accept-Language": "nl-NL,en;q=0.9" } });
+  expect(res.status).not.toBe(302);
+  expect(res.headers.get("location")).toBeNull();
+});
+
+test("the redirect response still carries the global secureHeaders", async () => {
+  const res = await app.request("/", {
+    headers: { "Accept-Language": "en-US,en;q=0.9" },
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("x-frame-options")).toBe("DENY");
+  expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+});

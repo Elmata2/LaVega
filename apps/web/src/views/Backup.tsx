@@ -81,8 +81,8 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       <>
         <h3>Back-up op de server</h3>
         <p>
-          Log in om je versleutelde kluis ook op de server te bewaren. Handig voor een tweede
-          apparaat.
+          Log in om je versleutelde kluis ook op de server te bewaren, bij Account hierboven. Handig
+          voor een tweede apparaat.
         </p>
       </>
     );

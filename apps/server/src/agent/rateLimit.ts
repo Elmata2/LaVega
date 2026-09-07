@@ -1,8 +1,11 @@
+export type RateLimiter = ((key: string) => boolean) & { readonly size: number };
+
 /**
  * Tiny in-memory sliding-window rate limiter. `createRateLimiter(max, windowMs)`
  * returns a guard `(key) => boolean` — `true` = allowed, `false` = over the
  * limit for that key within the last `windowMs`. `now` is injectable so tests
- * can advance the clock deterministically.
+ * can advance the clock deterministically. `.size` exposes the tracked-key
+ * count for tests; the Map itself stays private to the closure.
  *
  * Single-process, single-user personal app: the counts live in a Map that's
  * lost on restart. Good enough to keep a runaway client (or a stuck retry loop)
@@ -12,10 +15,13 @@ export function createRateLimiter(
   max: number,
   windowMs: number,
   now: () => number = () => Date.now(),
-) {
+): RateLimiter {
   const hits = new Map<string, number[]>();
-  return (key: string): boolean => {
+  const guard = (key: string): boolean => {
     const t = now();
+    // Every distinct caller ever seen otherwise stays in `hits` forever, even
+    // once its window has fully emptied and nothing will touch that key again.
+    for (const [k, arr] of hits) if (t - arr.at(-1)! >= windowMs) hits.delete(k);
     const arr = (hits.get(key) ?? []).filter((ts) => t - ts < windowMs);
     if (arr.length >= max) {
       hits.set(key, arr);
@@ -25,6 +31,7 @@ export function createRateLimiter(
     hits.set(key, arr);
     return true;
   };
+  return Object.defineProperty(guard, "size", { get: () => hits.size }) as RateLimiter;
 }
 
 /**
@@ -42,9 +49,16 @@ export function createRateLimiter(
  * and only the entry the nearest proxy appends is not attacker-chosen. Keying
  * on the leftmost would let one client mint a fresh bucket per request.
  */
-export function rateLimitKey(route: string, userId: string | undefined, forwardedFor: string | undefined): string {
+export function rateLimitKey(
+  route: string,
+  userId: string | undefined,
+  forwardedFor: string | undefined,
+): string {
   if (userId) return `${route}:u:${userId}`;
-  const chain = (forwardedFor ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+  const chain = (forwardedFor ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   const nearest = chain.length > 0 ? chain[chain.length - 1] : "unknown";
   return `${route}:ip:${nearest}`;
 }

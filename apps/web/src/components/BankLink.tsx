@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_BASE } from "../api";
+import { API_BASE, apiErrorMessage } from "../api";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
  * lets the user pick one, and redirects the browser to the bank to authorise.
@@ -18,11 +18,11 @@ export default function BankLink({ busy }: { busy: boolean }) {
     setError("");
     try {
       const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL`);
-      const data = await res.json();
       if (!res.ok) {
-        setError(data.error || `Fout ${res.status}`);
+        setError(await apiErrorMessage(res));
         return;
       }
+      const data = await res.json();
       setAspsps(data.aspsps || []);
       if (data.aspsps?.length) setSelected(data.aspsps[0].name);
     } catch (e) {
@@ -43,9 +43,14 @@ export default function BankLink({ busy }: { busy: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: bank.name, country: bank.country }),
       });
+      if (!res.ok) {
+        setError(await apiErrorMessage(res));
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      if (!res.ok || !data.url) {
-        setError(data.error || `Fout ${res.status}`);
+      if (!data.url) {
+        setError(data.error || "De bank gaf geen autorisatiepagina terug.");
         setLoading(false);
         return;
       }

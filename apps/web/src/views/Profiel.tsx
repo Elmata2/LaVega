@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import type { Account, EntityScope, EntitySummary, LearnedFact, Rule } from "@lavega/core";
 import {
   accountType,
@@ -28,6 +29,7 @@ import {
   type OwnerName,
 } from "../settings.js";
 import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
+import { signIn, signOut, useAuthState } from "../authClient.js";
 import Import from "./Import";
 import Regels from "./Regels";
 import Koppelingen from "./Koppelingen";
@@ -83,6 +85,105 @@ type ProfielProps = {
   asOf: string;
   onRestored: () => void;
 };
+
+/* Account — sign in against the configured LaVega server so the owner can test
+ * the Enable Banking flow. Sign-up is deliberately absent: the server decides
+ * who gets an account, not this page. Nothing renders while the state is
+ * `loading`: a signed-out default would flash the login form at someone who
+ * is already signed in, for the one render before the real check lands. */
+function AccountBlock() {
+  const { state, refresh } = useAuthState();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSignIn(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await signIn(email, password);
+      setPassword("");
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    refresh();
+  }
+
+  if (state.kind === "loading") return null;
+
+  return (
+    <section className="card" aria-label="Account">
+      <h2>Account</h2>
+      {state.kind === "unconfigured" && (
+        <p className="cell-sub">
+          Deze installatie heeft geen serveraccount ingesteld, dus alles blijft lokaal in deze
+          browser.
+        </p>
+      )}
+      {state.kind === "signed-out" && (
+        <>
+          <p className="cell-sub">
+            Log in op de geconfigureerde LaVega-server om de bankkoppeling te testen.
+          </p>
+          <form onSubmit={(e) => void handleSignIn(e)}>
+            <div className="vault-field">
+              <label htmlFor="account-email">E-mailadres</label>
+              <input
+                id="account-email"
+                type="email"
+                value={email}
+                disabled={busy}
+                autoComplete="username"
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="vault-field">
+              <label htmlFor="account-password">Wachtwoord</label>
+              <input
+                id="account-password"
+                type="password"
+                value={password}
+                disabled={busy}
+                autoComplete="current-password"
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error !== "" && (
+              <p role="alert" className="text-warn">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || !email || !password}
+            >
+              Inloggen
+            </button>
+          </form>
+        </>
+      )}
+      {state.kind === "signed-in" && (
+        <>
+          <p className="cell-sub">{state.email}</p>
+          <button type="button" className="btn" onClick={() => void handleSignOut()}>
+            Uitloggen
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
 
 /* ── CASHBACK CORRIGEREN — de feedbackmodule (app review 4, punt 22) ─────────
  *
@@ -428,6 +529,8 @@ export default function Profiel({
 
   return (
     <>
+      <AccountBlock />
+
       {/* The owner, at the very top, so the page reads as his own screen and not
           as a settings menu. The name is a local preference like the buffer and
           the country: this browser only, never in the vault, never in a

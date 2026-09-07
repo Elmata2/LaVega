@@ -21,6 +21,16 @@ test("frees the budget once the window has fully passed", () => {
   expect(limit("extract")).toBe(false);
 });
 
+test("a key's entry is pruned once its window has fully passed", () => {
+  let t = 0;
+  const limit = createRateLimiter(2, 1000, () => t);
+  limit("solo");
+  expect(limit.size).toBe(1);
+  t = 1000; // "solo"'s only hit is now outside the window
+  limit("other"); // any call sweeps stale entries, not just "solo"'s own
+  expect(limit.size).toBe(1); // "solo" is gone; "other" is the only key left
+});
+
 test("each key has an independent budget", () => {
   let t = 0;
   const limit = createRateLimiter(2, 1000, () => t);
@@ -42,7 +52,9 @@ test("two users on the same route get separate buckets", () => {
 });
 
 test("one user on two routes gets separate buckets", () => {
-  expect(rateLimitKey("chat", "user-a", undefined)).not.toBe(rateLimitKey("extract", "user-a", undefined));
+  expect(rateLimitKey("chat", "user-a", undefined)).not.toBe(
+    rateLimitKey("extract", "user-a", undefined),
+  );
 });
 
 test("the same user on the same route reuses one bucket", () => {

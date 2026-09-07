@@ -32,6 +32,7 @@ export type EbFlowStore = {
   startAuth(state: string, pending: PendingAuth): Promise<void>;
   consumeAuth(state: string, ttlMs: number): Promise<PendingAuth | null>;
   sweepAuth(ttlMs: number): Promise<void>;
+  sweepSessions(userId: string, ttlMs: number): Promise<number>;
   putSession(userId: string, sessionId: string, payload: EbSession): Promise<void>;
   getSession(userId: string, sessionId: string, ttlMs: number): Promise<EbSession | null>;
   deleteSession(userId: string, sessionId: string): Promise<void>;
@@ -66,6 +67,13 @@ export type EbRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;
 };
 
+/** ISO 3166-1 alpha-2 or nothing: the value is interpolated into the Enable
+ *  Banking URL, and `.toUpperCase()` alone let `&` and `#` through (L2). */
+function countryCode(raw: string | undefined): string | null {
+  const country = (raw || "NL").toUpperCase();
+  return /^[A-Z]{2}$/.test(country) ? country : null;
+}
+
 export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): void {
   const { store, tenantId } = dependencies;
   // Bank list for the picker (defaults to NL). Public-ish metadata only.
@@ -73,7 +81,8 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     const cfg = loadConfig();
     if (!cfg.configured)
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
-    const country = (c.req.query("country") || "NL").toUpperCase();
+    const country = countryCode(c.req.query("country"));
+    if (!country) return c.json({ error: "Ongeldige landcode." }, 400);
     try {
       const data = (await eb(
         clientConfig(cfg),
@@ -101,11 +110,22 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     const userId = await tenantId(c.req.raw);
     if (!userId) return c.json({ error: "Log in om een bank te koppelen." }, 401);
-    await store.sweepAuth(PENDING_TTL_MS);
+    // Housekeeping, not a prerequisite: a failed sweep must not stop the user
+    // from connecting a bank. eb_sessions is RLS-scoped per user, so there is
+    // no table-wide sweep for it — it is swept for this user here, on the one
+    // request that already runs as them. SESSION_TTL_MS is the window
+    // getSession already treats a session as gone by.
+    await Promise.all([
+      store.sweepAuth(PENDING_TTL_MS),
+      store.sweepSessions(userId, SESSION_TTL_MS),
+    ]).catch((error: unknown) => {
+      console.warn("eb sweep skipped", error instanceof Error ? error.message : String(error));
+    });
     const body = (await c.req.json().catch(() => ({}))) as { name?: string; country?: string };
     const name = body.name;
-    const country = (body.country || "NL").toUpperCase();
+    const country = countryCode(body.country);
     if (!name) return c.json({ error: "Kies een bank (name ontbreekt)." }, 400);
+    if (!country) return c.json({ error: "Ongeldige landcode." }, 400);
     const state = randomUUID();
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/auth", {
@@ -152,7 +172,9 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
      * on a session cookie surviving a redirect from the bank's own domain. */
     const authorised = state ? await store.consumeAuth(state, PENDING_TTL_MS) : null;
     if (!authorised) {
-      return c.redirect(`/?eb_error=${encodeURIComponent("Onbekende of verlopen autorisatie — koppel de bank opnieuw.")}`);
+      return c.redirect(
+        `/?eb_error=${encodeURIComponent("Onbekende of verlopen autorisatie — koppel de bank opnieuw.")}`,
+      );
     }
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/sessions", { code })) as {
