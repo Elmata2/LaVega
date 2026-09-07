@@ -89,6 +89,32 @@ test("values a pie holding that never reaches the trade history", () => {
   expect(result.at(-1)?.positionsValue).toBe(340);
 });
 
+test("values an all-pie portfolio that has no trade history at all", () => {
+  const positions: Position[] = [
+    {
+      entity: "personal",
+      symbol: "PIE",
+      quantity: 4,
+      averagePrice: 50,
+      marketPrice: 60,
+      marketValue: 240,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "PIE", date: "2026-01-02", close: 50, currency: "EUR" },
+    { symbol: "PIE", date: "2026-02-02", close: 60, currency: "EUR" },
+  ];
+
+  const result = computePortfolioValueSeries(positions, [], bars, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
+
+  expect(result[0]?.positionsValue).toBe(200);
+  expect(result.at(-1)?.positionsValue).toBe(240);
+});
+
 test("includes closed positions only while trade history says they were held", () => {
   const trades: Trade[] = [
     {
