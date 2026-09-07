@@ -9,6 +9,14 @@ export async function readPriceBars(
   symbols: readonly string[],
   concurrency = 3,
 ): Promise<{ bars: PriceBar[]; failed: number }> {
+  if (symbols.length === 0) return { bars: [], failed: 0 };
+  if (priceStore.getRanges) {
+    try {
+      return { bars: await priceStore.getRanges(tenantId, symbols), failed: 0 };
+    } catch {
+      return { bars: [], failed: symbols.length };
+    }
+  }
   const bars: PriceBar[] = [];
   let failed = 0;
   let next = 0;

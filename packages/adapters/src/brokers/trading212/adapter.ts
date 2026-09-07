@@ -892,7 +892,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             ? { dividendsNextPagePath: dividendsResume }
             : {}),
       };
-      return result(
+      const synced = result(
         positionsResult,
         trades,
         dividends,
@@ -907,6 +907,12 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           cashBalancesComplete: summaryComplete,
         },
       );
+      return {
+        ...synced,
+        ...(historyPending(inputResume ?? config.resume)
+          ? { historyMode: "incremental" as const }
+          : {}),
+      };
     },
   };
 }

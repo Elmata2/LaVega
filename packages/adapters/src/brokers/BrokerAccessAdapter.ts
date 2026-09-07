@@ -13,6 +13,7 @@ export type BrokerSyncResume = {
 export type BrokerResult = {
   positions: Position[];
   trades: Omit<Trade, "id">[];
+  historyMode?: "snapshot" | "incremental";
   /** Optional until each broker adapter maps its dividend records. */
   dividends?: Dividend[];
   cashBalances?: CashBalance[];

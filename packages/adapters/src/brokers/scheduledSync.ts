@@ -72,11 +72,13 @@ export async function syncScheduledBrokers(input: {
   entity: string;
   force?: boolean;
   now?: Date;
+  onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>;
 }): Promise<ScheduledSyncResult> {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
   const outcomes: BrokerSyncOutcome[] = [];
   const problems: string[] = [];
+  const pendingStates = new Map<ScheduledBroker, BrokerSyncState>();
 
   for (const entry of input.adapters) {
     const previous = await input.state.get(entry.broker);
@@ -131,7 +133,7 @@ export async function syncScheduledBrokers(input: {
       // credentials above all) must stay retryable, or saving credentials would
       // not be able to trigger the sync that follows it.
       if (result.retryAfter) {
-        await input.state.put(entry.broker, {
+        pendingStates.set(entry.broker, {
           lastSyncedAt,
           retryAfter: result.retryAfter,
           resume,
@@ -154,13 +156,13 @@ export async function syncScheduledBrokers(input: {
           result.trades.length > 0 ||
           (result.cashBalances?.length ?? 0) > 0);
       if (delivered)
-        await input.state.put(entry.broker, {
+        pendingStates.set(entry.broker, {
           lastSyncedAt: nowIso,
           retryAfter: null,
           resume: null,
         });
       else
-        await input.state.put(entry.broker, {
+        pendingStates.set(entry.broker, {
           lastSyncedAt,
           retryAfter: result.retryAfter ?? null,
           resume,
@@ -174,7 +176,7 @@ export async function syncScheduledBrokers(input: {
       continue;
     }
     if (resume) {
-      await input.state.put(entry.broker, {
+      pendingStates.set(entry.broker, {
         lastSyncedAt,
         retryAfter: result.retryAfter ?? null,
         resume,
@@ -182,9 +184,12 @@ export async function syncScheduledBrokers(input: {
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result });
       continue;
     }
-    await input.state.put(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
+    pendingStates.set(entry.broker, { lastSyncedAt: nowIso, retryAfter: null, resume: null });
     outcomes.push({ broker: entry.broker, status: "synced", lastSyncedAt: nowIso, result });
   }
 
-  return { outcomes, problems };
+  const result = { outcomes, problems };
+  await input.onCompleted?.(result);
+  for (const [broker, state] of pendingStates) await input.state.put(broker, state);
+  return result;
 }

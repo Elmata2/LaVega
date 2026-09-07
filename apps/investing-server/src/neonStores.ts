@@ -31,6 +31,7 @@ export function createNeonPriceStore(
   resolveTenantId: () => string | Promise<string>,
 ): PriceStore {
   return {
+    getRanges: (tenantId, symbols) => createPriceBarRepository(db, tenantId).getRanges(symbols),
     getRange: (tenantId, symbol, from, to) =>
       createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
     lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),

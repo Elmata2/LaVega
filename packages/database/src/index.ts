@@ -155,6 +155,7 @@ const isoDate = (value: unknown): string | null =>
 export type PriceBarRepository = {
   /** Omitting a bound means no bound. There is no date that stands for "all time". */
   getRange(symbol: string, from?: string, to?: string): Promise<PriceBarRow[]>;
+  getRanges(symbols: readonly string[]): Promise<PriceBarRow[]>;
   lastDate(symbol: string): Promise<string | null>;
   upsert(bars: readonly PriceBarRow[]): Promise<void>;
   purgeAll(): Promise<void>;
@@ -174,6 +175,21 @@ export function createPriceBarRepository(
 ): PriceBarRepository {
   const tenantId = requireUserId(userId);
   return {
+    async getRanges(symbols) {
+      if (symbols.length === 0) return [];
+      return withTenant(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
+          [[...new Set(symbols)]],
+        );
+        return result.rows.map((row) => ({
+          symbol: row.symbol as string,
+          date: row.date as string,
+          close: Number(row.close),
+          currency: row.currency as string,
+        }));
+      });
+    },
     async getRange(symbol, from, to) {
       /* Built from the bounds actually given. A caller wanting the whole history
        * passes none: spelling it as a wide date range is how '0000-01-01' — a

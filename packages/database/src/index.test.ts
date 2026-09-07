@@ -80,6 +80,30 @@ const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
       !call.sql.startsWith("SELECT set_config"),
   );
 
+test("bulk price reads use one tenant transaction and deduplicate symbols", async () => {
+  const { db, calls } = fakeDatabase([
+    { symbol: "AAPL", date: "2026-01-02", close: "120.5", currency: "USD" },
+  ]);
+  const bars = await createPriceBarRepository(db, "user-a").getRanges(["AAPL", "MSFT", "AAPL"]);
+  expect(bars).toEqual([{ symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
+  expect(calls.filter((call) => call.sql === "BEGIN")).toHaveLength(1);
+  expect(calls.find((call) => call.sql.startsWith("SELECT set_config"))?.values).toEqual([
+    "user-a",
+  ]);
+  expect(executed(calls)).toEqual([
+    {
+      sql: "SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE symbol = ANY($1::text[]) ORDER BY date, symbol",
+      values: [["AAPL", "MSFT"]],
+    },
+  ]);
+});
+
+test("empty bulk price reads do not open a database connection", async () => {
+  const { db, calls } = fakeDatabase();
+  expect(await createPriceBarRepository(db, "user-a").getRanges([])).toEqual([]);
+  expect(calls).toEqual([]);
+});
+
 test("an unbounded price bar read asks for no date range at all", async () => {
   /* The whole history used to be spelled '0000-01-01'..'9999-12-31'. Postgres has
    * no year zero, so that read threw and every dashboard behind it came back
