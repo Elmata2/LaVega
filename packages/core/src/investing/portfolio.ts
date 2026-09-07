@@ -168,9 +168,28 @@ export function computePortfolioValueSeries(
   } = {},
 ): PortfolioValuePoint[] {
   const firstTrade = [...trades].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
-  if (!firstTrade) return [];
+  // A pie-only holding never appears in order history at all (see
+  // quantityOnDate below), so trades can be entirely empty while the
+  // position is real. Price sync already backfills those symbols from
+  // 2000-01-01 for exactly this case (priceOrchestrator.ts), so fall back to
+  // the earliest priced bar for a currently held symbol rather than
+  // discarding the series.
+  const heldSymbols = new Set(
+    positions.filter((position) => Math.abs(position.quantity) > 1e-12).map((position) => position.symbol),
+  );
+  const firstPricedBar = priceBars
+    .filter((bar) => heldSymbols.has(bar.symbol))
+    .map((bar) => bar.date)
+    .sort()[0];
+  const start =
+    firstTrade && firstPricedBar
+      ? firstTrade < firstPricedBar
+        ? firstTrade
+        : firstPricedBar
+      : (firstTrade ?? firstPricedBar);
+  if (!start) return [];
   const today = options.today ?? isoDate(new Date());
-  const dates = businessCalendar(firstTrade, today, priceBars);
+  const dates = businessCalendar(start, today, priceBars);
   const symbols = [
     ...new Set([
       ...trades.map((trade) => trade.symbol),
