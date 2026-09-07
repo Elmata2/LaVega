@@ -70,6 +70,8 @@ Personal app paths (SPA; server already serves `index.html` for unknown paths):
 
 | Path                      | View          |
 | ------------------------- | ------------- |
+| `/`                       | Landing (Dutch — canonical) |
+| `/en`                     | Landing (English) |
 | `/app` or `/app/overview` | Overzicht     |
 | `/app/transactions`       | Transacties   |
 | `/app/accounts`           | Rekeningen    |
@@ -84,6 +86,17 @@ Personal app paths (SPA; server already serves `index.html` for unknown paths):
 | `/app/backup`             | Back-up       |
 
 Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
+
+The landing page is bilingual: Dutch at `/` and English at `/en`, same SPA —
+`Root` reads the locale off the path. **Dutch stays the canonical page.** The
+acquisition plan rests on one Dutch search cluster, so the two are declared to
+search engines as `hreflang` alternates with Dutch as `x-default`, never as
+separate competing pages. `/en` needs its own entry in the Vercel route table
+(`scripts/vercel-build.mjs`); the Hono server needs nothing, since an
+extensionless path already falls through to `index.html`.
+
+The privacy policy and terms stay Dutch on both: they are legal documents of a
+Dutch company and the Dutch text is the operative one.
 
 ## Investing dashboard (same deploy)
 
