@@ -81,16 +81,22 @@ await writeFile(
  * `@lavega/investing-web` and `@lavega/investing-server` are deliberately NOT in
  * this list. They belong to the investing side and are typechecked there; adding
  * them here would let a failure in that tree block the personal app's deploys.
- * `@lavega/server` is missing from the list and should not be. Its
- * `investing-mount.ts` imports `@lavega/investing-server/src/index.js`
- * directly, so `tsc` on our server pulls the whole investing tree in with it —
- * there is no way to check ours without checking theirs. That tree currently
- * has a type error (investing-server/src/index.ts:302, a caught FX failure
- * substitutes `undefined` for `FxRates`), so including our server here would
- * block every deploy on a fix we do not own. Add "@lavega/server" to this list
- * the moment that error is gone; it is the package that most needs checking.
+ * `@lavega/server` IS checked, and checking it also checks the investing tree:
+ * its `investing-mount.ts` imports `@lavega/investing-server/src/index.js`
+ * directly, so `tsc` cannot look at ours without looking at theirs. That was
+ * briefly a reason to leave it out — the investing side had a type error we did
+ * not own, and including it would have blocked our deploys on someone else's
+ * fix. That error is gone, so the coupling now works in our favour: one command
+ * covers both trees.
  */
-const TYPECHECKED = ["@lavega/core", "@lavega/adapters", "@lavega/database", "@lavega/web", "@lavega/email-worker"];
+const TYPECHECKED = [
+  "@lavega/core",
+  "@lavega/adapters",
+  "@lavega/database",
+  "@lavega/server",
+  "@lavega/web",
+  "@lavega/email-worker",
+];
 await exec("pnpm", [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"], execOptions);
 
 await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);
