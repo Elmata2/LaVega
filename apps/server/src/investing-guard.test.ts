@@ -122,6 +122,7 @@ test("the investing SPA shell stays reachable without a session", async () => {
 });
 
 test("the health line is answered without a session, and by the investing runtime", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
   investingTenantIdMock.mockResolvedValue(null);
   const app = await investingApp();
 
@@ -133,6 +134,7 @@ test("the health line is answered without a session, and by the investing runtim
 });
 
 test("investing cron route uses cron handler instead of browser session auth", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
   investingTenantIdMock.mockResolvedValue(null);
   const app = await investingApp();
 

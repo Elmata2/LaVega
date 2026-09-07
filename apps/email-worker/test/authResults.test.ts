@@ -68,11 +68,18 @@ test("een harde SPF-fail zonder geldige DKIM wordt geweigerd", () => {
   expect(senderHardFail({ spf: "fail", dkim: "none", dmarc: "unknown" })).not.toBeNull();
 });
 
-test("een DOORGESTUURDE mail komt er gewoon door: SPF zakt, DKIM klopt", () => {
+test("een DOORGESTUURDE mail komt er gewoon door: SPF zakt, DKIM klopt, DMARC houdt stand", () => {
   // Het hoofdgebruik van het doorstuuradres. Sluiten we dit, dan sluiten we de
   // functie.
   expect(senderHardFail({ spf: "fail", dkim: "pass", dmarc: "pass" })).toBeNull();
-  expect(senderHardFail({ spf: "softfail", dkim: "pass", dmarc: "fail" })).toBeNull();
+});
+
+test("DMARC-fail wordt geweigerd, ook als DKIM voor een ANDER domein klopt", () => {
+  // Een aanvaller kan zelf DKIM-ondertekenen vanaf zijn eigen domein en toch
+  // `From: facturen@ing.nl` zetten. Dan is `dkim=pass` maar `dmarc=fail` — DMARC
+  // is de check die het DKIM/SPF-domein aan het From-domein bindt (alignment),
+  // dus een DKIM-pass mag een DMARC-fail nooit overrulen.
+  expect(senderHardFail({ spf: "softfail", dkim: "pass", dmarc: "fail" })).not.toBeNull();
 });
 
 test("geen header gemeten is geen mislukking", () => {

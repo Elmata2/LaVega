@@ -360,15 +360,17 @@ test("credentials sealed under an older key fail loudly, naming the key", async 
  * `fakeDatabase` above has no reason to. */
 function erasureDatabase(rowCount = 1, failOn?: string) {
   const calls: string[] = [];
+  const paramCalls: Array<{ sql: string; values?: unknown[] }> = [];
   const client = {
-    query: async (sql: string) => {
+    query: async (sql: string, values?: unknown[]) => {
       calls.push(sql);
+      paramCalls.push({ sql, values });
       if (failOn && sql.includes(failOn)) throw new Error("boom");
       return { rows: [], rowCount };
     },
     release: () => undefined,
   } as never;
-  return { db: { connect: async () => client } as never, calls };
+  return { db: { connect: async () => client } as never, calls, paramCalls };
 }
 
 test("erasure clears every table that holds personal data, in one transaction", async () => {
@@ -380,18 +382,34 @@ test("erasure clears every table that holds personal data, in one transaction", 
   expect(calls[1]).toBe("SELECT set_config('app.user_id', $1, true)");
   expect(calls.at(-1)).toBe("COMMIT");
   expect(calls.filter((sql) => sql.startsWith("DELETE FROM"))).toEqual([
-    "DELETE FROM personal.eb_sessions",
-    "DELETE FROM personal.eb_pending_auth",
-    "DELETE FROM investing.agent_runs",
-    "DELETE FROM investing.sync_state",
-    "DELETE FROM investing.preferences",
-    "DELETE FROM investing.price_bars",
-    "DELETE FROM investing.broker_vaults",
-    "DELETE FROM personal.vaults",
+    "DELETE FROM personal.eb_sessions WHERE user_id = $1",
+    "DELETE FROM personal.eb_pending_auth WHERE user_id = $1",
+    "DELETE FROM investing.agent_runs WHERE user_id = $1",
+    "DELETE FROM investing.sync_state WHERE user_id = $1",
+    "DELETE FROM investing.preferences WHERE user_id = $1",
+    "DELETE FROM investing.price_bars WHERE user_id = $1",
+    "DELETE FROM investing.broker_vaults WHERE user_id = $1",
+    "DELETE FROM personal.vaults WHERE user_id = $1",
   ]);
   // The personal vault — the one thing the server cannot read — is still erasable.
   expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
   expect(report).toHaveLength(8);
+});
+
+test("erasure scopes personal.eb_pending_auth by user_id — that table has no RLS to fall back on", async () => {
+  // 0003_eb_flow.sql leaves eb_pending_auth deliberately without RLS (the bank
+  // callback cannot be relied on to carry a session cookie). An unscoped
+  // DELETE against it during erasure would empty every user's pending bank
+  // authorisations, not just the identity being erased.
+  const { db, paramCalls } = erasureDatabase(1);
+
+  await eraseUserData(db, "user-123");
+
+  const pendingAuthDelete = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM personal.eb_pending_auth"),
+  );
+  expect(pendingAuthDelete?.sql).toBe("DELETE FROM personal.eb_pending_auth WHERE user_id = $1");
+  expect(pendingAuthDelete?.values).toEqual(["user-123"]);
 });
 
 test("erasure reports zero rows rather than pretending it did not run", async () => {
@@ -413,7 +431,9 @@ test("a half-erased account rolls back — the caller is never told they are gon
 
 test("erasure refuses without an authenticated identity", async () => {
   const { db, calls } = erasureDatabase();
-  await expect(eraseUserData(db, undefined)).rejects.toThrow("Authenticated user identity is required");
+  await expect(eraseUserData(db, undefined)).rejects.toThrow(
+    "Authenticated user identity is required",
+  );
   await expect(eraseUserData(db, " ")).rejects.toThrow("Authenticated user identity is required");
   // Nothing was even connected to, let alone deleted.
   expect(calls).toEqual([]);

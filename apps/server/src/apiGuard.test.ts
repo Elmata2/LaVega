@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { isPublicApiPath } from "./apiGuard.js";
 
 /* The guard asks auth.js whether this request carries a verified session.
  * Mocked so a test can be "logged in" without a Neon database. */
@@ -68,6 +69,14 @@ test("/api/card-terms/ingest keeps its own shared-secret auth, not the session g
     body: JSON.stringify({ terms: [] }),
   });
   expect(res.status).toBe(503);
+});
+
+test("/api/cron/investing-sync and /api/investing/health pass the guard without a session — each carries its own auth", async () => {
+  for (const path of ["/api/cron/investing-sync", "/api/investing/health"]) {
+    expect(isPublicApiPath(path)).toBe(true);
+    const res = await app.request(path);
+    expect(await res.text()).not.toContain('{"error":"unauthorized"}');
+  }
 });
 
 test("LAVEGA_ALLOW_UNAUTHENTICATED=1 opens the guard for local development", async () => {

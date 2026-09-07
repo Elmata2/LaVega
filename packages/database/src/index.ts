@@ -561,7 +561,7 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
   };
 }
 
-/* The six tables that hold anything belonging to a person. Deliberately a
+/* The eight tables that hold anything belonging to a person. Deliberately a
  * literal list rather than a query over the catalogue: a table added later
  * should have to be considered here by a human, not silently swept up or —
  * worse — silently missed. Order is child-before-parent; nothing here has a
@@ -587,10 +587,12 @@ export type ErasureReport = { table: string; rows: number }[];
  * mitigation, not a lawful basis: a user asking to be forgotten could not be,
  * because nothing could remove their rows.
  *
- * It runs in ONE transaction inside `withTenant`, so `app.user_id` is set and
- * the RLS policies in `0001_lavega.sql` scope every statement to that user —
- * the deletion cannot reach anyone else's rows even if a predicate here were
- * wrong. Either all six tables are cleared or none are; a half-erased account
+ * It runs in ONE transaction inside `withTenant`, and every DELETE below
+ * carries an explicit `WHERE user_id = $1`. RLS is a second belt, not the
+ * only one: `personal.eb_pending_auth` deliberately has no RLS policy at all
+ * (`0003_eb_flow.sql`), so an unqualified `DELETE FROM` against it would
+ * empty every user's pending bank authorisations, not just this one's.
+ * Either all eight tables are cleared or none are; a half-erased account
  * is worse than a failed request, because the caller is told they are gone.
  *
  * It returns what it deleted per table. An erasure you cannot evidence is one
@@ -601,12 +603,15 @@ export type ErasureReport = { table: string; rows: number }[];
  * and session rows from `0002_auth.sql`) is separate and must be deleted
  * through Better Auth, or the person is forgotten but can still sign in.
  */
-export async function eraseUserData(db: Database, userId: string | undefined | null): Promise<ErasureReport> {
+export async function eraseUserData(
+  db: Database,
+  userId: string | undefined | null,
+): Promise<ErasureReport> {
   const identity = requireUserId(userId);
   return withTenant(db, identity, async (client) => {
     const report: ErasureReport = [];
     for (const table of USER_DATA_TABLES) {
-      const result = await client.query(`DELETE FROM ${table}`);
+      const result = await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [identity]);
       report.push({ table, rows: result.rowCount ?? 0 });
     }
     return report;
@@ -660,7 +665,13 @@ export function createEbFlowRepository(db: Database) {
           [state, String(ttlMs)],
         );
         const row = result.rows[0];
-        return row ? { userId: row.user_id as string, name: row.aspsp_name as string, country: row.aspsp_country as string } : null;
+        return row
+          ? {
+              userId: row.user_id as string,
+              name: row.aspsp_name as string,
+              country: row.aspsp_country as string,
+            }
+          : null;
       } finally {
         client.release();
       }

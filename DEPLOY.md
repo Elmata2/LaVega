@@ -22,12 +22,18 @@ storage. Better Auth integration remains pending.
   so its unguessable single-use `state` is the credential and the row is where
   the user's identity comes back from. `personal.eb_sessions` holds the account
   list, so it is encrypted and RLS-scoped like everything else.
+- `db/migrations/0004_eb_grants.sql` — `0003_eb_flow.sql` granted nothing to
+  `lavega_runtime` and left `eb_sessions` without `FORCE ROW LEVEL SECURITY`;
+  this migration adds both, plus a default-privilege grant on `personal` and
+  `investing` so a future table in either schema is not missed again. Apply it
+  before the first live EB connection, alongside `0003_eb_flow.sql`.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
 - Better Auth is mounted at `/api/auth/*`, and `apiGuard` (`apps/server/src/apiGuard.ts`)
   puts **every** `/api/*` route behind it — not just investing. Closed unless the
   path is on the public list (`/api/auth/*`, `/api/rates`, `/api/fx/rate`, the two
-  `status` probes, and the card-terms ingest endpoint, which carries its own
-  shared secret) or the request has a verified session. Everything else answers
+  `status` probes, `/api/investing/health`, and the two machine endpoints that
+  carry their own secret: the card-terms ingest and `/api/cron/investing-sync`)
+  or the request has a verified session. Everything else answers
   `401`, including the routes that spend the Anthropic key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
   Investing keeps a second, later check on top: `investingTenantId` decides
@@ -208,8 +214,11 @@ Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
 
 **Two things to check before the first live connection:**
-- Apply `0003_eb_flow.sql`. Without a `DATABASE_URL` the EB routes are not
-  registered at all, and without the tables the flow fails at `/auth`.
+- Apply `0003_eb_flow.sql` and `0004_eb_grants.sql`. Without a `DATABASE_URL`
+  the EB routes are not registered at all; without the tables the flow fails
+  at `/auth`; without the grants in `0004` every EB statement fails
+  `permission denied` once the app connects as `lavega_runtime` rather than
+  the schema owner.
 - `lavega.dev` now 308-redirects to `www.lavega.dev`. Register the redirect URL
   against whichever hostname is canonical and test that leg deliberately — an
   OAuth callback is a bad place to discover an extra hop.

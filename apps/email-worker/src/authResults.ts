@@ -113,13 +113,29 @@ export function localPartOf(address: string): string {
 export function senderHardFail(checks: SenderChecks): string | null {
   const detail = `SPF ${checks.spf}, DKIM ${checks.dkim}, DMARC ${checks.dmarc}`;
 
-  // DKIM ondertekent het BERICHT en overleeft doorsturen. Klopt hij, dan is dit
-  // geen naspeler — hoe hard SPF of DMARC ook zakt, want dat is precies het
-  // patroon van een doorgestuurde mail (zie forwardedNotSpoofed in n8n.ts).
+  // DMARC eerst. DMARC bindt het domein dat SPF of DKIM haalde aan het
+  // From-domein (alignment) — dus `dkim=pass` bewijst alleen dat IEMAND
+  // ondertekende, niet dat het de afzender in `From:` was. Een aanvaller kan
+  // vanaf zijn eigen domein DKIM-ondertekenen en toch `From: facturen@ing.nl`
+  // zetten; dat geeft `dkim=pass` maar `dmarc=fail`, en dat mag een DKIM-pass
+  // nooit overrulen.
+  if (checks.dmarc === "fail") {
+    return (
+      "de afzender kwam niet door de controle op afzenderdomein (" +
+      detail +
+      "). Dat is het patroon van een NAGESPEELDE afzender, " +
+      "dus LaVega neemt deze mail niet aan. Klopt dit niet, dan staat het SPF-, DKIM- of DMARC-record " +
+      "van het verzendende domein verkeerd; laat de afzender dat nakijken, of stuur de factuur als bijlage door."
+    );
+  }
+
+  // DKIM ondertekent het BERICHT en overleeft doorsturen. Klopt hij, en is
+  // DMARC niet gezakt, dan telt een SPF-fail alleen niet mee — dat is precies
+  // het patroon van een doorgestuurde mail (zie forwardedNotSpoofed in n8n.ts).
   if (checks.dkim === "pass") return null;
 
   const spfHard = checks.spf === "fail" || checks.spf === "permerror";
-  if (checks.dmarc === "fail" || spfHard) {
+  if (spfHard) {
     return (
       "de afzender kwam niet door de controle op afzenderdomein (" +
       detail +
