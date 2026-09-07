@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import CardSpiral from "./CardSpiral";
 import { INVESTING_URL } from "../investing.js";
+import { landingCopy } from "../landingCopy.js";
+import { alternatePath, applyDocumentLocale, applyHreflang, DEFAULT_LOCALE, type Locale } from "../locale.js";
 
 /** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
  *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
@@ -14,7 +16,17 @@ const WAITLIST_ENDPOINT =
  *  ondernemers). The app isn't public yet — it's a waitlist front door: the
  *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
  *  the vault (`/app`) via `onEnter`, for owner/Railway testing. */
-export default function Landing({ onEnter }: { onEnter: () => void }) {
+export default function Landing({ onEnter, locale = DEFAULT_LOCALE }: { onEnter: () => void; locale?: Locale }) {
+  const c = landingCopy(locale);
+
+  /* `<html lang>` has to follow the copy, and the two pages have to declare
+   * each other as alternates — otherwise the English page reads to a search
+   * engine as content competing with the Dutch one it exists alongside. */
+  useEffect(() => {
+    applyDocumentLocale(locale);
+    applyHreflang(window.location.origin);
+  }, [locale]);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
   const agentsRef = useRef<HTMLDivElement | null>(null);
 
@@ -107,10 +119,10 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           LaVega
         </button>
         <nav className="lp-nav-links">
-          <a href="#agents">Agents</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#how">Hoe het werkt</a>
-          <a href="#wachtlijst">Wachtlijst</a>
+          <a href="#agents">{c.nav.agents}</a>
+          <a href="#privacy">{c.nav.privacy}</a>
+          <a href="#how">{c.nav.how}</a>
+          <a href="#wachtlijst">{c.nav.waitlist}</a>
           {INVESTING_URL && (
             <a
               href={INVESTING_URL}
@@ -118,42 +130,43 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                 ? { target: "_blank", rel: "noopener noreferrer" }
                 : {})}
             >
-              Investing
+              {c.nav.investing}
             </a>
           )}
         </nav>
+        <a className="lp-lang" href={alternatePath(locale)} hrefLang={locale === "en" ? "nl" : "en"} title={c.langSwitch.to}>
+          {c.langSwitch.label}
+        </a>
         <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
-          Inloggen
+          {c.nav.login}
         </button>
       </header>
 
       {/* Hero */}
       <section className="lp-hero">
         <h1 className="lp-h1 lp-reveal">
-          Al je rekeningen,
+          {c.hero.titleTop}
           <br />
-          één helder getal.
+          {c.hero.titleBottom}
         </h1>
         <p className="lp-sub lp-reveal">
-          LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment
-          precies hoeveel je hebt en waar je geld heen gaat, reserveer je belasting, en haal het
-          meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.
+          {c.hero.sub}
         </p>
         <div className="lp-cta-row lp-reveal">
           <a className="lp-btn lp-btn-dark lp-btn-lg" href="#wachtlijst">
-            Kom op de wachtlijst <span aria-hidden="true">→</span>
+            {c.hero.ctaPrimary} <span aria-hidden="true">→</span>
           </a>
           <a className="lp-btn lp-btn-light lp-btn-lg" href="#how">
-            Bekijk hoe het werkt
+            {c.hero.ctaSecondary}
           </a>
         </div>
 
         {/* Floating product illustration */}
         <div className="lp-stage lp-reveal" aria-hidden="true">
           <div className="lp-device">
-            <div className="lp-device-eyebrow">Totaalpositie</div>
+            <div className="lp-device-eyebrow">{c.device.eyebrow}</div>
             <div className="lp-device-value">€12.480</div>
-            <div className="lp-device-delta">▲ 4,6% deze maand</div>
+            <div className="lp-device-delta">{c.device.delta}</div>
             <div className="lp-spark">
               <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
                 <polyline
@@ -168,29 +181,29 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             </div>
             <div className="lp-device-rows">
               <div>
-                <span>Boodschappen</span>
+                <span>{c.device.rows[0]}</span>
                 <span>28%</span>
               </div>
               <div>
-                <span>Vaste lasten</span>
+                <span>{c.device.rows[1]}</span>
                 <span>34%</span>
               </div>
               <div>
-                <span>Sparen</span>
+                <span>{c.device.rows[2]}</span>
                 <span>18%</span>
               </div>
             </div>
           </div>
           <div className="lp-chip lp-chip-a lp-float">
-            <div className="lp-chip-label">Deze maand gespaard</div>
+            <div className="lp-chip-label">{c.device.savedLabel}</div>
             <div className="lp-chip-value lp-pos">+€420</div>
           </div>
           <div className="lp-chip lp-chip-b lp-float lp-float-slow">
-            <div className="lp-chip-label">Forecast · 13 weken</div>
-            <div className="lp-chip-value lp-pos">geen tekort</div>
+            <div className="lp-chip-label">{c.device.forecastLabel}</div>
+            <div className="lp-chip-value lp-pos">{c.device.forecastValue}</div>
           </div>
           <div className="lp-chip lp-chip-c lp-float lp-float-slower">
-            <span className="lp-lock">🔒</span> Lokaal &amp; versleuteld
+            <span className="lp-lock">🔒</span> {c.device.lockChip}
           </div>
         </div>
       </section>
@@ -201,20 +214,19 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Kern-tegels — waarom LaVega (SS1-inspired, our fonts + warm palet) */}
       <section className="lp-section lp-strengths" id="waarom">
         <div className="lp-strengths-head lp-reveal">
-          <h2 className="lp-h2 lp-strengths-title">Al je geldzaken, samen op één plek</h2>
+          <h2 className="lp-h2 lp-strengths-title">{c.strengths.title}</h2>
           <div className="lp-strengths-aside">
             <p className="lp-sub lp-strengths-sub">
-              We doen er alles aan om je een naadloze ervaring te geven — snel, veilig en compleet.
-              Eén helder beeld van al je rekeningen, waar je ook bankiert.
+              {c.strengths.sub}
             </p>
             <a className="lp-btn lp-btn-dark" href="#agents">
-              Ontdek meer <span aria-hidden="true">→</span>
+              {c.strengths.cta} <span aria-hidden="true">→</span>
             </a>
           </div>
         </div>
         <div className="lp-tiles lp-reveal">
           <article className="lp-tile">
-            <h3 className="lp-tile-title">Snel &amp; soepel</h3>
+            <h3 className="lp-tile-title">{c.strengths.tiles[0]}</h3>
             <div className="lp-ill lp-ill-fast" aria-hidden="true">
               <span className="c c1" />
               <span className="c c2" />
@@ -223,7 +235,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             </div>
           </article>
           <article className="lp-tile">
-            <h3 className="lp-tile-title">Al je rekeningen gekoppeld</h3>
+            <h3 className="lp-tile-title">{c.strengths.tiles[1]}</h3>
             <div className="lp-ill lp-ill-toggles" aria-hidden="true">
               <span className="tg" />
               <span className="tg on" />
@@ -231,7 +243,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             </div>
           </article>
           <article className="lp-tile">
-            <h3 className="lp-tile-title">Sterke versleuteling</h3>
+            <h3 className="lp-tile-title">{c.strengths.tiles[2]}</h3>
             <div className="lp-ill lp-ill-rings" aria-hidden="true">
               <span className="ring r1" />
               <span className="ring r2" />
@@ -242,7 +254,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
             </div>
           </article>
           <article className="lp-tile">
-            <h3 className="lp-tile-title">Eén compleet overzicht</h3>
+            <h3 className="lp-tile-title">{c.strengths.tiles[3]}</h3>
             <div className="lp-ill lp-ill-tree" aria-hidden="true">
               <svg viewBox="0 0 160 120" width="100%" height="120">
                 <circle cx="80" cy="28" r="15" className="tree-node" />
@@ -261,16 +273,16 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       <section className="lp-section" id="agents">
         <div className="lp-carousel-head lp-reveal">
           <div>
-            <p className="lp-eyebrow lp-eyebrow-left">De agents</p>
-            <h2 className="lp-h2 lp-strengths-title">Slimme agents die het werk doen</h2>
+            <p className="lp-eyebrow lp-eyebrow-left">{c.agents.eyebrow}</p>
+            <h2 className="lp-h2 lp-strengths-title">{c.agents.title}</h2>
           </div>
           <div className="lp-carousel-nav">
-            <button type="button" aria-label="Vorige" onClick={() => scrollAgents(-1)}>
+            <button type="button" aria-label={c.agents.prev} onClick={() => scrollAgents(-1)}>
               ←
             </button>
             <button
               type="button"
-              aria-label="Volgende"
+              aria-label={c.agents.next}
               className="accent"
               onClick={() => scrollAgents(1)}
             >
@@ -295,8 +307,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                   <path d="M9 13h6M9 17h6" />
                 </svg>
               ),
-              t: "Facturen-agent",
-              d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt.",
+              t: c.agents.cards[0]!.t,
+              d: c.agents.cards[0]!.d,
             },
             {
               icon: (
@@ -312,8 +324,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                   <path d="M9 12l2 2 4-4" />
                 </svg>
               ),
-              t: "Belasting-agent",
-              d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan.",
+              t: c.agents.cards[1]!.t,
+              d: c.agents.cards[1]!.d,
             },
             {
               icon: (
@@ -329,8 +341,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                   <path d="M20 16H7M7 16l3 3M7 16l3-3" />
                 </svg>
               ),
-              t: "Koersen-agent",
-              d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank).",
+              t: c.agents.cards[2]!.t,
+              d: c.agents.cards[2]!.d,
             },
             {
               icon: (
@@ -345,8 +357,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                   <path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6 6.9 19.2l1-5.7-4.1-4 5.7-.8z" />
                 </svg>
               ),
-              t: "Punten-agent",
-              d: "Houdt je punten bij en zoekt live op wat ze écht waard zijn en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen.",
+              t: c.agents.cards[3]!.t,
+              d: c.agents.cards[3]!.d,
             },
           ].map((a) => (
             <article className="lp-feature-card" key={a.t}>
@@ -363,45 +375,28 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Privacy */}
       <section className="lp-section lp-privacy" id="privacy">
         <div className="lp-privacy-inner lp-reveal">
-          <h2 className="lp-h2">Jouw data blijft van jou.</h2>
+          <h2 className="lp-h2">{c.privacy.title}</h2>
           <p className="lp-sub">
-            Alles staat versleuteld op je eigen apparaat. Bankkoppelingen zijn alleen-lezen. Geen
-            cloud, geen meekijken — tenzij jij een agent expliciet aanzet. Zo simpel is het.
+            {c.privacy.sub}
           </p>
           <ul className="lp-ticks">
-            <li>Lokaal-first: geen server bewaart je transacties</li>
-            <li>Alleen-lezen bankkoppeling (geen betalingen)</li>
-            <li>Versleutelde kluis met je eigen wachtwoord</li>
+            {c.privacy.ticks.map((tick) => (
+              <li key={tick}>{tick}</li>
+            ))}
           </ul>
         </div>
       </section>
 
       {/* How it works */}
       <section className="lp-section" id="how">
-        <p className="lp-eyebrow lp-reveal">Hoe het werkt</p>
-        <h2 className="lp-h2 lp-reveal">In een paar minuten opgezet</h2>
+        <p className="lp-eyebrow lp-reveal">{c.how.eyebrow}</p>
+        <h2 className="lp-h2 lp-reveal">{c.how.title}</h2>
         <div className="lp-steps lp-reveal">
-          {[
-            {
-              n: "1",
-              t: "Importeer of koppel",
-              d: "Sleep je bankexports erin of koppel je bank alleen-lezen.",
-            },
-            {
-              n: "2",
-              t: "LaVega rekent",
-              d: "Categoriseert automatisch en voorspelt je kaspositie vooruit.",
-            },
-            {
-              n: "3",
-              t: "Vraag de assistent",
-              d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee.",
-            },
-          ].map((s) => (
-            <div className="lp-step" key={s.n}>
-              <div className="lp-step-n">{s.n}</div>
-              <h3 className="lp-card-title">{s.t}</h3>
-              <p className="lp-card-text">{s.d}</p>
+          {c.how.steps.map((step, i) => (
+            <div className="lp-step" key={step.t}>
+              <div className="lp-step-n">{i + 1}</div>
+              <h3 className="lp-card-title">{step.t}</h3>
+              <p className="lp-card-text">{step.d}</p>
             </div>
           ))}
         </div>
@@ -409,31 +404,10 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
 
       {/* FAQ */}
       <section className="lp-section" id="faq">
-        <p className="lp-eyebrow lp-reveal">FAQ</p>
-        <h2 className="lp-h2 lp-reveal">Veelgestelde vragen</h2>
+        <p className="lp-eyebrow lp-reveal">{c.faq.eyebrow}</p>
+        <h2 className="lp-h2 lp-reveal">{c.faq.title}</h2>
         <div className="lp-faq lp-reveal">
-          {[
-            {
-              q: "Is mijn data veilig?",
-              a: "Ja. Alles staat versleuteld op je eigen apparaat — er is geen cloud die je transacties bewaart. Bankkoppelingen zijn altijd alleen-lezen.",
-            },
-            {
-              q: "Moet ik mijn bank koppelen?",
-              a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
-            },
-            {
-              q: "Voor wie is LaVega?",
-              a: "Van studenten die grip willen op hun budget tot werkenden en ondernemers die hun rekeningen, cashflow en btw willen beheren.",
-            },
-            {
-              q: "Werkt het met meerdere rekeningen en BV's?",
-              a: "Ja — LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
-            },
-            {
-              q: "Gebruikt de AI-assistent mijn gegevens?",
-              a: "Alleen als jij dat aanzet, per onderdeel, en je bevestigt zelf wat er gedeeld wordt. Standaard staat het uit.",
-            },
-          ].map((f) => (
+          {c.faq.items.map((f) => (
             <details className="lp-faq-item" key={f.q}>
               <summary>
                 <span>{f.q}</span>
@@ -448,23 +422,22 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Waitlist */}
       <section className="lp-section lp-waitlist" id="wachtlijst">
         <div className="lp-waitlist-inner lp-reveal">
-          <p className="lp-eyebrow">Wachtlijst</p>
-          <h2 className="lp-h2">Wees er als eerste bij</h2>
+          <p className="lp-eyebrow">{c.waitlist.eyebrow}</p>
+          <h2 className="lp-h2">{c.waitlist.title}</h2>
           <p className="lp-sub">
-            LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan
-            de beurt bent — plus af en toe een update over nieuwe agents.
+            {c.waitlist.sub}
           </p>
           {wlStatus === "done" ? (
             <p className="lp-waitlist-done">
-              Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.
+              {c.waitlist.done}
             </p>
           ) : (
             <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
               <input
                 type="text"
                 className="lp-input"
-                placeholder="Naam (optioneel)"
-                aria-label="Naam"
+                placeholder={c.waitlist.namePlaceholder}
+                aria-label={c.waitlist.nameLabel}
                 value={wlName}
                 onChange={(e) => setWlName(e.target.value)}
                 disabled={!wlReady || wlStatus === "sending"}
@@ -472,8 +445,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               <input
                 type="email"
                 className="lp-input"
-                placeholder="jouw@email.nl"
-                aria-label="E-mailadres"
+                placeholder={c.waitlist.emailPlaceholder}
+                aria-label={c.waitlist.emailLabel}
                 required
                 value={wlEmail}
                 onChange={(e) => setWlEmail(e.target.value)}
@@ -486,15 +459,15 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               >
                 {wlReady
                   ? wlStatus === "sending"
-                    ? "Bezig…"
-                    : "Zet me op de lijst"
-                  : "Binnenkort"}
+                    ? c.waitlist.sending
+                    : c.waitlist.submit
+                  : c.waitlist.soon}
               </button>
             </form>
           )}
-          {!wlReady && <p className="lp-waitlist-note">De wachtlijst opent zeer binnenkort.</p>}
+          {!wlReady && <p className="lp-waitlist-note">{c.waitlist.notReady}</p>}
           {wlStatus === "error" && (
-            <p className="lp-waitlist-note">Er ging iets mis — probeer het zo nog eens.</p>
+            <p className="lp-waitlist-note">{c.waitlist.error}</p>
           )}
         </div>
       </section>
@@ -502,31 +475,31 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       {/* Footer */}
       <footer className="lp-footer2">
         <div className="lp-footer2-cta lp-reveal">
-          <h2 className="lp-h2">Klaar om grip te krijgen op je geld?</h2>
+          <h2 className="lp-h2">{c.footer.ctaTitle}</h2>
           <a className="lp-btn lp-btn-tan lp-btn-lg" href="#wachtlijst">
-            Kom op de wachtlijst <span aria-hidden="true">→</span>
+            {c.footer.cta} <span aria-hidden="true">→</span>
           </a>
         </div>
         <div className="lp-footer2-grid">
           <div className="lp-footer2-about">
             <div className="lp-footer2-brand">LaVega</div>
             <p className="lp-footer2-note">
-              Lokaal-first personal finance — van student tot ondernemer.
+              {c.footer.note}
             </p>
           </div>
           <div className="lp-footer2-col">
-            <span className="lp-footer2-h">Product</span>
-            <a href="#agents">Agents</a>
-            <a href="#how">Hoe het werkt</a>
-            <a href="#faq">FAQ</a>
+            <span className="lp-footer2-h">{c.footer.product}</span>
+            <a href="#agents">{c.nav.agents}</a>
+            <a href="#how">{c.nav.how}</a>
+            <a href="#faq">{c.faq.eyebrow}</a>
           </div>
           <div className="lp-footer2-col">
-            <span className="lp-footer2-h">Juridisch</span>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Voorwaarden</a>
+            <span className="lp-footer2-h">{c.footer.legal}</span>
+            <a href="/privacy">{c.footer.privacy}</a>
+            <a href="/terms">{c.footer.terms}</a>
           </div>
         </div>
-        <div className="lp-footer2-bottom">© 2026 LaVega · lokaal-first</div>
+        <div className="lp-footer2-bottom">{c.footer.rights}</div>
       </footer>
     </div>
   );

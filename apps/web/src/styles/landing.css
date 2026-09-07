@@ -67,6 +67,32 @@ body.lp-scroll #root {
   color: var(--lp-ink);
 }
 
+/* Language switcher. Deliberately quiet — a Dutch visitor is on the page they
+ * should be on, so this is an escape hatch for the minority who need it, not a
+ * decision the majority has to make before reading anything. */
+.lp-lang {
+  color: var(--lp-ink2);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-line, rgba(0, 0, 0, 0.12));
+  margin-right: 10px;
+  white-space: nowrap;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.lp-lang:hover {
+  color: var(--lp-ink);
+  border-color: var(--lp-ink2);
+}
+@media (max-width: 720px) {
+  .lp-lang {
+    display: none;
+  }
+}
+
 /* ---- Buttons ---- */
 .lp-btn {
   display: inline-flex;
