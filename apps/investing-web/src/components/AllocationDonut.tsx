@@ -17,15 +17,54 @@ const colors = [
   "hsl(var(--chart-teal))",
   "hsl(var(--chart-purple))",
   "hsl(var(--chart-amber))",
-  "hsl(var(--chart-coral))",
 ];
+const otherColor = "hsl(var(--muted-foreground) / 0.35)";
+// A donut reads as at most a handful of wedges. Past that, per-slice padding
+// angle eats more arc than the data itself and the ring turns into a row of
+// disconnected ticks. Cap named slices and fold the rest into one "Overige"
+// wedge instead of rendering every holding.
+const MAX_NAMED_BUCKETS = colors.length;
+
+type DisplayBucket = {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+  members?: { key: string; label: string; value: number }[];
+};
+
+function buildDisplayBuckets(
+  priced: { key: string; label: string; value: number | null }[],
+): DisplayBucket[] {
+  const sorted = [...priced]
+    .filter((bucket): bucket is { key: string; label: string; value: number } => !!bucket.value)
+    .sort((a, b) => b.value - a.value);
+  if (sorted.length <= MAX_NAMED_BUCKETS) {
+    return sorted.map((bucket, index) => ({ ...bucket, color: colors[index] }));
+  }
+  const named = sorted.slice(0, MAX_NAMED_BUCKETS - 1);
+  const rest = sorted.slice(MAX_NAMED_BUCKETS - 1);
+  return [
+    ...named.map((bucket, index) => ({ ...bucket, color: colors[index] })),
+    {
+      key: "__overige",
+      label: `Overige (${rest.length})`,
+      value: rest.reduce((sum, bucket) => sum + bucket.value, 0),
+      color: otherColor,
+      members: rest,
+    },
+  ];
+}
 
 export function AllocationDonut({ instrument, entity, currency = "EUR" }: AllocationDonutProps) {
   const [group, setGroup] = useState<"instrument" | "entity">("instrument");
+  const [showOverige, setShowOverige] = useState(false);
   const allocation = group === "instrument" ? instrument : entity;
   const priced = allocation.buckets.filter(
     (bucket) => !bucket.unpriced && bucket.value !== null && bucket.value > 0,
   );
+  const display = buildDisplayBuckets(priced);
+  const total = display.reduce((sum, bucket) => sum + bucket.value, 0);
 
   return (
     <Card>
@@ -42,7 +81,10 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
           <Button
             aria-pressed={group === "instrument"}
             className="rounded-pill"
-            onClick={() => setGroup("instrument")}
+            onClick={() => {
+              setGroup("instrument");
+              setShowOverige(false);
+            }}
             size="sm"
             variant={group === "instrument" ? "default" : "ghost"}
           >
@@ -51,7 +93,10 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
           <Button
             aria-pressed={group === "entity"}
             className="rounded-pill"
-            onClick={() => setGroup("entity")}
+            onClick={() => {
+              setGroup("entity");
+              setShowOverige(false);
+            }}
             size="sm"
             variant={group === "entity" ? "default" : "ghost"}
           >
@@ -72,11 +117,11 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
               role="img"
               aria-label={`Portefeuilleverdeling per ${group === "instrument" ? "belegging" : "entiteit"}`}
             >
-              {priced.length > 0 ? (
+              {display.length > 0 ? (
                 <ChartContainer className="h-[180px]" aria-hidden="true">
                   <PieChart>
                     <Pie
-                      data={priced}
+                      data={display}
                       dataKey="value"
                       nameKey="label"
                       cx="50%"
@@ -86,8 +131,8 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                       paddingAngle={2}
                       strokeWidth={0}
                     >
-                      {priced.map((bucket, index) => (
-                        <Cell key={bucket.key} fill={colors[index % colors.length]} />
+                      {display.map((bucket) => (
+                        <Cell key={bucket.key} fill={bucket.color} />
                       ))}
                     </Pie>
                   </PieChart>
@@ -99,23 +144,60 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
               )}
             </div>
             <ul aria-label="Verdelingsdetails" className="space-y-3 text-sm">
-              {priced.map((bucket, index) => (
-                <li className="flex items-center justify-between gap-3" key={bucket.key}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: colors[index % colors.length] }}
-                    />
-                    <span className="truncate">{bucket.label}</span>
-                  </span>
-                  <span className="font-semibold tabular-nums">
-                    {bucket.value?.toLocaleString("nl-NL", {
-                      style: "currency",
-                      currency,
-                      maximumFractionDigits: 0,
-                    })}
-                  </span>
+              {display.map((bucket) => (
+                <li key={bucket.key}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: bucket.color }}
+                      />
+                      {bucket.members ? (
+                        <button
+                          aria-expanded={showOverige}
+                          className="truncate underline decoration-dotted underline-offset-2"
+                          onClick={() => setShowOverige((value) => !value)}
+                          type="button"
+                        >
+                          {bucket.label}
+                        </button>
+                      ) : (
+                        <span className="truncate">{bucket.label}</span>
+                      )}
+                    </span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {Math.round((bucket.value / total) * 100)}%
+                      </span>
+                      <span className="font-semibold tabular-nums">
+                        {bucket.value.toLocaleString("nl-NL", {
+                          style: "currency",
+                          currency,
+                          maximumFractionDigits: 0,
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                  {bucket.members && showOverige && (
+                    <ul className="mt-2 space-y-2 border-l border-border pl-4">
+                      {bucket.members.map((member) => (
+                        <li
+                          className="flex items-center justify-between gap-3 text-muted-foreground"
+                          key={member.key}
+                        >
+                          <span className="truncate">{member.label}</span>
+                          <span className="tabular-nums">
+                            {member.value.toLocaleString("nl-NL", {
+                              style: "currency",
+                              currency,
+                              maximumFractionDigits: 0,
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
               {allocation.unpriced.length > 0 && (

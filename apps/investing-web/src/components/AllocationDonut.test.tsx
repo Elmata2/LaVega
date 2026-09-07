@@ -58,3 +58,31 @@ test("excludes unpriced holdings and names unknown symbols", () => {
   expect(container.textContent).not.toContain("Old Holding");
   root.unmount();
 });
+
+test("caps named slices, sorts by value, and folds the rest into an expandable Overige bucket", () => {
+  const many: Allocation = {
+    buckets: [
+      { key: "A", label: "Alpha", value: 10, unpriced: false },
+      { key: "B", label: "Bravo", value: 400, unpriced: false },
+      { key: "C", label: "Charlie", value: 30, unpriced: false },
+      { key: "D", label: "Delta", value: 20, unpriced: false },
+      { key: "E", label: "Echo", value: 40, unpriced: false },
+      { key: "F", label: "Foxtrot", value: 5, unpriced: false },
+    ],
+    unpriced: [],
+  };
+  const { container, root } = render(many, many);
+  const labels = [...container.querySelectorAll("li > div .truncate")].map(
+    (node) => node.textContent,
+  );
+  // Top 3 individually named, largest first, rest folded into one bucket.
+  expect(labels).toEqual(["Bravo", "Echo", "Charlie", "Overige (3)"]);
+  expect(container.textContent).not.toContain("Alpha");
+  act(() => {
+    (container.querySelector("button.truncate") as HTMLButtonElement).click();
+  });
+  expect(container.textContent).toContain("Alpha");
+  expect(container.textContent).toContain("Delta");
+  expect(container.textContent).toContain("Foxtrot");
+  root.unmount();
+});
