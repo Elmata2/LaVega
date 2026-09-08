@@ -32,6 +32,7 @@ test("GET /api/eb/status reports configured:false and applicationId:null when no
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
     keySource: "missing",
+    keyShape: { kind: "none", length: 0 },
   });
   const res = await app.request("/api/eb/status");
   expect(res.status).toBe(200);
@@ -39,6 +40,7 @@ test("GET /api/eb/status reports configured:false and applicationId:null when no
     configured: false,
     applicationId: null,
     privateKey: "missing",
+    privateKeyShape: { kind: "none", length: 0 },
   });
 });
 
@@ -51,6 +53,7 @@ test("GET /api/eb/status masks the applicationId when configured", async () => {
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
     keySource: "file",
+    keyShape: { kind: "none", length: 0 },
   });
   const res = await app.request("/api/eb/status");
   expect(res.status).toBe(200);
@@ -58,6 +61,7 @@ test("GET /api/eb/status masks the applicationId when configured", async () => {
     configured: true,
     applicationId: "abcd1234…",
     privateKey: "file",
+    privateKeyShape: { kind: "none", length: 0 },
   });
 });
 

@@ -198,6 +198,7 @@ app.get("/api/eb/status", (c) => {
     configured: config.configured,
     applicationId: maskApplicationId(config.applicationId),
     privateKey: config.keySource,
+    privateKeyShape: config.keyShape,
   });
 });
 

@@ -125,9 +125,13 @@ test("EB_PRIVATE_KEY without the PEM header lines is reported as env-not-pem and
   try {
     process.env.EB_PRIVATE_KEY = "MIIBbodyonly";
     expect(loadConfig(configPath).keySource).toBe("env-not-pem");
+    expect(loadConfig(configPath).keyShape).toEqual({ kind: "base64-body", length: 12 });
+    process.env.EB_PRIVATE_KEY = "./keys/eb.pem";
+    expect(loadConfig(configPath).keyShape.kind).toBe("path");
     expect(loadConfig(configPath).configured).toBe(false);
     process.env.EB_PRIVATE_KEY = Buffer.from(pem).toString("base64");
     expect(loadConfig(configPath).keySource).toBe("env");
+    expect(loadConfig(configPath).keyShape.kind).toBe("base64-pem");
     expect(loadConfig(configPath).privateKey).toBe(pem);
     process.env.EB_PRIVATE_KEY = pem.replace(/\n/g, "\\n");
     expect(loadConfig(configPath).privateKey).toBe(pem);

@@ -36,6 +36,27 @@ export interface EbConfig {
   psuType: PsuType;
   /** Where the signing key comes from; "missing" means every EB call will fail. */
   keySource: "env" | "env-not-pem" | "file" | "missing";
+  /** What the pasted EB_PRIVATE_KEY looks like, never its content: enough to
+   *  tell an operator what went wrong with the paste. */
+  keyShape: KeyShape;
+}
+
+export type KeyShape = {
+  kind: "pem" | "base64-pem" | "base64-body" | "path" | "other" | "none";
+  length: number;
+};
+
+function shapeOf(value: string | null): KeyShape {
+  if (!value) return { kind: "none", length: 0 };
+  const v = value.trim();
+  const length = v.length;
+  if (v.includes("-----BEGIN")) return { kind: "pem", length };
+  if (/\.pem$|^[./~]/.test(v) && !v.includes(" ") && length < 200) return { kind: "path", length };
+  if (/^[A-Za-z0-9+/=\s\\n]+$/.test(v)) {
+    const decoded = Buffer.from(v.replace(/\\n/g, ""), "base64").toString("utf8");
+    return { kind: decoded.includes("-----BEGIN") ? "base64-pem" : "base64-body", length };
+  }
+  return { kind: "other", length };
 }
 
 interface RawEbConfig {
@@ -101,6 +122,7 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   return {
     configured,
     keySource,
+    keyShape: shapeOf(envKey),
     applicationId: hasApplicationId ? (applicationId as string) : null,
     privateKey,
     privateKeyFile,
