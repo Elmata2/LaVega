@@ -45,13 +45,13 @@ export function AuthForm() {
       <Card className="w-full">
         <CardHeader>
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">LaVega</p>
-          <CardTitle>{mode === "sign-up" ? "Account aanmaken" : "Inloggen"}</CardTitle>
+          <CardTitle>{mode === "sign-up" ? "Create account" : "Sign in"}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
             {mode === "sign-up" && (
               <Label className="block">
-                Naam
+                Name
                 <Input
                   required
                   name="name"
@@ -63,7 +63,7 @@ export function AuthForm() {
               </Label>
             )}
             <Label className="block">
-              E-mailadres
+              Email address
               <Input
                 required
                 name="email"
@@ -75,7 +75,7 @@ export function AuthForm() {
               />
             </Label>
             <Label className="block">
-              Wachtwoord
+              Password
               <Input
                 required
                 name="password"
@@ -93,10 +93,10 @@ export function AuthForm() {
             )}
             <Button type="submit" disabled={status === "loading"} className="w-full">
               {status === "loading"
-                ? "Bezig…"
+                ? "Working…"
                 : mode === "sign-up"
-                  ? "Account aanmaken"
-                  : "Inloggen"}
+                  ? "Create account"
+                  : "Sign in"}
             </Button>
           </form>
           <button
@@ -105,7 +105,7 @@ export function AuthForm() {
             onClick={switchMode}
             className="pressable mt-4 rounded-sm text-sm font-semibold text-primary underline-offset-2 hover:underline"
           >
-            {mode === "sign-up" ? "Al een account? Inloggen" : "Nog geen account? Registreren"}
+            {mode === "sign-up" ? "Already have an account? Sign in" : "No account yet? Sign up"}
           </button>
         </CardContent>
       </Card>

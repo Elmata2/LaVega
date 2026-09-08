@@ -38,10 +38,10 @@ test("keeps asking while the server pauses on its time budget", async () => {
 });
 
 test("stops at the first terminal answer and reports its problems", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(progress("problem", { problems: ["ASML: mislukt"] }));
+  const fetchMock = vi.fn().mockResolvedValue(progress("problem", { problems: ["ASML: failed"] }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-  await expect(runPriceSyncUntilComplete()).resolves.toEqual(["ASML: mislukt"]);
+  await expect(runPriceSyncUntilComplete()).resolves.toEqual(["ASML: failed"]);
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 
@@ -80,7 +80,7 @@ test("a server that keeps failing is reported rather than hammered", async () =>
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 
   await expect(runPriceSyncUntilComplete()).resolves.toEqual([
-    "Prijsgeschiedenis kon niet worden bijgewerkt.",
+    "Price history could not be updated.",
   ]);
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });

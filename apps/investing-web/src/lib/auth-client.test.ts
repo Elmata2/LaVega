@@ -67,12 +67,12 @@ test("signUp surfaces the server's error message", async () => {
     "fetch",
     vi.fn(() =>
       Promise.resolve(
-        new Response(JSON.stringify({ message: "E-mailadres al in gebruik" }), { status: 422 }),
+        new Response(JSON.stringify({ message: "Email address al in gebruik" }), { status: 422 }),
       ),
     ),
   );
   const result = await signUp({ name: "Jort", email: "jort@example.com", password: "x" });
-  expect(result).toEqual({ ok: false, message: "E-mailadres al in gebruik" });
+  expect(result).toEqual({ ok: false, message: "Email address al in gebruik" });
 });
 
 test("signIn posts email and password to sign-in/email", async () => {
@@ -98,7 +98,7 @@ test("signIn surfaces a fallback message when the server sends none", async () =
     vi.fn(() => Promise.resolve(new Response(JSON.stringify({}), { status: 401 }))),
   );
   const result = await signIn({ email: "jort@example.com", password: "wrong" });
-  expect(result).toEqual({ ok: false, message: "Inloggen mislukt." });
+  expect(result).toEqual({ ok: false, message: "Sign-in failed." });
 });
 
 test("signOut posts to sign-out", async () => {

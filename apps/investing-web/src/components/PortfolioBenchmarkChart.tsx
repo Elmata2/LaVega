@@ -26,26 +26,20 @@ type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; prob
 export type VisibleWindow = ChartWindow;
 
 const money = (value: number, currency: string) =>
-  value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
+  value.toLocaleString("en-GB", { style: "currency", currency, maximumFractionDigits: 2 });
 const percent = (value: number) =>
-  value.toLocaleString("nl-NL", {
+  value.toLocaleString("en-GB", {
     style: "percent",
     minimumFractionDigits: 1,
     maximumFractionDigits: 2,
   });
 const dateLabel = shortDate;
 const valueOrUnknown = (value: number | null, formatter: (value: number) => string) =>
-  value === null ? "Onbekend" : formatter(value);
+  value === null ? "Unknown" : formatter(value);
 const pp = (value: number) =>
-  `${value >= 0 ? "+" : ""}${(value * 100).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pp`;
+  `${value >= 0 ? "+" : ""}${(value * 100).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pp`;
 const cappedXirr = (value: number | null) =>
-  value === null
-    ? "Onbekend"
-    : value > 9.99
-      ? "> +999%"
-      : value < -0.99
-        ? "< -99%"
-        : percent(value);
+  value === null ? "Unknown" : value > 9.99 ? "> +999%" : value < -0.99 ? "< -99%" : percent(value);
 
 function allPoints(data: Props["data"]): PortfolioValuePoint[] {
   if (data.All) return data.All;
@@ -126,21 +120,21 @@ export function PortfolioBenchmarkChart({
     if (!comparing) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setSearchStatus("Zoeken…");
+      setSearchStatus("Searching…");
       void fetch(`/api/investing/benchmarks/search?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
         .then(async (response) => {
-          if (!response.ok) throw new Error("Zoeken mislukt");
+          if (!response.ok) throw new Error("Search failed");
           return (await response.json()) as SearchPayload;
         })
         .then((payload) => {
           setResults((payload.results ?? []).filter((result) => !selected.includes(result.symbol)));
-          setSearchStatus(payload.fallback ? "Europese suggesties" : null);
+          setSearchStatus(payload.fallback ? "European suggestions" : null);
         })
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === "AbortError"))
-            setSearchStatus("Zoeken niet beschikbaar");
+            setSearchStatus("Search unavailable");
         });
     }, 250);
     return () => {
@@ -158,7 +152,7 @@ export function PortfolioBenchmarkChart({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ symbols }),
       });
-      if (!response.ok) throw new Error("Selectie opslaan mislukt");
+      if (!response.ok) throw new Error("Failed to save selection");
       setSelected(symbols);
       setVisible(
         (current) =>
@@ -168,11 +162,10 @@ export function PortfolioBenchmarkChart({
           ]),
       );
       window.dispatchEvent(new Event("lavega:dashboard-refresh"));
-      /* Een net gekozen benchmark heeft nog geen koersen. De server haalt ze
-         alleen op terwijl er een aanvraag loopt, dus vraagt de pagina erom. */
+      /* A newly chosen benchmark has no prices yet. The server only fetches them while a request is in flight, so the page asks for them. */
       await runPriceSyncUntilComplete();
     } catch (error) {
-      setSelectionError(error instanceof Error ? error.message : "Selectie opslaan mislukt");
+      setSelectionError(error instanceof Error ? error.message : "Failed to save selection");
     } finally {
       setBusy(false);
     }
@@ -218,7 +211,7 @@ export function PortfolioBenchmarkChart({
     const values = points.flatMap((point) => (point.value === null ? [] : [point.value]));
     return values.length < 2 || values.at(-1)! >= values[0]! ? "pos" : "neg";
   }, [points]);
-  const label = mode === "euros" ? "Portefeuillewaarde" : "Geïndexeerd rendement";
+  const label = mode === "euros" ? "Portfolio value" : "Indexed return";
   const summaryPoint = indexed[focusIndex ?? indexed.length - 1] ?? null;
   const applyTypedDates = (event: React.FormEvent) => {
     event.preventDefault();
@@ -233,19 +226,19 @@ export function PortfolioBenchmarkChart({
             <span
               className={`axis-label absolute inset-0 ${mode === "euros" ? "opacity-100" : "opacity-0"}`}
             >
-              Portefeuillewaarde
+              Portfolio value
             </span>
             <span
               className={`axis-label absolute inset-0 ${mode === "indexed" ? "opacity-100" : "opacity-0"}`}
             >
-              Geïndexeerd rendement
+              Indexed return
             </span>
           </p>
-          <CardTitle>{mode === "euros" ? "Portefeuille" : "Vergelijking"}</CardTitle>
+          <CardTitle>{mode === "euros" ? "Portfolio" : "Comparison"}</CardTitle>
         </div>
         <div
           role="group"
-          aria-label="Periode kiezen"
+          aria-label="Choose period"
           className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
         >
           {chartRanges.map((item) => (
@@ -262,10 +255,7 @@ export function PortfolioBenchmarkChart({
         </div>
       </CardHeader>
       <CardContent>
-        <div
-          className="mb-4 flex flex-wrap items-center gap-2"
-          aria-label="Geselecteerde benchmarks"
-        >
+        <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Selected benchmarks">
           {selected.map((symbol, index) => (
             <span
               key={symbol}
@@ -280,7 +270,7 @@ export function PortfolioBenchmarkChart({
               <button
                 type="button"
                 disabled={busy}
-                aria-label={`${symbol} verwijderen`}
+                aria-label={`${symbol} remove`}
                 onClick={() => void replaceSelection(selected.filter((item) => item !== symbol))}
                 className="pressable -mr-1 rounded-full px-1 text-muted-foreground hover:text-foreground"
               >
@@ -294,7 +284,7 @@ export function PortfolioBenchmarkChart({
               onClick={() => setComparing(true)}
               className="pressable rounded-pill border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-primary"
             >
-              + Vergelijk
+              + Compare
             </button>
           )}
         </div>
@@ -307,7 +297,7 @@ export function PortfolioBenchmarkChart({
           <div className="mb-5 rounded-card border border-border bg-secondary/30 p-3">
             <div className="flex gap-2">
               <label className="min-w-0 flex-1 text-xs font-semibold">
-                Benchmark zoeken
+                Search benchmarks
                 <input
                   autoFocus
                   role="combobox"
@@ -324,7 +314,7 @@ export function PortfolioBenchmarkChart({
                 onClick={() => setComparing(false)}
                 className="pressable self-end rounded-[12px] px-3 py-2 text-sm font-semibold"
               >
-                Sluiten
+                Close
               </button>
             </div>
             {searchStatus && (
@@ -357,8 +347,8 @@ export function PortfolioBenchmarkChart({
         )}
         {points.length === 0 ? (
           <EmptyState
-            title="Geen portefeuillegegevens"
-            description="De waardegrafiek wordt opgebouwd uit je transactiegeschiedenis. Zolang je broker daar geen transacties voor aanlevert, blijft deze leeg."
+            title="No portfolio data"
+            description="The value chart is built from your transaction history. While your broker provides no transactions for it, it stays empty."
           />
         ) : (
           <>
@@ -371,14 +361,14 @@ export function PortfolioBenchmarkChart({
             )}
             <form
               onSubmit={applyTypedDates}
-              aria-label="Datumbereik kiezen"
+              aria-label="Choose date range"
               className="mb-3 flex flex-wrap items-end gap-2 text-xs"
             >
               <label className="font-semibold text-muted-foreground">
-                Van
+                From
                 <input
                   type="date"
-                  aria-label="Van datum"
+                  aria-label="From date"
                   min={minDate}
                   max={maxDate}
                   value={dateFrom}
@@ -387,10 +377,10 @@ export function PortfolioBenchmarkChart({
                 />
               </label>
               <label className="font-semibold text-muted-foreground">
-                Tot
+                To
                 <input
                   type="date"
-                  aria-label="Tot datum"
+                  aria-label="To date"
                   min={minDate}
                   max={maxDate}
                   value={dateTo}
@@ -402,13 +392,13 @@ export function PortfolioBenchmarkChart({
                 type="submit"
                 className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold"
               >
-                Toepassen
+                Apply
               </button>
               {chart.window.kind === "custom" && (
                 <button
                   type="button"
                   onClick={chart.clearZoom}
-                  aria-label="Zoom wissen"
+                  aria-label="Clear zoom"
                   className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold"
                 >
                   Zoom: {dateLabel(chart.window.from)} – {dateLabel(chart.window.to)} ×
@@ -424,7 +414,7 @@ export function PortfolioBenchmarkChart({
               ref={chartRef}
               role="img"
               tabIndex={0}
-              aria-label={`${label}. Gebruik pijltoetsen voor exacte waarden, Home en End voor begin en einde, Escape om zoom te wissen.`}
+              aria-label={`${label}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
               className="touch-pan-y select-none rounded-[12px]"
               onKeyDown={chart.onKeyDown}
               onPointerDown={chart.onPointerDown}
@@ -506,7 +496,7 @@ export function PortfolioBenchmarkChart({
                   />
                   <Line
                     dataKey={mode === "euros" ? "value" : "portfolioReturn"}
-                    name="Portefeuille"
+                    name="Portfolio"
                     hide={!visible.has("portfolio")}
                     connectNulls={false}
                     stroke={`hsl(var(--${mode === "euros" ? direction : "pos"}))`}
@@ -536,14 +526,14 @@ export function PortfolioBenchmarkChart({
             <p aria-live="polite" className="sr-only">
               {summaryPoint
                 ? accessiblePoint(summaryPoint, selectedSeries, currency)
-                : "Geen waarden beschikbaar"}
+                : "No values available"}
             </p>
-            <ul className="sr-only" aria-label="Exacte grafiekwaarden">
+            <ul className="sr-only" aria-label="Exact chart values">
               {indexed.map((point) => (
                 <li key={point.date}>{accessiblePoint(point, selectedSeries, currency)}</li>
               ))}
             </ul>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Grafiekseries">
+            <div className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Chart series">
               <button
                 type="button"
                 aria-pressed={visible.has("portfolio")}
@@ -555,7 +545,7 @@ export function PortfolioBenchmarkChart({
                   className="size-2 rounded-full"
                   style={{ backgroundColor: `hsl(var(--${mode === "euros" ? direction : "pos"}))` }}
                 />
-                Portefeuille
+                Portfolio
               </button>
               {selectedSeries.map((benchmark, index) => (
                 <button
@@ -592,11 +582,11 @@ function PerformanceSummary({
 }) {
   return (
     <section
-      aria-label="Rendement op geselecteerde datum"
+      aria-label="Return on selected date"
       className="mb-4 rounded-[14px] border border-border bg-secondary/30 p-3"
     >
       <p className="mb-2 text-xs font-semibold text-muted-foreground">
-        {dateLabel(point.date)} · Portefeuille{" "}
+        {dateLabel(point.date)} · Portfolio{" "}
         {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
       </p>
       <div className="flex flex-wrap gap-3">
@@ -620,7 +610,7 @@ function PerformanceSummary({
               <MetricSpread label="TWR" value={twrSpread} tone="blue" />
               <MetricSpread label="XIRR p.j." value={mwrSpread} tone="amber" />
               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                <span>Portefeuille {valueOrUnknown(point.portfolioReturn, percent)}</span>
+                <span>Portfolio {valueOrUnknown(point.portfolioReturn, percent)}</span>
                 <span>
                   {benchmark.name} {valueOrUnknown(benchmarkTwr, percent)}
                 </span>
@@ -662,7 +652,7 @@ function MetricSpread({
       <span
         className={`font-semibold tabular-nums ${value === null ? "text-muted-foreground" : value >= 0 ? "text-positive" : "text-negative"}`}
       >
-        {value === null ? "Onbekend" : pp(value)}
+        {value === null ? "Unknown" : pp(value)}
       </span>
     </p>
   );
@@ -688,7 +678,7 @@ function PerformanceTooltip({
       <p className="mb-2 text-muted-foreground">{dateLabel(point.date)}</p>
       {mode === "euros" ? (
         <p className="font-semibold">
-          Portefeuille: {valueOrUnknown(point.value, (value) => money(value, currency))}
+          Portfolio: {valueOrUnknown(point.value, (value) => money(value, currency))}
         </p>
       ) : (
         <div className="flex flex-wrap gap-3">
@@ -717,7 +707,7 @@ function PerformanceTooltip({
                   tone="amber"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Portefeuille {valueOrUnknown(point.portfolioReturn, percent)} · {benchmark.name}{" "}
+                  Portfolio {valueOrUnknown(point.portfolioReturn, percent)} · {benchmark.name}{" "}
                   {valueOrUnknown(benchmarkTwr, percent)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
@@ -730,7 +720,7 @@ function PerformanceTooltip({
       )}
       {(point.unpriced.length > 0 || point.cashUnknown.length > 0) && (
         <p className="mt-2 border-t border-border pt-1 text-negative">
-          Onbekend: {[...point.unpriced, ...point.cashUnknown].join(", ")}
+          Unknown: {[...point.unpriced, ...point.cashUnknown].join(", ")}
         </p>
       )}
     </div>
@@ -743,7 +733,7 @@ function accessiblePoint(
   currency: string,
 ): string {
   const unknown = [...point.unpriced, ...point.cashUnknown];
-  return `${dateLabel(point.date)}: portefeuille ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmark.name} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, onbekend: ${unknown.join(", ")}` : ""}`;
+  return `${dateLabel(point.date)}: portfolio ${valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}, TWR ${valueOrUnknown(point.portfolioReturn, percent)}, XIRR ${cappedXirr(point.portfolioXirr)}${benchmarks.map((benchmark) => `, ${benchmark.name} TWR ${valueOrUnknown(point.benchmarkReturns[benchmark.symbol] ?? null, percent)}, XIRR ${cappedXirr(point.benchmarkXirr[benchmark.symbol] ?? null)}`).join("")}${unknown.length ? `, unknown: ${unknown.join(", ")}` : ""}`;
 }
 
 function toggle(current: Set<string>, key: string): Set<string> {

@@ -42,10 +42,10 @@ test("renders metrics, top positions, and sector bars", async () => {
     root.render(<PortfolioSummaryCard />);
   });
   await act(async () => {});
-  expect(container.textContent).toContain("Jaarvolatiliteit");
+  expect(container.textContent).toContain("Annual volatility");
   expect(container.textContent).toContain("AAPL");
   expect(container.textContent).toContain("Technology");
-  expect(container.querySelectorAll('[aria-label="Sectorverdeling"] li')).toHaveLength(2);
+  expect(container.querySelectorAll('[aria-label="Sector allocation"] li')).toHaveLength(2);
 });
 
 test("renders error state when the API fails", async () => {

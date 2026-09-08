@@ -592,9 +592,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           0
         )
           throw error;
-        refreshProblems.push(
-          "Brokergegevens konden niet worden vernieuwd. Laatst geladen gegevens worden getoond.",
-        );
+        refreshProblems.push("Broker data could not be refreshed. Showing the last loaded data.");
       }
       const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } =
         brokerData.read();
@@ -617,10 +615,10 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       const prices = await readPriceBars(priceStore, tenantId, symbols);
       const benches = await readPriceBars(priceStore, tenantId, selectedBenchmarks);
       const priceProblems =
-        prices.failed + benches.failed > 0 ? ["Prijsdata kon niet volledig worden geladen"] : [];
+        prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
       const fxResult = await fxProvider
         .getLatestRate()
-        .catch(() => ({ rate: undefined, problems: ["FX-koers kon niet worden geladen"] }));
+        .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] }));
       const data = buildInvestingDashboard({
         positions,
         trades,

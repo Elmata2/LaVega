@@ -66,7 +66,7 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
   let salt: Uint8Array | null = null;
   const save = () =>
     queue(async () => {
-      if (!key || !salt || !data) throw new Error("kluis vergrendeld");
+      if (!key || !salt || !data) throw new Error("credential vault is locked");
       await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
     });
 
@@ -75,7 +75,7 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
       return (await readBlob()) == null ? "empty" : key == null ? "locked" : "unlocked";
     },
     async setup(passphrase) {
-      if (await readBlob()) throw new Error("kluis bestaat al");
+      if (await readBlob()) throw new Error("credential vault already exists");
       salt = newSalt();
       key = await deriveKey(passphrase, salt, PBKDF2_ITERATIONS);
       data = { credentials: [] };
@@ -110,7 +110,7 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
     },
     putCredentials(credentials) {
       return queue(async () => {
-        if (!key || !salt || !data) throw new Error("kluis vergrendeld");
+        if (!key || !salt || !data) throw new Error("credential vault is locked");
         data = {
           ...data,
           credentials: [
@@ -130,7 +130,7 @@ export function createFileCredentialStore(filePath = runtimeCredentialFile()): C
     },
     putBrokerData(snapshot) {
       return queue(async () => {
-        if (!key || !salt || !data) throw new Error("kluis vergrendeld");
+        if (!key || !salt || !data) throw new Error("credential vault is locked");
         data = { ...data, brokerData: structuredClone(snapshot) };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, data));
       });

@@ -21,9 +21,9 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
 
 export async function fetchPortfolioSummary(): Promise<PortfolioSummary> {
   const response = await fetch("/api/investing/summary");
-  if (!response.ok) throw new Error(`Samenvatting laden mislukt: ${response.status}`);
+  if (!response.ok) throw new Error(`Failed to load summary: ${response.status}`);
   const payload: unknown = await response.json();
-  if (!isPortfolioSummary(payload)) throw new Error("Samenvatting heeft ongeldig formaat.");
+  if (!isPortfolioSummary(payload)) throw new Error("Summary has an invalid format.");
   return payload;
 }
 
@@ -44,7 +44,7 @@ export function usePortfolioSummary(): SummaryState {
         if (current)
           setState({
             status: "error",
-            message: reason instanceof Error ? reason.message : "Samenvatting laden mislukt",
+            message: reason instanceof Error ? reason.message : "Failed to load summary",
           });
       });
     return () => {
@@ -65,13 +65,13 @@ const barColors = [
 const percent = (value: number | null | undefined): string =>
   value === null || value === undefined
     ? "–"
-    : value.toLocaleString("nl-NL", {
+    : value.toLocaleString("en-GB", {
         style: "percent",
         maximumFractionDigits: 1,
         signDisplay: "exceptZero",
       });
 const decimal = (value: number | null): string =>
-  value === null ? "–" : value.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
+  value === null ? "–" : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
 export function PortfolioSummaryCard({ currency }: { currency?: string }) {
   const state = usePortfolioSummary();
@@ -79,7 +79,7 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
     return (
       <Card aria-busy="true">
         <CardContent>
-          <p className="p-5 text-sm text-muted-foreground">Samenvatting laden…</p>
+          <p className="p-5 text-sm text-muted-foreground">Loading summary…</p>
         </CardContent>
       </Card>
     );
@@ -93,17 +93,17 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
     );
   const { metrics, sectors, topPositions } = state.data;
   const stats: Array<[string, string]> = [
-    ["Jaarvolatiliteit", percent(metrics.annualizedVolatility)],
+    ["Annual volatility", percent(metrics.annualizedVolatility)],
     ["Beta", decimal(metrics.beta)],
-    ["Alpha (jaar)", percent(metrics.alpha)],
-    ["Maximale daling", metrics.maxDrawdown === null ? "–" : percent(metrics.maxDrawdown)],
-    ["Waarnemingen", `${metrics.observationDays} dagen`],
+    ["Alpha (annual)", percent(metrics.alpha)],
+    ["Maximum drawdown", metrics.maxDrawdown === null ? "–" : percent(metrics.maxDrawdown)],
+    ["Observations", `${metrics.observationDays} dagen`],
   ];
   return (
-    <Card aria-label="Portefeuillesamenvatting" data-dashboard-section="summary">
+    <Card aria-label="Portfolio summary" data-dashboard-section="summary">
       <CardHeader>
-        <p className="text-sm font-medium text-muted-foreground">Risico &amp; samenstelling</p>
-        <CardTitle className="text-xl">Samenvatting</CardTitle>
+        <p className="text-sm font-medium text-muted-foreground">Risk &amp; composition</p>
+        <CardTitle className="text-xl">Summary</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -115,10 +115,10 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
           ))}
         </dl>
         <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Grootste posities</p>
-          <ul aria-label="Grootste posities" className="space-y-2 text-sm">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
+          <ul aria-label="Largest positions" className="space-y-2 text-sm">
             {topPositions.length === 0 && (
-              <li className="text-muted-foreground">Nog geen geprijsde posities.</li>
+              <li className="text-muted-foreground">No priced positions yet.</li>
             )}
             {topPositions.map((position) => (
               <li key={position.symbol} className="flex items-center justify-between gap-3">
@@ -129,10 +129,10 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
           </ul>
         </div>
         <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Sectorverdeling</p>
-          <ul aria-label="Sectorverdeling" className="space-y-2">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Sector allocation</p>
+          <ul aria-label="Sector allocation" className="space-y-2">
             {sectors.length === 0 && (
-              <li className="text-sm text-muted-foreground">Nog geen sectorgegevens.</li>
+              <li className="text-sm text-muted-foreground">No sector data yet.</li>
             )}
             {sectors.map((sector, index) => (
               <li key={sector.sector}>
@@ -154,7 +154,7 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
             ))}
           </ul>
         </div>
-        {currency && <p className="text-xs text-muted-foreground">Bedragen in {currency}.</p>}
+        {currency && <p className="text-xs text-muted-foreground">Amounts in {currency}.</p>}
       </CardContent>
     </Card>
   );

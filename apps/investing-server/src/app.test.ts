@@ -75,7 +75,7 @@ test("dashboard route reports read-model failures without inventing values", asy
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     ...emptyInvestingDashboard(),
-    problems: ["Dashboardgegevens konden niet worden geladen"],
+    problems: ["Dashboard data could not be loaded"],
   });
   expect(problemReporter).toHaveBeenCalledWith({
     source: "dashboard-read",

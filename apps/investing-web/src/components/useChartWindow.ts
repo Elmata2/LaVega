@@ -2,11 +2,11 @@ import type { PortfolioRange } from "@lavega/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export const chartRanges: Array<{ value: PortfolioRange; label: string }> = [
-  { value: "1M", label: "1 maand" },
-  { value: "6M", label: "6 maanden" },
-  { value: "1Y", label: "1 jaar" },
-  { value: "YTD", label: "Dit jaar" },
-  { value: "All", label: "Alles" },
+  { value: "1M", label: "1 month" },
+  { value: "6M", label: "6 months" },
+  { value: "1Y", label: "1 year" },
+  { value: "YTD", label: "YTD" },
+  { value: "All", label: "All" },
 ];
 
 export type ChartWindow =
@@ -154,7 +154,7 @@ export function useChartWindow<T extends Dated>(options: {
 
   const applyTypedDates = useCallback(() => {
     if (!dateFrom || !dateTo || !minDate || !maxDate) {
-      setDateError("Kies twee geldige datums.");
+      setDateError("Choose two valid dates.");
       return;
     }
     const from = dateFrom <= dateTo ? dateFrom : dateTo;
@@ -164,7 +164,7 @@ export function useChartWindow<T extends Dated>(options: {
     if (
       allPoints.filter((point) => point.date >= clampedFrom && point.date <= clampedTo).length < 2
     ) {
-      setDateError("Dit bereik bevat te weinig waarden.");
+      setDateError("This range contains too few values.");
       return;
     }
     setWindow({ kind: "custom", from: clampedFrom, to: clampedTo, baseRange });

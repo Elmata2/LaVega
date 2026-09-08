@@ -98,14 +98,14 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
     root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Geïndexeerd rendement");
+  expect(container.textContent).toContain("Indexed return");
   expect(container.textContent).toContain("> +999%");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   const daxDotBefore = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
     ?.querySelector<HTMLElement>("span")?.style.backgroundColor;
   await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[aria-label="^AEX verwijderen"]')?.click();
+    container.querySelector<HTMLButtonElement>('button[aria-label="^AEX remove"]')?.click();
     await Promise.resolve();
   });
   expect(fetchMock).toHaveBeenCalledWith(
@@ -133,25 +133,25 @@ test("uses one custom window for typed dates and clears it with Escape", async (
     );
     await Promise.resolve();
   });
-  const from = container.querySelector<HTMLInputElement>('input[aria-label="Van datum"]')!;
-  const to = container.querySelector<HTMLInputElement>('input[aria-label="Tot datum"]')!;
+  const from = container.querySelector<HTMLInputElement>('input[aria-label="From date"]')!;
+  const to = container.querySelector<HTMLInputElement>('input[aria-label="To date"]')!;
   await act(async () => {
     changeInput(from, "2026-01-08");
     changeInput(to, "2026-01-03");
   });
   await act(async () => {
     container
-      .querySelector<HTMLFormElement>('form[aria-label="Datumbereik kiezen"]')!
+      .querySelector<HTMLFormElement>('form[aria-label="Choose date range"]')!
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')?.textContent).toContain(
-    "3 jan",
+  expect(container.querySelector('button[aria-label="Clear zoom"]')?.textContent).toContain(
+    "3 Jan",
   );
   const chart = container.querySelector<HTMLElement>('[role="img"]')!;
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="Clear zoom"]')).toBeNull();
   await act(async () => root.unmount());
 });
 
@@ -174,13 +174,13 @@ test("supports keyboard crosshair and announces exact unknown values", async () 
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
   });
-  expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("1 jan");
+  expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("1 Jan");
   for (let index = 0; index < 4; index += 1)
     await act(async () => {
       chart.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     });
   expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("MISSING");
-  expect(container.querySelector('ul[aria-label="Exacte grafiekwaarden"]')?.textContent).toContain(
+  expect(container.querySelector('ul[aria-label="Exact chart values"]')?.textContent).toContain(
     "AEX TWR",
   );
   await act(async () => root.unmount());
@@ -223,9 +223,9 @@ test("wheel and pointer drag write custom zoom without brush", async () => {
     chart.dispatchEvent(wheel);
   });
   expect(wheel.defaultPrevented).toBe(true);
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Clear zoom"]')).not.toBeNull();
   expect(container.querySelector(".recharts-brush")).toBeNull();
-  const wheelWindow = container.querySelector('button[aria-label="Zoom wissen"]')?.textContent;
+  const wheelWindow = container.querySelector('button[aria-label="Clear zoom"]')?.textContent;
   await act(async () => {
     chart.dispatchEvent(pointerEvent("pointerdown", 80));
   });
@@ -235,7 +235,7 @@ test("wheel and pointer drag write custom zoom without brush", async () => {
   await act(async () => {
     chart.dispatchEvent(pointerEvent("pointerup", 300));
   });
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')?.textContent).not.toBe(
+  expect(container.querySelector('button[aria-label="Clear zoom"]')?.textContent).not.toBe(
     wheelWindow,
   );
   await act(async () => root.unmount());

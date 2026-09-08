@@ -250,19 +250,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         topPositions,
       });
     } catch {
-      return c.json({ problems: ["Portefeuillesamenvatting kon niet worden samengesteld"] }, 503);
+      return c.json({ problems: ["Portfolio summary could not be assembled"] }, 503);
     }
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     try {
       return c.json(await dashboardReader({ symbol: c.req.query("symbol")?.trim() || undefined }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Dashboardgegevens konden niet worden geladen";
+      const message = error instanceof Error ? error.message : "Dashboard data could not be loaded";
       problemReporter({ source: "dashboard-read", problems: [message] });
       return c.json({
         ...emptyInvestingDashboard(),
-        problems: ["Dashboardgegevens konden niet worden geladen"],
+        problems: ["Dashboard data could not be loaded"],
       });
     }
   });
@@ -289,10 +288,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/investing/benchmarks/search", async (c) => {
     const query = c.req.query("q")?.trim() ?? "";
     if (!(await hasYahooConsent(await resolveTenantId())))
-      return c.json(
-        { consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] },
-        428,
-      );
+      return c.json({ consentRequired: true, problems: ["Yahoo Finance consent required"] }, 428);
     return c.json(await benchmarkSearch(query));
   });
   investingApp.get("/api/market-data/consent", async (c) =>
@@ -429,10 +425,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.post("/api/prices/sync", async (c) => {
     const tenantId = await resolveTenantId();
     if (!(await hasYahooConsent(tenantId)))
-      return c.json(
-        { consentRequired: true, problems: ["Yahoo Finance-toestemming vereist"] },
-        428,
-      );
+      return c.json({ consentRequired: true, problems: ["Yahoo Finance consent required"] }, 428);
     const progress = await priceOrchestrator.run(tenantId, priceSyncDeadline());
     return c.json(visiblePriceProgress(progress), priceSyncStatusCode(progress));
   });

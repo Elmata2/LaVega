@@ -55,37 +55,35 @@ test("uses independent typed range, keyboard crosshair, and zoom clearing", asyn
   await act(async () => {
     root.render(<NetWorthChart data={{ "1M": points, All: points }} currency="EUR" />);
   });
-  expect(container.textContent).toContain("Nettovermogen");
-  expect(container.textContent).toContain("Geschatte koers: ASML");
-  expect(container.textContent).toContain("Uitgesloten wegens verouderde koers: OLD");
-  expect(container.textContent).toContain("Cashwaarde onbekend: ibkr:USD");
+  expect(container.textContent).toContain("Net worth");
+  expect(container.textContent).toContain("Estimated price: ASML");
+  expect(container.textContent).toContain("Excluded due to stale price: OLD");
+  expect(container.textContent).toContain("Cash value unknown: ibkr:USD");
 
   const from = container.querySelector<HTMLInputElement>(
-    'input[aria-label="Nettovermogen van datum"]',
+    'input[aria-label="Net worth from date"]',
   )!;
-  const to = container.querySelector<HTMLInputElement>(
-    'input[aria-label="Nettovermogen tot datum"]',
-  )!;
+  const to = container.querySelector<HTMLInputElement>('input[aria-label="Net worth to date"]')!;
   await act(async () => {
     changeInput(from, "2026-01-03");
     changeInput(to, "2026-01-08");
   });
   await act(async () => {
     container
-      .querySelector<HTMLFormElement>('form[aria-label="Datumbereik nettovermogen kiezen"]')!
+      .querySelector<HTMLFormElement>('form[aria-label="Choose net worth date range"]')!
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
-  expect(container.querySelector('button[aria-label="Zoom nettovermogen wissen"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Clear net worth zoom"]')).not.toBeNull();
 
   const chart = container.querySelector<HTMLElement>('[role="img"]')!;
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
   });
-  expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("3 jan");
+  expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("3 Jan");
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  expect(container.querySelector('button[aria-label="Zoom nettovermogen wissen"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="Clear net worth zoom"]')).toBeNull();
   await act(async () => root.unmount());
 });
 
@@ -97,15 +95,15 @@ test("renders accessible exact values and explicit empty state", async () => {
     root.render(<NetWorthChart data={{ "1M": points, All: points }} />);
   });
   expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain(
-    "Beleggingen",
+    "investments",
   );
-  expect(
-    container.querySelector('ul[aria-label="Exacte nettovermogenswaarden"]')?.textContent,
-  ).toContain("Waarde onbekend");
+  expect(container.querySelector('ul[aria-label="Exact net worth values"]')?.textContent).toContain(
+    "Value unknown",
+  );
   await act(async () => {
     root.render(<NetWorthChart data={{ "1M": [], All: [] }} />);
   });
-  expect(container.textContent).toContain("Geen vermogenshistorie");
+  expect(container.textContent).toContain("No net worth history");
   await act(async () => root.unmount());
 });
 
@@ -149,9 +147,9 @@ test("supports chart-local wheel and drag zoom", async () => {
     chart.dispatchEvent(wheel);
   });
   expect(wheel.defaultPrevented).toBe(true);
-  expect(container.querySelector('button[aria-label="Zoom nettovermogen wissen"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Clear net worth zoom"]')).not.toBeNull();
   const wheelWindow = container.querySelector(
-    'button[aria-label="Zoom nettovermogen wissen"]',
+    'button[aria-label="Clear net worth zoom"]',
   )?.textContent;
   await act(async () => {
     chart.dispatchEvent(pointerEvent("pointerdown", 80));
@@ -163,7 +161,7 @@ test("supports chart-local wheel and drag zoom", async () => {
     chart.dispatchEvent(pointerEvent("pointerup", 300));
   });
   expect(
-    container.querySelector('button[aria-label="Zoom nettovermogen wissen"]')?.textContent,
+    container.querySelector('button[aria-label="Clear net worth zoom"]')?.textContent,
   ).not.toBe(wheelWindow);
   await act(async () => root.unmount());
 });

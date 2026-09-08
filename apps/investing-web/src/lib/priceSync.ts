@@ -12,28 +12,21 @@ export type PriceSyncProgress = {
 
 export const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
 
-/* De server doet per aanroep zoveel symbolen als er tijd is en zet de rest
-   klaar; werk dat na het antwoord doorloopt, overleeft een serverless functie
-   niet. "paused" betekent dus: nog niet klaar, vraag opnieuw. De limiet is een
-   noodrem, geen verwachting — elke ronde is korter dan de vorige omdat al
-   opgehaalde symbolen worden overgeslagen. */
+/* Per call the server handles as many symbols as time allows and queues the rest; work that continues after the response does not survive a serverless function. "paused" therefore means: not done yet, ask again. The limit is an emergency brake, not an expectation — each round is shorter than the previous one because already fetched symbols are skipped. */
 const MAX_ROUNDS = 40;
 
-/* Een ronde kan worden afgekapt voordat de server antwoordt: Cloudflare sluit
-   een aanvraag na ongeveer 100 seconden af (524) terwijl de server doorwerkt
-   en zijn voortgang gewoon wegschrijft. Opnieuw vragen pakt die voortgang op.
-   Blijft het misgaan, dan is het geen afkapping maar een storing. */
+/* A round can be cut off before the server answers: Cloudflare closes a request after about 100 seconds (524) while the server keeps working and simply writes away its progress. Asking again picks up that progress. If it keeps failing, it is not a cutoff but an outage. */
 const MAX_INTERRUPTIONS = 3;
 
-/** Vraagt net zo lang om prijssynchronisatie tot de server klaar is. */
+/** Keeps requesting price sync until the server is done. */
 export async function runPriceSyncUntilComplete(
   current: () => boolean = () => true,
 ): Promise<string[]> {
-  const failed = ["Prijsgeschiedenis kon niet worden bijgewerkt."];
+  const failed = ["Price history could not be updated."];
   let interruptions = 0;
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const response = await fetch("/api/prices/sync", { method: "POST" }).catch(() => null);
-    // Zonder Yahoo-toestemming is niets ophalen het juiste antwoord, geen fout.
+    // Without Yahoo consent, fetching nothing is the right answer, not an error.
     if (response?.status === 428) return [];
     if (response && response.status >= 400 && response.status < 500) return failed;
     const progress = response
@@ -48,9 +41,7 @@ export async function runPriceSyncUntilComplete(
       continue;
     }
     if (progress?.status === "paused") continue;
-    /* Alles behalve "paused" is een eindantwoord voor deze aanroeper: klaar,
-       of een run die elders al loopt en die deze pagina niet moet verdubbelen.
-       Alleen een afgeronde run heeft problemen om te melden. */
+    /* Everything except "paused" is a final answer for this caller: done, or a run already going elsewhere that this page should not duplicate. Only a completed run has problems to report. */
     return progress?.status === "completed" || progress?.status === "problem"
       ? progress.problems
       : [];

@@ -37,7 +37,7 @@ export async function signUp(input: {
     body: JSON.stringify(input),
   });
   if (!response.ok)
-    return { ok: false, message: await readMessage(response, "Account aanmaken mislukt.") };
+    return { ok: false, message: await readMessage(response, "Failed to create account.") };
   return { ok: true };
 }
 
@@ -47,7 +47,7 @@ export async function signIn(input: { email: string; password: string }): Promis
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!response.ok) return { ok: false, message: await readMessage(response, "Inloggen mislukt.") };
+  if (!response.ok) return { ok: false, message: await readMessage(response, "Sign-in failed.") };
   return { ok: true };
 }
 

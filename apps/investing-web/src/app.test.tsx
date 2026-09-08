@@ -221,7 +221,7 @@ test("overview shell fetches and displays investing server health", async () => 
     await Promise.resolve();
   });
   expect(container.textContent).toContain("investing-server: beschikbaar");
-  expect(container.textContent).toContain("Portefeuillewaarde");
+  expect(container.textContent).toContain("Portfolio value");
   expect(container.textContent).toContain("ASML");
   expect(fetch).toHaveBeenCalledWith("/api/investing/dashboard");
   expect(fetch).toHaveBeenCalledWith("/api/investing/health");
@@ -245,8 +245,8 @@ test("positions route renders its empty state", async () => {
     );
   });
 
-  expect(container.textContent).toContain("Geen posities geladen");
-  expect(container.querySelector('nav[aria-label="Hoofdnavigatie"]')).not.toBeNull();
+  expect(container.textContent).toContain("No positions loaded");
+  expect(container.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
   root.unmount();
 });
 
@@ -318,9 +318,9 @@ test("overview shows priced positions total when history is still unavailable", 
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("10.150,00");
-  expect(container.textContent).toContain("Alleen geprijsde posities");
-  expect(container.textContent).toContain("0,319 stuks");
+  expect(container.textContent).toContain("10,150.00");
+  expect(container.textContent).toContain("Priced positions only");
+  expect(container.textContent).toContain("0.319 shares");
   expect(container.textContent).not.toContain("credentials are not configured");
   root.unmount();
 });
@@ -351,7 +351,7 @@ test("positions route renders loading state while read model is pending", async 
     );
   });
 
-  expect(container.textContent).toContain("Dashboard laden");
+  expect(container.textContent).toContain("Loading dashboard");
   root.unmount();
 });
 
@@ -383,7 +383,7 @@ test("positions route renders read-model error state", async () => {
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Dashboard niet beschikbaar");
+  expect(container.textContent).toContain("Dashboard unavailable");
   root.unmount();
 });
 
@@ -463,14 +463,14 @@ test("positions table sorts numeric columns through URL state and preserves it i
     container.querySelector('a[href="/positions/SMALL?sort=return&direction=asc"]'),
   ).not.toBeNull();
   const returnHeader = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes("Totaal rendement"),
+    button.textContent?.includes("Total return"),
   );
   await act(async () => {
     returnHeader?.click();
   });
   expect(
     container.querySelector('[role="columnheader"][aria-sort="descending"]')?.textContent,
-  ).toContain("Totaal rendement");
+  ).toContain("Total return");
   const instrumentHeader = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes("Instrument"),
   );
@@ -551,11 +551,11 @@ test("positions table shows forward-filled, unpriced, missing-FX, and missing-co
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Geschatte koers");
-  expect(container.textContent).toContain("Waarde onbekend");
-  expect(container.textContent).toContain("FX-koers ontbreekt");
-  expect(container.textContent).toContain("Rendement niet beschikbaar");
-  expect(container.textContent).toContain("Importeer eerdere transacties");
+  expect(container.textContent).toContain("Estimated price");
+  expect(container.textContent).toContain("Value unknown");
+  expect(container.textContent).toContain("FX rate missing");
+  expect(container.textContent).toContain("Return unavailable");
+  expect(container.textContent).toContain("Import earlier transactions");
   root.unmount();
 });
 
@@ -613,22 +613,22 @@ test("overview preserves responsive reading order and independent chart ranges",
     "net-worth",
   ]);
   const performanceRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Periode kiezen"]',
+    '[role="group"][aria-label="Choose period"]',
   )!;
   const netWorthRange = container.querySelector<HTMLElement>(
-    '[role="group"][aria-label="Periode nettovermogen kiezen"]',
+    '[role="group"][aria-label="Choose net worth period"]',
   )!;
   expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 maand",
+    "1 month",
   );
   await act(async () => {
     Array.from(netWorthRange.querySelectorAll("button"))
-      .find((button) => button.textContent === "Alles")
+      .find((button) => button.textContent === "All")
       ?.click();
   });
-  expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Alles");
+  expect(netWorthRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe("All");
   expect(performanceRange.querySelector('button[aria-pressed="true"]')?.textContent).toBe(
-    "1 maand",
+    "1 month",
   );
   root.unmount();
 });
@@ -656,7 +656,7 @@ test("overview runs portfolio investor agent and renders its insight", async () 
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Investeerderslens");
+  expect(container.textContent).toContain("Investor lens");
   expect(container.textContent).toContain("Warren Buffett");
   expect(container.textContent).toContain("Bill Ackman");
   const ackmanButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
@@ -666,7 +666,7 @@ test("overview runs portfolio investor agent and renders its insight", async () 
 
   await act(async () => {
     Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "Analyseer portefeuille")
+      .find((button) => button.textContent === "Analyse portfolio")
       ?.click();
     await Promise.resolve();
   });
@@ -739,7 +739,7 @@ test("agent route opens focused chat with the account positions", async () => {
   });
 
   expect(container.textContent).toContain("Bill Ackman");
-  expect(container.textContent).toContain("Jouw posities");
+  expect(container.textContent).toContain("Your positions");
   expect(container.textContent).toContain("ASML");
 
   const input = container.querySelector<HTMLInputElement>("#agent-message");
@@ -777,7 +777,7 @@ test("overview makes KPIs and all operational status chips visible", async () =>
             waitUntil: null,
             remaining: 1,
             updatedAt: "2026-08-21T10:00:00Z",
-            message: "API-pauze",
+            message: "API pause",
           }),
         );
       if (url === "/api/prices/sync/status")
@@ -791,7 +791,7 @@ test("overview makes KPIs and all operational status chips visible", async () =>
             waitUntil: null,
             updatedAt: "2026-08-21T10:00:00Z",
             message: null,
-            problems: ["OLD: mislukt"],
+            problems: ["OLD: failed"],
           }),
         );
       if (url === "/api/brokers/credentials/status")
@@ -811,13 +811,13 @@ test("overview makes KPIs and all operational status chips visible", async () =>
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Portefeuillewaarde");
-  expect(container.textContent).toContain("Dagmutatie");
-  expect(container.textContent).toContain("Totaal rendement");
-  expect(container.textContent).toContain("BrokersWachten");
-  expect(container.textContent).toContain("PrijsgeschiedenisProbleem");
-  expect(container.textContent).toContain("KluisVergrendeld");
-  expect(container.textContent).toContain("CacheVersie");
+  expect(container.textContent).toContain("Portfolio value");
+  expect(container.textContent).toContain("Daily change");
+  expect(container.textContent).toContain("Total return");
+  expect(container.textContent).toContain("BrokersWaiting");
+  expect(container.textContent).toContain("Price historyProblem");
+  expect(container.textContent).toContain("VaultLocked");
+  expect(container.textContent).toContain("CacheVersion");
   expect(container.textContent).toContain("ASML");
   root.unmount();
 });
@@ -862,12 +862,12 @@ test("overview separates positions, cash, and incomplete value states", async ()
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Posities");
+  expect(container.textContent).toContain("Positions");
   expect(container.textContent).toContain("Cash");
-  expect(container.textContent).toContain("Waarde deels onbekend");
+  expect(container.textContent).toContain("Value partly unknown");
   expect(container.textContent).toContain("MSFT");
   expect(container.textContent).toContain("ibkr:USD");
-  expect(container.textContent).toContain("Geschatte koers: ASML");
+  expect(container.textContent).toContain("Estimated price: ASML");
   root.unmount();
 });
 
@@ -895,7 +895,7 @@ test("position navigation moves from overview to detail and back", async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Koershistorie");
+  expect(container.textContent).toContain("Price history");
 
   const backLink = container.querySelector<HTMLAnchorElement>('a[href="/positions"]');
   await act(async () => {
@@ -903,7 +903,7 @@ test("position navigation moves from overview to detail and back", async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Posities");
+  expect(container.textContent).toContain("Positions");
   root.unmount();
 });
 
@@ -930,7 +930,7 @@ test("position detail selects symbol from route and links back", async () => {
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Koershistorie");
+  expect(container.textContent).toContain("Price history");
   expect(container.textContent).toContain("ASML");
   expect(requests).toContain("/api/investing/dashboard?symbol=ASML");
   expect(container.querySelector('a[href="/positions"]')).not.toBeNull();
@@ -955,21 +955,21 @@ test("position detail shows returns, quantity disclosure, and activity", async (
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Open positie");
-  expect(container.textContent).toContain("Huidige waarde");
-  expect(container.textContent).toContain("Totaal rendement");
-  expect(container.textContent).toContain("Sinds eerste aankoop:");
-  expect(container.textContent).toContain("vanaf 2026-01-02");
-  expect(container.textContent).toContain("Activiteit");
+  expect(container.textContent).toContain("Open position");
+  expect(container.textContent).toContain("Current value");
+  expect(container.textContent).toContain("Total return");
+  expect(container.textContent).toContain("Since first purchase:");
+  expect(container.textContent).toContain("since 2026-01-02");
+  expect(container.textContent).toContain("Activity");
   const quantity = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes("Aantalhistorie"),
+    button.textContent?.includes("quantity history"),
   );
   expect(quantity?.getAttribute("aria-expanded")).toBe("false");
   await act(async () => {
     quantity?.click();
   });
   expect(quantity?.getAttribute("aria-expanded")).toBe("true");
-  expect(container.textContent).toContain("2 januari 2026 · Koop");
+  expect(container.textContent).toContain("2 January 2026 · Buy");
   expect(container.querySelector('a[href="/positions?sort=return&direction=asc"]')).not.toBeNull();
   root.unmount();
 });
@@ -1041,9 +1041,9 @@ test("closed position omits current value and keeps realized history", async () 
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Gesloten positie");
-  expect(container.textContent).toContain("0 stuks · gesloten");
-  expect(container.textContent).not.toContain("Huidige waarde");
+  expect(container.textContent).toContain("Closed position");
+  expect(container.textContent).toContain("0 shares · closed");
+  expect(container.textContent).not.toContain("Current value");
   expect(
     Array.from(container.querySelectorAll('div[id^="activity-"]')).map((row) => row.id),
   ).toEqual(["activity-2026-04-02", "activity-2026-01-02"]);
@@ -1091,7 +1091,7 @@ test("position detail shows import prompt when return history is incomplete", as
     await Promise.resolve();
   });
   expect(container.textContent).toContain(
-    "Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.",
+    "Import earlier transactions or connect your other brokers to calculate return.",
   );
   root.unmount();
 });
@@ -1120,13 +1120,13 @@ test("dashboard shows loading state before read model arrives", async () => {
       </MemoryRouter>,
     );
   });
-  expect(container.textContent).toContain("Dashboard laden");
+  expect(container.textContent).toContain("Loading dashboard");
 
   release(new Response(JSON.stringify(emptyDashboard)));
   await act(async () => {
     await pending;
   });
-  expect(container.textContent).toContain("Geen posities geladen");
+  expect(container.textContent).toContain("No positions loaded");
   root.unmount();
 });
 
@@ -1151,7 +1151,7 @@ test("dashboard shows read error when route fails", async () => {
     );
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Dashboard niet beschikbaar");
+  expect(container.textContent).toContain("Dashboard unavailable");
   root.unmount();
 });
 
@@ -1188,11 +1188,11 @@ test("requests and persists Yahoo consent before broker-triggered price sync", a
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Yahoo Finance-toestemming");
+  expect(container.textContent).toContain("Yahoo Finance consent");
   expect(requests).not.toContainEqual({ url: "/api/brokers/sync", method: "POST" });
   await act(async () => {
     Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Yahoo Finance toestaan"))
+      .find((button) => button.textContent?.includes("Allow Yahoo Finance"))
       ?.click();
     await Promise.resolve();
   });
@@ -1237,9 +1237,9 @@ test("overview reports independent price-sync progress", async () => {
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Prijsgeschiedenis");
-  expect(container.textContent).toContain("2 van 4 geladen");
-  expect(container.textContent).toContain("CLOSED wordt geladen");
+  expect(container.textContent).toContain("Price history");
+  expect(container.textContent).toContain("2 of 4 loaded");
+  expect(container.textContent).toContain("CLOSED is loading");
   root.unmount();
 });
 
@@ -1274,17 +1274,17 @@ test("shows broker sync problems and asks before deleting cached prices", async 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Synchronisatieproblemen");
+  expect(container.textContent).toContain("Sync problems");
   await act(async () => {
     Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Prijsgegevens wissen"))
+      .find((button) => button.textContent?.includes("Clear price data"))
       ?.click();
     await Promise.resolve();
   });
-  expect(container.textContent).toContain("Dit verwijdert alle lokaal opgeslagen prijsgegevens.");
+  expect(container.textContent).toContain("This deletes all locally stored price data.");
   expect(requests.some((request) => request.method === "DELETE")).toBe(false);
   const deleteButton = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes("alles verwijderen"),
+    button.textContent?.includes("delete everything"),
   );
   await act(async () => {
     deleteButton?.click();
@@ -1296,7 +1296,7 @@ test("shows broker sync problems and asks before deleting cached prices", async 
   root.unmount();
 });
 
-test("broker koppelen opens setup guide with IBKR instructions", async () => {
+test("connect broker opens setup guide with IBKR instructions", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
@@ -1320,7 +1320,7 @@ test("broker koppelen opens setup guide with IBKR instructions", async () => {
   await act(async () => {
     connectLink?.click();
   });
-  expect(container.textContent).toContain("Broker koppelen");
+  expect(container.textContent).toContain("Connect broker");
   expect(container.textContent).toContain("Interactive Brokers");
   expect(container.textContent).toContain("Flex Web Service");
   expect(container.textContent).toContain("Trading 212");
@@ -1360,7 +1360,7 @@ test("broker setup starts forced sync and shows returned problems", async () => 
     );
   });
   const syncButton = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes("Synchronisatie starten"),
+    button.textContent?.includes("Start sync"),
   );
   expect(syncButton).not.toBeUndefined();
   await act(async () => {
@@ -1369,7 +1369,7 @@ test("broker setup starts forced sync and shows returned problems", async () => 
   });
   expect(requests).toContainEqual({ url: "/api/brokers/sync?force=true", method: "POST" });
   expect(container.textContent).not.toContain("credentials are not configured");
-  expect(container.textContent).toContain("Synchronisatie voltooid");
+  expect(container.textContent).toContain("Sync completed");
   root.unmount();
 });
 
@@ -1428,7 +1428,7 @@ test("broker credential form stores IBKR credentials and starts sync", async () 
     }),
   );
   expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Synchronisatie voltooid");
+  expect(container.textContent).toContain("Sync completed");
   expect(container.textContent).not.toContain("flex-token");
   root.unmount();
 });
@@ -1482,7 +1482,7 @@ test("locked broker vault can be unlocked without entering broker credentials ag
   );
   expect(unlockRequest?.init?.body).toBe(JSON.stringify({ passphrase: "vault-passphrase" }));
   expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Kluis ontgrendeld");
+  expect(container.textContent).toContain("Vault unlocked");
   expect(container.textContent).not.toContain("vault-passphrase");
   await act(async () => {
     root.unmount();
@@ -1529,11 +1529,11 @@ test("broker sync progress shows exact pages, orders, and provider wait", async 
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Trading 212 synchroniseert");
-  expect(container.textContent).toContain("6 pagina’s");
-  expect(container.textContent).toContain("300 orders gelezen");
-  expect(container.textContent).toContain("0 posities");
-  expect(container.textContent).toContain("Wacht op nieuwe API-capaciteit");
+  expect(container.textContent).toContain("Trading 212 syncing");
+  expect(container.textContent).toContain("6 pages");
+  expect(container.textContent).toContain("300 orders read");
+  expect(container.textContent).toContain("0 positions");
+  expect(container.textContent).toContain("Waiting for new API capacity");
   await act(async () => {
     root.unmount();
   });
@@ -1594,7 +1594,7 @@ test("broker credential form succeeds when the other broker is not configured", 
   });
 
   expect(requests.some((request) => request.url === "/api/brokers/sync?force=true")).toBe(true);
-  expect(container.textContent).toContain("Synchronisatie voltooid");
+  expect(container.textContent).toContain("Sync completed");
   expect(container.textContent).not.toContain("credentials are not configured");
   root.unmount();
 });
@@ -1685,7 +1685,7 @@ test("a broker sync that outlives the edge timeout reports background progress, 
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Synchronisatie loopt door op de achtergrond");
+  expect(container.textContent).toContain("Sync continues in the background");
   expect(container.textContent).not.toMatch(/JSON|Unexpected token|did not match/i);
   root.unmount();
 });
@@ -1721,7 +1721,7 @@ test("a server-key vault asks for no passphrase and does not claim the key is th
   });
 
   expect(container.querySelector('[name="passphrase"]')).toBeNull();
-  expect(container.textContent).not.toContain("lokale kluis");
+  expect(container.textContent).not.toContain("local vault");
   expect(container.textContent).not.toContain("LaVega kan het niet herstellen");
 
   const setInput = (field: HTMLInputElement, value: string) => {

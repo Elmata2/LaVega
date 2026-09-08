@@ -18,9 +18,9 @@ type NetWorthChartPoint = PortfolioValuePoint & {
 
 const dateLabel = shortDate;
 const money = (value: number, currency: string) =>
-  value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
+  value.toLocaleString("en-GB", { style: "currency", currency, maximumFractionDigits: 2 });
 const displayValue = (value: number | null, currency: string) =>
-  value === null ? "Waarde onbekend" : money(value, currency);
+  value === null ? "Value unknown" : money(value, currency);
 
 function allPoints(data: Props["data"]): PortfolioValuePoint[] {
   if (data.All) return data.All;
@@ -96,12 +96,12 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
     <Card data-dashboard-section="net-worth">
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">Nettovermogen</p>
-          <CardTitle>Beleggingen en cash</CardTitle>
+          <p className="text-sm font-medium text-muted-foreground">Net worth</p>
+          <CardTitle>Investments and cash</CardTitle>
         </div>
         <div
           role="group"
-          aria-label="Periode nettovermogen kiezen"
+          aria-label="Choose net worth period"
           className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
         >
           {chartRanges.map((item) => (
@@ -120,8 +120,8 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
       <CardContent>
         {points.length === 0 ? (
           <EmptyState
-            title="Geen vermogenshistorie"
-            description="Nettovermogen verschijnt zodra broker- en prijsgegevens beschikbaar zijn."
+            title="No net worth history"
+            description="Net worth appears once broker and price data are available."
           />
         ) : (
           <>
@@ -130,19 +130,19 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 {displayValue(activePoint?.value ?? null, currency)}
               </strong>
               <span className="text-xs text-muted-foreground">
-                op {activePoint ? dateLabel(activePoint.date) : "onbekende datum"}
+                on {activePoint ? dateLabel(activePoint.date) : "unknown date"}
               </span>
             </div>
             <form
               onSubmit={applyTypedDates}
-              aria-label="Datumbereik nettovermogen kiezen"
+              aria-label="Choose net worth date range"
               className="mb-3 flex flex-wrap items-end gap-2 text-xs"
             >
               <label className="font-semibold text-muted-foreground">
-                Van
+                From
                 <input
                   type="date"
-                  aria-label="Nettovermogen van datum"
+                  aria-label="Net worth from date"
                   min={minDate}
                   max={maxDate}
                   value={dateFrom}
@@ -151,10 +151,10 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 />
               </label>
               <label className="font-semibold text-muted-foreground">
-                Tot
+                To
                 <input
                   type="date"
-                  aria-label="Nettovermogen tot datum"
+                  aria-label="Net worth to date"
                   min={minDate}
                   max={maxDate}
                   value={dateTo}
@@ -166,13 +166,13 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 type="submit"
                 className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold"
               >
-                Toepassen
+                Apply
               </button>
               {chart.window.kind === "custom" && (
                 <button
                   type="button"
                   onClick={chart.clearZoom}
-                  aria-label="Zoom nettovermogen wissen"
+                  aria-label="Clear net worth zoom"
                   className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold"
                 >
                   Zoom: {dateLabel(chart.window.from)} – {dateLabel(chart.window.to)} ×
@@ -188,7 +188,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
               ref={chartRef}
               role="img"
               tabIndex={0}
-              aria-label="Nettovermogen: Beleggingen, cash en totaal. Gebruik pijltoetsen voor exacte waarden, Home en End voor begin en einde, Escape om zoom te wissen."
+              aria-label="Net worth: investments, cash and total. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom."
               className="touch-pan-y select-none rounded-[12px]"
               onKeyDown={chart.onKeyDown}
               onPointerDown={chart.onPointerDown}
@@ -274,7 +274,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                   <Area
                     dataKey="positionsValue"
                     stackId="net"
-                    name="Beleggingen"
+                    name="Investments"
                     connectNulls={false}
                     stroke="hsl(var(--chart-teal))"
                     fill="hsl(var(--chart-teal) / 0.24)"
@@ -293,7 +293,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                   />
                   <Area
                     dataKey="stalePositions"
-                    name="Geschatte koers"
+                    name="Estimated price"
                     connectNulls={false}
                     stroke="none"
                     fill={`url(#${hatchId})`}
@@ -302,7 +302,7 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                   />
                   <Line
                     dataKey="value"
-                    name="Totaal"
+                    name="Total"
                     connectNulls={false}
                     stroke="hsl(var(--foreground))"
                     strokeWidth={2.25}
@@ -314,23 +314,23 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
               </ChartContainer>
             </div>
             <p aria-live="polite" className="sr-only">
-              {activePoint ? accessiblePoint(activePoint, currency) : "Geen waarden beschikbaar"}
+              {activePoint ? accessiblePoint(activePoint, currency) : "No values available"}
             </p>
-            <ul className="sr-only" aria-label="Exacte nettovermogenswaarden">
+            <ul className="sr-only" aria-label="Exact net worth values">
               {chartPoints.map((point) => (
                 <li key={point.date}>{accessiblePoint(point, currency)}</li>
               ))}
             </ul>
             <div
               className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground"
-              aria-label="Nettovermogen grafiekseries"
+              aria-label="Net worth chart series"
             >
               <span className="inline-flex items-center gap-1.5">
                 <span
                   aria-hidden="true"
                   className="size-2 rounded-full bg-[hsl(var(--chart-teal))]"
                 />
-                Beleggingen
+                Investments
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span
@@ -341,12 +341,12 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-0.5 w-3 bg-foreground" />
-                Totaal
+                Total
               </span>
               {warnings.forwardFilled.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden="true" className="h-2.5 w-3 net-worth-hatch" />
-                  Geschatte koers: {warnings.forwardFilled.join(", ")}
+                  Estimated price: {warnings.forwardFilled.join(", ")}
                 </span>
               )}
             </div>
@@ -355,12 +355,12 @@ export function NetWorthChart({ data, currency = "EUR" }: Props) {
                 role="status"
                 className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5"
               >
-                <p className="font-semibold">Nettovermogen deels onbekend</p>
+                <p className="font-semibold">Net worth partly unknown</p>
                 {warnings.unpriced.length > 0 && (
-                  <p>Uitgesloten wegens verouderde koers: {warnings.unpriced.join(", ")}</p>
+                  <p>Excluded due to stale price: {warnings.unpriced.join(", ")}</p>
                 )}
                 {warnings.cashUnknown.length > 0 && (
-                  <p>Cashwaarde onbekend: {warnings.cashUnknown.join(", ")}</p>
+                  <p>Cash value unknown: {warnings.cashUnknown.join(", ")}</p>
                 )}
               </div>
             )}
@@ -389,7 +389,7 @@ function NetWorthTooltip({
         {displayValue(point.value, currency)}
       </p>
       <p className="flex justify-between gap-5">
-        <span>Beleggingen{point.forwardFilled.length > 0 ? " (geschatte koers)" : ""}</span>
+        <span>Investments{point.forwardFilled.length > 0 ? " (estimated price)" : ""}</span>
         <strong>{displayValue(point.positionsValue, currency)}</strong>
       </p>
       <p className="mt-1 flex justify-between gap-5">
@@ -398,16 +398,16 @@ function NetWorthTooltip({
       </p>
       {point.unpriced.length > 0 && (
         <p className="mt-2 border-t border-border pt-2 text-warning">
-          Uitgesloten wegens verouderde koers: {point.unpriced.join(", ")}
+          Excluded due to stale price: {point.unpriced.join(", ")}
         </p>
       )}
       {point.cashUnknown.length > 0 && (
-        <p className="mt-1 text-warning">Cashwaarde onbekend: {point.cashUnknown.join(", ")}</p>
+        <p className="mt-1 text-warning">Cash value unknown: {point.cashUnknown.join(", ")}</p>
       )}
     </div>
   );
 }
 
 function accessiblePoint(point: PortfolioValuePoint, currency: string): string {
-  return `${dateLabel(point.date)}: totaal ${displayValue(point.value, currency)}, beleggingen ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.forwardFilled.length ? `, geschatte koers: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, uitgesloten wegens verouderde koers: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cashwaarde onbekend: ${point.cashUnknown.join(", ")}` : ""}`;
+  return `${dateLabel(point.date)}: total ${displayValue(point.value, currency)}, investments ${displayValue(point.positionsValue, currency)}, cash ${displayValue(point.cashValue, currency)}${point.forwardFilled.length ? `, estimated price: ${point.forwardFilled.join(", ")}` : ""}${point.unpriced.length ? `, excluded due to stale price: ${point.unpriced.join(", ")}` : ""}${point.cashUnknown.length ? `, cash value unknown: ${point.cashUnknown.join(", ")}` : ""}`;
 }

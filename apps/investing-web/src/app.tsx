@@ -34,8 +34,7 @@ import {
 
 const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
 
-const SYNC_BACKGROUND_MESSAGE =
-  "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
+const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
 function brokerSyncActive(status?: BrokerProgress["status"]): boolean {
   return status === "running" || status === "waiting";
@@ -49,10 +48,7 @@ function notifyBrokerSyncStarted() {
   window.dispatchEvent(new Event(BROKER_SYNC_STARTED_EVENT));
 }
 
-/* Een eerste volledige synchronisatie duurt langer dan de time-out van de edge:
-   Cloudflare kapt de aanvraag na ongeveer 100 seconden af met een HTML-pagina
-   (524), terwijl de server gewoon doorwerkt. Een antwoord zonder JSON is dus
-   geen mislukking, en de parserfout hoort niet als foutmelding op het scherm. */
+/* An initial full sync takes longer than the edge timeout: Cloudflare cuts the request off after about 100 seconds with an HTML page (524) while the server keeps working. A response without JSON is therefore not a failure, and the parse error should not appear as an on-screen error. */
 async function readSyncResult(response: Response): Promise<{ problems?: string[] } | null> {
   return (await response.json().catch(() => null)) as { problems?: string[] } | null;
 }
@@ -121,9 +117,9 @@ function isDashboardData(value: unknown): value is InvestingDashboardData {
 async function fetchDashboard(symbol?: string): Promise<InvestingDashboardData> {
   const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
   const response = await fetch(`/api/investing/dashboard${query}`);
-  if (!response.ok) throw new Error(`Dashboard laden mislukt: ${response.status}`);
+  if (!response.ok) throw new Error(`Failed to load dashboard: ${response.status}`);
   const payload: unknown = await response.json();
-  if (!isDashboardData(payload)) throw new Error("Dashboardgegevens hebben ongeldig formaat.");
+  if (!isDashboardData(payload)) throw new Error("Dashboard data has an invalid format.");
   return payload;
 }
 
@@ -158,12 +154,12 @@ function isPortfolioAgentInsight(value: unknown): value is PortfolioAgentInsight
 
 async function fetchPortfolioAgents(): Promise<PortfolioAgentDefinition[]> {
   const response = await fetch("/api/agents/portfolio");
-  if (!response.ok) throw new Error("Agents laden mislukt.");
+  if (!response.ok) throw new Error("Failed to load agents.");
   const payload = (await response.json()) as { agents?: unknown };
   const agents = Array.isArray(payload.agents)
     ? payload.agents.filter(isPortfolioAgentDefinition)
     : [];
-  if (agents.length === 0) throw new Error("Geen portfolio-agents beschikbaar.");
+  if (agents.length === 0) throw new Error("No portfolio agents available.");
   return agents;
 }
 
@@ -178,8 +174,8 @@ async function runPortfolioAgent(agentId: string, prompt?: string): Promise<Port
     result?: unknown;
     problems?: string[];
   };
-  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent-run mislukt.");
-  if (!isPortfolioAgentInsight(payload.result)) throw new Error("Agent gaf ongeldig antwoord.");
+  if (!response.ok) throw new Error(payload.problems?.[0] ?? "Agent run failed.");
+  if (!isPortfolioAgentInsight(payload.result)) throw new Error("Agent gave an invalid answer.");
   return payload.result;
 }
 
@@ -195,7 +191,7 @@ function useDashboard(symbol?: string): DashboardState {
         })
         .catch((reason: unknown) => {
           if (!current) return;
-          const message = reason instanceof Error ? reason.message : "Dashboard laden mislukt";
+          const message = reason instanceof Error ? reason.message : "Failed to load dashboard";
           setState((previous) =>
             previous.status === "ready"
               ? { ...previous, refreshError: message }
@@ -219,13 +215,13 @@ function DashboardLoading() {
       role="status"
       className="rounded-card border border-border bg-secondary/30 p-6 text-sm text-muted-foreground"
     >
-      Dashboard laden…
+      Loading dashboard…
     </div>
   );
 }
 
 function DashboardError({ message }: { message: string }) {
-  return <EmptyState title="Dashboard niet beschikbaar" description={message} />;
+  return <EmptyState title="Dashboard unavailable" description={message} />;
 }
 
 function DashboardProblems({ problems }: { problems: string[] }) {
@@ -233,7 +229,7 @@ function DashboardProblems({ problems }: { problems: string[] }) {
   if (visibleProblems.length === 0) return null;
   return (
     <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Leesproblemen</p>
+      <p className="font-semibold">Reading problems</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {visibleProblems.map((problem, index) => (
           <li key={`${problem}-${index}`}>{problem}</li>
@@ -248,9 +244,9 @@ type SortDirection = "asc" | "desc";
 
 const POSITION_SORTS: Array<{ key: PositionSort; label: string }> = [
   { key: "instrument", label: "Instrument" },
-  { key: "value", label: "Waarde" },
-  { key: "weight", label: "% portefeuille" },
-  { key: "return", label: "Totaal rendement" },
+  { key: "value", label: "Value" },
+  { key: "weight", label: "% portfolio" },
+  { key: "return", label: "Total return" },
 ];
 
 function numericCompare(
@@ -279,15 +275,15 @@ function PositionList({
   if (positions.length === 0)
     return (
       <EmptyState
-        title="Geen posities geladen"
-        description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien."
+        title="No positions loaded"
+        description="Connect a broker or import a statement to see your investments."
       />
     );
   const sorted = [...positions].sort((left, right) => {
     if (sort === "instrument") {
       const result = `${left.description ?? left.symbol}\u0000${left.entity}`.localeCompare(
         `${right.description ?? right.symbol}\u0000${right.entity}`,
-        "nl",
+        "en",
       );
       return result * (direction === "asc" ? 1 : -1);
     }
@@ -297,14 +293,14 @@ function PositionList({
     return numericCompare(left.returns.totalReturn, right.returns.totalReturn, direction);
   });
   const money = (value: number) =>
-    value.toLocaleString("nl-NL", {
+    value.toLocaleString("en-GB", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
       signDisplay: "always",
     });
   const percent = (value: number) =>
-    value.toLocaleString("nl-NL", {
+    value.toLocaleString("en-GB", {
       style: "percent",
       maximumFractionDigits: 1,
       signDisplay: "always",
@@ -325,7 +321,7 @@ function PositionList({
     <div
       className="overflow-x-auto rounded-card border border-border"
       role="table"
-      aria-label="Posities"
+      aria-label="Positions"
     >
       <div className="min-w-[760px]">
         <div
@@ -369,15 +365,13 @@ function PositionList({
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {position.symbol} · {position.entity} ·{" "}
-                  {position.quantity.toLocaleString("nl-NL")} stuks
+                  {position.quantity.toLocaleString("en-GB")} shares
                 </span>
               </div>
               <div role="cell" className="text-right text-sm tabular-nums">
                 {position.marketValue === null ? (
                   <span className="text-muted-foreground">
-                    {position.priceStatus === "missing-fx"
-                      ? "FX-koers ontbreekt"
-                      : "Waarde onbekend"}
+                    {position.priceStatus === "missing-fx" ? "FX rate missing" : "Value unknown"}
                   </span>
                 ) : (
                   <>
@@ -385,14 +379,14 @@ function PositionList({
                       {money(position.marketValue).replace(/^\+/, "")}
                     </span>
                     {position.priceStatus === "forward-filled" && (
-                      <span className="block text-xs text-warning">Geschatte koers</span>
+                      <span className="block text-xs text-warning">Estimated price</span>
                     )}
                   </>
                 )}
               </div>
               <div role="cell" className="text-right text-sm tabular-nums">
                 {position.portfolioWeight === null ? (
-                  <span className="text-muted-foreground">Niet beschikbaar</span>
+                  <span className="text-muted-foreground">Unavailable</span>
                 ) : (
                   percent(position.portfolioWeight).replace(/^\+/, "")
                 )}
@@ -416,21 +410,21 @@ function PositionList({
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       {position.returns.status === "broker-average"
-                        ? "rendement op gemiddelde aankoopprijs"
-                        : "totaal rendement"}
+                        ? "return on average purchase price"
+                        : "total return"}
                     </span>
                   </>
                 ) : (
                   <>
                     <span className="font-medium text-muted-foreground">
                       {position.returns.status === "missing-fx"
-                        ? "FX-koers ontbreekt"
-                        : "Rendement niet beschikbaar"}
+                        ? "FX rate missing"
+                        : "Return unavailable"}
                     </span>
                     {position.returns.status === "missing-cost" && (
                       <span className="block text-xs leading-5 text-muted-foreground">
-                        Importeer eerdere transacties of koppel je andere brokers om rendement te
-                        berekenen.
+                        Import earlier transactions or connect your other brokers to calculate
+                        return.
                       </span>
                     )}
                   </>
@@ -468,8 +462,8 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
     buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
   const money = (value: number | null, signDisplay: "auto" | "always" = "auto") =>
     value === null
-      ? "Waarde onbekend"
-      : value.toLocaleString("nl-NL", {
+      ? "Value unknown"
+      : value.toLocaleString("en-GB", {
           style: "currency",
           currency: data.presentationCurrency,
           maximumFractionDigits: 2,
@@ -477,24 +471,24 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
         });
   const percentage = (value: number | null) =>
     value === null
-      ? "Rendement onbekend"
-      : value.toLocaleString("nl-NL", {
+      ? "Return unknown"
+      : value.toLocaleString("en-GB", {
           style: "percent",
           maximumFractionDigits: 2,
           signDisplay: "always",
         });
   return (
     <section
-      aria-label="Portefeuille-KPI's"
+      aria-label="Portfolio KPIs"
       className="rounded-card border border-border bg-card p-5 shadow-soft"
       data-dashboard-section="kpis"
     >
       <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">
-        Kerncijfers
+        Key figures
       </p>
       <dl className="mt-4 space-y-4">
         <div>
-          <dt className="text-xs text-muted-foreground">Portefeuillewaarde</dt>
+          <dt className="text-xs text-muted-foreground">Portfolio value</dt>
           <dd
             className={`mt-1 font-display text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
           >
@@ -502,12 +496,12 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           </dd>
           {usingPositionsFallback && (
             <dd className="text-xs text-muted-foreground">
-              Alleen geprijsde posities; cash en historie ontbreken nog.
+              Priced positions only; cash and history are still missing.
             </dd>
           )}
         </div>
         <div className="border-t border-border pt-4">
-          <dt className="text-xs text-muted-foreground">Dagmutatie</dt>
+          <dt className="text-xs text-muted-foreground">Daily change</dt>
           <dd
             className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
           >
@@ -516,18 +510,18 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           <dd className="text-xs text-muted-foreground">{percentage(dailyChangePercentage)}</dd>
         </div>
         <div className="border-t border-border pt-4">
-          <dt className="text-xs text-muted-foreground">Totaal rendement</dt>
+          <dt className="text-xs text-muted-foreground">Total return</dt>
           <dd
             className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
           >
             {percentage(totalReturn)}
           </dd>
-          <dd className="text-xs text-muted-foreground">TWR na stortingen en opnames</dd>
+          <dd className="text-xs text-muted-foreground">TWR after deposits and withdrawals</dd>
         </div>
       </dl>
       {latest && latest.forwardFilled.length > 0 && (
         <p className="mt-4 text-xs text-muted-foreground">
-          Geschatte koers: {latest.forwardFilled.join(", ")}
+          Estimated price: {latest.forwardFilled.join(", ")}
         </p>
       )}
       {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && (
@@ -535,10 +529,10 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
           role="status"
           className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"
         >
-          <p className="font-semibold">Waarde deels onbekend</p>
-          {latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}
+          <p className="font-semibold">Value partly unknown</p>
+          {latest.unpriced.length > 0 && <p>No usable price: {latest.unpriced.join(", ")}</p>}
           {latest.cashUnknown.length > 0 && (
-            <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>
+            <p>Cash history unknown: {latest.cashUnknown.join(", ")}</p>
           )}
         </div>
       )}
@@ -565,7 +559,7 @@ function PortfolioAgentCard() {
       .catch((error) => {
         if (!current) return;
         setStatus("error");
-        setMessage(error instanceof Error ? error.message : "Agents laden mislukt.");
+        setMessage(error instanceof Error ? error.message : "Failed to load agents.");
       });
     return () => {
       current = false;
@@ -581,7 +575,7 @@ function PortfolioAgentCard() {
       setStatus("idle");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Agent-run mislukt.");
+      setMessage(error instanceof Error ? error.message : "Agent run failed.");
     }
   }
 
@@ -609,7 +603,7 @@ function PortfolioAgentCard() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent</p>
           <h3 id="portfolio-agent-title" className="mt-1 font-display text-2xl font-semibold">
-            Investeerderslens
+            Investor lens
           </h3>
         </div>
         {insight && (
@@ -620,11 +614,11 @@ function PortfolioAgentCard() {
       </div>
       {status === "loading" ? (
         <p role="status" className="mt-4 text-sm text-muted-foreground">
-          Agents laden…
+          Loading agents…
         </p>
       ) : (
         <>
-          <div role="radiogroup" aria-label="Agent kiezen" className="mt-4 grid grid-cols-2 gap-2">
+          <div role="radiogroup" aria-label="Choose agent" className="mt-4 grid grid-cols-2 gap-2">
             {agents.map((agent) => (
               <button
                 key={agent.id}
@@ -644,7 +638,7 @@ function PortfolioAgentCard() {
               to={`/agents/${active.id}`}
               className="pressable mt-4 flex items-center justify-between rounded-[14px] border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10"
             >
-              <span>Open gesprek met {active.displayName}</span>
+              <span>Open conversation with {active.displayName}</span>
               <span aria-hidden="true">→</span>
             </Link>
           )}
@@ -654,7 +648,7 @@ function PortfolioAgentCard() {
             onClick={run}
             disabled={status === "running" || agents.length === 0}
           >
-            {status === "running" ? "Agent leest…" : "Analyseer portefeuille"}
+            {status === "running" ? "Agent reading…" : "Analyse portfolio"}
           </Button>
           {message && (
             <p role="alert" className="mt-3 text-sm text-negative">
@@ -696,7 +690,7 @@ function AgentView() {
     void fetchPortfolioAgents()
       .then(setAgents)
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Agents laden mislukt.");
+        setError(reason instanceof Error ? reason.message : "Failed to load agents.");
       });
   }, []);
 
@@ -705,7 +699,7 @@ function AgentView() {
   const initialMessage: AgentMessage | null = agent
     ? {
         role: "assistant",
-        content: `Ik ben ${agent.displayName}. Ik kijk naar jouw posities vanuit deze lens. Stel een vraag over concentratie, rendement of risico.`,
+        content: `I am ${agent.displayName}. I look at your positions through this lens. Ask a question about concentration, return or risk.`,
       }
     : null;
   const messages = agent ? (conversations[agent.id] ?? [initialMessage!]) : [];
@@ -735,7 +729,7 @@ function AgentView() {
         ],
       }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Agent-antwoord mislukt.");
+      setError(reason instanceof Error ? reason.message : "Agent reply failed.");
     } finally {
       setSending(false);
     }
@@ -744,17 +738,19 @@ function AgentView() {
   if (dashboard.status === "loading" || agents.length === 0) return <DashboardLoading />;
   if (dashboard.status === "error") return <DashboardError message={dashboard.message} />;
   if (!agent) {
-    return (
-      <EmptyState title="Agent niet gevonden" description="Kies een agent vanuit overzicht." />
-    );
+    return <EmptyState title="Agent not found" description="Choose an agent from the overview." />;
   }
+
+  const contextPositions = [...dashboard.data.positions].sort(
+    (left, right) => (right.marketValue ?? -Infinity) - (left.marketValue ?? -Infinity),
+  );
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card shadow-soft">
         <div className="border-b border-border px-5 py-5 sm:px-6">
           <Link to="/" className="text-sm font-semibold text-primary hover:underline">
-            ← Terug naar overzicht
+            ← Back to overview
           </Link>
           <p className="mt-6 text-xs font-semibold uppercase tracking-[.16em] text-primary">
             Portfolio agent
@@ -777,25 +773,25 @@ function AgentView() {
           ))}
           {sending && (
             <p role="status" className="text-sm text-muted-foreground">
-              {agent.displayName} leest posities…
+              {agent.displayName} is reading positions…
             </p>
           )}
         </div>
         <form onSubmit={sendMessage} className="border-t border-border p-4 sm:p-5">
           <label htmlFor="agent-message" className="sr-only">
-            Vraag aan {agent.displayName}
+            Ask {agent.displayName}
           </label>
           <div className="flex gap-2 rounded-[16px] border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
             <input
               id="agent-message"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Vraag over jouw posities…"
+              placeholder="Ask about your positions…"
               className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none"
               disabled={sending}
             />
             <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
-              Verstuur
+              Send
             </Button>
           </div>
           {error && (
@@ -804,42 +800,60 @@ function AgentView() {
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            Educatieve analyse. Geen persoonlijk handelsadvies.
+            Educational analysis. No personal investment advice.
           </p>
         </form>
       </section>
       <aside
-        aria-label="Posities in gesprek"
-        className="rounded-card border border-border bg-card p-5 shadow-soft"
+        aria-label="Positions in conversation"
+        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 shadow-soft lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
       >
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Context</p>
-        <h3 className="mt-1 font-display text-2xl font-semibold">Jouw posities</h3>
-        <div className="mt-4 space-y-3">
-          {dashboard.data.positions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Geen posities beschikbaar.</p>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Context</p>
+            <h3 className="mt-1 font-display text-2xl font-semibold">Your positions</h3>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {contextPositions.length}
+          </span>
+        </div>
+        <div className="mt-4 min-h-0 max-h-96 flex-1 space-y-1.5 overflow-y-auto pr-1 lg:max-h-none">
+          {contextPositions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No positions available.</p>
           ) : (
-            dashboard.data.positions.map((position) => (
-              <div
+            contextPositions.map((position) => (
+              <Link
                 key={`${position.symbol}-${position.entity}`}
-                className="rounded-[14px] bg-secondary/60 p-3"
+                to={`/positions/${encodeURIComponent(position.symbol)}`}
+                className="pressable flex items-center justify-between gap-3 rounded-[12px] bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
               >
-                <p className="font-semibold">{position.description ?? position.symbol}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {position.symbol} · {position.quantity.toLocaleString("nl-NL")} stuks
-                </p>
-                <p className="mt-2 text-sm font-semibold tabular-nums">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">
+                    {position.description ?? position.symbol}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {position.symbol} · {position.quantity.toLocaleString("en-GB")} shares
+                  </span>
+                </span>
+                <span className="shrink-0 text-right text-xs font-semibold tabular-nums">
                   {position.marketValue === null
-                    ? "Waarde onbekend"
-                    : position.marketValue.toLocaleString("nl-NL", {
+                    ? "Unknown"
+                    : position.marketValue.toLocaleString("en-GB", {
                         style: "currency",
                         currency: dashboard.data.presentationCurrency,
-                        maximumFractionDigits: 2,
+                        maximumFractionDigits: 0,
                       })}
-                </p>
-              </div>
+                </span>
+              </Link>
             ))
           )}
         </div>
+        <Link
+          to="/positions"
+          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-primary hover:underline"
+        >
+          View all positions →
+        </Link>
       </aside>
     </div>
   );
@@ -968,28 +982,28 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
   }, []);
   const brokerValue =
     broker?.status === "running"
-      ? "Bezig"
+      ? "In progress"
       : broker?.status === "waiting"
-        ? "Wachten"
+        ? "Waiting"
         : broker?.status === "completed"
-          ? "Actueel"
+          ? "Up to date"
           : broker?.status === "problem"
-            ? "Probleem"
+            ? "Problem"
             : broker?.status === "idle"
-              ? "Gereed"
-              : "Onbekend";
+              ? "Ready"
+              : "Unknown";
   const priceValue =
     price?.status === "running" || price?.status === "paused"
-      ? `${price.completed} van ${price.total} geladen`
+      ? `${price.completed} of ${price.total} loaded`
       : price?.status === "waiting"
-        ? "Wachten"
+        ? "Waiting"
         : price?.status === "completed"
-          ? "Actueel"
+          ? "Up to date"
           : price?.status === "problem"
-            ? "Probleem"
+            ? "Problem"
             : price?.status === "idle"
-              ? "Gereed"
-              : "Onbekend";
+              ? "Ready"
+              : "Unknown";
   const statusTone = (status?: BrokerProgress["status"] | PriceProgress["status"]): StatusTone =>
     status === "problem"
       ? "problem"
@@ -1002,7 +1016,7 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
             : "neutral";
   return (
     <section
-      aria-label="Operationele status"
+      aria-label="Operational status"
       className="rounded-card border border-border bg-card p-4 shadow-soft"
       data-dashboard-section="status"
     >
@@ -1016,42 +1030,42 @@ function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
           tone={statusTone(broker?.status)}
           detail={
             broker?.status === "waiting"
-              ? (broker.message ?? "API-capaciteit wordt afgewacht")
+              ? (broker.message ?? "Waiting for API capacity")
               : broker?.status === "problem"
-                ? (broker.message ?? "Gecachete gegevens blijven zichtbaar")
+                ? (broker.message ?? "Cached data remains visible")
                 : undefined
           }
         />
         <StatusChip
-          label="Prijsgeschiedenis"
+          label="Price history"
           value={priceValue}
           tone={statusTone(price?.status)}
           detail={
             price?.status === "running" || price?.status === "paused"
               ? price.currentSymbol
-                ? `${price.currentSymbol} wordt geladen`
-                : `${price.remainingSymbols.length} symbolen resterend`
+                ? `${price.currentSymbol} is loading`
+                : `${price.remainingSymbols.length} symbols remaining`
               : price?.status === "problem"
-                ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar`
+                ? `${price.problems.length} symbol problems; cache remains available`
                 : undefined
           }
         />
         <StatusChip
-          label="Kluis"
+          label="Vault"
           value={
             vault === "unlocked"
               ? "Open"
               : vault === "locked"
-                ? "Vergrendeld"
+                ? "Locked"
                 : vault === "empty"
-                  ? "Niet ingesteld"
-                  : "Onbekend"
+                  ? "Not set up"
+                  : "Unknown"
           }
           tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"}
         />
         <StatusChip
           label="Cache"
-          value={`Versie ${dataVersion}`}
+          value={`Version ${dataVersion}`}
           tone={dataVersion > 0 ? "success" : "neutral"}
         >
           <div className="mt-2 flex justify-end">
@@ -1078,7 +1092,7 @@ function AppOpenSync() {
       if (current() && priceProblems.length > 0)
         setProblems((existing) => [...existing, ...priceProblems]);
     } catch {
-      if (current()) setProblems(["Brokersynchronisatie mislukt."]);
+      if (current()) setProblems(["Broker sync failed."]);
     }
   }, []);
   useEffect(() => {
@@ -1087,7 +1101,7 @@ function AppOpenSync() {
       try {
         const response = await fetch("/api/market-data/consent");
         const decision = (await response.json()) as { accepted?: boolean };
-        if (!response.ok) throw new Error("Toestemming kon niet worden gelezen.");
+        if (!response.ok) throw new Error("Consent could not be read.");
         if (!current) return;
         if (!decision.accepted) {
           setConsent("required");
@@ -1097,9 +1111,7 @@ function AppOpenSync() {
         await runSync(() => current);
       } catch (error) {
         if (current)
-          setProblems([
-            error instanceof Error ? error.message : "Toestemming kon niet worden gelezen.",
-          ]);
+          setProblems([error instanceof Error ? error.message : "Consent could not be read."]);
       }
     };
     void prepare();
@@ -1116,11 +1128,11 @@ function AppOpenSync() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ accepted: true }),
       });
-      if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
+      if (!response.ok) throw new Error("Failed to save consent.");
       setConsent("accepted");
       await runSync(() => true);
     } catch (error) {
-      setProblems([error instanceof Error ? error.message : "Toestemming opslaan mislukt."]);
+      setProblems([error instanceof Error ? error.message : "Failed to save consent."]);
     } finally {
       setConsentBusy(false);
     }
@@ -1132,15 +1144,14 @@ function AppOpenSync() {
         className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm"
       >
         <h3 id="yahoo-consent-title" className="font-semibold">
-          Yahoo Finance-toestemming
+          Yahoo Finance consent
         </h3>
         <p className="mt-2 leading-6 text-muted-foreground">
-          LaVega stuurt tickers en zoektermen naar Yahoo Finance om koershistorie en benchmarks op
-          te halen. Keuze blijft lokaal bewaard. Zonder toestemming blijven gecachete gegevens
-          zichtbaar.
+          LaVega sends tickers and search terms to Yahoo Finance to fetch price history and
+          benchmarks. Your choice is stored locally. Without consent, cached data remains visible.
         </p>
         <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>
-          {consentBusy ? "Opslaan…" : "Yahoo Finance toestaan"}
+          {consentBusy ? "Saving…" : "Allow Yahoo Finance"}
         </Button>
         {problems.length > 0 && (
           <p role="alert" className="mt-3 text-negative">
@@ -1155,13 +1166,13 @@ function AppOpenSync() {
         role="status"
         className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground"
       >
-        Marktdata-toestemming controleren…
+        Checking market data consent…
       </div>
     );
   if (problems.length === 0) return null;
   return (
     <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm">
-      <p className="font-semibold">Synchronisatieproblemen</p>
+      <p className="font-semibold">Sync problems</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {problems.map((problem, index) => (
           <li key={`${problem}-${index}`}>{problem}</li>
@@ -1180,10 +1191,10 @@ function ClearPriceCache() {
     setMessage(null);
     try {
       const response = await fetch("/api/prices/cache", { method: "DELETE" });
-      if (!response.ok) throw new Error("Wissen mislukt");
-      setMessage("Prijsgegevens verwijderd");
+      if (!response.ok) throw new Error("Failed to clear");
+      setMessage("Price data deleted");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Wissen mislukt");
+      setMessage(error instanceof Error ? error.message : "Failed to clear");
     } finally {
       setBusy(false);
     }
@@ -1191,9 +1202,7 @@ function ClearPriceCache() {
   if (confirming)
     return (
       <div className="flex flex-wrap items-center justify-end gap-3" role="alert">
-        <span className="text-xs text-negative">
-          Dit verwijdert alle lokaal opgeslagen prijsgegevens.
-        </span>
+        <span className="text-xs text-negative">This deletes all locally stored price data.</span>
         <Button
           type="button"
           variant="outline"
@@ -1201,10 +1210,10 @@ function ClearPriceCache() {
           onClick={() => setConfirming(false)}
           disabled={busy}
         >
-          Annuleren
+          Cancel
         </Button>
         <Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>
-          {busy ? "Wissen…" : "Ja, alles verwijderen"}
+          {busy ? "Clearing…" : "Yes, delete everything"}
         </Button>
       </div>
     );
@@ -1217,7 +1226,7 @@ function ClearPriceCache() {
         onClick={() => setConfirming(true)}
         disabled={busy}
       >
-        Prijsgegevens wissen
+        Clear price data
       </Button>
       {message && (
         <span role="status" className="text-xs text-muted-foreground">
@@ -1249,7 +1258,7 @@ function BrokerSetupCard({
       <h3 className="mt-2 font-display text-3xl font-semibold">{name}</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       <div className="mt-6 border-t border-border pt-5">
-        <p className="text-sm font-semibold">Gegevens die je nodig hebt</p>
+        <p className="text-sm font-semibold">Data you need</p>
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
           {fields.map((field) => (
             <li key={field} className="flex gap-2">
@@ -1260,7 +1269,7 @@ function BrokerSetupCard({
         </ul>
       </div>
       <div className="mt-6 border-t border-border pt-5">
-        <p className="text-sm font-semibold">Zo vind je ze</p>
+        <p className="text-sm font-semibold">How to find them</p>
         <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
           {steps.map((step) => (
             <li key={step}>{step}</li>
@@ -1290,13 +1299,13 @@ function BrokerSyncAction() {
       notifyBrokerSyncStarted();
       const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const result = (await response.json()) as { problems?: string[] };
-      if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker sync failed.");
       const nextProblems = filterVisibleSyncProblems(result.problems ?? []);
       setProblems(nextProblems);
       setStatus(nextProblems.length > 0 ? "error" : "success");
       if (nextProblems.length === 0) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {
-      setProblems([error instanceof Error ? error.message : "Broker synchronisatie mislukt."]);
+      setProblems([error instanceof Error ? error.message : "Broker sync failed."]);
       setStatus("error");
     }
   }
@@ -1304,19 +1313,19 @@ function BrokerSyncAction() {
   return (
     <div className="rounded-card border border-border bg-secondary/40 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
       <div>
-        <p className="text-sm font-semibold">Gegevens opgeslagen?</p>
+        <p className="text-sm font-semibold">Data saved?</p>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Start direct nieuwe broker-synchronisatie. Dit omzeilt dagelijkse sync-cache.
+          Start a new broker sync now. This bypasses the daily sync cache.
         </p>
       </div>
       <div className="mt-4 shrink-0 sm:mt-0">
         <Button type="button" onClick={sync} disabled={status === "loading"}>
-          {status === "loading" ? "Synchroniseren…" : "Synchronisatie starten"}
+          {status === "loading" ? "Syncing…" : "Start sync"}
         </Button>
       </div>
       {status === "success" && (
         <p role="status" className="mt-3 text-sm text-positive sm:mt-0">
-          Synchronisatie voltooid.
+          Sync completed.
         </p>
       )}
       {problems.length > 0 && (
@@ -1324,7 +1333,7 @@ function BrokerSyncAction() {
           role="alert"
           className="mt-4 basis-full rounded-[14px] border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
         >
-          <p className="font-semibold">Synchronisatie niet voltooid</p>
+          <p className="font-semibold">Sync not completed</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {problems.map((problem, index) => (
               <li key={`${problem}-${index}`}>{problem}</li>
@@ -1396,30 +1405,30 @@ function BrokerSyncProgressCard() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
-            Brokersynchronisatie
+            Broker sync
           </p>
           <h3 className="mt-2 font-display text-2xl font-semibold">
-            {completed ? "Trading 212 gesynchroniseerd" : "Trading 212 synchroniseert"}
+            {completed ? "Trading 212 synced" : "Trading 212 syncing"}
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            {progress.pages} pagina’s · {progress.ordersRead.toLocaleString("nl-NL")} orders gelezen
-            · {progress.positionsRead} posities
+            {progress.pages} pages · {progress.ordersRead.toLocaleString("en-GB")} orders read ·{" "}
+            {progress.positionsRead} positions
           </p>
         </div>
         <span
           className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${completed ? "bg-positive/10 text-positive" : waiting ? "bg-warning/20 text-foreground" : "bg-primary/10 text-primary"}`}
         >
-          {completed ? "Voltooid" : waiting ? "API-pauze" : "Bezig"}
+          {completed ? "Completed" : waiting ? "API pause" : "In progress"}
         </span>
       </div>
       {waiting && (
         <p className="mt-4 text-sm font-medium">
-          Wacht op nieuwe API-capaciteit{seconds !== null ? ` · verder over ${seconds} sec.` : ""}
+          Waiting for new API capacity{seconds !== null ? ` · continuing in ${seconds} sec.` : ""}
         </p>
       )}
       {!waiting && !completed && (
         <p className="mt-4 text-sm text-muted-foreground">
-          Volledige orderhistorie wordt geladen. Venster mag open blijven, maar hoeft niet.
+          Full order history is loading. You may keep this window open, but you don't have to.
         </p>
       )}
     </section>
@@ -1491,32 +1500,30 @@ function BrokerVaultUnlock() {
         problems?: string[];
       };
       if (!unlockResponse.ok)
-        throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
+        throw new Error(unlockResult.problems?.[0] ?? "Failed to unlock vault.");
       setPassphrase("");
       notifyBrokerSyncStarted();
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await readSyncResult(syncResponse);
       if (!syncResult) {
         setVaultStatus("unlocked");
-        setMessage(`Kluis ontgrendeld. ${SYNC_BACKGROUND_MESSAGE}`);
+        setMessage(`Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}`);
         window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
         void runPriceSyncUntilComplete();
         return;
       }
-      if (!syncResponse.ok)
-        throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
+      if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker sync failed.");
       setVaultStatus("unlocked");
       setMessage(
         (syncResult.problems ?? []).length === 0
-          ? "Kluis ontgrendeld. Synchronisatie voltooid."
-          : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`,
+          ? "Vault unlocked. Sync completed."
+          : `Vault unlocked. ${syncResult.problems?.join(" · ")}`,
       );
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-      /* Een eerste sync levert de posities; de koersen erachter komen pas als
-         iemand erom blijft vragen. Deze pagina is die iemand. */
+      /* An initial sync provides the positions; the prices behind them only arrive while someone keeps asking. This page is that someone. */
       void runPriceSyncUntilComplete();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kluis ontgrendelen mislukt.");
+      setMessage(error instanceof Error ? error.message : "Failed to unlock vault.");
     } finally {
       setBusy(false);
     }
@@ -1539,15 +1546,15 @@ function BrokerVaultUnlock() {
     >
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
-          Bestaande kluis
+          Existing vault
         </p>
-        <h3 className="mt-2 font-display text-2xl font-semibold">Kluis ontgrendelen</h3>
+        <h3 className="mt-2 font-display text-2xl font-semibold">Unlock vault</h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Inloggegevens staan versleuteld op schijf. Voer alleen kluiswachtwoord in; brokersleutels
-          hoeven niet opnieuw.
+          Credentials are stored encrypted on disk. Enter only the vault password; broker keys are
+          not needed again.
         </p>
         <label className="mt-4 block text-sm font-semibold">
-          Kluiswachtwoord
+          Vault password
           <input
             required
             name="unlockPassphrase"
@@ -1570,7 +1577,7 @@ function BrokerVaultUnlock() {
         disabled={busy}
         className="mt-4 shrink-0 sm:mt-0"
       >
-        {busy ? "Ontgrendelen…" : "Ontgrendelen en synchroniseren"}
+        {busy ? "Unlocking…" : "Unlock and sync"}
       </Button>
     </form>
   );
@@ -1613,13 +1620,13 @@ function BrokerCredentialForm() {
       });
       const saveResult = (await saveResponse.json().catch(() => ({}))) as { problems?: string[] };
       if (!saveResponse.ok)
-        throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
+        throw new Error(saveResult.problems?.[0] ?? "Failed to save credentials.");
       notifyBrokerSyncStarted();
       const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
       const syncResult = await readSyncResult(syncResponse);
       if (!syncResult) {
         setStatus("success");
-        setMessage(`Inloggegevens opgeslagen. ${SYNC_BACKGROUND_MESSAGE}`);
+        setMessage(`Credentials saved. ${SYNC_BACKGROUND_MESSAGE}`);
         setToken("");
         setQueryId("");
         setSecret("");
@@ -1631,11 +1638,9 @@ function BrokerCredentialForm() {
         (problem) => !otherBrokerUnconfigured(problem, broker),
       );
       if (!syncResponse.ok || blocking.length > 0)
-        throw new Error(
-          blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.",
-        );
+        throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker sync failed.");
       setStatus("success");
-      setMessage("Inloggegevens opgeslagen. Synchronisatie voltooid.");
+      setMessage("Credentials saved. Sync completed.");
       setToken("");
       setQueryId("");
       setSecret("");
@@ -1643,7 +1648,7 @@ function BrokerCredentialForm() {
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Broker koppelen mislukt.");
+      setMessage(error instanceof Error ? error.message : "Failed to connect broker.");
     }
   }
 
@@ -1654,12 +1659,12 @@ function BrokerCredentialForm() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p>
-          <h3 className="mt-2 font-display text-3xl font-semibold">Inloggegevens opslaan</h3>
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Step 2</p>
+          <h3 className="mt-2 font-display text-3xl font-semibold">Save credentials</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {passphraseMode === "unused"
-              ? "LaVega versleutelt deze gegevens met de serversleutel voordat ze worden opgeslagen. Daarna start synchronisatie automatisch."
-              : "LaVega versleutelt deze gegevens in lokale kluis. Daarna start synchronisatie automatisch."}
+              ? "LaVega encrypts these details with the server key before storing them. Sync then starts automatically."
+              : "LaVega encrypts these details in the local vault. Sync then starts automatically."}
           </p>
         </div>
         <label className="text-sm font-semibold">
@@ -1716,7 +1721,7 @@ function BrokerCredentialForm() {
         )}
         {passphraseMode !== "unused" && (
           <label className="text-sm font-semibold sm:col-span-2">
-            Kluiswachtwoord
+            Vault password
             <input
               required
               name="passphrase"
@@ -1727,15 +1732,15 @@ function BrokerCredentialForm() {
               className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal"
             />
             <span className="mt-2 block text-xs font-normal text-muted-foreground">
-              Nieuwe kluis? Dit wachtwoord wordt kluissleutel. Bewaar het veilig; LaVega kan het
-              niet herstellen.
+              New vault? This password becomes the vault key. Keep it safe; LaVega cannot recover
+              it.
             </span>
           </label>
         )}
       </div>
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <Button type="submit" disabled={status === "loading"}>
-          {status === "loading" ? "Opslaan en synchroniseren…" : "Opslaan en synchroniseren"}
+          {status === "loading" ? "Saving and syncing…" : "Save and sync"}
         </Button>
         {status === "success" && (
           <span role="status" className="text-sm text-positive">
@@ -1757,15 +1762,15 @@ function BrokerConnect() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="max-w-2xl">
         <Link to="/" className="text-sm font-semibold text-primary hover:underline">
-          ← Terug naar overzicht
+          ← Back to overview
         </Link>
-        <p className="mb-2 mt-8 text-sm font-medium text-primary">Veilige lokale koppeling</p>
+        <p className="mb-2 mt-8 text-sm font-medium text-primary">Secure local connection</p>
         <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-          Broker koppelen
+          Connect broker
         </h2>
         <p className="mt-4 text-base leading-7 text-muted-foreground">
-          Volg instructies voor jouw broker. LaVega gebruikt alleen read-only gegevens en bewaart
-          credentials lokaal.
+          Follow the instructions for your broker. LaVega only uses read-only data and stores
+          credentials locally.
         </p>
       </div>
       <BrokerVaultUnlock />
@@ -1774,40 +1779,40 @@ function BrokerConnect() {
         <BrokerSetupCard
           name="Interactive Brokers"
           eyebrow="IBKR"
-          description="Gebruik IBKR Flex Web Service. Dit werkt met dagelijks bijgewerkte rapporten, zonder lokale gateway of browser-login."
+          description="Use IBKR Flex Web Service. This works with daily updated reports, without a local gateway or browser login."
           fields={[
             "Flex-token",
-            "Numeriek Query ID",
-            "Flex Query met Open Positions, Trades, Cash Report en Statement of Funds",
+            "Numeric Query ID",
+            "Flex Query with Open Positions, Trades, Cash Report and Statement of Funds",
           ]}
           steps={[
-            "Open Client Portal van Interactive Brokers.",
-            "Ga naar Performance & Reports → Flex Queries.",
-            "Maak één query met Open Positions, Trades, Cash Report en Statement of Funds.",
-            "Sla query op en noteer het numerieke Query ID.",
-            "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt.",
+            "Open the Interactive Brokers Client Portal.",
+            "Go to Performance & Reports → Flex Queries.",
+            "Create one query with Open Positions, Trades, Cash Report and Statement of Funds.",
+            "Save the query and note the numeric Query ID.",
+            "Go to Flex Web Service and generate a token. Note the token immediately; IBKR only shows it briefly.",
           ]}
         />
         <BrokerSetupCard
           name="Trading 212"
           eyebrow="Trading 212"
-          description="Gebruik de officiële Trading 212 API. LaVega leest posities en orders via jouw eigen API-credentials."
+          description="Use the official Trading 212 API. LaVega reads positions and orders via your own API credentials."
           fields={["API key", "API secret"]}
           steps={[
-            "Open de Trading 212-app.",
-            "Ga naar Menu → Settings → API (of API management).",
-            "Maak een API-key voor jouw Invest- of Stocks ISA-account.",
-            "Kies read-only scope als Trading 212 die optie toont.",
-            "Kopieer API key en API secret. Het secret kan daarna niet opnieuw zichtbaar zijn.",
+            "Open the Trading 212 app.",
+            "Go to Menu → Settings → API (or API management).",
+            "Create an API key for your Invest or Stocks ISA account.",
+            "Choose read-only scope if Trading 212 shows that option.",
+            "Copy the API key and API secret. The secret may not be shown again afterwards.",
           ]}
-          warning="Controleer scope vóór opslaan. Een key zonder read-only beperking kan mogelijk orders plaatsen."
+          warning="Check the scope before saving. A key without a read-only restriction may be able to place orders."
         />
       </div>
       <BrokerCredentialForm />
       <BrokerSyncAction />
       <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">
-        Credentials blijven op jouw machine. Deel Flex-tokens, API keys of API secrets nooit in
-        chat, screenshots, issues of git.
+        Credentials stay on your machine. Never share Flex tokens, API keys or API secrets in chat,
+        screenshots, issues or git.
       </p>
     </div>
   );
@@ -1824,17 +1829,17 @@ export function HealthStatus() {
   useEffect(() => {
     fetch("/api/investing/health")
       .then(async (response) => {
-        if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`);
+        if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
         return (await response.json().catch(() => {
-          throw new Error("Gezondheidscontrole gaf geen serverantwoord");
+          throw new Error("Health check returned no server response");
         })) as Health;
       })
       .then(setHealth)
       .catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt"),
+        setError(reason instanceof Error ? reason.message : "Health check failed"),
       );
   }, []);
-  if (error) return <span className="text-negative">Server niet beschikbaar: {error}</span>;
+  if (error) return <span className="text-negative">Server unavailable: {error}</span>;
   if (!health) return <span>Verbinden met investeringsserver…</span>;
   return (
     <span>
@@ -1855,7 +1860,7 @@ function SignOutLink() {
       onClick={handleSignOut}
       className="pressable rounded-sm font-semibold text-primary underline-offset-2 hover:underline"
     >
-      Uitloggen
+      Sign out
     </button>
   );
 }
@@ -1873,10 +1878,10 @@ function Layout() {
             <span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">
               LaVega
             </span>
-            <h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1>
+            <h1 className="font-display text-3xl font-semibold leading-none">Investing</h1>
           </Link>
           <nav
-            aria-label="Hoofdnavigatie"
+            aria-label="Main navigation"
             className="flex items-center gap-1 rounded-pill bg-secondary p-1"
           >
             <NavLink
@@ -1886,7 +1891,7 @@ function Layout() {
                 `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
               }
             >
-              Overzicht
+              Overview
             </NavLink>
             <NavLink
               to="/positions"
@@ -1894,7 +1899,7 @@ function Layout() {
                 `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`
               }
             >
-              Posities
+              Positions
             </NavLink>
           </nav>
         </header>
@@ -1904,13 +1909,13 @@ function Layout() {
               <div>
                 <p className="mb-2 text-sm font-medium text-primary">
                   {detail
-                    ? "Positiedetail"
+                    ? "Position detail"
                     : agentView
-                      ? "Agentgesprek"
-                      : "Jouw financiële overzicht"}
+                      ? "Agent conversation"
+                      : "Your financial overview"}
                 </p>
                 <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {detail ? "Positie" : agentView ? "Agent" : "Overzicht"}
+                  {detail ? "Position" : agentView ? "Agent" : "Overview"}
                 </h2>
               </div>
               {!detail && !agentView && (
@@ -1918,7 +1923,7 @@ function Layout() {
                   to="/brokers/connect"
                   className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
                 >
-                  Broker koppelen
+                  Connect broker
                 </Link>
               )}
             </div>
@@ -1952,9 +1957,9 @@ function Overview() {
               role="alert"
               className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"
             >
-              <p className="font-semibold">Vernieuwen mislukt</p>
+              <p className="font-semibold">Refresh failed</p>
               <p className="mt-1 text-muted-foreground">
-                {state.refreshError} Gecachete gegevens blijven zichtbaar.
+                {state.refreshError} Cached data remains visible.
               </p>
             </div>
           )}
@@ -1980,7 +1985,7 @@ function Overview() {
                 />
               </div>
             </div>
-            <aside aria-label="Portefeuilleoverzicht" className="space-y-5">
+            <aside aria-label="Portfolio overview" className="space-y-5">
               <PortfolioKpis data={state.data} />
               <PortfolioSummaryCard currency={state.data.presentationCurrency} />
               <PortfolioAgentCard />
@@ -1989,7 +1994,7 @@ function Overview() {
           </div>
           <section aria-labelledby="positions-heading" data-dashboard-section="positions">
             <h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">
-              Posities
+              Positions
             </h3>
             <PositionList
               positions={state.data.positions}
@@ -2021,8 +2026,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
   const [quantityOpen, setQuantityOpen] = useState(false);
   const money = (value: number | null) =>
     value === null
-      ? "Niet beschikbaar"
-      : value.toLocaleString("nl-NL", {
+      ? "Unavailable"
+      : value.toLocaleString("en-GB", {
           style: "currency",
           currency: position.currency,
           maximumFractionDigits: 2,
@@ -2030,8 +2035,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         });
   const percent = (value: number | null) =>
     value === null
-      ? "Niet beschikbaar"
-      : value.toLocaleString("nl-NL", {
+      ? "Unavailable"
+      : value.toLocaleString("en-GB", {
           style: "percent",
           maximumFractionDigits: 1,
           signDisplay: "always",
@@ -2046,19 +2051,19 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">
-            {position.status === "closed" ? "Gesloten positie" : "Open positie"}
+            {position.status === "closed" ? "Closed position" : "Open position"}
           </p>
           <h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">
             {position.description ?? position.symbol}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {position.symbol} · bedragen in {position.currency}
+            {position.symbol} · amounts in {position.currency}
           </p>
         </div>
         <span
           className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${position.status === "closed" ? "bg-secondary text-muted-foreground" : "bg-positive/10 text-positive"}`}
         >
-          {position.status === "closed" ? "Gesloten" : "Open"}
+          {position.status === "closed" ? "Closed" : "Open"}
         </span>
       </div>
       <dl
@@ -2066,7 +2071,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       >
         {position.status === "open" && (
           <div className="rounded-[14px] bg-secondary/40 p-4">
-            <dt className="text-xs font-semibold text-muted-foreground">Huidige waarde</dt>
+            <dt className="text-xs font-semibold text-muted-foreground">Current value</dt>
             <dd className="mt-1 text-xl font-semibold tabular-nums">
               {money(position.currentValue).replace(/^\+/, "")}
             </dd>
@@ -2074,7 +2079,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
         )}
         {position.status === "open" && (
           <div className="rounded-[14px] bg-secondary/40 p-4">
-            <dt className="text-xs font-semibold text-muted-foreground">Dagverandering</dt>
+            <dt className="text-xs font-semibold text-muted-foreground">Daily change</dt>
             <dd
               className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}
             >
@@ -2086,19 +2091,19 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </div>
         )}
         <div className="rounded-[14px] bg-secondary/40 p-4">
-          <dt className="text-xs font-semibold text-muted-foreground">Totaal rendement</dt>
+          <dt className="text-xs font-semibold text-muted-foreground">Total return</dt>
           <dd
             className={`mt-1 text-xl font-semibold tabular-nums ${!available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}
           >
             {available
               ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}`
-              : "Niet beschikbaar"}
+              : "Unavailable"}
           </dd>
         </div>
         {position.status === "closed" && (
           <div className="rounded-[14px] bg-secondary/40 p-4">
-            <dt className="text-xs font-semibold text-muted-foreground">Eindstatus</dt>
-            <dd className="mt-1 text-xl font-semibold">0 stuks · gesloten</dd>
+            <dt className="text-xs font-semibold text-muted-foreground">Final status</dt>
+            <dd className="mt-1 text-xl font-semibold">0 shares · closed</dd>
           </div>
         )}
       </dl>
@@ -2108,8 +2113,8 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
           {position.returnStatus === "missing-fx"
-            ? "FX-koers ontbreekt. Rendement kan niet worden berekend."
-            : "Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen."}
+            ? "FX rate missing. Return cannot be calculated."
+            : "Import earlier transactions or connect your other brokers to calculate return."}
         </p>
       )}
       {position.returnStatus === "broker-average" && (
@@ -2117,16 +2122,15 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           role="status"
           className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
-          Kostprijs komt van de gemiddelde aankoopprijs van je broker, omdat niet elke aankoop in de
-          orderhistorie staat. Gerealiseerde winst en jaarrendement kunnen daardoor niet worden
-          berekend.
+          Cost is based on your broker's average purchase price, because not every purchase is in
+          the order history. Realised profit and annual return therefore cannot be calculated.
         </p>
       )}
       <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <dt className="text-muted-foreground">Aantal</dt>
+          <dt className="text-muted-foreground">Quantity</dt>
           <dd className="mt-1 font-semibold tabular-nums">
-            {position.quantity.toLocaleString("nl-NL")}
+            {position.quantity.toLocaleString("en-GB")}
           </dd>
           <button
             type="button"
@@ -2135,25 +2139,25 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             onClick={() => setQuantityOpen((open) => !open)}
             className="pressable mt-1 rounded-sm text-xs font-semibold text-primary underline-offset-2 hover:underline"
           >
-            {quantityOpen ? "Historie verbergen" : "Aantalhistorie tonen"}
+            {quantityOpen ? "Hide history" : "Show quantity history"}
           </button>
         </div>
         {position.status === "open" && (
           <>
             <div>
-              <dt className="text-muted-foreground">Gemiddelde kostprijs</dt>
+              <dt className="text-muted-foreground">Average cost</dt>
               <dd className="mt-1 font-semibold tabular-nums">
                 {money(position.averageCost).replace(/^\+/, "")}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Huidige koers</dt>
+              <dt className="text-muted-foreground">Current price</dt>
               <dd className="mt-1 font-semibold tabular-nums">
                 {money(position.currentPrice).replace(/^\+/, "")}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Ongerealiseerd</dt>
+              <dt className="text-muted-foreground">Unrealised</dt>
               <dd className="mt-1 font-semibold tabular-nums">
                 {money(position.returns.unrealizedGain)}
                 {position.returns.remainingCostBasis && position.returns.unrealizedGain !== null
@@ -2164,27 +2168,27 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           </>
         )}
         <div>
-          <dt className="text-muted-foreground">Gerealiseerd</dt>
+          <dt className="text-muted-foreground">Realised</dt>
           <dd className="mt-1 font-semibold tabular-nums">
             {money(position.returns.realizedGain)}
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Dividend ontvangen</dt>
+          <dt className="text-muted-foreground">Dividends received</dt>
           <dd className="mt-1 font-semibold tabular-nums">
             {money(position.returns.dividendsReceived)}
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Eerste aankoop</dt>
+          <dt className="text-muted-foreground">First purchase</dt>
           <dd className="mt-1 font-semibold">
-            {position.firstBuyDate ? detailDate(position.firstBuyDate) : "Niet beschikbaar"}
+            {position.firstBuyDate ? detailDate(position.firstBuyDate) : "Unavailable"}
           </dd>
         </div>
       </dl>
       {position.firstBuyDate && (
         <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
-          Sinds eerste aankoop:{" "}
+          Since first purchase:{" "}
           <strong
             className={
               position.returns.sinceFirstBuyPercentage === null
@@ -2196,13 +2200,13 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           >
             {percent(position.returns.sinceFirstBuyPercentage)}
           </strong>{" "}
-          vanaf {position.firstBuyDate}
+          since {position.firstBuyDate}
         </p>
       )}
       {quantityOpen && (
         <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
           {position.quantityHistory.length === 0 ? (
-            <li className="text-muted-foreground">Geen volledige aantalhistorie beschikbaar.</li>
+            <li className="text-muted-foreground">No full quantity history available.</li>
           ) : (
             position.quantityHistory.map((change) => (
               <li
@@ -2210,11 +2214,11 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
                 className="flex flex-wrap justify-between gap-2"
               >
                 <span>
-                  {detailDate(change.date)} · {change.reason === "buy" ? "Koop" : "Verkoop"}
+                  {detailDate(change.date)} · {change.reason === "buy" ? "Buy" : "Sell"}
                 </span>
                 <span className="font-semibold tabular-nums">
                   {change.delta > 0 ? "+" : ""}
-                  {change.delta.toLocaleString("nl-NL")} → {change.quantity.toLocaleString("nl-NL")}
+                  {change.delta.toLocaleString("en-GB")} → {change.quantity.toLocaleString("en-GB")}
                 </span>
               </li>
             ))
@@ -2228,33 +2232,33 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
 function PositionActivityTable({ position }: { position: InvestingPositionDetail }) {
   const dates = [...new Set(position.activity.map((item) => item.date))];
   const number = (value: number | null | undefined) =>
-    value == null ? "—" : value.toLocaleString("nl-NL", { maximumFractionDigits: 4 });
+    value == null ? "—" : value.toLocaleString("en-GB", { maximumFractionDigits: 4 });
   return (
     <section
       aria-labelledby="activity-title"
       className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"
     >
       <h3 id="activity-title" className="font-display text-2xl font-semibold">
-        Activiteit
+        Activity
       </h3>
       {dates.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          Geen transactie- of dividendhistorie beschikbaar.
+          No transaction or dividend history available.
         </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <div role="table" aria-label="Positieactiviteit" className="min-w-[760px] text-sm">
+          <div role="table" aria-label="Position activity" className="min-w-[760px] text-sm">
             <div
               role="row"
               className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] border-b border-border pb-2 text-xs font-semibold text-muted-foreground"
             >
-              <span>Datum</span>
+              <span>Date</span>
               <span>Type</span>
-              <span className="text-right">Aantal</span>
-              <span className="text-right">Koers</span>
-              <span className="text-right">Bedrag</span>
-              <span className="text-right">Commissie</span>
-              <span className="text-right">Valuta</span>
+              <span className="text-right">Quantity</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Amount</span>
+              <span className="text-right">Commission</span>
+              <span className="text-right">Currency</span>
             </div>
             {dates.map((date) => (
               <div
@@ -2273,11 +2277,7 @@ function PositionActivityTable({ position }: { position: InvestingPositionDetail
                     >
                       <span>{detailDate(date)}</span>
                       <span className="font-semibold">
-                        {item.kind === "buy"
-                          ? "Koop"
-                          : item.kind === "sell"
-                            ? "Verkoop"
-                            : "Dividend"}
+                        {item.kind === "buy" ? "Buy" : item.kind === "sell" ? "Sell" : "Dividend"}
                       </span>
                       <span className="text-right">{number(item.quantity)}</span>
                       <span className="text-right">{number(item.executionPrice)}</span>
@@ -2327,12 +2327,12 @@ function PositionDetail() {
         to={{ pathname: "/positions", search: query ? `?${query}` : "" }}
         className="text-sm font-semibold text-primary hover:underline"
       >
-        ← Terug naar posities
+        ← Back to positions
       </Link>
       {!positionSymbol ? (
         <EmptyState
-          title="Geen positie gekozen"
-          description="Kies een positie om koershistorie te bekijken."
+          title="No position selected"
+          description="Choose a position to view price history."
         />
       ) : state.status === "loading" ? (
         <DashboardLoading />
@@ -2345,8 +2345,8 @@ function PositionDetail() {
         </>
       ) : (
         <EmptyState
-          title="Positie niet gevonden"
-          description="Deze positie staat niet in het lokale dashboardmodel."
+          title="Position not found"
+          description="This position is not in the local dashboard model."
         />
       )}
     </div>

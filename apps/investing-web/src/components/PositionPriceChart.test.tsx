@@ -28,7 +28,7 @@ test("exposes position price history and marker details accessibly", async () =>
     );
   });
   expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("AAPL");
-  expect(container.textContent).toContain("Koop");
+  expect(container.textContent).toContain("Buy");
   expect(container.textContent).toContain("Koop 2");
   root.unmount();
 });
@@ -76,9 +76,9 @@ test("groups marker fields and supports marker keyboard activation", async () =>
       />,
     );
   });
-  expect(container.textContent).toContain("Slotkoers");
-  expect(container.textContent).toContain("2 stuks");
-  expect(container.textContent).toContain("commissie");
+  expect(container.textContent).toContain("Close");
+  expect(container.textContent).toContain("2 shares");
+  expect(container.textContent).toContain("commission");
   expect(container.textContent).toContain("Dividend");
   const marker = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes("Koop 2"),
@@ -106,12 +106,10 @@ test("moves exact-value crosshair with keyboard and clears zoom with Escape", as
   });
   const chart = container.querySelector<HTMLElement>('[role="img"]')!;
   const all = Array.from(container.querySelectorAll("button")).find(
-    (button) => button.textContent === "Alles",
+    (button) => button.textContent === "All",
   );
   expect(
-    Array.from(container.querySelectorAll("button")).some(
-      (button) => button.textContent === "Dit jaar",
-    ),
+    Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "YTD"),
   ).toBe(true);
   await act(async () => {
     all?.click();
@@ -119,7 +117,7 @@ test("moves exact-value crosshair with keyboard and clears zoom with Escape", as
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
   });
-  expect(container.querySelector('[role="status"]')?.textContent).toContain("5 jan 2026");
+  expect(container.querySelector('[role="status"]')?.textContent).toContain("5 Jan 2026");
   Object.defineProperty(chart, "clientWidth", { configurable: true, value: 400 });
   chart.getBoundingClientRect = () => ({
     x: 0,
@@ -137,16 +135,16 @@ test("moves exact-value crosshair with keyboard and clears zoom with Escape", as
       new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 200, deltaY: -100 }),
     );
   });
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Clear zoom"]')).not.toBeNull();
   await act(async () => {
     chart.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  expect(container.querySelector('button[aria-label="Zoom wissen"]')).toBeNull();
-  expect(
-    container.querySelectorAll('[aria-label="Exacte koerswaarden"] li').length,
-  ).toBeGreaterThan(3);
-  expect(container.querySelector('[aria-label="Exacte koerswaarden"]')?.textContent).toContain(
-    "koers onbekend",
+  expect(container.querySelector('button[aria-label="Clear zoom"]')).toBeNull();
+  expect(container.querySelectorAll('[aria-label="Exact price values"] li').length).toBeGreaterThan(
+    3,
+  );
+  expect(container.querySelector('[aria-label="Exact price values"]')?.textContent).toContain(
+    "price unknown",
   );
   root.unmount();
 });

@@ -28,9 +28,7 @@ test("renders accessible allocation and switches grouping", () => {
     buckets: [{ key: "Privé", label: "Privé", value: 100, unpriced: false }],
     unpriced: [],
   });
-  expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain(
-    "belegging",
-  );
+  expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toContain("holding");
   act(() => {
     (container.querySelector('button[aria-pressed="false"]') as HTMLButtonElement).click();
   });
@@ -40,7 +38,7 @@ test("renders accessible allocation and switches grouping", () => {
 
 test("renders explicit empty state", () => {
   const { container, root } = render(empty, empty);
-  expect(container.textContent).toContain("Geen posities");
+  expect(container.textContent).toContain("No positions");
   root.unmount();
 });
 
@@ -53,8 +51,8 @@ test("excludes unpriced holdings and names unknown symbols", () => {
     unpriced: ["OLD"],
   };
   const { container, root } = render(incomplete, incomplete);
-  expect(container.textContent).toContain("Waarde onbekend: OLD");
-  expect(container.textContent).toContain("Niet opgenomen in grafiek of percentage");
+  expect(container.textContent).toContain("Value unknown: OLD");
+  expect(container.textContent).toContain("Not included in the chart or percentage");
   expect(container.textContent).not.toContain("Old Holding");
   root.unmount();
 });
@@ -76,7 +74,7 @@ test("caps named slices, sorts by value, and folds the rest into an expandable O
     (node) => node.textContent,
   );
   // Top 3 individually named, largest first, rest folded into one bucket.
-  expect(labels).toEqual(["Bravo", "Echo", "Charlie", "Overige (3)"]);
+  expect(labels).toEqual(["Bravo", "Echo", "Charlie", "Other (3)"]);
   expect(container.textContent).not.toContain("Alpha");
   act(() => {
     (container.querySelector("button.truncate") as HTMLButtonElement).click();

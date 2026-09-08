@@ -28,7 +28,7 @@ const markerColors = {
 } as const;
 const dateLabel = shortDate;
 const priceLabel = (value: number, currency: string) =>
-  value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2 });
+  value.toLocaleString("en-GB", { style: "currency", currency, maximumFractionDigits: 2 });
 
 function chartPointsWithGaps(
   points: PositionPricePoint[],
@@ -70,32 +70,32 @@ function MarkerDetails({
       className="rounded-[12px] border border-border bg-secondary/30 p-3 text-xs"
     >
       <p className="font-semibold">
-        {dateLabel(date)} · Slotkoers {priceLabel(close, currency)}
+        {dateLabel(date)} · Close {priceLabel(close, currency)}
       </p>
       {markers.length === 0 ? (
-        <p className="mt-1 text-muted-foreground">Geen activiteit op deze datum.</p>
+        <p className="mt-1 text-muted-foreground">No activity on this date.</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {markers.map((marker, index) => (
             <li key={`${marker.eventDate}-${marker.kind}-${index}`}>
               <span className="font-semibold">
-                {marker.kind === "buy" ? "Koop" : marker.kind === "sell" ? "Verkoop" : "Dividend"}
+                {marker.kind === "buy" ? "Buy" : marker.kind === "sell" ? "Sell" : "Dividend"}
               </span>
               <span className="text-muted-foreground">
                 {" "}
-                · gebeurtenis {dateLabel(marker.eventDate)}
+                · event {dateLabel(marker.eventDate)}
                 {marker.quantity === undefined
                   ? ""
-                  : ` · ${marker.quantity.toLocaleString("nl-NL")} stuks`}
+                  : ` · ${marker.quantity.toLocaleString("en-GB")} shares`}
                 {marker.executionPrice == null
                   ? ""
-                  : ` · koers ${priceLabel(marker.executionPrice, marker.currency ?? currency)}`}
+                  : ` · price ${priceLabel(marker.executionPrice, marker.currency ?? currency)}`}
                 {marker.amount === undefined
                   ? ""
-                  : ` · bedrag ${priceLabel(marker.amount, marker.currency ?? currency)}`}
+                  : ` · amount ${priceLabel(marker.amount, marker.currency ?? currency)}`}
                 {marker.commission == null
                   ? ""
-                  : ` · commissie ${priceLabel(marker.commission, marker.currency ?? currency)}`}
+                  : ` · commission ${priceLabel(marker.commission, marker.currency ?? currency)}`}
               </span>
             </li>
           ))}
@@ -162,12 +162,12 @@ export function PositionPriceChart({
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">Koershistorie</p>
+          <p className="text-sm font-medium text-muted-foreground">Price history</p>
           <CardTitle>{symbol}</CardTitle>
         </div>
         <div
           role="group"
-          aria-label="Periode kiezen"
+          aria-label="Choose period"
           className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
         >
           {chartRanges.map((range) => (
@@ -189,21 +189,21 @@ export function PositionPriceChart({
       <CardContent>
         {all.length === 0 ? (
           <EmptyState
-            title="Geen koershistorie"
-            description="Prijsdata verschijnt zodra de eerste synchronisatie klaar is."
+            title="No price history"
+            description="Price data appears once the first sync is done."
           />
         ) : (
           <>
             <form
               onSubmit={applyDates}
-              aria-label="Datumbereik kiezen"
+              aria-label="Choose date range"
               className="mb-3 flex flex-wrap items-end gap-2 text-xs"
             >
               <label className="font-semibold text-muted-foreground">
-                Van
+                From
                 <input
                   type="date"
-                  aria-label="Van datum"
+                  aria-label="From date"
                   min={minDate}
                   max={maxDate}
                   value={dateFrom}
@@ -212,10 +212,10 @@ export function PositionPriceChart({
                 />
               </label>
               <label className="font-semibold text-muted-foreground">
-                Tot
+                To
                 <input
                   type="date"
-                  aria-label="Tot datum"
+                  aria-label="To date"
                   min={minDate}
                   max={maxDate}
                   value={dateTo}
@@ -227,7 +227,7 @@ export function PositionPriceChart({
                 type="submit"
                 className="pressable rounded-pill border border-border px-3 py-1.5 font-semibold"
               >
-                Toepassen
+                Apply
               </button>
               {chart.window.kind === "custom" && (
                 <button
@@ -236,7 +236,7 @@ export function PositionPriceChart({
                     chart.clearZoom();
                     setActiveEventDate(null);
                   }}
-                  aria-label="Zoom wissen"
+                  aria-label="Clear zoom"
                   className="pressable rounded-pill bg-secondary px-3 py-1.5 font-semibold"
                 >
                   Zoom: {dateLabel(chart.window.from)} – {dateLabel(chart.window.to)} ×
@@ -252,7 +252,7 @@ export function PositionPriceChart({
               ref={chartRef}
               role="img"
               tabIndex={0}
-              aria-label={`Koershistorie van ${symbol}. Gebruik pijltoetsen voor exacte waarden, Home en End voor begin en einde, Escape om zoom te wissen.`}
+              aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
               className="touch-pan-y select-none rounded-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
                 chart.onKeyDown(event);
@@ -277,12 +277,12 @@ export function PositionPriceChart({
                     tickLine={false}
                     axisLine={false}
                     width={60}
-                    tickFormatter={(value: number) => value.toLocaleString("nl-NL")}
+                    tickFormatter={(value: number) => value.toLocaleString("en-GB")}
                   />
                   <Line
                     type="monotone"
                     dataKey="close"
-                    name="Koers"
+                    name="Price"
                     stroke="hsl(var(--chart-blue))"
                     strokeWidth={2}
                     dot={false}
@@ -333,7 +333,7 @@ export function PositionPriceChart({
                 />
               </div>
             )}
-            <div aria-label="Koersmarkeringen" className="mt-4 flex flex-wrap gap-2 text-xs">
+            <div aria-label="Price markers" className="mt-4 flex flex-wrap gap-2 text-xs">
               {markers.map(({ marker, pointIndex, markerIndex }) => (
                 <button
                   type="button"
@@ -350,7 +350,7 @@ export function PositionPriceChart({
                 </button>
               ))}
             </div>
-            <ul className="sr-only" aria-label="Exacte koerswaarden">
+            <ul className="sr-only" aria-label="Exact price values">
               {visible.map((point) => (
                 <li key={point.date}>
                   {dateLabel(point.date)}: {priceLabel(point.close, currency)}
@@ -360,7 +360,7 @@ export function PositionPriceChart({
                 </li>
               ))}
               {missingDates.map((date) => (
-                <li key={`missing-${date}`}>{dateLabel(date)}: koers onbekend</li>
+                <li key={`missing-${date}`}>{dateLabel(date)}: price unknown</li>
               ))}
             </ul>
           </>

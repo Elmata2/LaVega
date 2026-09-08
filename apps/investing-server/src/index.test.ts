@@ -821,5 +821,5 @@ test("dashboard keeps positions when price history reads fail", async () => {
 
   expect(response.status).toBe(200);
   expect(body.positions.length).toBeGreaterThan(0);
-  expect(body.problems).toContain("Prijsdata kon niet volledig worden geladen");
+  expect(body.problems).toContain("Price data could not be fully loaded");
 });

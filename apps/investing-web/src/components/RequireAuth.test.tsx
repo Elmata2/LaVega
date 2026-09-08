@@ -27,7 +27,7 @@ async function render(status: number, body: unknown, initialEntries = ["/"]) {
           <Route element={<RequireAuth />}>
             <Route path="/" element={<p>Beveiligde inhoud</p>} />
           </Route>
-          <Route path="/sign-in" element={<p>Inloggen</p>} />
+          <Route path="/sign-in" element={<p>Sign in</p>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -53,5 +53,5 @@ test("renders protected content when a session exists", async () => {
 });
 
 test("redirects to sign-in when auth is configured but no session exists", async () => {
-  expect(await render(200, null)).toContain("Inloggen");
+  expect(await render(200, null)).toContain("Sign in");
 });

@@ -21,7 +21,7 @@ const colors = [
 const otherColor = "hsl(var(--muted-foreground) / 0.35)";
 // A donut reads as at most a handful of wedges. Past that, per-slice padding
 // angle eats more arc than the data itself and the ring turns into a row of
-// disconnected ticks. Cap named slices and fold the rest into one "Overige"
+// disconnected ticks. Cap named slices and fold the rest into one "Other"
 // wedge instead of rendering every holding.
 const MAX_NAMED_BUCKETS = colors.length;
 
@@ -48,7 +48,7 @@ function buildDisplayBuckets(
     ...named.map((bucket, index) => ({ ...bucket, color: colors[index] })),
     {
       key: "__overige",
-      label: `Overige (${rest.length})`,
+      label: `Other (${rest.length})`,
       value: rest.reduce((sum, bucket) => sum + bucket.value, 0),
       color: otherColor,
       members: rest,
@@ -70,11 +70,11 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">Verdeling</p>
-          <CardTitle>Portefeuille</CardTitle>
+          <p className="text-sm font-medium text-muted-foreground">Allocation</p>
+          <CardTitle>Portfolio</CardTitle>
         </div>
         <div
-          aria-label="Verdeling groeperen"
+          aria-label="Group allocation"
           className="flex rounded-pill bg-secondary p-1"
           role="group"
         >
@@ -88,7 +88,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
             size="sm"
             variant={group === "instrument" ? "default" : "ghost"}
           >
-            Belegging
+            Holding
           </Button>
           <Button
             aria-pressed={group === "entity"}
@@ -100,22 +100,22 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
             size="sm"
             variant={group === "entity" ? "default" : "ghost"}
           >
-            Entiteit
+            Entity
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {priced.length === 0 && allocation.unpriced.length === 0 ? (
           <EmptyState
-            title="Geen posities"
-            description="Jouw verdeling verschijnt na de eerste brokersynchronisatie."
+            title="No positions"
+            description="Your allocation appears after the first broker sync."
           />
         ) : (
           <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
             <div
               className="relative"
               role="img"
-              aria-label={`Portefeuilleverdeling per ${group === "instrument" ? "belegging" : "entiteit"}`}
+              aria-label={`Portfolio allocation per ${group === "instrument" ? "holding" : "entity"}`}
             >
               {display.length > 0 ? (
                 <ChartContainer className="h-[180px]" aria-hidden="true">
@@ -139,11 +139,11 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                 </ChartContainer>
               ) : (
                 <div className="mx-auto flex size-[180px] items-center justify-center rounded-full border-[22px] border-secondary text-center text-xs text-muted-foreground">
-                  Niet geprijsd
+                  Not priced
                 </div>
               )}
             </div>
-            <ul aria-label="Verdelingsdetails" className="space-y-3 text-sm">
+            <ul aria-label="Allocation details" className="space-y-3 text-sm">
               {display.map((bucket) => (
                 <li key={bucket.key}>
                   <div className="flex items-center justify-between gap-3">
@@ -171,7 +171,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                         {Math.round((bucket.value / total) * 100)}%
                       </span>
                       <span className="font-semibold tabular-nums">
-                        {bucket.value.toLocaleString("nl-NL", {
+                        {bucket.value.toLocaleString("en-GB", {
                           style: "currency",
                           currency,
                           maximumFractionDigits: 0,
@@ -188,7 +188,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                         >
                           <span className="truncate">{member.label}</span>
                           <span className="tabular-nums">
-                            {member.value.toLocaleString("nl-NL", {
+                            {member.value.toLocaleString("en-GB", {
                               style: "currency",
                               currency,
                               maximumFractionDigits: 0,
@@ -202,10 +202,10 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
               ))}
               {allocation.unpriced.length > 0 && (
                 <li role="status" className="border-t border-warning/30 pt-3 text-warning">
-                  <span className="font-semibold">Waarde onbekend:</span>{" "}
+                  <span className="font-semibold">Value unknown:</span>{" "}
                   {allocation.unpriced.join(", ")}
                   <span className="block text-xs text-muted-foreground">
-                    Niet opgenomen in grafiek of percentage.
+                    Not included in the chart or percentage.
                   </span>
                 </li>
               )}
