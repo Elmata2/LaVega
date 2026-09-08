@@ -34,6 +34,8 @@ export interface EbConfig {
   privateKeyFile: string | null;
   redirectUrl: string;
   psuType: PsuType;
+  /** Where the signing key comes from; "missing" means every EB call will fail. */
+  keySource: "env" | "file" | "missing";
 }
 
 interface RawEbConfig {
@@ -64,17 +66,23 @@ function readJSON<T>(filePath: string, fallback: T): T {
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
   const applicationId = process.env.EB_APPLICATION_ID ?? raw?.applicationId ?? null;
-  const configured =
+  const hasApplicationId =
     typeof applicationId === "string" &&
     applicationId.length > 0 &&
     !applicationId.includes(PLACEHOLDER);
   const envKey = process.env.EB_PRIVATE_KEY;
   const privateKey = envKey ? envKey.replace(/\\n/g, "\n") : (raw?.privateKey ?? null);
+  const privateKeyFile = process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null;
+  const keySource = privateKey ? "env" : privateKeyFile ? "file" : "missing";
+  // An application id without a key is not configured: every call would fail
+  // at signing, and /api/eb/status must not claim otherwise (it did, once).
+  const configured = hasApplicationId && keySource !== "missing";
   return {
     configured,
-    applicationId: configured ? (applicationId as string) : null,
+    keySource,
+    applicationId: hasApplicationId ? (applicationId as string) : null,
     privateKey,
-    privateKeyFile: process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null,
+    privateKeyFile,
     redirectUrl: process.env.EB_REDIRECT_URL ?? raw?.redirectUrl ?? DEFAULT_REDIRECT_URL,
     psuType: psuTypeSetting(process.env.EB_PSU_TYPE ?? raw?.psuType),
   };

@@ -79,6 +79,7 @@ beforeEach(() => {
     privateKeyFile: null,
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
+    keySource: "env",
   });
 });
 

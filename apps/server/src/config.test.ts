@@ -40,10 +40,14 @@ test("a VUL-IN placeholder applicationId is treated as not configured", () => {
 test("a real config is reported as configured, with defaults filled in when absent", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
   const configPath = path.join(dir, "config.json");
-  writeFileSync(configPath, JSON.stringify({ applicationId: "abcd1234efgh5678" }));
+  writeFileSync(
+    configPath,
+    JSON.stringify({ applicationId: "abcd1234efgh5678", privateKey: "-----BEGIN KEY-----" }),
+  );
   try {
     const config = loadConfig(configPath);
     expect(config.configured).toBe(true);
+    expect(config.keySource).toBe("env");
     expect(config.applicationId).toBe("abcd1234efgh5678");
     expect(config.privateKeyFile).toBeNull();
     expect(config.redirectUrl).toBe("http://localhost:8787/api/eb/callback");
@@ -89,6 +93,26 @@ test("a misspelt psuType falls back to business instead of reaching Enable Banki
     expect(loadConfig(configPath).psuType).toBe("personal");
   } finally {
     warn.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an application id without any private key is not configured, and says which is missing", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(configPath, JSON.stringify({ applicationId: "abcd1234efgh5678" }));
+  try {
+    const config = loadConfig(configPath);
+    expect(config.configured).toBe(false);
+    expect(config.keySource).toBe("missing");
+    expect(config.applicationId).toBe("abcd1234efgh5678");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ applicationId: "abcd1234efgh5678", privateKeyFile: "eb.pem" }),
+    );
+    expect(loadConfig(configPath).keySource).toBe("file");
+    expect(loadConfig(configPath).configured).toBe(true);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

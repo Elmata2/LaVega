@@ -31,10 +31,15 @@ test("GET /api/eb/status reports configured:false and applicationId:null when no
     privateKeyFile: null,
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
+    keySource: "missing",
   });
   const res = await app.request("/api/eb/status");
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ configured: false, applicationId: null });
+  expect(await res.json()).toEqual({
+    configured: false,
+    applicationId: null,
+    privateKey: "missing",
+  });
 });
 
 test("GET /api/eb/status masks the applicationId when configured", async () => {
@@ -45,10 +50,15 @@ test("GET /api/eb/status masks the applicationId when configured", async () => {
     privateKeyFile: "./key.pem",
     redirectUrl: "http://localhost:8787/api/eb/callback",
     psuType: "business",
+    keySource: "file",
   });
   const res = await app.request("/api/eb/status");
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ configured: true, applicationId: "abcd1234…" });
+  expect(await res.json()).toEqual({
+    configured: true,
+    applicationId: "abcd1234…",
+    privateKey: "file",
+  });
 });
 
 test("GET /api/rates returns a valid rates payload with open CORS", async () => {

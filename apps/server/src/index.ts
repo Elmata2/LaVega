@@ -197,6 +197,7 @@ app.get("/api/eb/status", (c) => {
   return c.json({
     configured: config.configured,
     applicationId: maskApplicationId(config.applicationId),
+    privateKey: config.keySource,
   });
 });
 
