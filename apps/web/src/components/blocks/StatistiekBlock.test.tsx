@@ -152,6 +152,26 @@ test("StatistiekBlock renders an empty state instead of a chart with no transact
   expect(html).not.toContain("lv-bar");
 });
 
+test("StatistiekBlock names what it left out for being in a foreign currency", () => {
+  const revolutHufSpend = {
+    ...txs[0],
+    id: "rHUF",
+    accountKey: "A1",
+    date: "2026-08-05",
+    amount: -300_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+  };
+  const html = render([...txs, revolutHufSpend]);
+  expect(html).toContain("Buiten deze cijfers: 1 transactie in vreemde valuta (HUF 300.000).");
+});
+
+test("StatistiekBlock says nothing about foreign currency when there is none excluded", () => {
+  const html = render();
+  expect(html).not.toContain("vreemde valuta");
+});
+
 test("StatistiekBlock still renders with two days of history", () => {
   // The weekday view is the one that refuses (see statistics.test.ts); the
   // block itself must not crash on a nearly-empty vault.

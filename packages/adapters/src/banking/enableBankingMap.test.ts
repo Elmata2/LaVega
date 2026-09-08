@@ -66,6 +66,38 @@ test("mapEbTransaction: missing remittance_information falls back to bank_transa
   expect(result.counterparty).toBe("NL02XXXX0002");
 });
 
+test("mapEbTransaction: no creditor/debtor at all (a card-rail purchase) falls back to remittance_information for counterparty, same as description already does", () => {
+  // Card transactions frequently carry no structured creditor/debtor at all —
+  // Enable Banking (and PSD2 generally) only guarantees remittance_information
+  // for these, with the merchant name living there instead. Before this fix,
+  // `description` already fell back to remittance_information but
+  // `counterparty` did not, so this exact shape produced counterparty: "" —
+  // which merchantKey("") then drops from subscription/merchant detection
+  // entirely, however many times the same merchant repeats.
+  const tx = {
+    transaction_amount: { amount: "11.89", currency: "EUR" },
+    credit_debit_indicator: "DBIT",
+    remittance_information: ["SIMYO"],
+    booking_date: "2026-01-05",
+  };
+  const result = mapEbTransaction(tx, "ACC1");
+  expect(result.counterparty).toBe("SIMYO");
+  expect(result.description).toBe("SIMYO");
+});
+
+test("mapEbTransaction: creditor.name still wins over remittance_information when both are present", () => {
+  const tx = {
+    transaction_amount: { amount: "11.89", currency: "EUR" },
+    credit_debit_indicator: "DBIT",
+    remittance_information: ["Telefoonabonnement"],
+    creditor: { name: "Simyo B.V." },
+    booking_date: "2026-01-05",
+  };
+  const result = mapEbTransaction(tx, "ACC1");
+  expect(result.counterparty).toBe("Simyo B.V.");
+  expect(result.description).toBe("Telefoonabonnement");
+});
+
 test("mapEbTransaction: multi-currency — transaction_amount.currency wins over fallbackCurrency", () => {
   const tx = {
     transaction_amount: { amount: 10, currency: "USD" },

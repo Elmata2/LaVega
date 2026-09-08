@@ -1,8 +1,35 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
+import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import SaldoBlock, { changePct, positionSeries } from "./SaldoBlock";
 import { accounts, ASOF, freshAccounts, freshTxs, scheduledFlows, txs } from "./fixtures";
+
+// A freshly EB-linked Revolut: one EUR pocket plus one HUF pocket. Enable
+// Banking hands back a separate account per currency pocket, and until now
+// positionSeries summed every account's `balance` regardless of `currency` —
+// so the HUF pocket's face value (380.000, worth roughly 950 EUR) landed in
+// the EUR total unconverted, on top of the real 4.500.
+const revolutAccounts: Account[] = [
+  {
+    key: "R1",
+    iban: "LT123456789012345678",
+    name: "Current",
+    bank: "Revolut",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 4_500,
+  },
+  {
+    key: "R2",
+    iban: "LT987654321098765432",
+    name: "Current (HUF)",
+    bank: "Revolut",
+    entity: "Prive",
+    currency: "HUF",
+    balance: 380_000,
+  },
+];
 
 const KNOWN_SUM = 182_310 + 21_900;
 
@@ -124,6 +151,29 @@ test("positionSeries walks today's position back through the transactions", () =
   const at = (d: string) => s.points.find((p) => p.date === d)?.value;
   expect(at("2026-08-10")).toBe(KNOWN_SUM + 1_100);
   expect(at("2026-08-11")).toBe(KNOWN_SUM);
+});
+
+test("positionSeries excludes a foreign-currency balance instead of adding its face value to the EUR total", () => {
+  const s = positionSeries(revolutAccounts, [], ASOF);
+  expect(s.current).toBe(4_500); // the HUF pocket does not get added at face value
+  expect(s.excluded).toBe(1);
+  expect(s.excludedCurrencyKeys).toEqual(["R2"]);
+});
+
+test("SaldoBlock names the foreign-currency account it left out, separately from a missing saldo", () => {
+  const html = renderToStaticMarkup(
+    <SaldoBlock
+      accounts={revolutAccounts}
+      txs={[]}
+      scheduledFlows={[]}
+      asOf={ASOF}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html).toContain(formatEuro(4_500));
+  expect(html).not.toContain(formatEuro(384_500));
+  expect(html).toContain("vreemde valuta");
+  expect(html).toContain("Revolut");
 });
 
 test("positionSeries stops at the oldest transaction and reports no comparison", () => {

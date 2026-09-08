@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Account } from "@lavega/core";
+import { isEurCurrency } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
@@ -37,10 +38,28 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
     return entities
       .map((entity, i) => {
         const entityAccounts = accounts.filter((a) => a.entity === entity);
-        const balance = entityAccounts.some((a) => a.balance === null)
-          ? null
-          : entityAccounts.reduce((s, a) => s + (a.balance as number), 0);
-        return { entity, color: entityColor(i), count: entityAccounts.length, balance };
+        // A balance in another currency is just as unknown here as a missing
+        // one: adding its face value into a EUR total is what produced
+        // "384.500" out of a real 4.500 + a Revolut HUF pocket of 380.000. The
+        // two reasons are tracked separately, though — the footer says which
+        // one it is, and a genuinely missing balance always wins the label
+        // when both are present (mirrors SaldoBlock's excludedCurrencyKeys,
+        // which only counts accounts that DO have a balance).
+        const missingBalance = entityAccounts.some((a) => a.balance === null);
+        const foreignCurrency =
+          !missingBalance && entityAccounts.some((a) => !isEurCurrency(a.currency));
+        const balance =
+          missingBalance || foreignCurrency
+            ? null
+            : entityAccounts.reduce((s, a) => s + (a.balance as number), 0);
+        return {
+          entity,
+          color: entityColor(i),
+          count: entityAccounts.length,
+          balance,
+          missingBalance,
+          foreignCurrency,
+        };
       })
       .sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
   }, [accounts]);
@@ -51,7 +70,12 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
   );
   const shown = rows.slice(0, ROWS);
   const hidden = rows.length - shown.length;
-  const unknown = rows.filter((r) => r.balance === null).length;
+  // Two different facts, worded differently in the footer (mirrors
+  // SaldoBlock's currencyCount / noBalanceCount split): a company with no
+  // balance at all is not the same claim as one whose only balance is in a
+  // currency LaVega does not convert.
+  const noBalanceCount = rows.filter((r) => r.missingBalance).length;
+  const currencyCount = rows.filter((r) => r.foreignCurrency).length;
 
   return (
     <Module
@@ -66,9 +90,14 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
         rows.length > 0 ? (
           <>
             {hidden > 0 && `+${hidden} meer · `}
-            {unknown > 0
-              ? `${unknown} bedrijf${unknown === 1 ? "" : "ven"} zonder compleet saldo`
-              : "Alle saldo's bekend"}
+            {[
+              noBalanceCount > 0 &&
+                `${noBalanceCount} bedrijf${noBalanceCount === 1 ? "" : "ven"} zonder compleet saldo`,
+              currencyCount > 0 &&
+                `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta — LaVega rekent nog niet om naar euro's`,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "Alle saldo's bekend"}
           </>
         ) : undefined
       }

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Account, ScheduledFlow, Tx } from "@lavega/core";
-import { availableBalanceCents, reservedCents } from "@lavega/core";
+import { availableBalanceCents, isEurCurrency, reservedCents } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
@@ -54,8 +54,15 @@ export type PositionSeries = {
   /** Accounts whose history is what limits `coverageDays`, so the card can say
    *  which import would unlock the comparison instead of just refusing it. */
   limitedBy: string[];
-  /** Accounts left out because their saldo is unknown. */
+  /** Accounts left out because their saldo is unknown, OR because it is in a
+   *  currency other than EUR (see `isEurCurrency`) — a balance LaVega cannot
+   *  fold into this total honestly, so it stays out instead of being added at
+   *  face value. */
   excluded: number;
+  /** Of `excluded`, the ones WITH a known balance that is simply not in EUR —
+   *  named separately so the card can say "vreemde valuta" instead of the
+   *  misleading "zonder saldo" it would otherwise print for them. */
+  excludedCurrencyKeys: string[];
 };
 
 /** The total position over time, derived from the transactions alone. Pure, so
@@ -66,13 +73,16 @@ export function positionSeries(
   asOf: string,
   windowDays: number = POSITION_WINDOW_DAYS,
 ): PositionSeries {
-  const known = accounts.filter((a) => a.balance !== null);
+  const known = accounts.filter((a) => a.balance !== null && isEurCurrency(a.currency));
   const keys = new Set(known.map((a) => a.key));
   // Integer cents throughout the walk: a 30-step float subtraction over a
   // six-figure position drifts into visible cents.
   const currentCents = known.reduce((s, a) => s + Math.round((a.balance as number) * 100), 0);
   const excluded = accounts.length - known.length;
-  const base = { current: currentCents / 100, excluded };
+  const excludedCurrencyKeys = accounts
+    .filter((a) => a.balance !== null && !isEurCurrency(a.currency))
+    .map((a) => a.key);
+  const base = { current: currentCents / 100, excluded, excludedCurrencyKeys };
 
   const relevant = txs.filter((t) => keys.has(t.accountKey) && t.date <= asOf);
   if (relevant.length === 0) {
@@ -197,6 +207,13 @@ export default function SaldoBlock({
 
   const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
   const unknownCount = series.excluded;
+  const currencyCount = series.excludedCurrencyKeys.length;
+  const noBalanceCount = unknownCount - currencyCount;
+  const currencyNames = series.excludedCurrencyKeys
+    .map((key) => accounts.find((a) => a.key === key))
+    .filter((a): a is NonNullable<typeof a> => a != null)
+    .map((a) => a.bank || a.name || a.key)
+    .join(", ");
   const knownSum = series.current;
   // Money already earmarked for unpaid BTW. Only worth a line when there is
   // some — otherwise "beschikbaar" would just repeat the number above it.
@@ -253,10 +270,15 @@ export default function SaldoBlock({
       <p className="module-figure-label">
         {accounts.length === 0
           ? "Importeer een bestand of vul saldo's in."
-          : unknownCount > 0
-            ? `${unknownCount} rekening${unknownCount > 1 ? "en" : ""} nog zonder saldo — niet meegeteld, vul in bij Rekeningen.`
+          : noBalanceCount > 0
+            ? `${noBalanceCount} rekening${noBalanceCount > 1 ? "en" : ""} nog zonder saldo — niet meegeteld, vul in bij Rekeningen.`
             : "Compleet: elke rekening heeft een saldo."}
       </p>
+      {currencyCount > 0 && (
+        <p className="module-figure-label">
+          {`${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`}
+        </p>
+      )}
 
       {hasGraph ? (
         <div className="position-graph">

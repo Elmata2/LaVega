@@ -87,6 +87,20 @@ export type Tx = {
   category: string;
   manual: boolean;
 };
+/** Whether an amount in this currency can be added straight into a EUR total.
+ *  Missing/empty defaults to EUR, matching every importer — `parseBankCsv` and
+ *  `mapEbTransaction`/`mapEbAccount` all default an absent currency to "EUR".
+ *
+ *  A currency that ISN'T EUR needs a conversion nothing at the point these
+ *  sums run has, so callers exclude it rather than adding its face value as
+ *  if it were euros. That silent add is the bug: a Revolut EUR pocket next to
+ *  a Revolut HUF pocket summed 4.500 EUR and 380.000 HUF into "384.500", a
+ *  number that was never a euro amount of anything — the HUF pocket (worth
+ *  roughly 950 EUR) was counted at 400x its value. */
+export function isEurCurrency(currency: string | null | undefined): boolean {
+  return (currency || "EUR").trim().toUpperCase() === "EUR";
+}
+
 export type Rule = { id: string; match: string; category: string };
 
 /** A signed, dated future cash movement the forecast can see BEFORE the bank

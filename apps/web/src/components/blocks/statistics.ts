@@ -1,5 +1,5 @@
 import type { CategorySelection, OwnAccounts, Rule, Tx } from "@lavega/core";
-import { categorize, selectMajorCategories } from "@lavega/core";
+import { categorize, isEurCurrency, selectMajorCategories } from "@lavega/core";
 import {
   dayLabelNL,
   daysBetween,
@@ -137,6 +137,7 @@ export function movedTotals(
   const byCat = new Map<string, { outCents: number; inCents: number }>();
   for (const t of txs) {
     if (!t.date || t.date < window.start || t.date > window.end) continue;
+    if (!isEurCurrency(t.currency)) continue;
     const category = categorize(t, rules, own);
     if (!isMovedCategory(category)) continue;
     const bucket = byCat.get(category) ?? { outCents: 0, inCents: 0 };
@@ -216,6 +217,7 @@ function spendRows(txs: Tx[], rules: Rule[], own: OwnAccounts | undefined) {
   for (const t of txs) {
     if (t.amount >= 0) continue;
     if (!t.date) continue;
+    if (!isEurCurrency(t.currency)) continue;
     const category = categorize(t, rules, own);
     if (isMovedCategory(category)) continue;
     rows.push({ date: t.date, category, spend: -t.amount });
@@ -426,6 +428,12 @@ export type WindowTotals = {
   outTotal: number;
   /** The part of the window the data covers — null when nothing does. */
   covered: StatWindow | null;
+  /** Rows in the window excluded from every total above because their currency
+   *  isn't EUR (`isEurCurrency`) — nothing here is dropped silently, so the
+   *  count and the face-value sum per currency travel with the totals instead
+   *  of just vanishing from them. `byCurrency` is unsigned face value, not a
+   *  euro amount of anything. */
+  foreignCurrency: { count: number; byCurrency: Record<string, number> };
 };
 
 /** What came in and what went out inside `window`. Totals, not per-month
@@ -444,13 +452,26 @@ export function windowTotals(
   );
   let inTotal = 0;
   let outTotal = 0;
+  let foreignCount = 0;
+  const foreignByCurrency: Record<string, number> = {};
   for (const t of dated) {
     if (t.date < window.start || t.date > window.end) continue;
+    if (!isEurCurrency(t.currency)) {
+      foreignCount++;
+      const currency = (t.currency || "EUR").trim().toUpperCase();
+      foreignByCurrency[currency] = (foreignByCurrency[currency] ?? 0) + Math.abs(t.amount);
+      continue;
+    }
     if (isMovedCategory(categorize(t, rules, own))) continue;
     if (t.amount >= 0) inTotal += t.amount;
     else outTotal += -t.amount;
   }
-  return { inTotal, outTotal, covered };
+  return {
+    inTotal,
+    outTotal,
+    covered,
+    foreignCurrency: { count: foreignCount, byCurrency: foreignByCurrency },
+  };
 }
 
 /* ─────────────────────────────── gemiddelde inkomsten en gemiddelde uitgaven
@@ -775,6 +796,7 @@ export function categoryShare(
   let total = 0;
   for (const t of inWindow) {
     if (t.amount >= 0) continue;
+    if (!isEurCurrency(t.currency)) continue;
     const cat = categorize(t, rules, own);
     if (isMovedCategory(cat)) continue;
     const cents = Math.round(Math.abs(t.amount) * 100);
@@ -827,6 +849,7 @@ export function categoryGrowth(
     const m = new Map<string, number>();
     for (const t of txs) {
       if (!t.date || t.date < w.start || t.date > w.end || t.amount >= 0) continue;
+      if (!isEurCurrency(t.currency)) continue;
       const cat = categorize(t, rules, own);
       if (isMovedCategory(cat)) continue;
       m.set(cat, (m.get(cat) ?? 0) + Math.round(Math.abs(t.amount) * 100));

@@ -68,9 +68,22 @@ export function mapEbTransaction(
     .concat(ebTx?.remittance_information ?? [])
     .filter(Boolean)
     .join(" ");
+  /* A card-rail purchase routinely carries no creditor/debtor at all — PSD2
+   * only guarantees remittance_information for those, with the merchant name
+   * living there instead of in a structured field. `description` already fell
+   * back to it; `counterparty` did not, so a card purchase with no structured
+   * party landed with counterparty: "" — invisible to everything keyed on
+   * counterparty (merchantKey, the subscription detector, "Eigen
+   * overboeking"), no matter how many times the same merchant repeats.
+   * `counterparty` now also feeds ingest's dedup (`ingest.ts`'s
+   * `samePartyKey`/`merchantKey`) and the categorisation rules engine, both of
+   * which key on it directly — so `remit` earning a place in this fallback
+   * chain only works because remittance_information is, in practice, the
+   * merchant's name; a future fallback added here has to keep that same
+   * merchant-like shape or those three consumers silently stop matching. */
   const cpName = dbit
-    ? ebTx?.creditor?.name || ebTx?.creditor_account?.iban || ""
-    : ebTx?.debtor?.name || ebTx?.debtor_account?.iban || "";
+    ? ebTx?.creditor?.name || ebTx?.creditor_account?.iban || remit
+    : ebTx?.debtor?.name || ebTx?.debtor_account?.iban || remit;
   const date = String(ebTx?.booking_date || ebTx?.value_date || "").slice(0, 10);
 
   return {

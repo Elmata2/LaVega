@@ -894,6 +894,24 @@ export default function StatistiekBlock({
             </ToonMeer>
           )}
 
+          {/* Nothing here is dropped silently either: every total in this
+              block skips a non-EUR row rather than adding its face value in
+              as if it were euros (statistics.ts, isEurCurrency). One sentence,
+              not folded — the count and the face value per currency are the
+              whole finding, there is no further breakdown to fold away. */}
+          {totals && totals.foreignCurrency.count > 0 && (
+            <p className="stat-insight-basis">
+              {`Buiten deze cijfers: ${totals.foreignCurrency.count} transactie${
+                totals.foreignCurrency.count === 1 ? "" : "s"
+              } in vreemde valuta (${Object.entries(totals.foreignCurrency.byCurrency)
+                .map(
+                  ([currency, amount]) =>
+                    `${currency} ${new Intl.NumberFormat("nl-NL").format(amount)}`,
+                )
+                .join(", ")}).`}
+            </p>
+          )}
+
           {/* Totals over the window, not a monthly average: with a one-week
               window a "per maand" figure would be an extrapolation. No title
               attribute on them any more either: what they leave out is said out

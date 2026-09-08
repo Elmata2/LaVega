@@ -86,6 +86,37 @@ test("consolidate: no entities/balances (pristine app, no accounts) -> totalBala
   expect(c.totalBalance).toBeNull();
 });
 
+test("consolidate: a non-EUR account is excluded from the entity balance instead of added at face value, and does not make the balance unknown", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 380_000 },
+  ];
+  const c = consolidate(accounts, []);
+  expect(c.byEntity["BV1"].balance).toBe(4_500);
+  expect(c.totalBalance).toBe(4_500);
+});
+
+test("consolidate: an entity whose only account is non-EUR reports an unknown balance, not a false zero", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV2", currency: "USD", balance: 10_000 },
+  ];
+  const c = consolidate(accounts, []);
+  expect(c.byEntity["BV2"].balance).toBeNull();
+  // BV2's unknown balance makes the total unknown too, same as a missing one
+  // would — it must not silently drop out and leave BV1's 4.500 looking whole.
+  expect(c.totalBalance).toBeNull();
+});
+
+test("consolidate: a non-EUR transaction is excluded from in/out instead of added at face value", () => {
+  const txs = assignTxIds([mk({ amount: -10 }), mk({ amount: 300_000, currency: "HUF" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+  ];
+  const c = consolidate(accounts, txs);
+  expect(c.byEntity["BV1"]).toMatchObject({ in: 0, out: -10, balance: 100 });
+});
+
 /* ── Eén betaling, twee bronnen (review 4, antwoord op vraag 1) ─────────────
  *
  * De CSV-import en de Enable Banking-koppeling van dezelfde ING-rekening
@@ -258,4 +289,46 @@ test("een overboeking tussen zijn eigen twee rekeningen blijft twee rijen", () =
   ]);
   expect(nieuw).toHaveLength(2);
   expect(nieuw.map((t) => t.amount).sort((a, b) => a - b)).toEqual([-250, 250]);
+});
+
+test("a stored row without counterparty is upgraded in place when the same row arrives named", () => {
+  // Card-rail rows from Enable Banking landed with counterparty "" before the
+  // mapper read the party off the payment reference. The re-sync must fill the
+  // name in, not add a second row.
+  const stored = ingest(
+    [],
+    [mk({ counterparty: "", description: "SIMYO 0612345678", amount: -11.89 })],
+  );
+  const resynced = ingest(stored, [
+    mk({ counterparty: "SIMYO", description: "SIMYO 0612345678", amount: -11.89 }),
+  ]);
+  expect(resynced).toHaveLength(1);
+  expect(resynced[0]!.counterparty).toBe("SIMYO");
+  expect(resynced[0]!.id).toBe(stored[0]!.id);
+  // A genuinely different nameless row on the same day stays untouched.
+  const other = ingest(stored, [
+    mk({ counterparty: "SHELL", description: "SHELL 123", amount: -11.89 }),
+  ]);
+  expect(other).toHaveLength(2);
+});
+
+test("rule 4 refuses to guess when two stored nameless rows share the description", () => {
+  // Two genuinely different nameless rows, same account/date/amount/description
+  // (assignTxIds gives them distinct ids via the occurrence counter). A named
+  // row for one of them arrives, but nothing distinguishes which one it
+  // upgrades — so neither is touched and the incoming row is dropped rather
+  // than guessed into either.
+  const stored = ingest(
+    [],
+    [
+      mk({ counterparty: "", description: "ONBEKEND", amount: -11.89 }),
+      mk({ counterparty: "", description: "ONBEKEND", amount: -11.89 }),
+    ],
+  );
+  expect(stored).toHaveLength(2);
+  const resynced = ingest(stored, [
+    mk({ counterparty: "SIMYO", description: "ONBEKEND", amount: -11.89 }),
+  ]);
+  expect(resynced).toHaveLength(2);
+  expect(resynced.every((t) => t.counterparty === "")).toBe(true);
 });

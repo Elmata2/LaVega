@@ -225,6 +225,81 @@ test("windowTotals reports what came in and went out inside the window", () => {
   expect(gap.outTotal).toBe(0);
 });
 
+test("windowTotals excludes a non-EUR transaction instead of adding its face value to the EUR total", () => {
+  // Same shape as a Revolut HUF-pocket purchase via Enable Banking: the
+  // account's own currency, not EUR. Before the fix, windowTotals summed
+  // t.amount regardless of t.currency, so this one row (worth roughly 750 EUR)
+  // landed in the total as "300.000" — a 400x inflation from a single
+  // transaction, the mechanism behind the reported "842.259,39".
+  const revolutHufSpend: Tx = {
+    id: "rHUF",
+    accountKey: "A1",
+    date: "2026-08-05",
+    amount: -300_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+    category: "",
+    manual: false,
+  };
+  const withHuf = [...txs, revolutHufSpend];
+  const year = windowTotals(withHuf, rules, own, YEAR);
+  expect(year.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
+});
+
+test("windowTotals reports what it excluded for being non-EUR, not just drops it", () => {
+  // Nothing here is dropped silently (the file's own rule, see movedTotals) —
+  // a non-EUR row is excluded from every total, but the count and its
+  // face-value sum per currency are still reported so the block can say so.
+  const revolutHufSpend: Tx = {
+    id: "rHUF",
+    accountKey: "A1",
+    date: "2026-08-05",
+    amount: -300_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+    category: "",
+    manual: false,
+  };
+  const dollarDeposit: Tx = {
+    id: "rUSD",
+    accountKey: "A1",
+    date: "2026-08-06",
+    amount: 120,
+    currency: "USD",
+    counterparty: "Client Inc",
+    description: "Invoice",
+    category: "",
+    manual: false,
+  };
+  const mixed = [...txs, revolutHufSpend, dollarDeposit];
+  const year = windowTotals(mixed, rules, own, YEAR);
+  expect(year.foreignCurrency).toEqual({ count: 2, byCurrency: { HUF: 300_000, USD: 120 } });
+  expect(windowTotals(txs, rules, own, YEAR).foreignCurrency).toEqual({
+    count: 0,
+    byCurrency: {},
+  });
+});
+
+test("categoryShare excludes a non-EUR transaction from the spend total and its shares", () => {
+  const revolutHufSpend: Tx = {
+    id: "rHUF",
+    accountKey: "A1",
+    date: "2026-08-05",
+    amount: -300_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+    category: "",
+    manual: false,
+  };
+  const withHuf = [...txs, revolutHufSpend];
+  const share = categoryShare(withHuf, rules, own, YEAR);
+  const withoutHuf = categoryShare(txs, rules, own, YEAR);
+  expect(share.totalCents).toBe(withoutHuf.totalCents);
+});
+
 test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction", () => {
   const w = weekdaySpend(txs, rules, own, YEAR);
   expect(w.spanDays).toBe(64);
