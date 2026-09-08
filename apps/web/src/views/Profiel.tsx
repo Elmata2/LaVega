@@ -747,6 +747,9 @@ export default function Profiel({
           Vergrendel
         </button>
       </section>
+      <p className="cell-sub" data-testid="build-stamp">
+        LaVega build {__LAVEGA_BUILD__}
+      </p>
     </>
   );
 }
