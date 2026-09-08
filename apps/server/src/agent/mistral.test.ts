@@ -237,6 +237,41 @@ test("chatWithSearch() only reads text from message.output entries, not tool/fun
   expect(res.text).toBe("final answer");
 });
 
+test("chatWithSearch() joins only the text blocks when content is the live API's array-of-blocks shape, skipping tool_reference blocks", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      conversation_id: "c1",
+      outputs: [
+        { type: "tool.execution", content: "internal search trace" },
+        {
+          type: "message.output",
+          content: [
+            { type: "text", text: "Het antwoord is " },
+            {
+              type: "tool_reference",
+              tool: "web_search",
+              url: "https://source.example",
+              title: "Bron",
+            },
+            { type: "text", text: "42." },
+          ],
+        },
+      ],
+      usage: {},
+    }),
+  );
+
+  const provider = createMistralProvider("sk-test", "mistral-medium-latest");
+  const res = await provider.chatWithSearch({
+    system: "sys",
+    messages: [{ role: "user", content: "vraag" }],
+    onDelta: vi.fn(),
+  });
+
+  expect(res.text).toBe("Het antwoord is 42.");
+  expect(res.sources).toEqual([{ url: "https://source.example", title: "Bron" }]);
+});
+
 test("chatWithSearch() collects sources from a directly {url,title}-shaped output entry and from a bare array of {url,title} items", async () => {
   fetchMock.mockResolvedValue(
     jsonResponse({

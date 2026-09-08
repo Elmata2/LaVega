@@ -29,6 +29,18 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+// A message.output entry's `content` is an array of typed blocks in the live
+// API (`{type:"text", text}` interleaved with `{type:"tool_reference", url,
+// title, ...}`), not the plain string the docs implied — only the text blocks
+// are the visible answer, so this joins those and drops the rest.
+function blockText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b) => (isRecord(b) && b.type === "text" && typeof b.text === "string" ? b.text : ""))
+    .join("");
+}
+
 function asSource(v: unknown): { url: string; title: string } | undefined {
   if (!isRecord(v) || typeof v.url !== "string") return undefined;
   const title = typeof v.title === "string" && v.title ? v.title : v.url;
@@ -181,12 +193,12 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
       const outputs: unknown[] = Array.isArray(data.outputs) ? data.outputs : [];
       const text = outputs
         .map((o) => {
-          if (!isRecord(o) || typeof o.content !== "string") return "";
+          if (!isRecord(o)) return "";
           // Only message entries carry user-visible text — tool/function/handoff
           // entries (e.g. the web_search step) can also have a `content` field,
           // but it's internal and must not leak into the answer.
           if (typeof o.type === "string" && o.type !== "message.output") return "";
-          return o.content;
+          return blockText(o.content);
         })
         .join("");
       const sources = extractSources(outputs);
