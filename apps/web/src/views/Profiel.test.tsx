@@ -36,9 +36,12 @@ afterEach(() => {
  *  cashbackmodule LEEST hem bij het openen van de pagina — vandaar de drie
  *  echte methoden. `putFacts` schrijft naar dezelfde array die `getFacts`
  *  teruggaf, zodat een test kan zien wat er is opgeslagen in plaats van alleen
- *  dat er iets is opgeslagen. */
+ *  dat er iets is opgeslagen. `get/putN8nSettings` bestaan alleen omdat Profiel
+ *  nu `<Koppelingen storage={storage} />` rendert, en die leest ze bij het
+ *  openen — zonder stub crasht elke test in dit bestand op een onbehandelde
+ *  afwijzing zodra Koppelingen mount. */
 function fakeStorage(accounts: Account[] = [], facts: LearnedFact[] = []) {
-  const stored = { facts: [...facts] };
+  const stored = { facts: [...facts], n8n: {} as Record<string, string | undefined> };
   return {
     storage: {
       export: () => null,
@@ -47,6 +50,10 @@ function fakeStorage(accounts: Account[] = [], facts: LearnedFact[] = []) {
       getFacts: async () => stored.facts,
       putFacts: async (f: LearnedFact[]) => {
         stored.facts = [...f];
+      },
+      getN8nSettings: async () => ({ ...stored.n8n }),
+      putN8nSettings: async (s: Record<string, string | undefined>) => {
+        stored.n8n = { ...s };
       },
     } as unknown as VaultStorage,
     stored,
@@ -724,6 +731,8 @@ test("kan de kluis niet gelezen worden, dan zegt het scherm dát in plaats van e
       throw new Error("vault is locked");
     },
     getFacts: async () => [],
+    getN8nSettings: async () => ({}),
+    putN8nSettings: async () => {},
   } as unknown as VaultStorage;
   await render({ storage: broken });
   const sec = section("Cashback corrigeren");

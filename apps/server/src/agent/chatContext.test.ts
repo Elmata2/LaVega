@@ -92,6 +92,32 @@ test("sanitizeMessages trims a leading assistant so history starts with user", (
     { role: "assistant", content: "antwoord" },
   ]);
 });
+test("sanitizeMessages scrubs personal values from message content (M5)", () => {
+  // A message typed straight into the chat box carries none of `sanitizeChatContext`'s
+  // key allowlisting — it is the raw text a person typed, so it is the one
+  // place a value-scrub has to run on the server regardless of what the
+  // browser already did.
+  const msgs = sanitizeMessages([
+    {
+      role: "user",
+      content: "mijn iban is NL91 ABNA 0417 1643 00, bel me op 06 12345678",
+    },
+  ]);
+  expect(msgs).toEqual([{ role: "user", content: "mijn iban is [IBAN], bel me op [TEL]" }]);
+});
+
+test("sanitizeMessages scrubs BEFORE truncating, so an IBAN straddling the 8000-char cap can't survive as a fragment", () => {
+  // MAX_MSG_CHARS is 8000 and not exported; padding puts the IBAN's raw digits
+  // across that exact boundary. Truncating first would cut the IBAN mid-match,
+  // leaving a fragment the regex no longer recognises as one.
+  const padding = "x".repeat(7_990);
+  const msgs = sanitizeMessages([
+    { role: "user", content: `${padding} NL91 ABNA 0417 1643 00 na de grens` },
+  ]);
+  expect(msgs[0].content).not.toMatch(/NL91|ABNA|0417|1643/);
+  expect(msgs[0].content).toContain("[IBAN]");
+});
+
 test("sanitizeMessages trims the leading assistant left by the tail slice", () => {
   // 22 alternating msgs: slice(-20) starts at index 2, an assistant turn.
   const raw = Array.from({ length: 22 }, (_, i) => ({

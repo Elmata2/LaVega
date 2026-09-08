@@ -18,6 +18,12 @@ import {
 const WAITLIST_ENDPOINT =
   "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
 
+/** Bots fill and submit forms faster than a human can read them. A submit
+ *  before this much time has passed since mount is held (the button shows
+ *  "sending") until the window closes, then posted; a real visitor with
+ *  autofill loses nothing, a bot has to wait like everyone else. */
+const WAITLIST_MIN_FILL_MS = 2000;
+
 /** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
  *  serif (StrategiQ-inspired), broad audience (students → werkenden →
  *  ondernemers). The app isn't public yet — it's a waitlist front door: the
@@ -71,13 +77,29 @@ export default function Landing({
   const wlReady = WAITLIST_ENDPOINT.length > 0;
   const [wlName, setWlName] = useState("");
   const [wlEmail, setWlEmail] = useState("");
+  const [wlHoneypot, setWlHoneypot] = useState("");
   const [wlStatus, setWlStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const wlMountedAt = useRef<number | null>(null);
+  useEffect(() => {
+    wlMountedAt.current = Date.now();
+  }, []);
 
   async function submitWaitlist(e: FormEvent) {
     e.preventDefault();
     const email = wlEmail.trim();
     if (!wlReady || !email || wlStatus === "sending") return;
+    if (wlHoneypot.trim()) {
+      // A bot filled the hidden field — pretend success without posting.
+      setWlStatus("done");
+      setWlName("");
+      setWlEmail("");
+      setWlHoneypot("");
+      return;
+    }
     setWlStatus("sending");
+    const elapsed = wlMountedAt.current === null ? 0 : Date.now() - wlMountedAt.current;
+    if (elapsed < WAITLIST_MIN_FILL_MS)
+      await new Promise((resolve) => setTimeout(resolve, WAITLIST_MIN_FILL_MS - elapsed));
     try {
       await fetch(WAITLIST_ENDPOINT, {
         method: "POST",
@@ -87,6 +109,7 @@ export default function Landing({
       setWlStatus("done");
       setWlName("");
       setWlEmail("");
+      setWlHoneypot("");
     } catch {
       setWlStatus("error");
     }
@@ -458,6 +481,16 @@ export default function Landing({
             <p className="lp-waitlist-done">{c.waitlist.done}</p>
           ) : (
             <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
+              <input
+                type="text"
+                name="company"
+                value={wlHoneypot}
+                onChange={(e) => setWlHoneypot(e.target.value)}
+                style={{ position: "absolute", left: "-9999px" }}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+              />
               <input
                 type="text"
                 className="lp-input"

@@ -10,8 +10,9 @@
  * skipped, and the caller keeps the rows until the owner has decided on each.
  */
 
-import type { Invoice } from "@lavega/core";
+import type { Invoice, N8nAutoBooked } from "@lavega/core";
 import { makeInvoice } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 
 /** Where a row came in, and whether the sending domain survived the mail
  *  authentication checks Cloudflare ran on it.
@@ -484,22 +485,23 @@ export function autoBookDecision(row: N8nInvoiceRow, ctx: EntityContext): AutoBo
 
 /* ── De lijst van wat zichzelf geboekt heeft ───────────────────────────────
  *
- * Dit hoort eigenlijk als veld op `Invoice` in packages/core/src/model.ts —
- * dan reist het mee in de kluis en in een back-up. Dat bestand is van een
- * andere lane, dus staat het hier: een aparte localStorage-sleutel naast de
- * kluis, met alleen een id, het messageId en het onderwerp. Zonder deze lijst
- * is een automatisch geboekte factuur na één herlaad niet te onderscheiden van
- * een die hij zelf bevestigde, en dan is "zichtbaar automatisch gebeurd" een
- * belofte die maar één sessie meegaat.
+ * `Invoice.autoBooked` (packages/core/src/model.ts) is the field of record and
+ * reaches the vault and a back-up through the normal invoice path. This list is
+ * only the fallback for rows booked before that field existed — see
+ * views/Facturen.tsx's `autoBookedIds`. It used to be its own localStorage key
+ * next to the vault (privacy/security review 2026-08-28, finding L6: factuur-
+ * onderwerpen in platte tekst); now it is `vault.getAutoBookedInvoices()`, the
+ * same encrypted-at-rest treatment the `autoBooked` field itself already gets.
  */
 
-const AUTO_BOOKED_KEY = "lavega.n8n.autoBooked.v1";
+const AUTO_BOOKED_LEGACY_KEY = "lavega.n8n.autoBooked.v1";
 
-export type AutoBookedInvoice = { invoiceId: string; messageId: string; subject?: string };
+export type AutoBookedInvoice = N8nAutoBooked;
 
-export function getAutoBookedInvoices(): AutoBookedInvoice[] {
+function readLegacyAutoBooked(): AutoBookedInvoice[] {
   try {
-    const raw = localStorage.getItem(AUTO_BOOKED_KEY);
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(AUTO_BOOKED_LEGACY_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -516,24 +518,37 @@ export function getAutoBookedInvoices(): AutoBookedInvoice[] {
   }
 }
 
-/** Idempotent: the same invoice logged twice stays one entry, so a re-render or
- *  a repeated fetch cannot inflate the list. */
-export function rememberAutoBooked(entry: AutoBookedInvoice): void {
-  const kept = getAutoBookedInvoices().filter((a) => a.invoiceId !== entry.invoiceId);
+/** Reads the vault's list, migrating a legacy localStorage list into it (and
+ *  deleting the legacy key) the first time this runs after unlock. Safe to call
+ *  on every read — once the legacy key is gone, this is one vault read. */
+export async function getAutoBookedInvoices(vault: VaultStorage): Promise<AutoBookedInvoice[]> {
+  const current = await vault.getAutoBookedInvoices();
+  const legacy = readLegacyAutoBooked();
+  if (legacy.length === 0) return current;
+  const byId = new Map(current.map((e) => [e.invoiceId, e]));
+  for (const e of legacy) if (!byId.has(e.invoiceId)) byId.set(e.invoiceId, e);
+  const merged = [...byId.values()];
+  await vault.putAutoBookedInvoices(merged);
   try {
-    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify([...kept, entry]));
+    localStorage.removeItem(AUTO_BOOKED_LEGACY_KEY);
   } catch {
-    /* a full or blocked localStorage must not break the booking itself */
+    /* the vault write already succeeded; a stuck legacy key is stale, not lost data */
   }
+  return merged;
 }
 
-export function forgetAutoBooked(invoiceId: string): void {
-  try {
-    localStorage.setItem(
-      AUTO_BOOKED_KEY,
-      JSON.stringify(getAutoBookedInvoices().filter((a) => a.invoiceId !== invoiceId)),
-    );
-  } catch {
-    /* ignored, same reason */
-  }
+/** Idempotent: the same invoice logged twice stays one entry, so a re-render or
+ *  a repeated fetch cannot inflate the list. */
+export async function rememberAutoBooked(
+  vault: VaultStorage,
+  entry: AutoBookedInvoice,
+): Promise<void> {
+  const current = await getAutoBookedInvoices(vault);
+  const kept = current.filter((a) => a.invoiceId !== entry.invoiceId);
+  await vault.putAutoBookedInvoices([...kept, entry]);
+}
+
+export async function forgetAutoBooked(vault: VaultStorage, invoiceId: string): Promise<void> {
+  const current = await getAutoBookedInvoices(vault);
+  await vault.putAutoBookedInvoices(current.filter((a) => a.invoiceId !== invoiceId));
 }

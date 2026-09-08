@@ -431,6 +431,51 @@ test("a stale-tracked rewards balance round-trips with its interval and snooze",
   expect(await s.getRewards()).toEqual([reward]);
 });
 
+test("n8n settings round-trip, are absent while locked, and restore with the vault", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-n8n-settings");
+  await v.setup("pw");
+  expect(await v.getN8nSettings()).toEqual({}); // never set
+
+  const settings = {
+    baseUrl: "https://n8n.example",
+    apiKey: "n8n-api-key-secret",
+    invoiceUrl: "https://n8n.example/webhook/lavega-facturen",
+    invoiceToken: "webhook-token-secret",
+  };
+  await v.putN8nSettings(settings);
+  expect(await v.getN8nSettings()).toEqual(settings);
+
+  const backup = v.export();
+  expect(backup).not.toBeNull();
+  expect(JSON.stringify(backup)).not.toContain("n8n-api-key-secret");
+  expect(JSON.stringify(backup)).not.toContain("webhook-token-secret");
+
+  v.lock();
+  await expect(v.getN8nSettings()).rejects.toBeTruthy();
+  expect(await v.unlock("pw")).toBe(true);
+  expect(await v.getN8nSettings()).toEqual(settings);
+
+  const restored = createEncryptedStorage("lavega-vault-test-n8n-settings-restored");
+  expect(await restored.restore(backup!, "pw")).toBe(true);
+  expect(await restored.getN8nSettings()).toEqual(settings);
+});
+
+test("auto-booked invoices round-trip and survive lock/unlock; legacy vault defaults to []", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-n8n-autobooked");
+  await v.setup("pw");
+  expect(await v.getAutoBookedInvoices()).toEqual([]);
+
+  const entry = { invoiceId: "i1", messageId: "msg-1", subject: "Factuur juli" };
+  await v.putAutoBookedInvoices([entry]);
+  expect(await v.getAutoBookedInvoices()).toEqual([entry]);
+
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect(await v.getAutoBookedInvoices()).toEqual([entry]);
+});
+
 test("broker credentials stay encrypted, are absent while locked, and restore with the vault", async () => {
   globalThis.indexedDB = new IDBFactory();
   const source = createEncryptedStorage("lavega-vault-test-credentials-source");

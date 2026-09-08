@@ -3,6 +3,9 @@
  * localStorage — outside the encrypted vault, and available before unlock.
  * Guarded so it no-ops where localStorage is absent (SSR/tests). */
 
+import type { VaultStorage } from "@lavega/adapters";
+import type { N8nSettings } from "@lavega/core";
+
 const BUFFER_KEY = "lavega.bufferCents";
 
 /** The alert buffer in integer cents (>= 0). Defaults to 0 (warn only when a
@@ -137,95 +140,93 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
   }
 }
 
-/* --- The owner's own n8n invoice webhook (see docs/n8n/FACTUREN.md).
- * URL and token are HIS, for HIS n8n: they live in this browser only — never in
- * the vault-synced data (a back-up file would then carry a live token), never
- * in the repo, and they are never sent to the LaVega server. The whole point of
- * the n8n design is that the invoice path is mailbox -> his n8n -> his browser,
- * with our server nowhere in it. --- */
+/* --- The owner's own n8n webhook/API credentials (docs/n8n/FACTUREN.md,
+ * n8n-provision.ts). URL, token, base URL and API key are HIS, for HIS n8n:
+ * never in the repo, never sent to the LaVega server. The whole point of the
+ * n8n design is that the invoice path is mailbox -> his n8n -> his browser,
+ * with our server nowhere in it.
+ *
+ * They used to live in plain localStorage, kept OUT of the vault on the theory
+ * that a back-up file would then carry a live token. `BrokerCredentials`
+ * (encryptedStorage.ts) already contradicts that theory for an equally live
+ * secret: it travels in the same encrypted vault blob a `.lavega` back-up is
+ * made of, gated by the same passphrase every other line in that file trusts.
+ * Plain localStorage was the weaker of the two, readable by any script that
+ * gets an XSS in (privacy/security review 2026-08-28, M4/L6) — so these four
+ * follow BrokerCredentials into `vault.getN8nSettings()`/`putN8nSettings()`
+ * instead. --- */
 
-const N8N_URL_KEY = "lavega.n8nInvoiceUrl";
-const N8N_TOKEN_KEY = "lavega.n8nInvoiceToken";
+type N8nField = keyof N8nSettings;
 
-export function getN8nInvoiceUrl(): string {
+/** Runs once per browser: an existing plaintext key is imported into the
+ *  (now-unlocked) vault and then deleted, so nothing under `lavega.n8n*`
+ *  survives in localStorage past the first read after this ships. Safe to call
+ *  on every read — once the legacy keys are gone, this is a no-op. */
+async function migrateLegacyN8nSettings(vault: VaultStorage): Promise<N8nSettings> {
+  const current = await vault.getN8nSettings();
+  if (typeof localStorage === "undefined") return current;
+  const legacyKeys: Partial<Record<N8nField, string>> = {
+    invoiceUrl: "lavega.n8nInvoiceUrl",
+    invoiceToken: "lavega.n8nInvoiceToken",
+  };
+  // The provisioning key and base URL are NOT carried over: nothing in the app
+  // provisions n8n any more (the opzethulp was removed), so a workflow-editing
+  // API key would sit in the vault and every backup as a capability no code
+  // uses. Their plaintext copies are deleted along with the rest.
+  const dropOnly = ["lavega.n8nBaseUrl", "lavega.n8nApiKey"];
+  let legacy: Partial<N8nSettings> | null = null;
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_URL_KEY)) ?? "";
+    for (const [field, storageKey] of Object.entries(legacyKeys) as [N8nField, string][]) {
+      const raw = localStorage.getItem(storageKey);
+      if (raw !== null && raw !== "") (legacy ??= {})[field] = raw;
+    }
   } catch {
-    return "";
+    return current; // a blocked localStorage has nothing to migrate
   }
+  const merged = legacy == null ? current : { ...current, ...legacy };
+  if (legacy != null) await vault.putN8nSettings(merged);
+  try {
+    for (const storageKey of [...Object.values(legacyKeys), ...dropOnly])
+      localStorage.removeItem(storageKey);
+  } catch {
+    /* the vault write already succeeded; a stuck legacy key is stale, not lost data */
+  }
+  return merged;
 }
 
-export function setN8nInvoiceUrl(url: string): void {
-  try {
-    if (typeof localStorage !== "undefined")
-      localStorage.setItem(N8N_URL_KEY, String(url ?? "").trim());
-  } catch {
-    /* non-fatal for a preference */
-  }
+export async function getN8nSettings(vault: VaultStorage): Promise<N8nSettings> {
+  return migrateLegacyN8nSettings(vault);
 }
 
-export function getN8nInvoiceToken(): string {
-  try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_TOKEN_KEY)) ?? "";
-  } catch {
-    return "";
-  }
+// Read-modify-write, not compare-and-swap: two concurrent callers writing
+// DIFFERENT fields off a stale `current` can silently drop each other's
+// change. Safe today — Koppelingen is the only writer, and it always writes
+// invoiceUrl+invoiceToken together from its own state — but the moment a
+// second writer of overlapping fields exists (e.g. baseUrl/apiKey gaining a
+// UI), this needs a real merge inside the vault's own write, not composed by
+// the caller.
+export async function setN8nSettings(
+  vault: VaultStorage,
+  patch: Partial<N8nSettings>,
+): Promise<void> {
+  const current = await migrateLegacyN8nSettings(vault);
+  await vault.putN8nSettings({ ...current, ...patch });
 }
 
-export function setN8nInvoiceToken(token: string): void {
-  try {
-    if (typeof localStorage !== "undefined")
-      localStorage.setItem(N8N_TOKEN_KEY, String(token ?? "").trim());
-  } catch {
-    /* non-fatal for a preference */
-  }
+export async function getN8nInvoiceUrl(vault: VaultStorage): Promise<string> {
+  return (await getN8nSettings(vault)).invoiceUrl ?? "";
 }
 
-/* --- The owner's own n8n API access (see n8n-provision.ts).
- * The base URL of HIS n8n and an API key for it. Same rule as the two above and
- * for the same reason, one notch sharper: this key can create and modify
- * workflows. It stays in THIS browser, it is never put in the vault (a back-up
- * file would then carry it), and it is never sent to the LaVega server — a
- * server-side proxy would work around CORS but would park a workflow-modifying
- * key on a shared host. --- */
-
-const N8N_BASE_KEY = "lavega.n8nBaseUrl";
-const N8N_API_KEY_KEY = "lavega.n8nApiKey";
-
-export function getN8nBaseUrl(): string {
-  try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_BASE_KEY)) ?? "";
-  } catch {
-    return "";
-  }
+export async function setN8nInvoiceUrl(vault: VaultStorage, url: string): Promise<void> {
+  await setN8nSettings(vault, { invoiceUrl: String(url ?? "").trim() });
 }
 
-export function setN8nBaseUrl(url: string): void {
-  try {
-    if (typeof localStorage !== "undefined")
-      localStorage.setItem(N8N_BASE_KEY, String(url ?? "").trim());
-  } catch {
-    /* non-fatal for a preference */
-  }
+export async function getN8nInvoiceToken(vault: VaultStorage): Promise<string> {
+  return (await getN8nSettings(vault)).invoiceToken ?? "";
 }
 
-export function getN8nApiKey(): string {
-  try {
-    return (
-      (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_API_KEY_KEY)) ?? ""
-    );
-  } catch {
-    return "";
-  }
-}
-
-export function setN8nApiKey(key: string): void {
-  try {
-    if (typeof localStorage !== "undefined")
-      localStorage.setItem(N8N_API_KEY_KEY, String(key ?? "").trim());
-  } catch {
-    /* non-fatal for a preference */
-  }
+export async function setN8nInvoiceToken(vault: VaultStorage, token: string): Promise<void> {
+  await setN8nSettings(vault, { invoiceToken: String(token ?? "").trim() });
 }
 
 /* --- Het doorstuuradres voor facturen (docs/superpowers/specs/

@@ -1,9 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { VaultStorage } from "@lavega/adapters";
 import {
-  getN8nInvoiceToken,
-  getN8nInvoiceUrl,
-  setN8nInvoiceToken,
-  setN8nInvoiceUrl,
+  getN8nSettings,
+  setN8nSettings,
   getInvoiceForwardAddress,
   ensureInvoiceForwardAddress,
   setInvoiceForwardAddress,
@@ -20,9 +19,10 @@ import {
  * getN8nInvoiceToken() en haalt daarmee de wachtrij op. Dat is de reden dat dit
  * blok blijft en de andere twee niet: zonder dit paar werkt de factuurketen niet.
  *
- * Beide waarden zijn een lokale voorkeur: localStorage, deze browser. Niet in de
- * kluis (een back-up zou dan een levend token bevatten) en nooit naar de
- * LaVega-server. */
+ * Beide waarden staan in de versleutelde kluis (net als een broker-credential),
+ * niet in localStorage: alleen bereikbaar terwijl de kluis ontgrendeld is, en
+ * nooit naar de LaVega-server. Zolang `storage` (nog) niet is doorgegeven staat
+ * dit blok uit — zie de prop hieronder. */
 
 /** The eye. Drawn inline: an icon fetched from anywhere would tell that server
  *  the owner opened his bank-integration screen. */
@@ -84,12 +84,19 @@ function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
   );
 }
 
-export default function Koppelingen() {
+type KoppelingenProps = {
+  /** The unlocked vault. URL/token now live there (M4/L6 of the 2026-08-28
+   *  review), so until this is wired the n8n block reads/saves nothing rather
+   *  than falling back to the plaintext localStorage it replaced. */
+  storage?: VaultStorage;
+};
+
+export default function Koppelingen({ storage }: KoppelingenProps) {
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
   const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
   const [forwardError, setForwardError] = useState(false);
-  const [url, setUrl] = useState<string>(() => getN8nInvoiceUrl());
-  const [token, setToken] = useState<string>(() => getN8nInvoiceToken());
+  const [url, setUrl] = useState("");
+  const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // One open explanation at a time: two panels at once and the fields are
@@ -97,23 +104,57 @@ export default function Koppelingen() {
   const [info, setInfo] = useState<InfoKey | null>(null);
   const toggle = (key: InfoKey) => () => setInfo((cur) => (cur === key ? null : key));
 
+  useEffect(() => {
+    if (!storage) return;
+    let cancelled = false;
+    void getN8nSettings(storage).then(
+      (settings) => {
+        if (cancelled) return;
+        setUrl(settings.invoiceUrl ?? "");
+        setToken(settings.invoiceToken ?? "");
+      },
+      () => {
+        if (!cancelled) setNote("Kon de kluis niet lezen — probeer dit scherm opnieuw te openen.");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [storage]);
+
   const urlLooksWrong = url.trim().length > 0 && !/^https?:\/\//i.test(url.trim());
 
-  function handleSave() {
-    setN8nInvoiceUrl(url);
-    setN8nInvoiceToken(token);
+  async function handleSave() {
+    if (!storage) {
+      setNote("De kluis is nog niet gekoppeld aan dit scherm — er is niets opgeslagen.");
+      return;
+    }
+    try {
+      await setN8nSettings(storage, { invoiceUrl: url, invoiceToken: token });
+    } catch {
+      setNote("Opslaan in de kluis is mislukt — probeer het opnieuw.");
+      return;
+    }
     setNote(
       url.trim() && token.trim()
-        ? "Opgeslagen in deze browser. Facturen haalt de wachtrij vanzelf op zodra je dat scherm opent."
+        ? "Opgeslagen in je kluis. Facturen haalt de wachtrij vanzelf op zodra je dat scherm opent."
         : "Opgeslagen — maar zolang URL óf token leeg is, kan LaVega niets ophalen.",
     );
   }
 
-  function handleClear() {
+  async function handleClear() {
     setUrl("");
     setToken("");
-    setN8nInvoiceUrl("");
-    setN8nInvoiceToken("");
+    if (!storage) {
+      setNote("De kluis is nog niet gekoppeld aan dit scherm — er is niets gewist.");
+      return;
+    }
+    try {
+      await setN8nSettings(storage, { invoiceUrl: "", invoiceToken: "" });
+    } catch {
+      setNote("Wissen in de kluis is mislukt — probeer het opnieuw.");
+      return;
+    }
     setNote("Gewist. LaVega haalt nu niets meer op uit n8n.");
   }
 
@@ -218,8 +259,8 @@ export default function Koppelingen() {
           Opzetten doe je één keer, in n8n zelf: importeer{" "}
           <code>docs/n8n/lavega-invoices.json</code>, zet een Header Auth-credential op de
           webhook-node, activeer de workflow, en plak de Production URL en dat token hieronder.
-          Beide blijven in deze browser — niet in de kluis, niet in een back-up; op een andere
-          computer vul je ze opnieuw in.
+          Beide staan versleuteld in je kluis, net als een broker-koppeling — dus reizen ze mee in
+          een back-up en zijn ze alleen te lezen terwijl de kluis ontgrendeld is.
           <br />
           <br />
           <strong>Er is met opzet geen testknop.</strong> De webhook leegt de wachtrij zodra hij

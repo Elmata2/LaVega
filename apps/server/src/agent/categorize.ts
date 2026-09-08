@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AGENTS, CATEGORY_OPTIONS, type LearnedFact } from "@lavega/core";
+import { AGENTS, CATEGORY_OPTIONS, scrubPersonalValues, type LearnedFact } from "@lavega/core";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 
@@ -10,7 +10,12 @@ const MAX_TEXT = 200;
 
 /** THE redaction boundary for bulk categorization: only {id, text, sign} per
  *  item can ever reach Claude — never amounts, balances, account keys, or dates.
- *  Builds a fresh array from allowlisted fields; throws on empty/oversize. */
+ *  Builds a fresh array from allowlisted fields; throws on empty/oversize.
+ *
+ *  M5: an allowlist on field names says nothing about what sits inside `text`
+ *  — the browser's own scrub could be stale, bypassed, or simply wrong. So
+ *  `text` is run through `scrubPersonalValues` again here, server-side, before
+ *  it is trusted. Defence in depth, not a replacement for the browser pass. */
 export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[] } {
   if (!raw || typeof raw !== "object") throw new Error("ongeldige invoer");
   const rawItems = (raw as Record<string, unknown>).items;
@@ -24,7 +29,7 @@ export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[]
     const text = o.text;
     if (typeof id !== "string" || typeof text !== "string") continue;
     if (text.length > MAX_TEXT) throw new Error("tekst te lang");
-    items.push({ id, text, sign: o.sign === "in" ? "in" : "out" });
+    items.push({ id, text: scrubPersonalValues(text), sign: o.sign === "in" ? "in" : "out" });
   }
   if (items.length === 0) throw new Error("geen geldige items");
   return { items };

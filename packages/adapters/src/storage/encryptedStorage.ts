@@ -12,6 +12,8 @@ import type {
   BrokerCredentials,
   CredentialBroker,
   CredentialStore,
+  N8nSettings,
+  N8nAutoBooked,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
 import {
@@ -41,6 +43,12 @@ type VaultData = {
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
+  /** His own n8n webhook/API credentials (settings.ts). Same treatment as
+   *  `credentials` above: a live secret, encrypted at rest and gated by the
+   *  vault passphrase like everything else here — not the plaintext
+   *  localStorage it replaces. */
+  n8nSettings?: N8nSettings;
+  n8nAutoBooked?: N8nAutoBooked[];
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
@@ -67,6 +75,10 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putRewards(r: RewardsBalance[]): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
+  getN8nSettings(): Promise<N8nSettings>;
+  putN8nSettings(settings: N8nSettings): Promise<void>;
+  getAutoBookedInvoices(): Promise<N8nAutoBooked[]>;
+  putAutoBookedInvoices(list: N8nAutoBooked[]): Promise<void>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
@@ -347,6 +359,36 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, facts: [...f] };
+        await persist();
+      });
+    },
+
+    // His n8n webhook/API credentials (settings.ts). Additive optional field,
+    // replace-all — same shape as entityProfiles/facts above. A legacy vault
+    // decrypts without it, so the getter defaults to {}: "never set", not "".
+    async getN8nSettings(): Promise<N8nSettings> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return { ...data.n8nSettings };
+    },
+    putN8nSettings(settings: N8nSettings): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, n8nSettings: { ...settings } };
+        await persist();
+      });
+    },
+
+    // Invoices that booked themselves from the n8n queue (n8n.ts). The `Invoice`
+    // record itself carries `autoBooked: true`; this list is only the fallback
+    // for rows booked before that field existed, kept alive the same way.
+    async getAutoBookedInvoices(): Promise<N8nAutoBooked[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.n8nAutoBooked ?? [])];
+    },
+    putAutoBookedInvoices(list: N8nAutoBooked[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, n8nAutoBooked: [...list] };
         await persist();
       });
     },

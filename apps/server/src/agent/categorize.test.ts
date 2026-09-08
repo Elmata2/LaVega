@@ -151,6 +151,39 @@ test("redaction boundary end-to-end: nothing but {id,text,sign} reaches the mode
   }
 });
 
+test("sanitizeCategorizeInput scrubs a raw IBAN left in text — defence in depth (M5/L7)", () => {
+  // The browser's own redaction is supposed to have already stripped this;
+  // the server must not trust that and re-check the value itself.
+  const out = sanitizeCategorizeInput({
+    items: [
+      {
+        id: "t1",
+        text: "Naar NL91 ABNA 0417 1643 00 voor Jan, mail jan@voorbeeld.nl",
+        sign: "out",
+      },
+    ],
+  });
+  expect(out.items).toEqual([
+    { id: "t1", text: "Naar [IBAN] voor Jan, mail [EMAIL]", sign: "out" },
+  ]);
+});
+
+test("categorizeTransactions never forwards a raw IBAN even if the caller's text still carries one", async () => {
+  createMock.mockResolvedValue({
+    content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }],
+  });
+  const input = sanitizeCategorizeInput({
+    items: [{ id: "t1", text: "NL91 ABNA 0417 1643 00 Albert Heijn", sign: "out" }],
+  });
+  await categorizeTransactions(input, "k");
+  const sent: string = JSON.stringify(createMock.mock.calls[0][0].messages);
+  expect(sent).toBe(
+    String.raw`[{"role":"user","content":"Transacties:\nt1\t[out] [IBAN] Albert Heijn"}]`,
+  );
+  expect(sent).not.toContain("NL91");
+  expect(sent).not.toContain("1643");
+});
+
 test("categorizeTransactions returns [] when there's no tool_use block", async () => {
   createMock.mockResolvedValue({ content: [{ type: "text", text: "nope" }] });
   expect(

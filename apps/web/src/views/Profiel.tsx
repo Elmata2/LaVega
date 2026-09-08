@@ -721,7 +721,7 @@ export default function Profiel({
         onImport={onImport}
       />
 
-      <Koppelingen />
+      <Koppelingen storage={storage} />
 
       <Regels
         rules={rules}

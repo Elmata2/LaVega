@@ -2,10 +2,34 @@
 import { StrictMode, act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Invoice, Tx } from "@lavega/core";
+import type { Invoice, N8nAutoBooked, Tx } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
-import { getHandledInvoiceMessageIds, setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
+import { getHandledInvoiceMessageIds } from "./settings";
+
+/** An in-memory vault, enough for Facturen's n8n block: URL/token and the
+ *  auto-booked fallback log (privacy/security review 2026-08-28, M4/L6 — both
+ *  moved out of localStorage into the vault 2026-09-08). */
+function fakeVault(seed: { invoiceUrl?: string; invoiceToken?: string } = {}): VaultStorage {
+  const state = {
+    settings: { invoiceUrl: seed.invoiceUrl, invoiceToken: seed.invoiceToken } as Record<
+      string,
+      string | undefined
+    >,
+    autoBooked: [] as N8nAutoBooked[],
+  };
+  return {
+    getN8nSettings: async () => ({ ...state.settings }),
+    putN8nSettings: async (s: Record<string, string | undefined>) => {
+      state.settings = { ...s };
+    },
+    getAutoBookedInvoices: async () => [...state.autoBooked],
+    putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
+      state.autoBooked = [...list];
+    },
+  } as unknown as VaultStorage;
+}
 
 /* The confirm-first review queue in Facturen. What matters here is not the
  * markup but the promises the feature makes: a fetched row is only ever a
@@ -31,12 +55,15 @@ const ROW = {
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 let saved: Invoice[][] = [];
+let vault: VaultStorage;
 
 beforeEach(() => {
   localStorage.clear();
   saved = [];
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
+  vault = fakeVault({
+    invoiceUrl: "https://n8n.example/webhook/lavega-facturen",
+    invoiceToken: "sekret",
+  });
 });
 
 afterEach(() => {
@@ -63,11 +90,13 @@ function Harness({
   invoices,
   txs,
   entities,
+  storage,
 }: {
   fetchImpl: typeof fetch;
   invoices: Invoice[];
   txs: Tx[];
   entities: string[];
+  storage?: VaultStorage;
 }) {
   const [pending, setPending] = useState<PendingInvoice[]>([]);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
@@ -86,6 +115,7 @@ function Harness({
       onNoticesChange={setNotices}
       onNavigate={() => {}}
       fetchImpl={fetchImpl}
+      storage={storage ?? vault}
     />
   );
 }
@@ -95,13 +125,20 @@ function render(
   invoices: Invoice[] = [],
   txs: Tx[] = [],
   entities: string[] = ["BV1"],
+  storage?: VaultStorage,
 ) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root!.render(
-      <Harness fetchImpl={fetchImpl} invoices={invoices} txs={txs} entities={entities} />,
+      <Harness
+        fetchImpl={fetchImpl}
+        invoices={invoices}
+        txs={txs}
+        entities={entities}
+        storage={storage}
+      />,
     );
   });
   return container;
@@ -142,10 +179,11 @@ async function fetchOnce(
   invoices: Invoice[] = [],
   txs: Tx[] = [],
   entities: string[] = ["BV1"],
+  storage?: VaultStorage,
 ) {
   if (root) act(() => root!.unmount());
   container?.remove();
-  const c = render(fetchImpl, invoices, txs, entities);
+  const c = render(fetchImpl, invoices, txs, entities, storage);
   await clickAsync(byText("button", "Ophalen uit n8n"));
   return c;
 }
@@ -233,10 +271,9 @@ test("a row whose invoice is already stored is not booked twice", async () => {
   expect(existing).toHaveLength(1);
 
   // Same mail again, on a browser that has forgotten it handled this messageId
-  // (so the row IS offered), but with that invoice already in the vault.
+  // (so the row IS offered), but with that invoice already in the vault. The
+  // vault fixture (unlike the old localStorage keys) is untouched by this clear.
   localStorage.clear();
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
   saved = [];
   const c2 = await fetchOnce(serving([{ invoices: [ROW] }]), existing);
   expect(c2.querySelectorAll(".n8n-row")).toHaveLength(1);
@@ -295,13 +332,12 @@ test("an empty queue, a refused token and a dead connection each say their own t
 });
 
 test("without a URL and token nothing is fetched, and it says so", async () => {
-  localStorage.clear();
   let called = 0;
   const counting = (async () => {
     called++;
     return { ok: true, status: 200, json: async () => ({ invoices: [] }) };
   }) as unknown as typeof fetch;
-  const c = await fetchOnce(counting);
+  const c = await fetchOnce(counting, [], [], ["BV1"], fakeVault());
   expect(called).toBe(0);
   expect(c.textContent).toContain("Nog niet ingesteld");
 });
@@ -417,6 +453,7 @@ test("de wachtrij wordt opgehaald zodra Facturen opent — zonder dat hij iets i
 test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij intussen op de knop drukt", async () => {
   const { fetchImpl, calls, deliver } = deferredFetch();
   const c = renderStrict(fetchImpl);
+  await flush(); // the auto-pull now reads the vault before deciding to fetch
   // React 18 monteert een StrictMode-boom twee keer. Twee GET's zouden hier één
   // wachtrij over twee antwoorden verdelen.
   expect(calls()).toBe(1);
@@ -433,9 +470,8 @@ test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij in
 });
 
 test("zonder URL en token wordt er bij het openen niets opgehaald", async () => {
-  localStorage.clear();
   const { fetchImpl, calls } = deferredFetch();
-  render(fetchImpl);
+  render(fetchImpl, [], [], ["BV1"], fakeVault());
   await flush();
   // Geen verzoek, en dus ook geen rode melding op een scherm waar hij hem niet
   // kan oplossen — de knop "Koppelingen instellen" staat er wel.
@@ -644,9 +680,8 @@ test("twee keer dezelfde factuur boekt één keer, ook automatisch", async () =>
   const booked = saved[0];
   saved = [];
   // Zelfde mail, browser die het messageId vergeten is, factuur al in de kluis.
+  // De kluis-fixture (anders dan de oude localStorage-sleutels) overleeft dit.
   localStorage.clear();
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
   const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), booked);
   expect(saved).toHaveLength(0);
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);

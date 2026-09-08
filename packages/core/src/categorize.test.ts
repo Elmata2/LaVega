@@ -7,6 +7,7 @@ import {
   recategorize,
   uncategorizedByMonth,
   redactForAi,
+  scrubPersonalValues,
   aiCategorizeItems,
   foreignCode,
   unknownReason,
@@ -204,6 +205,69 @@ test("redactForAi still removes IBANs, amounts and dates", () => {
   expect(out).not.toMatch(/2026-07-14/);
   expect(out).not.toMatch(/45,00/);
   expect(out).toMatch(/Netflix/);
+});
+
+test("redactForAi now also catches the space-grouped IBAN form (L7)", () => {
+  // Verbatim from the privacy/security review's L7 finding — this form used
+  // to survive redactForAi untouched.
+  expect(redactForAi("Naar NL91 ABNA 0417 1643 00 voor Jan")).toBe("Naar voor Jan");
+});
+
+/* --- scrubPersonalValues: the server-side value-scrub (M5 + L7) ---------- */
+
+test.each([
+  ["compact IBAN, any country", "Betaling NL91ABNA0417164300 Netflix", "Betaling [IBAN] Netflix"],
+  [
+    "space-grouped IBAN (L7, verbatim)",
+    "Naar NL91 ABNA 0417 1643 00 voor Jan",
+    "Naar [IBAN] voor Jan",
+  ],
+  ["space-grouped IBAN, another country", "DE77 1001 1001 2424 1460 89 SEPA", "[IBAN] SEPA"],
+  ["email address", "Vraag: iets@voorbeeld.nl graag reageren", "Vraag: [EMAIL] graag reageren"],
+  ["NL mobile phone, 06 form", "bel 06 12345678 terug", "bel [TEL] terug"],
+  ["NL phone, +31 form", "bel +31 6 12345678 terug", "bel [TEL] terug"],
+  ["valid BSN (passes elfproef)", "BSN 123456782 bij aanvraag", "BSN [BSN] bij aanvraag"],
+  ["amount with € marker", "betaald € 45,00 aan Netflix", "betaald [BEDRAG] aan Netflix"],
+  ["amount with EUR marker", "betaald EUR 45,00 aan Netflix", "betaald [BEDRAG] aan Netflix"],
+])("scrubPersonalValues replaces %s with a stable token", (_label, input, expected) => {
+  expect(scrubPersonalValues(input)).toBe(expected);
+});
+
+test("scrubPersonalValues does not over-scrub: an 8-digit invoice number and a date stay", () => {
+  expect(scrubPersonalValues("Factuur 12345678 vervalt op 2026-07-14")).toBe(
+    "Factuur 12345678 vervalt op 2026-07-14",
+  );
+});
+
+test("scrubPersonalValues leaves a nine-digit run alone when it fails the elfproef", () => {
+  // A plausible reference/order number, not a real BSN.
+  expect(scrubPersonalValues("Referentie 123456789 ontvangen")).toBe(
+    "Referentie 123456789 ontvangen",
+  );
+});
+
+test("scrubPersonalValues keeps merchant names and free text intact", () => {
+  expect(scrubPersonalValues("Albert Heijn 1234 Rotterdam")).toBe("Albert Heijn 1234 Rotterdam");
+  expect(scrubPersonalValues("Jorien Bastiaans Kaartnr: 5238 53** **** 1748 Term: 11223344")).toBe(
+    "Jorien Bastiaans Kaartnr: 5238 53** **** 1748 Term: 11223344",
+  );
+});
+
+test("scrubPersonalValues preserves whitespace and newlines (a chat message, not a tx description)", () => {
+  expect(scrubPersonalValues("regel1\nmijn iban is NL91 ABNA 0417 1643 00\nregel3")).toBe(
+    "regel1\nmijn iban is [IBAN]\nregel3",
+  );
+});
+
+test("aiCategorizeItems' payload text is scrubbed of a space-grouped IBAN before it would leave the browser (L7)", () => {
+  const items = aiCategorizeItems([
+    abroad("t1", "NL91 ABNA 0417 1643 00", "Albert Heijn Rotterdam"),
+  ]);
+  // aiCategorizeItems builds `text` from counterparty + description, which is
+  // exactly the `text` field categorizeTxs (apps/web/src/api.ts) sends as-is —
+  // so a clean payload here is what actually leaves the browser.
+  expect(items[0].text).not.toContain("NL91");
+  expect(items[0].text).toContain("Albert Heijn Rotterdam");
 });
 
 test("aiCategorizeItems sends only {id,text,sign} and drops rows with no readable text", () => {

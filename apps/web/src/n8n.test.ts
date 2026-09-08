@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
+import type { N8nAutoBooked } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 import {
   autoBookDecision,
   bookingEntity,
@@ -18,6 +20,7 @@ import {
   addHandledInvoiceMessageIds,
   getHandledInvoiceMessageIds,
   getN8nInvoiceToken,
+  getN8nSettings,
   getN8nInvoiceUrl,
   setN8nInvoiceToken,
   setN8nInvoiceUrl,
@@ -26,6 +29,24 @@ import {
 beforeEach(() => {
   localStorage.clear();
 });
+
+/** An in-memory vault, enough for settings.ts/n8n.ts's n8n-related calls. */
+function fakeVault(): VaultStorage {
+  const state = {
+    settings: {} as Record<string, string | undefined>,
+    autoBooked: [] as N8nAutoBooked[],
+  };
+  return {
+    getN8nSettings: async () => ({ ...state.settings }),
+    putN8nSettings: async (s: Record<string, string | undefined>) => {
+      state.settings = { ...s };
+    },
+    getAutoBookedInvoices: async () => [...state.autoBooked],
+    putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
+      state.autoBooked = [...list];
+    },
+  } as unknown as VaultStorage;
+}
 
 const ROW = {
   source: "gmail",
@@ -174,19 +195,35 @@ test("an empty VAT field stays unknown on the invoice instead of becoming zero",
   expect(out.ok === true && out.invoice.vatAmount).toBeUndefined();
 });
 
-test("URL, token and handled ids are local preferences, and default to empty", () => {
-  expect(getN8nInvoiceUrl()).toBe("");
-  expect(getN8nInvoiceToken()).toBe("");
+test("URL and token are vault preferences and default to empty; handled ids stay a local preference", async () => {
+  const vault = fakeVault();
+  expect(await getN8nInvoiceUrl(vault)).toBe("");
+  expect(await getN8nInvoiceToken(vault)).toBe("");
   expect(getHandledInvoiceMessageIds()).toEqual([]);
-  setN8nInvoiceUrl("  https://n8n.example/webhook/x  ");
-  setN8nInvoiceToken(" tok ");
-  expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/x");
-  expect(getN8nInvoiceToken()).toBe("tok");
+  await setN8nInvoiceUrl(vault, "  https://n8n.example/webhook/x  ");
+  await setN8nInvoiceToken(vault, " tok ");
+  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/x");
+  expect(await getN8nInvoiceToken(vault)).toBe("tok");
   addHandledInvoiceMessageIds(["a", "b"]);
   addHandledInvoiceMessageIds(["b", "c"]);
   expect(getHandledInvoiceMessageIds()).toEqual(["a", "b", "c"]);
-  // Nothing sensitive rides along: only the opaque ids are stored.
+  // Nothing sensitive rides along: only the opaque ids are stored, and the URL
+  // and token never touch localStorage at all.
   expect(localStorage.getItem("lavega.n8nHandledMessageIds")).toBe('["a","b","c"]');
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
+});
+
+test("a legacy plaintext URL/token is imported into the vault on first read, then deleted", async () => {
+  localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/legacy");
+  localStorage.setItem("lavega.n8nInvoiceToken", "legacy-tok");
+  const vault = fakeVault();
+  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/legacy");
+  expect(await getN8nInvoiceToken(vault)).toBe("legacy-tok");
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
+  // Idempotent: a second read finds nothing left to migrate and keeps the value.
+  expect(await getN8nInvoiceUrl(vault)).toBe("https://n8n.example/webhook/legacy");
 });
 
 test("an unreadable currency stays empty and blocks the row — a USD invoice is never booked as euros", () => {
@@ -371,15 +408,38 @@ test("autoBookDecision: een incomplete factuur boekt niet, en noemt precies wat 
   expect(d3.book === false && d3.reason).toContain("relatie");
 });
 
-test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", () => {
-  expect(getAutoBookedInvoices()).toEqual([]);
-  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" });
-  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" }); // idempotent
-  rememberAutoBooked({ invoiceId: "inv-2", messageId: "msg-2" });
-  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
-  expect(getAutoBookedInvoices()[0].subject).toBe("Factuur juli");
-  forgetAutoBooked("inv-1");
-  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-2"]);
+test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", async () => {
+  const vault = fakeVault();
+  expect(await getAutoBookedInvoices(vault)).toEqual([]);
+  await rememberAutoBooked(vault, {
+    invoiceId: "inv-1",
+    messageId: "msg-1",
+    subject: "Factuur juli",
+  });
+  await rememberAutoBooked(vault, {
+    invoiceId: "inv-1",
+    messageId: "msg-1",
+    subject: "Factuur juli",
+  }); // idempotent
+  await rememberAutoBooked(vault, { invoiceId: "inv-2", messageId: "msg-2" });
+  const list = await getAutoBookedInvoices(vault);
+  expect(list.map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
+  expect(list[0].subject).toBe("Factuur juli");
+  await forgetAutoBooked(vault, "inv-1");
+  expect((await getAutoBookedInvoices(vault)).map((a) => a.invoiceId)).toEqual(["inv-2"]);
+});
+
+test("een oude localStorage-lijst met auto-boekingen wordt eenmalig naar de kluis gemigreerd", async () => {
+  localStorage.setItem(
+    "lavega.n8n.autoBooked.v1",
+    JSON.stringify([{ invoiceId: "legacy-1", messageId: "msg-legacy", subject: "Oude factuur" }]),
+  );
+  const vault = fakeVault();
+  const list = await getAutoBookedInvoices(vault);
+  expect(list).toEqual([
+    { invoiceId: "legacy-1", messageId: "msg-legacy", subject: "Oude factuur" },
+  ]);
+  expect(localStorage.getItem("lavega.n8n.autoBooked.v1")).toBeNull();
 });
 
 /** Een geverifieerde rij zoals de app hem krijgt: via parseQueue, niet met de hand
@@ -466,4 +526,17 @@ test("de poort gaat niet open van een geldige DKIM alleen", () => {
     { entityChoices: [], defaultEntity: "Prive" },
   );
   expect(d.book).toBe(false);
+});
+
+test("a legacy n8n API key is deleted, not carried into the vault", async () => {
+  localStorage.setItem("lavega.n8nApiKey", "n8n-api-key");
+  localStorage.setItem("lavega.n8nBaseUrl", "https://n8n.example");
+  localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/q");
+  const vault = fakeVault();
+  const settings = await getN8nSettings(vault);
+  expect(settings.invoiceUrl).toBe("https://n8n.example/webhook/q");
+  expect(settings.apiKey).toBeUndefined();
+  expect(settings.baseUrl).toBeUndefined();
+  expect(localStorage.getItem("lavega.n8nApiKey")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nBaseUrl")).toBeNull();
 });

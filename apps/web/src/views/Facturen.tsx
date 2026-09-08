@@ -6,6 +6,7 @@ import {
   reconcileInvoices,
   scheduledInvoiceFlows,
 } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 import type { View } from "../App";
 import { formatEuro } from "../format";
 import { API_BASE } from "../api";
@@ -15,8 +16,7 @@ import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
   getHandledInvoiceMessageIds,
-  getN8nInvoiceToken,
-  getN8nInvoiceUrl,
+  getN8nSettings,
   setAiExtractionEnabled,
 } from "../settings";
 import {
@@ -139,6 +139,11 @@ type FacturenProps = {
   onNavigate: (view: View) => void;
   /** Injectable for tests; production uses the browser's own fetch. */
   fetchImpl?: typeof fetch;
+  /** The unlocked vault. The n8n webhook URL/token and the auto-booked log now
+   *  live there (privacy/security review 2026-08-28, M4/L6) instead of
+   *  localStorage; until this is wired, n8n fetching stays off rather than
+   *  falling back to the plaintext it replaced. */
+  storage?: VaultStorage;
 };
 
 const STATUS_LABELS: Record<Invoice["status"], string> = {
@@ -169,6 +174,7 @@ export default function Facturen({
   onNoticesChange,
   onNavigate,
   fetchImpl,
+  storage,
 }: FacturenProps) {
   const [entity, setEntity] = useState(defaultEntity);
   const [direction, setDirection] = useState<Invoice["direction"]>("out");
@@ -203,6 +209,22 @@ export default function Facturen({
   const [n8nBusy, setN8nBusy] = useState(false);
   const [n8nNote, setN8nNote] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+  // The vault's fallback auto-booked log (see `autoBookedIds` below).
+  const [legacyAutoBookedIds, setLegacyAutoBookedIds] = useState<Set<string>>(new Set());
+  async function refreshLegacyAutoBooked() {
+    if (!storage) return;
+    try {
+      const list = await getAutoBookedInvoices(storage);
+      setLegacyAutoBookedIds(new Set(list.map((a) => a.invoiceId)));
+    } catch {
+      /* a vault read that fails here just leaves the FIELD-based ids showing */
+    }
+  }
+  useEffect(() => {
+    void refreshLegacyAutoBooked();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storage]);
 
   // A reload would take the fetched rows with it, and n8n cannot serve them
   // again. So while rows are still undecided, make the browser ask first.
@@ -257,20 +279,39 @@ export default function Facturen({
   const fetchLatest = useRef(handleFetchN8n);
   fetchLatest.current = handleFetchN8n;
   useEffect(() => {
-    const configured = () => getN8nInvoiceUrl().trim() !== "" && getN8nInvoiceToken().trim() !== "";
-    if (!configured()) return;
-    if (!autoPulled.current) {
-      autoPulled.current = true;
-      void fetchLatest.current();
+    if (!storage) return; // see the `storage` prop doc: n8n stays off until wired
+    const vault = storage;
+    let cancelled = false;
+    async function configured(): Promise<boolean> {
+      try {
+        const settings = await getN8nSettings(vault);
+        return (
+          (settings.invoiceUrl ?? "").trim() !== "" && (settings.invoiceToken ?? "").trim() !== ""
+        );
+      } catch {
+        return false; // a vault read that fails (e.g. locked mid-session) is not "configured"
+      }
     }
+    void (async () => {
+      if (cancelled || !(await configured())) return;
+      if (!autoPulled.current) {
+        autoPulled.current = true;
+        void fetchLatest.current();
+      }
+    })();
     const id = setInterval(() => {
-      if (configured()) void fetchLatest.current();
+      void (async () => {
+        if (!cancelled && (await configured())) void fetchLatest.current();
+      })();
     }, PULL_INTERVAL_MS);
-    return () => clearInterval(id);
-    // Deliberately empty: the timer belongs to this screen being open, not to
-    // any value it renders, and `fetchLatest` keeps it calling the newest one.
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // Deliberately just `storage`: the timer belongs to this screen being open,
+    // not to any value it renders, and `fetchLatest` keeps it calling the newest.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [storage]);
 
   // Every outcome gets its own sentence, and none of the failures may read like
   // a success. The two that can cost data (a broken connection, an unreadable
@@ -286,10 +327,20 @@ export default function Facturen({
   }
 
   async function runFetchN8n() {
+    if (!storage) {
+      setN8nNote("De kluis is nog niet gekoppeld aan dit scherm. Er is niets opgehaald.");
+      return;
+    }
+    const vault = storage;
     setN8nBusy(true);
     setN8nNote("Bezig met ophalen…");
     try {
-      const outcome = await fetchQueue(getN8nInvoiceUrl(), getN8nInvoiceToken(), fetchImpl);
+      const settings = await getN8nSettings(vault);
+      const outcome = await fetchQueue(
+        settings.invoiceUrl ?? "",
+        settings.invoiceToken ?? "",
+        fetchImpl,
+      );
       if (outcome.kind === "not-configured") {
         setN8nNote(
           "Nog niet ingesteld: vul eerst de webhook-URL en het token in onder Koppelingen. Er is niets opgehaald.",
@@ -393,7 +444,8 @@ export default function Facturen({
         // ONE save with everything, and reconciled in the same breath: a payment
         // that already came in links now instead of at the next import.
         onSaveInvoices(reconcileInvoices([...invoices, ...booked], txs));
-        for (const b of bookedFrom) rememberAutoBooked(b);
+        for (const b of bookedFrom) await rememberAutoBooked(vault, b);
+        await refreshLegacyAutoBooked();
       }
       if (proposals.length > 0) onPendingChange([...currentPending, ...proposals]);
       // Meldingen langs dezelfde zeef: afgehandeld is afgehandeld.
@@ -540,16 +592,15 @@ export default function Facturen({
   // elke regel dezelfde naam.
   const showEntityColumn = entities.length > 1;
 
-  // Which invoices got here without him clicking. Read from the log on EVERY
-  // render, deliberately un-memoised: the log is written by this view (booking,
-  // undoing) and by a previous session, so any cache key would be a guess about
-  // when it changed. It is one localStorage read of a handful of ids.
-  // The FIELD is the truth; the log is the fallback for invoices booked before
-  // the field existed. An invoice with autoBooked absent was confirmed by hand —
-  // the safe reading, since that is what every older row actually was.
+  // Which invoices got here without him clicking. `legacyAutoBookedIds` is
+  // refreshed after every booking/undo (see `refreshLegacyAutoBooked` below) —
+  // it is the vault's fallback log, kept for invoices booked before `autoBooked`
+  // existed as a field. The FIELD is the truth; an invoice with autoBooked
+  // absent was confirmed by hand — the safe reading, since that is what every
+  // older row actually was.
   const autoBookedIds = new Set([
     ...invoices.filter((i) => i.autoBooked).map((i) => i.id),
-    ...getAutoBookedInvoices().map((a) => a.invoiceId),
+    ...legacyAutoBookedIds,
   ]);
 
   function handleAdd() {
@@ -616,7 +667,7 @@ export default function Facturen({
   // something that entered his books on its own.
   function undoAutoBooked(id: string) {
     setStatus(id, "cancelled");
-    forgetAutoBooked(id);
+    if (storage) void forgetAutoBooked(storage, id).then(refreshLegacyAutoBooked, () => {});
     setN8nNote(
       "Automatische boeking teruggedraaid: de factuur staat op geannuleerd en telt niet meer mee in de prognose.",
     );

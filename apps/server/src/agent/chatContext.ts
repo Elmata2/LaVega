@@ -1,3 +1,5 @@
+import { scrubPersonalValues } from "@lavega/core";
+
 export const CHAT_TABS = [
   "overview",
   "rekeningen",
@@ -51,6 +53,9 @@ export function sanitizeChatContext(tab: string, raw: unknown): Record<string, u
   return out;
 }
 
+/** M5: the owner types this content free-hand (an IBAN pasted into the chat
+ *  box, say), so — unlike `sanitizeChatContext`'s structured, allowlisted
+ *  fields — it gets the same value-scrub the categorize boundary applies. */
 export function sanitizeMessages(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatMessage[] = [];
@@ -63,7 +68,7 @@ export function sanitizeMessages(raw: unknown): ChatMessage[] {
         // leaves an empty-content assistant message in history, which
         // Anthropic rejects.
         if (content.trim() === "") continue;
-        out.push({ role, content: content.slice(0, MAX_MSG_CHARS) });
+        out.push({ role, content: scrubPersonalValues(content).slice(0, MAX_MSG_CHARS) });
       }
     }
   }

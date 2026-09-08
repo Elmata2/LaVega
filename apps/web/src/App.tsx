@@ -55,10 +55,11 @@ import {
 } from "@lavega/adapters";
 import { CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
-import { pathForView, viewFromPathname, type View } from "./appRoutes";
+import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData } from "./migrate.js";
+import useIdleLock from "./useIdleLock";
 import {
   getBufferCents,
   setBufferCents,
@@ -399,16 +400,17 @@ export default function App() {
   }, []);
 
   // After returning from an Enable Banking authorisation, the browser lands on
-  // the SPA with ?eb=<session> (or ?eb_error=). Once the vault is unlocked, pull
-  // the accounts+transactions, map them (same shape as a file import) and store
-  // them. Reads fresh from storage to avoid stale state right after unlock.
+  // the SPA with ?eb=<session> (or ?eb_error=). normalizeAppLocation (Root.tsx,
+  // via appRoutes.ts) already stripped that off the URL on load, so the id
+  // never sits in browser history — it's picked up here, once, from the
+  // in-memory handoff. Once the vault is unlocked, pull the accounts+
+  // transactions, map them (same shape as a file import) and store them.
+  // Reads fresh from storage to avoid stale state right after unlock.
   useEffect(() => {
     if (gate !== "ready") return;
-    const params = new URLSearchParams(window.location.search);
-    const ebError = params.get("eb_error");
-    const ebSession = params.get("eb");
-    if (!ebError && !ebSession) return;
-    window.history.replaceState({}, "", window.location.pathname); // don't re-run on refresh
+    const pending = takePendingEbParams();
+    if (!pending) return;
+    const { session: ebSession, error: ebError } = pending;
     setView("overview");
     if (ebError) {
       setProblems([`Bankkoppeling mislukt: ${ebError}`]);
@@ -481,6 +483,13 @@ export default function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate]);
+
+  // M7 (2026-08-28 security review): the vault never locked itself. 15
+  // minutes without pointer/key/touch/scroll activity, or a tab hidden that
+  // long, runs the exact same lock path as the sidebar button below.
+  // Not while an import or sync is writing: a lock between putAccounts and
+  // putTxs would leave the vault half-written. The timer re-arms when busy ends.
+  useIdleLock(gate === "ready" && !busy, handleLock);
 
   // Sidebar "Vergrendel": drop the derived key + in-memory data (nothing
   // sensitive stays rendered) and show the unlock screen again.
@@ -1281,6 +1290,7 @@ export default function App() {
 
           {view === "facturen" && (
             <Facturen
+              storage={storage}
               entities={entityOptions}
               invoices={invoices}
               txs={txs}
@@ -1300,7 +1310,7 @@ export default function App() {
             <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />
           )}
 
-          {view === "koppelingen" && <Koppelingen />}
+          {view === "koppelingen" && <Koppelingen storage={storage} />}
 
           {view === "backup" && (
             <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />

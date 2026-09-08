@@ -4,6 +4,7 @@ import {
   isAppPathname,
   normalizeAppLocation,
   pathForView,
+  takePendingEbParams,
   viewFromPathname,
 } from "./appRoutes";
 
@@ -32,20 +33,60 @@ test("isAppPathname covers /app and unknown /app segments", () => {
   expect(isAppPathname(APP_BASE)).toBe(true);
 });
 
-test("normalizeAppLocation rewrites legacy #app and /?eb= into /app", () => {
+test("normalizeAppLocation rewrites legacy #app into /app", () => {
   const writes: string[] = [];
   normalizeAppLocation({ pathname: "/", search: "", hash: "#app" }, (url) => writes.push(url));
   expect(writes).toEqual(["/app"]);
+});
 
-  writes.length = 0;
+test("normalizeAppLocation strips eb= off the URL immediately and hands it off in-memory", () => {
+  const writes: string[] = [];
   normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "" }, (url) =>
     writes.push(url),
   );
-  expect(writes).toEqual(["/app?eb=sess-1"]);
+  expect(writes).toEqual(["/app"]);
+  expect(writes.join("")).not.toContain("eb");
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
 
-  writes.length = 0;
-  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1", hash: "" }, (url) =>
+test("normalizeAppLocation strips eb= even when already on /app, keeping unrelated params", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1&foo=bar", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app?foo=bar"]);
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
+
+test("normalizeAppLocation strips eb_error= the same way", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/", search: "?eb_error=denied", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app"]);
+  expect(takePendingEbParams()).toEqual({ session: null, error: "denied" });
+});
+
+test("takePendingEbParams is one-shot and null when nothing is pending", () => {
+  expect(takePendingEbParams()).toBeNull();
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-2", hash: "" }, () => {});
+  expect(takePendingEbParams()).toEqual({ session: "sess-2", error: null });
+  expect(takePendingEbParams()).toBeNull();
+});
+
+test("normalizeAppLocation is a no-op without #app or eb params", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app/transactions", search: "", hash: "" }, (url) =>
     writes.push(url),
   );
   expect(writes).toEqual([]);
+});
+
+test("a legacy #app bookmark that also carries eb= is stripped in the same step", () => {
+  const replaced: string[] = [];
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "#app" }, (url) =>
+    replaced.push(url),
+  );
+  expect(replaced).toEqual(["/app"]);
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
 });

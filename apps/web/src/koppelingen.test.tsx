@@ -2,14 +2,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import type { VaultStorage } from "@lavega/adapters";
 import Koppelingen from "./views/Koppelingen";
-import {
-  getInvoiceForwardAddress,
-  getN8nInvoiceToken,
-  getN8nInvoiceUrl,
-  setN8nInvoiceToken,
-  setN8nInvoiceUrl,
-} from "./settings";
+import { getInvoiceForwardAddress } from "./settings";
 
 /* Koppelingen is één blok geworden: de webhook-URL en het token.
  *
@@ -23,7 +18,10 @@ import {
  * zijn weg.
  *
  * Wat hier BLIJFT staan is het paar waar Facturen op wacht — zie de twee
- * MVP-tests onderaan. */
+ * MVP-tests onderaan.
+ *
+ * URL/token verhuisden 2026-09-08 uit localStorage naar de kluis (privacy/
+ * security review 2026-08-28, M4/L6) — zie `fakeVault` hieronder. */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,11 +39,33 @@ afterEach(() => {
   container = null;
 });
 
-function render() {
+/** An in-memory vault, enough for Koppelingen's n8n block. `stored` is exposed
+ *  so a test can see what was actually written, not just that something was. */
+function fakeVault() {
+  const stored = {
+    invoiceUrl: undefined as string | undefined,
+    invoiceToken: undefined as string | undefined,
+  };
+  const storage = {
+    getN8nSettings: async () => ({
+      invoiceUrl: stored.invoiceUrl,
+      invoiceToken: stored.invoiceToken,
+    }),
+    putN8nSettings: async (s: { invoiceUrl?: string; invoiceToken?: string }) => {
+      stored.invoiceUrl = s.invoiceUrl;
+      stored.invoiceToken = s.invoiceToken;
+    },
+  } as unknown as VaultStorage;
+  return { storage, stored };
+}
+
+async function render(storage?: VaultStorage) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(<Koppelingen />));
+  await act(async () => {
+    root!.render(<Koppelingen storage={storage} />);
+  });
   return container;
 }
 
@@ -64,6 +84,12 @@ function byText(selector: string, text: string): HTMLElement {
 
 function click(el: Element) {
   act(() => {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function clickAsync(el: Element) {
+  await act(async () => {
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
@@ -89,8 +115,9 @@ function blur(el: HTMLInputElement) {
 
 /* ── De webhook-URL en het token ────────────────────────────────────────── */
 
-test("the webhook URL and token are saved as LOCAL preferences", () => {
-  const c = render();
+test("the webhook URL and token are saved to the vault, never to localStorage", async () => {
+  const { storage, stored } = fakeVault();
+  const c = await render(storage);
   act(() =>
     setNativeValue(
       c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement,
@@ -100,16 +127,15 @@ test("the webhook URL and token are saved as LOCAL preferences", () => {
   act(() =>
     setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"),
   );
-  act(() => byText("button", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await clickAsync(byText("button", "Opslaan"));
 
-  expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/lavega-facturen");
-  expect(getN8nInvoiceToken()).toBe("sekret");
-  // localStorage, i.e. this browser — not the vault, so a back-up file can
-  // never carry a live token, and never the server.
-  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBe("sekret");
+  expect(stored.invoiceUrl).toBe("https://n8n.example/webhook/lavega-facturen");
+  expect(stored.invoiceToken).toBe("sekret");
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
 });
 
-test("dit scherm belt met niemand — opslaan doet geen enkel verzoek", () => {
+test("dit scherm belt met niemand — opslaan doet geen enkel verzoek", async () => {
   // De vorige versie kon dit met een geïnjecteerde fetch, omdat het scherm zelf
   // met n8n praatte. Dat doet het niet meer, dus meten we de echte: er mag geen
   // verzoek de deur uit, naar n8n niet en naar de LaVega-server niet.
@@ -120,7 +146,8 @@ test("dit scherm belt met niemand — opslaan doet geen enkel verzoek", () => {
     return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
   }) as unknown as typeof fetch;
   try {
-    const c = render();
+    const { storage, stored } = fakeVault();
+    const c = await render(storage);
     act(() =>
       setNativeValue(
         c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement,
@@ -130,16 +157,16 @@ test("dit scherm belt met niemand — opslaan doet geen enkel verzoek", () => {
     act(() =>
       setNativeValue(c.querySelector('[aria-label="n8n token"]') as HTMLInputElement, "sekret"),
     );
-    click(byText("button", "Opslaan"));
+    await clickAsync(byText("button", "Opslaan"));
     expect(calls).toBe(0);
-    expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/x");
+    expect(stored.invoiceUrl).toBe("https://n8n.example/webhook/x");
   } finally {
     globalThis.fetch = original;
   }
 });
 
-test("the token is masked by default and only shown on request", () => {
-  const c = render();
+test("the token is masked by default and only shown on request", async () => {
+  const c = await render(fakeVault().storage);
   const token = c.querySelector('[aria-label="n8n token"]') as HTMLInputElement;
   expect(token.type).toBe("password");
   act(() => {
@@ -151,13 +178,45 @@ test("the token is masked by default and only shown on request", () => {
   expect((c.querySelector('[aria-label="n8n token"]') as HTMLInputElement).type).toBe("text");
 });
 
-test("wissen clears both, so nothing can be fetched by accident", () => {
-  setN8nInvoiceUrl("https://n8n.example/webhook/x");
-  setN8nInvoiceToken("sekret");
-  render();
-  act(() => byText("button", "Wissen").dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(getN8nInvoiceUrl()).toBe("");
-  expect(getN8nInvoiceToken()).toBe("");
+test("wissen clears both in the vault, so nothing can be fetched by accident", async () => {
+  const { storage, stored } = fakeVault();
+  await storage.putN8nSettings({
+    invoiceUrl: "https://n8n.example/webhook/x",
+    invoiceToken: "sekret",
+  });
+  await render(storage);
+  await clickAsync(byText("button", "Wissen"));
+  expect(stored.invoiceUrl).toBe("");
+  expect(stored.invoiceToken).toBe("");
+});
+
+test("zonder kluis-prop blijft het blok stil — geen localStorage-terugval", async () => {
+  // De prop is optioneel zolang App.tsx hem nog niet doorgeeft (zie de docstring
+  // op `storage` in Koppelingen.tsx); "geen kluis" mag nooit stilzwijgend
+  // localStorage worden, want dat is precies het lek dat dit blok dichtte.
+  const c = await render(undefined);
+  act(() =>
+    setNativeValue(
+      c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement,
+      "https://n8n.example/webhook/x",
+    ),
+  );
+  await clickAsync(byText("button", "Opslaan"));
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(c.textContent).toContain("kluis");
+});
+
+test("een oude localStorage-URL/token wordt bij het openen naar de kluis gemigreerd", async () => {
+  localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/legacy");
+  localStorage.setItem("lavega.n8nInvoiceToken", "legacy-tok");
+  const { storage, stored } = fakeVault();
+  const c = await render(storage);
+  expect((c.querySelector('[aria-label="n8n webhook-URL"]') as HTMLInputElement).value).toBe(
+    "https://n8n.example/webhook/legacy",
+  );
+  expect(stored.invoiceUrl).toBe("https://n8n.example/webhook/legacy");
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
 });
 
 /* ── Opschonen richting MVP (review 3, item 9) ──────────────────────────────
@@ -167,12 +226,12 @@ test("wissen clears both, so nothing can be fetched by accident", () => {
  *
  * Het antwoord op zijn vraag staat in deze twee tests. Wat WEG kan zijn de twee
  * blokken die hem hielpen n8n op te zetten; wat BLIJFT is het paar waar Facturen
- * op staat te wachten — Facturen.tsx leest getN8nInvoiceUrl() en
- * getN8nInvoiceToken() en zegt bij een leeg paar letterlijk "vul eerst de
- * webhook-URL en het token in onder Koppelingen". Dat weghalen zou de keten die
- * hij vandaag test onmogelijk maken, en daarom pinnen we het hier vast. */
+ * op staat te wachten — Facturen.tsx leest getN8nSettings() en zegt bij een leeg
+ * paar letterlijk "vul eerst de webhook-URL en het token in onder Koppelingen".
+ * Dat weghalen zou de keten die hij vandaag test onmogelijk maken, en daarom
+ * pinnen we het hier vast. */
 
-test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", () => {
+test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", async () => {
   /* DEZE VERWACHTING IS BEWUST GEWIJZIGD, niet afgezwakt.
    *
    * Hij vroeg de kaart weg en dat is gebeurd: de opzethulp, de uitleg en de
@@ -185,7 +244,7 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", () 
    * Wat de oorspronkelijke test bedoelde te beschermen — geen provisioning, geen
    * uitleglawaai, geen testknop die echte facturen opgebruikt — wordt hieronder
    * nog even hard beweerd. */
-  const c = render();
+  const c = await render(fakeVault().storage);
   // De n8n-provisioning is en blijft weg.
   expect(c.querySelector('[aria-label="n8n basis-URL"]')).toBeNull();
   expect(c.querySelector('[aria-label="n8n API-sleutel"]')).toBeNull();
@@ -211,8 +270,8 @@ test("de opzethulp is weg, maar het doorstuuradres is te lezen en te maken", () 
   );
 });
 
-test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vindt", () => {
-  const c = render();
+test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vindt", async () => {
+  const c = await render(fakeVault().storage);
   expect(c.querySelector('[aria-label="n8n webhook-URL"]')).not.toBeNull();
   expect(c.querySelector('[aria-label="n8n token"]')).not.toBeNull();
   // De uitleg die de plek van die twee waarden in n8n noemt, blijft bereikbaar.
@@ -220,8 +279,8 @@ test("het paar waar Facturen op staat blijft staan, en zegt nog waar je het vind
   expect(c.textContent).toContain("Production URL");
 });
 
-test("het opzetblok verdwijnt, de reden waarom er geen testknop is niet", () => {
-  const c = render();
+test("het opzetblok verdwijnt, de reden waarom er geen testknop is niet", async () => {
+  const c = await render(fakeVault().storage);
   expect(c.textContent).not.toContain("geen testknop");
   click(c.querySelector('[aria-label="Uitleg bij deze koppeling"]') as HTMLButtonElement);
   expect(c.textContent).toContain("geen testknop");
@@ -230,21 +289,21 @@ test("het opzetblok verdwijnt, de reden waarom er geen testknop is niet", () => 
   expect(c.textContent).toContain("jouw browser");
 });
 
-test("hij kan het adres intypen dat Cloudflare werkelijk routeert", () => {
+test("hij kan het adres intypen dat Cloudflare werkelijk routeert", async () => {
   /* Het adres komt van buiten: zijn cofounder heeft in Cloudflare
    * ale@invoices.lavega.dev aangemaakt (23 augustus, door hem bevestigd), niet
    * het lavega-<random>@invoices.lavega.dev
    * dat LaVega verzon. Een adres dat wij bedenken en dat niets routeert is erger
    * dan geen adres — de post komt nergens aan terwijl het scherm zegt van wel. */
-  const c = render();
+  const c = await render(fakeVault().storage);
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
   setValue(input, "ale@invoices.lavega.dev");
   blur(input);
   expect(getInvoiceForwardAddress()).toBe("ale@invoices.lavega.dev");
 });
 
-test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", () => {
-  const c = render();
+test("een half overgetikt adres wordt geweigerd en overschrijft het oude niet", async () => {
+  const c = await render(fakeVault().storage);
   const input = c.querySelector('[aria-label="Doorstuuradres"]') as HTMLInputElement;
   setValue(input, "ale@invoices.lavega.dev");
   blur(input);
