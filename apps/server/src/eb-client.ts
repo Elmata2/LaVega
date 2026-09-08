@@ -122,7 +122,9 @@ export async function ebJWT(config: EbClientConfig): Promise<string> {
     privateKey = config.privateKey;
   } else {
     if (!privateKeyFile) {
-      throw new Error("Enable Banking: no private key (set EB_PRIVATE_KEY or privateKeyFile)");
+      throw new Error(
+        "Enable Banking: no usable private key. EB_PRIVATE_KEY must hold the whole .pem including its -----BEGIN/END----- lines (or set privateKeyFile)",
+      );
     }
     const keyPath = resolvePrivateKeyPath(privateKeyFile);
     if (!existsSync(keyPath)) {

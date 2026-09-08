@@ -35,7 +35,7 @@ export interface EbConfig {
   redirectUrl: string;
   psuType: PsuType;
   /** Where the signing key comes from; "missing" means every EB call will fail. */
-  keySource: "env" | "file" | "missing";
+  keySource: "env" | "env-not-pem" | "file" | "missing";
 }
 
 interface RawEbConfig {
@@ -63,6 +63,21 @@ function readJSON<T>(filePath: string, fallback: T): T {
  * Env: EB_APPLICATION_ID, EB_PRIVATE_KEY (inline PEM — literal `\n` is
  * un-escaped), EB_PRIVATE_KEY_FILE, EB_REDIRECT_URL, EB_PSU_TYPE.
  */
+/** The PEM as an operator may have pasted it into a dashboard: with literal
+ *  `\n` for line breaks, or base64-encoded as a whole file. Anything without a
+ *  `-----BEGIN` line after that is not a key we can sign with. */
+function pemFromSetting(value: string): string | null {
+  const unescaped = value.replace(/\\n/g, "\n").trim();
+  if (unescaped.includes("-----BEGIN")) return unescaped;
+  try {
+    const decoded = Buffer.from(unescaped, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) return decoded.trim();
+  } catch {
+    /* not base64 */
+  }
+  return null;
+}
+
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
   const applicationId = process.env.EB_APPLICATION_ID ?? raw?.applicationId ?? null;
@@ -70,13 +85,19 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
     typeof applicationId === "string" &&
     applicationId.length > 0 &&
     !applicationId.includes(PLACEHOLDER);
-  const envKey = process.env.EB_PRIVATE_KEY;
-  const privateKey = envKey ? envKey.replace(/\\n/g, "\n") : (raw?.privateKey ?? null);
+  const envKey = process.env.EB_PRIVATE_KEY || raw?.privateKey || null;
+  const privateKey = envKey ? pemFromSetting(envKey) : null;
   const privateKeyFile = process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null;
-  const keySource = privateKey ? "env" : privateKeyFile ? "file" : "missing";
+  const keySource = privateKey
+    ? "env"
+    : envKey
+      ? "env-not-pem"
+      : privateKeyFile
+        ? "file"
+        : "missing";
   // An application id without a key is not configured: every call would fail
   // at signing, and /api/eb/status must not claim otherwise (it did, once).
-  const configured = hasApplicationId && keySource !== "missing";
+  const configured = hasApplicationId && (keySource === "env" || keySource === "file");
   return {
     configured,
     keySource,

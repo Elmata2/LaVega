@@ -116,3 +116,23 @@ test("an application id without any private key is not configured, and says whic
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("EB_PRIVATE_KEY without the PEM header lines is reported as env-not-pem and not configured", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(configPath, JSON.stringify({ applicationId: "abcd1234efgh5678" }));
+  const pem = "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----";
+  try {
+    process.env.EB_PRIVATE_KEY = "MIIBbodyonly";
+    expect(loadConfig(configPath).keySource).toBe("env-not-pem");
+    expect(loadConfig(configPath).configured).toBe(false);
+    process.env.EB_PRIVATE_KEY = Buffer.from(pem).toString("base64");
+    expect(loadConfig(configPath).keySource).toBe("env");
+    expect(loadConfig(configPath).privateKey).toBe(pem);
+    process.env.EB_PRIVATE_KEY = pem.replace(/\n/g, "\\n");
+    expect(loadConfig(configPath).privateKey).toBe(pem);
+  } finally {
+    delete process.env.EB_PRIVATE_KEY;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
