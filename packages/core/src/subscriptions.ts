@@ -31,7 +31,12 @@ export type Subscription = {
   /** Cycles that were expected inside the observed history and never arrived —
    *  a failed direct debit. Kept because "monthly, seen 5x" and "monthly, seen
    *  4x with one miss" are different claims, and because the empty-list
-   *  explanation needs to be able to say which one it saw. */
+   *  explanation needs to be able to say which one it saw.
+   *
+   *  ONE EXCEPTION: when this stream came from the third reading in
+   *  `fitMerchantStreams` (a bounded-outlier rescue), a "skipped" cycle means
+   *  the DOMINANT price was not charged that month — a bundle or catch-up month
+   *  billed something else — not that nothing was charged at all. */
   skippedCycles: number;
 };
 
@@ -676,6 +681,11 @@ export type MerchantStreams = {
    *  as one stream and nothing about it changed. Reported so a test can pin
    *  WHICH mechanism produced the answer instead of only the answer. */
   splitByAmount: boolean;
+  /** True only for the third reading (see `dominantPriceMembers`): `whole`'s
+   *  own date chain, re-read with a bounded-outlier price tolerance. Absent
+   *  (not `false`) for the other two — a test pinning the mechanism should be
+   *  able to tell "not this one" from "explicitly no". */
+  rescued?: true;
 };
 
 /** Every subscription-shaped stream one merchant is billing, read amount-first.
@@ -694,6 +704,76 @@ function amountsCoherent(members: number[], amountsCents: number[], maxCv: numbe
   if (mean <= 0) return false;
   const sd = Math.sqrt(xs.reduce((a, c) => a + (c - mean) ** 2, 0) / xs.length);
   return sd / mean <= maxCv;
+}
+
+/* ===========================================================================
+ * THE THIRD READING — a run of bundle months back to back.
+ *
+ * `whole` and `split` both look at ONE thing: whole reads the dates and ignores
+ * price, split reads the price and re-derives the dates per amount. A phone bill
+ * that adds a bundle for three months IN A ROW defeats both. Whole sees a clean,
+ * ungapped monthly rhythm across all twelve rows and then fails on price spread
+ * (0,366 against a 0,35 ceiling). Split carves out the nine EUR 11,89 rows
+ * correctly, but on their OWN calendar those three bundle months are a single
+ * 120-day hole — four cycles in one jump, and `MAX_SKIPPED_CYCLES` (2) calls
+ * that a stopped stream, not a bumpy one. Rightly so for real silence (see
+ * "twee gemiste incasso's..."): there the merchant billed NOTHING for three
+ * months. Here it billed every month without fail, just not always EUR 11,89.
+ *
+ * The dates already answer that question, and `whole` already asked it: a
+ * chain across every row, no skips, is exactly "billed every cycle". So when
+ * neither the amount-blind nor the amount-first reading finds anything, take
+ * `whole`'s already-proven cadence and re-read its price with the SAME bounded
+ * tolerance the stray budget already uses elsewhere in this file: a minority
+ * (at most a third) may sit off the dominant price and still be a subscription
+ * with an occasional bundle or catch-up month, not a series of purchases. */
+// Coupled with MAX_SKIPPED_CYCLES below by nothing but arithmetic: today's floor
+// (kept >= 9, budget = 3) is exactly wide enough for a 3-row run and no wider —
+// the majority-cycle check enforced below is what keeps a looser retuning of
+// either constant from silently widening this past a real gap.
+const OUTLIER_BUDGET = 3;
+
+/** The members that share the merchant's most-charged price, or null when it
+ *  never repeats (one busy month is not "occasional"). How MANY may be left
+ *  out is not this function's call — the caller checks that the same way it
+ *  already checks `wholeClaimed` and `splitClaimed`, against `claimed`, not
+ *  against the count before filtering; a second budget here, on a different
+ *  base, would only disagree with that one. */
+function dominantPriceMembers(members: number[], amountsCents: number[]): number[] | null {
+  const counts = new Map<number, number>();
+  for (const i of members) counts.set(amountsCents[i], (counts.get(amountsCents[i]) ?? 0) + 1);
+  let modeCents = -1;
+  let modeCount = 0;
+  for (const [cents, count] of counts) {
+    if (count > modeCount || (count === modeCount && cents < modeCents)) {
+      modeCents = cents;
+      modeCount = count;
+    }
+  }
+  if (modeCount < 2) return null;
+  return members.filter((i) => amountsCents[i] === modeCents);
+}
+
+/** Gaps, skipped cycles and residual for an already-decided member list — the
+ *  bookkeeping half of `chainFrom`, without its anchor search: the members are
+ *  fixed here, only their stats are read off. `onCycle` is exposed too, because
+ *  the third reading below has to apply `chainFrom`'s OWN majority-cycle rule
+ *  by hand — nothing else here re-derives that invariant, so a fixed member
+ *  list is not a substitute for it. */
+function chainStats(days: number[], members: number[], cadenceDays: number) {
+  const gaps: number[] = [];
+  let skippedCycles = 0;
+  let residual = 0;
+  let onCycle = 0;
+  for (let i = 1; i < members.length; i++) {
+    const g = days[members[i]] - days[members[i - 1]];
+    gaps.push(g);
+    const k = Math.round(g / cadenceDays);
+    skippedCycles += Math.max(0, k - 1);
+    residual += Math.abs(g - k * cadenceDays);
+    if (k === 1) onCycle++;
+  }
+  return { gaps, skippedCycles, residual, onCycle };
 }
 
 export function fitMerchantStreams(
@@ -743,10 +823,45 @@ export function fitMerchantStreams(
   const streams = useSplit ? split : whole === null ? [] : [whole];
   const claimed = useSplit ? splitClaimed : wholeClaimed;
   const strays = sortedDates.length - claimed;
-  if (streams.length === 0) return { streams: [], strays, splitByAmount: useSplit };
-  if (strays > Math.floor(claimed / 3)) return { streams: [], strays, splitByAmount: useSplit };
-  streams.sort((a, b) => b.members.length - a.members.length || a.members[0] - b.members[0]);
-  return { streams, strays, splitByAmount: useSplit };
+  if (streams.length > 0 && strays <= Math.floor(claimed / 3)) {
+    streams.sort((a, b) => b.members.length - a.members.length || a.members[0] - b.members[0]);
+    return { streams, strays, splitByAmount: useSplit };
+  }
+
+  // The third reading — see the block comment above `dominantPriceMembers`.
+  // Only tried once the first two have nothing: it can never take a stream away
+  // from either, only find one where both came up empty. It is not `split` —
+  // no amount-grouping ran to produce it — so it is reported as
+  // `splitByAmount: false, rescued: true`, a mechanism of its own.
+  if (whole !== null) {
+    const kept = dominantPriceMembers(whole.members, amountsCents);
+    if (kept !== null && kept.length >= whole.band.minOcc) {
+      const rescueStrays = sortedDates.length - kept.length;
+      const stats = chainStats(days, kept, whole.band.cadenceDays);
+      // `chainStats` only tallies; it applies none of `chainFrom`'s sanity
+      // checks. Enforce the one that matters by hand: a majority of the KEPT
+      // sequence's own gaps must be single-cycle, same as `chainFrom` requires
+      // of any chain it builds. Without this, `kept` could be a scatter of
+      // rows that only individually happen to share a price, held together by
+      // nothing — the outlier-count budget above bounds how MANY are missing,
+      // not how they are arranged, and a widened `OUTLIER_BUDGET` or
+      // `MAX_SKIPPED_CYCLES` must not be able to smuggle that scatter through.
+      const majorityOnCycle = stats.onCycle >= Math.ceil(stats.gaps.length / 2);
+      if (rescueStrays <= Math.floor(kept.length / OUTLIER_BUDGET) && majorityOnCycle) {
+        const fit: CadenceFit = {
+          band: whole.band,
+          members: kept,
+          extras: whole.members.length - kept.length,
+          gaps: stats.gaps,
+          skippedCycles: stats.skippedCycles,
+          residual: stats.residual,
+        };
+        return { streams: [fit], strays: rescueStrays, splitByAmount: false, rescued: true };
+      }
+    }
+  }
+
+  return { streams: [], strays, splitByAmount: useSplit };
 }
 
 /** Dutch name of each cadence, for the UI. */

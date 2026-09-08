@@ -1056,6 +1056,71 @@ describe("wat zijn eigen afschrift blootlegde", () => {
     manual: false,
   });
 
+  it("Simyo: drie bundelmaanden ACHTER ELKAAR, en tóch een lopend abonnement", () => {
+    /* DE MEETTABEL VAN 8 SEPTEMBER: SIMYO, 12 keer, EUR 180,94, 30 dg, spreiding
+     * 0,36, meegenomen: ja. Zelfde vorm als de reparatie hierboven — negen keer
+     * EUR 11,89 en een paar duurdere maanden — maar dit keer zitten de duurdere
+     * maanden DRIE OP EEN RIJ in plaats van verspreid over het jaar.
+     *
+     * Dat verandert de uitkomst, en de vorige reparatie raakt het niet: de
+     * bedragsplitsing pakt de negen 11,89-rijen er nog steeds keurig uit, maar
+     * hun eigen rooster heeft nu een gat van 120 dagen waar de drie bundelmaanden
+     * stonden — vier cycli in één sprong, en de grens `MAX_SKIPPED_CYCLES` staat
+     * op twee. De keten breekt daar middenin af, en het overblijfsel valt op zijn
+     * eigen `extras`-budget. Ondertussen faalt de ONGESPLITSTE lezing gewoon op
+     * de bedragspreiding (0,366 tegen een grens van 0,35) zoals hij al deed vóór
+     * de vorige reparatie. Twee lezingen, twee andere redenen, allebei leeg. */
+    const bedragen = [
+      11.89, 11.89, 11.89, 11.89, 24.64, 24.64, 24.65, 11.89, 11.89, 11.89, 11.89, 11.89,
+    ];
+    const rows = bedragen.map((b, i) => {
+      const d = new Date(Date.UTC(2025, 8, 14 + i * 30));
+      return tx("SIMYO", d.toISOString().slice(0, 10), -b);
+    });
+    const t = merchantTallies(rows)[0];
+    expect(t).toMatchObject({ charges: 12, totalCents: 18094, medianGapDays: 30 });
+    expect(t.amountCv).toBeCloseTo(0.366, 3);
+
+    const found = detectSubscriptions(rows);
+    expect(found).toHaveLength(1);
+    expect(found[0].monthlyCents).toBe(1189);
+    expect(found[0].occurrences).toBe(9);
+    expect(found[0].cadenceDays).toBe(30);
+    expect(found[0].skippedCycles).toBe(3);
+
+    // WELKE lezing dit vond: niet de bedragsplitsing (die vond hier niets, zie
+    // hierboven) maar de derde lezing — `whole`'s eigen, al bewezen rooster,
+    // opnieuw gelezen met een begrensde uitschieter-tolerantie. Een test die
+    // alleen op de uitkomst let, ziet dat verschil niet.
+    const s = stromenVan(rows);
+    expect(s.splitByAmount).toBe(false);
+    expect(s.rescued).toBe(true);
+  });
+
+  it("een meerderheid meercyclus-gaten in de gehouden reeks weigert de reddingslezing", () => {
+    /* Een tegenvoorbeeld bij de vorige: het aantal uitschieters past binnen
+     * `OUTLIER_BUDGET`, maar wat overblijft is geen rooster meer. Acht rijen op
+     * dag 0, 30, 90, 120, 180, 210, 270, 300 — `whole` vindt ze allemaal (de
+     * meerderheid van ZIJN gaten is nog steeds één cyclus: 30/60/30/60/30/60/30,
+     * vier van de zeven). Twee ervan (dag 0 en dag 270) krijgen een ander bedrag;
+     * de resterende zes delen EUR 11,89.
+     *
+     * Zes gehouden, twee weg: dat is binnen budget (floor(6/3) = 2). Maar de
+     * gaten van die zes OP ZICHZELF zijn 60/30/60/30/90 — twee van de vijf zijn
+     * één cyclus, geen meerderheid. Zonder de meerderheidstoets zou de
+     * reddingslezing dit toch als één stroom rapporteren; met de toets hoort hij
+     * het te weigeren, want `chainFrom` zou dit rooster ook nooit zelf bouwen. */
+    const dagen = [0, 30, 90, 120, 180, 210, 270, 300];
+    const bedragen = [50, 11.89, 11.89, 11.89, 11.89, 11.89, 60, 11.89];
+    const rows = dagen.map((d, i) => {
+      const dt = new Date(Date.UTC(2025, 8, 14 + d));
+      return tx("SIMYO", dt.toISOString().slice(0, 10), -bedragen[i]);
+    });
+    const s = stromenVan(rows);
+    expect(s.streams).toEqual([]);
+    expect(s.rescued).toBeUndefined();
+  });
+
   it("Simyo: twaalf keer, ritme 29 dagen, spreiding 0,36 — en tóch gevonden", () => {
     /* DE MEETWAARDEN KOMEN UIT ZIJN TABEL: SIMYO, 12 keer, EUR 190,55, 29 dg,
      * spreiding 0,36 tegen een grens van 0,35. Het abonnement is EUR 11,89 met
