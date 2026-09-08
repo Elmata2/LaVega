@@ -11,14 +11,23 @@ test("every third party the code sends data to is named in the policy", () => {
   // Railway was here until 2026-09-01, when hosting moved to Vercel and the
   // database to Neon. A processor leaving the stack has to leave the policy too,
   // or it names a company that no longer holds anything.
-  for (const processor of ["Enable Banking", "Anthropic", "Cloudflare", "n8n", "Google", "Vercel", "Neon", "Frankfurter"]) {
+  for (const processor of [
+    "Enable Banking",
+    "Mistral",
+    "Cloudflare",
+    "n8n",
+    "Google",
+    "Vercel",
+    "Neon",
+    "Frankfurter",
+  ]) {
     expect(privacyHtml, `policy does not name ${processor}`).toContain(processor);
   }
 });
 
 test("the policy no longer claims financial data is NEVER sent to a LaVega server", () => {
   // Transaction descriptions, invoice PDFs and chat context do pass through the
-  // server on their way to Anthropic. Redacted and opt-in, but not "never".
+  // server on their way to Mistral. Redacted and opt-in, but not "never".
   expect(privacyHtml).not.toMatch(/nooit<\/strong> naar servers van LaVega/);
 });
 
@@ -26,8 +35,8 @@ test("the policy says the AI features are opt-in, which is what the code enforce
   expect(privacyHtml.toLowerCase()).toContain("opt-in");
 });
 
-test("the policy names the transfer outside the EU, which is the AVG-relevant fact", () => {
-  expect(privacyHtml).toMatch(/buiten de E[UER]/i);
+test("the policy names where the AI processor handles the data, which is the AVG-relevant fact", () => {
+  expect(privacyHtml).toMatch(/binnen de EU/i);
 });
 
 test("the policy still states the things that remained true", () => {

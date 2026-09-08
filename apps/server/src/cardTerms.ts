@@ -27,7 +27,7 @@ const MAX_TRACKED = 60;
  *               n8n workflow (`ingestCardTerms`). The most precise thing there is.
  *  · comparison — bank.nl's koersopslag table. One step removed from the source,
  *               but curated, dated, and it covers banks that block us outright.
- *  · agent    — Claude + web search. Last, because its weak step was never
+ *  · agent    — Mistral + web search. Last, because its weak step was never
  *               reading a tariff but FINDING one: Revolut kept coming back empty
  *               while ING, ABN and Amex succeeded.
  *
@@ -194,8 +194,12 @@ function startLookup(
       // must not be re-asked on every request for the rest of the TTL.
       const after = cache.get(key);
       if (after) cache.set(key, { ...after, agentTried: true });
-    } catch {
-      /* stays unknown; the UI says so and the owner can correct it */
+    } catch (e) {
+      // Stays unknown; the UI says so and the owner can correct it. Logged
+      // (not surfaced) so a run of upstream failures is visible in the
+      // server log without ever putting Mistral's raw error text in front
+      // of the user, who never sees this lookup fail — only "unknown".
+      console.error(`agent/travel-facts: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       inFlight.delete(key);
     }
@@ -203,7 +207,7 @@ function startLookup(
 }
 
 /** Fill the gaps from the bank.nl comparison table — ONE HTTP GET covering
- *  seven Dutch banks and both card kinds, against a Claude+search lookup per
+ *  seven Dutch banks and both card kinds, against a Mistral+search lookup per
  *  provider that takes 40s-5min and fails outright on the sites behind
  *  Cloudflare. Runs in the background like `startLookup`, and for the same
  *  reason: the request must not wait on it.

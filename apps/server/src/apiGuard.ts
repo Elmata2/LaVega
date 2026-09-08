@@ -6,7 +6,7 @@ import { verifiedSession } from "./auth.js";
  *
  * Until this existed, `verifiedSession` was defined in auth.ts and called from
  * nowhere: Better Auth was wired to Neon but guarded no route, so every API —
- * including the ones that spend the owner's Anthropic key and the ones that own
+ * including the ones that spend the owner's Mistral key and the ones that own
  * the broker vault — answered any stranger with a `curl`. CORS did not cover it;
  * CORS stops browsers, not clients.
  *

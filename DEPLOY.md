@@ -34,7 +34,7 @@ storage. Better Auth integration remains pending.
   `status` probes, `/api/investing/health`, and the two machine endpoints that
   carry their own secret: the card-terms ingest and `/api/cron/investing-sync`)
   or the request has a verified session. Everything else answers
-  `401`, including the routes that spend the Anthropic key (`/api/agent/*`), the
+  `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
   Investing keeps a second, later check on top: `investingTenantId` decides
   *which tenant* the request is served under. The `/investing/*` SPA shell and
@@ -187,6 +187,10 @@ locally, create your own Neon branch and put its connection string, a
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
+- `MISTRAL_API_KEY` — enables `/api/agent/*` (invoice extraction, chat, AI
+  categorization). Obtained from console.mistral.ai (La Plateforme). Absent
+  means `/api/agent/status` answers `configured: false` and the agent routes
+  answer `503`.
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.

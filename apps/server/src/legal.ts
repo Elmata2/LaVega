@@ -62,20 +62,21 @@ export const privacyHtml = page(
 </ul>
 
 <h2>AI-functies — standaard uit</h2>
-<p>LaVega heeft vier functies die een AI-model van <strong>Anthropic</strong> gebruiken. Ze zijn <strong>opt-in</strong>: je zet ze zelf aan, en wat er verstuurd wordt krijg je eerst te zien ter bevestiging. Staan ze uit, dan gaat er niets heen.</p>
+<p>LaVega heeft vier functies die een AI-model van <strong>Mistral</strong> gebruiken. Ze zijn <strong>opt-in</strong>: je zet ze zelf aan, en wat er verstuurd wordt krijg je eerst te zien ter bevestiging. Staan ze uit, dan gaat er niets heen.</p>
 <ul>
   <li><strong>Factuur uitlezen</strong> — het factuurdocument dat je aanbiedt (PDF), om er bedrag, datum en leverancier uit te halen.</li>
   <li><strong>Transacties categoriseren</strong> — alleen de omschrijving van een transactie, met een filter dat IBANs, bedragen en datums er vooraf uit haalt. Niet je saldo, niet je rekeningnummer.</li>
   <li><strong>Chat</strong> — de context van het tabblad waar je op staat: rekeningtypes en saldi, abonnementen, facturen en btw-instellingen. Rekeningnummers gaan niet mee.</li>
   <li><strong>Reisfeiten opzoeken</strong> — de naam van een aanbieder of kaart, geen persoonsgegevens.</li>
 </ul>
-<p>Anthropic verwerkt deze gegevens <strong>buiten de EU</strong> (Verenigde Staten) om er een antwoord op te geven. De sleutel is van ons, niet van jou; je hoeft dus geen eigen account. Wij bewaren deze verzoeken niet.</p>
+<p>Mistral verwerkt deze gegevens <strong>binnen de EU</strong> (Frankrijk) om er een antwoord op te geven. De sleutel is van ons, niet van jou; je hoeft dus geen eigen account. Wij bewaren deze verzoeken niet.</p>
+<p>Bij Chat en Reisfeiten zoekt het model ook op het open web; die pagina's komen van overal en vallen buiten deze garantie.</p>
 
 <h2>Facturen per e-mail — alleen als je het aanzet</h2>
 <p>Zet je het doorstuuradres voor facturen aan, dan loopt inkomende post langs <strong>Cloudflare</strong> (die het adres bedient) naar <strong>n8n</strong> (dat de mail en de bijlagen klaarzet voor je Facturen-scherm). Een factuur wordt pas geboekt nadat jij hem bevestigt. Gebruik je een eigen n8n-server, dan gaat het naar de jouwe.</p>
 
 <h2>De rol van de server</h2>
-<p>De server: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Anthropic-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt elke API achter een ingelogde sessie.</p>
+<p>De server: (a) voert de Enable Banking-autorisatie uit met kortstondige sessietokens; (b) haalt publieke, niet-persoonlijke spaarrentes op (bron: geld.nl) en wisselkoersen; (c) houdt de Mistral-sleutel vast en is de enige plek die met het AI-model praat, zodat die sleutel nooit in je browser staat; en (d) bewaakt elke API achter een ingelogde sessie.</p>
 
 <h2>Wat er wél op de server staat</h2>
 <p>Hier stond eerder dat de server je administratie niet bewaart. Sinds we een database (Neon) gebruiken klopt dat niet meer, en we schrijven het liever precies op dan mooi.</p>
@@ -90,7 +91,7 @@ export const privacyHtml = page(
 <table>
   <tr><th align="left">Wie</th><th align="left">Wat er heen gaat</th><th align="left">Wanneer</th></tr>
   <tr><td><strong>Enable Banking</strong></td><td>Banktoegang (AIS), rekening- en transactiegegevens</td><td>Als je een bank koppelt</td></tr>
-  <tr><td><strong>Anthropic</strong> (VS)</td><td>Factuurdocumenten, transactieomschrijvingen, chatcontext</td><td>Alleen met AI-functies aan</td></tr>
+  <tr><td><strong>Mistral</strong> (EU)</td><td>Factuurdocumenten, transactieomschrijvingen, chatcontext</td><td>Alleen met AI-functies aan</td></tr>
   <tr><td><strong>Cloudflare</strong></td><td>Inkomende factuurmail</td><td>Alleen met het factuuradres aan</td></tr>
   <tr><td><strong>n8n</strong></td><td>Diezelfde mail plus bijlagen</td><td>Alleen met het factuuradres aan</td></tr>
   <tr><td><strong>Google</strong> (Apps Script)</td><td>Je e-mailadres</td><td>Alleen als je je op de wachtlijst zet</td></tr>

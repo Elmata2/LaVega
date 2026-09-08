@@ -423,7 +423,7 @@ export const GRENS_COPY = {
   },
 
   /** De uitleg boven het antwoordformulier. Geen toestemmingsstap, en dat is
-   *  bewust: bij de AI-categorisatie bestaat die stap omdat er tekst naar Claude
+   *  bewust: bij de AI-categorisatie bestaat die stap omdat er tekst naar Mistral
    *  gaat (Transacties.tsx). Hier wordt lokaal gemeten en lokaal bewaard, dus
    *  een toestemmingsvraag zou theater zijn. Wat er wél moet staan is wat een
    *  antwoord DOET — namelijk niets aan de bedragen. */

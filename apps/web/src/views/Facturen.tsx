@@ -85,7 +85,7 @@ import "../styles/views.css";
  */
 
 /** Shape returned by our own server proxy (POST /api/agent/extract-invoice).
- *  The browser only ever talks to our server — never api.anthropic.com. */
+ *  The browser only ever talks to our server — never api.mistral.ai. */
 type ExtractResponse = {
   fields: {
     counterparty: string;
@@ -752,7 +752,7 @@ export default function Facturen({
 
   // Opt-in, per-document: only fires when the owner has enabled the toggle AND
   // dropped/picked a specific PDF. Reads the file to base64 and POSTs it to OUR
-  // server proxy (never to Anthropic directly). On success it PRE-FILLS the
+  // server proxy (never to Mistral directly). On success it PRE-FILLS the
   // manual form as a draft — nothing is saved until the owner clicks "Toevoegen".
   async function handleExtractPdf(file: File) {
     setAiBusy(true);
@@ -904,10 +904,10 @@ export default function Facturen({
               aria-label="AI-facturen lezen"
               onChange={(e) => toggleAi(e.target.checked)}
             />{" "}
-            AI-facturen lezen (PDF → Claude)
+            AI-facturen lezen (PDF → Mistral)
           </label>
           <p className="cell-sub">
-            Alleen met deze schakelaar aan gaat een PDF via onze server naar Claude — dat ene
+            Alleen met deze schakelaar aan gaat een PDF via onze server naar Mistral — dat ene
             document, en je bevestigt zelf voor het meetelt.
           </p>
           {importNote && <p className="cell-sub">{importNote}</p>}

@@ -91,7 +91,7 @@ test("a loopback origin gets CORS on the agent routes, and nobody else does", as
   expect(allowed.headers.get("access-control-allow-origin")).toBe("http://localhost:5174");
   expect(allowed.headers.get("vary")).toBe("Origin");
 
-  // These routes spend the owner's Anthropic key, so an open policy would let
+  // These routes spend the owner's Mistral key, so an open policy would let
   // any page on the internet spend it. Only loopback is echoed back.
   const stranger = await app.request("/api/agent/status", {
     headers: { Origin: "https://evil.example.com" },

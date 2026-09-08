@@ -67,7 +67,7 @@ export type TabState = {
  *  small and well under the server's MAX_CONTEXT_CHARS budget. */
 const MAX_ITEMS = 100;
 
-/** App uses English view ids for two tabs; the server allowlist (and Claude's
+/** App uses English view ids for two tabs; the server allowlist (and Mistral's
  *  per-tab prompt) key them in Dutch. Normalize here so the `tab` we return —
  *  and thus the `tab` the widget forwards to the server — matches the
  *  allowlist EXACTLY. All other views already share their name with the tab. */

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { sanitizeTravelInput, lookupProviderTerms } from "./travel.js";
 
 const valid = {
@@ -97,66 +97,77 @@ test("a known fact outside the namespace, or carrying money, is refused", () => 
 });
 
 test("the travel prompt is composed from _base.md + travel.md, with the owner's facts marked", async () => {
-  let sent: Record<string, unknown> = {};
-  const client = {
-    messages: {
-      create: async (arg: Record<string, unknown>) => {
-        sent = arg;
-        return {
-          content: [{ type: "tool_use", name: "report_provider_terms", input: { providers: [] } }],
-        };
-      },
+  let sent: { system: string } | undefined;
+  const provider = {
+    chatWithSearch: async (arg: { system: string }) => {
+      sent = arg;
+      return { text: JSON.stringify({ providers: [] }), sources: [] };
     },
   } as never;
   const input = sanitizeTravelInput({
     ...valid,
     knownFacts: [{ subject: "ING", key: "fxFeePct", value: "1.4" }],
   });
-  await lookupProviderTerms(input, "k", { client });
-  const system = String(sent.system);
+  await lookupProviderTerms(input, "k", { provider });
+  const system = sent?.system ?? "";
   expect(system).toContain("LaVega — basis voor elke agent");
   expect(system).toContain("CURRENT terms"); // travel.md itself
   expect(system).toContain("- ING fxFeePct = 1.4 (door de gebruiker)");
 });
 
-/* --- The model call, with a stubbed client (no network, no key). --- */
+/* --- The model call, with a stubbed provider (no network, no key). --- */
 
-function stubClient(providers: unknown) {
-  return {
-    messages: {
-      create: async () => ({
-        content: [{ type: "tool_use", name: "report_provider_terms", input: { providers } }],
-      }),
-    },
-  } as never;
+function stubProvider(providers: unknown) {
+  const chatWithSearch = vi.fn(async () => ({
+    text: JSON.stringify({ providers }),
+    sources: [],
+  }));
+  return { chatWithSearch } as never;
 }
 
 test("lookup returns terms for the providers we asked about", async () => {
-  const client = stubClient([
+  const provider = stubProvider([
     { provider: "Trading 212", fxFeePct: 0, cashbackPct: 1, note: "geen wisselkosten" },
     { provider: "ING", fxFeePct: 1.2 },
   ]);
-  const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { client });
+  const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
   expect(out).toHaveLength(2);
   expect(out[0]).toMatchObject({ provider: "Trading 212", fxFeePct: 0, cashbackPct: 1 });
   expect(out[1]).toMatchObject({ provider: "ING", fxFeePct: 1.2 });
 });
 
 test("a product the user does not hold is dropped, and unverifiable fields stay undefined", async () => {
-  const client = stubClient([
+  const provider = stubProvider([
     { provider: "Some Other Bank", fxFeePct: 0 }, // never asked for
     { provider: "trading 212", fxFeePct: 0, cashbackPct: "veel" }, // case-insensitive match, junk number
   ]);
-  const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { client });
+  const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
   expect(out.map((o) => o.provider)).toEqual(["Trading 212"]); // normalized back to what we asked
   expect(out[0].cashbackPct).toBeUndefined(); // not coerced to 0
 });
 
-test("a model reply with no tool call yields no terms rather than throwing", async () => {
-  const client = {
-    messages: { create: async () => ({ content: [{ type: "text", text: "sorry" }] }) },
+test("a reply with no providers array yields no terms rather than throwing", async () => {
+  const provider = {
+    chatWithSearch: async () => ({ text: JSON.stringify({ sorry: true }), sources: [] }),
   } as never;
-  expect(await lookupProviderTerms(sanitizeTravelInput(valid), "k", { client })).toEqual([]);
+  expect(await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider })).toEqual([]);
+});
+
+test("a reply that isn't valid JSON yields no terms rather than throwing", async () => {
+  const provider = {
+    chatWithSearch: async () => ({ text: "sorry, I couldn't verify that", sources: [] }),
+  } as never;
+  expect(await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider })).toEqual([]);
+});
+
+test("calls chatWithSearch, confirming the lookup has search capability wired in", async () => {
+  const chatWithSearch = vi.fn(async () => ({
+    text: JSON.stringify({ providers: [] }),
+    sources: [],
+  }));
+  const provider = { chatWithSearch } as never;
+  await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
+  expect(chatWithSearch).toHaveBeenCalledTimes(1);
 });
 
 test("a provider that looks like an account number is refused at the boundary", () => {
@@ -185,8 +196,8 @@ test("real brand names with digits still pass", () => {
 test("with ONE provider asked, an answer under any name is attributed to it", async () => {
   const single = { ...valid, providers: ["American Express"] };
   for (const name of ["Amex", "American Express Nederland", "AMERICAN EXPRESS", ""]) {
-    const client = stubClient([{ provider: name, fxFeePct: 2 }]);
-    const out = await lookupProviderTerms(sanitizeTravelInput(single), "k", { client });
+    const provider = stubProvider([{ provider: name, fxFeePct: 2 }]);
+    const out = await lookupProviderTerms(sanitizeTravelInput(single), "k", { provider });
     expect(out).toHaveLength(1);
     expect(out[0].provider).toBe("American Express"); // keyed by what WE asked
     expect(out[0].fxFeePct).toBe(2);
@@ -194,14 +205,14 @@ test("with ONE provider asked, an answer under any name is attributed to it", as
 });
 
 test("with one asked, a model volunteering extra products still can't inject them", async () => {
-  const client = stubClient([
+  const provider = stubProvider([
     { provider: "Amex", fxFeePct: 2 },
     { provider: "Wise", fxFeePct: 0.4 },
   ]);
   const out = await lookupProviderTerms(
     sanitizeTravelInput({ ...valid, providers: ["American Express"] }),
     "k",
-    { client },
+    { provider },
   );
   expect(out).toHaveLength(1);
   expect(out[0]).toMatchObject({ provider: "American Express", fxFeePct: 2 });
@@ -209,12 +220,12 @@ test("with one asked, a model volunteering extra products still can't inject the
 
 test("with several asked, near-matches attach to the right one and strangers are refused", async () => {
   const many = { ...valid, providers: ["ING", "American Express"] };
-  const client = stubClient([
+  const provider = stubProvider([
     { provider: "ING Bank", fxFeePct: 1.4 },
     { provider: "Amex", fxFeePct: 2 }, // no containment either way -> refused
     { provider: "Wise", fxFeePct: 0.4 },
   ]);
-  const out = await lookupProviderTerms(sanitizeTravelInput(many), "k", { client });
+  const out = await lookupProviderTerms(sanitizeTravelInput(many), "k", { provider });
   expect(out.map((o) => o.provider)).toEqual(["ING"]);
   expect(out[0].fxFeePct).toBe(1.4);
 });

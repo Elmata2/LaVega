@@ -206,7 +206,7 @@ export default function App() {
     setOwnerNameState(next); // keep the field exactly as typed, spaces and all
     setOwnerName(next);
   }
-  // Whether the server has an ANTHROPIC_API_KEY (drives the AI features'
+  // Whether the server has a MISTRAL_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
   // A question raised elsewhere in the UI (e.g. the per-category "vs.

@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig } from "./config.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
-import { extractInvoiceFields } from "./agent/anthropicExtract.js";
+import { extractInvoiceFields } from "./agent/invoiceExtract.js";
 import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
 import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
@@ -15,8 +15,8 @@ import { createRateLimiter, rateLimitKey } from "./agent/rateLimit.js";
 import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
 
-/* Agent proxy routes. The server holds the Anthropic key (it never reaches the
- * client) and is the ONLY place that talks to Claude. `deps.extract`/`deps.chat`
+/* Agent proxy routes. The server holds the Mistral key (it never reaches the
+ * client) and is the ONLY place that talks to Mistral. `deps.extract`/`deps.chat`
  * are injectable so routes can be tested without a real network call. */
 
 type Deps = {
@@ -33,6 +33,15 @@ type Deps = {
 // address; see the note there for why it is not the route name alone.
 const limit = createRateLimiter(20, 60_000);
 
+// Mistral's error text (up to 2000 chars of its raw response body, per
+// mistral.ts) must never reach the browser — it can carry more detail about
+// our account/usage than a stranger should see. Every AI-route failure logs
+// the real error server-side and returns this one fixed message instead.
+const AI_ERROR_MESSAGE = "De AI-dienst gaf een fout; probeer het later opnieuw.";
+
+function logAiError(route: string, e: unknown): void {
+  console.error(`agent/${route}: ${e instanceof Error ? e.message : String(e)}`);
+}
 
 /* This request's rate-limit bucket for `route`. */
 function bucket(c: { req: { header(name: string): string | undefined } }, route: string): string {
@@ -50,7 +59,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // key itself is never returned. Lives here, not in index.ts (Task 1 deferred).
   app.get("/api/agent/status", (c) => c.json({ configured: loadLlmConfig().configured }));
 
-  // Extract one invoice's fields via Claude. Guard order: 503 (not configured)
+  // Extract one invoice's fields via Mistral. Guard order: 503 (not configured)
   // -> 429 (rate limited) -> 400 (bad/oversize input, thrown by the redaction
   // boundary) -> 502 (extraction failed). The request body is sanitized BEFORE
   // it can reach the SDK, so transactions/balances never leave the browser.
@@ -58,7 +67,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
-    if (!limit(bucket(c, "extract"))) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
+    if (!limit(bucket(c, "extract")))
+      return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
     try {
@@ -73,19 +83,21 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     try {
       return c.json(await extract(input, apiKey, facts));
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "extractie mislukt" }, 502);
+      logAiError("extract-invoice", e);
+      return c.json({ error: AI_ERROR_MESSAGE }, 502);
     }
   });
 
-  // Stream one chat turn from Claude. Guard order matches extract-invoice:
+  // Stream one chat turn from Mistral. Guard order matches extract-invoice:
   // 503 (not configured) -> 429 (rate limited) -> 400 (bad body / no messages)
   // -> stream. `context` is redacted per-tab by `sanitizeChatContext` BEFORE it
-  // reaches `chat` — that's the boundary that keeps raw data off Claude.
+  // reaches `chat` — that's the boundary that keeps raw data off Mistral.
   app.post("/api/agent/chat", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
-    if (!limit(bucket(c, "chat"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "chat")))
+      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let tab = "";
     let messages;
     let context;
@@ -109,12 +121,13 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         }
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
-        await stream.writeSSE({ event: "error", data: e instanceof Error ? e.message : "fout" });
+        logAiError("chat", e);
+        await stream.writeSSE({ event: "error", data: AI_ERROR_MESSAGE });
       }
     });
   });
 
-  // Bulk-categorize onbekend transactions via Claude. Guard order matches the
+  // Bulk-categorize onbekend transactions via Mistral. Guard order matches the
   // other agent routes: 503 -> 429 -> 400 -> 502. `sanitizeCategorizeInput`
   // strips every item down to {id,text,sign} BEFORE it can reach the model, so
   // amounts/accounts/balances never leave the browser.
@@ -122,7 +135,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
-    if (!limit(bucket(c, "categorize"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "categorize")))
+      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
     try {
@@ -137,7 +151,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     try {
       return c.json(await categorize(input, apiKey, facts));
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "categorisatie mislukt" }, 502);
+      logAiError("categorize", e);
+      return c.json({ error: AI_ERROR_MESSAGE }, 502);
     }
   });
 
@@ -150,7 +165,8 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     const { configured, apiKey } = loadLlmConfig();
     if (!configured || !apiKey)
       return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
-    if (!limit(bucket(c, "travel"))) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!limit(bucket(c, "travel")))
+      return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());

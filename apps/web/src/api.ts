@@ -32,8 +32,8 @@ export async function apiErrorMessage(res: Response): Promise<string> {
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
 /** Bulk-categorize onbekend transactions via our server's `POST
- *  /api/agent/categorize` (which proxies Claude — the browser never talks to
- *  Anthropic directly). Returns one `{id, category}` per transaction the model
+ *  /api/agent/categorize` (which proxies Mistral — the browser never talks to
+ *  Mistral directly). Returns one `{id, category}` per transaction the model
  *  could classify; ids it couldn't place are simply absent. Throws with the
  *  server's `{error}` message on a non-OK response (503/429/400/502). */
 export async function categorizeTxs(
@@ -120,7 +120,7 @@ export function dispatchSseRecord(record: string, handlers: ChatStreamHandlers):
 }
 
 /** Stream one chat turn from our server's `POST /api/agent/chat` (which
- *  itself proxies Claude — the browser never talks to Anthropic directly).
+ *  itself proxies Mistral — the browser never talks to Mistral directly).
  *  Non-OK responses (503 unconfigured, 429 rate-limited, 400 bad body) are
  *  reported via `onError` with the server's `{error}` message; a healthy
  *  response is an SSE stream of `data:` text chunks terminated by

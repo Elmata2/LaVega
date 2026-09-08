@@ -154,12 +154,12 @@ export function maskApplicationId(applicationId: string | null): string | null {
 }
 
 /**
- * Load the Anthropic LLM config (server-only; the API key never reaches the
- * client). `configured` is true only when ANTHROPIC_API_KEY is a non-empty
+ * Load the Mistral LLM config (server-only; the API key never reaches the
+ * client). `configured` is true only when MISTRAL_API_KEY is a non-empty
  * string.
  */
 export function loadLlmConfig(): { configured: boolean; apiKey: string | null } {
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? null;
+  const apiKey = process.env.MISTRAL_API_KEY ?? null;
   return { configured: typeof apiKey === "string" && apiKey.length > 0, apiKey };
 }
 

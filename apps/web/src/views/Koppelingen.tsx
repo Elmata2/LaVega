@@ -250,7 +250,7 @@ export default function Koppelingen({ storage }: KoppelingenProps) {
 
       {info === "koppeling" && (
         <InfoNote id="koppeling">
-          Je eigen n8n leest je mailbox, laat Claude bepalen of er een factuur in zit, en houdt die
+          Je eigen n8n leest je mailbox, laat Mistral bepalen of er een factuur in zit, en houdt die
           vast in een wachtrij. LaVega haalt die rij rechtstreeks op:{" "}
           <strong>jouw mailbox → jouw n8n → jouw browser</strong>. De LaVega-server komt er niet aan
           te pas en ziet dus nooit een factuurbedrag.

@@ -1,7 +1,7 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { Hono } from "hono";
 import { registerAgentRoutes } from "./agent-routes.js";
-import type { ExtractedInvoice } from "./agent/anthropicExtract.js";
+import type { ExtractedInvoice } from "./agent/invoiceExtract.js";
 
 const FAKE_RESULT: { fields: ExtractedInvoice; confidence: number } = {
   fields: {
@@ -16,17 +16,17 @@ const FAKE_RESULT: { fields: ExtractedInvoice; confidence: number } = {
   confidence: 0.9,
 };
 
-/** Set (or clear) ANTHROPIC_API_KEY for the duration of an async body, then
+/** Set (or clear) MISTRAL_API_KEY for the duration of an async body, then
  *  restore it — matches config.test.ts so the env can't leak across tests. */
 async function withApiKey(value: string | undefined, fn: () => Promise<void>): Promise<void> {
-  const prev = process.env.ANTHROPIC_API_KEY;
+  const prev = process.env.MISTRAL_API_KEY;
   try {
-    if (value === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = value;
+    if (value === undefined) delete process.env.MISTRAL_API_KEY;
+    else process.env.MISTRAL_API_KEY = value;
     await fn();
   } finally {
-    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = prev;
+    if (prev === undefined) delete process.env.MISTRAL_API_KEY;
+    else process.env.MISTRAL_API_KEY = prev;
   }
 }
 
@@ -190,6 +190,76 @@ test("only the sanitized context reaches the chat agent — disallowed keys are 
     const context = captured?.context as Record<string, unknown>;
     expect(context.txs).toBeUndefined();
     expect(context.invoices).toEqual([{ id: 1 }]);
+  });
+});
+
+test("extract-invoice: an upstream error's raw body never reaches the client, only a fixed Dutch message", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAgentRoutes(app, {
+      extract: async () => {
+        throw new Error("mistral chat 429: SECRET_UPSTREAM_MARKER rate limit details");
+      },
+    });
+    const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+    expect(res.status).toBe(502);
+    const body = await res.text();
+    expect(body).not.toContain("SECRET_UPSTREAM_MARKER");
+    expect(body).toContain("De AI-dienst gaf een fout");
+    expect(
+      errSpy.mock.calls.some((c) => String(c.join(" ")).includes("SECRET_UPSTREAM_MARKER")),
+    ).toBe(true);
+    errSpy.mockRestore();
+  });
+});
+
+test("categorize: an upstream error's raw body never reaches the client, only a fixed Dutch message", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAgentRoutes(app, {
+      categorize: async () => {
+        throw new Error("mistral chat 500: SECRET_UPSTREAM_MARKER server trace");
+      },
+    });
+    const res = await app.request(
+      "/api/agent/categorize",
+      jsonPost({ items: [{ id: "t1", text: "x", sign: "out" }] }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.text();
+    expect(body).not.toContain("SECRET_UPSTREAM_MARKER");
+    expect(body).toContain("De AI-dienst gaf een fout");
+    expect(
+      errSpy.mock.calls.some((c) => String(c.join(" ")).includes("SECRET_UPSTREAM_MARKER")),
+    ).toBe(true);
+    errSpy.mockRestore();
+  });
+});
+
+test("chat: an upstream error's raw body never reaches the client via the SSE error event, only a fixed Dutch message", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    const app = new Hono();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerAgentRoutes(app, {
+      // eslint-disable-next-line require-yield
+      chat: async function* () {
+        throw new Error("mistral conversation 502: SECRET_UPSTREAM_MARKER");
+      },
+    });
+    const res = await app.request(
+      "/api/agent/chat",
+      jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).not.toContain("SECRET_UPSTREAM_MARKER");
+    expect(body).toContain("De AI-dienst gaf een fout");
+    expect(
+      errSpy.mock.calls.some((c) => String(c.join(" ")).includes("SECRET_UPSTREAM_MARKER")),
+    ).toBe(true);
+    errSpy.mockRestore();
   });
 });
 

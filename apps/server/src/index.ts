@@ -136,7 +136,7 @@ const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
  * `configured: true` to curl while the app on screen insisted there was no key.
  *
  * Deliberately NOT `Access-Control-Allow-Origin: *` the way /api/rates is. Those
- * two endpoints return public data; these routes SPEND the owner's Anthropic
+ * two endpoints return public data; these routes SPEND the owner's Mistral
  * key, so an open policy would let any page on the internet spend it. Only a
  * loopback origin is echoed back, which no remote site can claim.
  */

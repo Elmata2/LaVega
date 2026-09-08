@@ -20,7 +20,7 @@ const MAX_MSG_CHARS = 8_000;
 const MAX_MSGS = 20;
 
 /** Per-tab allowlist of top-level context keys the client may send. Nothing
- *  outside this can reach Claude — the chat redaction boundary. */
+ *  outside this can reach Mistral — the chat redaction boundary. */
 const ALLOW: Record<string, readonly string[]> = {
   overview: ["entities", "categories", "alertCount", "shortfall", "bufferCents"],
   rekeningen: ["accounts"],
@@ -66,14 +66,14 @@ export function sanitizeMessages(raw: unknown): ChatMessage[] {
       if ((role === "user" || role === "assistant") && typeof content === "string") {
         // Drop empty/whitespace-only messages: a turn that yields no text
         // leaves an empty-content assistant message in history, which
-        // Anthropic rejects.
+        // Mistral rejects.
         if (content.trim() === "") continue;
         out.push({ role, content: scrubPersonalValues(content).slice(0, MAX_MSG_CHARS) });
       }
     }
   }
   const capped = out.slice(-MAX_MSGS);
-  // Anthropic requires the first message to be `user`; the tail slice (or a
+  // Mistral requires the first message to be `user`; the tail slice (or a
   // history that opened mid-turn) can leave a leading `assistant`. Drop any
   // leading assistant turns so the result starts with `user` (or is empty).
   let start = 0;

@@ -9,7 +9,7 @@ export type RateLimiter = ((key: string) => boolean) & { readonly size: number }
  *
  * Single-process, single-user personal app: the counts live in a Map that's
  * lost on restart. Good enough to keep a runaway client (or a stuck retry loop)
- * from hammering the paid Anthropic API.
+ * from hammering the paid Mistral API.
  */
 export function createRateLimiter(
   max: number,
@@ -39,7 +39,7 @@ export function createRateLimiter(
  *
  * It used to be the route name alone, which made every caller in the world
  * share one bucket. That cut both ways — a stranger could spend 20 requests a
- * minute on the owner's Anthropic key, and those same 20 locked the owner out
+ * minute on the owner's Mistral key, and those same 20 locked the owner out
  * of his own AI features.
  *
  * `userId` (from the verified session) is preferred because it cannot be

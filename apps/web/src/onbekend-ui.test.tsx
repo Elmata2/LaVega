@@ -127,7 +127,7 @@ test("without a server key the panel names the missing key, not a vague failure"
   const html = renderToStaticMarkup(
     <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP")], false)} />,
   );
-  expect(html).toContain("geen Anthropic-sleutel");
+  expect(html).toContain("geen Mistral-sleutel");
   expect(html).not.toContain("Laat de AI ze lezen");
 });
 

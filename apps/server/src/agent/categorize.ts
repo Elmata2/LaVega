@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { AGENTS, CATEGORY_OPTIONS, scrubPersonalValues, type LearnedFact } from "@lavega/core";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
+import { createMistralProvider } from "./mistral.js";
 
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
@@ -9,7 +9,7 @@ const MAX_ITEMS = 200;
 const MAX_TEXT = 200;
 
 /** THE redaction boundary for bulk categorization: only {id, text, sign} per
- *  item can ever reach Claude — never amounts, balances, account keys, or dates.
+ *  item can ever reach Mistral — never amounts, balances, account keys, or dates.
  *  Builds a fresh array from allowlisted fields; throws on empty/oversize.
  *
  *  M5: an allowlist on field names says nothing about what sits inside `text`
@@ -35,34 +35,11 @@ export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[]
   return { items };
 }
 
-const CATEGORIZE_TOOL = {
-  name: "categorize_transactions",
-  description: "Wijs elke transactie een categorie toe uit de toegestane lijst.",
-  input_schema: {
-    type: "object",
-    properties: {
-      results: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            category: { type: "string", enum: [...CATEGORY_OPTIONS] },
-          },
-          required: ["id", "category"],
-        },
-      },
-    },
-    required: ["results"],
-  },
-} as const;
-
 const VALID = new Set(CATEGORY_OPTIONS);
 
-/** Bulk-categorize transactions via Haiku (forced tool). Returns [{id, category}]
- *  for the ids the model classified, filtered to the allowed taxonomy. The only
- *  place `@anthropic-ai/sdk` is imported for categorization; it only ever sees
- *  the sanitized {id, text, sign} items.
+/** Bulk-categorize transactions via the Mistral provider (JSON mode). Returns
+ *  [{id, category}] for the ids the model classified, filtered to the allowed
+ *  taxonomy. It only ever sees the sanitized {id, text, sign} items.
  *
  *  Its behaviour lives in `prompts/categorize.md` (composed with `_base.md`),
  *  not in this file — plus what it has learned about how the owner re-files its
@@ -72,21 +49,23 @@ export async function categorizeTransactions(
   apiKey: string,
   facts: readonly LearnedFact[] = [],
 ): Promise<{ id: string; category: string }[]> {
-  const client = new Anthropic({ apiKey });
+  const provider = createMistralProvider(apiKey, "mistral-small-latest");
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
-  const res = await client.messages.create({
-    model: "claude-haiku-4-5",
-    // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
-    // land well under this, so the forced-tool JSON won't truncate mid-array.
-    max_tokens: 8192,
+  const res = await provider.complete({
     system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
-    tools: [CATEGORIZE_TOOL as unknown as Anthropic.Tool],
-    tool_choice: { type: "tool", name: "categorize_transactions" },
-    messages: [{ role: "user", content: `Transacties:\n${list}` }],
+    user: `Transacties:\n${list}`,
+    json: true,
+    // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
+    // land well under this, so the JSON won't truncate mid-array.
+    maxTokens: 8192,
   });
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") return [];
-  const results = (block.input as { results?: unknown }).results;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(res.text);
+  } catch {
+    return [];
+  }
+  const results = (parsed as { results?: unknown } | null)?.results;
   if (!Array.isArray(results)) return [];
   const out: { id: string; category: string }[] = [];
   for (const r of results) {

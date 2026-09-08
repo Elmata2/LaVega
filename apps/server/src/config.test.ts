@@ -62,16 +62,16 @@ test("maskApplicationId shows only the first 8 characters", () => {
   expect(maskApplicationId(null)).toBeNull();
 });
 
-test("loadLlmConfig: configured only when ANTHROPIC_API_KEY is set", () => {
-  const prev = process.env.ANTHROPIC_API_KEY;
+test("loadLlmConfig: configured only when MISTRAL_API_KEY is set", () => {
+  const prev = process.env.MISTRAL_API_KEY;
   try {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
     expect(loadLlmConfig()).toEqual({ configured: false, apiKey: null });
-    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-    expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "sk-ant-test" });
+    process.env.MISTRAL_API_KEY = "test-mistral-key";
+    expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "test-mistral-key" });
   } finally {
-    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = prev;
+    if (prev === undefined) delete process.env.MISTRAL_API_KEY;
+    else process.env.MISTRAL_API_KEY = prev;
   }
 });
 

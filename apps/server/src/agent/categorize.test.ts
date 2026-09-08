@@ -3,16 +3,13 @@ import { AGENTS } from "@lavega/core";
 import { sanitizeCategorizeInput } from "./categorize.js";
 import { sanitizeKnownFacts } from "./facts.js";
 
-// Mock the SDK so categorizeTransactions runs without a network call.
-const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: class {
-    messages = { create: createMock };
-  },
+const { completeMock } = vi.hoisted(() => ({ completeMock: vi.fn() }));
+vi.mock("./mistral.js", () => ({
+  createMistralProvider: () => ({ complete: completeMock }),
 }));
 import { categorizeTransactions } from "./categorize.js";
 
-beforeEach(() => createMock.mockReset());
+beforeEach(() => completeMock.mockReset());
 
 test("sanitizeCategorizeInput keeps only {id,text,sign} — drops amount/accountKey etc.", () => {
   const out = sanitizeCategorizeInput({
@@ -53,21 +50,16 @@ test("sanitizeCategorizeInput coerces sign to in/out", () => {
   expect(out.items.map((i) => i.sign)).toEqual(["out", "in"]);
 });
 
-test("categorizeTransactions uses Haiku forced tool + drops invalid categories", async () => {
-  createMock.mockResolvedValue({
-    content: [
-      {
-        type: "tool_use",
-        name: "categorize_transactions",
-        input: {
-          results: [
-            { id: "t1", category: "Boodschappen" },
-            { id: "t2", category: "NietBestaand" }, // invalid -> dropped
-            { id: "t3", category: "Inkomen" },
-          ],
-        },
-      },
-    ],
+test("categorizeTransactions calls the Mistral provider in JSON mode + drops invalid categories", async () => {
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({
+      results: [
+        { id: "t1", category: "Boodschappen" },
+        { id: "t2", category: "NietBestaand" },
+        { id: "t3", category: "Inkomen" },
+      ],
+    }),
+    usage: { input: 0, output: 0 },
   });
   const out = await categorizeTransactions(
     {
@@ -83,17 +75,17 @@ test("categorizeTransactions uses Haiku forced tool + drops invalid categories",
     { id: "t1", category: "Boodschappen" },
     { id: "t3", category: "Inkomen" },
   ]);
-  const arg = createMock.mock.calls[0][0];
-  expect(arg.model).toBe("claude-haiku-4-5");
-  expect(arg.tool_choice).toEqual({ type: "tool", name: "categorize_transactions" });
-  // The instructions come from prompts/categorize.md + _base.md, not a literal.
+  const arg = completeMock.mock.calls[0][0];
+  expect(arg.json).toBe(true);
+  expect(arg.maxTokens).toBe(8192);
   expect(arg.system).toContain("Categorisatie-agent");
   expect(arg.system).toContain("LaVega — basis voor elke agent");
 });
 
 test("categorizeTransactions is told how the owner re-files its suggestions", async () => {
-  createMock.mockResolvedValue({
-    content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }],
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ results: [] }),
+    usage: { input: 0, output: 0 },
   });
   const facts = sanitizeKnownFacts(
     [
@@ -108,7 +100,7 @@ test("categorizeTransactions is told how the owner re-files its suggestions", as
     AGENTS.categorize,
   );
   await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k", facts);
-  const system: string = createMock.mock.calls[0][0].system;
+  const system: string = completeMock.mock.calls[0][0].system;
   expect(system).toContain("- Overboekingen corrigeerNaar = Eigen overboeking (door de gebruiker)");
   expect(system).not.toContain("Albert Heijn");
 });
@@ -125,8 +117,9 @@ test("a full month-sized batch fits the cap (the AI pass runs month by month)", 
 });
 
 test("redaction boundary end-to-end: nothing but {id,text,sign} reaches the model", async () => {
-  createMock.mockResolvedValue({
-    content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }],
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ results: [] }),
+    usage: { input: 0, output: 0 },
   });
   // A caller that smuggles amounts/IBANs/dates onto the item alongside the text.
   const input = sanitizeCategorizeInput({
@@ -144,7 +137,7 @@ test("redaction boundary end-to-end: nothing but {id,text,sign} reaches the mode
     ],
   });
   await categorizeTransactions(input, "k");
-  const sent = JSON.stringify(createMock.mock.calls[0][0].messages);
+  const sent = completeMock.mock.calls[0][0].user;
   expect(sent).toContain("Onbekende Winkel XYZ");
   for (const leak of ["1234.56", "98765.43", "NL95INGB0674843703", "2026-08-14"]) {
     expect(sent).not.toContain(leak);
@@ -169,23 +162,32 @@ test("sanitizeCategorizeInput scrubs a raw IBAN left in text — defence in dept
 });
 
 test("categorizeTransactions never forwards a raw IBAN even if the caller's text still carries one", async () => {
-  createMock.mockResolvedValue({
-    content: [{ type: "tool_use", name: "categorize_transactions", input: { results: [] } }],
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ results: [] }),
+    usage: { input: 0, output: 0 },
   });
   const input = sanitizeCategorizeInput({
     items: [{ id: "t1", text: "NL91 ABNA 0417 1643 00 Albert Heijn", sign: "out" }],
   });
   await categorizeTransactions(input, "k");
-  const sent: string = JSON.stringify(createMock.mock.calls[0][0].messages);
-  expect(sent).toBe(
-    String.raw`[{"role":"user","content":"Transacties:\nt1\t[out] [IBAN] Albert Heijn"}]`,
-  );
+  const sent: string = completeMock.mock.calls[0][0].user;
+  expect(sent).toBe("Transacties:\nt1\t[out] [IBAN] Albert Heijn");
   expect(sent).not.toContain("NL91");
   expect(sent).not.toContain("1643");
 });
 
-test("categorizeTransactions returns [] when there's no tool_use block", async () => {
-  createMock.mockResolvedValue({ content: [{ type: "text", text: "nope" }] });
+test("categorizeTransactions returns [] when the model's text has no usable results array", async () => {
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ nope: true }),
+    usage: { input: 0, output: 0 },
+  });
+  expect(
+    await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k"),
+  ).toEqual([]);
+});
+
+test("categorizeTransactions returns [] when the model's text isn't JSON", async () => {
+  completeMock.mockResolvedValue({ text: "not json at all", usage: { input: 0, output: 0 } });
   expect(
     await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k"),
   ).toEqual([]);

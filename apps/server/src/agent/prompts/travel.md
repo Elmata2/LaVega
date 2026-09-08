@@ -62,4 +62,17 @@ Use web search only. Do **not** use code execution — you need the provider's
 tariff page, not a calculation. (Measured: allowing it turned a 39-second
 lookup into one still running after several minutes.)
 
-Return your findings through the `report_provider_terms` tool only.
+**Search before you answer.** For every requested product, run at least one
+web search for its current tariff page before writing anything. Never answer
+from memory alone — fees change, and a remembered number is exactly the stale
+guess this brief forbids.
+
+Respond with ONLY a raw JSON object — no markdown fences, no prose before or
+after it — of this shape:
+
+```
+{"providers": [{"provider": "...", "fxFeePct"?: number, "convertFeePct"?: number, "cashbackPct"?: number, "pointsPerEuro"?: number, "transferFreeViaIdeal"?: 0 | 1, "note"?: "..."}]}
+```
+
+One entry per requested product, using the field rules above. Omit a field
+you didn't verify rather than guessing a value for it.

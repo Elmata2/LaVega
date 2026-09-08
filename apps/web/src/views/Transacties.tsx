@@ -72,7 +72,7 @@ type TransactiesProps = {
   onFToChange: (to: string) => void;
   fCategory: string;
   onFCategoryChange: (category: string) => void;
-  /** Whether the server has an Anthropic key — gates the "Categoriseer met AI"
+  /** Whether the server has a Mistral key — gates the "Categoriseer met AI"
    *  button. When false the button is hidden entirely. */
   configured: boolean;
   /** Apply confirmed AI-category decisions against the full tx + rules lists
@@ -321,10 +321,10 @@ export default function Transacties({
 
           {!configured && unknown.byReason.some((b) => REASON_TEXT[b.reason].ai) && (
             /* Name the real cause. The AI route is not "unavailable" in the
-               abstract — the server has no Anthropic key set. Anything vaguer
+               abstract — the server has no Mistral key set. Anything vaguer
                sends someone looking in the wrong place. */
             <p className="cell-sub">
-              De AI-route staat uit: op de server is geen Anthropic-sleutel ingesteld. Tot die er is
+              De AI-route staat uit: op de server is geen Mistral-sleutel ingesteld. Tot die er is
               kun je deze transacties indelen met een eigen regel onder Regels, of ze hier per stuk
               een categorie geven.
             </p>
@@ -342,7 +342,7 @@ export default function Transacties({
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <p className="cell-sub">
             Alleen de <strong>tegenpartij + omschrijving</strong> en de richting (in/uit) van je
-            onbekende transacties gaan via onze server naar Claude — nooit je bedragen, saldi,
+            onbekende transacties gaan via onze server naar Mistral — nooit je bedragen, saldi,
             rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen en
             datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk voorstel
             voordat er iets verandert.

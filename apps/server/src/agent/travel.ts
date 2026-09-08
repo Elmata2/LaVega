@@ -1,7 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { AGENTS, isSafeFact, makeFact } from "@lavega/core";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
+import type { LlmProvider } from "./provider.js";
+import { createMistralProvider } from "./mistral.js";
 
 export type KnownFact = { subject: string; key: string; value: string };
 export type TravelInput = {
@@ -50,7 +51,7 @@ function asTravelFact(f: KnownFact) {
 /** THE redaction boundary for the travel agent — the tightest in the app.
  *
  *  Only a home country, a destination, a currency, provider NAMES, and facts
- *  already known may reach Claude. Balances, amounts, account keys, IBANs,
+ *  already known may reach Mistral. Balances, amounts, account keys, IBANs,
  *  transactions, dates and entity names are structurally unable to pass: this
  *  builds a fresh object from allowlisted, length-capped, shape-checked fields
  *  and never copies the input. The ranking that needs the money happens locally. */
@@ -92,34 +93,6 @@ export function sanitizeTravelInput(raw: unknown): TravelInput {
   return { homeCountry, destination, currency, providers, knownFacts };
 }
 
-const TERMS_TOOL = {
-  name: "report_provider_terms",
-  description:
-    "Rapporteer de actuele voorwaarden per aanbieder. Laat een veld weg als je het niet kunt verifiëren.",
-  input_schema: {
-    type: "object",
-    properties: {
-      providers: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            provider: { type: "string" },
-            fxFeePct: { type: "number" },
-            convertFeePct: { type: "number" },
-            cashbackPct: { type: "number" },
-            pointsPerEuro: { type: "number" },
-            transferFreeViaIdeal: { type: "number", enum: [0, 1] },
-            note: { type: "string" },
-          },
-          required: ["provider"],
-        },
-      },
-    },
-    required: ["providers"],
-  },
-} as const;
-
 export type ProviderTerms = {
   provider: string;
   fxFeePct?: number;
@@ -133,15 +106,6 @@ export type ProviderTerms = {
    *  a fee checked seven months ago must not overwrite one found today. */
   checkedAt?: string;
 };
-
-const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 4 } as const;
-
-/** Hard ceiling per provider. Measured: an "American Express" lookup was still
- *  searching after seven minutes (a brand with a dozen card variants). This now
- *  runs in the BACKGROUND (see cardTerms.ts), so nobody is waiting on it — the
- *  ceiling only has to catch the pathological case, not keep a UI responsive.
- *  120s proved too tight and cut off legitimate work, including Revolut's. */
-const LOOKUP_TIMEOUT_MS = 240_000;
 
 function numeric(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
@@ -168,52 +132,41 @@ function attribute(reported: string, asked: string[], alreadyTaken: number): str
   );
 }
 
-/** Look up current product terms via Sonnet 5 + web search (fees change, so a
+/** Look up current product terms via Mistral + web search (fees change, so a
  *  bundled table would go stale — that is why the indicative tables were
- *  dropped). The ONLY place the Anthropic SDK is touched for travel, and it only
- *  ever sees the sanitized input. Results are filtered back to the providers we
- *  asked about, so the model can't introduce products the user doesn't hold. */
+ *  dropped). The ONLY place the Mistral provider is touched for travel, and it
+ *  only ever sees the sanitized input. Results are filtered back to the
+ *  providers we asked about, so the model can't introduce products the user
+ *  doesn't hold. */
 export async function lookupProviderTerms(
   input: TravelInput,
   apiKey: string,
-  deps: { client?: Anthropic } = {},
+  deps: { provider?: LlmProvider } = {},
 ): Promise<ProviderTerms[]> {
-  const client = deps.client ?? new Anthropic({ apiKey });
+  const provider = deps.provider ?? createMistralProvider(apiKey, "mistral-medium-latest");
   // `_base.md` + `travel.md`, and what the owner has already corrected — the
   // same composition and the same "WAT LAVEGA AL WEET" block the other three
   // agents get, so the learning contract is explained once for all of them.
-  const instructions =
+  const system =
     loadAgentPrompt("travel") + factsBlock(input.knownFacts.map(asTravelFact), AGENTS.travel);
+  const userMessage =
+    `Thuisland: ${input.homeCountry}. Bestemming: ${input.destination}` +
+    (input.currency ? ` (${input.currency})` : "") +
+    `.\nAanbieders: ${input.providers.join(", ")}.`;
 
-  const message = await client.messages.create(
-    {
-      model: "claude-sonnet-5",
-      max_tokens: 2048,
-      system: instructions,
-      tools: [WEB_SEARCH as never, TERMS_TOOL as never],
-      // NOT a forced tool_choice. Forcing this tool makes the model report on its
-      // FIRST turn, before it can run a single web search — and since the prompt
-      // (rightly) forbids guessing, it then reports provider names with no fields
-      // at all. Measured: forced => zero searches and empty terms; auto => ~10
-      // searches and correctly hedged answers. The prompt still says to answer
-      // only through this tool, and a reply without it yields no terms.
-      tool_choice: { type: "auto" },
-      messages: [
-        {
-          role: "user",
-          content:
-            `Thuisland: ${input.homeCountry}. Bestemming: ${input.destination}` +
-            (input.currency ? ` (${input.currency})` : "") +
-            `.\nAanbieders: ${input.providers.join(", ")}.`,
-        },
-      ],
-    },
-    { timeout: LOOKUP_TIMEOUT_MS, maxRetries: 0 },
-  );
+  const { text } = await provider.chatWithSearch({
+    system,
+    messages: [{ role: "user", content: userMessage }],
+    onDelta: () => {},
+  });
 
-  const block = message.content.find((b) => b.type === "tool_use" && b.name === TERMS_TOOL.name);
-  if (!block || block.type !== "tool_use") return [];
-  const rows = (block.input as { providers?: unknown }).providers;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const rows = (parsed as { providers?: unknown } | null)?.providers;
   if (!Array.isArray(rows)) return [];
 
   const out: ProviderTerms[] = [];

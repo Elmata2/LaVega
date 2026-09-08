@@ -19,7 +19,7 @@ type ChatWidgetProps = {
 /** Floating LaVega assistant. Opt-in and local-first: nothing leaves the
  *  browser until the owner enables the assistant AND sends a message. Each turn
  *  forwards only the active tab's pre-computed context (via buildTabContext) plus
- *  the conversation to our own server (POST /api/agent/chat) — never Anthropic
+ *  the conversation to our own server (POST /api/agent/chat) — never Mistral
  *  directly. Default OFF; the consent gate below explains what is sent. */
 export default function ChatWidget({
   view,
@@ -144,8 +144,7 @@ export default function ChatWidget({
             <div className="chat-body">
               <div className="chat-notice">
                 <p>
-                  AI-assistent is nog niet geconfigureerd (ANTHROPIC_API_KEY ontbreekt op de
-                  server).
+                  AI-assistent is nog niet geconfigureerd (MISTRAL_API_KEY ontbreekt op de server).
                 </p>
               </div>
             </div>
@@ -153,9 +152,9 @@ export default function ChatWidget({
             <div className="chat-body">
               <div className="chat-notice">
                 <p>
-                  Ik stuur de gegevens van dít tabblad + je vraag naar Claude (via jouw server, jouw
-                  sleutel) om te antwoorden. Voor actuele cijfers zoek ik op het web. Er wordt niets
-                  opgeslagen.
+                  Ik stuur de gegevens van dít tabblad + je vraag naar Mistral (via jouw server,
+                  jouw sleutel) om te antwoorden. Voor actuele cijfers zoek ik op het web. Er wordt
+                  niets opgeslagen.
                 </p>
                 <button type="button" className="btn btn-primary" onClick={enableAssistant}>
                   Zet assistent aan

@@ -323,7 +323,7 @@ test("convertFeePct is correctable inline and fires the same callback shape as f
 /* --- L1: never advise an action that cannot work. -------------------------
  *
  * The reported bug was "clicking a destination says 'ververs eerst de
- * voorwaarden'" while the server had no ANTHROPIC_API_KEY, so the refresh it
+ * voorwaarden'" while the server had no MISTRAL_API_KEY, so the refresh it
  * asked for answered 503. The block receives `aiAvailable`; these pin that it
  * now uses it, and that the three no-price situations read as three. --- */
 
@@ -375,7 +375,7 @@ test("with no API key the block names the key, not a refresh that cannot work", 
   const c = renderWithDestination({ facts: noFacts, aiAvailable: false });
 
   expect(c.textContent).toContain("deze server heeft geen AI-sleutel");
-  expect(c.textContent).toContain("ANTHROPIC_API_KEY");
+  expect(c.textContent).toContain("MISTRAL_API_KEY");
   // The exact advice that cost him an afternoon.
   expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
   // And no button offering it, anywhere in the block.

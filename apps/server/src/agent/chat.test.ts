@@ -1,31 +1,27 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { AGENTS } from "@lavega/core";
 import { sanitizeKnownFacts } from "./facts.js";
-const { streamMock } = vi.hoisted(() => ({ streamMock: vi.fn() }));
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: class {
-    messages = { stream: streamMock };
-  },
+const { chatWithSearchMock, createMistralProviderMock } = vi.hoisted(() => ({
+  chatWithSearchMock: vi.fn(),
+  createMistralProviderMock: vi.fn(),
+}));
+vi.mock("./mistral.js", () => ({
+  createMistralProvider: createMistralProviderMock.mockImplementation(() => ({
+    chatWithSearch: chatWithSearchMock,
+  })),
 }));
 import { runChat } from "./chat.js";
 
-function fakeStream(events: unknown[]) {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const e of events) yield e;
-    },
-  };
-}
-beforeEach(() => streamMock.mockReset());
+beforeEach(() => {
+  chatWithSearchMock.mockReset();
+  createMistralProviderMock.mockClear();
+});
 
-test("runChat yields only text deltas and sends Sonnet 5 + web_search + tab context", async () => {
-  streamMock.mockReturnValue(
-    fakeStream([
-      { type: "content_block_delta", delta: { type: "thinking_delta", thinking: "hmm" } },
-      { type: "content_block_delta", delta: { type: "text_delta", text: "Hallo" } },
-      { type: "content_block_delta", delta: { type: "text_delta", text: " wereld" } },
-    ]),
-  );
+test("runChat yields the full text and sends Mistral + tab context", async () => {
+  chatWithSearchMock.mockImplementation(async ({ onDelta }) => {
+    onDelta("Hallo wereld");
+    return { text: "Hallo wereld", sources: [] };
+  });
   const chunks: string[] = [];
   for await (const c of runChat({
     tab: "overview",
@@ -34,21 +30,20 @@ test("runChat yields only text deltas and sends Sonnet 5 + web_search + tab cont
     apiKey: "k",
   }))
     chunks.push(c);
-  expect(chunks.join("")).toBe("Hallo wereld");
-  const arg = streamMock.mock.calls[0][0];
-  expect(arg.model).toBe("claude-sonnet-5");
-  expect(arg.tools.some((t: { type: string }) => String(t.type).startsWith("web_search"))).toBe(
-    true,
-  );
+  expect(chunks).toEqual(["Hallo wereld"]); // one yield, not chopped into fake streamed pieces
+  const arg = chatWithSearchMock.mock.calls[0][0];
   expect(JSON.stringify(arg.system)).toContain("alertCount"); // tab context injected into system
   expect(arg.system).toContain("LaVega — basis voor elke agent"); // instruction files, not a literal
   expect(arg.system).not.toContain("WAT LAVEGA AL WEET:"); // nothing learned yet -> no dangling header
+  expect(arg.messages).toEqual([{ role: "user", content: "hoi" }]);
+  expect(createMistralProviderMock).toHaveBeenCalledWith("k", "mistral-medium-latest");
 });
 
 test("chat reads what it has learned about how to answer, and nothing else", async () => {
-  streamMock.mockReturnValue(
-    fakeStream([{ type: "content_block_delta", delta: { type: "text_delta", text: "ok" } }]),
-  );
+  chatWithSearchMock.mockImplementation(async ({ onDelta }) => {
+    onDelta("ok");
+    return { text: "ok", sources: [] };
+  });
   const facts = sanitizeKnownFacts(
     [
       { subject: "antwoord", key: "lengte", value: "kort", source: "user" },
@@ -65,7 +60,7 @@ test("chat reads what it has learned about how to answer, and nothing else", asy
     apiKey: "k",
   }))
     void _;
-  const system: string = streamMock.mock.calls[0][0].system;
+  const system: string = chatWithSearchMock.mock.calls[0][0].system;
   expect(system).toContain("- antwoord lengte = kort (door de gebruiker)");
   expect(system).not.toContain("fxFeePct");
 });

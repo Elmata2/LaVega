@@ -505,7 +505,7 @@ function journeyKey(j: Journey): string {
 /* ---------- Why there is no priced route, and what actually unlocks one ----------
  *
  * Core's own fallback sentence is "ververs eerst de voorwaarden". On a server
- * with no ANTHROPIC_API_KEY that is advice that cannot work: /api/agent/status
+ * with no MISTRAL_API_KEY that is advice that cannot work: /api/agent/status
  * answers `{"configured":false}` and the lookup answers 503, so the refresh the
  * sentence asks for is a no-op. It cost Alexander an afternoon hunting a bug
  * that did not exist.
@@ -683,8 +683,8 @@ export function TermsNotice({
   const noKeyLine = (
     <>
       <p className="cell-sub">
-        Deze server heeft geen AI-sleutel (<code>ANTHROPIC_API_KEY</code>) ingesteld, dus opzoeken
-        kan hier niet — verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de
+        Deze server heeft geen AI-sleutel (<code>MISTRAL_API_KEY</code>) ingesteld, dus opzoeken kan
+        hier niet — verversen zou niets doen. Zet die sleutel in de serveromgeving, of vul de
         percentages zelf in {zelfInvullen}. Wat jij invult wordt nooit door een agent overschreven.
       </p>
       <button type="button" className="card-link" onClick={onRecheckAi} disabled={busy}>
