@@ -96,7 +96,23 @@ function pemFromSetting(value: string): string | null {
   } catch {
     /* not base64 */
   }
-  return null;
+  return wrapBareKeyBody(unescaped);
+}
+
+// The rsaEncryption OID that a PKCS#8 envelope carries right after its
+// version integer; a PKCS#1 body has the modulus integer there instead.
+const RSA_OID = Buffer.from("06092a864886f70d010101", "hex");
+
+/** A key pasted as only the base64 between the header lines (the most common
+ *  dashboard mistake) is wrapped in the envelope its DER bytes call for. */
+function wrapBareKeyBody(value: string): string | null {
+  const body = value.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+=*$/.test(body) || body.length < 200) return null;
+  const der = Buffer.from(body, "base64");
+  if (der.length < 64 || der[0] !== 0x30) return null;
+  const label = der.subarray(0, 32).includes(RSA_OID) ? "PRIVATE KEY" : "RSA PRIVATE KEY";
+  const lines = body.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
 }
 
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {

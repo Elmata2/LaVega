@@ -124,7 +124,7 @@ test("EB_PRIVATE_KEY without the PEM header lines is reported as env-not-pem and
   const pem = "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----";
   try {
     process.env.EB_PRIVATE_KEY = "MIIBbodyonly";
-    expect(loadConfig(configPath).keySource).toBe("env-not-pem");
+    expect(loadConfig(configPath).keySource).toBe("env-not-pem"); // too short to be a key
     expect(loadConfig(configPath).keyShape).toEqual({ kind: "base64-body", length: 12 });
     process.env.EB_PRIVATE_KEY = "./keys/eb.pem";
     expect(loadConfig(configPath).keyShape.kind).toBe("path");
@@ -135,6 +135,57 @@ test("EB_PRIVATE_KEY without the PEM header lines is reported as env-not-pem and
     expect(loadConfig(configPath).privateKey).toBe(pem);
     process.env.EB_PRIVATE_KEY = pem.replace(/\n/g, "\\n");
     expect(loadConfig(configPath).privateKey).toBe(pem);
+  } finally {
+    delete process.env.EB_PRIVATE_KEY;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a key pasted without its header lines is wrapped in the envelope its bytes call for", async () => {
+  const { generateKeyPairSync } = await import("node:crypto");
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const pkcs8 = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+  const pkcs1 = privateKey.export({ type: "pkcs1", format: "pem" }) as string;
+  const bodyOf = (pem: string) =>
+    pem.replace(/-----(BEGIN|END) [^-]+-----/g, "").replace(/\s+/g, "");
+  const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(configPath, JSON.stringify({ applicationId: "abcd1234efgh5678" }));
+  try {
+    process.env.EB_PRIVATE_KEY = bodyOf(pkcs8);
+    let config = loadConfig(configPath);
+    expect(config.keySource).toBe("env");
+    expect(config.privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----\n/);
+    expect(bodyOf(config.privateKey!)).toBe(bodyOf(pkcs8));
+    process.env.EB_PRIVATE_KEY = bodyOf(pkcs1);
+    config = loadConfig(configPath);
+    expect(config.privateKey).toMatch(/^-----BEGIN RSA PRIVATE KEY-----\n/);
+    expect(config.configured).toBe(true);
+  } finally {
+    delete process.env.EB_PRIVATE_KEY;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a wrapped bare key body signs an Enable Banking JWT through the real signing path", async () => {
+  const { generateKeyPairSync } = await import("node:crypto");
+  const { ebJWT } = await import("./eb-client.js");
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+  const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(configPath, JSON.stringify({ applicationId: "abcd1234efgh5678" }));
+  try {
+    process.env.EB_PRIVATE_KEY = pem
+      .replace(/-----(BEGIN|END) [^-]+-----/g, "")
+      .replace(/\s+/g, "");
+    const config = loadConfig(configPath);
+    const jwt = await ebJWT({
+      applicationId: config.applicationId,
+      privateKey: config.privateKey,
+      privateKeyFile: config.privateKeyFile,
+    });
+    expect(jwt.split(".")).toHaveLength(3);
   } finally {
     delete process.env.EB_PRIVATE_KEY;
     rmSync(dir, { recursive: true, force: true });
