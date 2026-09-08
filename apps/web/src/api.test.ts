@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { categorizeTxs, SIGNED_OUT_MESSAGE } from "./api.js";
+import { apiErrorMessage, categorizeTxs, SIGNED_OUT_MESSAGE } from "./api.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -41,4 +41,15 @@ test("a non-401 error with an unparseable body falls back to the status message"
     }),
   );
   await expect(categorizeTxs([])).rejects.toThrow("Verzoek mislukt (500).");
+});
+
+test("apiErrorMessage reads a problems list the way it reads an error string", async () => {
+  const res = new Response(
+    JSON.stringify({ problems: ["Bevestig met confirm", "niet terug te draaien"] }),
+    {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    },
+  );
+  expect(await apiErrorMessage(res)).toBe("Bevestig met confirm niet terug te draaien");
 });

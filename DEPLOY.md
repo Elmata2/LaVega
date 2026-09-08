@@ -202,7 +202,7 @@ set these Vercel **Environment Variables**:
 - `EB_PRIVATE_KEY` — the PEM private key, inline (paste the whole key; literal
   `\n` is accepted). Alternatively `EB_PRIVATE_KEY_FILE` pointing at a mounted file.
 - `EB_REDIRECT_URL` — `https://lavega.dev/api/eb/callback`
-- `EB_PSU_TYPE` — `business` (or `personal`)
+- `EB_PSU_TYPE` — default type of account; the bank picker lets the user pick business or personal per connection
 
 In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
 

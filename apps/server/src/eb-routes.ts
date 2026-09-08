@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
-import { loadConfig, type EbConfig } from "./config.js";
+import { loadConfig, type EbConfig, type PsuType } from "./config.js";
 import { createEbFlowRepository } from "@lavega/database";
 import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { investingTenantId } from "./investing-mount.js";
@@ -74,6 +74,11 @@ function countryCode(raw: string | undefined): string | null {
   return /^[A-Z]{2}$/.test(country) ? country : null;
 }
 
+function psuTypeParam(raw: string | undefined, fallback: PsuType): PsuType | null {
+  if (!raw) return fallback;
+  return raw === "business" || raw === "personal" ? raw : null;
+}
+
 export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): void {
   const { store, tenantId } = dependencies;
   // Bank list for the picker (defaults to NL). Public-ish metadata only.
@@ -83,11 +88,13 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       return c.json({ error: "Enable Banking is nog niet geconfigureerd op de server." }, 503);
     const country = countryCode(c.req.query("country"));
     if (!country) return c.json({ error: "Ongeldige landcode." }, 400);
+    const psuType = psuTypeParam(c.req.query("psu_type"), cfg.psuType);
+    if (!psuType) return c.json({ error: "Ongeldig type rekening." }, 400);
     try {
       const data = (await eb(
         clientConfig(cfg),
         "GET",
-        `/aspsps?country=${country}&psu_type=${cfg.psuType}`,
+        `/aspsps?country=${country}&psu_type=${psuType}`,
       )) as {
         aspsps?: Array<{ name?: string; country?: string; logo?: string }>;
       };
@@ -121,11 +128,17 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     ]).catch((error: unknown) => {
       console.warn("eb sweep skipped", error instanceof Error ? error.message : String(error));
     });
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string; country?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      country?: string;
+      psuType?: string;
+    };
     const name = body.name;
     const country = countryCode(body.country);
     if (!name) return c.json({ error: "Kies een bank (name ontbreekt)." }, 400);
     if (!country) return c.json({ error: "Ongeldige landcode." }, 400);
+    const psuType = psuTypeParam(body.psuType, cfg.psuType);
+    if (!psuType) return c.json({ error: "Ongeldig type rekening." }, 400);
     const state = randomUUID();
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/auth", {
@@ -133,7 +146,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
         aspsp: { name, country },
         state,
         redirect_url: cfg.redirectUrl,
-        psu_type: cfg.psuType,
+        psu_type: psuType,
       })) as { url?: string };
       if (!data.url)
         return c.json({ error: "Geen autorisatie-URL ontvangen van Enable Banking." }, 502);

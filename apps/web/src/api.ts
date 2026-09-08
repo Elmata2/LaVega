@@ -17,8 +17,9 @@ export async function apiErrorMessage(res: Response): Promise<string> {
   if (res.status === 401) return SIGNED_OUT_MESSAGE;
   let msg = `Verzoek mislukt (${res.status}).`;
   try {
-    const parsed = (await res.json()) as { error?: string };
+    const parsed = (await res.json()) as { error?: string; problems?: string[] };
     if (parsed?.error) msg = parsed.error;
+    else if (parsed?.problems?.length) msg = parsed.problems.join(" ");
   } catch {
     /* non-JSON error body; keep the status-based message */
   }

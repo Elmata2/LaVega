@@ -12,7 +12,18 @@ export const DEFAULT_PORT = 8787;
 
 const PLACEHOLDER = "VUL-IN";
 const DEFAULT_REDIRECT_URL = `http://localhost:${DEFAULT_PORT}/api/eb/callback`;
-const DEFAULT_PSU_TYPE = "business";
+export type PsuType = "business" | "personal";
+const DEFAULT_PSU_TYPE: PsuType = "business";
+
+/** EB_PSU_TYPE is the default for callers that do not choose; the bank picker
+ *  sends one explicitly. A misspelt value falls back to the default with a
+ *  warning instead of reaching Enable Banking as garbage. */
+function psuTypeSetting(raw: string | undefined): PsuType {
+  if (raw === undefined || raw === "") return DEFAULT_PSU_TYPE;
+  if (raw === "business" || raw === "personal") return raw;
+  console.warn(`EB_PSU_TYPE "${raw}" is not business or personal; using ${DEFAULT_PSU_TYPE}`);
+  return DEFAULT_PSU_TYPE;
+}
 
 export interface EbConfig {
   configured: boolean;
@@ -22,7 +33,7 @@ export interface EbConfig {
   /** Path to a PEM file (config.json / EB_PRIVATE_KEY_FILE), if provided. */
   privateKeyFile: string | null;
   redirectUrl: string;
-  psuType: string;
+  psuType: PsuType;
 }
 
 interface RawEbConfig {
@@ -65,7 +76,7 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
     privateKey,
     privateKeyFile: process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null,
     redirectUrl: process.env.EB_REDIRECT_URL ?? raw?.redirectUrl ?? DEFAULT_REDIRECT_URL,
-    psuType: process.env.EB_PSU_TYPE ?? raw?.psuType ?? DEFAULT_PSU_TYPE,
+    psuType: psuTypeSetting(process.env.EB_PSU_TYPE ?? raw?.psuType),
   };
 }
 

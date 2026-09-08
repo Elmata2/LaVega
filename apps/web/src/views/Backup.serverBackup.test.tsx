@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
 import Backup from "./Backup";
+import { SIGNED_OUT_MESSAGE } from "../api.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -55,6 +56,7 @@ test("a signed-out user is invited to log in, not shown a broken backup", async 
 
   expect(container!.textContent).toContain("Log in om je versleutelde kluis");
   expect(button("Nu back-uppen")).toBeUndefined();
+  expect(button("Servergegevens verwijderen")).toBeUndefined();
 });
 
 test("an account with no backup yet says so and can make one", async () => {
@@ -122,4 +124,112 @@ test("a locked vault is told to unlock rather than uploading nothing", async () 
   });
 
   expect(container!.querySelector('[role="alert"]')?.textContent).toContain("Ontgrendel de kluis");
+});
+
+const withEraseRouting = (erase: (init?: RequestInit) => Response) =>
+  vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === "DELETE") return erase(init);
+    return new Response(JSON.stringify({ blob: null, updatedAt: null }));
+  });
+
+test("a signed-in user sees the erase control", async () => {
+  vi.stubGlobal(
+    "fetch",
+    withEraseRouting(() => new Response(JSON.stringify({ erased: [] }))),
+  );
+
+  await render();
+
+  expect(button("Servergegevens verwijderen")).toBeDefined();
+});
+
+test("clicking the erase control reveals an inline confirmation, not a browser dialog", async () => {
+  vi.stubGlobal(
+    "fetch",
+    withEraseRouting(() => new Response(JSON.stringify({ erased: [] }))),
+  );
+  await render();
+
+  await act(async () => {
+    button("Servergegevens verwijderen")!.click();
+  });
+
+  expect(container!.textContent).toContain("blijft staan");
+  expect(button("Ja, verwijder")).toBeDefined();
+  expect(button("Annuleer")).toBeDefined();
+});
+
+test("erasure is not requested until the confirmation is accepted", async () => {
+  const fetchMock = withEraseRouting(() => new Response(JSON.stringify({ erased: [] })));
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+
+  await act(async () => {
+    button("Servergegevens verwijderen")!.click();
+  });
+  expect(
+    fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "DELETE"),
+  ).toBe(false);
+
+  await act(async () => {
+    button("Annuleer")!.click();
+  });
+  expect(button("Ja, verwijder")).toBeUndefined();
+  expect(
+    fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "DELETE"),
+  ).toBe(false);
+});
+
+test("confirming erasure sends the DELETE and renders what was reported deleted", async () => {
+  const fetchMock = withEraseRouting(
+    () =>
+      new Response(
+        JSON.stringify({
+          erased: [
+            { table: "personal.eb_sessions", rows: 0 },
+            { table: "personal.eb_pending_auth", rows: 0 },
+            { table: "investing.agent_runs", rows: 0 },
+            { table: "investing.sync_state", rows: 3 },
+            { table: "investing.preferences", rows: 0 },
+            { table: "investing.price_bars", rows: 0 },
+            { table: "investing.broker_vaults", rows: 0 },
+            { table: "personal.vaults", rows: 1 },
+          ],
+        }),
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+
+  await act(async () => {
+    button("Servergegevens verwijderen")!.click();
+  });
+  await act(async () => {
+    button("Ja, verwijder")!.click();
+  });
+
+  expect(container!.textContent).toContain("Verwijderd: 4 rijen over 2 tabellen.");
+  expect(container!.textContent).not.toContain("Ja, verwijder");
+  const deleteCall = fetchMock.mock.calls.find(
+    (call) => (call[1] as RequestInit | undefined)?.method === "DELETE",
+  ) as unknown as [string, RequestInit];
+  expect(deleteCall[0]).toBe("/api/account/data");
+  expect(JSON.parse(String(deleteCall[1].body))).toEqual({ confirm: "ERASE" });
+});
+
+test("a session that lapsed mid-erasure is reported with the shared signed-out message", async () => {
+  vi.stubGlobal(
+    "fetch",
+    withEraseRouting(() => new Response(null, { status: 401 })),
+  );
+  await render();
+
+  await act(async () => {
+    button("Servergegevens verwijderen")!.click();
+  });
+  await act(async () => {
+    button("Ja, verwijder")!.click();
+  });
+
+  expect(container!.querySelector('[role="alert"]')?.textContent).toContain(SIGNED_OUT_MESSAGE);
 });

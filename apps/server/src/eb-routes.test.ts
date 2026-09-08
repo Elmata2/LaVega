@@ -232,3 +232,33 @@ test("a country that is not two letters never reaches the Enable Banking URL (L2
   }
   expect(ebMock).not.toHaveBeenCalled();
 });
+
+test("aspsps with psu_type=personal in the query overrides the configured default", async () => {
+  ebMock.mockResolvedValueOnce({ aspsps: [] });
+  await app.request("/api/eb/aspsps?country=NL&psu_type=personal");
+  expect(ebMock.mock.calls[0]![2]).toBe("/aspsps?country=NL&psu_type=personal");
+});
+
+test("aspsps with no psu_type in the query falls back to the configured default", async () => {
+  ebMock.mockResolvedValueOnce({ aspsps: [] });
+  await app.request("/api/eb/aspsps?country=NL");
+  expect(ebMock.mock.calls[0]![2]).toBe("/aspsps?country=NL&psu_type=business");
+});
+
+test("aspsps with an invalid psu_type in the query is rejected before the bank call", async () => {
+  const res = await app.request("/api/eb/aspsps?country=NL&psu_type=corporate");
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({ error: "Ongeldig type rekening." });
+  expect(ebMock).not.toHaveBeenCalled();
+});
+
+test("auth with psuType personal in the body overrides the configured default", async () => {
+  ebMock.mockResolvedValueOnce({ url: "https://bank.example/authorize" });
+  await app.request("/api/eb/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "ING", country: "NL", psuType: "personal" }),
+  });
+  const sent = ebMock.mock.calls[0]![3] as { psu_type: string };
+  expect(sent.psu_type).toBe("personal");
+});

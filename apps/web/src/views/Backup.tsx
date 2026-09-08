@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
 import { backupFilename, serializeBackup, parseBackup } from "../backup.js";
-import { fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
+import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -30,16 +30,23 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirmErase, setConfirmErase] = useState(false);
+  const [erasing, setErasing] = useState(false);
+  const [eraseMessage, setEraseMessage] = useState("");
+  const [eraseError, setEraseError] = useState("");
+
+  function applyStatus(result: Awaited<ReturnType<typeof fetchServerBackup>>) {
+    if (result === "signed-out") return setState("signed-out");
+    setState("ready");
+    setUpdatedAt(result.updatedAt);
+    setServerBlob(result.blob);
+  }
 
   useEffect(() => {
     let current = true;
     void fetchServerBackup()
       .then((result) => {
-        if (!current) return;
-        if (result === "signed-out") return setState("signed-out");
-        setState("ready");
-        setUpdatedAt(result.updatedAt);
-        setServerBlob(result.blob);
+        if (current) applyStatus(result);
       })
       .catch(() => {
         if (current) setState("signed-out");
@@ -75,6 +82,26 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
     }
   }
 
+  async function eraseData() {
+    setErasing(true);
+    setEraseError("");
+    setEraseMessage("");
+    try {
+      const report = await eraseServerData();
+      const touched = report.filter((entry) => entry.rows > 0);
+      const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
+      setEraseMessage(`Verwijderd: ${rows} rijen over ${touched.length} tabellen.`);
+      await fetchServerBackup()
+        .then(applyStatus)
+        .catch(() => setState("signed-out"));
+    } catch (err) {
+      setEraseError(err instanceof Error ? err.message : "Verwijderen mislukt.");
+    } finally {
+      setErasing(false);
+      setConfirmErase(false);
+    }
+  }
+
   if (state === "checking") return null;
   if (state === "signed-out") {
     return (
@@ -98,7 +125,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       <button
         type="button"
         className="btn btn-primary"
-        disabled={busy}
+        disabled={busy || erasing}
         onClick={() => void upload(false)}
       >
         {busy ? "Bezig…" : "Nu back-uppen"}
@@ -109,7 +136,12 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
             Een ander apparaat heeft op {dutchDate(conflict)} een nieuwere back-up opgeslagen.
             Overschrijven verwijdert die.
           </p>
-          <button type="button" className="btn" disabled={busy} onClick={() => void upload(true)}>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || erasing}
+            onClick={() => void upload(true)}
+          >
             Toch overschrijven
           </button>
         </>
@@ -139,6 +171,53 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
           >
             Haal back-up van server
           </button>
+        </p>
+      )}
+      {!confirmErase && (
+        <p>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || erasing}
+            onClick={() => {
+              setConfirmErase(true);
+              setEraseMessage("");
+              setEraseError("");
+            }}
+          >
+            Servergegevens verwijderen
+          </button>
+        </p>
+      )}
+      {confirmErase && (
+        <>
+          <p role="alert" className="text-warn">
+            Dit verwijdert alles wat de server over je bewaart: de versleutelde back-up,
+            bankkoppelingen en brokerkluizen, koersgeschiedenis, AI-runs en je instellingen. De
+            lokale kluis in deze browser blijft staan.
+          </p>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || erasing}
+            onClick={() => void eraseData()}
+          >
+            {erasing ? "Bezig…" : "Ja, verwijder"}
+          </button>{" "}
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || erasing}
+            onClick={() => setConfirmErase(false)}
+          >
+            Annuleer
+          </button>
+        </>
+      )}
+      {eraseMessage && <p>{eraseMessage}</p>}
+      {eraseError && (
+        <p role="alert" className="text-warn">
+          {eraseError}
         </p>
       )}
     </>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { API_BASE, apiErrorMessage } from "../api";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
@@ -6,18 +6,26 @@ import { API_BASE, apiErrorMessage } from "../api";
  * The return trip (?eb=<session>) is handled in App. Read-only: no payments. */
 
 type Aspsp = { name: string; country: string; logo?: string };
+type PsuType = "business" | "personal";
+
+const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
+const PSU_TYPE_LABELS: Record<PsuType, string> = {
+  business: "Zakelijk",
+  personal: "Particulier",
+};
 
 export default function BankLink({ busy }: { busy: boolean }) {
+  const [psuType, setPsuType] = useState<PsuType>("business");
   const [aspsps, setAspsps] = useState<Aspsp[] | null>(null);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadBanks() {
+  const loadBanks = useCallback(async (type: PsuType) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL`);
+      const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`);
       if (!res.ok) {
         setError(await apiErrorMessage(res));
         return;
@@ -30,6 +38,15 @@ export default function BankLink({ busy }: { busy: boolean }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  function pickPsuType(type: PsuType) {
+    setPsuType(type);
+    if (aspsps !== null) {
+      setAspsps(null);
+      setSelected("");
+      void loadBanks(type);
+    }
   }
 
   async function connect() {
@@ -41,7 +58,7 @@ export default function BankLink({ busy }: { busy: boolean }) {
       const res = await fetch(`${API_BASE}/api/eb/auth`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: bank.name, country: bank.country }),
+        body: JSON.stringify({ name: bank.name, country: bank.country, psuType }),
       });
       if (!res.ok) {
         setError(await apiErrorMessage(res));
@@ -70,12 +87,28 @@ export default function BankLink({ busy }: { busy: boolean }) {
       }}
     >
       <h3 style={{ marginTop: 0 }}>Of koppel je bank direct</h3>
+      <div className="scope-switch" role="group" aria-label="Type rekening">
+        {PSU_TYPE_ORDER.map((t, i) => (
+          <Fragment key={t}>
+            {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+            <button
+              type="button"
+              className={`scope-option${psuType === t ? " scope-on" : ""}`}
+              aria-pressed={psuType === t}
+              disabled={busy || loading}
+              onClick={() => pickPsuType(t)}
+            >
+              {PSU_TYPE_LABELS[t]}
+            </button>
+          </Fragment>
+        ))}
+      </div>
       {aspsps === null ? (
         <button
           type="button"
           className="btn"
           disabled={busy || loading}
-          onClick={() => void loadBanks()}
+          onClick={() => void loadBanks(psuType)}
         >
           {loading ? "Laden…" : "Koppel bank (Enable Banking)"}
         </button>

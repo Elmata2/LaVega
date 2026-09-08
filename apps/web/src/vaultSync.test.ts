@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { fetchServerBackup, uploadServerBackup } from "./vaultSync.js";
+import { eraseServerData, fetchServerBackup, uploadServerBackup } from "./vaultSync.js";
+import { SIGNED_OUT_MESSAGE } from "./api.js";
 import type { CipherBlob } from "@lavega/adapters";
 
 const blob: CipherBlob = {
@@ -79,4 +80,29 @@ test("overwriting is a different request, never a silent retry", async () => {
   expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe(
     "/api/vault/backup?overwrite=true",
   );
+});
+
+test("erasure confirms with the server-required body and reports what was deleted", async () => {
+  const fetchMock = stub(
+    new Response(JSON.stringify({ erased: [{ table: "personal.vaults", rows: 1 }] })),
+  );
+
+  expect(await eraseServerData()).toEqual([{ table: "personal.vaults", rows: 1 }]);
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe("/api/account/data");
+  expect(init.method).toBe("DELETE");
+  expect(init.credentials).toBe("same-origin");
+  expect(JSON.parse(String(init.body))).toEqual({ confirm: "ERASE" });
+});
+
+test("erasure while signed out reports the shared signed-out message", async () => {
+  stub(new Response(null, { status: 401 }));
+
+  await expect(eraseServerData()).rejects.toThrow(SIGNED_OUT_MESSAGE);
+});
+
+test("a server-side erasure failure surfaces its own message", async () => {
+  stub(new Response(JSON.stringify({ error: "Wissen mislukt." }), { status: 500 }));
+
+  await expect(eraseServerData()).rejects.toThrow("Wissen mislukt.");
 });

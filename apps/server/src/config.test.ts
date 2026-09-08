@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -68,5 +68,27 @@ test("loadLlmConfig: configured only when ANTHROPIC_API_KEY is set", () => {
   } finally {
     if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = prev;
+  }
+});
+
+test("a misspelt psuType falls back to business instead of reaching Enable Banking", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({ applicationId: "abcd1234efgh5678", psuType: "corporate" }),
+  );
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  try {
+    expect(loadConfig(configPath).psuType).toBe("business");
+    expect(warn).toHaveBeenCalledOnce();
+    writeFileSync(
+      configPath,
+      JSON.stringify({ applicationId: "abcd1234efgh5678", psuType: "personal" }),
+    );
+    expect(loadConfig(configPath).psuType).toBe("personal");
+  } finally {
+    warn.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
   }
 });
