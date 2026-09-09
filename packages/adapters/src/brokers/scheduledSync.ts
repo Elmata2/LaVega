@@ -81,7 +81,13 @@ export async function syncScheduledBrokers(input: {
   const pendingStates = new Map<ScheduledBroker, BrokerSyncState>();
 
   for (const entry of input.adapters) {
+    // TEMP DIAGNOSTIC — timing instrumentation for the broker-sync hang investigation.
+    const entryT0 = Date.now();
+    console.log(`[diag] scheduledSync: ${entry.broker} state.get start`);
     const previous = await input.state.get(entry.broker);
+    console.log(
+      `[diag] scheduledSync: ${entry.broker} state.get resolved t=${Date.now() - entryT0}ms`,
+    );
     const lastSyncedAt = previous.lastSyncedAt;
     const retryAfter = previous.retryAfter ?? null;
     // A provider cooldown outranks `force`. Forcing through it only spends more
@@ -100,8 +106,17 @@ export async function syncScheduledBrokers(input: {
 
     let credentials: BrokerCredentials | null;
     try {
+      console.log(`[diag] scheduledSync: ${entry.broker} getCredentials start`);
       credentials = await input.credentials.getCredentials(input.tenantId, entry.broker);
+      console.log(
+        `[diag] scheduledSync: ${entry.broker} getCredentials resolved t=${Date.now() - entryT0}ms`,
+        { found: credentials != null },
+      );
     } catch (error) {
+      console.log(
+        `[diag] scheduledSync: ${entry.broker} getCredentials threw t=${Date.now() - entryT0}ms`,
+        error instanceof Error ? error.message : error,
+      );
       const problem = `${entry.broker}: ${readableError(error, entry.broker)}`;
       problems.push(problem);
       outcomes.push({ broker: entry.broker, status: "problem", lastSyncedAt, result: null });
@@ -116,10 +131,14 @@ export async function syncScheduledBrokers(input: {
 
     let result: BrokerResult;
     try {
+      console.log(`[diag] scheduledSync: ${entry.broker} adapter.sync start`);
       result = await entry.adapter.sync({
         entity: input.entity,
         resume: previous.resume ?? undefined,
       });
+      console.log(
+        `[diag] scheduledSync: ${entry.broker} adapter.sync resolved t=${Date.now() - entryT0}ms`,
+      );
     } catch (error) {
       const problem = `${entry.broker}: ${readableError(error, entry.broker)}`;
       problems.push(problem);

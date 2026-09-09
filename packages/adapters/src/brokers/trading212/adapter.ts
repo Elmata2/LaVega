@@ -579,10 +579,16 @@ async function request(
 ): Promise<Response> {
   const path = new URL(url).pathname;
   for (let retry = 0; ; retry += 1) {
+    // TEMP DIAGNOSTIC — timing instrumentation for the broker-sync hang investigation.
+    const reqT0 = Date.now();
     await limiter.reserve(path);
+    console.log(
+      `[diag] trading212: ${path} limiter.reserve resolved t=${Date.now() - reqT0}ms, fetch start`,
+    );
     const response = await fetch(url, {
       headers: { Authorization: basicAuth(config.token, config.secret) },
     });
+    console.log(`[diag] trading212: ${path} fetch resolved t=${Date.now() - reqT0}ms status=${response.status}`);
     const reset = resetAtMs(response);
     config.diagnostics?.({
       type: "response",

@@ -327,15 +327,29 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   });
   investingApp.post("/api/brokers/sync", async (c) => {
     const deadline = priceSyncDeadline();
+    // TEMP DIAGNOSTIC — timing instrumentation for the broker-sync hang investigation.
+    const t0 = Date.now();
+    console.log(`[diag] brokers/sync: start t=0ms`);
     try {
       const result = await brokerSync(c.req.query("force") === "true");
+      console.log(`[diag] brokers/sync: brokerSync resolved t=${Date.now() - t0}ms`, {
+        outcomeCount: result.outcomes.length,
+        problems: result.problems,
+      });
       problemReporter({ source: "broker-sync", problems: result.problems });
       /* Awaited, not detached. Work started after the response is not
        * guaranteed to run at all on a serverless host, which is how prices
        * went months without a bar while every call looked successful. */
-      await runPriceSyncIfConsented(await resolveTenantId(), deadline);
+      const tenantId = await resolveTenantId();
+      console.log(`[diag] brokers/sync: resolveTenantId resolved t=${Date.now() - t0}ms`);
+      await runPriceSyncIfConsented(tenantId, deadline);
+      console.log(`[diag] brokers/sync: runPriceSyncIfConsented resolved t=${Date.now() - t0}ms`);
       return c.json(result);
-    } catch {
+    } catch (error) {
+      console.log(
+        `[diag] brokers/sync: threw t=${Date.now() - t0}ms`,
+        error instanceof Error ? error.message : error,
+      );
       const result = { outcomes: [], problems: ["Broker synchronization failed"] };
       problemReporter({ source: "broker-sync", problems: result.problems });
       return c.json(result, 503);
