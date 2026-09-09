@@ -317,7 +317,17 @@ test("broker sync route forwards force and keeps problems in response", async ()
     outcomes: [{ status: "synced" }],
     problems: ["ibkr: unavailable"],
   });
-  expect(brokerSync).toHaveBeenCalledWith(true);
+  expect(brokerSync).toHaveBeenCalledWith(true, undefined);
+});
+
+test("broker sync passes host deadline to broker work", async () => {
+  const brokerSync = vi.fn(async () => ({ outcomes: [], problems: [] }));
+  const investingApp = createApp({ brokerSync, priceSyncDeadline: () => 1_234 });
+
+  const response = await investingApp.request("/api/brokers/sync", { method: "POST" });
+
+  expect(response.status).toBe(200);
+  expect(brokerSync).toHaveBeenCalledWith(false, 1_234);
 });
 
 test("broker sync starts server-side price orchestration despite broker problems", async () => {

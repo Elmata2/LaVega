@@ -11,6 +11,7 @@ export type CredentialsAwareBrokerAdaptersOptions = {
   /** Config override for tests; defaults to reading process.env. */
   environment?: (name: string) => string | undefined;
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void;
+  deadlineMs?: number;
 };
 
 function defaultEnvironment(name: string): string | undefined {
@@ -78,7 +79,7 @@ export function createCredentialsAwareBrokerAdapters(
             token: stored.token,
             secret: stored.secret,
             baseUrl: environment("TRADING212_BASE_URL") ?? "https://live.trading212.com",
-            deadlineMs: trading212DeadlineMs(environment),
+            deadlineMs: options.deadlineMs ?? trading212DeadlineMs(environment),
             resume: input.resume,
             diagnostics: (details) => {
               console.log(JSON.stringify({ event: "investing.trading212.http", ...details }));

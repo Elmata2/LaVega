@@ -128,7 +128,7 @@ export function createRuntimeBrokerSync(
   state: BrokerSyncStateStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
-): (force: boolean) => Promise<ScheduledSyncResult> {
+): (force: boolean, deadlineMs?: number) => Promise<ScheduledSyncResult> {
   let inFlight: Promise<ScheduledSyncResult> | null = null;
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
   const adapters = createCredentialsAwareBrokerAdapters({
@@ -136,10 +136,18 @@ export function createRuntimeBrokerSync(
     tenantId,
     onTrading212Diagnostic,
   });
-  return async (force) => {
+  return async (force, deadlineMs) => {
     if (inFlight) return inFlight;
     const run = syncScheduledBrokers({
-      adapters,
+      adapters:
+        deadlineMs === undefined
+          ? adapters
+          : createCredentialsAwareBrokerAdapters({
+              credentials,
+              tenantId,
+              deadlineMs,
+              onTrading212Diagnostic,
+            }),
       credentials,
       state,
       tenantId,
@@ -521,7 +529,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       updateProgress,
       tenantId,
     );
-    const brokerSync = async (force: boolean) => {
+    const brokerSync = async (force: boolean, deadlineMs?: number) => {
       if (devFixtureEnabled) {
         syncProgress = {
           status: "completed",
@@ -550,7 +558,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
       }
       try {
-        const result = await scheduledBrokerSync(force);
+        const result = await scheduledBrokerSync(force, deadlineMs);
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
