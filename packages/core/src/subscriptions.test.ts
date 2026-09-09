@@ -12,6 +12,7 @@ import {
   CADENCE_LABEL_NL,
   detectScheduleStreams,
   fitMerchantStreams,
+  explainMerchant,
 } from "./subscriptions.js";
 
 let n = 0;
@@ -1097,6 +1098,49 @@ describe("wat zijn eigen afschrift blootlegde", () => {
     expect(s.rescued).toBe(true);
   });
 
+  it("Simyo: zijn ECHTE reeks van 8 september — twee centen-outliers vlak bij 11,89 horen erbij, drie bundelmaanden niet", () => {
+    /* Zijn eigen ING-afschrift, twaalf rijen, EUR 180,94 in totaal. De vorige
+     * twee tests in dit blok zijn gemeten VOORBEELDEN van deze vorm; dit is de
+     * reeks zelf. `whole` vindt alle twaalf als één keten (elk gat 25-36 dagen,
+     * ruim binnen de bandtolerantie) maar faalt op de bedragspreiding (cv 0,36
+     * tegen 0,35). De bedragsplitsing haalt de zeven EXACT-1189-rijen eruit —
+     * de decemberrij (12,10) en de meirij (12,35) vallen dan in hun eigen
+     * groepje van één — en struikelt daarna over het zwerversbudget van de hele
+     * winkel (5 van de 12 wijken af, budget floor(7/3) = 2).
+     *
+     * Vóór de tolerantie-verruiming (Part 0) telde de reddingslezing 12,10 en
+     * 12,35 óók als afwijkend, naast de drie echte bundelmaanden — vijf van de
+     * twaalf, over het derde-budget, dus ook de reddingslezing weigerde. Met
+     * `DOMINANT_PRICE_TOLERANCE` (5%) horen 12,10 (1,8% boven 11,89) en 12,35
+     * (3,9% boven) er wél bij: negen gehouden, budget floor(9/3) = 3, en de
+     * meerderheid van hun eigen gaten (29/34/30/28/28/35/57/32) is één cyclus. */
+    const rows = [
+      tx("SIMYO", "2025-09-25", -24.03),
+      tx("SIMYO", "2025-10-31", -27.34),
+      tx("SIMYO", "2025-11-25", -11.89),
+      tx("SIMYO", "2025-12-24", -12.1),
+      tx("SIMYO", "2026-01-27", -11.89),
+      tx("SIMYO", "2026-02-26", -11.89),
+      tx("SIMYO", "2026-03-26", -11.89),
+      tx("SIMYO", "2026-04-23", -11.89),
+      tx("SIMYO", "2026-05-28", -12.35),
+      tx("SIMYO", "2026-06-24", -21.89),
+      tx("SIMYO", "2026-07-24", -11.89),
+      tx("SIMYO", "2026-08-25", -11.89),
+    ];
+    const t = merchantTallies(rows)[0];
+    expect(t).toMatchObject({ charges: 12, totalCents: 18094 });
+
+    const found = detectSubscriptions(rows);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      monthlyCents: 1189,
+      lastAmountCents: 1189,
+      cadenceDays: 30,
+      occurrences: 9,
+    });
+  });
+
   it("een meerderheid meercyclus-gaten in de gehouden reeks weigert de reddingslezing", () => {
     /* Een tegenvoorbeeld bij de vorige: het aantal uitschieters past binnen
      * `OUTLIER_BUDGET`, maar wat overblijft is geen rooster meer. Acht rijen op
@@ -1167,5 +1211,130 @@ describe("wat zijn eigen afschrift blootlegde", () => {
     expect(merchantKey("n26")).toBe("n26");
     // Een kaal klant- of factuurnummer blijft ruis.
     expect(merchantKey("m0123456")).toBe("");
+  });
+});
+
+/* ── explainMerchant — één Nederlandse zin per poort (self-explanation) ────
+ *
+ * Elke test hieronder is het KLEINSTE fixture dat precies één van de exacte
+ * strings uit de spec produceert — geen twee tests op dezelfde zin, en geen
+ * enkele op een re-derivatie: elk fixture loopt door de echte `dominantPriceMembers`
+ * / `fitCadenceDays` / `fitMerchantStreams`, dezelfde functies die
+ * `detectSubscriptions` zelf gebruikt. */
+describe("explainMerchant — de exacte Nederlandse reden per poort", () => {
+  const addDays = (iso: string, n: number): string => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  };
+
+  it("te weinig afschrijvingen — twee rijen, geen band haalt minOcc", () => {
+    const dates = ["2026-01-01", "2026-01-31"];
+    expect(explainMerchant(dates, [1000, 1000], 0.35, "2026-01-31")).toBe(
+      "te weinig afschrijvingen (1 < 2)",
+    );
+  });
+
+  it("afschrijvingen op één dag — niets ketent, maar twee rijen delen een datum", () => {
+    const dates = ["2026-01-01", "2026-01-01", "2026-08-01"];
+    expect(explainMerchant(dates, [1000, 2000, 3000], 0.35, "2026-08-01")).toBe(
+      "2 afschrijvingen op één dag",
+    );
+  });
+
+  it("prijsspreiding boven de grens — de hele winkel ketent, het bedrag niet", () => {
+    const dates = ["2026-01-01", "2026-02-01", "2026-03-01"];
+    const reason = explainMerchant(dates, [1000, 5000, 9000], 0.35, "2026-03-01");
+    expect(reason).toBe("prijsspreiding 0.65 boven 0.35");
+  });
+
+  it("te veel afwijkende afschrijvingen — geen dominante enkele hap", () => {
+    const base = "2026-01-01";
+    const dates = [0, 15, 30, 45, 60, 90].map((d) => addDays(base, d));
+    const reason = explainMerchant(
+      dates,
+      dates.map(() => 1000),
+      0.35,
+      addDays(base, 90),
+    );
+    expect(reason).toBe("te veel afwijkende afschrijvingen (2 van 4, max 1)");
+  });
+
+  it("gat in de reeks — één sprong die alleen zelf de hele extras-teller draagt", () => {
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 210, 240].map((d) => addDays(base, d));
+    const reason = explainMerchant(
+      dates,
+      dates.map(() => 1000),
+      0.35,
+      addDays(base, 240),
+    );
+    expect(reason).toBe("gat van 150 dagen in de reeks van € 10,00");
+  });
+
+  it("meerderheid van de gaten is meercyclus — elke gap is een schone 2x-sprong", () => {
+    const base = "2026-01-01";
+    const dates = [0, 122, 244, 366, 488].map((d) => addDays(base, d));
+    const reason = explainMerchant(
+      dates,
+      dates.map(() => 1000),
+      0.35,
+      addDays(base, 488),
+    );
+    expect(reason).toBe("meerderheid van de gaten is meercyclus");
+  });
+
+  it("reddingslezing: meerderheid van de gaten is meercyclus — drie geïsoleerde dominante rijen", () => {
+    /* Drie 1189-rijen, elk gescheiden door een eigen drie-bundel-run (elke
+     * bundelprijs > 20% uit elkaar, zodat er geen toevallige samenvoeging
+     * ontstaat). `whole` en `split` breken allebei op het onoverbrugbare gat;
+     * alleen de reddingslezing bereikt deze drie rijen — en haar eigen twee
+     * gaten zijn allebei 4-cyclus-sprongen. */
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 90, 120, 150, 180, 210, 240].map((d) => addDays(base, d));
+    const cents = [1189, 5000, 7000, 9000, 1189, 11000, 13500, 16000, 1189];
+    const reason = explainMerchant(dates, cents, 0.35, addDays(base, 240));
+    expect(reason).toBe("reddingslezing: meerderheid van de gaten is meercyclus");
+  });
+
+  it("reddingslezing: te veel afwijkende maanden — kept haalt de meerderheid, niet het budget", () => {
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 90, 120, 150, 180, 210, 240].map((d) => addDays(base, d));
+    const cents = [1189, 1189, 1189, 5000, 7000, 9000, 1189, 1189, 1189];
+    const reason = explainMerchant(dates, cents, 0.35, addDays(base, 240));
+    expect(reason).toBe("reddingslezing: 3 van 6 maanden wijken af (max 2 toegestaan)");
+  });
+
+  it("merchant-budget — een schone maandgroep verdrinkt in twee losse zwervers", () => {
+    const base = "2026-01-01";
+    const dates = [0, 10, 30, 45, 60].map((d) => addDays(base, d));
+    const cents = [1000, 2000, 1000, 3000, 1000];
+    const reason = explainMerchant(dates, cents, 0.35, addDays(base, 60));
+    expect(reason).toBe("2 van 5 afschrijvingen horen nergens bij (max 1 toegestaan)");
+  });
+
+  it("geen enkel bedrag komt twee keer voor — een stroom die wél ketent, nooit hetzelfde bedrag", () => {
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 90].map((d) => addDays(base, d));
+    const reason = explainMerchant(dates, [1000, 1010, 1020, 1030], 0.35, addDays(base, 90));
+    expect(reason).toBe("geen enkel bedrag komt twee keer voor");
+  });
+
+  it("laatste afschrijving X dagen geleden — een stroom die stilviel", () => {
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 90].map((d) => addDays(base, d));
+    const cents = dates.map(() => 1599);
+    const reason = explainMerchant(dates, cents, 0.35, addDays(base, 90 + 100));
+    expect(reason).toBe("laatste afschrijving 100 dagen geleden");
+  });
+
+  it("geen ritme herkend — de ware terugval, op een lege reeks", () => {
+    expect(explainMerchant([], [], 0.35, "")).toBe("geen ritme herkend");
+  });
+
+  it("null voor een echt abonnement — er is niets te verklaren", () => {
+    const base = "2026-01-01";
+    const dates = [0, 30, 60, 90].map((d) => addDays(base, d));
+    const cents = dates.map(() => 1599);
+    expect(explainMerchant(dates, cents, 0.35, addDays(base, 90))).toBeNull();
   });
 });

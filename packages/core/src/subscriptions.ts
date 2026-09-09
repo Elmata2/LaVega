@@ -422,10 +422,33 @@ function bandTolerance(b: CadenceBand): number {
  *  in a row is a stopped stream, not a bumpy one. */
 const MAX_SKIPPED_CYCLES = 2;
 
+/** Why one chain attempt (one anchor, one band) came up empty — the same three
+ *  gates `chainFrom` already enforced, now named instead of collapsed into a
+ *  bare `null`. `explainMerchant` reads these to tell an owner which gate
+ *  stopped a merchant, not just that one did.
+ *
+ *  `"gap"` is never produced by `chainFrom` itself — it is a `too-many-extras`
+ *  reading that `fitMerchantStreams` re-labels, once it can see the group's own
+ *  dates, when one dominant hole is what drove the extras count. Carried here
+ *  rather than as a fifth field on `too-many-extras` so a plain reader of that
+ *  kind never has to check a maybe-present gap that only one caller fills in. */
+export type ChainFailure =
+  | { kind: "too-few"; got: number; needed: number }
+  | { kind: "majority-multi-cycle"; onCycle: number; totalGaps: number }
+  | { kind: "too-many-extras"; extras: number; budget: number; totalMembers: number }
+  | { kind: "gap"; gapDays: number };
+
 /** One chain, anchored at `start`: greedy from cycle to cycle, but never greedy
  *  WITHIN a cycle — see the pick below. Exported nowhere: `fitCadence` tries
- *  every anchor and keeps the best. */
-function chainFrom(days: number[], start: number, band: CadenceBand): CadenceFit | null {
+ *  every anchor and keeps the best. `failure` is populated at exactly the 3
+ *  gates below that used to just `return null`; a successful chain still
+ *  returns `failure: null`, so a caller can tell "not tried" from "tried and
+ *  passed" from "tried and failed here". */
+function chainFrom(
+  days: number[],
+  start: number,
+  band: CadenceBand,
+): { fit: CadenceFit | null; failure: ChainFailure | null } {
   const tol = bandTolerance(band);
   const members = [start];
   const gaps: number[] = [];
@@ -489,13 +512,23 @@ function chainFrom(days: number[], start: number, band: CadenceBand): CadenceFit
      * merchant that is simply visited a lot. */
     break;
   }
-  if (members.length < band.minOcc) return null;
+  if (members.length < band.minOcc)
+    return { fit: null, failure: { kind: "too-few", got: members.length, needed: band.minOcc } };
   /* The majority must be SINGLE cycles. Without this a monthly stream fits a
    * weekly cadence arithmetically (30 ~ 4x7) while being nothing of the sort. */
-  if (onCycle < Math.ceil(gaps.length / 2)) return null;
+  if (onCycle < Math.ceil(gaps.length / 2))
+    return {
+      fit: null,
+      failure: { kind: "majority-multi-cycle", onCycle, totalGaps: gaps.length },
+    };
   const extras = days.length - members.length;
-  if (extras > Math.floor(members.length / 3)) return null;
-  return { band, members, gaps, skippedCycles, extras, residual };
+  const budget = Math.floor(members.length / 3);
+  if (extras > budget)
+    return {
+      fit: null,
+      failure: { kind: "too-many-extras", extras, budget, totalMembers: members.length },
+    };
+  return { fit: { band, members, gaps, skippedCycles, extras, residual }, failure: null };
 }
 
 function betterFit(a: CadenceFit, b: CadenceFit): boolean {
@@ -514,7 +547,42 @@ function betterFit(a: CadenceFit, b: CadenceFit): boolean {
  *  `extras <= floor(members / 3)` a chain can never start later than that, so
  *  the extra anchors could only produce fits that are thrown away again. */
 export function fitCadence(sortedDates: string[]): CadenceFit | null {
-  return fitCadenceDays(sortedDates.map(dayNumber));
+  return fitCadenceDays(sortedDates.map(dayNumber)).fit;
+}
+
+/** The one failing `(band, start)` attempt that got furthest, alongside the
+ *  winner — see `fitCadenceDays`. */
+type CadenceDaysResult = {
+  fit: CadenceFit | null;
+  /** The failing attempt that got furthest (most members) among every band and
+   *  anchor tried, when nothing succeeded. Picking by member count is what
+   *  makes this "furthest": the more members a broken chain still accumulated,
+   *  the closer it reads to a real subscription that one gate refused, not
+   *  noise. Ties prefer the shorter cadence — the bands are tried shortest
+   *  first, so the earlier one already holds the record and is never displaced
+   *  by an equal-length later one. Always computed; the cost is one comparison
+   *  per attempt already being made, not a second search. */
+  bestFailure: { failure: ChainFailure; band: CadenceBand; members: number } | null;
+};
+
+/** How many members an unsuccessful chain attempt got to before it failed —
+ *  the "furthest" a broken chain reached, in the sense `CadenceDaysResult`
+ *  describes. Read straight off the failure itself rather than re-derived: a
+ *  `too-few` failure's `got` IS that count, a `majority-multi-cycle`'s
+ *  `totalGaps` is one short of it, and `too-many-extras` already carries
+ *  `totalMembers`. `"gap"` never comes out of `chainFrom`, so it scores 0 and
+ *  can never win a comparison here. */
+function failureMemberCount(failure: ChainFailure): number {
+  switch (failure.kind) {
+    case "too-few":
+      return failure.got;
+    case "majority-multi-cycle":
+      return failure.totalGaps + 1;
+    case "too-many-extras":
+      return failure.totalMembers;
+    case "gap":
+      return 0;
+  }
 }
 
 /* The same fitter on day numbers that were already parsed. It exists because
@@ -526,17 +594,25 @@ export function fitCadence(sortedDates: string[]): CadenceFit | null {
  * pre-existing cost, not one the amount split introduced — but the split does
  * fit more series per merchant, so it is paid off here rather than left to grow.
  * It is the same arithmetic; only the parsing moved out of the loop. */
-function fitCadenceDays(days: number[]): CadenceFit | null {
+function fitCadenceDays(days: number[]): CadenceDaysResult {
   const maxStart = Math.floor(days.length / 4);
   let best: CadenceFit | null = null;
+  let bestFailure: CadenceDaysResult["bestFailure"] = null;
   for (const band of CADENCE_BANDS) {
     if (days.length < band.minOcc) continue;
     for (let s = 0; s <= maxStart && s + band.minOcc <= days.length; s++) {
-      const fit = chainFrom(days, s, band);
-      if (fit !== null && (best === null || betterFit(fit, best))) best = fit;
+      const { fit, failure } = chainFrom(days, s, band);
+      if (fit !== null && (best === null || betterFit(fit, best))) {
+        best = fit;
+      } else if (failure !== null) {
+        const members = failureMemberCount(failure);
+        if (bestFailure === null || members > bestFailure.members) {
+          bestFailure = { failure, band, members };
+        }
+      }
     }
   }
-  return best;
+  return { fit: best, bestFailure };
 }
 
 /* ===========================================================================
@@ -671,6 +747,27 @@ function amountGroups(days: number[], amountsCents: number[]): number[][] {
   return merged;
 }
 
+/** The amount guard failing, reported with the actual number instead of just a
+ *  boolean — `amountsCoherent` still only returns pass/fail, this is what a
+ *  diagnosis needs on top of that. */
+export type AmountSpreadFailure = { kind: "amount-spread"; cv: number; max: number };
+
+/** The single most useful explanation for why a merchant's `streams` came back
+ *  empty — see the selection order in `fitMerchantStreams`, which is
+ *  deliberate and evaluated top to bottom, not "whichever is easiest to
+ *  compute". Each source names WHICH reading was closest and WHY it still
+ *  lost: the whole-merchant chain, the amount split, the bundle-month rescue,
+ *  the merchant-wide stray budget, a same-day pile with no rhythm at all, or —
+ *  should none of those apply — the plain "too few rows" the true fallback
+ *  reports rather than throw. */
+export type MerchantDiagnosis =
+  | { source: "whole"; amountCents?: number; failure: ChainFailure | AmountSpreadFailure }
+  | { source: "split"; amountCents: number; failure: ChainFailure | AmountSpreadFailure }
+  | { source: "rescue"; failure: ChainFailure }
+  | { source: "merchant-budget"; strays: number; claimed: number; budget: number }
+  | { source: "same-day"; count: number }
+  | { source: "none"; failure: { kind: "too-few"; got: number; needed: number } };
+
 export type MerchantStreams = {
   /** The rhythms found at this merchant, most charges first. `members` index
    *  into the `sortedDates` that was passed in, not into an amount group. */
@@ -686,12 +783,28 @@ export type MerchantStreams = {
    *  (not `false`) for the other two — a test pinning the mechanism should be
    *  able to tell "not this one" from "explicitly no". */
   rescued?: true;
+  /** Set only when `streams` is empty: the one explanation `explainMerchant`
+   *  turns into a Dutch sentence. Computed on the failure path only — a
+   *  merchant that DID become a stream pays nothing extra for this. */
+  diagnostics?: MerchantDiagnosis;
 };
 
 /** Every subscription-shaped stream one merchant is billing, read amount-first.
  *  `sortedDates` must be ascending and `amountsCents` positive and aligned to
  *  it. Returns no streams at all when the merchant looks like a shop — see the
  *  budget in the comment above; it is a whole-merchant veto on purpose. */
+/** The coefficient of variation of these members' amounts. `Infinity` for a
+ *  non-positive mean, so a plain `<= maxCv` comparison refuses it the same way
+ *  `amountsCoherent` always did — pulled out on its own because the diagnostics
+ *  below need the actual number, not just whether it passed. */
+function amountCv(members: number[], amountsCents: number[]): number {
+  const xs = members.map((i) => amountsCents[i]);
+  const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+  if (m <= 0) return Infinity;
+  const sd = Math.sqrt(xs.reduce((a, c) => a + (c - m) ** 2, 0) / xs.length);
+  return sd / m;
+}
+
 /** Houden de bedragen van deze leden genoeg verband om samen ÉÉN stroom te zijn?
  *
  *  Dezelfde toets die `detectSubscriptions` verderop doet, maar hier al nodig —
@@ -699,11 +812,7 @@ export type MerchantStreams = {
  *  geen tweede getal ontstaat dat op een dag afwijkt van het eerste. */
 function amountsCoherent(members: number[], amountsCents: number[], maxCv: number): boolean {
   if (members.length < 2) return true;
-  const xs = members.map((i) => amountsCents[i]);
-  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
-  if (mean <= 0) return false;
-  const sd = Math.sqrt(xs.reduce((a, c) => a + (c - mean) ** 2, 0) / xs.length);
-  return sd / mean <= maxCv;
+  return amountCv(members, amountsCents) <= maxCv;
 }
 
 /* ===========================================================================
@@ -733,10 +842,23 @@ function amountsCoherent(members: number[], amountsCents: number[], maxCv: numbe
 // either constant from silently widening this past a real gap.
 const OUTLIER_BUDGET = 3;
 
-/** The members that share the merchant's most-charged price, or null when it
- *  never repeats (one busy month is not "occasional"). How MANY may be left
- *  out is not this function's call — the caller checks that the same way it
- *  already checks `wholeClaimed` and `splitClaimed`, against `claimed`, not
+/** How far a member's price may sit from the mode and still count as "the same
+ *  charge with a few cents of extras" rather than a different one. Measured
+ *  against his real Simyo series (12 rows, mode 1189): the Dec row at 1210 and
+ *  the May row at 1235 are a data-bundle rounding and a text message, 1.8% and
+ *  3.9% over the mode — while the three real bundle months (2403/2734/2189)
+ *  are 66-130% over. An exact-match test threw the small overages in with the
+ *  real outliers: five of twelve read as "off-price", over the merchant's own
+ *  third-budget, so the whole series was refused even with the outlier budget
+ *  below. 5% keeps the phone bill's rounding in and the bundle months out. */
+const DOMINANT_PRICE_TOLERANCE = 0.05;
+
+/** The members that share the merchant's most-charged price (mode), or within
+ *  `DOMINANT_PRICE_TOLERANCE` of it, or null when the mode never repeats (one
+ *  busy month is not "occasional"). The mode itself is still the exact-count
+ *  winner — only membership is widened, not which price wins. How MANY may be
+ *  left out is not this function's call — the caller checks that the same way
+ *  it already checks `wholeClaimed` and `splitClaimed`, against `claimed`, not
  *  against the count before filtering; a second budget here, on a different
  *  base, would only disagree with that one. */
 function dominantPriceMembers(members: number[], amountsCents: number[]): number[] | null {
@@ -751,7 +873,8 @@ function dominantPriceMembers(members: number[], amountsCents: number[]): number
     }
   }
   if (modeCount < 2) return null;
-  return members.filter((i) => amountsCents[i] === modeCents);
+  const tol = modeCents * DOMINANT_PRICE_TOLERANCE;
+  return members.filter((i) => Math.abs(amountsCents[i] - modeCents) <= tol);
 }
 
 /** Gaps, skipped cycles and residual for an already-decided member list — the
@@ -776,13 +899,163 @@ function chainStats(days: number[], members: number[], cadenceDays: number) {
   return { gaps, skippedCycles, residual, onCycle };
 }
 
+/** The diagnosis for an empty `fitMerchantStreams` result — cases 2 through 7
+ *  of the selection order documented on `MerchantDiagnosis`. Case 1 (the
+ *  merchant-budget veto on an otherwise-successful reading) and case 4's
+ *  rescue attempt are both decided by the caller, which already holds the
+ *  state they need; this only covers the cases that need nothing more than
+ *  what it is handed. Evaluated top to bottom — the first case whose
+ *  condition holds wins, and that order is deliberate (see the comment on
+ *  `MerchantDiagnosis`), not "whichever is cheapest to compute". */
+function diagnoseEmpty(
+  days: number[],
+  amountsCents: number[],
+  maxAmountCv: number,
+  whole: CadenceFit | null,
+  wholeResult: CadenceDaysResult,
+  splitAttempts: { idx: number[]; result: CadenceDaysResult }[],
+  rescueDiagnosis: MerchantDiagnosis | null,
+  merchantBudgetFailure: { strays: number; claimed: number; budget: number } | null,
+): MerchantDiagnosis {
+  // 1: an otherwise-successful reading (whole or split) that only lost on the
+  // merchant-wide stray budget, and the rescue — already tried by the caller —
+  // did not find a stream of its own either.
+  if (merchantBudgetFailure !== null) {
+    return { source: "merchant-budget", ...merchantBudgetFailure };
+  }
+
+  /* 4, checked here rather than after 2/3: `dominantPriceMembers` (rescue's
+   * precondition) only ever fires on a price that already repeats exactly
+   * `>= 2` times — and `amountGroups` always turns that same exact price into
+   * its own group of `>= 2`, which unconditionally produces a case-2 or
+   * case-3 candidate too (every group that size either succeeds, becomes a
+   * `merchant-budget` case above, or leaves a `bestFailure` — see
+   * `fitCadenceDays`). So whenever the rescue is even attempted, cases 2/3
+   * ALWAYS also have something to say, and checking them first would make the
+   * rescue's own verdict — the more specific of the two, since it is the read
+   * that actually ran with the 5%-tolerant price band — unreachable. The
+   * numbered list stays the intended reading order; only the code order moves,
+   * for a `rescueDiagnosis` that exists precisely when the rescue was tried
+   * and lost. */
+  if (rescueDiagnosis !== null) return rescueDiagnosis;
+
+  // 2: the whole-merchant chain found a rhythm, but its own amounts don't
+  // agree closely enough.
+  if (whole !== null && !amountsCoherent(whole.members, amountsCents, maxAmountCv)) {
+    return {
+      source: "whole",
+      failure: {
+        kind: "amount-spread",
+        cv: amountCv(whole.members, amountsCents),
+        max: maxAmountCv,
+      },
+    };
+  }
+
+  // 3: the best amount-group candidate — one that chained but drifted on
+  // price, or one whose chain attempt failed outright. "Best" by the same
+  // member-count heuristic `fitCadenceDays` already used for its own
+  // `bestFailure`.
+  let bestSplit: { members: number; diagnosis: MerchantDiagnosis } | null = null;
+  for (const { idx, result } of splitAttempts) {
+    const repCents = amountsCents[idx[0]];
+    if (result.fit !== null) {
+      const members = result.fit.members.map((i) => idx[i]);
+      if (amountsCoherent(members, amountsCents, maxAmountCv)) continue; // claimed already, not a candidate
+      const diagnosis: MerchantDiagnosis = {
+        source: "split",
+        amountCents: repCents,
+        failure: { kind: "amount-spread", cv: amountCv(members, amountsCents), max: maxAmountCv },
+      };
+      if (bestSplit === null || members.length > bestSplit.members) {
+        bestSplit = { members: members.length, diagnosis };
+      }
+      continue;
+    }
+    if (result.bestFailure === null) continue; // group too small for any band to even try
+    const { failure, band, members: attempted } = result.bestFailure;
+    // A `too-many-extras` failure reads as a run-of-the-mill scatter of
+    // strays UNLESS one single hole in the group's own calendar is what
+    // actually drove it — a bundle-month run like the one `dominantPriceMembers`
+    // exists for, just too big for that rescue's own budget. Reported as the
+    // gap itself then, not as an extras count nobody could picture.
+    let diagnosis: MerchantDiagnosis = { source: "split", amountCents: repCents, failure };
+    if (failure.kind === "too-many-extras") {
+      const groupDays = idx.map((i) => days[i]);
+      let maxGap = 0;
+      for (let i = 1; i < groupDays.length; i++) {
+        maxGap = Math.max(maxGap, groupDays[i] - groupDays[i - 1]);
+      }
+      if (maxGap >= band.cadenceDays * (MAX_SKIPPED_CYCLES + 2)) {
+        diagnosis = {
+          source: "split",
+          amountCents: repCents,
+          failure: { kind: "gap", gapDays: maxGap },
+        };
+      }
+    }
+    if (bestSplit === null || attempted > bestSplit.members) {
+      bestSplit = { members: attempted, diagnosis };
+    }
+  }
+  if (bestSplit !== null) return bestSplit.diagnosis;
+
+  // 5: nothing chained anywhere, not even partially — the only rhythm left
+  // to name is "these landed on the same day".
+  if (whole === null && splitAttempts.every(({ result }) => result.fit === null)) {
+    const dateCounts = new Map<number, number>();
+    for (const d of days) dateCounts.set(d, (dateCounts.get(d) ?? 0) + 1);
+    let maxSameDay = 0;
+    for (const c of dateCounts.values()) maxSameDay = Math.max(maxSameDay, c);
+    if (maxSameDay >= 2) return { source: "same-day", count: maxSameDay };
+  }
+
+  // 6: whichever bare failed attempt — the whole-merchant chain or the best
+  // split group — got furthest, in that priority order.
+  if (wholeResult.bestFailure !== null) {
+    return { source: "whole", failure: wholeResult.bestFailure.failure };
+  }
+  let bestSplitFailure: { members: number; amountCents: number; failure: ChainFailure } | null =
+    null;
+  for (const { idx, result } of splitAttempts) {
+    if (result.bestFailure === null) continue;
+    if (bestSplitFailure === null || result.bestFailure.members > bestSplitFailure.members) {
+      bestSplitFailure = {
+        members: result.bestFailure.members,
+        amountCents: amountsCents[idx[0]],
+        failure: result.bestFailure.failure,
+      };
+    }
+  }
+  if (bestSplitFailure !== null) {
+    return {
+      source: "split",
+      amountCents: bestSplitFailure.amountCents,
+      failure: bestSplitFailure.failure,
+    };
+  }
+
+  // 7: true fallback — should be unreachable given the merchant already has
+  // at least 2 rows by the time `detectSubscriptions` calls in, but a
+  // diagnosis function does not get to throw.
+  return {
+    source: "none",
+    failure: {
+      kind: "too-few",
+      got: days.length,
+      needed: Math.min(...CADENCE_BANDS.map((b) => b.minOcc)),
+    },
+  };
+}
+
 export function fitMerchantStreams(
   sortedDates: string[],
   amountsCents: number[],
   maxAmountCv = 0.35,
 ): MerchantStreams {
   const days = sortedDates.map(dayNumber);
-  const whole = fitCadenceDays(days);
+  const wholeResult = fitCadenceDays(days);
+  const whole = wholeResult.fit;
 
   /* WAT "VERKLAREN" BETEKENT, en hier zat de fout die zijn Simyo twaalf keer op
    * rij onzichtbaar hield.
@@ -807,9 +1080,16 @@ export function fitMerchantStreams(
       : whole.members.length;
 
   const split: CadenceFit[] = [];
+  // Kept alongside `split`, not just folded into it: the diagnostics path
+  // below reads `result.bestFailure` off every attempt, including the ones
+  // that never became a stream — data `fitCadenceDays` already computed, so
+  // retaining it here costs nothing extra on the success path.
+  const splitAttempts: { idx: number[]; result: CadenceDaysResult }[] = [];
   let splitClaimed = 0;
   for (const idx of amountGroups(days, amountsCents)) {
-    const fit = fitCadenceDays(idx.map((i) => days[i]));
+    const result = fitCadenceDays(idx.map((i) => days[i]));
+    splitAttempts.push({ idx, result });
+    const fit = result.fit;
     if (fit === null) continue;
     // Back to the merchant's own indices; everything downstream reads rows, not
     // amount groups.
@@ -823,16 +1103,37 @@ export function fitMerchantStreams(
   const streams = useSplit ? split : whole === null ? [] : [whole];
   const claimed = useSplit ? splitClaimed : wholeClaimed;
   const strays = sortedDates.length - claimed;
-  if (streams.length > 0 && strays <= Math.floor(claimed / 3)) {
+  const budget = Math.floor(claimed / 3);
+  if (streams.length > 0 && strays <= budget) {
     streams.sort((a, b) => b.members.length - a.members.length || a.members[0] - b.members[0]);
     return { streams, strays, splitByAmount: useSplit };
   }
+
+  /* Selection 1 (see `MerchantDiagnosis`) applies exactly when this first pass
+   * had an OTHERWISE-SUCCESSFUL reading that only lost on the merchant-wide
+   * stray budget — gated on `claimed > 0`, not the raw `streams.length > 0`:
+   * `streams` itself is `[whole]` the moment `whole !== null`, even when
+   * `whole`'s own amounts are incoherent and `wholeClaimed` is 0 — a quirk the
+   * pre-existing code carried harmlessly (the `strays <= budget` check right
+   * below always failed for it anyway) but that would wrongly swallow case 2
+   * (an incoherent `whole`) if used here as its literal length. `claimed > 0`
+   * is what "otherwise-successful" actually means: something really did chain
+   * AND agree on price, and only the whole-merchant total sank it.
+   *
+   * It is not returned here, though: the rescue below must still get its turn
+   * even when this holds, precisely as it always did — the rescue can only
+   * find a stream where the first two came up empty, and "over budget" is
+   * empty for this purpose too. Carried into `diagnoseEmpty` instead, where
+   * it is checked first, ahead of every other case, but only once rescue has
+   * also had its shot. */
+  const merchantBudgetFailure = claimed > 0 ? { strays, claimed, budget } : null;
 
   // The third reading — see the block comment above `dominantPriceMembers`.
   // Only tried once the first two have nothing: it can never take a stream away
   // from either, only find one where both came up empty. It is not `split` —
   // no amount-grouping ran to produce it — so it is reported as
   // `splitByAmount: false, rescued: true`, a mechanism of its own.
+  let rescueDiagnosis: MerchantDiagnosis | null = null;
   if (whole !== null) {
     const kept = dominantPriceMembers(whole.members, amountsCents);
     if (kept !== null && kept.length >= whole.band.minOcc) {
@@ -847,7 +1148,8 @@ export function fitMerchantStreams(
       // not how they are arranged, and a widened `OUTLIER_BUDGET` or
       // `MAX_SKIPPED_CYCLES` must not be able to smuggle that scatter through.
       const majorityOnCycle = stats.onCycle >= Math.ceil(stats.gaps.length / 2);
-      if (rescueStrays <= Math.floor(kept.length / OUTLIER_BUDGET) && majorityOnCycle) {
+      const rescueBudget = Math.floor(kept.length / OUTLIER_BUDGET);
+      if (rescueStrays <= rescueBudget && majorityOnCycle) {
         const fit: CadenceFit = {
           band: whole.band,
           members: kept,
@@ -858,10 +1160,143 @@ export function fitMerchantStreams(
         };
         return { streams: [fit], strays: rescueStrays, splitByAmount: false, rescued: true };
       }
+      rescueDiagnosis = {
+        source: "rescue",
+        failure: !majorityOnCycle
+          ? { kind: "majority-multi-cycle", onCycle: stats.onCycle, totalGaps: stats.gaps.length }
+          : {
+              kind: "too-many-extras",
+              extras: rescueStrays,
+              budget: rescueBudget,
+              totalMembers: kept.length,
+            },
+      };
     }
   }
 
-  return { streams: [], strays, splitByAmount: useSplit };
+  return {
+    streams: [],
+    strays,
+    splitByAmount: useSplit,
+    diagnostics: diagnoseEmpty(
+      days,
+      amountsCents,
+      maxAmountCv,
+      whole,
+      wholeResult,
+      splitAttempts,
+      rescueDiagnosis,
+      merchantBudgetFailure,
+    ),
+  };
+}
+
+/** Euro's op de Nederlandse manier — een eigen kopie van de formatter die
+ *  netBenefit.ts en travel.ts allebei al privé hebben, om dezelfde reden: dit
+ *  bestand importeren zou daar een cirkel maken, en een gedeelde module met
+ *  één functie erin is meer machinerie dan twee regels dubbel. */
+function euro(cents: number): string {
+  return `€ ${(Math.round(cents) / 100).toFixed(2).replace(".", ",")}`;
+}
+
+/** One `ChainFailure` in Dutch. Shared by `whole`/`split` diagnoses (which
+ *  carry the group's own representative price for the `"gap"` case) and, as a
+ *  defensive fallback, by `"rescue"` (which in practice only ever constructs
+ *  `majority-multi-cycle` or `too-many-extras` — see `fitMerchantStreams` —
+ *  but its type is the general `ChainFailure`, so this stays exhaustive rather
+ *  than assumed). */
+function chainFailureText(f: ChainFailure, amountCents: number | undefined): string {
+  switch (f.kind) {
+    case "too-few":
+      return `te weinig afschrijvingen (${f.got} < ${f.needed})`;
+    case "majority-multi-cycle":
+      return "meerderheid van de gaten is meercyclus";
+    case "too-many-extras":
+      return `te veel afwijkende afschrijvingen (${f.extras} van ${f.totalMembers}, max ${f.budget})`;
+    case "gap":
+      return `gat van ${f.gapDays} dagen in de reeks van ${euro(amountCents ?? 0)}`;
+  }
+}
+
+/** A `MerchantDiagnosis` in one Dutch sentence — the vocabulary `explainMerchant`
+ *  reads off `fitMerchantStreams`'s empty-path diagnosis. Exact strings match
+ *  what the coordinator asked for; tests assert against them verbatim. */
+function diagnosisText(d: MerchantDiagnosis): string {
+  switch (d.source) {
+    case "merchant-budget":
+      return `${d.strays} van ${d.claimed + d.strays} afschrijvingen horen nergens bij (max ${d.budget} toegestaan)`;
+    case "same-day":
+      return `${d.count} afschrijvingen op één dag`;
+    case "none":
+      return "geen ritme herkend";
+    case "rescue": {
+      const f = d.failure;
+      if (f.kind === "majority-multi-cycle")
+        return "reddingslezing: meerderheid van de gaten is meercyclus";
+      if (f.kind === "too-many-extras")
+        return `reddingslezing: ${f.extras} van ${f.totalMembers} maanden wijken af (max ${f.budget} toegestaan)`;
+      return `reddingslezing: ${chainFailureText(f, undefined)}`;
+    }
+    case "whole":
+    case "split": {
+      const f = d.failure;
+      if (f.kind === "amount-spread")
+        return `prijsspreiding ${f.cv.toFixed(2)} boven ${f.max.toFixed(2)}`;
+      return chainFailureText(f, d.amountCents);
+    }
+  }
+}
+
+/** Waarom deze reeks GEEN abonnement opleverde, in één Nederlandse zin — of
+ *  `null` als hij dat wél zou doen, want dan is er niets te verklaren.
+ *
+ *  Leest de echte detector, niet een tweede afgeleide versie ervan: eerst
+ *  `fitMerchantStreams` zelf (dezelfde cadans-/bedraggrendels als
+ *  `detectSubscriptions`), en als die WEL een stroom vond, dezelfde drie
+ *  na-controles die `detectSubscriptions` op zijn beste stroom loslaat
+ *  (nog lopend, herhaalt het bedrag, bedragspreiding) — hier herhaald in
+ *  plaats van herschreven, om precies de reden die dit bestand al vijf keer
+ *  citeert: een kopie loopt op den duur op precies dezelfde manier uit elkaar. */
+export function explainMerchant(
+  sortedDates: string[],
+  amountsCents: number[],
+  maxAmountCv: number,
+  asOf: string,
+): string | null {
+  const result = fitMerchantStreams(sortedDates, amountsCents, maxAmountCv);
+  if (result.streams.length === 0) {
+    return result.diagnostics ? diagnosisText(result.diagnostics) : "geen ritme herkend";
+  }
+
+  let best = result.streams[0];
+  for (const s of result.streams) {
+    if (s.members.length > best.members.length) best = s;
+    else if (s.members.length === best.members.length && s.members[0] < best.members[0]) best = s;
+  }
+  const band = best.band;
+  const streamAmounts = best.members.map((i) => amountsCents[i]);
+  const lastDate = sortedDates[best.members[best.members.length - 1]];
+
+  // Nog lopend? Zelfde grens als `detectSubscriptions`: twee overgeslagen
+  // cycli plus wat speling.
+  const daysAgo = daysBetween(lastDate, asOf);
+  if (daysAgo > band.cadenceDays * 2 + 5) return `laatste afschrijving ${daysAgo} dagen geleden`;
+
+  // Herhaalt het bedrag zich? Eén keer is een prijs die nooit is bevestigd.
+  const timesCharged = new Map<number, number>();
+  for (const c of streamAmounts) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+  if (Math.max(...timesCharged.values()) < 2) return "geen enkel bedrag komt twee keer voor";
+
+  // Laatste bedragspreiding-controle: `amountsCoherent` heeft dit al bovenstrooms
+  // gecheckt, maar de reddingslezing controleert `kept` daar zelf niet op — dus
+  // deze grendel blijft staan, ook al vuurt hij zelden.
+  const amtMean = mean(streamAmounts);
+  if (streamAmounts.length >= 2 && amtMean > 0) {
+    const cv = std(streamAmounts) / amtMean;
+    if (cv > maxAmountCv) return `prijsspreiding ${cv.toFixed(2)} boven ${maxAmountCv.toFixed(2)}`;
+  }
+
+  return null;
 }
 
 /** Dutch name of each cadence, for the UI. */
@@ -979,9 +1414,24 @@ export type MerchantTally = {
   amountCv: number | null;
   /** Waarom deze ontvanger de detector niet eens haalt, of null. */
   excluded: "overboeking-of-persoon" | "woonlast" | "geen-naam" | null;
+  /** Waarom deze ontvanger, ondanks een naam die de detector wél accepteert,
+   *  geen abonnement opleverde — of null als hij dat wel deed, of als
+   *  `excluded` de vraag al beantwoordt. */
+  reason: string | null;
 };
 
 export function merchantTallies(txs: Tx[]): MerchantTally[] {
+  // Zelfde grondslag als `detectSubscriptions`'s "nog lopend"-controle: per
+  // rekening het laatste afschrift, niet het laatste in de hele kluis — anders
+  // zou een oudere ING-export elk Simyo-abonnement als opgezegd verklaren
+  // terwijl er gewoon een verser Amex-bestand naast ligt.
+  const accountEnd = new Map<string, string>();
+  for (const t of txs) {
+    if (!t.date) continue;
+    const cur = accountEnd.get(t.accountKey);
+    if (cur === undefined || t.date > cur) accountEnd.set(t.accountKey, t.date);
+  }
+
   const groups = new Map<
     string,
     { label: string; rows: Tx[]; excluded: MerchantTally["excluded"] }
@@ -1029,6 +1479,15 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
     };
     const mean = cents.reduce((a, b) => a + b, 0) / cents.length;
     const sd = Math.sqrt(cents.reduce((a, c) => a + (c - mean) ** 2, 0) / cents.length);
+    // `asOf` per merchant, niet globaal: het maximum van de accounts die deze
+    // ontvanger zelf raakt, dezelfde grondslag als hierboven — een ontvanger die
+    // alleen op de oude ING-export voorkomt hoort niet "nog lopend" getoetst te
+    // worden tegen de datum van een Amex-bestand waar hij nooit in stond.
+    let asOf = "";
+    for (const t of sorted) {
+      const end = accountEnd.get(t.accountKey) ?? "";
+      if (end > asOf) asOf = end;
+    }
     out.push({
       merchant: key.startsWith("\u0000") ? "" : key,
       label: g.label,
@@ -1039,6 +1498,15 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
       medianGapDays: med(gaps),
       amountCv: cents.length > 1 && mean > 0 ? Math.round((sd / mean) * 1000) / 1000 : null,
       excluded: g.excluded,
+      reason:
+        g.excluded === null
+          ? explainMerchant(
+              sorted.map((t) => t.date),
+              cents,
+              0.35,
+              asOf,
+            )
+          : null,
     });
   }
   /* GESORTEERD OP HOE ABONNEMENT-ACHTIG iets is, niet op bedrag. Dat was mijn

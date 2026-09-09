@@ -119,6 +119,21 @@ test("the thin subscriptions half reports what was actually measured, and seeds 
   expect(html).toContain("<details");
 });
 
+/* Part A (self-explanation): the "Wat LaVega per ontvanger zag" table now
+ * carries a "Waarom niet" column naming the exact gate that stopped a merchant
+ * the detector otherwise accepts — reusing `explainMerchant` from core, not a
+ * second UI-side guess. Albert Heijn's two rows here are 17 days apart and
+ * never repeat a band's minimum occurrence, so core reports "te weinig
+ * afschrijvingen (1 < 2)"; the UI's only job is to print that verbatim. */
+test("the empty-state table names WHY an accepted merchant still isn't a subscription", () => {
+  const html = render([
+    tx("a", "2026-07-02", -12.5, "Albert Heijn"),
+    tx("b", "2026-07-19", -31.4, "Albert Heijn"),
+  ]);
+  expect(html).toContain("Waarom niet");
+  expect(html).toContain("te weinig afschrijvingen (1 &lt; 2)");
+});
+
 /* HIER STONDEN DE KOLOMMEN "Per maand" EN "Per jaar" NAAST ELKAAR, en de tweede
  * was de eerste × 12. Voor dít abonnement klopte dat — Netflix wordt maandelijks
  * afgeschreven — maar voor een jaarabonnement niet, want dan is "per maand" zelf

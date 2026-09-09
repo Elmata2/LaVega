@@ -1254,6 +1254,7 @@ export default function Optimalisatie({
                           <th className="num">Ritme</th>
                           <th className="num">Spreiding</th>
                           <th>Meegenomen?</th>
+                          <th>Waarom niet</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1275,6 +1276,13 @@ export default function Optimalisatie({
                                   ? "nee — gelezen als overboeking of persoon"
                                   : "nee — geen naam op de regel"}
                             </td>
+                            {/* WAAROM NIET, in de eigen woorden van de detector, niet
+                                in een samenvatting ernaast. `t.reason` is al leeg (null)
+                                voor de twee andere gevallen — een uitgesloten regel legt de
+                                "Meegenomen?"-cel al uit, en een regel die wél een abonnement
+                                werd heeft niets te verklaren — dus deze cel toont precies
+                                één ding: de poort die een geaccepteerde naam alsnog tegenhield. */}
+                            <td>{t.reason ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>
