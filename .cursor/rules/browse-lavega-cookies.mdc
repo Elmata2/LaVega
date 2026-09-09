@@ -1,0 +1,40 @@
+---
+description: Load saved gstack browse session before QA of lavega.dev/investing.
+alwaysApply: true
+---
+
+# gstack /browse + investing auth
+
+`/browse` uses Playwright Chromium (`~/.gstack/chromium-profile`), not daily Chrome.
+
+Cursor often sets `PLAYWRIGHT_BROWSERS_PATH` to an empty sandbox cache. Before any `$B` call:
+
+```bash
+B="$HOME/.claude/skills/gstack/browse/dist/browse"
+unset PLAYWRIGHT_BROWSERS_PATH
+export PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"
+export GSTACK_CHROMIUM_PATH="$HOME/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+```
+
+If daemon already `Mode: headed`, pass `--headed` on every command (or config mismatch).
+
+Before opening `lavega.dev` / `www.lavega.dev` /investing:
+
+```bash
+$B state load lavega-investing
+```
+
+If load fails or page is sign-in:
+
+```bash
+$B --headed goto https://www.lavega.dev/investing
+$B --headed focus
+```
+
+Stop. User logs in in the visible window. After they say done:
+
+```bash
+$B state save lavega-investing
+```
+
+Do not dump cookie values into chat. Confirm with URL + that the page is not `/sign-in`.
