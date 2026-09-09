@@ -21,6 +21,10 @@ afterEach(() => {
   host = null;
 });
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 /** Mount the block, click "Weekdagen", return the rendered HTML. */
 function renderWeekdayView(list = txs): string {
   host = document.createElement("div");
@@ -28,7 +32,15 @@ function renderWeekdayView(list = txs): string {
   const el = host;
   act(() => {
     root = createRoot(el);
-    root.render(<StatistiekBlock txs={list} rules={rules} own={own} onSelectCategory={() => {}} />);
+    root.render(
+      <StatistiekBlock
+        txs={list}
+        rules={rules}
+        own={own}
+        onSelectCategory={() => {}}
+        {...SEPARATE}
+      />,
+    );
   });
   const tab = [...el.querySelectorAll("button")].find((b) => b.textContent === "Weekdagen");
   expect(tab).toBeDefined();

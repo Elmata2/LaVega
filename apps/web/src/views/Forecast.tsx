@@ -1,5 +1,6 @@
 import type { Account, EntityForecast, Tx, ScheduledFlow } from "@lavega/core";
 import { forecastCashflow } from "@lavega/core";
+import type { ConversionMode } from "../settings.js";
 import { formatEuro } from "../format";
 import {
   bannerState,
@@ -18,6 +19,8 @@ type ForecastProps = {
   asOf: string;
   bufferCents: number;
   scheduledFlows: ScheduledFlow[];
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
 // 91 days = 13 weekly points. The buffer is user-set (Overzicht → Aandacht) and
@@ -252,12 +255,16 @@ export default function Forecast({
   asOf,
   bufferCents,
   scheduledFlows,
+  fxHistory,
+  mode,
 }: ForecastProps) {
   const fc = forecastCashflow(txs, accounts, {
     asOf,
     horizonDays: HORIZON_DAYS,
     bufferCents,
     scheduledFlows,
+    fxHistory,
+    mode,
   });
   // Honor entityScope, but fall back to the consolidated view if the scope
   // isn't (or is no longer) present in byEntity — App.tsx self-heals a stale

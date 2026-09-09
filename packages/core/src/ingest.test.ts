@@ -34,7 +34,7 @@ test("consolidate sums in/out per entity", () => {
       balance: 100,
     },
   ];
-  const c = consolidate(accounts, txs);
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"]).toMatchObject({ in: 40, out: -10, balance: 100 });
 });
 
@@ -51,7 +51,7 @@ test("consolidate: account with null balance makes entity balance null (unknown)
       balance: null,
     },
   ];
-  const c = consolidate(accounts, txs);
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"].balance).toBeNull();
   expect(c.totalBalance).toBeNull();
 });
@@ -77,12 +77,12 @@ test("consolidate: one known + one null balance in same entity means unknown win
       balance: null,
     },
   ];
-  const c = consolidate(accounts, []);
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"].balance).toBeNull();
 });
 
 test("consolidate: no entities/balances (pristine app, no accounts) -> totalBalance is null, not 0", () => {
-  const c = consolidate([], []);
+  const c = consolidate([], [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.totalBalance).toBeNull();
 });
 
@@ -91,7 +91,7 @@ test("consolidate: a non-EUR account is excluded from the entity balance instead
     { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
     { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 380_000 },
   ];
-  const c = consolidate(accounts, []);
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"].balance).toBe(4_500);
   expect(c.totalBalance).toBe(4_500);
 });
@@ -101,7 +101,7 @@ test("consolidate: an entity whose only account is non-EUR reports an unknown ba
     { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
     { key: "B", iban: "B", name: "", bank: "", entity: "BV2", currency: "USD", balance: 10_000 },
   ];
-  const c = consolidate(accounts, []);
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV2"].balance).toBeNull();
   // BV2's unknown balance makes the total unknown too, same as a missing one
   // would — it must not silently drop out and leave BV1's 4.500 looking whole.
@@ -113,8 +113,79 @@ test("consolidate: a non-EUR transaction is excluded from in/out instead of adde
   const accounts = [
     { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
   ];
-  const c = consolidate(accounts, txs);
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"]).toMatchObject({ in: 0, out: -10, balance: 100 });
+});
+
+test("consolidate: convert mode folds a non-EUR balance in at asOf's rate instead of excluding it", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-06-15", {
+    fxHistory: { HUF: { "2026-06-15": 400 } },
+    mode: "convert",
+  });
+  expect(c.byEntity["BV1"].balance).toBeCloseTo(750, 2);
+});
+
+test("consolidate: balance conversion reads only the injected asOf, never the wall clock", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const fxHistory = { HUF: { "2026-06-15": 400, "2026-07-15": 500 } };
+  const june = consolidate(accounts, [], "2026-06-15", { fxHistory, mode: "convert" });
+  const july = consolidate(accounts, [], "2026-07-15", { fxHistory, mode: "convert" });
+  expect(june.byEntity["BV1"].balance).toBeCloseTo(750, 2);
+  expect(july.byEntity["BV1"].balance).toBeCloseTo(600, 2);
+});
+
+test("consolidate: convert mode converts a non-EUR transaction at its OWN date, not asOf", () => {
+  const txs = assignTxIds([mk({ amount: -300_000, currency: "HUF", date: "2026-03-10" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 0 },
+  ];
+  const c = consolidate(accounts, txs, "2026-03-10", {
+    fxHistory: { HUF: { "2026-03-10": 400 } },
+    mode: "convert",
+  });
+  expect(c.byEntity["BV1"].out).toBeCloseTo(-750, 2);
+});
+
+test("consolidate: convert mode nulls the entity when a foreign account's OWN balance is missing, not just when its rate is", () => {
+  // A genuinely missing a.balance means the same thing here as it does for an
+  // EUR account: this account's contribution is unknown. It must not be
+  // funnelled into the same exclusion as "no FX rate" — the EUR sibling
+  // account has a real balance, but the whole entity is still incomplete.
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "USD", balance: null },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBeNull();
+});
+
+test("consolidate: convert mode excludes a no-rate foreign account without nulling a sibling EUR account's real balance", () => {
+  // The inverse of the null-a.balance test above: here the foreign account's
+  // OWN balance is known, only the FX rate is missing. That must exclude
+  // just this account's contribution — same as separate mode — and must not
+  // propagate unknown-ness onto the entity the way a genuinely missing
+  // a.balance does.
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 5_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBe(100);
+});
+
+test("consolidate: convert mode with no matching rate excludes exactly like separate mode", () => {
+  const txs = assignTxIds([mk({ amount: -300_000, currency: "HUF", date: "2026-03-10" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const c = consolidate(accounts, txs, "2026-03-10", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBeNull(); // no EUR-equivalent account for this entity at all
+  expect(c.byEntity["BV1"].out).toBe(0); // no rate found, so the tx is excluded
 });
 
 /* ── Eén betaling, twee bronnen (review 4, antwoord op vraag 1) ─────────────
@@ -168,8 +239,16 @@ test("dezelfde incasso uit CSV en bankkoppeling wordt één rij — en Simyo kom
     currency: "EUR",
     balance: 0,
   };
-  expect(consolidate([rekening], naCsv).byEntity["Prive"].out).toBeCloseTo(-47.56, 2);
-  expect(consolidate([rekening], naBank).byEntity["Prive"].out).toBeCloseTo(-47.56, 2); // was -95,12
+  expect(
+    consolidate([rekening], naCsv, "2026-08-16", { fxHistory: {}, mode: "separate" }).byEntity[
+      "Prive"
+    ].out,
+  ).toBeCloseTo(-47.56, 2);
+  expect(
+    consolidate([rekening], naBank, "2026-08-16", { fxHistory: {}, mode: "separate" }).byEntity[
+      "Prive"
+    ].out,
+  ).toBeCloseTo(-47.56, 2); // was -95,12
 
   // En het abonnement, dat op de gaten [0, 29, 0, 30, 0, 32, 0] stukliep.
   const [sub] = detectSubscriptions(naBank, { asOf: "2026-08-16" });

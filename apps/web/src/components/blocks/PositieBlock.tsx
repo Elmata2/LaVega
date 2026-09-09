@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { Account } from "@lavega/core";
-import { isEurCurrency } from "@lavega/core";
+import type { Account, ConversionMode } from "@lavega/core";
+import { isEurCurrency, toEur } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
@@ -14,8 +14,14 @@ import { useWidgetEnabled } from "../moduleRegistry";
  * too large". What is left is the answer itself: the split as one bar, and one
  * compact row per entity.
  *
- * One unknown balance inside an entity makes that entity's position unknown —
- * never a partial sum presented as a position, and never a zero. */
+ * A missing balance on any account makes that entity's position unknown —
+ * never a partial sum, and never a zero. A foreign-currency balance is
+ * different: in convert mode LaVega sums whatever it CAN price and names
+ * what it can't (mirrors SaldoBlock's excludedCurrencyKeys), because a
+ * missing rate for one date is a gap that might resolve with the next
+ * import. Separate mode never converts anything, so there the gap is
+ * permanent for as long as that mode is chosen — a foreign balance there
+ * still nulls the whole entity, same as before this file's partial-sum fix. */
 
 // One colour per entity, reused for the row's dot and its segment in the
 // proportion bar so the two read as the same thing. Design tokens only.
@@ -30,39 +36,60 @@ const ROWS = 4;
 type PositieBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
+  asOf: string;
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
-export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps) {
+export default function PositieBlock({
+  accounts,
+  onNavigate,
+  asOf,
+  fxHistory,
+  mode,
+}: PositieBlockProps) {
   const rows = useMemo(() => {
+    const eurBalanceOf = (a: Account): number | null => {
+      if (a.balance === null) return null;
+      if (isEurCurrency(a.currency)) return a.balance;
+      return mode === "convert" ? toEur(a.balance, a.currency, asOf, fxHistory) : null;
+    };
     const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
     return entities
       .map((entity, i) => {
         const entityAccounts = accounts.filter((a) => a.entity === entity);
-        // A balance in another currency is just as unknown here as a missing
-        // one: adding its face value into a EUR total is what produced
-        // "384.500" out of a real 4.500 + a Revolut HUF pocket of 380.000. The
-        // two reasons are tracked separately, though — the footer says which
-        // one it is, and a genuinely missing balance always wins the label
-        // when both are present (mirrors SaldoBlock's excludedCurrencyKeys,
-        // which only counts accounts that DO have a balance).
+        // A genuinely missing balance always wins the label when it and a
+        // foreign-currency gap both exist on the same entity (mirrors
+        // SaldoBlock's excludedCurrencyKeys, which only counts accounts that
+        // DO have a balance) — so unpricedAccounts stays empty once
+        // missingBalance is already true.
         const missingBalance = entityAccounts.some((a) => a.balance === null);
-        const foreignCurrency =
-          !missingBalance && entityAccounts.some((a) => !isEurCurrency(a.currency));
+        const unpricedAccounts = missingBalance
+          ? []
+          : entityAccounts.filter(
+              (a) => a.balance !== null && !isEurCurrency(a.currency) && eurBalanceOf(a) === null,
+            );
+        const pricedAccounts = entityAccounts.filter((a) => eurBalanceOf(a) !== null);
         const balance =
-          missingBalance || foreignCurrency
+          missingBalance ||
+          pricedAccounts.length === 0 ||
+          (mode === "separate" && unpricedAccounts.length > 0)
             ? null
-            : entityAccounts.reduce((s, a) => s + (a.balance as number), 0);
+            : pricedAccounts.reduce((s, a) => s + (eurBalanceOf(a) as number), 0);
         return {
           entity,
           color: entityColor(i),
           count: entityAccounts.length,
           balance,
           missingBalance,
-          foreignCurrency,
+          unpricedAccounts,
+          converted: entityAccounts.some(
+            (a) => !isEurCurrency(a.currency) && eurBalanceOf(a) !== null,
+          ),
         };
       })
       .sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
-  }, [accounts]);
+  }, [accounts, asOf, fxHistory, mode]);
 
   const positiveTotal = rows.reduce(
     (s, r) => s + (r.balance !== null && r.balance > 0 ? r.balance : 0),
@@ -72,10 +99,19 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
   const hidden = rows.length - shown.length;
   // Two different facts, worded differently in the footer (mirrors
   // SaldoBlock's currencyCount / noBalanceCount split): a company with no
-  // balance at all is not the same claim as one whose only balance is in a
-  // currency LaVega does not convert.
+  // balance at all is not the same claim as one that still has an unpriced
+  // foreign-currency account.
   const noBalanceCount = rows.filter((r) => r.missingBalance).length;
-  const currencyCount = rows.filter((r) => r.foreignCurrency).length;
+  const currencyCount = rows.filter((r) => r.unpricedAccounts.length > 0).length;
+  // Named the same way SaldoBlock names its excludedCurrencyKeys, so "why is
+  // this smaller than the account list" has an answer instead of a bare count.
+  const currencyNames = rows
+    .flatMap((r) => r.unpricedAccounts)
+    .map((a) => a.bank || a.name || a.key)
+    .join(", ");
+  // Whether something WAS actually converted — separate from currencyCount,
+  // which counts what is still excluded. Only worth a line once, not per row.
+  const anyConverted = rows.some((r) => r.converted);
 
   return (
     <Module
@@ -94,7 +130,10 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
               noBalanceCount > 0 &&
                 `${noBalanceCount} bedrijf${noBalanceCount === 1 ? "" : "ven"} zonder compleet saldo`,
               currencyCount > 0 &&
-                `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta — LaVega rekent nog niet om naar euro's`,
+                (mode === "convert"
+                  ? `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} — nog geen koers.`
+                  : `${currencyCount} bedrijf${currencyCount === 1 ? "" : "ven"} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} — LaVega rekent nog niet om naar euro's`),
+              anyConverted && "Omgerekend via ECB.",
             ]
               .filter(Boolean)
               .join(" · ") || "Alle saldo's bekend"}

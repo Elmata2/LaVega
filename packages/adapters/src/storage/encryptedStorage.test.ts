@@ -476,6 +476,30 @@ test("auto-booked invoices round-trip and survive lock/unlock; legacy vault defa
   expect(await v.getAutoBookedInvoices()).toEqual([entry]);
 });
 
+test("fx history round-trips, defaults to {} on a legacy vault, and survives lock/unlock", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-fx-history");
+  await v.setup("pw");
+  expect(await v.getFxHistory()).toEqual({});
+
+  const history = { HUF: { "2026-08-01": 390.5, "2026-08-02": 391.2 } };
+  await v.putFxHistory(history);
+  expect(await v.getFxHistory()).toEqual(history);
+
+  v.lock();
+  expect(await v.unlock("pw")).toBe(true);
+  expect(await v.getFxHistory()).toEqual(history);
+});
+
+test("fx history get/put while locked throws", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const v = createEncryptedStorage("lavega-vault-test-fx-history-locked");
+  await v.setup("pw");
+  v.lock();
+  await expect(v.getFxHistory()).rejects.toBeTruthy();
+  await expect(v.putFxHistory({ HUF: { "2026-08-01": 390.5 } })).rejects.toBeTruthy();
+});
+
 test("broker credentials stay encrypted, are absent while locked, and restore with the vault", async () => {
   globalThis.indexedDB = new IDBFactory();
   const source = createEncryptedStorage("lavega-vault-test-credentials-source");

@@ -45,14 +45,19 @@ test("Reassign flow: change an account's entity -> persist -> its txs regroup on
   await storage.putAccounts(accounts);
   await storage.putTxs(txs);
 
-  expect(consolidate(accounts, txs).byEntity["BV1"]).toMatchObject({ in: 50, out: -10 });
+  expect(
+    consolidate(accounts, txs, "2026-01-03", { fxHistory: {}, mode: "separate" }).byEntity["BV1"],
+  ).toMatchObject({ in: 50, out: -10 });
 
   const next = reassignEntity(accounts, "A1", "BV3");
   await storage.putAccounts([next.find((a) => a.key === "A1")!]);
 
   const reloaded = await storage.getAccounts();
   const persistedTxs = await storage.getTxs();
-  const after = consolidate(reloaded, persistedTxs);
+  const after = consolidate(reloaded, persistedTxs, "2026-01-03", {
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(after.byEntity["BV3"]).toMatchObject({ in: 50, out: -10 });
   expect(after.byEntity["BV1"]).toBeUndefined();
 });

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Account, EntityScope, EntitySummary, LearnedFact, Rule } from "@lavega/core";
+import type { ConversionMode } from "../settings.js";
 import {
   accountType,
   assumptionDueForReview,
@@ -63,6 +64,10 @@ type ProfielProps = {
   /** The level under the country. "" means he has not said — never a default. */
   homeRegion: string;
   onHomeRegionChange: (region: string) => void;
+  /** Whether a non-EUR balance/transaction counts toward the euro totals. Owned
+   *  by App (see homeCountry above) so every view sees the same flip. */
+  fxConversionMode: ConversionMode;
+  onFxConversionModeChange: (mode: ConversionMode) => void;
   /** The owner's own name. A local preference; it never leaves this browser. */
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
@@ -485,6 +490,8 @@ export default function Profiel({
   onHomeCountryChange,
   homeRegion,
   onHomeRegionChange,
+  fxConversionMode,
+  onFxConversionModeChange,
   ownerName,
   onOwnerNameChange,
   onLock,
@@ -710,6 +717,25 @@ export default function Profiel({
           {regions.length > 0
             ? `LaVega kent de lijst voor ${countryName(homeCountry)}; je mag ook zelf iets intypen.`
             : `Voor ${countryName(homeCountry)} heeft LaVega geen geverifieerde regiolijst — typ hem zelf, of laat hem leeg.`}
+        </p>
+      </section>
+
+      <section className="card" aria-label="Vreemde valuta">
+        <div className="card-header">
+          <h2>Vreemde valuta</h2>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={fxConversionMode === "convert"}
+            aria-label="Vreemde valuta omrekenen naar euro"
+            onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
+          />{" "}
+          Vreemde valuta omrekenen naar euro
+        </label>
+        <p className="cell-sub">
+          Rekeningen en transacties in een andere valuta dan euro tellen mee in de totalen,
+          omgerekend via de ECB-koers van de dag. Zet dit uit om ze zoals voorheen apart te houden.
         </p>
       </section>
 

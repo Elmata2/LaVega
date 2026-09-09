@@ -49,6 +49,11 @@ type VaultData = {
    *  localStorage it replaces. */
   n8nSettings?: N8nSettings;
   n8nAutoBooked?: N8nAutoBooked[];
+  /** ECB history per non-EUR currency (isoDate -> units-per-1-EUR), merged
+   *  across currencies. Lives in the vault (not refetched every load) so a
+   *  euro figure already converted from a past date stays the same number
+   *  offline, after the fact, or once the ECB has moved on. */
+  fxHistory?: Record<string, Record<string, number>>;
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
@@ -79,6 +84,8 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putN8nSettings(settings: N8nSettings): Promise<void>;
   getAutoBookedInvoices(): Promise<N8nAutoBooked[]>;
   putAutoBookedInvoices(list: N8nAutoBooked[]): Promise<void>;
+  getFxHistory(): Promise<Record<string, Record<string, number>>>;
+  putFxHistory(h: Record<string, Record<string, number>>): Promise<void>;
 }
 
 // Local base64 decode — not exported by vaultCrypto.ts (only its CipherBlob.salt
@@ -389,6 +396,20 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, n8nAutoBooked: [...list] };
+        await persist();
+      });
+    },
+
+    // fxHistory is also an optional VaultData field — a legacy vault decrypts
+    // without it, so the getter defaults to {}. Replace-all, like n8nSettings.
+    async getFxHistory(): Promise<Record<string, Record<string, number>>> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return { ...data.fxHistory };
+    },
+    putFxHistory(h: Record<string, Record<string, number>>): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, fxHistory: { ...h } };
         await persist();
       });
     },

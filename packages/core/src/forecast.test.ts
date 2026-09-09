@@ -17,6 +17,10 @@ function tx(id: string, date: string, amount: number, cp: string): Tx {
   };
 }
 
+function txCur(id: string, date: string, amount: number, cp: string, currency: string): Tx {
+  return { ...tx(id, date, amount, cp), currency };
+}
+
 test("amountCents stays an integer for an even occurrence count (median of two middles is rounded)", () => {
   const txs: Tx[] = [
     tx("1", "2026-03-25", -100.0, "Saas"),
@@ -118,6 +122,8 @@ test("roll-forward: monthly salary + rent projects the balance, no shortfall, en
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
   });
   const f = byEntity["BV1"];
   expect(f.openingCents).toBe(500000);
@@ -141,6 +147,8 @@ test("shortfall: a large recurring outflow against a small opening flags a breac
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
   });
   const f = byEntity["BV1"];
   expect(f.shortfall).not.toBeNull();
@@ -157,7 +165,11 @@ test("null opening (CSV-only) -> flow projected internally but closing/band null
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null },
   ];
-  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const { byEntity } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
   const f = byEntity["BV1"];
   expect(f.openingCents).toBeNull();
   expect(f.points[0].projectedClosingCents).toBeNull();
@@ -181,6 +193,8 @@ test("thin history: a big non-recurring one-off does NOT dominate (incidental ba
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
   });
   const f = byEntity["BV1"];
   expect(f.streams).toHaveLength(0); // nothing recurs (Coffee 2x, Equipment 1x)
@@ -197,7 +211,12 @@ test("sufficient history: the incidental (non-recurring) baseline drifts the pro
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 });
+  const { byEntity } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  });
   const f = byEntity["BV1"];
   expect(f.streams).toHaveLength(0);
   // history 90d, nonRecurring sum -182000c, per day round(-182000/90) = -2022 -> well below opening
@@ -243,7 +262,11 @@ test("orphan txs (accountKey with no account) -> 'onbekend' scope has null openi
     },
   ];
   const accounts: Account[] = []; // no accounts at all
-  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const { byEntity } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
   const f = byEntity["onbekend"];
   expect(f.openingCents).toBeNull();
   expect(f.shortfall).toBeNull(); // would have been a spurious breach if opening defaulted to 0
@@ -258,8 +281,16 @@ test("deterministic: identical JSON on repeated runs", () => {
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const a = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
-  const b = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const a = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
+  const b = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
 });
 
@@ -279,8 +310,14 @@ test("forecast: a scheduled outflow on its due date lowers the projected closing
   const withFlow = forecastCashflow([], accounts, {
     asOf: "2026-08-01",
     scheduledFlows: [flow],
+    fxHistory: {},
+    mode: "separate",
   }).consolidated;
-  const without = forecastCashflow([], accounts, { asOf: "2026-08-01" }).consolidated;
+  const without = forecastCashflow([], accounts, {
+    asOf: "2026-08-01",
+    fxHistory: {},
+    mode: "separate",
+  }).consolidated;
   // €300 lower from the due date onward (week 3 point = day 21, after 08-15)
   const wk3With = withFlow.points.find((p) => p.date >= "2026-08-15")!;
   const wk3Without = without.points.find((p) => p.date >= "2026-08-15")!;
@@ -293,8 +330,17 @@ test("forecast: no scheduledFlows => identical to before (additive)", () => {
   const accounts = [
     { key: "A", iban: "A", name: "A", bank: "ING", entity: "BV1", currency: "EUR", balance: 500 },
   ];
-  const a = forecastCashflow([], accounts, { asOf: "2026-08-01" }).consolidated;
-  const b = forecastCashflow([], accounts, { asOf: "2026-08-01", scheduledFlows: [] }).consolidated;
+  const a = forecastCashflow([], accounts, {
+    asOf: "2026-08-01",
+    fxHistory: {},
+    mode: "separate",
+  }).consolidated;
+  const b = forecastCashflow([], accounts, {
+    asOf: "2026-08-01",
+    scheduledFlows: [],
+    fxHistory: {},
+    mode: "separate",
+  }).consolidated;
   expect(a.points).toEqual(b.points);
 });
 
@@ -353,9 +399,12 @@ test("a stream silent for more than two missed cycles is not projected, and is N
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   // Still DETECTED (alerts.ts reasons over forecast.streams), but not projected.
   expect(f.streams).toHaveLength(1);
   expect(f.basis!.liveStreamCount).toBe(0);
@@ -373,9 +422,12 @@ test("a stream inside the two-missed-cycle window is still projected", () => {
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.liveStreamCount).toBe(1);
   expect(f.basis!.endedStreams).toHaveLength(0);
   expect(f.points[12].projectedClosingCents).toBeLessThan(500000);
@@ -415,9 +467,12 @@ test("no measurable variability -> NO band at all (null), never a confident tigh
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.bandBasis).toBe("none");
   expect(f.points[0].lowerCents).toBeNull();
   expect(f.points[0].upperCents).toBeNull();
@@ -434,9 +489,12 @@ test("the band widens by the streams' OWN measured amount spread, one occurrence
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 10000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   const wk = (n: number) => f.points[n - 1];
   // Week 1: nothing has been paid yet, so nothing is uncertain yet.
   expect(wk(1).upperCents! - wk(1).lowerCents!).toBe(0);
@@ -461,9 +519,12 @@ test("quiet weeks count as real zeros: two identical burst weeks are not a stead
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 20000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-04-15", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-04-15",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.bandBasis).toBe("both");
   expect(f.basis!.fullWeeks).toBeGreaterThanOrEqual(8);
   expect(f.points[0].upperCents! - f.points[0].lowerCents!).toBeGreaterThan(0);
@@ -508,9 +569,12 @@ test("a one-off sweep to the owner's OWN savings account is not projected as a s
     t("2", "2026-05-01", -500, "NL02BANK0000000002"), // the sweep — his own money, still his
     t("3", "2026-05-30", -1, "Boek"),
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-06-01", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-06-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   // Only the €2 of real incidental spend feeds the baseline: -200c over 90 days.
   expect(f.basis!.incidentalIncluded).toBe(true);
   expect(f.basis!.incidentalPerWeekCents).toBe(-14);
@@ -558,9 +622,12 @@ test("basis reports the SHORTEST account's history — three weeks of one card c
     on("3", "B", "2026-07-01", "Tanken"),
     on("4", "B", "2026-07-22", "Lunch"),
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-25", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-25",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.historyDays).toBe(202);
   expect(f.basis!.accountsTotal).toBe(2);
   expect(f.basis!.accountsWithHistory).toBe(2);
@@ -602,9 +669,12 @@ test("an account whose balance counts but whose transactions were never imported
     manual: false,
   });
   const txs: Tx[] = [on("1", "2026-01-01", "Koffie"), on("2", "2026-07-19", "Boek")];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-25", horizonDays: 91 }).byEntity[
-    "BV1"
-  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-25",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.accountsTotal).toBe(2);
   expect(f.basis!.accountsWithHistory).toBe(1); // B's future flows are invisible
   expect(f.basis!.confidence).toBe("low");
@@ -614,7 +684,12 @@ test("nothing to project from -> confidence 'none': a flat line at today's balan
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow([], accounts, { asOf: "2026-07-01", horizonDays: 91 }).byEntity["BV1"];
+  const f = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.confidence).toBe("none");
   expect(f.basis!.liveStreamCount).toBe(0);
   expect(f.basis!.incidentalIncluded).toBe(false);
@@ -629,14 +704,14 @@ test("history long enough and even across accounts -> medium, then high", () => 
   const medium = forecastCashflow(
     [tx("1", "2026-04-01", -25, "Koffie"), tx("2", "2026-06-30", -25, "Boek")],
     accounts,
-    { asOf: "2026-07-01" },
+    { asOf: "2026-07-01", fxHistory: {}, mode: "separate" },
   ).byEntity["BV1"];
   expect(medium.basis!.confidence).toBe("medium"); // 90 days
 
   const high = forecastCashflow(
     [tx("1", "2025-10-01", -25, "Koffie"), tx("2", "2026-06-30", -25, "Boek")],
     accounts,
-    { asOf: "2026-07-01" },
+    { asOf: "2026-07-01", fxHistory: {}, mode: "separate" },
   ).byEntity["BV1"];
   expect(high.basis!.confidence).toBe("high"); // 272 days
 });
@@ -659,6 +734,8 @@ test("an overdue, still-unpaid scheduled flow is reported — not silently dropp
   const f = forecastCashflow([], accounts, {
     asOf: "2026-08-01",
     scheduledFlows: [overdue],
+    fxHistory: {},
+    mode: "separate",
   }).consolidated;
   // Not in the line: from here we cannot know whether he paid it outside LaVega.
   expect(f.points[12].projectedClosingCents).toBe(100000);
@@ -684,6 +761,8 @@ test("a future scheduled flow counts as evidence and is projected", () => {
   const f = forecastCashflow([], accounts, {
     asOf: "2026-08-01",
     scheduledFlows: [flow],
+    fxHistory: {},
+    mode: "separate",
   }).consolidated;
   expect(f.basis!.projectedFlowCount).toBe(1);
   expect(f.basis!.overdueFlowCount).toBe(0);
@@ -707,6 +786,8 @@ test("atRisk: the band reaches below the buffer while the expected line still cl
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 15000,
+    fxHistory: {},
+    mode: "separate",
   }).byEntity["BV1"];
   expect(f.shortfall).toBeNull(); // the expected line ends at €200, above the €150 buffer
   expect(f.atRisk).not.toBeNull();
@@ -723,8 +804,137 @@ test("atRisk is cleared when there is a real shortfall — the louder statement 
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 1000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 })
-    .byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.shortfall).not.toBeNull();
   expect(f.atRisk).toBeNull();
+});
+
+/* ── Foreign-currency opening balance ─────────────────────────────────────── */
+
+test("a HUF balance converts to EUR at the ECB rate in convert mode — never its raw face value", () => {
+  const accounts: Account[] = [
+    { key: "H1", iban: "H1", name: "x", bank: "", entity: "BV1", currency: "HUF", balance: 300000 },
+  ];
+  const f = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    fxHistory: { HUF: { "2026-07-01": 400 } },
+    mode: "convert",
+  }).byEntity["BV1"];
+  expect(f.openingCents).toBe(75000); // 300000 HUF / 400 = €750, not €300.000
+});
+
+test("the same HUF balance is EXCLUDED, not zeroed and not raw, in separate mode — opening is unknown", () => {
+  const accounts: Account[] = [
+    { key: "H1", iban: "H1", name: "x", bank: "", entity: "BV1", currency: "HUF", balance: 300000 },
+  ];
+  const f = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    fxHistory: { HUF: { "2026-07-01": 400 } },
+    mode: "separate",
+  }).byEntity["BV1"];
+  expect(f.openingCents).toBeNull();
+});
+
+test("a HUF account with no rate for the date excludes itself but does not poison the EUR account's opening", () => {
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 500 },
+    { key: "H1", iban: "H1", name: "y", bank: "", entity: "BV1", currency: "HUF", balance: 300000 },
+  ];
+  const f = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {}, // no HUF rate at all
+    mode: "convert",
+  }).byEntity["BV1"];
+  expect(f.openingCents).toBe(50000); // only the EUR account's €500 counts
+});
+
+test("a genuinely missing balance still nulls the whole opening — unchanged regression guard", () => {
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null },
+  ];
+  const f = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "convert",
+  }).byEntity["BV1"];
+  expect(f.openingCents).toBeNull();
+});
+
+/* ── Foreign-currency recurring streams and incidental spend ─────────────── */
+
+test("a monthly HUF recurring outflow converts to EUR at each occurrence's own rate in convert mode — not its raw face value", () => {
+  const txs: Tx[] = [
+    txCur("1", "2026-04-25", -300000, "Berleti dij", "HUF"),
+    txCur("2", "2026-05-25", -300000, "Berleti dij", "HUF"),
+    txCur("3", "2026-06-25", -300000, "Berleti dij", "HUF"),
+  ];
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
+  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+    fxHistory: { HUF: { "2026-04-25": 400, "2026-05-25": 400, "2026-06-25": 400 } },
+    mode: "convert",
+  }).byEntity["BV1"];
+  expect(f.streams).toHaveLength(1);
+  expect(f.streams[0].sign).toBe(-1);
+  expect(f.streams[0].amountCents).toBe(75000); // 300000 HUF / 400 = €750, not €300.000
+});
+
+test("the same monthly HUF stream is ABSENT (not present at the wrong amount) in separate mode", () => {
+  const txs: Tx[] = [
+    txCur("1", "2026-04-25", -300000, "Berleti dij", "HUF"),
+    txCur("2", "2026-05-25", -300000, "Berleti dij", "HUF"),
+    txCur("3", "2026-06-25", -300000, "Berleti dij", "HUF"),
+  ];
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
+  ];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+    fxHistory: { HUF: { "2026-04-25": 400, "2026-05-25": 400, "2026-06-25": 400 } },
+    mode: "separate",
+  }).byEntity["BV1"];
+  expect(f.streams).toHaveLength(0);
+});
+
+test("a one-off HUF transaction converts into the incidental baseline at its own date's rate in convert mode, and is excluded in separate mode", () => {
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
+  ];
+  const txs: Tx[] = [
+    tx("1", "2026-05-01", -100, "Koffie"),
+    txCur("2", "2026-06-30", -40000, "Buitenlandse leverancier", "HUF"),
+  ];
+  const converted = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+    fxHistory: { HUF: { "2026-06-30": 400 } },
+    mode: "convert",
+  }).byEntity["BV1"];
+  // historyDays = 60 (>= MIN_HISTORY_DAYS) -> incidental baseline included.
+  // sum = round(-100*100) + round(-40000/400*100) = -10000 + -10000 = -20000c
+  // per day = round(-20000/60) = -333; closing = 500000 + (-333 * 91)
+  expect(converted.points[12].projectedClosingCents).toBe(469697);
+
+  const separate = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+    fxHistory: { HUF: { "2026-06-30": 400 } },
+    mode: "separate",
+  }).byEntity["BV1"];
+  // HUF tx excluded -> sum = -10000c, per day = round(-10000/60) = -167
+  expect(separate.points[12].projectedClosingCents).toBe(484803);
 });

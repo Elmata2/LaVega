@@ -1,5 +1,7 @@
 import type { Account, Tx } from "./model.js";
 import { isEurCurrency } from "./model.js";
+import type { ConversionMode } from "./fx.js";
+import { toEur } from "./fx.js";
 import { assignTxIds, txBase } from "./hash.js";
 import { merchantKey } from "./subscriptions.js";
 
@@ -142,19 +144,43 @@ export function ingest(existing: Tx[], incoming: Omit<Tx, "id">[]): Tx[] {
   return [...existing.map((t) => upgraded.get(t.id) ?? t), ...kept];
 }
 
-export function consolidate(accounts: Account[], txs: Tx[]) {
+export function consolidate(
+  accounts: Account[],
+  txs: Tx[],
+  asOf: string,
+  conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
+) {
   const entityOf = new Map(accounts.map((a) => [a.key, a.entity]));
   const byEntity: Record<string, { in: number; out: number; balance: number | null }> = {};
   const eurAccountEntities = new Set<string>();
   for (const a of accounts) {
     const b = (byEntity[a.entity] ??= { in: 0, out: 0, balance: 0 });
-    // A foreign-currency pocket is excluded, not folded in at face value — see
-    // isEurCurrency — but unlike a missing balance it does not make the rest of
-    // the entity's balance unknown, as long as the entity has at least one EUR
-    // account to sum (the fix-up loop below handles the entity that has none).
-    if (!isEurCurrency(a.currency)) continue;
+    if (isEurCurrency(a.currency)) {
+      eurAccountEntities.add(a.entity);
+      b.balance = a.balance === null || b.balance === null ? null : b.balance + a.balance;
+      continue;
+    }
+    // "separate" mode: excluded, not folded in at face value — but unlike a
+    // missing balance it does not make the rest of the entity's balance
+    // unknown, as long as the entity has at least one EUR(-equivalent)
+    // account to sum (the fix-up loop below handles the entity that has
+    // none). "convert" mode folds it in at `asOf`'s rate instead. Two
+    // different unknowns live on this path and must not share a `continue`:
+    // a genuinely missing `a.balance` means the same thing it means for an
+    // EUR account three lines up (this account's contribution is unknown),
+    // so it nulls the entity; a `null` from `toEur` means only that no rate
+    // was found for a balance that IS known, which excludes this account's
+    // contribution exactly like "separate" mode, not the entity's balance.
+    if (conversion.mode !== "convert") continue;
+    if (a.balance === null) {
+      eurAccountEntities.add(a.entity);
+      b.balance = null;
+      continue;
+    }
+    const converted = toEur(a.balance, a.currency, asOf, conversion.fxHistory);
+    if (converted === null) continue;
     eurAccountEntities.add(a.entity);
-    b.balance = a.balance === null || b.balance === null ? null : b.balance + a.balance;
+    b.balance = b.balance === null ? null : b.balance + converted;
   }
   // An entity whose accounts are ALL non-EUR never ran the sum above, so it is
   // still sitting at the `??=` seed of 0 — a confident "this entity holds
@@ -167,9 +193,16 @@ export function consolidate(accounts: Account[], txs: Tx[]) {
   for (const t of txs) {
     const e = entityOf.get(t.accountKey) ?? "onbekend";
     const b = (byEntity[e] ??= { in: 0, out: 0, balance: null });
-    if (!isEurCurrency(t.currency)) continue;
-    if (t.amount >= 0) b.in += t.amount;
-    else b.out += t.amount;
+    // A transaction converts at its OWN date, unlike the balance above: a flow
+    // has a date already, so there is no `asOf` fallback to reach for.
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+        : null;
+    if (eurAmount === null) continue;
+    if (eurAmount >= 0) b.in += eurAmount;
+    else b.out += eurAmount;
   }
   const balances = Object.values(byEntity).map((b) => b.balance);
   const totalBalance =

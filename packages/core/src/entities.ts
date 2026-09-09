@@ -1,4 +1,5 @@
 import type { Account, Tx } from "./model.js";
+import type { ConversionMode } from "./fx.js";
 import { norm } from "./hash.js";
 import { consolidate } from "./ingest.js";
 
@@ -228,13 +229,15 @@ export function accountsInScope(
 export function consolidateByScope(
   accounts: readonly Account[],
   txs: readonly Tx[],
+  asOf: string,
+  conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
   profiles: readonly EntityProfile[] = [],
 ): {
   byScope: Record<string, { in: number; out: number; balance: number | null }>;
   totalBalance: number | null;
 } {
   const relabelled = accounts.map((a) => ({ ...a, entity: accountScope(a, profiles) as string }));
-  const { byEntity, totalBalance } = consolidate(relabelled, [...txs]);
+  const { byEntity, totalBalance } = consolidate(relabelled, [...txs], asOf, conversion);
   return { byScope: byEntity, totalBalance };
 }
 

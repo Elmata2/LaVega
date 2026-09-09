@@ -75,6 +75,8 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       putFacts: async () => {},
       getEntityProfiles: async () => vault.profiles,
       putEntityProfiles: async () => {},
+      getFxHistory: async () => ({}),
+      putFxHistory: async () => {},
     }),
     createRatesProvider: () => ({
       getRates: async () => ({ rates: [], asOf: "2026-01-01", source: "bundled" as const }),

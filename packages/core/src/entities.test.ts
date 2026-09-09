@@ -154,14 +154,20 @@ test("the existing per-entity consolidation is untouched, and the scope rollup a
     { entity: "BV2", scope: "business" },
   ];
 
-  const perEntity = consolidate(accounts, txs);
+  const perEntity = consolidate(accounts, txs, "2026-08-01", { fxHistory: {}, mode: "separate" });
   expect(perEntity.byEntity).toEqual({
     BV1: { in: 30, out: 0, balance: 100 },
     BV2: { in: 0, out: -10, balance: 200 },
     Privé: { in: 5, out: 0, balance: 50 },
   });
 
-  const { byScope, totalBalance } = consolidateByScope(accounts, txs, profiles);
+  const { byScope, totalBalance } = consolidateByScope(
+    accounts,
+    txs,
+    "2026-08-01",
+    { fxHistory: {}, mode: "separate" },
+    profiles,
+  );
   expect(byScope).toEqual({
     business: { in: 30, out: -10, balance: 300 },
     personal: { in: 5, out: 0, balance: 50 },
@@ -176,7 +182,13 @@ test("the scope rollup inherits consolidate's unknown-balance rule: one null mak
     { entity: "BV1", scope: "business" },
     { entity: "BV2", scope: "business" },
   ];
-  const { byScope, totalBalance } = consolidateByScope(accounts, [], profiles);
+  const { byScope, totalBalance } = consolidateByScope(
+    accounts,
+    [],
+    "2026-08-01",
+    { fxHistory: {}, mode: "separate" },
+    profiles,
+  );
   expect(byScope.business.balance).toBeNull();
   expect(byScope.personal.balance).toBe(50);
   expect(totalBalance).toBeNull();
@@ -184,7 +196,12 @@ test("the scope rollup inherits consolidate's unknown-balance rule: one null mak
 
 test("with no profiles at all everything rolls up as privé — the default is genuinely the fallback", () => {
   const accounts = [acc("A", "BV1", 100), acc("B", "Privé", 50)];
-  const { byScope } = consolidateByScope(accounts, []);
+  // No `profiles` argument at all — proving the default is genuinely the
+  // fallback, not just a value passed explicitly.
+  const { byScope } = consolidateByScope(accounts, [], "2026-08-01", {
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(Object.keys(byScope)).toEqual(["personal"]);
   expect(byScope.personal.balance).toBe(150);
 });

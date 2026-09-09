@@ -55,6 +55,11 @@ test("public data routes stay open without a session", async () => {
   expect((await app.request("/api/agent/status")).status).toBe(200);
 });
 
+test("/api/fx/history stays open without a session", async () => {
+  const res = await app.request("/api/fx/history?currency=huf&from=2026-08-01");
+  expect(res.status).not.toBe(401);
+});
+
 test("/api/auth/* stays open — it is how you log in", async () => {
   const res = await app.request("/api/auth/get-session");
   expect(res.status).not.toBe(401);

@@ -2,6 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
+import { forecastCashflow } from "@lavega/core";
 import Forecast from "./Forecast";
 
 /* App review 2, 20 August: "remove the Forecast explainer about the
@@ -70,6 +71,8 @@ const render = () =>
       asOf="2026-12-28"
       bufferCents={250_000}
       scheduledFlows={[]}
+      fxHistory={{}}
+      mode="separate"
     />,
   );
 
@@ -90,4 +93,61 @@ test("what carries numbers stays: the chart, the drivers and the banner", () => 
   expect(html).toContain("Verwachte inkomsten");
   expect(html).toContain("Werkgever BV");
   expect(html).toContain("Tekort-signalering");
+});
+
+/* Same bug forecast.ts had directly: a HUF balance must never enter the chart
+ * at its raw face value. No txs, so every weekly point stays flat at the
+ * opening — the last point's readout is the opening itself either way. */
+
+test("a HUF balance shows its converted euro value in convert mode, and no position at all in separate mode", () => {
+  const hufAccounts: Account[] = [
+    {
+      key: "H1",
+      iban: "H1",
+      name: "Buda",
+      bank: "OTP",
+      entity: "Prive",
+      currency: "HUF",
+      balance: 300_000,
+    },
+  ];
+  const fxHistory = { HUF: { "2026-12-28": 400 } };
+
+  // Sanity on the engine itself first: 300.000 HUF / 400 = €750.
+  const converted = forecastCashflow([], hufAccounts, {
+    asOf: "2026-12-28",
+    fxHistory,
+    mode: "convert",
+  }).consolidated;
+  expect(converted.openingCents).toBe(75_000);
+
+  const convertHtml = renderToStaticMarkup(
+    <Forecast
+      txs={[]}
+      accounts={hufAccounts}
+      entityScope=""
+      asOf="2026-12-28"
+      bufferCents={0}
+      scheduledFlows={[]}
+      fxHistory={fxHistory}
+      mode="convert"
+    />,
+  );
+  expect(convertHtml).toContain("€750"); // never "€300.000"
+  expect(convertHtml).not.toContain("300.000");
+
+  const separateHtml = renderToStaticMarkup(
+    <Forecast
+      txs={[]}
+      accounts={hufAccounts}
+      entityScope=""
+      asOf="2026-12-28"
+      bufferCents={0}
+      scheduledFlows={[]}
+      fxHistory={fxHistory}
+      mode="separate"
+    />,
+  );
+  expect(separateHtml).toContain("Positie onbekend"); // excluded, not a raw or zero balance
+  expect(separateHtml).not.toContain("€750");
 });

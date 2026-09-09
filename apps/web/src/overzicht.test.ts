@@ -72,13 +72,19 @@ const txs: Tx[] = [
 ];
 
 test("Overzicht KPI derivations: an unknown account balance makes Totaalpositie unknown", () => {
-  const { totalBalance } = consolidate(accounts, txs);
+  const { totalBalance } = consolidate(accounts, txs, "2026-07-02", {
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(totalBalance).toBeNull();
 });
 
 test("Overzicht KPI derivations: Totaalpositie sums all entities once every balance is known", () => {
   const knownAccounts = accounts.map((a) => (a.key === "A3" ? { ...a, balance: 44_100 } : a));
-  const { totalBalance } = consolidate(knownAccounts, txs);
+  const { totalBalance } = consolidate(knownAccounts, txs, "2026-07-02", {
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(totalBalance).toBe(182_310 + 21_900 + 44_100 + 100);
 });
 

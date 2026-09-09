@@ -79,6 +79,8 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeCountryChange: () => {},
     homeRegion: "",
     onHomeRegionChange: () => {},
+    fxConversionMode: "convert",
+    onFxConversionModeChange: () => {},
     ownerName: { first: "", last: "" },
     onOwnerNameChange: () => {},
     onLock: () => {},
@@ -685,6 +687,27 @@ test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   // De voorkeur overleeft het scherm — anders staat de aanname er bij de
   // volgende keer weer, zonder dat iemand hem heeft aangezet.
   expect(localStorage.getItem("lavega.cashbackAssumption")).toBe("0");
+});
+
+test("vreemde valuta omrekenen staat standaard aan en meldt de wijziging aan de ouder", async () => {
+  const onFxConversionModeChange = vi.fn();
+  await render({ fxConversionMode: "convert", onFxConversionModeChange });
+  const toggle = container!.querySelector(
+    '[aria-label="Vreemde valuta omrekenen naar euro"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(true); // omrekenen is het gestelde standaardgedrag
+
+  // App owns the state (see App.tsx); Profiel only reports the click.
+  act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(onFxConversionModeChange).toHaveBeenCalledWith("separate");
+});
+
+test("de omreken-checkbox volgt de fxConversionMode prop", async () => {
+  await render({ fxConversionMode: "separate" });
+  const toggle = container!.querySelector(
+    '[aria-label="Vreemde valuta omrekenen naar euro"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
 });
 
 test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async () => {

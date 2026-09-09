@@ -2,6 +2,8 @@
  * provider-fee comparison lives in the chat assistant, which web-searches
  * live fees instead of relying on a static, staleness-prone table. */
 
+import { isEurCurrency } from "./model.js";
+
 export type FxRate = { base: string; date: string; rates: Record<string, number> };
 
 /* London quotes several instruments in pence under GBp (Yahoo) or GBX (brokers).
@@ -63,6 +65,54 @@ export function parseFxRatePayload(raw: unknown): FxRate | null {
   }
   if (Object.keys(out).length === 0) return null;
   return { base: o.base, date: o.date, rates: out };
+}
+
+export type ConversionMode = "convert" | "separate";
+
+/** Most recent rate for `currency` on or before `date`, from a per-currency
+ *  isoDate->rate history (ECB convention: units of currency per 1 EUR). ECB
+ *  publishes no Sat/Sun rate and skips holidays, so an exact miss walks
+ *  backward up to 10 calendar days rather than inventing a rate; it never
+ *  looks past `date`. `currency` is normalized the same way `isEurCurrency`
+ *  is (trim + uppercase) so a code read anywhere in this codebase — a CSV
+ *  import lowercases nothing — resolves the same regardless of case; `history`
+ *  itself is not renormalized, keying it uppercase stays the caller's job.
+ *  A non-positive stored value (a corrupted history entry) is treated as "no
+ *  rate here", not "return it" — same guard as `parseFxRatePayload`. */
+export function rateOn(
+  history: Record<string, Record<string, number>>,
+  currency: string,
+  date: string,
+): number | null {
+  const byDate = history[currency.trim().toUpperCase()];
+  if (!byDate) return null;
+  const exact = byDate[date];
+  if (typeof exact === "number" && exact > 0) return exact;
+  const cursor = new Date(`${date}T00:00:00Z`);
+  for (let i = 0; i < 10; i++) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    const iso = cursor.toISOString().slice(0, 10);
+    const v = byDate[iso];
+    if (typeof v === "number" && v > 0) return v;
+  }
+  return null;
+}
+
+/** Convert a signed amount into EUR as of `date`. EUR short-circuits to the
+ *  amount unchanged (rate 1) without touching `history` at all. Division by
+ *  the ECB per-EUR rate keeps the sign of a negative (outgoing) amount. The
+ *  `rate <= 0` check is defence in depth on top of `rateOn`'s own guard — this
+ *  function never divides by a non-positive rate regardless of how one could
+ *  reach it. */
+export function toEur(
+  amount: number,
+  currency: string,
+  date: string,
+  history: Record<string, Record<string, number>>,
+): number | null {
+  if (isEurCurrency(currency)) return amount;
+  const rate = rateOn(history, currency, date);
+  return rate === null || rate <= 0 ? null : amount / rate;
 }
 
 /* Offline fallback (ECB via Frankfurter, verified 2026-08-04). Majors only. */

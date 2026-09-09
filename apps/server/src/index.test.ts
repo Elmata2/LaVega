@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { EbConfig } from "./config.js";
+import type { FxHistoryResponse } from "./fxHistory.js";
 
 // Deterministic — doesn't depend on whether a real (git-ignored) config.json
 // happens to exist on disk. loadConfig's own "missing/placeholder file"
@@ -11,10 +12,23 @@ vi.mock("./config.js", async () => {
   return { ...actual, loadConfig: loadConfigMock };
 });
 
+// getFxHistory hits the network (ECB via Frankfurter); mocked so the 503 and
+// 200 paths of the route are deterministic and don't depend on the real
+// service being up.
+const { getFxHistoryMock } = vi.hoisted(() => ({
+  getFxHistoryMock: vi.fn<() => Promise<FxHistoryResponse | null>>(),
+}));
+
+vi.mock("./fxHistory.js", async () => {
+  const actual = await vi.importActual<typeof import("./fxHistory.js")>("./fxHistory.js");
+  return { ...actual, getFxHistory: getFxHistoryMock };
+});
+
 const { app, isStaticAssetPath } = await import("./index.js");
 
 afterEach(() => {
   loadConfigMock.mockReset();
+  getFxHistoryMock.mockReset();
 });
 
 test("GET /health returns ok:true", async () => {
@@ -77,6 +91,36 @@ test("GET /api/rates returns a valid rates payload with open CORS", async () => 
     ratePct: expect.any(Number),
     freeWithdrawal: expect.any(Boolean),
   });
+});
+
+/* --- /api/fx/history's Cache-Control must track the outcome, not be blanket.
+ * A malformed request or an ECB outage used to get the same hour-long
+ * cacheable header as a real success, so a cache could serve a stale error
+ * for up to an hour after the caller fixed their request or ECB recovered. --- */
+
+test("GET /api/fx/history with an invalid currency is a 400 with Cache-Control: no-store", async () => {
+  const res = await app.request("/api/fx/history?currency=XX&from=2026-08-01");
+  expect(res.status).toBe(400);
+  expect(res.headers.get("cache-control")).toBe("no-store");
+  expect(getFxHistoryMock).not.toHaveBeenCalled();
+});
+
+test("GET /api/fx/history when getFxHistory fails is a 503 with Cache-Control: no-store", async () => {
+  getFxHistoryMock.mockResolvedValue(null);
+  const res = await app.request("/api/fx/history?currency=HUF&from=2026-08-01");
+  expect(res.status).toBe(503);
+  expect(res.headers.get("cache-control")).toBe("no-store");
+});
+
+test("GET /api/fx/history on success still returns Cache-Control: public, max-age=3600", async () => {
+  getFxHistoryMock.mockResolvedValue({
+    base: "EUR",
+    currency: "HUF",
+    rates: { "2026-08-03": 363.98 },
+  });
+  const res = await app.request("/api/fx/history?currency=HUF&from=2026-08-01");
+  expect(res.status).toBe(200);
+  expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
 });
 
 /* --- Dev CORS. Without this, an agent call from Vite on :5173 is blocked by the

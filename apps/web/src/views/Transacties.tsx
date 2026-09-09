@@ -18,10 +18,12 @@ import {
   unknownReason,
   foreignCode,
   aiCategorizeItems,
+  isEurCurrency,
+  toEur,
 } from "@lavega/core";
-import { formatEuro } from "../format";
+import { formatEuro, formatCurrency } from "../format";
 import { categorizeTxs } from "../api";
-import { getAiCategorizeEnabled, setAiCategorizeEnabled } from "../settings";
+import { getAiCategorizeEnabled, setAiCategorizeEnabled, type ConversionMode } from "../settings";
 import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
 
 /* What each "onbekend" reason means and what the owner can DO about it. Written
@@ -58,6 +60,11 @@ type TransactiesProps = {
   scopedTxs: Tx[];
   rules: Rule[];
   own: OwnAccounts;
+  /** ECB daily rates, and whether a non-EUR row shows its € equivalent
+   *  alongside its original amount ("convert") or the original amount only,
+   *  as before FX support existed ("separate"). */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
   entityOptions: string[];
   entityScope: string;
   fEntity: string;
@@ -85,6 +92,8 @@ export default function Transacties({
   scopedTxs,
   rules,
   own,
+  fxHistory,
+  mode,
   entityOptions,
   entityScope,
   fEntity,
@@ -517,8 +526,18 @@ export default function Transacties({
                   </td>
                   <td data-label="Bedrag">
                     <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
-                      {formatEuro(t.amount)}
+                      {isEurCurrency(t.currency)
+                        ? formatEuro(t.amount)
+                        : formatCurrency(t.amount, t.currency)}
                     </span>
+                    {!isEurCurrency(t.currency) &&
+                      mode === "convert" &&
+                      (() => {
+                        const eur = toEur(t.amount, t.currency, t.date, fxHistory);
+                        return eur === null ? null : (
+                          <span className="cell-sub"> ≈ {formatEuro(eur)}</span>
+                        );
+                      })()}
                   </td>
                   <td data-label="Entiteit">{t.entity}</td>
                   <td data-label="Categorie">{categoryCell(t)}</td>

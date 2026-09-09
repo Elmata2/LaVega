@@ -7,6 +7,7 @@
 
 import type {
   Account,
+  ConversionMode,
   FxRate,
   Invoice,
   RewardsBalance,
@@ -61,6 +62,13 @@ export type TabState = {
   scheduledFlows?: ScheduledFlow[];
   summary?: unknown;
   asOf?: string;
+  /** ECB rate history + the owner's Profiel setting — same two values Overzicht
+   *  and Forecast get, so the chat's forecast never disagrees with the screen
+   *  over a foreign-currency balance. Absent (dormant chat, or a caller that
+   *  predates this) falls back to "separate" over an empty history, exactly
+   *  what an all-EUR scope already computed before conversion existed. */
+  fxHistory?: Record<string, Record<string, number>>;
+  mode?: ConversionMode;
 };
 
 /** Cap for any array leaving the browser as context — keeps a tab's slice
@@ -125,6 +133,8 @@ export function buildTabContext(
         asOf,
         bufferCents,
         scheduledFlows,
+        fxHistory: state.fxHistory ?? {},
+        mode: state.mode ?? "separate",
       }).consolidated;
       const alertCount = computeAlerts({
         accounts: accounts as Account[],
@@ -184,6 +194,8 @@ export function buildTabContext(
         horizonDays: 91,
         bufferCents: state.bufferCents ?? 0,
         scheduledFlows: state.scheduledFlows ?? [],
+        fxHistory: state.fxHistory ?? {},
+        mode: state.mode ?? "separate",
       });
       const f = fc.consolidated;
       const lastPoint = f.points.length > 0 ? f.points[f.points.length - 1] : null;

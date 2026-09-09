@@ -1,4 +1,7 @@
 import type { Account, ScheduledFlow, Tx } from "./model.js";
+import { isEurCurrency } from "./model.js";
+import type { ConversionMode } from "./fx.js";
+import { toEur } from "./fx.js";
 import { norm } from "./hash.js";
 import { scheduledFlowsForScope } from "./scheduledFlows.js";
 import { categorize, ownAccounts } from "./views.js";
@@ -383,6 +386,11 @@ export type ForecastOptions = {
   horizonDays?: number;
   bufferCents?: number;
   scheduledFlows?: ScheduledFlow[];
+  /** Required, no default: whether a foreign-currency balance folds into the
+   *  opening position (converted at the ECB rate) or is excluded from it is a
+   *  choice the caller must make explicitly, exactly like `consolidate()`. */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
 /** Per-week "recurring flow" contribution of a stream, used for the driver
@@ -403,17 +411,53 @@ function buildForecast(
   horizonDays: number,
   bufferCents: number,
   scheduledFlows: ScheduledFlow[] = [],
+  conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
 ): EntityForecast {
   const horizonEnd = addDays(asOf, horizonDays);
 
   // No accounts (e.g. the "onbekend" scope of orphan txs) => opening is UNKNOWN,
   // not a confident €0 — otherwise it could surface a spurious shortfall.
+  //
+  // A balance LaVega cannot price into euro right now (separate mode, or
+  // convert mode with no ECB rate yet) does not poison an otherwise-known
+  // opening balance — it is excluded, exactly like consolidate()'s entity
+  // balance — unless excluding it leaves nothing left to sum. A genuinely
+  // MISSING balance (null, any currency) still poisons the whole scope,
+  // unchanged from before.
+  const eurBalanceOf = (a: Account): number | null => {
+    if (a.balance === null) return null;
+    if (isEurCurrency(a.currency)) return a.balance;
+    return conversion.mode === "convert"
+      ? toEur(a.balance, a.currency, asOf, conversion.fxHistory)
+      : null;
+  };
+  const missingBalance = scopeAccounts.some((a) => a.balance === null);
+  const pricedAccounts = scopeAccounts.filter((a) => eurBalanceOf(a) !== null);
   const openingCents =
-    scopeAccounts.length === 0 || scopeAccounts.some((a) => a.balance === null)
+    scopeAccounts.length === 0 || missingBalance || pricedAccounts.length === 0
       ? null
-      : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
+      : Math.round(pricedAccounts.reduce((s, a) => s + (eurBalanceOf(a) as number), 0) * 100);
 
-  const streams = detectRecurringStreams(scopeTxs);
+  // Everything below this point (recurring-stream detection, incidental spend,
+  // the week-by-week roll-forward) reads Tx.amount directly, exactly like the
+  // opening balance did before it was fixed — so it needs the same conversion,
+  // done once, here, rather than re-derived at every downstream site. A tx this
+  // function cannot price into euro right now (separate mode, or convert mode
+  // with no rate for its own date) is dropped, matching how every other
+  // aggregation site in this feature treats an unconvertible row.
+  const eurTxs: Tx[] = [];
+  for (const t of scopeTxs) {
+    if (isEurCurrency(t.currency)) {
+      eurTxs.push(t);
+      continue;
+    }
+    if (conversion.mode !== "convert") continue;
+    const eur = toEur(t.amount, t.currency, t.date, conversion.fxHistory);
+    if (eur === null) continue;
+    eurTxs.push({ ...t, amount: eur });
+  }
+
+  const streams = detectRecurringStreams(eurTxs);
   const liveStreams = streams.filter((s) => !streamHasEnded(s, asOf));
   const endedStreams = streams.filter((s) => streamHasEnded(s, asOf));
   const streamKeys = new Set(streams.map((s) => s.key));
@@ -424,7 +468,7 @@ function buildForecast(
   // one computed from a mean over mixed signs, so it did not even describe the
   // thing it was 15% of.
   const amountsByKey = new Map<string, number[]>();
-  for (const t of scopeTxs) {
+  for (const t of eurTxs) {
     const k = streamKeyOf(t);
     if (!streamKeys.has(k)) continue;
     const arr = amountsByKey.get(k);
@@ -442,7 +486,7 @@ function buildForecast(
   // full list): consolidated nets a BV1->BV2 move to zero and should ignore both
   // legs, while for BV1 alone that same move is a real outflow and must count.
   const own = ownAccounts(scopeAccounts);
-  const incidental = scopeTxs.filter(
+  const incidental = eurTxs.filter(
     (t) => !streamKeys.has(streamKeyOf(t)) && categorize(t, [], own) !== TRANSFER_CATEGORY,
   );
 
@@ -667,6 +711,7 @@ export function forecastCashflow(
   const horizonDays = opts.horizonDays ?? 91;
   const bufferCents = opts.bufferCents ?? 0;
   const allFlows = opts.scheduledFlows ?? [];
+  const conversion = { fxHistory: opts.fxHistory, mode: opts.mode };
 
   const entityOf = new Map(accounts.map((a) => [a.key, a.entity]));
 
@@ -711,6 +756,7 @@ export function forecastCashflow(
       horizonDays,
       bufferCents,
       scheduledFlowsForScope(allFlows, e),
+      conversion,
     );
   }
 
@@ -722,6 +768,7 @@ export function forecastCashflow(
     horizonDays,
     bufferCents,
     allFlows,
+    conversion,
   );
 
   return { byEntity, consolidated };

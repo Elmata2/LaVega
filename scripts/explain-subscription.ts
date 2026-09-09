@@ -1,4 +1,4 @@
-// Usage: npx tsx packages/core/scripts/explain-subscription.ts <rows-file>
+// Usage: npx tsx scripts/explain-subscription.ts <rows-file>
 // <rows-file> is a text file, one "date,amount" pair per line, oldest or
 // newest first (the script sorts), e.g.:
 //   2025-09-25,-24.03
@@ -9,12 +9,12 @@
 // subscription it forms or the Dutch reason it does not.
 
 import { readFileSync } from "node:fs";
-import type { Tx } from "../src/model.js";
-import { detectSubscriptions, explainMerchant, merchantTallies } from "../src/subscriptions.js";
+import type { Tx } from "../packages/core/src/model.js";
+import { detectSubscriptions, explainMerchant, merchantTallies } from "../packages/core/src/subscriptions.js";
 
 const path = process.argv[2];
 if (!path) {
-  console.error("Usage: npx tsx packages/core/scripts/explain-subscription.ts <rows-file>");
+  console.error("Usage: npx tsx scripts/explain-subscription.ts <rows-file>");
   process.exit(1);
 }
 

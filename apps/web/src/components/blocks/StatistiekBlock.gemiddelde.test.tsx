@@ -22,9 +22,13 @@ import { own, rules, txs } from "./fixtures";
  * bewijst niets over de stand — dat wordt in StatistiekBlock.toonmeer.test.tsx
  * getest, waar een echte DOM is. */
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 const render = (t: Tx[] = txs) =>
   renderToStaticMarkup(
-    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />,
+    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
   );
 
 const tx = (id: string, date: string, amount: number, counterparty: string, category = ""): Tx => ({

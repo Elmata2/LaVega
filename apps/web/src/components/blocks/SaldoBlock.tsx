@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { Account, ScheduledFlow, Tx } from "@lavega/core";
-import { availableBalanceCents, isEurCurrency, reservedCents } from "@lavega/core";
+import type { Account, ConversionMode, ScheduledFlow, Tx } from "@lavega/core";
+import { availableBalanceCents, isEurCurrency, reservedCents, toEur } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuro } from "../../format.js";
 import Module from "../Module.js";
@@ -72,15 +72,25 @@ export function positionSeries(
   txs: Tx[],
   asOf: string,
   windowDays: number = POSITION_WINDOW_DAYS,
+  conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
 ): PositionSeries {
-  const known = accounts.filter((a) => a.balance !== null && isEurCurrency(a.currency));
+  const eurBalanceOf = (a: Account): number | null => {
+    if (a.balance === null) return null;
+    if (isEurCurrency(a.currency)) return a.balance;
+    return conversion.mode === "convert"
+      ? toEur(a.balance, a.currency, asOf, conversion.fxHistory)
+      : null;
+  };
+  const known = accounts.filter((a) => eurBalanceOf(a) !== null);
   const keys = new Set(known.map((a) => a.key));
   // Integer cents throughout the walk: a 30-step float subtraction over a
   // six-figure position drifts into visible cents.
-  const currentCents = known.reduce((s, a) => s + Math.round((a.balance as number) * 100), 0);
+  const currentCents = known.reduce((s, a) => s + Math.round((eurBalanceOf(a) as number) * 100), 0);
   const excluded = accounts.length - known.length;
+  // An account that DID convert is no longer "excluded" — the kept-out line
+  // is only for a balance that stayed unresolved into EUR.
   const excludedCurrencyKeys = accounts
-    .filter((a) => a.balance !== null && !isEurCurrency(a.currency))
+    .filter((a) => a.balance !== null && !isEurCurrency(a.currency) && eurBalanceOf(a) === null)
     .map((a) => a.key);
   const base = { current: currentCents / 100, excluded, excludedCurrencyKeys };
 
@@ -118,7 +128,18 @@ export function positionSeries(
       : known.filter((a) => startByKey.get(a.key) === latestStart).map((a) => a.key);
 
   const net = new Map<string, number>();
-  for (const t of relevant) net.set(t.date, (net.get(t.date) ?? 0) + Math.round(t.amount * 100));
+  for (const t of relevant) {
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? (toEur(t.amount, t.currency, t.date, conversion.fxHistory) ?? 0)
+        : 0;
+    // A missing single-day rate falls back to 0 rather than breaking the
+    // walk: it only smears the SHAPE of the historical line for that one
+    // day, not the current total (which comes from eurBalanceOf, not this
+    // loop), and rateOn's own 10-day walk-back makes an actual gap rare.
+    net.set(t.date, (net.get(t.date) ?? 0) + Math.round(eurAmount * 100));
+  }
 
   // Never earlier than the oldest transaction: before it the position is not
   // known, it is merely unrecorded.
@@ -193,6 +214,8 @@ type SaldoBlockProps = {
   scheduledFlows: ScheduledFlow[];
   asOf: string;
   onNavigate: (view: View) => void;
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
 export default function SaldoBlock({
@@ -202,8 +225,13 @@ export default function SaldoBlock({
   asOf,
   onNavigate,
   span = 2,
+  fxHistory,
+  mode,
 }: SaldoBlockProps) {
-  const series = useMemo(() => positionSeries(accounts, txs, asOf), [accounts, txs, asOf]);
+  const series = useMemo(
+    () => positionSeries(accounts, txs, asOf, POSITION_WINDOW_DAYS, { fxHistory, mode }),
+    [accounts, txs, asOf, fxHistory, mode],
+  );
 
   const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
   const unknownCount = series.excluded;
@@ -215,6 +243,14 @@ export default function SaldoBlock({
     .map((a) => a.bank || a.name || a.key)
     .join(", ");
   const knownSum = series.current;
+  // Something WAS actually converted: a non-EUR account with a balance that
+  // is not on the excluded list, so it fed the total via eurBalanceOf.
+  const excludedKeys = new Set(series.excludedCurrencyKeys);
+  const anyConverted =
+    mode === "convert" &&
+    accounts.some(
+      (a) => a.balance !== null && !isEurCurrency(a.currency) && !excludedKeys.has(a.key),
+    );
   // Money already earmarked for unpaid BTW. Only worth a line when there is
   // some — otherwise "beschikbaar" would just repeat the number above it.
   const reserved = reservedCents(scheduledFlows, asOf);
@@ -276,9 +312,12 @@ export default function SaldoBlock({
       </p>
       {currencyCount > 0 && (
         <p className="module-figure-label">
-          {`${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`}
+          {mode === "convert"
+            ? `${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — nog geen koers.`
+            : `${currencyCount} rekening${currencyCount > 1 ? "en" : ""} in vreemde valuta${currencyNames ? ` (${currencyNames})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`}
         </p>
       )}
+      {anyConverted && <p className="module-figure-label">Omgerekend via ECB.</p>}
 
       {hasGraph ? (
         <div className="position-graph">

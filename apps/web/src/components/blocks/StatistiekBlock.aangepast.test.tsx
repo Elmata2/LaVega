@@ -24,13 +24,25 @@ afterEach(() => {
   host = null;
 });
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 function mount(): HTMLDivElement {
   host = document.createElement("div");
   document.body.appendChild(host);
   const el = host;
   act(() => {
     root = createRoot(el);
-    root.render(<StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={() => {}} />);
+    root.render(
+      <StatistiekBlock
+        txs={txs}
+        rules={rules}
+        own={own}
+        onSelectCategory={() => {}}
+        {...SEPARATE}
+      />,
+    );
   });
   return el;
 }

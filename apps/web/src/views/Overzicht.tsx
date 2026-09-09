@@ -10,6 +10,7 @@ import type {
 } from "@lavega/core";
 import { forecastCashflow, computeAlerts } from "@lavega/core";
 import type { View } from "../App";
+import type { ConversionMode } from "../settings.js";
 import ModuleGrid from "../components/ModuleGrid";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
@@ -75,6 +76,11 @@ type OverzichtProps = {
   invoices: Invoice[];
   /** Het land uit het profiel; bepaalt welke belastingregels gelden. */
   country: string;
+  /** ECB daily rates, and whether non-EUR balances/transactions convert into
+   *  the totals or stay out of them — threaded to every block that touches an
+   *  amount in a foreign currency. */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
@@ -96,14 +102,18 @@ export default function Overzicht({
   vatSettings,
   invoices,
   country,
+  fxHistory,
+  mode,
   onBufferChange,
   onNavigate,
   onSelectCategory,
   travel,
 }: OverzichtProps) {
   const forecast = useMemo(
-    () => forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows }).consolidated,
-    [txs, accounts, asOf, bufferCents, scheduledFlows],
+    () =>
+      forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows, fxHistory, mode })
+        .consolidated,
+    [txs, accounts, asOf, bufferCents, scheduledFlows, fxHistory, mode],
   );
 
   // The alert centre: shortfall (vs. buffer) + overdue recurring payments +
@@ -141,10 +151,25 @@ export default function Overzicht({
         scheduledFlows={scheduledFlows}
         asOf={asOf}
         onNavigate={onNavigate}
+        fxHistory={fxHistory}
+        mode={mode}
       />
-      <PositieWidget accounts={accounts} onNavigate={onNavigate} />
+      <PositieWidget
+        accounts={accounts}
+        onNavigate={onNavigate}
+        asOf={asOf}
+        fxHistory={fxHistory}
+        mode={mode}
+      />
 
-      <StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
+      <StatistiekBlock
+        txs={txs}
+        rules={rules}
+        own={own}
+        onSelectCategory={onSelectCategory}
+        fxHistory={fxHistory}
+        mode={mode}
+      />
 
       <RecenteTransactiesBlock
         txs={txs}

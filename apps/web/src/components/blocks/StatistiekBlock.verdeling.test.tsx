@@ -69,6 +69,10 @@ afterEach(() => {
   picked.length = 0;
 });
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 function mount(rows: Tx[] = txs): HTMLDivElement {
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -76,7 +80,13 @@ function mount(rows: Tx[] = txs): HTMLDivElement {
   act(() => {
     root = createRoot(el);
     root.render(
-      <StatistiekBlock txs={rows} rules={[]} own={own} onSelectCategory={(c) => picked.push(c)} />,
+      <StatistiekBlock
+        txs={rows}
+        rules={[]}
+        own={own}
+        onSelectCategory={(c) => picked.push(c)}
+        {...SEPARATE}
+      />,
     );
   });
   return el;

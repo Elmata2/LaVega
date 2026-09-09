@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
 import { getFxRate } from "./fx.js";
+import { getFxHistory, validateCurrency, validateFromDate } from "./fxHistory.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
@@ -186,6 +187,31 @@ app.get("/api/fx/rate", async (c) => {
   c.header("Access-Control-Allow-Origin", "*");
   c.header("Cache-Control", "public, max-age=3600");
   return c.json(await getFxRate());
+});
+
+/**
+ * ECB historical daily FX rates (base EUR) for one currency, from a given
+ * date. Public data only, same reasoning as /api/fx/rate above.
+ */
+app.get("/api/fx/history", async (c) => {
+  c.header("Access-Control-Allow-Origin", "*");
+  const currency = validateCurrency(c.req.query("currency"));
+  if (!currency) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "ongeldige valuta" }, 400);
+  }
+  const from = validateFromDate(c.req.query("from"));
+  if (!from) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "ongeldige datum" }, 400);
+  }
+  const history = await getFxHistory(currency, from);
+  if (!history) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "koershistorie tijdelijk niet beschikbaar" }, 503);
+  }
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json(history);
 });
 
 /**

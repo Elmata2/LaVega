@@ -25,6 +25,10 @@ const DEFAULT_CATEGORY = categorize(txs[1], rules, own); // Albert Heijn, via th
 const ANCHOR = "2026-08-11";
 const YEAR = presetWindow("12m", ANCHOR);
 
+/** Today's default, and every existing test's conversion argument: a non-EUR
+ *  row is excluded exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 test("newestTxDate takes the clock from the data, never from Date.now", () => {
   expect(newestTxDate(txs)).toBe(ANCHOR);
   expect(newestTxDate([])).toBeNull();
@@ -52,7 +56,7 @@ test("bucketUnit picks a bucket the window can actually fill", () => {
 });
 
 test("categoryPerWindow returns one group per month and one bar per major category", () => {
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
   expect(s.unit).toBe("maand");
   expect(s.buckets.map((b) => b.key)).toEqual(["2026-06", "2026-07", "2026-08"]);
   // Ranked by total spend in the window: Inkoop 2.980, boodschappen 420,50, Energie 250.
@@ -71,19 +75,26 @@ test("categoryPerWindow returns one group per month and one bar per major catego
 test("categoryPerWindow clamps the window to the span the data covers", () => {
   // Twelve months requested, three months held: nine extra groups would each be
   // a bar of zero, which claims a month of no spending that was never observed.
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
   expect(s.covered).toEqual({ start: "2026-06-09", end: ANCHOR });
   expect(s.buckets).toHaveLength(3);
   // And a window entirely outside the data covers nothing at all — no buckets,
   // rather than a row of zeroes.
-  const before = categoryPerWindow(txs, rules, own, { start: "2025-01-01", end: "2025-03-01" }, 4);
+  const before = categoryPerWindow(
+    txs,
+    rules,
+    own,
+    { start: "2025-01-01", end: "2025-03-01" },
+    4,
+    SEPARATE,
+  );
   expect(before.covered).toBeNull();
   expect(before.buckets).toEqual([]);
   expect(before.categories).toEqual([]);
 });
 
 test("categoryPerWindow marks a bucket the window only partly covers", () => {
-  const s = categoryPerWindow(txs, rules, own, YEAR, 4);
+  const s = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
   // June starts on the 9th (the first transaction) and August stops at the
   // 11th — neither is a whole month, and the tooltip says so.
   expect(s.buckets[0].partial).toBe(true);
@@ -94,7 +105,7 @@ test("categoryPerWindow marks a bucket the window only partly covers", () => {
 });
 
 test("categoryPerWindow buckets a one-week window per day", () => {
-  const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4);
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1w", ANCHOR), 4, SEPARATE);
   expect(s.unit).toBe("dag");
   // 5–11 August, clamped to the newest transaction on the 11th.
   expect(s.buckets.map((b) => b.key)).toEqual([
@@ -114,7 +125,7 @@ test("categoryPerWindow buckets a one-week window per day", () => {
 });
 
 test("categoryPerWindow buckets a month-long window per week", () => {
-  const s = categoryPerWindow(txs, rules, own, presetWindow("1m", ANCHOR), 4);
+  const s = categoryPerWindow(txs, rules, own, presetWindow("1m", ANCHOR), 4, SEPARATE);
   expect(s.unit).toBe("week");
   // 13 July – 11 August, in Monday-first weeks; the last one is cut short by
   // the window and says so rather than looking like a full week.
@@ -136,7 +147,14 @@ test("categoryPerWindow buckets a month-long window per week", () => {
 test("categoryPerWindow ranks the categories inside THIS window, against a floor scaled to it", () => {
   // Over the year Inkoop is the biggest category; over the first fortnight of
   // June it does not exist at all, and boodschappen is the only one there is.
-  const june = categoryPerWindow(txs, rules, own, { start: "2026-06-01", end: "2026-06-14" }, 4);
+  const june = categoryPerWindow(
+    txs,
+    rules,
+    own,
+    { start: "2026-06-01", end: "2026-06-14" },
+    4,
+    SEPARATE,
+  );
   expect(june.categories).toEqual([DEFAULT_CATEGORY]);
   expect(june.selection?.hidden).toEqual([]);
 
@@ -144,12 +162,12 @@ test("categoryPerWindow ranks the categories inside THIS window, against a floor
   // June carry a far lower bar than sixty-four days of summer.
   expect(june.windowDays).toBe(6);
   expect(june.selection?.thresholdOut).toBeCloseTo((25 * 6) / 30, 6);
-  const year = categoryPerWindow(txs, rules, own, YEAR, 4);
+  const year = categoryPerWindow(txs, rules, own, YEAR, 4, SEPARATE);
   expect(year.selection?.thresholdOut).toBeCloseTo((25 * 64) / 30, 6);
 
   // What the chart's cap pushes out is reported separately from what the floor
   // dropped — they are different facts about the same window.
-  const capped = categoryPerWindow(txs, rules, own, YEAR, 1);
+  const capped = categoryPerWindow(txs, rules, own, YEAR, 1, SEPARATE);
   expect(capped.categories).toEqual(["Inkoop"]);
   expect(capped.selection?.hidden.map((h) => h.category)).toEqual([DEFAULT_CATEGORY, "Energie"]);
   expect(capped.selection?.hidden.every((h) => h.belowThreshold)).toBe(false);
@@ -171,7 +189,7 @@ test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", ()
       manual: true,
     },
   ];
-  const year = categoryPerWindow(withSmall, rules, own, YEAR, 4);
+  const year = categoryPerWindow(withSmall, rules, own, YEAR, 4, SEPARATE);
   expect(year.categories).not.toContain("Zorg");
   expect(year.selection?.hidden.map((h) => [h.category, h.belowThreshold])).toEqual([
     ["Zorg", true],
@@ -183,6 +201,7 @@ test("categoryPerWindow folds away a category that is small FOR THIS WINDOW", ()
     own,
     { start: "2026-06-08", end: "2026-06-13" },
     4,
+    SEPARATE,
   );
   expect(week.categories).toContain("Zorg");
   expect(week.selection?.hidden).toEqual([]);
@@ -195,7 +214,14 @@ test("categoryPerWindow marks a month with no data at all, so it is never drawn 
     { ...txs[0], id: "g1", date: "2026-01-15", amount: -100, counterparty: "Albert Heijn" },
     { ...txs[0], id: "g2", date: "2026-03-15", amount: -100, counterparty: "Albert Heijn" },
   ];
-  const s = categoryPerWindow(gap, rules, own, { start: "2026-01-01", end: "2026-03-31" }, 4);
+  const s = categoryPerWindow(
+    gap,
+    rules,
+    own,
+    { start: "2026-01-01", end: "2026-03-31" },
+    4,
+    SEPARATE,
+  );
   expect(s.unit).toBe("maand");
   expect(s.buckets.map((b) => b.key)).toEqual(["2026-01", "2026-02", "2026-03"]);
   expect(s.buckets.map((b) => b.hasData)).toEqual([true, false, true]);
@@ -208,18 +234,18 @@ test("monthAxisLabel keeps month labels unique once the window passes a year", (
 });
 
 test("windowTotals reports what came in and went out inside the window", () => {
-  const year = windowTotals(txs, rules, own, YEAR);
+  const year = windowTotals(txs, rules, own, YEAR, SEPARATE);
   expect(year.inTotal).toBeCloseTo(12_000 + 9_500, 6);
   expect(year.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
 
   // A shorter window is a smaller total, not a rescaled one: no per-month
   // average is extrapolated out of eleven days.
-  const august = windowTotals(txs, rules, own, presetWindow("1m", ANCHOR));
+  const august = windowTotals(txs, rules, own, presetWindow("1m", ANCHOR), SEPARATE);
   expect(august.inTotal).toBe(0);
   expect(august.outTotal).toBeCloseTo(250 + 1_100, 6);
 
   // A window the data does not reach into covers nothing.
-  const gap = windowTotals(txs, rules, own, { start: "2025-01-01", end: "2025-02-01" });
+  const gap = windowTotals(txs, rules, own, { start: "2025-01-01", end: "2025-02-01" }, SEPARATE);
   expect(gap.covered).toBeNull();
   expect(gap.inTotal).toBe(0);
   expect(gap.outTotal).toBe(0);
@@ -243,7 +269,7 @@ test("windowTotals excludes a non-EUR transaction instead of adding its face val
     manual: false,
   };
   const withHuf = [...txs, revolutHufSpend];
-  const year = windowTotals(withHuf, rules, own, YEAR);
+  const year = windowTotals(withHuf, rules, own, YEAR, SEPARATE);
   expect(year.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
 });
 
@@ -274,9 +300,9 @@ test("windowTotals reports what it excluded for being non-EUR, not just drops it
     manual: false,
   };
   const mixed = [...txs, revolutHufSpend, dollarDeposit];
-  const year = windowTotals(mixed, rules, own, YEAR);
+  const year = windowTotals(mixed, rules, own, YEAR, SEPARATE);
   expect(year.foreignCurrency).toEqual({ count: 2, byCurrency: { HUF: 300_000, USD: 120 } });
-  expect(windowTotals(txs, rules, own, YEAR).foreignCurrency).toEqual({
+  expect(windowTotals(txs, rules, own, YEAR, SEPARATE).foreignCurrency).toEqual({
     count: 0,
     byCurrency: {},
   });
@@ -295,13 +321,13 @@ test("categoryShare excludes a non-EUR transaction from the spend total and its 
     manual: false,
   };
   const withHuf = [...txs, revolutHufSpend];
-  const share = categoryShare(withHuf, rules, own, YEAR);
-  const withoutHuf = categoryShare(txs, rules, own, YEAR);
+  const share = categoryShare(withHuf, rules, own, YEAR, SEPARATE);
+  const withoutHuf = categoryShare(txs, rules, own, YEAR, SEPARATE);
   expect(share.totalCents).toBe(withoutHuf.totalCents);
 });
 
 test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction", () => {
-  const w = weekdaySpend(txs, rules, own, YEAR);
+  const w = weekdaySpend(txs, rules, own, YEAR, SEPARATE);
   expect(w.spanDays).toBe(64);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
 
@@ -324,7 +350,7 @@ test("weekdaySpend averages per OCCURRENCE of the weekday, not per transaction",
 
 test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
   // Two days of history: only Friday and Saturday ever occurred.
-  const w = weekdaySpend(freshTxs, rules, own, presetWindow("12m", "2026-08-15"));
+  const w = weekdaySpend(freshTxs, rules, own, presetWindow("12m", "2026-08-15"), SEPARATE);
   expect(w.spanDays).toBe(2);
   expect(w.spanDays).toBeLessThan(MIN_WEEKDAY_DAYS);
   const by = Object.fromEntries(w.rows.map((r) => [r.short, r]));
@@ -337,7 +363,7 @@ test("weekdaySpend leaves an unobserved weekday null, never zero", () => {
 });
 
 test("weekdaySpend reports nothing at all rather than a flat week with no data", () => {
-  const w = weekdaySpend([], rules, own, YEAR);
+  const w = weekdaySpend([], rules, own, YEAR, SEPARATE);
   expect(w.spanDays).toBe(0);
   expect(w.peak).toBeNull();
   expect(w.dayAverage).toBeNull();
@@ -391,7 +417,7 @@ const parked: Tx[] = [
 ];
 
 test("money parked in your own savings is not spending — it is the same euro elsewhere", () => {
-  const share = categoryShare(parked, [], own, AUG);
+  const share = categoryShare(parked, [], own, AUG, SEPARATE);
   // The ring holds what was actually spent, and nothing else.
   expect(share.slices.map((s) => s.category)).toEqual(["Wonen & energie", "Boodschappen"]);
   expect(share.totalCents).toBe(25_000 + 8_540);
@@ -401,7 +427,7 @@ test("money parked in your own savings is not spending — it is the same euro e
 });
 
 test("what fell outside the diagram is reported, per category, with the reason", () => {
-  const moved = movedTotals(parked, [], own, AUG);
+  const moved = movedTotals(parked, [], own, AUG, SEPARATE);
   // Biggest first, so the € 20.000 line is the one he reads.
   expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen", "Eigen overboeking"]);
   expect(moved[0].outCents).toBe(2_000_000);
@@ -410,28 +436,28 @@ test("what fell outside the diagram is reported, per category, with the reason",
   expect(moved[1].outCents).toBe(100_000);
   expect(moved[1].inCents).toBe(0);
   // A window with nothing moved in it reports nothing — never a zero row.
-  expect(movedTotals(parked, [], own, JUL)).toEqual([]);
+  expect(movedTotals(parked, [], own, JUL, SEPARATE)).toEqual([]);
 });
 
 test("the window's own totals leave the moved money out of BOTH sides", () => {
-  const t = windowTotals(parked, [], own, AUG);
+  const t = windowTotals(parked, [], own, AUG, SEPARATE);
   expect(t.outTotal).toBeCloseTo(85.4 + 250, 6);
   expect(t.inTotal).toBeCloseTo(6_000, 6);
 });
 
 test("neither the bars nor the growth view counts a savings deposit as spending", () => {
-  const per = categoryPerWindow(parked, [], own, AUG, 4);
+  const per = categoryPerWindow(parked, [], own, AUG, 4, SEPARATE);
   expect(per.categories).not.toContain("Sparen & beleggen");
   expect(per.categories).not.toContain("Eigen overboeking");
 
-  const grown = categoryGrowth(parked, [], own, AUG);
+  const grown = categoryGrowth(parked, [], own, AUG, SEPARATE);
   expect(grown.rows.map((r) => r.category)).not.toContain("Sparen & beleggen");
   expect(grown.rows.map((r) => r.category)).not.toContain("Eigen overboeking");
 });
 
 test("a weekday average is not made expensive by a savings deposit landing on it", () => {
   // 6 August 2026 is a Thursday; the € 15.000 to Trading 212 is on it.
-  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" });
+  const w = weekdaySpend(parked, [], own, { start: "2026-08-01", end: "2026-08-28" }, SEPARATE);
   const thursday = w.rows[3];
   expect(thursday.total).toBe(0);
 });
@@ -467,10 +493,22 @@ test("een geldopname telt mee als uitgave, een storting op de eigen spaarrekenin
       manual: true,
     },
   ];
-  const share = categoryShare(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  const share = categoryShare(
+    txs,
+    [],
+    undefined,
+    { start: "2026-08-01", end: "2026-08-31" },
+    SEPARATE,
+  );
   expect(share.slices.map((s) => s.category)).toEqual(["Geldopname"]);
   expect(share.totalCents).toBe(20000);
-  const moved = movedTotals(txs, [], undefined, { start: "2026-08-01", end: "2026-08-31" });
+  const moved = movedTotals(
+    txs,
+    [],
+    undefined,
+    { start: "2026-08-01", end: "2026-08-31" },
+    SEPARATE,
+  );
   expect(moved.map((m) => m.category)).toEqual(["Sparen & beleggen"]);
   expect(moved[0].outCents).toBe(1500000);
 });
@@ -494,7 +532,7 @@ const drieMaanden: Tx[] = [
 const KWARTAAL = { start: "2026-06-01", end: "2026-08-31" };
 
 test("periodAverages middelt per hele kalendermaand als het venster er genoeg bevat", () => {
-  const a = periodAverages(drieMaanden, [], own, KWARTAAL);
+  const a = periodAverages(drieMaanden, [], own, KWARTAAL, SEPARATE);
   if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
   expect(a.unit).toBe("maand");
   expect(a.askedUnit).toBe("maand");
@@ -510,7 +548,7 @@ test("een aangebroken maand telt in de teller noch in de noemer mee", () => {
   // Het echte geval: twaalf maanden gekozen, negen weken afschrift. Van
   // 4 juni t/m 11 augustus is alleen JULI een hele maand — één is geen
   // gemiddelde, dus de eenheid zakt naar de week.
-  const a = periodAverages(txs, rules, own, YEAR);
+  const a = periodAverages(txs, rules, own, YEAR, SEPARATE);
   if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
   expect(a.askedUnit).toBe("maand");
   expect(a.unit).toBe("week");
@@ -525,7 +563,7 @@ test("een aangebroken maand telt in de teller noch in de noemer mee", () => {
   // DE TELLER BESLAAT EXACT DE DAGEN DIE DE NOEMER TELT. Zou de teller over het
   // hele gedekte venster gaan, dan zaten de € 12.000 van 4 juni en de € 1.100
   // van 11 augustus in een gemiddelde over negen weken die ze niet beslaan.
-  const overSpan = windowTotals(txs, rules, own, a.span);
+  const overSpan = windowTotals(txs, rules, own, a.span, SEPARATE);
   expect(a.inTotal).toBeCloseTo(overSpan.inTotal, 6);
   expect(a.outTotal).toBeCloseTo(overSpan.outTotal, 6);
   expect(a.inTotal).toBeCloseTo(9_500, 6);
@@ -534,7 +572,7 @@ test("een aangebroken maand telt in de teller noch in de noemer mee", () => {
 });
 
 test("een gemiddelde telt geen geld mee dat alleen van plaats veranderde", () => {
-  const a = periodAverages(parked, [], own, AUG);
+  const a = periodAverages(parked, [], own, AUG, SEPARATE);
   if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
   // 1 t/m 9 augustus draagt maar één hele week, dus per dag.
   expect(a.unit).toBe("dag");
@@ -547,7 +585,7 @@ test("een gemiddelde telt geen geld mee dat alleen van plaats veranderde", () =>
 });
 
 test("de eenheid zakt wel, maar stijgt nooit: een week wordt geen maandbedrag", () => {
-  const week = periodAverages(drieMaanden, [], own, presetWindow("1w", "2026-08-31"));
+  const week = periodAverages(drieMaanden, [], own, presetWindow("1w", "2026-08-31"), SEPARATE);
   if (week.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${week.reason}`);
   // Zeven dagen: `bucketUnit` zegt dag, en daar wordt niets uit geëxtrapoleerd.
   expect(week.askedUnit).toBe("dag");
@@ -569,7 +607,13 @@ test("een uitgesproken nul is wel een gemiddelde: niets ontvangen is € 0,00", 
     parkTx("u3", "2026-08-02", -100, "Albert Heijn", "Boodschappen"),
   ];
   // 6 juli t/m 2 augustus is precies vier hele weken, maandag tot zondag.
-  const a = periodAverages(alleenUit, [], own, { start: "2026-07-06", end: "2026-08-02" });
+  const a = periodAverages(
+    alleenUit,
+    [],
+    own,
+    { start: "2026-07-06", end: "2026-08-02" },
+    SEPARATE,
+  );
   if (a.kind !== "gemiddeld") throw new Error(`verwachtte een gemiddelde, kreeg ${a.reason}`);
   expect(a.unit).toBe("week");
   expect(a.units).toBe(4);
@@ -581,7 +625,7 @@ test("een uitgesproken nul is wel een gemiddelde: niets ontvangen is € 0,00", 
 
 test("te weinig om te middelen is een weigering met de echte oorzaak, geen nul", () => {
   const eenDag = [parkTx("x1", "2026-08-05", -30, "Albert Heijn", "Boodschappen")];
-  const kort = periodAverages(eenDag, [], own, AUG);
+  const kort = periodAverages(eenDag, [], own, AUG, SEPARATE);
   expect(kort.kind).toBe("geen");
   if (kort.kind !== "geen") throw new Error("verwachtte een weigering");
   expect(kort.reason).toBe("te-kort");
@@ -591,14 +635,20 @@ test("te weinig om te middelen is een weigering met de echte oorzaak, geen nul",
 
   // Een venster waar het afschrift niet in reikt is een ANDER feit: daar is niet
   // te weinig gemeten, daar is niets gemeten.
-  const leeg = periodAverages(txs, rules, own, { start: "2025-01-01", end: "2025-02-01" });
+  const leeg = periodAverages(
+    txs,
+    rules,
+    own,
+    { start: "2025-01-01", end: "2025-02-01" },
+    SEPARATE,
+  );
   if (leeg.kind !== "geen") throw new Error("verwachtte een weigering");
   expect(leeg.reason).toBe("geen-gegevens");
   expect(leeg.covered).toBeNull();
   expect(leeg.coveredDays).toBe(0);
 
   // En zonder enige transactie is er ook niets — geen 0 en geen NaN.
-  const geen = periodAverages([], [], own, AUG);
+  const geen = periodAverages([], [], own, AUG, SEPARATE);
   expect(geen.kind).toBe("geen");
 });
 
@@ -610,4 +660,90 @@ test("unitPluralNL houdt de eenheid leesbaar in de zin die eromheen staat", () =
   expect(unitPluralNL("maand", 1)).toBe("maand");
   expect(unitPluralNL("maand", 3)).toBe("maanden");
   expect(MIN_AVERAGE_UNITS).toBe(2);
+});
+
+/* ───────────────────────── FX-omrekening: convert versus separate
+ *
+ * `toEur` zelf is al bewezen in packages/core/src/fx.test.ts (300.000 HUF
+ * tegen 400 HUF/EUR is exact € 750). Wat híer bewaakt wordt is dat elke
+ * functie in dit bestand die conversie ook daadwerkelijk GEBRUIKT: een
+ * geconverteerde rij telt mee in het echte cijfer en verdwijnt uit de
+ * "buiten de cijfers"-telling, en een rij zonder koers blijft precies zo
+ * buitengesloten als in "separate" — nooit stil aan het totaal toegevoegd
+ * tegen zijn eigen-valuta gezicht. */
+
+const HUF_RATE = { HUF: { "2026-08-05": 400 } };
+const CONVERT = { fxHistory: HUF_RATE, mode: "convert" as const };
+
+const hufSpend: Tx = {
+  id: "hufSpend",
+  accountKey: "A1",
+  date: "2026-08-05",
+  amount: -300_000,
+  currency: "HUF",
+  counterparty: "Bolt Budapest",
+  description: "Taxi",
+  category: "",
+  manual: false,
+};
+const hufSpendNoRate: Tx = { ...hufSpend, id: "hufNoRate", date: "2026-01-01" };
+
+test("windowTotals: convert mode turns 300.000 HUF at 400 HUF/EUR into € 750 in the real total, and drops it out of foreignCurrency", () => {
+  const converted = windowTotals([...txs, hufSpend], rules, own, YEAR, CONVERT);
+  expect(converted.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100 + 750, 6);
+  expect(converted.foreignCurrency).toEqual({ count: 0, byCurrency: {} });
+
+  // The same row, on a date more than 10 days from any known rate: still
+  // kept out in convert mode, same as separate — toEur returned null, so
+  // eurAmount is null either way.
+  const noRate = windowTotals([...txs, hufSpendNoRate], rules, own, YEAR, CONVERT);
+  expect(noRate.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
+  expect(noRate.foreignCurrency).toEqual({ count: 1, byCurrency: { HUF: 300_000 } });
+
+  // separate mode reproduces exactly today's behavior, rate or no rate: it
+  // never looks at fxHistory at all.
+  const separate = windowTotals([...txs, hufSpend], rules, own, YEAR, SEPARATE);
+  expect(separate.outTotal).toBeCloseTo(420.5 + 1_880 + 250 + 1_100, 6);
+  expect(separate.foreignCurrency).toEqual({ count: 1, byCurrency: { HUF: 300_000 } });
+});
+
+test("categoryShare: a converted HUF row counts toward the total in euros, not its foreign face value", () => {
+  const withRate = categoryShare([...txs, hufSpend], rules, own, YEAR, CONVERT);
+  const withoutForeignRow = categoryShare(txs, rules, own, YEAR, SEPARATE);
+  expect(withRate.totalCents).toBe(withoutForeignRow.totalCents + 75_000);
+});
+
+test("categoryPerWindow: a converted row lands in the bucket it happened in, at its euro amount", () => {
+  const s = categoryPerWindow([...txs, hufSpend], rules, own, YEAR, 4, CONVERT);
+  // "taxi" in the description categorizes as "Transport" — a new category,
+  // and 5 August falls in the same "aug" bucket as the existing rows.
+  expect(s.categories).toContain("Transport");
+  const transport = s.categories.indexOf("Transport");
+  expect(s.values[2][transport]).toBe(750);
+});
+
+test("weekdaySpend: a converted row is measured on its own weekday, in euros", () => {
+  // 5 August 2026 is a Wednesday.
+  const withRate = weekdaySpend([...txs, hufSpend], rules, own, YEAR, CONVERT);
+  const woe = withRate.rows.find((r) => r.short === "wo");
+  expect(woe?.total).toBe(750);
+});
+
+test("movedTotals: a converted deposit into a moved category counts at its euro amount", () => {
+  const hufDeposit: Tx = {
+    ...parkTx("hufMoved", "2026-08-05", -300_000, "Trading 212", "Storting"),
+    currency: "HUF",
+  };
+  const withHuf = movedTotals([hufDeposit], [], own, AUG, CONVERT);
+  expect(withHuf[0].category).toBe("Sparen & beleggen");
+  expect(withHuf[0].outCents).toBe(75_000);
+});
+
+test("periodAverages: threads the same conversion through windowTotals, so a converted row moves the average", () => {
+  const withHuf = periodAverages([...drieMaanden, hufSpend], [], own, KWARTAAL, CONVERT);
+  if (withHuf.kind !== "gemiddeld")
+    throw new Error(`verwachtte een gemiddelde, kreeg ${withHuf.reason}`);
+  const withoutHuf = periodAverages(drieMaanden, [], own, KWARTAAL, SEPARATE);
+  if (withoutHuf.kind !== "gemiddeld") throw new Error("verwachtte een gemiddelde");
+  expect(withHuf.outAverage).toBeCloseTo(withoutHuf.outAverage + 750 / 3, 6);
 });

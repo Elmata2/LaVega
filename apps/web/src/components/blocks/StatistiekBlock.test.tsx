@@ -5,9 +5,13 @@ import { formatEuro } from "../../format.js";
 import StatistiekBlock, { customWindow, STAT_PERIODS } from "./StatistiekBlock";
 import { freshTxs, own, rules, txs } from "./fixtures";
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 const render = (t = txs) =>
   renderToStaticMarkup(
-    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} />,
+    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
   );
 
 test("StatistiekBlock leads with the per-category-per-month view from the reference", () => {
@@ -177,4 +181,67 @@ test("StatistiekBlock still renders with two days of history", () => {
   // block itself must not crash on a nearly-empty vault.
   const html = render(freshTxs);
   expect(html).toContain("Statistieken");
+});
+
+/* ───────────────────────── FX-omrekening: convert versus separate */
+
+const hufSpend = {
+  ...txs[0],
+  id: "rHUF",
+  accountKey: "A1",
+  date: "2026-08-05",
+  amount: -300_000,
+  currency: "HUF",
+  counterparty: "Bolt Budapest",
+  description: "Taxi",
+};
+const HUF_RATE = { HUF: { "2026-08-05": 400 } };
+
+test("StatistiekBlock: convert mode with 300.000 HUF at 400 HUF/EUR drops the 'vreemde valuta' line and shows the one-time ECB note", () => {
+  const html = renderToStaticMarkup(
+    <StatistiekBlock
+      txs={[...txs, hufSpend]}
+      rules={rules}
+      own={own}
+      onSelectCategory={() => {}}
+      fxHistory={HUF_RATE}
+      mode="convert"
+    />,
+  );
+  expect(html).not.toContain("vreemde valuta");
+  expect(html).toContain("Vreemde valuta omgerekend via ECB-koers van de dag.");
+  // 750 EUR extra uitgave: 420,50 + 1.880 + 250 + 1.100 + 750.
+  expect(html).toContain(formatEuro(420.5 + 1_880 + 250 + 1_100 + 750));
+});
+
+test("StatistiekBlock: convert mode with no known rate keeps the row out, worded 'nog geen koers' rather than the separate-mode wording", () => {
+  const html = renderToStaticMarkup(
+    <StatistiekBlock
+      txs={[...txs, hufSpend]}
+      rules={rules}
+      own={own}
+      onSelectCategory={() => {}}
+      fxHistory={{}}
+      mode="convert"
+    />,
+  );
+  expect(html).toContain("Buiten deze cijfers: 1 transactie, nog geen koers (HUF 300.000).");
+  expect(html).not.toContain("in vreemde valuta (HUF");
+  expect(html).not.toContain("Vreemde valuta omgerekend via ECB-koers van de dag.");
+});
+
+test("StatistiekBlock: separate mode reproduces exactly today's wording even when a rate is available", () => {
+  const html = renderToStaticMarkup(
+    <StatistiekBlock
+      txs={[...txs, hufSpend]}
+      rules={rules}
+      own={own}
+      onSelectCategory={() => {}}
+      fxHistory={HUF_RATE}
+      mode="separate"
+    />,
+  );
+  expect(html).toContain("Buiten deze cijfers: 1 transactie in vreemde valuta (HUF 300.000).");
+  expect(html).not.toContain("nog geen koers");
+  expect(html).not.toContain("Vreemde valuta omgerekend via ECB-koers van de dag.");
 });

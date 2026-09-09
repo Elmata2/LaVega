@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account } from "@lavega/core";
+import type { Account, Tx } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import SaldoBlock, { changePct, positionSeries } from "./SaldoBlock";
+import SaldoBlock, { changePct, POSITION_WINDOW_DAYS, positionSeries } from "./SaldoBlock";
 import { accounts, ASOF, freshAccounts, freshTxs, scheduledFlows, txs } from "./fixtures";
+
+/** Today's default and every existing test's mode: a non-EUR balance is
+ *  left out exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
 
 // A freshly EB-linked Revolut: one EUR pocket plus one HUF pocket. Enable
 // Banking hands back a separate account per currency pocket, and until now
@@ -41,6 +45,7 @@ test("SaldoBlock renders the summed known balances and what the number covers", 
       scheduledFlows={scheduledFlows}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   // A3 has no saldo, so the title is flagged "(deels)" and the figure is the
@@ -63,6 +68,7 @@ test("SaldoBlock draws the position graph and both comparisons when history allo
       scheduledFlows={scheduledFlows}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   expect(html).toContain("lv-chart-svg");
@@ -85,6 +91,7 @@ test("the percentage beside the big number says what it is measured against", ()
       scheduledFlows={scheduledFlows}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   // "▲ 1%" on its own is unreadable — one percent since when? The pill is the
@@ -101,6 +108,7 @@ test("with no week of history there is neither a pill nor a claim about one", ()
       scheduledFlows={[]}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   expect(html).not.toContain("delta-pill");
@@ -115,6 +123,7 @@ test("SaldoBlock refuses to draw a line it cannot back with history", () => {
       scheduledFlows={[]}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   // Two days of history: no chart, and the card says why rather than drawing a
@@ -129,7 +138,14 @@ test("SaldoBlock refuses to draw a line it cannot back with history", () => {
 
 test("SaldoBlock shows a dash and an instruction with no accounts at all", () => {
   const html = renderToStaticMarkup(
-    <SaldoBlock accounts={[]} txs={[]} scheduledFlows={[]} asOf={ASOF} onNavigate={() => {}} />,
+    <SaldoBlock
+      accounts={[]}
+      txs={[]}
+      scheduledFlows={[]}
+      asOf={ASOF}
+      onNavigate={() => {}}
+      {...SEPARATE}
+    />,
   );
   expect(html).toContain("—");
   expect(html).toContain("Importeer een bestand of vul saldo"); // apostrophe is HTML-escaped
@@ -138,7 +154,7 @@ test("SaldoBlock shows a dash and an instruction with no accounts at all", () =>
 });
 
 test("positionSeries walks today's position back through the transactions", () => {
-  const s = positionSeries(accounts, txs, ASOF);
+  const s = positionSeries(accounts, txs, ASOF, POSITION_WINDOW_DAYS, SEPARATE);
   expect(s.current).toBe(KNOWN_SUM);
   expect(s.excluded).toBe(1); // A3 has no saldo and is left out of both sides
   // 30-day window, so 31 daily points ending on asOf.
@@ -154,7 +170,7 @@ test("positionSeries walks today's position back through the transactions", () =
 });
 
 test("positionSeries excludes a foreign-currency balance instead of adding its face value to the EUR total", () => {
-  const s = positionSeries(revolutAccounts, [], ASOF);
+  const s = positionSeries(revolutAccounts, [], ASOF, POSITION_WINDOW_DAYS, SEPARATE);
   expect(s.current).toBe(4_500); // the HUF pocket does not get added at face value
   expect(s.excluded).toBe(1);
   expect(s.excludedCurrencyKeys).toEqual(["R2"]);
@@ -168,6 +184,7 @@ test("SaldoBlock names the foreign-currency account it left out, separately from
       scheduledFlows={[]}
       asOf={ASOF}
       onNavigate={() => {}}
+      {...SEPARATE}
     />,
   );
   expect(html).toContain(formatEuro(4_500));
@@ -177,7 +194,7 @@ test("SaldoBlock names the foreign-currency account it left out, separately from
 });
 
 test("positionSeries stops at the oldest transaction and reports no comparison", () => {
-  const s = positionSeries(freshAccounts, freshTxs, ASOF);
+  const s = positionSeries(freshAccounts, freshTxs, ASOF, POSITION_WINDOW_DAYS, SEPARATE);
   expect(s.coverageDays).toBe(2);
   expect(s.points[0].date).toBe("2026-08-14");
   expect(s.weekAgo).toBeNull();
@@ -185,7 +202,7 @@ test("positionSeries stops at the oldest transaction and reports no comparison",
 });
 
 test("positionSeries returns no history at all when nothing is imported", () => {
-  const s = positionSeries([], [], ASOF);
+  const s = positionSeries([], [], ASOF, POSITION_WINDOW_DAYS, SEPARATE);
   expect(s.points).toEqual([]);
   expect(s.coverageDays).toBe(0);
   expect(s.weekAgo).toBeNull();
@@ -257,7 +274,7 @@ test("coverage is the SHORTEST-covered account, so one fresh import cannot unloc
     },
   ] as never[];
 
-  const s = positionSeries([old, fresh], history, "2026-08-16");
+  const s = positionSeries([old, fresh], history, "2026-08-16", POSITION_WINDOW_DAYS, SEPARATE);
 
   expect(s.coverageDays).toBe(1); // Amex, not ABN's six weeks
   expect(s.limitedBy).toEqual(["amex"]);
@@ -311,8 +328,153 @@ test("an account with a saldo but no transactions blocks the comparison rather t
 
   // "No movements" and "not imported" are indistinguishable from here, so the
   // typed balance is not treated as having been constant for a month.
-  const s = positionSeries([typed, banked], history, "2026-08-16");
+  const s = positionSeries([typed, banked], history, "2026-08-16", POSITION_WINDOW_DAYS, SEPARATE);
   expect(s.coverageDays).toBe(0);
   expect(s.limitedBy).toEqual(["amex"]);
   expect(s.monthAgo).toBeNull();
+});
+
+/* ───────────────────────── FX-omrekening: convert versus separate */
+
+const HUF_RATE = { HUF: { [ASOF]: 400 } };
+const CONVERT = { fxHistory: HUF_RATE, mode: "convert" as const };
+
+test("positionSeries: convert mode turns 300.000 HUF at 400 HUF/EUR into € 750 in the current total, and drops it out of excludedCurrencyKeys", () => {
+  const revolutHuf: Account[] = [
+    ...revolutAccounts.slice(0, 1),
+    { ...revolutAccounts[1], balance: 300_000 },
+  ];
+  const converted = positionSeries(revolutHuf, [], ASOF, POSITION_WINDOW_DAYS, CONVERT);
+  expect(converted.current).toBe(4_500 + 750);
+  expect(converted.excluded).toBe(0);
+  expect(converted.excludedCurrencyKeys).toEqual([]);
+});
+
+test("positionSeries: convert mode with no rate for the balance's date keeps the row excluded, same as separate", () => {
+  const revolutHuf: Account[] = [
+    ...revolutAccounts.slice(0, 1),
+    { ...revolutAccounts[1], balance: 300_000 },
+  ];
+  const noRate = positionSeries(revolutHuf, [], "2025-01-01", POSITION_WINDOW_DAYS, CONVERT);
+  expect(noRate.current).toBe(4_500);
+  expect(noRate.excludedCurrencyKeys).toEqual(["R2"]);
+
+  const separate = positionSeries(revolutHuf, [], ASOF, POSITION_WINDOW_DAYS, SEPARATE);
+  expect(separate.current).toBe(4_500);
+  expect(separate.excludedCurrencyKeys).toEqual(["R2"]);
+});
+
+test("SaldoBlock: convert mode folds a converted HUF balance into the figure and shows the one-time ECB note", () => {
+  const revolutHuf: Account[] = [
+    ...revolutAccounts.slice(0, 1),
+    { ...revolutAccounts[1], balance: 300_000 },
+  ];
+  const html = renderToStaticMarkup(
+    <SaldoBlock
+      accounts={revolutHuf}
+      txs={[]}
+      scheduledFlows={[]}
+      asOf={ASOF}
+      onNavigate={() => {}}
+      {...CONVERT}
+    />,
+  );
+  expect(html).toContain(formatEuro(5_250));
+  expect(html).not.toContain("vreemde valuta");
+  expect(html).toContain("Omgerekend via ECB.");
+});
+
+test("SaldoBlock: convert mode with no rate keeps the account out, worded 'nog geen koers' rather than the separate-mode wording", () => {
+  const revolutHuf: Account[] = [
+    ...revolutAccounts.slice(0, 1),
+    { ...revolutAccounts[1], balance: 300_000 },
+  ];
+  const html = renderToStaticMarkup(
+    <SaldoBlock
+      accounts={revolutHuf}
+      txs={[]}
+      scheduledFlows={[]}
+      asOf="2025-01-01"
+      onNavigate={() => {}}
+      {...CONVERT}
+    />,
+  );
+  expect(html).toContain(formatEuro(4_500));
+  expect(html).toContain("vreemde valuta");
+  expect(html).toContain("nog geen koers.");
+  expect(html).not.toContain("LaVega rekent nog niet om naar euro");
+  expect(html).not.toContain("Omgerekend via ECB.");
+});
+
+// A lone HUF account, always converting (rate at asOf). `known` is a single
+// account and its own transactions decide `coverageDays` — the shape a bare
+// R1+R2 pairing did not give: R1 has no transactions of its own and, without
+// one of its own, "no movements" reads as "no history" (see the
+// coverage-is-the-shortest-covered-account tests above), which would have
+// clamped the window to only the newest transaction and hidden the days
+// these two tests need to inspect. A padding transaction far outside the
+// window establishes real 30-day coverage without moving any figure in it.
+const soloHuf: Account[] = [{ ...revolutAccounts[1], balance: 300_000 }];
+const paddingTx: Tx = {
+  id: "pad",
+  accountKey: "R2",
+  date: "2026-01-01",
+  amount: 0,
+  currency: "HUF",
+  counterparty: "Opening",
+  description: "",
+  category: "",
+  manual: false,
+};
+
+test("positionSeries: convert mode moves the historical line by a converted transaction, on the day it landed", () => {
+  // -40.000 HUF at 400 HUF/EUR is -100 EUR.
+  const hufSpend: Tx = {
+    id: "hufSpend",
+    accountKey: "R2",
+    date: "2026-08-10",
+    amount: -40_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+    category: "",
+    manual: false,
+  };
+  const rate = { HUF: { "2026-08-10": 400, [ASOF]: 400 } };
+  const s = positionSeries(soloHuf, [paddingTx, hufSpend], ASOF, POSITION_WINDOW_DAYS, {
+    fxHistory: rate,
+    mode: "convert",
+  });
+  const at = (d: string) => s.points.find((p) => p.date === d)?.value;
+  expect(s.current).toBe(750); // 300.000 / 400, unaffected by the transaction walk
+  // Same step-down shape as the EUR case above: before the 10th the € 100
+  // had not left yet, on and after the 10th it has.
+  expect(at("2026-08-09")).toBe(850);
+  expect(at("2026-08-10")).toBe(750);
+});
+
+test("positionSeries: convert mode, no rate for a transaction's date — the line stays flat rather than showing a phantom movement", () => {
+  // Same shape as the previous test, but on a date more than 10 days from any
+  // known rate: toEur returns null, so this row falls back to 0 rather than
+  // breaking the walk — it must not appear as a movement on either side of it.
+  const hufSpendNoRate: Tx = {
+    id: "hufNoRate",
+    accountKey: "R2",
+    date: "2026-07-20",
+    amount: -40_000,
+    currency: "HUF",
+    counterparty: "Bolt Budapest",
+    description: "Taxi",
+    category: "",
+    manual: false,
+  };
+  const rate = { HUF: { [ASOF]: 400 } };
+  const s = positionSeries(soloHuf, [paddingTx, hufSpendNoRate], ASOF, POSITION_WINDOW_DAYS, {
+    fxHistory: rate,
+    mode: "convert",
+  });
+  const at = (d: string) => s.points.find((p) => p.date === d)?.value;
+  expect(at("2026-07-19")).toBe(750);
+  expect(at("2026-07-20")).toBe(750);
+  expect(at("2026-07-21")).toBe(750);
 });

@@ -4,7 +4,7 @@
  * Guarded so it no-ops where localStorage is absent (SSR/tests). */
 
 import type { VaultStorage } from "@lavega/adapters";
-import type { N8nSettings } from "@lavega/core";
+import type { ConversionMode, N8nSettings } from "@lavega/core";
 
 const BUFFER_KEY = "lavega.bufferCents";
 
@@ -135,6 +135,31 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
   try {
     if (typeof localStorage !== "undefined")
       localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
+export type { ConversionMode };
+
+const FX_CONVERSION_MODE_KEY = "lavega.fxConversionMode";
+
+/** Converting into the totals is the stated default, not an opt-in — so, like
+ *  the cashback assumption above, "never set" must read as ON: `!== "0"`,
+ *  not `=== "1"`. */
+export function getFxConversionMode(): ConversionMode {
+  try {
+    if (typeof localStorage === "undefined") return "convert";
+    return localStorage.getItem(FX_CONVERSION_MODE_KEY) !== "0" ? "convert" : "separate";
+  } catch {
+    return "convert";
+  }
+}
+
+export function setFxConversionMode(mode: ConversionMode): void {
+  try {
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(FX_CONVERSION_MODE_KEY, mode === "convert" ? "1" : "0");
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }

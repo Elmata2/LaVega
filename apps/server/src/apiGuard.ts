@@ -21,6 +21,7 @@ import { verifiedSession } from "./auth.js";
 const PUBLIC_API_PATHS = new Set([
   "/api/rates", // public NL savings rates
   "/api/fx/rate", // ECB mid-market rates
+  "/api/fx/history", // ECB historical daily rates, currency + date range only, no personal data
   "/api/eb/status", // { configured: bool } only
   "/api/agent/status", // { configured: bool } only
   "/api/card-terms/ingest", // machine endpoint; carries its OWN shared secret

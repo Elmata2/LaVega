@@ -11,6 +11,7 @@ import type {
   EntityProfile,
   EntityScope,
 } from "@lavega/core";
+import { syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
   reassignEntity,
@@ -72,7 +73,10 @@ import {
   ownerDisplayName,
   getEnabledModules,
   setEnabledModules,
+  getFxConversionMode,
+  setFxConversionMode,
   type OwnerName,
+  type ConversionMode,
 } from "./settings.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 import {
@@ -199,6 +203,22 @@ export default function App() {
     setHomeRegion(region);
     setHomeRegionState(getHomeRegion()); // read back: the store trims and caps
   }
+  // Whether a non-EUR balance/transaction counts toward the euro totals
+  // (converted at the day's ECB rate) or stays out of them, as before FX
+  // support existed. A local preference, same pattern as homeCountry — held in
+  // App so every consuming view re-renders when it flips.
+  const [fxConversionMode, setFxConversionModeState] = useState<ConversionMode>(() =>
+    getFxConversionMode(),
+  );
+  function handleFxConversionModeChange(mode: ConversionMode) {
+    setFxConversionMode(mode);
+    setFxConversionModeState(mode);
+  }
+  // ECB daily rates, keyed by currency then by date — the vault's own copy,
+  // refreshed in the background (see the "Load persisted data" effect below).
+  // Empty until the vault loads it; `toEur` returns null on a lookup miss, so
+  // an empty history just means every conversion is unresolved yet, not wrong.
+  const [fxHistory, setFxHistoryState] = useState<Record<string, Record<string, number>>>({});
   // The owner's own name, shown at the top of his profile. A local preference —
   // it stays in this browser, out of the vault, and out of every model prompt.
   const [ownerName, setOwnerNameState] = useState<OwnerName>(() => getOwnerName());
@@ -363,6 +383,7 @@ export default function App() {
         loadedRewards,
         loadedFacts,
         loadedProfiles,
+        loadedFxHistory,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
@@ -373,6 +394,7 @@ export default function App() {
         storage.getRewards(),
         storage.getFacts(),
         storage.getEntityProfiles(),
+        storage.getFxHistory(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
@@ -383,6 +405,18 @@ export default function App() {
       setRewards(loadedRewards);
       setFacts(loadedFacts);
       setEntityProfiles(loadedProfiles);
+      setFxHistoryState(loadedFxHistory);
+      // Fire, don't block: refresh the ECB history against what's ALREADY on
+      // screen. A slow or failed fetch must never delay showing the vault's
+      // own data — it just leaves fxHistory as it was until this lands. The
+      // trailing `.catch` also covers a lock mid-flight: `getFxHistory()`
+      // throws once `lock()` has cleared the vault's in-memory data, and that
+      // is not an error worth surfacing for a background refresh nobody asked
+      // to see finish.
+      void syncFxHistory(storage, loadedAccounts, loadedTxs)
+        .then(() => storage.getFxHistory())
+        .then(setFxHistoryState)
+        .catch(() => {});
     })();
   }, [gate]);
 
@@ -1147,6 +1181,8 @@ export default function App() {
               vatSettings={vatSettings}
               invoices={invoices}
               country={homeCountry}
+              fxHistory={fxHistory}
+              mode={fxConversionMode}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
               travel={{
@@ -1186,6 +1222,8 @@ export default function App() {
               scopedTxs={scopedTxs}
               rules={rules}
               own={own}
+              fxHistory={fxHistory}
+              mode={fxConversionMode}
               entityOptions={entityOptions}
               entityScope={entityScope}
               fEntity={fEntity}
@@ -1240,6 +1278,8 @@ export default function App() {
               asOf={asOf}
               bufferCents={bufferCents}
               scheduledFlows={scopedScheduledFlows}
+              fxHistory={fxHistory}
+              mode={fxConversionMode}
             />
           )}
 
@@ -1327,6 +1367,8 @@ export default function App() {
               onHomeCountryChange={handleHomeCountryChange}
               homeRegion={homeRegion}
               onHomeRegionChange={handleHomeRegionChange}
+              fxConversionMode={fxConversionMode}
+              onFxConversionModeChange={handleFxConversionModeChange}
               ownerName={ownerName}
               onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}

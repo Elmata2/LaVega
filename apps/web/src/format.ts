@@ -2,6 +2,18 @@ export function formatEuro(n: number): string {
   return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(n);
 }
 
+/** Same formatting as `formatEuro`, for a foreign-currency amount kept in its
+ *  own currency (the "separate" FX display mode). The try/catch covers an ISO
+ *  code `Intl` doesn't recognize — fall back to a manual currency-code-plus-
+ *  number rendering rather than throwing and blanking the whole row. */
+export function formatCurrency(n: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("nl-NL", { style: "currency", currency }).format(n);
+  } catch {
+    return `${currency} ${new Intl.NumberFormat("nl-NL").format(n)}`;
+  }
+}
+
 const MONTHS_NL = [
   "jan",
   "feb",

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { categorize, categorySpendPercentiles } from "@lavega/core";
+import { categorize, categorySpendPercentiles, isEurCurrency, toEur } from "@lavega/core";
 import type {
   CategoryPercentile,
+  ConversionMode,
   OwnAccounts,
   Rule,
   SpendPercentiles,
@@ -380,6 +381,8 @@ type StatistiekBlockProps = {
   own: OwnAccounts;
   /** Open a category's transactions — the jump the legend offers. */
   onSelectCategory: (category: string) => void;
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
 export default function StatistiekBlock({
@@ -387,10 +390,13 @@ export default function StatistiekBlock({
   rules,
   own,
   onSelectCategory,
+  fxHistory,
+  mode,
 }: StatistiekBlockProps) {
   const [period, setPeriod] = useState<StatPeriod>("12m");
   const [view, setView] = useState<StatView>("categorie");
   const [custom, setCustom] = useState<{ start: string; end: string }>({ start: "", end: "" });
+  const conversion = useMemo(() => ({ fxHistory, mode }), [fxHistory, mode]);
 
   // Every window ends at the newest transaction, never at the clock: an
   // imported historical statement charts itself instead of showing an empty
@@ -423,26 +429,27 @@ export default function StatistiekBlock({
   }
 
   const perCategory = useMemo(
-    () => (range === null ? null : categoryPerWindow(txs, rules, own, range, TOP_CATEGORIES)),
-    [txs, rules, own, range],
+    () =>
+      range === null ? null : categoryPerWindow(txs, rules, own, range, TOP_CATEGORIES, conversion),
+    [txs, rules, own, range, conversion],
   );
   const weekdays = useMemo(
-    () => (range === null ? null : weekdaySpend(txs, rules, own, range)),
-    [txs, rules, own, range],
+    () => (range === null ? null : weekdaySpend(txs, rules, own, range, conversion)),
+    [txs, rules, own, range, conversion],
   );
   const share = useMemo(
     () =>
       range === null
         ? { slices: [], totalCents: 0, covered: null }
-        : categoryShare(txs, rules, own, range),
-    [txs, rules, own, range],
+        : categoryShare(txs, rules, own, range, conversion),
+    [txs, rules, own, range, conversion],
   );
   const growth = useMemo(
     () =>
       range === null
         ? { rows: [], before: { start: "", end: "" } }
-        : categoryGrowth(txs, rules, own, range),
-    [txs, rules, own, range],
+        : categoryGrowth(txs, rules, own, range, conversion),
+    [txs, rules, own, range, conversion],
   );
   const windowDays = useMemo(
     () =>
@@ -468,8 +475,8 @@ export default function StatistiekBlock({
     [growth],
   );
   const totals = useMemo(
-    () => (range === null ? null : windowTotals(txs, rules, own, range)),
-    [txs, rules, own, range],
+    () => (range === null ? null : windowTotals(txs, rules, own, range, conversion)),
+    [txs, rules, own, range, conversion],
   );
   /* De twee totalen zeggen wat er in deze periode gebeurde; deze zeggen wat een
      periode HEM normaal kost en oplevert. Twee cijfers uit dezelfde bron dus, en
@@ -478,8 +485,8 @@ export default function StatistiekBlock({
      krijgen. Over welke eenheid gemiddeld wordt is een keuze van het venster —
      zie de kop boven `periodAverages`. */
   const averages = useMemo(
-    () => (range === null ? null : periodAverages(txs, rules, own, range)),
-    [txs, rules, own, range],
+    () => (range === null ? null : periodAverages(txs, rules, own, range, conversion)),
+    [txs, rules, own, range, conversion],
   );
   /* What every figure in this block deliberately leaves out. Money moving
      between his own accounts — or into his own savings and investments — is not
@@ -487,8 +494,20 @@ export default function StatistiekBlock({
      rather than silently dropped: he has to be able to see that something is
      outside the diagram, and why. See MOVED_CATEGORIES in statistics.ts. */
   const moved = useMemo(
-    () => (range === null ? [] : movedTotals(txs, rules, own, range)),
-    [txs, rules, own, range],
+    () => (range === null ? [] : movedTotals(txs, rules, own, range, conversion)),
+    [txs, rules, own, range, conversion],
+  );
+  /* Of er OOIT iets is omgerekend, ongeacht het gekozen venster — de tegel
+     draagt deze zin maar één keer, dus de vraag is ruimer dan "in dit
+     venster". */
+  const anyConverted = useMemo(
+    () =>
+      mode === "convert" &&
+      txs.some(
+        (t) =>
+          !isEurCurrency(t.currency) && toEur(t.amount, t.currency, t.date, fxHistory) !== null,
+      ),
+    [mode, txs, fxHistory],
   );
 
   /* De rijen waar het percentiel op rust: uitgaven, en zonder het geld dat
@@ -901,14 +920,32 @@ export default function StatistiekBlock({
               whole finding, there is no further breakdown to fold away. */}
           {totals && totals.foreignCurrency.count > 0 && (
             <p className="stat-insight-basis">
-              {`Buiten deze cijfers: ${totals.foreignCurrency.count} transactie${
-                totals.foreignCurrency.count === 1 ? "" : "s"
-              } in vreemde valuta (${Object.entries(totals.foreignCurrency.byCurrency)
-                .map(
-                  ([currency, amount]) =>
-                    `${currency} ${new Intl.NumberFormat("nl-NL").format(amount)}`,
-                )
-                .join(", ")}).`}
+              {mode === "convert"
+                ? `Buiten deze cijfers: ${totals.foreignCurrency.count} transactie${
+                    totals.foreignCurrency.count === 1 ? "" : "s"
+                  }, nog geen koers (${Object.entries(totals.foreignCurrency.byCurrency)
+                    .map(
+                      ([currency, amount]) =>
+                        `${currency} ${new Intl.NumberFormat("nl-NL").format(amount)}`,
+                    )
+                    .join(", ")}).`
+                : `Buiten deze cijfers: ${totals.foreignCurrency.count} transactie${
+                    totals.foreignCurrency.count === 1 ? "" : "s"
+                  } in vreemde valuta (${Object.entries(totals.foreignCurrency.byCurrency)
+                    .map(
+                      ([currency, amount]) =>
+                        `${currency} ${new Intl.NumberFormat("nl-NL").format(amount)}`,
+                    )
+                    .join(", ")}).`}
+            </p>
+          )}
+          {/* Eén keer voor de hele tegel, niet per rij: of er ÜBERHAUPT iets
+              omgerekend is, los van welk venster nu open staat — dezelfde reden
+              waarom de regel hierboven ook over `totals.foreignCurrency` gaat
+              en niet over de gekozen periode alleen. */}
+          {anyConverted && (
+            <p className="stat-insight-basis">
+              Vreemde valuta omgerekend via ECB-koers van de dag.
             </p>
           )}
 

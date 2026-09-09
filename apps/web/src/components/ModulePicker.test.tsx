@@ -331,7 +331,13 @@ function WidgetShell() {
   return (
     <>
       <AandachtWidget alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />
-      <PositieWidget accounts={widgetAccounts} onNavigate={() => {}} />
+      <PositieWidget
+        accounts={widgetAccounts}
+        onNavigate={() => {}}
+        asOf="2026-08-16"
+        fxHistory={{}}
+        mode="separate"
+      />
       <BetaalschemaWidget scheduledFlows={[]} txs={[]} asOf="2026-08-16" />
       <BtwWidget
         entities={["BV1 Holding"]}

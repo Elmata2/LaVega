@@ -21,7 +21,10 @@ test("Overview wiring: FileImport -> ingest -> IndexedDB -> consolidate yields p
   const accounts = await storage.getAccounts();
   const txs = await storage.getTxs();
 
-  const { byEntity } = consolidate(accounts, txs);
+  const { byEntity } = consolidate(accounts, txs, "2026-01-03", {
+    fxHistory: {},
+    mode: "separate",
+  });
 
   expect(byEntity["BV1"].out).toBe(-12.34);
   expect(byEntity["BV1"].in).toBe(2500);

@@ -45,6 +45,8 @@ test('bannerState: a real shortfall takes priority -> "shortfall"', () => {
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
   });
   const f = byEntity["BV1"];
   expect(f.shortfall).not.toBeNull();
@@ -60,7 +62,11 @@ test('bannerState: an unknown opening balance (CSV-only account) -> "unknown"', 
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null },
   ];
-  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
+  const { byEntity } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
   const f = byEntity["BV1"];
   expect(f.openingCents).toBeNull();
   expect(bannerState(f)).toBe("unknown");
@@ -90,6 +96,8 @@ test('bannerState: a comfortable, known opening balance with no shortfall -> "no
     asOf: "2026-07-01",
     horizonDays: 91,
     bufferCents: 0,
+    fxHistory: {},
+    mode: "separate",
   });
   const f = byEntity["BV1"];
   expect(f.shortfall).toBeNull();
@@ -105,7 +113,11 @@ test('no transaction history at all -> thin, and the banner refuses the green "g
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const { byEntity } = forecastCashflow([], accounts, { asOf: "2026-07-01" });
+  const { byEntity } = forecastCashflow([], accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  });
   const f = byEntity["BV1"];
   expect(f.streams).toHaveLength(0);
   expect(isThinData(f)).toBe(true);
@@ -145,7 +157,11 @@ test("coverageNotes: names the history, the live streams and the window it was b
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01" }).byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   const basis = coverageNotes(f).find((n) => n.id === "basis")!;
   expect(basis.text).toContain("61 dagen historie (2026-04-25 t/m 2026-06-25)");
   expect(basis.text).toContain("1 lopende terugkerende stroom");
@@ -173,7 +189,11 @@ test("coverageNotes: an account with a balance but no transactions is said out l
     },
   ];
   const txs: Tx[] = [tx("1", "2026-01-01", -25, "Koffie"), tx("2", "2026-06-25", -25, "Boek")];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01" }).byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   const note = coverageNotes(f).find((n) => n.id === "accounts-without-history")!;
   expect(note.text).toContain("1 van je 2 rekeningen");
 });
@@ -216,7 +236,11 @@ test("coverageNotes: three weeks of one card among months of another is named, w
     on("3", "B", "2026-07-01", "Tanken"),
     on("4", "B", "2026-07-22", "Lunch"),
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-25" }).byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-25",
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(coverageNotes(f).find((n) => n.id === "short-account")!.text).toContain(
     "21 dagen historie",
   );
@@ -232,7 +256,11 @@ test("coverageNotes: a stale import says how old it is instead of quietly foreca
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-04-20" }).byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-04-20",
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(coverageNotes(f).find((n) => n.id === "stale-import")!.text).toContain(
     "2026-03-05, 46 dagen geleden",
   );
@@ -264,7 +292,7 @@ test("hasBand: false when the engine could not measure one, true once it could",
       tx("3", "2026-06-30", -50, "Coffee"),
     ],
     accounts,
-    { asOf: "2026-07-01" },
+    { asOf: "2026-07-01", fxHistory: {}, mode: "separate" },
   ).byEntity["BV1"];
   expect(hasBand(thin)).toBe(false);
 
@@ -275,7 +303,7 @@ test("hasBand: false when the engine could not measure one, true once it could",
       tx("3", "2026-06-25", 2400, "Werkgever"),
     ],
     accounts,
-    { asOf: "2026-07-01" },
+    { asOf: "2026-07-01", fxHistory: {}, mode: "separate" },
   ).byEntity["BV1"];
   expect(hasBand(measured)).toBe(true);
 });
@@ -292,7 +320,11 @@ test('coverageNotes: a zero-width band says "measured zero", not nothing', () =>
   const accounts: Account[] = [
     { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
   ];
-  const f = forecastCashflow(txs, accounts, { asOf: "2026-07-01" }).byEntity["BV1"];
+  const f = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    fxHistory: {},
+    mode: "separate",
+  }).byEntity["BV1"];
   expect(f.basis!.bandBasis).not.toBe("none");
   expect(hasBand(f)).toBe(false);
   expect(coverageNotes(f).map((n) => n.id)).toContain("flat-band");
