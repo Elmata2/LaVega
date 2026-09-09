@@ -79,6 +79,25 @@ test("/api/cron/investing-sync and /api/investing/health pass the guard without 
   }
 });
 
+test("an anonymous GET to /api/agent/budget is refused with 401 — spend figures are operational data, unlike /api/agent/status's boolean", async () => {
+  const res = await app.request("/api/agent/budget");
+  expect(res.status).toBe(401);
+});
+
+test("a verified session reaches /api/agent/budget and gets the spend figures", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "u1" } });
+  const res = await app.request("/api/agent/budget");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(
+    expect.objectContaining({
+      dayCents: expect.any(Number),
+      monthCents: expect.any(Number),
+      spentTodayCents: expect.any(Number),
+      spentMonthCents: expect.any(Number),
+    }),
+  );
+});
+
 test("LAVEGA_ALLOW_UNAUTHENTICATED=1 opens the guard for local development", async () => {
   process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
   const res = await app.request("/api/agent/chat", {

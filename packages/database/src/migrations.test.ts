@@ -69,7 +69,7 @@ test("lavega_runtime is granted select, insert, update, delete on every table in
   }
 });
 
-test("every RLS-enabled table in personal and investing also forces it, except personal.eb_pending_auth", async () => {
+test("every RLS-enabled table in personal and investing also forces it, except personal.eb_pending_auth and personal.ai_usage", async () => {
   const rows = await db.query<{ schema: string; table: string; enabled: boolean; forced: boolean }>(
     `SELECT n.nspname AS schema, c.relname AS table, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -79,7 +79,8 @@ test("every RLS-enabled table in personal and investing also forces it, except p
   expect(rows.rows.length).toBeGreaterThan(0);
 
   const checked = rows.rows.filter(
-    (row) => !(row.schema === "personal" && row.table === "eb_pending_auth"),
+    (row) =>
+      !(row.schema === "personal" && (row.table === "eb_pending_auth" || row.table === "ai_usage")),
   );
   const violations = checked
     .filter((row) => row.enabled && !row.forced)
@@ -95,6 +96,15 @@ test("personal.eb_pending_auth deliberately has neither RLS nor FORCE — the ba
     `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'personal' AND c.relname = 'eb_pending_auth'`,
+  );
+  expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
+});
+
+test("personal.ai_usage deliberately has neither RLS nor FORCE — aggregate owner spend, not per-user data", async () => {
+  const rows = await db.query<{ enabled: boolean; forced: boolean }>(
+    `SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'personal' AND c.relname = 'ai_usage'`,
   );
   expect(rows.rows).toEqual([{ enabled: false, forced: false }]);
 });

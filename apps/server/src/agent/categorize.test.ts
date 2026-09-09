@@ -192,3 +192,11 @@ test("categorizeTransactions returns [] when the model's text isn't JSON", async
     await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k"),
   ).toEqual([]);
 });
+
+test("categorizeTransactions calls onUsage once with the completion's token counts, even when the JSON fails to parse", async () => {
+  completeMock.mockResolvedValue({ text: "not json at all", usage: { input: 12, output: 34 } });
+  const onUsage = vi.fn();
+  await categorizeTransactions({ items: [{ id: "t1", text: "x", sign: "out" }] }, "k", [], onUsage);
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 12, outputTokens: 34 });
+});

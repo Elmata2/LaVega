@@ -1,4 +1,5 @@
 import type { LlmProvider } from "./provider.js";
+import { MISTRAL_OCR } from "./models.js";
 
 const BASE_URL = "https://api.mistral.ai/v1";
 const CITATION_KEYS = ["references", "citations", "citation_chunks"] as const;
@@ -140,7 +141,7 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
           method: "POST",
           headers,
           body: JSON.stringify({
-            model: "mistral-ocr-latest",
+            model: MISTRAL_OCR,
             document: {
               type: "document_url",
               document_url: `data:application/pdf;base64,${pdfBase64}`,
@@ -202,9 +203,14 @@ export function createMistralProvider(apiKey: string, model: string): LlmProvide
         })
         .join("");
       const sources = extractSources(outputs);
+      const usage = {
+        input: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens : 0,
+        output:
+          typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : 0,
+      };
 
       onDelta(text);
-      return { text, sources };
+      return { text, sources, usage };
     },
   };
 }

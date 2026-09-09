@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 import { Hono } from "hono";
 import { registerAgentRoutes } from "./agent-routes.js";
 import type { ExtractedInvoice } from "./agent/invoiceExtract.js";
+import { recordUsage, resetBudgetMemory } from "./agent/budget.js";
 
 const FAKE_RESULT: { fields: ExtractedInvoice; confidence: number } = {
   fields: {
@@ -38,7 +39,23 @@ function jsonPost(body: unknown): RequestInit {
   };
 }
 
-test("GET /api/agent/status reflects whether the API key is configured", async () => {
+/** Set AI_DAILY_BUDGET_CENTS for the duration of an async body, resetting the
+ *  in-memory spend counter before AND after so a low cap set here — or usage
+ *  recorded under it — never leaks into another test. */
+async function withDailyBudgetCents(cents: string, fn: () => Promise<void>): Promise<void> {
+  const prev = process.env.AI_DAILY_BUDGET_CENTS;
+  resetBudgetMemory();
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = cents;
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prev;
+    resetBudgetMemory();
+  }
+}
+
+test("GET /api/agent/status reflects whether the API key is configured — no spend data on this public route", async () => {
   await withApiKey("sk-ant-test", async () => {
     const app = new Hono();
     registerAgentRoutes(app);
@@ -52,6 +69,21 @@ test("GET /api/agent/status reflects whether the API key is configured", async (
     const res = await app.request("/api/agent/status");
     expect(await res.json()).toEqual({ configured: false });
   });
+});
+
+test("GET /api/agent/budget reports today's/month's AI spend against the configured caps", async () => {
+  resetBudgetMemory(); // deterministic spend regardless of test order
+  const app = new Hono();
+  registerAgentRoutes(app);
+  const res = await app.request("/api/agent/budget");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({
+    dayCents: 200,
+    monthCents: 2000,
+    spentTodayCents: 0,
+    spentMonthCents: 0,
+  });
+  resetBudgetMemory();
 });
 
 test("POST /api/agent/extract-invoice returns 503 when no API key is configured", async () => {
@@ -448,5 +480,110 @@ test("the chat route forwards its own facts and drops another agent's", async ()
     expect(res.status).toBe(200);
     await res.text(); // drain the stream so the generator runs
     expect(captured.map((f) => f.key)).toEqual(["lengte"]);
+  });
+});
+
+/* --- Budget: the 429 gate in front of extract-invoice/categorize/chat. --- */
+
+// mistral-small-latest at 1M in / 1M out costs exactly 69 cents (see
+// budget.test.ts) — a clean, rounding-free number to place a cap around.
+function recordOneExpensiveCall() {
+  recordUsage({
+    route: "categorize",
+    model: "mistral-small-latest",
+    inputTokens: 1_000_000,
+    outputTokens: 1_000_000,
+  });
+}
+
+test("extract-invoice returns 429 over the daily budget, and never reaches the extractor", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    await withDailyBudgetCents("68", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0)); // let recordUsage's detached persistence land
+      const app = new Hono();
+      let called = false;
+      registerAgentRoutes(app, {
+        extract: async () => {
+          called = true;
+          return FAKE_RESULT;
+        },
+      });
+      const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({ error: "De AI-limiet voor vandaag is bereikt." });
+      expect(called).toBe(false);
+    });
+  });
+});
+
+test("extract-invoice proceeds normally when spend is under the daily budget", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    await withDailyBudgetCents("70", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0));
+      const app = new Hono();
+      registerAgentRoutes(app, { extract: async () => FAKE_RESULT });
+      const res = await app.request("/api/agent/extract-invoice", jsonPost({ text: "factuur" }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(FAKE_RESULT);
+    });
+  });
+});
+
+test("chat over the daily budget: still HTTP 200, generator never runs, SSE carries the Dutch budget message", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    await withDailyBudgetCents("68", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0));
+      const app = new Hono();
+      let called = false;
+      registerAgentRoutes(app, {
+        chat: async function* () {
+          called = true;
+          yield "hoi";
+        },
+      });
+      const res = await app.request(
+        "/api/agent/chat",
+        jsonPost({ tab: "overview", messages: [{ role: "user", content: "hoi" }] }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain("De AI-limiet voor vandaag is bereikt.");
+      expect(called).toBe(false);
+    });
+  });
+});
+
+// travel-facts is worth its own budget test: its gate only guards route ENTRY
+// — getCardTerms() never awaits the model, it starts a backgrounded lookup —
+// so this proves the 429 fires before that background call is even scheduled,
+// rather than assuming the shared 2-line guard behaves like the synchronous
+// routes above.
+test("travel-facts returns 429 over the daily budget, and never starts the backgrounded lookup", async () => {
+  await withApiKey("sk-ant-test", async () => {
+    await withDailyBudgetCents("68", async () => {
+      recordOneExpensiveCall();
+      await new Promise((r) => setTimeout(r, 0));
+      const app = new Hono();
+      let called = false;
+      registerAgentRoutes(app, {
+        travelFacts: async () => {
+          called = true;
+          return [];
+        },
+      });
+      const res = await app.request(
+        "/api/agent/travel-facts",
+        jsonPost({ destination: "US", providers: ["Test Bank"] }),
+      );
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({ error: "De AI-limiet voor vandaag is bereikt." });
+      // Not just "not awaited yet" — genuinely never scheduled, given the
+      // event-loop tick below.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(called).toBe(false);
+    });
   });
 });

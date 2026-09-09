@@ -3,6 +3,8 @@ import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import type { LlmProvider } from "./provider.js";
 import { createMistralProvider } from "./mistral.js";
+import { checkBudget, recordUsage } from "./budget.js";
+import { MISTRAL_MEDIUM } from "./models.js";
 
 export type KnownFact = { subject: string; key: string; value: string };
 export type TravelInput = {
@@ -143,7 +145,7 @@ export async function lookupProviderTerms(
   apiKey: string,
   deps: { provider?: LlmProvider } = {},
 ): Promise<ProviderTerms[]> {
-  const provider = deps.provider ?? createMistralProvider(apiKey, "mistral-medium-latest");
+  const provider = deps.provider ?? createMistralProvider(apiKey, MISTRAL_MEDIUM);
   // `_base.md` + `travel.md`, and what the owner has already corrected — the
   // same composition and the same "WAT LAVEGA AL WEET" block the other three
   // agents get, so the learning contract is explained once for all of them.
@@ -154,10 +156,37 @@ export async function lookupProviderTerms(
     (input.currency ? ` (${input.currency})` : "") +
     `.\nAanbieders: ${input.providers.join(", ")}.`;
 
-  const { text } = await provider.chatWithSearch({
+  // `/api/agent/travel-facts` only gates its OWN entry (see agent-routes.ts) —
+  // one request can fan out into up to MAX_PROVIDERS backgrounded calls here
+  // (cardTerms.ts's startLookup, one per stale/gap provider), so that single
+  // route-entry check does nothing to cap the fan-out. This is the one place
+  // that actually spends, so it is the one place that has to check again,
+  // right before spending, for every one of those calls.
+  //
+  // Throws rather than returning [] — cardTerms.ts's startLookup only marks a
+  // provider `agentTried` (no retry for the rest of the TTL) on the path AFTER
+  // this resolves; a thrown error is treated the same as any other failed
+  // lookup, so the provider stays eligible for retry once the budget resets
+  // instead of being wrongly recorded as "asked, and the model had nothing".
+  const budget = await checkBudget();
+  if (!budget.ok) throw new Error(`agent/travel: AI-limiet bereikt (${budget.scope})`);
+
+  const { text, usage } = await provider.chatWithSearch({
     system,
     messages: [{ role: "user", content: userMessage }],
     onDelta: () => {},
+  });
+  // The one place the actual model call happens for travel, and the only
+  // caller path there is — `/api/agent/travel-facts` never awaits this (it's
+  // backgrounded past the route's return, see cardTerms.ts), so the route
+  // can't record it; this has to. `usage` is optional here defensively: a
+  // test double built before Part 2 can still omit it.
+  recordUsage({
+    route: "travel",
+    model: MISTRAL_MEDIUM,
+    inputTokens: usage?.input,
+    outputTokens: usage?.output,
+    searches: 1,
   });
 
   let parsed: unknown;

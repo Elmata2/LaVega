@@ -67,6 +67,18 @@ test("throws 'geen extractie' when OCR returns empty markdown and there is no in
   expect(completeMock).not.toHaveBeenCalled();
 });
 
+test("onUsage still fires with the OCR page count when a blank/unreadable scan throws before complete() — that OCR call was real and billable", async () => {
+  ocrMock.mockResolvedValue({ markdown: "", pages: 2 });
+  const onUsage = vi.fn();
+
+  await expect(extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage)).rejects.toThrow(
+    "geen extractie",
+  );
+  expect(completeMock).not.toHaveBeenCalled();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, pages: 2 });
+});
+
 test("a text-only input never calls ocrPdf, and input.text reaches complete()", async () => {
   completeMock.mockResolvedValue({
     text: JSON.stringify({
@@ -116,4 +128,26 @@ test("throws 'geen extractie' when complete() returns text that is not valid JSO
 test("throws 'geen extractie' when the parsed JSON is not an object", async () => {
   completeMock.mockResolvedValue({ text: JSON.stringify(null), usage: { input: 0, output: 0 } });
   await expect(extractInvoiceFields({ text: "x" }, "k")).rejects.toThrow("geen extractie");
+});
+
+test("onUsage fires once with OCR pages plus the completion's token counts, when a PDF is involved", async () => {
+  ocrMock.mockResolvedValue({ markdown: "factuur van ACME", pages: 3 });
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ counterparty: "ACME BV", amount: 1, issueDate: "2026-01-01" }),
+    usage: { input: 100, output: 50 },
+  });
+  const onUsage = vi.fn();
+  await extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage);
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 100, outputTokens: 50, pages: 3 });
+});
+
+test("onUsage reports 0 pages when no PDF was involved", async () => {
+  completeMock.mockResolvedValue({
+    text: JSON.stringify({ counterparty: "X", amount: 1, issueDate: "2026-01-01" }),
+    usage: { input: 10, output: 5 },
+  });
+  const onUsage = vi.fn();
+  await extractInvoiceFields({ text: "factuurtekst" }, "k", [], onUsage);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 10, outputTokens: 5, pages: 0 });
 });

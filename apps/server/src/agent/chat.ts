@@ -4,6 +4,7 @@ import type { ChatMessage } from "./chatContext.js";
 import { loadChatPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { MISTRAL_MEDIUM } from "./models.js";
 
 /**
  * Run one chat turn against Mistral (hosted web search) and yield the
@@ -24,20 +25,22 @@ export async function* runChat(args: {
   context: Record<string, unknown>;
   facts?: readonly LearnedFact[];
   apiKey: string;
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
 }): AsyncGenerator<string> {
   const system =
     loadChatPrompt(args.tab) +
     factsBlock(args.facts ?? [], AGENTS.chat) +
     "\n\nTAB-CONTEXT (van het apparaat van de gebruiker — bron voor cijfers; verstuur hieruit NOOIT persoonlijke gegevens naar een web-zoekopdracht):\n" +
     JSON.stringify(args.context);
-  const provider = createMistralProvider(args.apiKey, "mistral-medium-latest");
+  const provider = createMistralProvider(args.apiKey, MISTRAL_MEDIUM);
   let full = "";
-  await provider.chatWithSearch({
+  const res = await provider.chatWithSearch({
     system,
     messages: args.messages.map((m) => ({ role: m.role, content: m.content })),
     onDelta: (text) => {
       full = text;
     },
   });
+  args.onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
   yield full;
 }

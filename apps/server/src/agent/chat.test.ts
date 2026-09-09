@@ -64,3 +64,22 @@ test("chat reads what it has learned about how to answer, and nothing else", asy
   expect(system).toContain("- antwoord lengte = kort (door de gebruiker)");
   expect(system).not.toContain("fxFeePct");
 });
+
+test("runChat calls onUsage once with the provider's reported token counts, before yielding", async () => {
+  chatWithSearchMock.mockResolvedValue({
+    text: "ok",
+    sources: [],
+    usage: { input: 20, output: 8 },
+  });
+  const onUsage = vi.fn();
+  for await (const _ of runChat({
+    tab: "overview",
+    messages: [{ role: "user", content: "hoi" }],
+    context: {},
+    apiKey: "k",
+    onUsage,
+  }))
+    void _;
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 20, outputTokens: 8 });
+});

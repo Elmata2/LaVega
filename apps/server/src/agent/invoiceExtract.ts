@@ -3,6 +3,7 @@ import type { InvoiceExtractInput } from "./redaction.js";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { MISTRAL_SMALL } from "./models.js";
 
 /** The seven fields we ask the model to pull off one invoice. */
 export type ExtractedInvoice = {
@@ -28,15 +29,24 @@ export async function extractInvoiceFields(
   input: InvoiceExtractInput,
   apiKey: string,
   facts: readonly LearnedFact[] = [],
+  onUsage?: (usage: { inputTokens: number; outputTokens: number; pages: number }) => void,
 ): Promise<{ fields: ExtractedInvoice; confidence: number | null }> {
-  const provider = createMistralProvider(apiKey, "mistral-small-latest");
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
 
   let markdown: string | undefined;
+  let pages = 0;
   if (input.pdfBase64) {
-    markdown = (await provider.ocrPdf({ pdfBase64: input.pdfBase64 })).markdown;
+    const ocr = await provider.ocrPdf({ pdfBase64: input.pdfBase64 });
+    markdown = ocr.markdown;
+    pages = ocr.pages;
   }
   const documentText = markdown || input.text;
-  if (!documentText) throw new Error("geen extractie");
+  if (!documentText) {
+    // A blank/unreadable scan still burned a real, billable OCR call — record
+    // it before throwing, or the spend never reaches the budget ledger.
+    onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
+    throw new Error("geen extractie");
+  }
 
   const res = await provider.complete({
     system: loadAgentPrompt("facturen-extract") + factsBlock(facts, AGENTS.facturen),
@@ -44,6 +54,9 @@ export async function extractInvoiceFields(
     json: true,
     maxTokens: 1024,
   });
+  // One row covers both the OCR pass and the completion — call it once, after
+  // complete() resolves, so it reflects the full cost of this extraction.
+  onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output, pages });
 
   let parsed: unknown;
   try {

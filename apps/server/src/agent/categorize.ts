@@ -2,6 +2,7 @@ import { AGENTS, CATEGORY_OPTIONS, scrubPersonalValues, type LearnedFact } from 
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
+import { MISTRAL_SMALL } from "./models.js";
 
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
@@ -48,8 +49,9 @@ export async function categorizeTransactions(
   input: { items: CategorizeItem[] },
   apiKey: string,
   facts: readonly LearnedFact[] = [],
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<{ id: string; category: string }[]> {
-  const provider = createMistralProvider(apiKey, "mistral-small-latest");
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL);
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
   const res = await provider.complete({
     system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
@@ -59,6 +61,9 @@ export async function categorizeTransactions(
     // land well under this, so the JSON won't truncate mid-array.
     maxTokens: 8192,
   });
+  // Called regardless of what happens to res.text below — tokens were spent
+  // either way, whether or not the JSON that follows parses.
+  onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
   let parsed: unknown;
   try {
     parsed = JSON.parse(res.text);

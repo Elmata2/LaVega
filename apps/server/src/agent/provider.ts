@@ -13,5 +13,9 @@ export type LlmProvider = {
     system: string;
     messages: { role: "user" | "assistant"; content: string }[];
     onDelta: (text: string) => void;
-  }): Promise<{ text: string; sources: { url: string; title: string }[] }>;
+  }): Promise<{
+    text: string;
+    sources: { url: string; title: string }[];
+    usage: { input: number; output: number };
+  }>;
 };

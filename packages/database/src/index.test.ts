@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "vitest";
 import {
   eraseUserData,
   createAgentRunRepository,
+  createAiUsageRepository,
   createBrokerRepository,
   createEbFlowRepository,
   createOpaqueVaultRepository,
@@ -494,4 +495,41 @@ test("sweepSessions reports zero rather than pretending it did not run", async (
   const { db } = erasureDatabase(0);
   const removed = await createEbFlowRepository(db).sweepSessions("user-123", 60 * 60 * 1000);
   expect(removed).toBe(0);
+});
+
+test("AiUsage.record inserts all 8 columns in order", async () => {
+  const { db, calls } = fakeDatabase();
+  await createAiUsageRepository(db).record({
+    day: "2026-09-08",
+    route: "categorize",
+    model: "mistral-small-latest",
+    inputTokens: 120,
+    outputTokens: 40,
+    pages: 0,
+    searches: 0,
+    costCents: 2,
+  });
+  expect(calls).toEqual([
+    {
+      sql: "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      values: ["2026-09-08", "categorize", "mistral-small-latest", 120, 40, 0, 0, 2],
+    },
+  ]);
+});
+
+test("AiUsage.spentCents reads back day and month totals", async () => {
+  const { db, calls } = fakeDatabase([{ total: 150 }]);
+  const spent = await createAiUsageRepository(db).spentCents({
+    day: "2026-09-08",
+    month: "2026-09",
+  });
+  expect(spent).toEqual({ dayCents: 150, monthCents: 150 });
+  expect(calls[0]).toEqual({
+    sql: "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE day = $1",
+    values: ["2026-09-08"],
+  });
+  expect(calls[1]).toEqual({
+    sql: "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE to_char(day, 'YYYY-MM') = $1",
+    values: ["2026-09"],
+  });
 });

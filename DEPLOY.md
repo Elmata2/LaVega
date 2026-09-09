@@ -37,7 +37,7 @@ storage. Better Auth integration remains pending.
   `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
   Investing keeps a second, later check on top: `investingTenantId` decides
-  *which tenant* the request is served under. The `/investing/*` SPA shell and
+  _which tenant_ the request is served under. The `/investing/*` SPA shell and
   the personal SPA stay public — they have to load before anyone can sign in.
 - **The guard fails closed.** Without `DATABASE_URL` and `BETTER_AUTH_SECRET`
   there are no sessions to verify, so a deployment with those unset refuses every
@@ -101,22 +101,22 @@ storage. Better Auth integration remains pending.
 
 Personal app paths (SPA; server already serves `index.html` for unknown paths):
 
-| Path                      | View          |
-| ------------------------- | ------------- |
+| Path                      | View                        |
+| ------------------------- | --------------------------- |
 | `/`                       | Landing (Dutch — canonical) |
-| `/en`                     | Landing (English) |
-| `/app` or `/app/overview` | Overzicht     |
-| `/app/transactions`       | Transacties   |
-| `/app/accounts`           | Rekeningen    |
-| `/app/forecast`           | Forecast      |
-| `/app/optimalisatie`      | Optimalisatie |
-| `/app/valuta`             | Valuta        |
-| `/app/punten`             | Punten        |
-| `/app/belasting`          | Belasting     |
-| `/app/facturen`           | Facturen      |
-| `/app/profiel`            | Profiel       |
-| `/app/koppelingen`        | Koppelingen   |
-| `/app/backup`             | Back-up       |
+| `/en`                     | Landing (English)           |
+| `/app` or `/app/overview` | Overzicht                   |
+| `/app/transactions`       | Transacties                 |
+| `/app/accounts`           | Rekeningen                  |
+| `/app/forecast`           | Forecast                    |
+| `/app/optimalisatie`      | Optimalisatie               |
+| `/app/valuta`             | Valuta                      |
+| `/app/punten`             | Punten                      |
+| `/app/belasting`          | Belasting                   |
+| `/app/facturen`           | Facturen                    |
+| `/app/profiel`            | Profiel                     |
+| `/app/koppelingen`        | Koppelingen                 |
+| `/app/backup`             | Back-up                     |
 
 Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
 
@@ -191,6 +191,11 @@ locally, create your own Neon branch and put its connection string, a
   categorization). Obtained from console.mistral.ai (La Plateforme). Absent
   means `/api/agent/status` answers `configured: false` and the agent routes
   answer `503`.
+- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend, in euro cents. Default `200`
+  (€2). The four `/api/agent/*` routes refuse with 429 once today's recorded
+  spend meets or exceeds this.
+- `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend, in euro cents. Default
+  `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.
@@ -218,6 +223,7 @@ Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
 
 **Two things to check before the first live connection:**
+
 - Apply `0003_eb_flow.sql` and `0004_eb_grants.sql`. Without a `DATABASE_URL`
   the EB routes are not registered at all; without the tables the flow fails
   at `/auth`; without the grants in `0004` every EB statement fails
@@ -233,6 +239,7 @@ the app still works with file imports. Never commit the `.pem` — use the env v
 pnpm build      # builds apps/web/dist
 pnpm start      # Hono serves web + API on http://localhost:8787
 ```
+
 `pnpm start` runs production semantics, so without `DATABASE_URL` +
 `BETTER_AUTH_SECRET` in `apps/server/.env` the API answers `401` — that is the
 guard working, not a broken build. Prefix with `LAVEGA_ALLOW_UNAUTHENTICATED=1`

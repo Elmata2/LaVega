@@ -1,5 +1,22 @@
 import { expect, test, vi } from "vitest";
 import { sanitizeTravelInput, lookupProviderTerms } from "./travel.js";
+import { recordUsage, resetBudgetMemory } from "./budget.js";
+
+/** Set AI_DAILY_BUDGET_CENTS for the duration of an async body, resetting the
+ *  in-memory spend counter before AND after — matches agent-routes.test.ts's
+ *  helper of the same name. */
+async function withDailyBudgetCents(cents: string, fn: () => Promise<void>): Promise<void> {
+  const prev = process.env.AI_DAILY_BUDGET_CENTS;
+  resetBudgetMemory();
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = cents;
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prev;
+    resetBudgetMemory();
+  }
+}
 
 const valid = {
   homeCountry: "NL",
@@ -228,4 +245,39 @@ test("with several asked, near-matches attach to the right one and strangers are
   const out = await lookupProviderTerms(sanitizeTravelInput(many), "k", { provider });
   expect(out.map((o) => o.provider)).toEqual(["ING"]);
   expect(out[0].fxFeePct).toBe(1.4);
+});
+
+/* --- Budget gate: this is the ONE place travel-facts actually spends. The
+ * route only gates its own entry (agent-routes.test.ts covers that), but
+ * cardTerms.ts's getCardTerms() can fan out into up to MAX_PROVIDERS
+ * backgrounded calls that never pass back through the route — so the real
+ * cap has to live here. --- */
+
+test("over the daily budget, the provider is never called — cardTerms.ts's fan-out stops here, not just at the route", async () => {
+  await withDailyBudgetCents("68", async () => {
+    recordUsage({
+      route: "categorize",
+      model: "mistral-small-latest",
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+    });
+    await new Promise((r) => setTimeout(r, 0)); // let recordUsage's detached persistence land
+    const chatWithSearch = vi.fn(async () => ({
+      text: JSON.stringify({ providers: [] }),
+      sources: [],
+    }));
+    const provider = { chatWithSearch } as never;
+    await expect(
+      lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider }),
+    ).rejects.toThrow("AI-limiet bereikt");
+    expect(chatWithSearch).not.toHaveBeenCalled();
+  });
+});
+
+test("under the daily budget, the provider is still called normally", async () => {
+  await withDailyBudgetCents("2000", async () => {
+    const provider = stubProvider([{ provider: "ING", fxFeePct: 1.2 }]);
+    const out = await lookupProviderTerms(sanitizeTravelInput(valid), "k", { provider });
+    expect(out).toHaveLength(1);
+  });
 });

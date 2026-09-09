@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadConfig, loadLlmConfig, maskApplicationId } from "./config.js";
+import { loadBudgetConfig, loadConfig, loadLlmConfig, maskApplicationId } from "./config.js";
 
 test("with no config.json present, config reports configured:false and applicationId:null", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "lavega-server-config-"));
@@ -72,6 +72,51 @@ test("loadLlmConfig: configured only when MISTRAL_API_KEY is set", () => {
   } finally {
     if (prev === undefined) delete process.env.MISTRAL_API_KEY;
     else process.env.MISTRAL_API_KEY = prev;
+  }
+});
+
+test("loadBudgetConfig: defaults to 200/2000 cents when unset", () => {
+  const prevDay = process.env.AI_DAILY_BUDGET_CENTS;
+  const prevMonth = process.env.AI_MONTHLY_BUDGET_CENTS;
+  try {
+    delete process.env.AI_DAILY_BUDGET_CENTS;
+    delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    expect(loadBudgetConfig()).toEqual({ dayCents: 200, monthCents: 2000 });
+  } finally {
+    if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
+    if (prevMonth === undefined) delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    else process.env.AI_MONTHLY_BUDGET_CENTS = prevMonth;
+  }
+});
+
+test("loadBudgetConfig: reads custom caps when set", () => {
+  const prevDay = process.env.AI_DAILY_BUDGET_CENTS;
+  const prevMonth = process.env.AI_MONTHLY_BUDGET_CENTS;
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = "500";
+    process.env.AI_MONTHLY_BUDGET_CENTS = "5000";
+    expect(loadBudgetConfig()).toEqual({ dayCents: 500, monthCents: 5000 });
+  } finally {
+    if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
+    if (prevMonth === undefined) delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    else process.env.AI_MONTHLY_BUDGET_CENTS = prevMonth;
+  }
+});
+
+test("loadBudgetConfig: a non-numeric or non-positive value falls back to the default", () => {
+  const prevDay = process.env.AI_DAILY_BUDGET_CENTS;
+  const prevMonth = process.env.AI_MONTHLY_BUDGET_CENTS;
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = "not-a-number";
+    process.env.AI_MONTHLY_BUDGET_CENTS = "-5";
+    expect(loadBudgetConfig()).toEqual({ dayCents: 200, monthCents: 2000 });
+  } finally {
+    if (prevDay === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = prevDay;
+    if (prevMonth === undefined) delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    else process.env.AI_MONTHLY_BUDGET_CENTS = prevMonth;
   }
 });
 

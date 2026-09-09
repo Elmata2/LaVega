@@ -162,6 +162,40 @@ test("chatWithSearch() sends inline model+instructions+tools with a single-messa
   expect("agent_id" in body).toBe(false);
 });
 
+test("chatWithSearch() reads usage from data.usage the same way complete() does", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      conversation_id: "c1",
+      outputs: [{ content: "antwoord" }],
+      usage: { prompt_tokens: 42, completion_tokens: 7 },
+    }),
+  );
+
+  const provider = createMistralProvider("sk-test", "mistral-medium-latest");
+  const res = await provider.chatWithSearch({
+    system: "sys",
+    messages: [{ role: "user", content: "hallo" }],
+    onDelta: vi.fn(),
+  });
+
+  expect(res.usage).toEqual({ input: 42, output: 7 });
+});
+
+test("chatWithSearch() defaults usage to {input:0, output:0} when the response has no usage field", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({ conversation_id: "c1", outputs: [{ content: "antwoord" }] }),
+  );
+
+  const provider = createMistralProvider("sk-test", "mistral-medium-latest");
+  const res = await provider.chatWithSearch({
+    system: "sys",
+    messages: [{ role: "user", content: "hallo" }],
+    onDelta: vi.fn(),
+  });
+
+  expect(res.usage).toEqual({ input: 0, output: 0 });
+});
+
 test("chatWithSearch() always sends inputs as an array, even for a multi-turn history", async () => {
   fetchMock.mockResolvedValue(
     jsonResponse({ conversation_id: "c1", outputs: [{ content: "hoi" }], usage: {} }),

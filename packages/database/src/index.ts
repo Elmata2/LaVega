@@ -759,3 +759,68 @@ export function createEbFlowRepository(db: Database) {
     },
   };
 }
+
+export type AiUsage = {
+  day: string; // "YYYY-MM-DD"
+  route: "categorize" | "extract-invoice" | "chat" | "travel";
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  pages: number;
+  searches: number;
+  costCents: number;
+};
+
+/**
+ * The internal AI-spend ledger (`personal.ai_usage`), read and written by the
+ * budget guard in front of the four `/api/agent/*` routes. Not tenant data —
+ * one Mistral key, one owner's aggregate spend — so this uses `db.connect()`
+ * directly, the same shape as `createEbFlowRepository`'s non-tenant methods.
+ */
+export function createAiUsageRepository(db: Database) {
+  return {
+    async record(usage: AiUsage): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          "INSERT INTO personal.ai_usage (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          [
+            usage.day,
+            usage.route,
+            usage.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.pages,
+            usage.searches,
+            usage.costCents,
+          ],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
+    async spentCents(range: { day: string; month: string }): Promise<{
+      dayCents: number;
+      monthCents: number;
+    }> {
+      const client = await db.connect();
+      try {
+        const dayResult = await client.query<QueryResultRow>(
+          "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE day = $1",
+          [range.day],
+        );
+        const monthResult = await client.query<QueryResultRow>(
+          "SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage WHERE to_char(day, 'YYYY-MM') = $1",
+          [range.month],
+        );
+        return {
+          dayCents: Number(dayResult.rows[0]?.total ?? 0),
+          monthCents: Number(monthResult.rows[0]?.total ?? 0),
+        };
+      } finally {
+        client.release();
+      }
+    },
+  };
+}

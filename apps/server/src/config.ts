@@ -170,3 +170,20 @@ export function loadIngestConfig(): { configured: boolean; token: string | null 
   const token = process.env.CARD_TERMS_INGEST_TOKEN ?? null;
   return { configured: typeof token === "string" && token.length >= 16, token };
 }
+
+const DEFAULT_DAY_BUDGET_CENTS = 200;
+const DEFAULT_MONTH_BUDGET_CENTS = 2000;
+
+function budgetCentsSetting(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  return raw !== undefined && Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Daily/monthly caps on AI spend, in euro cents. A missing env var is the
+ *  expected default case (same spirit as psuTypeSetting), so this never warns. */
+export function loadBudgetConfig(): { dayCents: number; monthCents: number } {
+  return {
+    dayCents: budgetCentsSetting(process.env.AI_DAILY_BUDGET_CENTS, DEFAULT_DAY_BUDGET_CENTS),
+    monthCents: budgetCentsSetting(process.env.AI_MONTHLY_BUDGET_CENTS, DEFAULT_MONTH_BUDGET_CENTS),
+  };
+}
