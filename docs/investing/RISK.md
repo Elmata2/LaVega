@@ -4,6 +4,8 @@
 
 The Summary card measures historical account risk. It does not forecast the risk of current holdings. Default period is one year; six months and account history are available independently of the chart period.
 
+Risk refreshes on period/benchmark selection and with the explicit Refresh risk button. Background sync version changes must not reload the card or remove its controls. Use Refresh risk after broker or price updates. Browser verification caught a background-refresh regression; a UI regression test covers keeping loaded controls stable across parent renders and explicitly refreshing data.
+
 Account history starts at dated account evidence: a trade, cash flow or balance/position snapshot. A market quote from 2000 cannot establish ownership in 2000. Positions inferred from a later snapshot without opening-quantity evidence are flagged as unknown before that snapshot.
 
 For each adjacent, positive, finite account valuation, daily return is `(ending value - external cash flow) / starting value - 1`. External flows include deposits and withdrawals within the exact interval, including weekends. This uses an end-of-day flow convention. Dividends, fees and interest remain investment performance. Null flows invalidate the interval.

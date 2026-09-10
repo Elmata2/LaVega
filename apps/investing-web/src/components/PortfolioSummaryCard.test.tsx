@@ -117,3 +117,19 @@ test("renders error state when the API fails", async () => {
   await act(async () => {});
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("503");
 });
+
+test("keeps controls during parent renders and refreshes only on request", async () => {
+  const fetcher = vi.fn(async () => new Response(JSON.stringify(summary), { status: 200 }));
+  vi.stubGlobal("fetch", fetcher);
+  const { container, root } = render();
+  await act(async () => root.render(<PortfolioSummaryCard revision="BENCH" currency="EUR" />));
+  await act(async () => root.render(<PortfolioSummaryCard revision="BENCH" currency="EUR" />));
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('select[aria-label="Risk period"]')).not.toBeNull();
+  const refresh = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Refresh risk",
+  );
+  await act(async () => refresh!.click());
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('select[aria-label="Risk period"]')).not.toBeNull();
+});

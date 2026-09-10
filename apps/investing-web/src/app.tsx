@@ -1989,7 +1989,7 @@ function Overview() {
               <PortfolioKpis data={state.data} />
               <PortfolioSummaryCard
                 currency={state.data.presentationCurrency}
-                revision={`${state.data.dataVersion}:${state.data.benchmarks.map((item) => item.symbol).join(",")}`}
+                revision={state.data.benchmarks.map((item) => item.symbol).join(",")}
               />
               <PortfolioAgentCard />
               <OverviewStatusRail dataVersion={state.data.dataVersion} />

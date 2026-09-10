@@ -102,9 +102,10 @@ export function PortfolioSummaryCard({
   revision?: string;
 }) {
   const [range, setRange] = useState<RiskRange>("1Y");
+  const [refresh, setRefresh] = useState(0);
   const [selection, setSelection] = useState({ value: "", revision });
   const benchmark = selection.revision === revision ? selection.value : "";
-  const state = usePortfolioSummary(range, benchmark, revision);
+  const state = usePortfolioSummary(range, benchmark, `${revision}:${refresh}`);
   if (state.status === "loading")
     return (
       <Card aria-busy="true">
@@ -138,6 +139,13 @@ export function PortfolioSummaryCard({
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap gap-3 text-sm">
+          <button
+            type="button"
+            className="self-end rounded-md border px-2 py-1"
+            onClick={() => setRefresh((value) => value + 1)}
+          >
+            Refresh risk
+          </button>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Risk period</span>
             <select
@@ -174,6 +182,7 @@ export function PortfolioSummaryCard({
             Historical account risk ·{" "}
             {risk.status === "unavailable" ? "Unavailable" : "Estimate, currency moves excluded"}
           </p>
+          <p>Use Refresh risk after broker or price updates.</p>
           {risk.from && risk.to && (
             <p>
               {risk.from} to {risk.to} · {risk.currency}
