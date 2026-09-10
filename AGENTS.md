@@ -43,6 +43,10 @@ When issues are solved in github, we will provide a short summary of what our ch
 Five canonical triage roles, used with their default label strings.
 See `docs/agents/triage-labels.md`.
 
+### Firstmate (optional crew orchestration)
+
+Submodule at `tools/firstmate`. Setup: `./tools/setup-firstmate.sh`. Launch: `./tools/firstmate-launch.sh claude|pi|codex`. Full notes: `docs/agents/firstmate.md`.
+
 ### Domain docs
 
 Single-context repo: `CONTEXT.md` at the root plus `docs/adr/`, both created lazily.
