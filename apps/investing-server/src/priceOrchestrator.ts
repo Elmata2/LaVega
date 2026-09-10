@@ -348,15 +348,20 @@ export function createPriceOrchestrator(input: {
           },
           leaseId,
         );
+        let fetched = true;
         try {
           const result = await input.sync(target, tenantId);
+          fetched = result.fetched;
           problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
         } catch (error) {
           problems.push(
             `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
           );
         }
-        if (index < queue.length - 1) {
+        /* Cache hit made no provider request, so there is nothing to pace
+         * for. An error stays paced: we can't tell whether it reached the
+         * provider, so pacing is the safe default when one errored. */
+        if (fetched && index < queue.length - 1) {
           if (deadline !== undefined && now().getTime() + paceMs + pauseMarginMs >= deadline)
             return pause(index + 1);
           const waitUntil = new Date(now().getTime() + paceMs).toISOString();

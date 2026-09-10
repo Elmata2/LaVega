@@ -30,7 +30,7 @@ const trade = (symbol: string, date: string): Trade => ({
   currency: "EUR",
   commission: 0,
 });
-const result = (problems: string[] = []) => ({ bars: [], fetched: true, problems });
+const result = (problems: string[] = [], fetched = true) => ({ bars: [], fetched, problems });
 
 async function waitForAssertion(assertion: () => void) {
   let lastError: unknown;
@@ -193,6 +193,29 @@ const symbolTarget = (symbol: string): PriceSyncTarget => ({
   exchange: "UNKNOWN",
   currency: "EUR",
   backfillFrom: "2024-01-01",
+});
+
+test("does not pace between cache-hit syncs", async () => {
+  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  const sync = vi.fn(async () => result([], false));
+  const wait = vi.fn(async () => {});
+  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 10, wait });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
+
+  expect(wait).not.toHaveBeenCalled();
+});
+
+test("paces only after syncs that actually fetched", async () => {
+  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  const sync = vi.fn(async (target: PriceSyncTarget) => result([], target.symbol !== "TWO"));
+  const wait = vi.fn(async () => {});
+  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 10, wait });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
+
+  // ONE fetched (paces before TWO), TWO cache hit (no pace before THREE).
+  expect(wait).toHaveBeenCalledTimes(1);
 });
 
 test("run stops on the host budget and names what is left instead of continuing past it", async () => {
