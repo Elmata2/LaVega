@@ -66,6 +66,12 @@ test("caps named slices, sorts by value, and folds the rest into an expandable O
       { key: "D", label: "Delta", value: 20, unpriced: false },
       { key: "E", label: "Echo", value: 40, unpriced: false },
       { key: "F", label: "Foxtrot", value: 5, unpriced: false },
+      { key: "G", label: "Golf", value: 4, unpriced: false },
+      { key: "H", label: "Hotel", value: 3, unpriced: false },
+      { key: "I", label: "India", value: 2, unpriced: false },
+      { key: "J", label: "Juliet", value: 1, unpriced: false },
+      { key: "K", label: "Kilo", value: 0.5, unpriced: false },
+      { key: "L", label: "Lima", value: 0.25, unpriced: false },
     ],
     unpriced: [],
   };
@@ -73,14 +79,28 @@ test("caps named slices, sorts by value, and folds the rest into an expandable O
   const labels = [...container.querySelectorAll("li > div .truncate")].map(
     (node) => node.textContent,
   );
-  // Top 3 individually named, largest first, rest folded into one bucket.
-  expect(labels).toEqual(["Bravo", "Echo", "Charlie", "Other (3)"]);
-  expect(container.textContent).not.toContain("Alpha");
+  // Top 10 individually named, largest first, rest folded into one bucket.
+  expect(labels).toEqual([
+    "Bravo",
+    "Echo",
+    "Charlie",
+    "Delta",
+    "Alpha",
+    "Foxtrot",
+    "Golf",
+    "Hotel",
+    "India",
+    "Juliet",
+    "Other (2)",
+  ]);
+  expect(container.textContent).toContain("Alpha");
   act(() => {
     (container.querySelector("button.truncate") as HTMLButtonElement).click();
   });
   expect(container.textContent).toContain("Alpha");
   expect(container.textContent).toContain("Delta");
   expect(container.textContent).toContain("Foxtrot");
+  expect(container.textContent).toContain("Kilo");
+  expect(container.textContent).toContain("Lima");
   root.unmount();
 });

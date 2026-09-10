@@ -17,13 +17,19 @@ const colors = [
   "hsl(var(--chart-teal))",
   "hsl(var(--chart-purple))",
   "hsl(var(--chart-amber))",
+  "hsl(var(--chart-coral))",
+  "hsl(var(--chart-blue) / 0.72)",
+  "hsl(var(--chart-teal) / 0.72)",
+  "hsl(var(--chart-purple) / 0.72)",
+  "hsl(var(--chart-amber) / 0.72)",
+  "hsl(var(--chart-coral) / 0.72)",
 ];
 const otherColor = "hsl(var(--muted-foreground) / 0.35)";
 // A donut reads as at most a handful of wedges. Past that, per-slice padding
 // angle eats more arc than the data itself and the ring turns into a row of
 // disconnected ticks. Cap named slices and fold the rest into one "Other"
 // wedge instead of rendering every holding.
-const MAX_NAMED_BUCKETS = colors.length;
+const MAX_NAMED_BUCKETS = 10;
 
 type DisplayBucket = {
   key: string;
@@ -42,8 +48,8 @@ function buildDisplayBuckets(
   if (sorted.length <= MAX_NAMED_BUCKETS) {
     return sorted.map((bucket, index) => ({ ...bucket, color: colors[index] }));
   }
-  const named = sorted.slice(0, MAX_NAMED_BUCKETS - 1);
-  const rest = sorted.slice(MAX_NAMED_BUCKETS - 1);
+  const named = sorted.slice(0, MAX_NAMED_BUCKETS);
+  const rest = sorted.slice(MAX_NAMED_BUCKETS);
   return [
     ...named.map((bucket, index) => ({ ...bucket, color: colors[index] })),
     {
@@ -180,23 +186,31 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                     </span>
                   </div>
                   {bucket.members && showOverige && (
-                    <ul className="mt-2 space-y-2 border-l border-border pl-4">
-                      {bucket.members.map((member) => (
-                        <li
-                          className="flex items-center justify-between gap-3 text-muted-foreground"
-                          key={member.key}
-                        >
-                          <span className="truncate">{member.label}</span>
-                          <span className="tabular-nums">
-                            {member.value.toLocaleString("en-GB", {
-                              style: "currency",
-                              currency,
-                              maximumFractionDigits: 0,
-                            })}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="mt-3 rounded-lg border border-border/70 bg-secondary/40 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                        <span className="font-semibold text-foreground">Other holdings</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {bucket.members.length} positions
+                        </span>
+                      </div>
+                      <ul className="grid max-h-52 gap-x-4 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                        {bucket.members.map((member) => (
+                          <li
+                            className="flex items-center justify-between gap-3 text-muted-foreground"
+                            key={member.key}
+                          >
+                            <span className="truncate">{member.label}</span>
+                            <span className="tabular-nums">
+                              {member.value.toLocaleString("en-GB", {
+                                style: "currency",
+                                currency,
+                                maximumFractionDigits: 0,
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </li>
               ))}
