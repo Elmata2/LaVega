@@ -574,6 +574,36 @@ test("summary route reports failures as 503 problem payload", async () => {
   expect(response.status).toBe(503);
 });
 
+test("summary removes deposits and rejects invalid risk selectors", async () => {
+  const dashboard = emptyInvestingDashboard();
+  const cursor = new Date("2026-01-01T00:00:00Z");
+  const dates: string[] = [];
+  while (dates.length < 61) {
+    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6)
+      dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  dashboard.portfolio["1Y"] = dates.map((date, index) => ({
+    date,
+    value: index < 30 ? 100 : 200,
+    positionsValue: 0,
+    cashValue: index < 30 ? 100 : 200,
+    unpriced: [],
+    cashUnknown: [],
+    forwardFilled: [],
+  }));
+  dashboard.externalCashFlows = [{ date: dates[30]!, amount: 100 }];
+  const app = createApp({ dashboardReader: async () => dashboard });
+  const response = await app.request("/api/investing/summary?range=1Y");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    metrics: { annualizedVolatility: 0, maxDrawdown: 0, beta: null, observationDays: 60 },
+    risk: { status: "estimate", range: "1Y", benchmark: null },
+  });
+  expect((await app.request("/api/investing/summary?range=invalid")).status).toBe(400);
+  expect((await app.request("/api/investing/summary?benchmark=NOT_SELECTED")).status).toBe(400);
+});
+
 test("tenant-scoped routes read and write under the resolved tenant, not the local default", async () => {
   const benchmarkSelectionStore = {
     get: vi.fn(async (tenantId: string) => ({ tenantId, symbols: ["^GSPC"] })),

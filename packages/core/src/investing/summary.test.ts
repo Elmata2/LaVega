@@ -12,7 +12,15 @@ function seriesFromReturns(start: number, returns: readonly number[]): MetricPoi
 }
 
 const day = (index: number): string =>
-  `2026-${String(Math.floor(index / 28) + 2).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}`;
+  (() => {
+    const date = new Date("2026-01-01T00:00:00Z");
+    let left = index + 1;
+    while (left > 0) {
+      date.setUTCDate(date.getUTCDate() + 1);
+      if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6) left -= 1;
+    }
+    return date.toISOString().slice(0, 10);
+  })();
 
 test("volatility matches hand-computed sample stdev, annualized", () => {
   // 22 returns: eleven +2%, eleven 0% interleaved -> mean 0.01, var = 22*(0.01)^2/21.
@@ -76,8 +84,8 @@ test("null value gaps are skipped and dates align portfolio to benchmark", () =>
     value: index === 5 ? null : point.value,
   }));
   const metrics = computePortfolioMetrics({ valuePoints: portfolio, benchmarkPoints: benchmark });
-  // One gap removes one paired observation but still leaves >= 20 pairs.
-  expect(metrics.observationDays).toBe(29);
+  // Gap removes both adjacent intervals; no return bridges unknown value.
+  expect(metrics.observationDays).toBe(28);
   expect(metrics.beta).not.toBeNull();
 });
 
@@ -105,4 +113,104 @@ test("sector exposure buckets by weight, unknown last-resort bucket, sorted desc
 
 test("sector exposure is empty without priced positions", () => {
   expect(buildSectorExposure([{ symbol: "ACME", marketValue: null }], new Map())).toEqual([]);
+});
+
+test("owner deposit is removed from daily return", () => {
+  const points: MetricPoint[] = [{ date: "2026-01-01", value: 100 }];
+  let value = 100;
+  for (let index = 0; index < 21; index += 1) {
+    value = value * 1.01 + (index === 10 ? 100 : 0);
+    points.push({ date: day(index), value });
+  }
+  const metrics = computePortfolioMetrics({
+    valuePoints: points,
+    externalCashFlows: [{ date: day(10), amount: 100 }],
+  });
+  expect(metrics.observationDays).toBe(21);
+  expect(metrics.dailyVolatility).toBeCloseTo(0, 12);
+  expect(metrics.annualizedVolatility).toBeCloseTo(0, 12);
+});
+
+test("weekend flows apply to following business-day interval and unknown flow invalidates it", () => {
+  const points = seriesFromReturns(
+    100,
+    Array.from({ length: 21 }, () => 0.01),
+  );
+  const weekend = "2026-01-03";
+  const followingBusiness = points[2]!.date;
+  points[2] = { date: followingBusiness, value: points[2]!.value! + 50 };
+  for (let index = 3; index < points.length; index += 1)
+    points[index] = { date: points[index]!.date, value: points[index - 1]!.value! * 1.01 };
+  const metrics = computePortfolioMetrics({
+    valuePoints: points,
+    externalCashFlows: [{ date: weekend, amount: 50 }],
+  });
+  expect(metrics.dailyVolatility).toBeCloseTo(0, 12);
+  const unknown = computePortfolioMetrics({
+    valuePoints: points,
+    externalCashFlows: [{ date: weekend, amount: null }],
+  });
+  expect(unknown.maxDrawdown).toBeNull();
+});
+
+test("invalid dates do not create a return", () => {
+  const points = seriesFromReturns(
+    100,
+    Array.from({ length: 21 }, () => 0.01),
+  );
+  points[5] = { date: "not-a-date", value: 101 };
+  const metrics = computePortfolioMetrics({ valuePoints: points });
+  expect(metrics.excludedIntervals).toBeGreaterThan(0);
+  expect(metrics.maxDrawdown).toBeNull();
+});
+
+test("invalid values and gaps do not produce extreme statistics", () => {
+  const points = seriesFromReturns(
+    100,
+    Array.from({ length: 21 }, () => 0.01),
+  );
+  points[8] = { date: points[8]!.date, value: -1 };
+  const metrics = computePortfolioMetrics({ valuePoints: points });
+  expect(metrics.dailyVolatility).toBeNull();
+  expect(metrics.maxDrawdown).toBeNull();
+  expect(metrics.excludedIntervals).toBeGreaterThan(0);
+});
+
+test("beta pairs exact interval, not only ending date", () => {
+  const portfolio = seriesFromReturns(
+    100,
+    Array.from({ length: 24 }, () => 0.01),
+  );
+  const benchmark = Array.from({ length: 25 }, (_, i) => ({
+    date: i === 0 ? "2026-01-01" : day((i - 1) * 2),
+    value: 100 * Math.pow(i % 2 ? 1.01 : 0.99, i),
+  }));
+  // Ending dates can overlap, but intervals have different starts.
+  const shifted = benchmark;
+  const metrics = computePortfolioMetrics({ valuePoints: portfolio, benchmarkPoints: shifted });
+  expect(metrics.beta).toBeNull();
+  expect(metrics.pairedObservationDays).toBeLessThan(20);
+});
+
+test("duplicate dates are excluded instead of being silently ordered", () => {
+  const points = seriesFromReturns(
+    100,
+    Array.from({ length: 21 }, () => 0.01),
+  );
+  points.push({ date: points[5]!.date, value: points[5]!.value });
+  const metrics = computePortfolioMetrics({ valuePoints: points });
+  expect(metrics.excludedIntervals).toBeGreaterThan(0);
+  expect(metrics.maxDrawdown).toBeNull();
+});
+
+test("valid drawdown stays bounded and unknown interval makes it null", () => {
+  const points = seriesFromReturns(
+    100,
+    Array.from({ length: 21 }, (_, i) => (i === 10 ? -0.2 : 0.01)),
+  );
+  const metrics = computePortfolioMetrics({ valuePoints: points });
+  expect(metrics.maxDrawdown).toBeGreaterThanOrEqual(-1);
+  expect(metrics.maxDrawdown).toBeLessThanOrEqual(0);
+  points[7] = { date: points[7]!.date, value: null };
+  expect(computePortfolioMetrics({ valuePoints: points }).maxDrawdown).toBeNull();
 });

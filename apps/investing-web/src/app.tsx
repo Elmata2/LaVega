@@ -1987,7 +1987,10 @@ function Overview() {
             </div>
             <aside aria-label="Portfolio overview" className="space-y-5">
               <PortfolioKpis data={state.data} />
-              <PortfolioSummaryCard currency={state.data.presentationCurrency} />
+              <PortfolioSummaryCard
+                currency={state.data.presentationCurrency}
+                revision={`${state.data.dataVersion}:${state.data.benchmarks.map((item) => item.symbol).join(",")}`}
+              />
               <PortfolioAgentCard />
               <OverviewStatusRail dataVersion={state.data.dataVersion} />
             </aside>

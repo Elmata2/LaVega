@@ -3,7 +3,7 @@ import {
   emptyInvestingDashboard,
   LOCAL_TENANT_ID,
   buildSectorExposure,
-  computePortfolioMetrics,
+  buildHistoricalRisk,
   validateBenchmarkSymbols,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
@@ -215,7 +215,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   );
   investingApp.get("/api/investing/summary", async (c) => {
     try {
+      const range = c.req.query("range") ?? "1Y";
+      if (range !== "6M" && range !== "1Y" && range !== "All")
+        return c.json({ message: "Invalid risk range" }, 400);
       const data = await dashboardReader({});
+      const benchmark = c.req.query("benchmark");
+      if (benchmark && !data.benchmarks.some((item) => item.symbol === benchmark))
+        return c.json({ message: "Select a configured benchmark" }, 400);
       const priced = data.positions.filter(
         (position): position is typeof position & { marketValue: number } =>
           position.marketValue !== null && position.marketValue > 0,
@@ -242,15 +248,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         sectorBySymbol.set(position.symbol.toUpperCase(), profile?.sector ?? "Unknown");
       }
       return c.json({
-        metrics: computePortfolioMetrics({
-          valuePoints: data.portfolio.All.map((point) => ({
-            date: point.date,
-            value: point.value,
-          })),
-          benchmarkPoints: data.benchmarks[0]?.points,
-        }),
+        ...buildHistoricalRisk(data, range, benchmark),
         sectors: buildSectorExposure(data.positions, sectorBySymbol),
         topPositions,
+        composition: {
+          pricedHoldings: priced.length,
+          missingHoldings: data.positions.filter((position) => position.marketValue === null)
+            .length,
+          estimatedHoldings: data.positions.filter(
+            (position) => position.priceStatus === "forward-filled",
+          ).length,
+        },
       });
     } catch {
       return c.json({ problems: ["Portfolio summary could not be assembled"] }, 503);

@@ -39,7 +39,7 @@ test("values the broker position when the trade history is short", () => {
   expect(result.at(-1)?.positionsValue).toBeCloseTo((10 * 120 + 5 * 220) / 1.1, 9);
 });
 
-test("values a pie holding that never reaches the trade history", () => {
+test("marks a pie holding as unknown before its first broker snapshot", () => {
   const positions: Position[] = [
     {
       entity: "personal",
@@ -86,10 +86,12 @@ test("values a pie holding that never reaches the trade history", () => {
   });
 
   expect(result[0]?.positionsValue).toBe(300);
+  expect(result[0]?.holdingsUnknown).toEqual(["PIE"]);
   expect(result.at(-1)?.positionsValue).toBe(340);
+  expect(result.at(-1)?.holdingsUnknown).toBeUndefined();
 });
 
-test("values an all-pie portfolio that has no trade history at all", () => {
+test("does not invent pre-snapshot history for an all-pie portfolio", () => {
   const positions: Position[] = [
     {
       entity: "personal",
@@ -111,8 +113,50 @@ test("values an all-pie portfolio that has no trade history at all", () => {
     today: "2026-02-02",
   });
 
-  expect(result[0]?.positionsValue).toBe(200);
-  expect(result.at(-1)?.positionsValue).toBe(240);
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({ date: "2026-02-02", positionsValue: 240, value: 240 });
+  expect(result[0]?.holdingsUnknown).toBeUndefined();
+});
+
+test("starts at first account trade instead of earliest market quote", () => {
+  const positions: Position[] = [
+    {
+      entity: "personal",
+      symbol: "AAPL",
+      quantity: 1,
+      averagePrice: 100,
+      marketPrice: 110,
+      marketValue: 110,
+      currency: "EUR",
+      asOf: "2024-10-02",
+    },
+  ];
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2024-10-01",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      amount: 100,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2000-01-03", close: 10, currency: "EUR" },
+    { symbol: "AAPL", date: "2024-10-01", close: 100, currency: "EUR" },
+    { symbol: "AAPL", date: "2024-10-02", close: 110, currency: "EUR" },
+  ];
+
+  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, {
+    today: "2024-10-02",
+  });
+
+  expect(result.map(({ date }) => date)).toEqual(["2024-10-01", "2024-10-02"]);
+  expect(result[0]?.positionsValue).toBe(100);
 });
 
 test("includes closed positions only while trade history says they were held", () => {

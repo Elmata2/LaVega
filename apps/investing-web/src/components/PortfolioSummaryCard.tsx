@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import type { PortfolioMetrics, SectorExposure } from "@lavega/core";
+import type { HistoricalRisk, PortfolioMetrics, RiskRange, SectorExposure } from "@lavega/core";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 export type PortfolioSummary = {
   metrics: PortfolioMetrics;
   sectors: SectorExposure[];
   topPositions: Array<{ symbol: string; weight: number }>;
+  risk: HistoricalRisk;
+  composition?: { pricedHoldings: number; missingHoldings: number; estimatedHoldings: number };
 };
 
 function isPortfolioSummary(value: unknown): value is PortfolioSummary {
@@ -14,13 +16,20 @@ function isPortfolioSummary(value: unknown): value is PortfolioSummary {
   return Boolean(
     summary.metrics &&
     typeof summary.metrics === "object" &&
+    summary.risk &&
+    Array.isArray(summary.risk.reasons) &&
     Array.isArray(summary.sectors) &&
     Array.isArray(summary.topPositions),
   );
 }
 
-export async function fetchPortfolioSummary(): Promise<PortfolioSummary> {
-  const response = await fetch("/api/investing/summary");
+export async function fetchPortfolioSummary(
+  range: RiskRange = "1Y",
+  benchmark = "",
+): Promise<PortfolioSummary> {
+  const query = new URLSearchParams({ range });
+  if (benchmark) query.set("benchmark", benchmark);
+  const response = await fetch(`/api/investing/summary?${query}`);
   if (!response.ok) throw new Error(`Failed to load summary: ${response.status}`);
   const payload: unknown = await response.json();
   if (!isPortfolioSummary(payload)) throw new Error("Summary has an invalid format.");
@@ -32,26 +41,37 @@ type SummaryState =
   | { status: "ready"; data: PortfolioSummary }
   | { status: "error"; message: string };
 
-export function usePortfolioSummary(): SummaryState {
-  const [state, setState] = useState<SummaryState>({ status: "loading" });
+export function usePortfolioSummary(
+  range: RiskRange,
+  benchmark: string,
+  revision: string,
+): SummaryState {
+  const requestKey = JSON.stringify([range, benchmark, revision]);
+  const [state, setState] = useState<{ key: string; result: SummaryState }>({
+    key: "",
+    result: { status: "loading" },
+  });
   useEffect(() => {
     let current = true;
-    void fetchPortfolioSummary()
+    void fetchPortfolioSummary(range, benchmark)
       .then((data) => {
-        if (current) setState({ status: "ready", data });
+        if (current) setState({ key: requestKey, result: { status: "ready", data } });
       })
       .catch((reason: unknown) => {
         if (current)
           setState({
-            status: "error",
-            message: reason instanceof Error ? reason.message : "Failed to load summary",
+            key: requestKey,
+            result: {
+              status: "error",
+              message: reason instanceof Error ? reason.message : "Failed to load summary",
+            },
           });
       });
     return () => {
       current = false;
     };
-  }, []);
-  return state;
+  }, [range, benchmark, requestKey]);
+  return state.key === requestKey ? state.result : { status: "loading" };
 }
 
 const barColors = [
@@ -63,18 +83,28 @@ const barColors = [
 ];
 
 const percent = (value: number | null | undefined): string =>
-  value === null || value === undefined
-    ? "–"
+  value === null || value === undefined || !Number.isFinite(value)
+    ? "Unavailable"
     : value.toLocaleString("en-GB", {
         style: "percent",
         maximumFractionDigits: 1,
-        signDisplay: "exceptZero",
       });
 const decimal = (value: number | null): string =>
-  value === null ? "–" : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
+  value === null || !Number.isFinite(value)
+    ? "Unavailable"
+    : value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 
-export function PortfolioSummaryCard({ currency }: { currency?: string }) {
-  const state = usePortfolioSummary();
+export function PortfolioSummaryCard({
+  currency,
+  revision = "",
+}: {
+  currency?: string;
+  revision?: string;
+}) {
+  const [range, setRange] = useState<RiskRange>("1Y");
+  const [selection, setSelection] = useState({ value: "", revision });
+  const benchmark = selection.revision === revision ? selection.value : "";
+  const state = usePortfolioSummary(range, benchmark, revision);
   if (state.status === "loading")
     return (
       <Card aria-busy="true">
@@ -91,13 +121,14 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
         </CardContent>
       </Card>
     );
-  const { metrics, sectors, topPositions } = state.data;
+  const { metrics, sectors, topPositions, risk, composition } = state.data;
   const stats: Array<[string, string]> = [
     ["Annual volatility", percent(metrics.annualizedVolatility)],
     ["Beta", decimal(metrics.beta)],
-    ["Alpha (annual)", percent(metrics.alpha)],
-    ["Maximum drawdown", metrics.maxDrawdown === null ? "–" : percent(metrics.maxDrawdown)],
-    ["Observations", `${metrics.observationDays} dagen`],
+    ["Regression alpha (annual)", percent(metrics.alpha)],
+    ["Maximum drawdown", percent(metrics.maxDrawdown)],
+    ["Valid daily returns", `${metrics.observationDays}`],
+    ["Benchmark pairs", `${metrics.pairedObservationDays}`],
   ];
   return (
     <Card aria-label="Portfolio summary" data-dashboard-section="summary">
@@ -106,6 +137,69 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
         <CardTitle className="text-xl">Summary</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="flex flex-wrap gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Risk period</span>
+            <select
+              aria-label="Risk period"
+              className="rounded-md border bg-background px-2 py-1"
+              value={range}
+              onChange={(event) => setRange(event.target.value as RiskRange)}
+            >
+              <option value="6M">6 months</option>
+              <option value="1Y">1 year</option>
+              <option value="All">Account history</option>
+            </select>
+          </label>
+          {risk.benchmarks.length > 0 && (
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Risk benchmark</span>
+              <select
+                aria-label="Risk benchmark"
+                className="max-w-full rounded-md border bg-background px-2 py-1"
+                value={benchmark || risk.benchmark?.symbol || ""}
+                onChange={(event) => setSelection({ value: event.target.value, revision })}
+              >
+                {risk.benchmarks.map((item) => (
+                  <option key={item.symbol} value={item.symbol}>
+                    {item.name} ({item.currency})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        <div className="space-y-2 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">
+            Historical account risk ·{" "}
+            {risk.status === "unavailable" ? "Unavailable" : "Estimate, currency moves excluded"}
+          </p>
+          {risk.from && risk.to && (
+            <p>
+              {risk.from} to {risk.to} · {risk.currency}
+            </p>
+          )}
+          {risk.reasons.length > 0 && (
+            <ul aria-label="Risk data limits" className="list-disc space-y-1 pl-4">
+              {risk.reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          )}
+          {(risk.missingPrices.length > 0 || risk.missingHoldings.length > 0) && (
+            <details>
+              <summary className="cursor-pointer">Affected instruments</summary>
+              <div className="mt-2 max-h-36 space-y-2 overflow-y-auto break-words">
+                {risk.missingPrices.length > 0 && (
+                  <p>Missing prices: {risk.missingPrices.join(", ")}</p>
+                )}
+                {risk.missingHoldings.length > 0 && (
+                  <p>Incomplete ownership: {risk.missingHoldings.join(", ")}</p>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           {stats.map(([label, value]) => (
             <div key={label}>
@@ -114,6 +208,45 @@ export function PortfolioSummaryCard({ currency }: { currency?: string }) {
             </div>
           ))}
         </dl>
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer text-foreground">How to read these metrics</summary>
+          <div className="mt-2 space-y-2 leading-relaxed">
+            <p>
+              Historical account returns, not a forecast for today’s holdings. Deposits and
+              withdrawals are removed using an end-of-day cash-flow convention. Fees, dividends and
+              interest remain in returns.
+            </p>
+            <p>
+              Annual volatility measures daily return variation, scaled by √252. It is not a maximum
+              possible loss.
+            </p>
+            <p>
+              Beta compares matching daily returns with the named benchmark. A beta of 1 means
+              similar market sensitivity; 2 means twice the sensitivity. This is not a forecast.
+            </p>
+            <p>
+              Regression alpha is the annualized regression intercept, assuming a 0% cash rate. The
+              benchmark uses price returns, excluding dividends. This is not total-return or
+              risk-free-rate-adjusted alpha.
+            </p>
+            <p>
+              Maximum drawdown measures the largest fall in the cash-flow-adjusted growth index, not
+              in the account balance.
+            </p>
+            <p>
+              Currency conversion uses fixed latest exchange rates. Historical currency gains and
+              losses are excluded. Complete dates and at least 60 valid daily returns are required.
+              Missing or carried-forward prices, unknown cash and unsupported ownership history
+              prevent calculation.
+            </p>
+          </div>
+        </details>
+        <p className="text-xs text-muted-foreground">
+          Current composition · percentages of priced investments, excluding cash. Funds are grouped
+          by their reported sector; underlying holdings are not included.
+          {composition &&
+            ` ${composition.pricedHoldings} priced holdings; ${composition.missingHoldings} unpriced; ${composition.estimatedHoldings} estimated prices.`}
+        </p>
         <div>
           <p className="mb-2 text-xs font-medium text-muted-foreground">Largest positions</p>
           <ul aria-label="Largest positions" className="space-y-2 text-sm">
