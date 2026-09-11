@@ -218,6 +218,29 @@ test("paces only after syncs that actually fetched", async () => {
   expect(wait).toHaveBeenCalledTimes(1);
 });
 
+test("throttles progress writes by symbol count so store latency cannot gate cache-hit throughput", async () => {
+  const targets = Array.from({ length: 7 }, (_, index) => symbolTarget(`SYM${index}`));
+  const sync = vi.fn(async () => result([], false));
+  const put = vi.fn(async () => true);
+  const progressStore = { get: vi.fn(async () => null), put, claim: vi.fn(async () => null) };
+  const orchestrator = createPriceOrchestrator({
+    discover: () => targets,
+    sync,
+    paceMs: 0,
+    progressStore,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 7,
+  });
+
+  // Symbol 0 starts the row (so a lost lease is still caught immediately),
+  // symbol 5 crosses the throttle threshold, and the terminal write always
+  // persists: three writes total, not one per cache-hit symbol.
+  expect(put).toHaveBeenCalledTimes(3);
+});
+
 test("run stops on the host budget and names what is left instead of continuing past it", async () => {
   const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
   let clock = 0;

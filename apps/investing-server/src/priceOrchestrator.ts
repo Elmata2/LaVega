@@ -194,7 +194,7 @@ export function createPriceOrchestrator(input: {
   const paceMs = input.paceMs ?? 300;
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
   const takeoverAfterMs = input.takeoverAfterMs ?? 30_000;
-  const persistEveryMs = 2_000;
+  const persistEverySymbols = 5;
   const now = input.now ?? (() => new Date());
   const wait =
     input.wait ??
@@ -202,7 +202,7 @@ export function createPriceOrchestrator(input: {
   const terminal = (status: PriceSyncProgress["status"]) =>
     status !== "running" && status !== "waiting";
 
-  const lastPersistedAt = new Map<string, number>();
+  const sinceLastPersist = new Map<string, number>();
   const update = async (
     tenantId: string,
     next: Omit<PriceSyncProgress, "updatedAt">,
@@ -210,14 +210,20 @@ export function createPriceOrchestrator(input: {
   ): Promise<PriceSyncProgress> => {
     const value = { ...next, updatedAt: now().toISOString() };
     local.set(tenantId, value);
-    /* Every symbol would mean a row write per Yahoo call. The poll only needs
-     * to see movement, and a resumable run only needs the row to be right when
-     * it stops, so intermediate states are written on a timer. */
-    const at = now().getTime();
-    if (terminal(value.status) || at - (lastPersistedAt.get(tenantId) ?? 0) >= persistEveryMs) {
-      lastPersistedAt.set(tenantId, at);
+    /* Every symbol would mean a row write per Yahoo call. A wall-clock timer
+     * cannot bound that on its own: a Neon round trip costs about as much as
+     * the cache-hit symbol it reports on, so by the time one write finishes
+     * the timer has already elapsed and the next symbol writes too. Counting
+     * symbols instead keeps the write count bounded regardless of how slow
+     * the store is, and the first call for a tenant always persists so a
+     * lost lease is caught before another provider request. */
+    const elapsed = sinceLastPersist.get(tenantId);
+    if (terminal(value.status) || elapsed === undefined || elapsed >= persistEverySymbols) {
+      sinceLastPersist.set(tenantId, 0);
       const stored = await store.put(tenantId, value, leaseId).catch(() => undefined);
       if (stored === false) throw new PriceSyncLeaseLost();
+    } else {
+      sinceLastPersist.set(tenantId, elapsed + 1);
     }
     return value;
   };
