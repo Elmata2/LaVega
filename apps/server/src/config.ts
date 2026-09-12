@@ -175,8 +175,13 @@ const DEFAULT_DAY_BUDGET_CENTS = 200;
 const DEFAULT_MONTH_BUDGET_CENTS = 2000;
 
 function budgetCentsSetting(raw: string | undefined, fallback: number): number {
+  // 0 means 0: an explicit zero is a hard off switch for AI spend, not an
+  // invalid value to fall back from. Only a missing, empty, negative or
+  // non-numeric setting takes the default — anything else would silently
+  // grant a budget to someone who asked for none.
+  if (raw === undefined || raw.trim() === "") return fallback;
   const parsed = Number(raw);
-  return raw !== undefined && Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 /** Daily/monthly caps on AI spend, in euro cents. A missing env var is the

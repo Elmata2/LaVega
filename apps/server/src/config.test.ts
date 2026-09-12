@@ -236,3 +236,28 @@ test("a wrapped bare key body signs an Enable Banking JWT through the real signi
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("AI_DAILY_BUDGET_CENTS=0 switches AI spend off instead of falling back to the default", () => {
+  const keep = { d: process.env.AI_DAILY_BUDGET_CENTS, m: process.env.AI_MONTHLY_BUDGET_CENTS };
+  try {
+    process.env.AI_DAILY_BUDGET_CENTS = "0";
+    process.env.AI_MONTHLY_BUDGET_CENTS = "0";
+    expect(loadBudgetConfig()).toEqual({ dayCents: 0, monthCents: 0 });
+    process.env.AI_DAILY_BUDGET_CENTS = "50";
+    expect(loadBudgetConfig().dayCents).toBe(50);
+    // missing, empty and nonsense all take the documented default
+    delete process.env.AI_DAILY_BUDGET_CENTS;
+    expect(loadBudgetConfig().dayCents).toBe(200);
+    process.env.AI_DAILY_BUDGET_CENTS = "   ";
+    expect(loadBudgetConfig().dayCents).toBe(200);
+    process.env.AI_DAILY_BUDGET_CENTS = "gratis graag";
+    expect(loadBudgetConfig().dayCents).toBe(200);
+    process.env.AI_DAILY_BUDGET_CENTS = "-5";
+    expect(loadBudgetConfig().dayCents).toBe(200);
+  } finally {
+    if (keep.d === undefined) delete process.env.AI_DAILY_BUDGET_CENTS;
+    else process.env.AI_DAILY_BUDGET_CENTS = keep.d;
+    if (keep.m === undefined) delete process.env.AI_MONTHLY_BUDGET_CENTS;
+    else process.env.AI_MONTHLY_BUDGET_CENTS = keep.m;
+  }
+});
