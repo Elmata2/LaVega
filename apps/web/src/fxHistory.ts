@@ -29,6 +29,31 @@ async function fetchOne(currency: string, from: string): Promise<FxHistoryRespon
  *  back for a balance-only pocket with no tx history yet. Same operation for
  *  the initial fetch and every unlock-time refresh — the vault state decides
  *  which one it turns out to be. */
+/** A signature of what ECB history the ledger needs: every non-EUR currency
+ *  it touches, paired with the earliest transaction date in that currency
+ *  (empty when the currency only appears as an account balance). It changes
+ *  exactly when a fetch is warranted — a bank connected mid-session brings a
+ *  new currency, a later import of older rows moves a date back — and stays
+ *  put for edits that need no new rates. */
+export function fxNeedSignature(accounts: Account[], txs: Tx[]): string {
+  const earliest = new Map<string, string>();
+  for (const a of accounts)
+    if (!isEurCurrency(a.currency)) {
+      const c = normalizeCurrency(a.currency);
+      if (!earliest.has(c)) earliest.set(c, "");
+    }
+  for (const t of txs)
+    if (!isEurCurrency(t.currency)) {
+      const c = normalizeCurrency(t.currency);
+      const prev = earliest.get(c);
+      if (prev === undefined || prev === "" || t.date < prev) earliest.set(c, t.date);
+    }
+  return [...earliest.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([c, d]) => `${c}:${d}`)
+    .join(",");
+}
+
 export async function syncFxHistory(
   storage: VaultStorage,
   accounts: Account[],

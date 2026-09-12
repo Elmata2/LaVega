@@ -11,7 +11,7 @@ import type {
   EntityProfile,
   EntityScope,
 } from "@lavega/core";
-import { syncFxHistory } from "./fxHistory.js";
+import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
   reassignEntity,
@@ -419,6 +419,26 @@ export default function App() {
         .catch(() => {});
     })();
   }, [gate]);
+
+  /* Which foreign currencies the ledger holds, and how far back each one
+   * reaches. Connecting a bank mid-session adds pockets AFTER the unlock
+   * effect above has already fetched rates, which left those balances
+   * reading "nog geen koers" until the next unlock. A later import of older
+   * rows moves a currency's earliest date back, which needs a backfill for
+   * the same reason, so the date is part of the signature too. */
+  const fxNeed = useMemo(() => fxNeedSignature(accounts, txs), [accounts, txs]);
+
+  useEffect(() => {
+    if (gate !== "ready" || fxNeed === "") return;
+    void syncFxHistory(storage, accounts, txs)
+      .then(() => storage.getFxHistory())
+      .then(setFxHistoryState)
+      .catch(() => {});
+    // `accounts`/`txs` are read, not depended on: fxNeed is the signature that
+    // says a fetch is actually warranted, and re-running on every edit to an
+    // unrelated row would hammer the ECB route for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, fxNeed]);
 
   // Public savings-rate benchmark for the travel block's "where to keep it"
   // step. Public data, not user data; failing is harmless (bundled snapshot).

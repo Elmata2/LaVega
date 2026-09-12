@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import { rateOn } from "@lavega/core";
 import { createEncryptedStorage, type VaultStorage } from "@lavega/adapters";
-import { syncFxHistory } from "./fxHistory.js";
+import { syncFxHistory, fxNeedSignature } from "./fxHistory.js";
 
 const acc = (key: string, currency: string): Account => ({
   key,
@@ -211,4 +211,54 @@ test("nothing is written to the vault if there's nothing to sync", async () => {
 
   expect(fetchMock).not.toHaveBeenCalled();
   expect(putSpy).not.toHaveBeenCalled();
+});
+
+const fxAcc = (key: string, currency: string) =>
+  ({ key, name: key, currency, balance: 100, entity: "prive" }) as never;
+const fxTx = (date: string, currency: string) =>
+  ({
+    id: date + currency,
+    accountKey: "a",
+    date,
+    amount: -1,
+    currency,
+    counterparty: "x",
+    description: "",
+    category: "",
+    manual: false,
+  }) as never;
+
+test("fxNeedSignature is empty when nothing is in a foreign currency", () => {
+  expect(fxNeedSignature([fxAcc("a", "EUR")], [fxTx("2026-01-01", "EUR")])).toBe("");
+});
+
+test("fxNeedSignature includes a pocket that has a balance but no transactions yet", () => {
+  expect(fxNeedSignature([fxAcc("r", "USD")], [])).toBe("USD:");
+});
+
+test("fxNeedSignature changes when a bank connected mid-session brings a new currency", () => {
+  const before = fxNeedSignature([fxAcc("a", "EUR")], []);
+  const after = fxNeedSignature([fxAcc("a", "EUR"), fxAcc("r", "HUF")], []);
+  expect(before).toBe("");
+  expect(after).toBe("HUF:");
+});
+
+test("fxNeedSignature changes when a later import reaches further back", () => {
+  expect(fxNeedSignature([], [fxTx("2026-06-01", "USD")])).toBe("USD:2026-06-01");
+  expect(fxNeedSignature([], [fxTx("2026-06-01", "USD"), fxTx("2026-02-01", "USD")])).toBe(
+    "USD:2026-02-01",
+  );
+});
+
+test("fxNeedSignature does not change when only euro rows are added", () => {
+  const a = fxNeedSignature([fxAcc("r", "USD")], [fxTx("2026-03-03", "USD")]);
+  const b = fxNeedSignature(
+    [fxAcc("r", "USD"), fxAcc("e", "EUR")],
+    [fxTx("2026-03-03", "USD"), fxTx("2026-09-09", "EUR")],
+  );
+  expect(b).toBe(a);
+});
+
+test("fxNeedSignature treats a lower-case code as the same currency", () => {
+  expect(fxNeedSignature([fxAcc("r", "usd")], [])).toBe("USD:");
 });
